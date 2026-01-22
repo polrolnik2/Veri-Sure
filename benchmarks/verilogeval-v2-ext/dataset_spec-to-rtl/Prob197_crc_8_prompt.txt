@@ -1,0 +1,28 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [7:0] crc_in
+ - input  [7:0] data
+ - output [7:0] crc_out
+
+Implement a *parallel* CRC-8 update for one input byte.
+
+Polynomial:
+  CRC-8 with generator poly x^8 + x^2 + x + 1 (0x07)
+
+Conventions:
+ - Process the input byte MSB-first (bit 7 down to bit 0).
+ - No reflection, no final XOR.
+ - `crc_in` is the CRC state before consuming `data`.
+ - `crc_out` is the CRC state after consuming all 8 bits of `data`.
+
+Reference bit-serial algorithm (for clarity):
+
+  crc = crc_in
+  for i = 7 downto 0:
+    mix = data[i] XOR crc[7]
+    crc = (crc << 1)
+    if mix == 1: crc = crc XOR 8'h07
+
+All logic must be purely combinational.

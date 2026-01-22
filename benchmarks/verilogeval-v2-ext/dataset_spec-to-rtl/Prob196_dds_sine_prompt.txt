@@ -1,0 +1,36 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  [15:0] phase_inc
+ - output signed [11:0] sine_out
+
+Implement a simple direct digital synthesizer (DDS) that generates a
+discrete-time sine wave using a phase accumulator and a lookup table.
+
+Behavior:
+ - Maintain a 16-bit phase accumulator `phase` (wrap-around modulo 2^16).
+ - On each rising edge when not in reset:
+     phase <= phase + phase_inc
+   and update `sine_out` using the updated phase.
+ - Use the top 6 bits of the updated phase as the LUT address:
+     addr = phase[15:10]   // 0..63
+
+Sine lookup table:
+ - Output is a signed 12-bit value with peak magnitude 2047.
+ - Use quarter-wave symmetry with a 17-entry table q[k] = round(sin(2*pi*k/64)*2047)
+   for k = 0..16:
+
+   q = {0,201,399,594,783,965,1137,1299,1447,1582,1702,1805,1891,1959,2008,2037,2047}
+
+Mapping (quadrant = addr[5:4], offset = addr[3:0]):
+ - If quadrant is 0: mag = q[offset]
+ - If quadrant is 1: mag = q[16-offset]
+ - If quadrant is 2: mag = q[offset]
+ - If quadrant is 3: mag = q[16-offset]
+ - If quadrant[1] == 1 (quadrants 2 and 3), negate mag.
+
+`reset` is active-high synchronous. On reset, clear `phase` to 0 and
+drive `sine_out` to 0.

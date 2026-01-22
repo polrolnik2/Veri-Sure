@@ -1,0 +1,36 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  car_side
+ - output [1:0] main_light
+ - output [1:0] side_light
+
+Implement a 2-road traffic light controller with a side-road inductive
+loop sensor input.
+
+Light encoding:
+  2'b00 = RED
+  2'b01 = YELLOW
+  2'b10 = GREEN
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: main road is GREEN and side road is RED.
+
+State machine timing (all durations are in cycles of `clk`):
+ - Main road GREEN has a minimum duration of 10 cycles.
+ - If `car_side` is detected while main is GREEN, latch a pending request.
+ - Once main GREEN has lasted at least 10 cycles and a pending request
+   exists, transition to serve the side road using this fixed sequence:
+
+   1) Main YELLOW for 3 cycles (side stays RED)
+   2) ALL RED for 2 cycles
+   3) Side GREEN for 7 cycles (main stays RED)
+   4) Side YELLOW for 3 cycles (main stays RED)
+   5) ALL RED for 2 cycles
+   6) Return to Main GREEN (pending request cleared)
+
+All sequential logic is triggered on the positive edge of `clk`.

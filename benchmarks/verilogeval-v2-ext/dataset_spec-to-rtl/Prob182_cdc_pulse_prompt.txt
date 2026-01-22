@@ -1,0 +1,39 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk_fast
+ - input        reset_fast
+ - input        clk_slow
+ - input        reset_slow
+ - input        pulse_in
+ - output       ready
+ - output       pulse_out
+
+Implement a fast-to-slow clock-domain pulse synchronizer.
+
+Goal:
+ - `pulse_in` is a 1-cycle pulse in the `clk_fast` domain.
+ - When a pulse is accepted, the module must generate exactly one 1-cycle
+   pulse on `pulse_out` in the `clk_slow` domain.
+
+Handshake / acceptance:
+ - `ready` is asserted in the fast domain when the synchronizer is able to
+   accept a new pulse.
+ - A pulse is accepted when `pulse_in=1` and `ready=1` on a rising edge of
+   `clk_fast`.
+ - While a pulse is pending transfer, `ready` must be 0 and additional
+   `pulse_in` events must be ignored.
+
+Reset:
+ - `reset_fast` is active-high synchronous to `clk_fast`.
+ - `reset_slow` is active-high synchronous to `clk_slow`.
+ - On reset, clear internal state so `ready=1` and `pulse_out=0`.
+
+CDC requirement:
+ - Use a closed-loop handshake (e.g., toggle + 2-flop synchronizers) so the
+   slow domain reliably sees each accepted pulse (no lost pulses due to a
+   narrow `pulse_in`).
+
+All sequential logic is triggered on the positive edge of its respective
+clock.

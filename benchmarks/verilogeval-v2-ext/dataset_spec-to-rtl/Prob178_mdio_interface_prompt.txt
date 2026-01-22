@@ -1,0 +1,65 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input         clk
+ - input         reset
+ - input         start
+ - input         op
+ - input  [4:0]  phy_addr
+ - input  [4:0]  reg_addr
+ - input  [15:0] wr_data
+ - input         mdio_in
+ - output        mdc
+ - output        mdio_out
+ - output        mdio_oe
+ - output [15:0] rd_data
+ - output        busy
+ - output        done
+
+Implement an MDIO (Clause 22) master that performs one transaction per
+`start`.
+
+Operation:
+ - `op=0` : WRITE
+ - `op=1` : READ
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: `mdc=0`, `mdio_oe=0`, `mdio_out=1`, `busy=0`, `done=0`,
+   `rd_data=0`.
+
+Start / busy:
+ - When idle (`busy=0`), if `start` is 1 on a rising edge of `clk`, latch
+   inputs and begin one MDIO frame. While busy, ignore `start`.
+
+MDIO frame (64 bits total, MSB first):
+  1) Preamble: 32 bits of '1'
+  2) Start:    2 bits  "01"
+  3) Opcode:   2 bits  WRITE="01", READ="10"
+  4) PHYAD:    5 bits  phy_addr[4:0]
+  5) REGAD:    5 bits  reg_addr[4:0]
+  6) TA:       2 bits
+       - WRITE: "10" (driven by master)
+       - READ : "Z0" (master releases for both bits; the PHY drives 0 on
+                the second TA bit)
+  7) Data:     16 bits
+       - WRITE: drive wr_data[15:0] (MSB first)
+       - READ : master releases MDIO and samples 16 data bits (MSB first)
+
+Clocking / timing (one `clk` cycle = one half MDC period):
+ - While busy, `mdc` toggles every `clk` cycle: LOW, HIGH, LOW, HIGH, ...
+ - The cycle where `start` is accepted is the first MDC LOW half-cycle.
+ - On each MDC LOW half-cycle, update `mdio_out` / `mdio_oe` for the
+   current frame bit.
+ - On each MDC HIGH half-cycle, the current bit is considered "transferred".
+   For READ data bits, sample `mdio_in` on the HIGH half-cycle.
+
+Completion:
+ - After the last data bit is transferred, perform one final MDC LOW
+   half-cycle, then deassert `busy` and pulse `done` for exactly 1 `clk`
+   cycle (with `mdc=0`).
+ - `rd_data` must be updated with the captured 16-bit value for READ
+   transactions when `done` is asserted. For WRITE, `rd_data` must be 0.
+
+All sequential logic is triggered on the positive edge of `clk`.

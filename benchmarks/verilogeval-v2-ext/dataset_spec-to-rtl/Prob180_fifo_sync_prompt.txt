@@ -1,0 +1,35 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        wr_en
+ - input        rd_en
+ - input  [7:0] din
+ - output [7:0] dout
+ - output       full
+ - output       empty
+
+Implement a synchronous FIFO with data width 8 and depth 16.
+
+Reset / outputs:
+ - `reset` is active-high synchronous.
+ - On reset, clear the FIFO (occupancy becomes 0), set `dout` to 0,
+   `empty` to 1, and `full` to 0.
+
+Operation (on each rising edge of `clk`):
+ - If `wr_en=1` and `full=0`, write `din` into the FIFO and advance the
+   write pointer.
+ - If `rd_en=1` and `empty=0`, read the oldest element from the FIFO into
+   `dout` and advance the read pointer.
+ - If both a write and a read are accepted in the same cycle, perform both.
+   The read must return the oldest element (before the write), and the FIFO
+   occupancy remains unchanged.
+ - If `wr_en=1` when `full=1`, ignore the write.
+ - If `rd_en=1` when `empty=1`, ignore the read and keep `dout` unchanged.
+
+`empty` must indicate the FIFO has 0 elements, and `full` must indicate the
+FIFO has 16 elements.
+
+All sequential logic is triggered on the positive edge of `clk`.

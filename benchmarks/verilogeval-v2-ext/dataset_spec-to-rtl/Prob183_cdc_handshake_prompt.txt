@@ -1,0 +1,46 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        src_clk
+ - input        src_reset
+ - input        src_valid
+ - input  [7:0] src_data
+ - output       src_ready
+ - input        dst_clk
+ - input        dst_reset
+ - output       dst_valid
+ - output [7:0] dst_data
+ - input        dst_ready
+
+Implement a reliable clock-domain-crossing data transfer using a closed-loop
+Req/Ack handshake.
+
+Source side (`src_clk` domain):
+ - `src_valid/src_ready` form a standard ready/valid handshake.
+ - When `src_valid=1` and `src_ready=1` on a rising edge of `src_clk`, accept
+   one byte of `src_data` for transfer.
+ - While a transfer is in-flight, `src_ready` must be 0 (only one outstanding
+   transfer is allowed).
+
+Destination side (`dst_clk` domain):
+ - When a new byte arrives from the source, the module must assert `dst_valid`
+   and present `dst_data` (the transferred byte).
+ - `dst_valid` must remain asserted until `dst_ready=1` on a rising edge of
+   `dst_clk` (destination consumes the byte).
+ - After the byte is consumed, `dst_valid` deasserts and the module may accept
+   another source transfer.
+
+Reset:
+ - `src_reset` is active-high synchronous to `src_clk`.
+ - `dst_reset` is active-high synchronous to `dst_clk`.
+ - On reset, clear internal state so `src_ready=1`, `dst_valid=0`, and
+   `dst_data=0`.
+
+CDC requirement:
+ - Implement the Req/Ack handshake using toggle signals and 2-flop
+   synchronizers between domains. Hold the data stable while the request is
+   pending so the destination can safely sample it after seeing the request.
+
+All sequential logic is triggered on the positive edge of its respective
+clock.

@@ -1,0 +1,39 @@
+I would like you to implement a module named fp32_multiplier with the following interface:
+input [31:0] a
+input [31:0] b
+output exception
+output overflow
+output underflow
+output [31:0] out
+
+This module must compute the IEEE-754 single-precision (binary32) floating-point multiplication of inputs a and b, and also report status flags.
+
+Requirements:
+- Interpret inputs as IEEE-754 binary32: 1-bit sign (bit 31), 8-bit exponent (bits 30..23, bias 127), 23-bit fraction (bits 22..0).
+- Outputs and status flags:
+	- out: the 32-bit floating-point product (combinational).
+	- exception: 1 if either input is NaN or Infinity (exponent==255); 0 otherwise.
+	- overflow: 1 if the unbiased result exponent exceeds the representable range after normalization (biased exponent > 255) and the product is non-zero; 0 otherwise.
+	- underflow: 1 if the unbiased result exponent is below the minimum after normalization (biased exponent < 0) and the product is non-zero; 0 otherwise.
+- Special cases handling (combinational):
+	- If exception==1 and at least one input is NaN, you may return a quiet-NaN in out; otherwise you may return 0.
+	- Infinity × zero should produce a NaN (quiet-NaN preferred) and set exception=1.
+	- Infinity × finite non-zero => Infinity in out; sign = a[31] XOR b[31].
+	- Zero × finite => Zero in out; sign = a[31] XOR b[31].
+	- Distinguish zeros (±0), subnormals (exponent==0, fraction≠0), normals (1..254), infinities (exponent==255, fraction==0), NaNs (exponent==255, fraction≠0).
+- For normal numbers, use implicit leading 1 in the significand; for subnormals, the leading bit is 0.
+- Compute the product for non-special cases:
+	- sign = a[31] XOR b[31].
+	- unbiased_exponent = (exp_a != 0 ? exp_a - 127 : -126) + (exp_b != 0 ? exp_b - 127 : -126) + normalization_adjust.
+	- significand_product = (24-bit sig_a) × (24-bit sig_b) → 48-bit.
+	- Normalize the 48-bit product so the leading 1 is at the correct position, adjusting exponent accordingly.
+- Implement rounding to nearest, ties to even (round-to-nearest-even) using guard/round/sticky bits from the 48-bit product; if rounding overflows the mantissa, renormalize and increment exponent.
+- Handle overflow: set overflow=1 and out to ±Infinity when biased exponent > 255.
+- Handle underflow: set underflow=1 and out to signed zero (or a correctly rounded subnormal) when biased exponent < 0.
+- The final fraction in out is 23 bits; the stored exponent is biased by 127.
+- All logic must be purely combinational—no clocks, resets, or state elements. Output must reflect input changes via combinational propagation.
+
+Notes:
+- Use 24-bit significands: {hidden_bit, fraction[22:0]} where hidden_bit is 1 for normals and 0 for subnormals.
+- During normalization of the 48-bit product, select proper 24-bit window and compute guard/round/sticky for rounding.
+- Preserve NaN payload if convenient (optional); otherwise, return a quiet-NaN when producing NaN.

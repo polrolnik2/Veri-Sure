@@ -1,0 +1,47 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [7:0] tx_data
+ - input        miso
+ - output       mosi
+ - output       sclk
+ - output       cs_n
+ - output [7:0] rx_data
+ - output       busy
+ - output       done
+
+Implement an SPI master (Mode 0: CPOL=0, CPHA=0) that transfers one byte
+per request.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: `cs_n=1`, `sclk=0`, `mosi=0`, `busy=0`, `done=0`, `rx_data=0`.
+
+Starting a transfer:
+ - When idle (`busy=0`), if `start` is 1 on a rising edge of `clk`, latch
+   `tx_data` and begin an 8-bit SPI transfer (MSB first). While busy,
+   ignore `start`.
+ - Assert `cs_n` low immediately when the transfer begins.
+
+SPI timing (one `clk` cycle = one half SCLK period):
+ - The cycle where `start` is accepted is the first SCLK LOW half-cycle
+   (SCLK is 0).
+ - While transferring, `sclk` toggles every `clk` cycle:
+     LOW, HIGH, LOW, HIGH, ... for 8 bits total.
+ - On every LOW half-cycle, drive `mosi` to the current transmit bit and
+   keep it stable through the following HIGH half-cycle.
+ - On every HIGH half-cycle, sample input `miso` and shift it into the
+   receive byte (MSB first). (This corresponds to sampling on the rising
+   edge of SCLK in Mode 0.)
+
+Completion:
+ - After sampling the last bit (bit 0) on a HIGH half-cycle, perform one
+   final LOW half-cycle, then deassert `cs_n` and pulse `done` high for
+   exactly 1 `clk` cycle. `busy` must be 0 when `done` is asserted.
+ - `sclk` must be 0 when idle.
+
+All sequential logic is triggered on the positive edge of `clk`.

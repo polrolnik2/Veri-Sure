@@ -1,0 +1,21 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [31:0] a
+ - input  [31:0] b
+ - output [31:0] sum
+
+The inputs `a` and `b` are signed 32-bit two's-complement fixed-point values
+in Q15.16 format (16 fractional bits). Implement a signed saturating adder:
+
+  sum = saturate(a + b)
+
+Where saturation clamps the mathematical sum into the representable Q15.16
+range:
+
+ - If the sum overflows positive, output 32'h7FFF_FFFF.
+ - If the sum overflows negative, output 32'h8000_0000.
+ - Otherwise, output the exact two's-complement sum.
+
+All logic must be purely combinational (no clocked logic).

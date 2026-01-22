@@ -1,0 +1,37 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input         clk
+ - input         reset
+ - input         in_valid
+ - input  [15:0] a_re
+ - input  [15:0] a_im
+ - input  [15:0] b_re
+ - input  [15:0] b_im
+ - output [31:0] out_re
+ - output [31:0] out_im
+ - output        out_valid
+
+The inputs represent two complex numbers in signed two's-complement:
+  A = a_re + j*a_im
+  B = b_re + j*b_im
+
+Compute the complex product:
+  A * B = (a_re*b_re - a_im*b_im) + j*(a_re*b_im + a_im*b_re)
+
+Pipeline / control requirements:
+ - `reset` is active-high synchronous. On reset, clear internal state, set
+   `out_re`/`out_im` to 0, and set `out_valid` to 0.
+ - When `in_valid` is 1 on a rising clock edge, latch the inputs and accept
+   them into the pipeline.
+ - The design is fully pipelined: it may accept new inputs every cycle.
+ - `out_valid` must assert exactly 3 cycles after an input is accepted
+   (`in_valid` high), and may be high in consecutive cycles for back-to-back
+   inputs.
+ - When `out_valid` is 0, `out_re` and `out_im` must hold their previous
+   values (do not change).
+
+Implementation note: You may use a 3-multiplier method (resource reuse)
+and multiple pipeline stages, but exact micro-architecture is up to you as
+long as timing/valid behavior matches.

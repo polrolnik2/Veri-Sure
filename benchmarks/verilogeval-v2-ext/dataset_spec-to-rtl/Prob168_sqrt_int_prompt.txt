@@ -1,0 +1,27 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [15:0] radicand
+ - output [7:0]  root
+ - output       done
+
+Implement an integer square-root unit that computes:
+  root = floor(sqrt(radicand))
+for unsigned integers.
+
+Behavior:
+ - `reset` is active-high synchronous. On reset, clear internal state, set
+   `root` to 0, and set `done` to 0.
+ - When idle, if `start` is 1 on a rising clock edge, latch `radicand` and
+   begin a computation.
+ - The computation must take exactly 8 clock cycles after `start` is
+   accepted (iterative algorithm such as binary search or bit-iterative).
+ - While busy, ignore `start` and ignore changes on `radicand`.
+ - When finished, update `root` and assert `done` for exactly 1 clock cycle.
+   Then return to idle.
+
+All sequential logic is triggered on the positive edge of the clock.

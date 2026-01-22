@@ -1,0 +1,31 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [7:0] a
+ - input  [7:0] b
+ - output [15:0] product
+ - output       done
+
+Implement an 8-bit unsigned serial multiplier using a shift-and-add
+architecture (area-efficient, multi-cycle).
+
+Behavior:
+ - `reset` is active-high synchronous. On reset, clear internal state, set
+   `product` to 0, and set `done` to 0.
+ - When the multiplier is idle, if `start` is 1 on a rising clock edge,
+   latch inputs `a` and `b` and begin a multiplication.
+ - The multiplication must take exactly 8 clock cycles after the start is
+   accepted, using the classic shift-and-add method (check multiplier LSB,
+   conditionally add the shifted multiplicand, then shift).
+ - While a multiplication is in progress, ignore `start` (do not restart)
+   and ignore any changes on `a`/`b` (use the latched values).
+ - When the multiplication completes, update `product` with the final
+   16-bit result and assert `done` for exactly 1 clock cycle.
+ - After `done` pulses, the module returns to idle and may accept a new
+   `start`.
+
+All sequential logic is triggered on the positive edge of the clock.

@@ -1,0 +1,31 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  signed [7:0] sample_in
+ - output signed [17:0] sample_out
+
+Implement a 4-tap signed FIR filter using a shift-register chain of the
+last 4 input samples and a multiply-accumulate (MAC).
+
+Let the 4 most-recent samples be:
+  x0 = sample_in[n]   (current sample captured this cycle)
+  x1 = sample_in[n-1]
+  x2 = sample_in[n-2]
+  x3 = sample_in[n-3]
+
+Use the fixed signed coefficients:
+  c0 =  7
+  c1 = -3
+  c2 =  5
+  c3 = -2
+
+On every rising edge of `clk` (when not in reset), shift in `sample_in`
+and update `sample_out` to:
+
+  sample_out = c0*x0 + c1*x1 + c2*x2 + c3*x3
+
+`reset` is active-high synchronous. On reset, clear the sample history to
+0 and set `sample_out` to 0.

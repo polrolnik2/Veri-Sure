@@ -1,0 +1,24 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  arst
+ - output srst
+
+Implement an asynchronous-reset, synchronous-release reset synchronizer.
+
+Requirements:
+ - `arst` is an active-high asynchronous reset input.
+ - `srst` is an active-high reset output that:
+     * asserts asynchronously when `arst` is 1, and
+     * deasserts synchronously after `arst` goes to 0.
+ - Use a 2-flop synchronizer for the release (metastability reduction).
+
+More precisely:
+ - When `arst` is 1: `srst` must be 1 immediately (asynchronously).
+ - When `arst` transitions from 1 to 0: `srst` must remain 1 for 2 rising
+   edges of `clk`, then become 0.
+
+All sequential logic is triggered on the positive edge of `clk`, with
+asynchronous reset as needed.

@@ -1,0 +1,25 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  kick
+ - output wdt_reset
+
+Implement a watchdog timer that triggers a reset pulse if not kicked.
+
+Behavior:
+ - Use a fixed timeout of 20 clock cycles.
+ - Maintain an internal counter that increments every cycle.
+ - If `kick` is 1 on a rising edge, clear the counter to 0 (kick has
+   priority) and do not assert `wdt_reset`.
+ - If the counter reaches 19 (i.e., 20 cycles without a kick), assert
+   `wdt_reset` for exactly 1 cycle and clear the counter to 0.
+ - Otherwise, `wdt_reset` must be 0 and the counter continues counting.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: counter=0 and wdt_reset=0.
+
+All sequential logic is triggered on the positive edge of `clk`.

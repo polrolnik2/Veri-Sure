@@ -1,0 +1,43 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        wr_clk
+ - input        rd_clk
+ - input        wr_reset
+ - input        rd_reset
+ - input        wr_en
+ - input  [7:0] din
+ - output       full
+ - input        rd_en
+ - output [7:0] dout
+ - output       empty
+
+Implement an asynchronous FIFO with data width 8 and depth 16. The write and
+read sides run on different clocks (`wr_clk` and `rd_clk`).
+
+Reset / assumptions:
+ - `wr_reset` is active-high synchronous to `wr_clk`.
+ - `rd_reset` is active-high synchronous to `rd_clk`.
+ - On reset, clear pointers so the FIFO is empty (`empty=1`, `full=0`), and
+   set `dout` to 0.
+ - You may assume both resets are asserted during initialization.
+
+Write side (clocked by `wr_clk`):
+ - If `wr_en=1` and `full=0`, write `din` into the FIFO and advance the write
+   pointer.
+ - If `wr_en=1` when `full=1`, ignore the write.
+ - `full` indicates the FIFO has 16 elements.
+
+Read side (clocked by `rd_clk`):
+ - If `rd_en=1` and `empty=0`, read the oldest element into `dout` and advance
+   the read pointer.
+ - If `rd_en=1` when `empty=1`, ignore the read and keep `dout` unchanged.
+ - `empty` indicates the FIFO has 0 elements.
+
+CDC requirement:
+ - Use Gray-code pointers and 2-flop synchronizers to pass the pointers
+   between clock domains (classic async FIFO technique).
+
+All sequential logic is triggered on the positive edge of its respective
+clock.

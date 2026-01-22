@@ -1,0 +1,45 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [3:0] data_in
+ - input  [6:0] code_in
+ - output [6:0] encoded
+ - output [6:0] corrected
+ - output [3:0] data_out
+ - output [2:0] err_pos
+ - output error
+
+Implement (7,4) Hamming code encoding and single-error correction (SEC).
+
+Bit mapping for the 7-bit codeword `encoded` / `code_in`:
+  code bit index (0-based) -> Hamming position (1-based)
+    [0] -> 1  (p1)
+    [1] -> 2  (p2)
+    [2] -> 3  (d0)
+    [3] -> 4  (p4)
+    [4] -> 5  (d1)
+    [5] -> 6  (d2)
+    [6] -> 7  (d3)
+
+Encoding (even parity):
+  d0 = data_in[0], d1 = data_in[1], d2 = data_in[2], d3 = data_in[3]
+  p1 = d0 ^ d1 ^ d3
+  p2 = d0 ^ d2 ^ d3
+  p4 = d1 ^ d2 ^ d3
+
+  encoded = {d3,d2,d1,p4,d0,p2,p1} in terms of bit positions:
+    encoded[0]=p1, encoded[1]=p2, encoded[2]=d0, encoded[3]=p4,
+    encoded[4]=d1, encoded[5]=d2, encoded[6]=d3
+
+Decoding / correction:
+ - Compute the 3-bit syndrome (even parity checks):
+     s1 = code_in[0] ^ code_in[2] ^ code_in[4] ^ code_in[6]
+     s2 = code_in[1] ^ code_in[2] ^ code_in[5] ^ code_in[6]
+     s4 = code_in[3] ^ code_in[4] ^ code_in[5] ^ code_in[6]
+   err_pos = {s4,s2,s1}  (values 0..7)
+ - `error` is 1 when err_pos != 0.
+ - If err_pos is 1..7, flip that bit of `code_in` to produce `corrected`.
+ - `data_out` is extracted from the corrected codeword as {d3,d2,d1,d0}.
+
+All logic must be purely combinational.

@@ -1,0 +1,58 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [7:0] data
+ - input        ps2_data_in
+ - output       ps2_clk_oe
+ - output       ps2_data_oe
+ - output       busy
+ - output       done
+ - output       ack_error
+
+Implement a simplified PS/2 keyboard host transmitter that sends one byte
+and checks the device ACK.
+
+Open-drain modeling:
+ - `ps2_clk_oe` and `ps2_data_oe` are drive-low enables (open-drain):
+     *_oe = 1  -> drive the line LOW
+     *_oe = 0  -> release the line (pulled HIGH externally)
+ - `ps2_data_in` provides the actual PS/2 DATA line level (after the
+   open-drain combination). It is only sampled during the ACK phase.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: release both lines (`ps2_clk_oe=0`, `ps2_data_oe=0`),
+   clear `ack_error`, and set `busy=0`, `done=0`.
+
+Start / busy:
+ - When idle (`busy=0`), if `start` is 1 on a rising edge of `clk`, latch
+   `data` and begin a transmit sequence. While busy, ignore `start`.
+
+Transmit sequence (deterministic timing):
+ 1) Inhibit/request-to-send: 4 cycles
+    - Drive CLOCK low (`ps2_clk_oe=1`), release DATA (`ps2_data_oe=0`).
+ 2) Send 11 frame bits (LSB-first), each bit is 2 cycles:
+    - Frame bits in order:
+        start bit = 0
+        data bits = data[0], data[1], ..., data[7]
+        parity bit = odd parity over data bits
+        stop bit = 1
+    - For each bit:
+        LOW  cycle: CLOCK low (`ps2_clk_oe=1`), drive DATA for bit
+                   (drive low for 0, release for 1)
+        HIGH cycle: CLOCK released (`ps2_clk_oe=0`), hold DATA the same
+ 3) ACK clock pulse: 2 cycles
+    - LOW  cycle: CLOCK low, DATA released
+    - HIGH cycle: CLOCK released, DATA released, sample `ps2_data_in`
+      (0 means ACK, 1 means no-ACK)
+ 4) Done: pulse `done` for exactly 1 cycle while `busy=0`, then return idle.
+
+ACK handling:
+ - Clear `ack_error` when a new transfer starts.
+ - If `ps2_data_in` is 1 during the ACK HIGH cycle, set `ack_error=1`.
+
+All sequential logic is triggered on the positive edge of `clk`.

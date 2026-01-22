@@ -1,0 +1,26 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  noisy
+ - output clean
+
+Implement a button debouncer with glitch filtering.
+
+Behavior:
+ - Sample `noisy` on every rising edge of `clk`.
+ - Keep an 8-sample history shift-register of the most recent samples
+   (newest sample at bit 0).
+ - Update output `clean` only when the input has been stable for 8
+   consecutive samples:
+     * If all 8 samples are 1 -> set `clean` to 1.
+     * If all 8 samples are 0 -> set `clean` to 0.
+     * Otherwise keep `clean` unchanged.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: clear history to 0 and drive `clean` low.
+
+This rejects glitches shorter than 8 clock cycles.

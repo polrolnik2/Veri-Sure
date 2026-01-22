@@ -1,0 +1,16 @@
+I would like you to implement a module named comb_parallel_multiplier_8bit_pp with the following interface:
+input [7:0] a
+input [7:0] b
+output [15:0] product
+This module must compute the signed 8-bit × 8-bit multiplication of inputs a and b, producing a 16-bit signed product.
+The implementation should use a combinational parallel multiplier architecture based on partial products. Specifically:
+Interpret both a and b as two’s complement signed numbers.
+Generate eight partial products, one for each bit of b.
+For bit i of b, if it is 1, the partial product is a (sign-extended to 16 bits) left-shifted by i positions.
+If bit i is 0, the partial product is zero.
+Properly sign-extend a in each partial product according to its sign bit (a[7]) to ensure correct two’s complement arithmetic.
+Sum all eight 16-bit partial products combinatorially (no clock or sequential logic).
+The final 16-bit result must be correct for all combinations of signed inputs, including negative operands.
+Note: The overall sign of the product is determined by the XOR of the signs of a and b. You may compute the magnitude using positive partial products and conditionally negate the result if needed.
+All logic must be purely combinational—there are no clock, reset, or state elements in this module.
+Assume that the inputs can change at any time, and the output product must reflect the correct result as soon as possible through combinational logic propagation.

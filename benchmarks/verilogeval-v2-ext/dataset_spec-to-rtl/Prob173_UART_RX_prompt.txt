@@ -1,0 +1,18 @@
+Implement a UART receiver with the following exact interface (match port names, directions, and widths):
+module TopModule(
+	input        clk,
+	input        rstn,
+	input        rx,
+	output [7:0] rx_data,
+	output       done
+);
+
+Requirements:
+- Target clock: 100 MHz. Baud rate: 9600 baud. Derive the bit period as 100_000_000 / 9600 clock cycles (integer division).
+- Framing: 1 start bit (low), 8 data bits (LSB first), even parity bit, 1 stop bit (high).
+- Reset: active-low synchronous/asynchronous (match reference behavior). On reset, clear internal state and outputs, drive done low.
+- Sampling: detect start bit by rx going low; wait half a bit period to confirm it is still low, then sample each data bit on subsequent full bit periods. Sample parity and stop bits on full bit boundaries as well.
+- Parity: even parity. Track the parity across the received data bits and use the received parity bit to validate; if parity or framing (stop bit) is wrong, still complete the frame but the design may choose to output the collected data (matching the reference is sufficient).
+- Output behavior: assemble the received 8-bit word in rx_data. Assert done for one clock cycle after the stop bit sampling completes for each frame, then deassert and return to idle ready for the next frame.
+- Throughput: support continuous frames back-to-back with exactly one stop bit high time between frames.
+- Pure RTL/SystemVerilog (no delays). Use counters/state machines driven by clk to time bit periods.

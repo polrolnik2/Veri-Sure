@@ -1,0 +1,44 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        sclk
+ - input        reset
+ - input        cs_n
+ - input        mosi
+ - output       miso
+ - output       miso_oe
+
+Implement an SPI slave (Mode 0: CPOL=0, CPHA=0) that understands a simple
+2-byte command protocol.
+
+Reset:
+ - `reset` is active-high synchronous to `sclk`.
+ - On reset, clear the internal 8-bit register REG0 to 0.
+
+Framing:
+ - `cs_n` is active-low. A transfer is active when `cs_n=0`.
+ - When `cs_n=1`, the slave is idle. `miso_oe` must be 0 when idle.
+ - When `cs_n` goes high, the current command is aborted and the next
+   time `cs_n` goes low the slave starts from the first (opcode) byte.
+
+Bit timing / order:
+ - Sample `mosi` on the rising edge of `sclk` when `cs_n=0`.
+ - Bits are MSB-first within each byte.
+ - Drive `miso` on the falling edge of `sclk` when `cs_n=0` so it is stable
+   for the next rising edge (Mode 0).
+
+Protocol (two bytes while `cs_n=0`):
+ - Byte0 (opcode):
+     8'h02 = WRITE_REG0
+     8'h03 = READ_REG0
+ - Byte1 (payload/response):
+     If opcode == WRITE_REG0: latch Byte1 into REG0.
+     If opcode == READ_REG0: ignore MOSI bits, and shift out REG0 on MISO
+     (MSB first) across the 8 clocks of Byte1.
+
+`miso_oe` behavior:
+ - `miso_oe` must be 1 only during the Byte1 response of READ_REG0.
+ - Otherwise `miso_oe` must be 0 (tri-stated / not driving).
+
+All sequential logic is triggered on the edges of `sclk`.

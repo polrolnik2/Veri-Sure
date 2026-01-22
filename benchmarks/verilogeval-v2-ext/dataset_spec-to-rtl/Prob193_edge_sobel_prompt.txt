@@ -1,0 +1,27 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [7:0] p00, p01, p02
+ - input  [7:0] p10, p11, p12
+ - input  [7:0] p20, p21, p22
+ - output signed [10:0] gx
+ - output signed [10:0] gy
+ - output [10:0] mag
+
+The 9 inputs form a 3x3 grayscale pixel window (unsigned 8-bit values):
+
+  p00 p01 p02
+  p10 p11 p12
+  p20 p21 p22
+
+Compute the Sobel gradients:
+
+  gx = (p02 + 2*p12 + p22) - (p00 + 2*p10 + p20)
+  gy = (p20 + 2*p21 + p22) - (p00 + 2*p01 + p02)
+
+Then compute an approximate gradient magnitude:
+
+  mag = |gx| + |gy|
+
+All logic must be purely combinational.

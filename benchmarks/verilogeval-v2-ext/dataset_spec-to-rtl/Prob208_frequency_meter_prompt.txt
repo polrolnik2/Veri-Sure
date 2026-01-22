@@ -1,0 +1,25 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  sig_in
+ - output [15:0] freq_count
+ - output done
+
+Implement a frequency meter using a fixed reference window.
+
+Behavior:
+ - Use a fixed measurement window of 64 cycles of `clk`.
+ - Count the number of rising edges of `sig_in` that occur within each
+   64-cycle window (sampling `sig_in` on the rising edge of `clk`).
+ - At the end of each window, update `freq_count` with the edge count and
+   assert `done` for exactly 1 clock cycle.
+ - Then start a new window immediately (continuous measurements).
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: clear counters, set `freq_count=0`, and `done=0`.
+
+All sequential logic is triggered on the positive edge of `clk`.

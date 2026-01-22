@@ -1,0 +1,37 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  [1:0] coin
+ - output dispense
+ - output [5:0] change
+
+Implement a simple vending machine controller that accepts coins, dispenses
+an item when enough credit is reached, and returns change.
+
+Coin encoding (value in cents):
+  2'b00 = no coin (0)
+  2'b01 = 5
+  2'b10 = 10
+  2'b11 = 25
+
+Price:
+ - The item costs 30 cents.
+
+Behavior:
+ - Maintain an internal credit (cents).
+ - On each rising edge of `clk` (when not in reset), add the current coin
+   value to the credit.
+ - If the updated credit is >= 30:
+     * assert `dispense` for exactly 1 cycle
+     * output `change` = updated_credit - 30 (0..30)
+     * clear internal credit back to 0
+ - Otherwise:
+     * `dispense` must be 0
+     * `change` must be 0
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: credit=0, dispense=0, change=0.

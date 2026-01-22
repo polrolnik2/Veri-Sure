@@ -1,0 +1,39 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [31:0] a
+ - input  [31:0] b
+ - input  [3:0]  op
+ - output [31:0] result
+ - output        zero
+ - output        carry
+ - output        overflow
+ - output        negative
+
+Implement a combinational 32-bit ALU (no clocked logic).
+
+Operation encoding (`op`):
+ 0: ADD   result = a + b
+ 1: SUB   result = a - b
+ 2: AND   result = a & b
+ 3: OR    result = a | b
+ 4: XOR   result = a ^ b
+ 5: SLL   result = a << shamt       (shamt = b[4:0])
+ 6: SRL   result = a >> shamt       (logical right shift)
+ 7: SRA   result = a >>> shamt      (arithmetic right shift, treat `a` as signed)
+ 8: SLT   result = (signed(a) < signed(b)) ? 1 : 0
+ 9: SLTU  result = (a < b) ? 1 : 0
+10: EQ    result = (a == b) ? 1 : 0
+11: NEQ   result = (a != b) ? 1 : 0
+others:  result = 0
+
+Flags:
+ - `zero`     = 1 if result == 0 else 0.
+ - `negative` = result[31].
+ - `carry` is the carry-out from ADD, and for SUB it is the carry-out of
+   (a + ~b + 1) (i.e., 1 means no borrow). For other ops, carry = 0.
+ - `overflow` is the signed overflow flag for ADD/SUB. For other ops,
+   overflow = 0.
+
+All logic must be purely combinational.

@@ -1,0 +1,23 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  [7:0] duty
+ - output pwm
+
+Implement a simple PWM (pulse-width modulation) generator.
+
+Use an internal 8-bit free-running counter that increments every rising
+edge of `clk` (wraps from 255 back to 0).
+
+On each rising edge when not in reset:
+ - Set `pwm` high when the current counter value is less than `duty`.
+ - Then increment the counter.
+
+This produces a PWM period of 256 cycles where `duty` specifies the
+number of high cycles per period (0..255).
+
+`reset` is active-high synchronous. On reset, set the counter to 0 and
+drive `pwm` low.

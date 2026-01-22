@@ -1,0 +1,36 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        enable
+ - input  [7:0] din
+ - input  [4:0] tap
+ - output [7:0] dout
+
+Implement a RAM-based shift register (tapped delay line) with:
+ - data width 8
+ - depth 32 samples
+
+Behavior:
+ - Internally, the delay line holds the last 32 shifted-in samples.
+ - `tap` selects which delayed sample to output:
+     * `tap=0`  selects the most recently shifted-in sample,
+     * `tap=1`  selects the sample from 1 cycle ago,
+     * ...
+     * `tap=31` selects the sample from 31 cycles ago.
+ - On each rising edge of `clk`:
+     * If `enable=1`, shift in `din` (store it as the newest sample).
+     * If `enable=0`, do not shift (history is unchanged).
+     * Update `dout` to the currently selected tapped value.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset, clear the entire delay line to 0, and set `dout` to 0.
+
+Implementation note:
+ - Use a circular buffer in RAM (or an equivalent RAM-based implementation)
+   instead of 32 stages of flip-flops.
+
+All sequential logic is triggered on the positive edge of `clk`.

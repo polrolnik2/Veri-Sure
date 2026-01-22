@@ -1,0 +1,22 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - output clk_div
+
+Implement an odd clock divider that divides the input clock by 5 with an
+approximately 50% duty-cycle output.
+
+Requirements:
+ - `reset` is active-high synchronous.
+ - On reset: drive `clk_div` low and clear internal state.
+ - After reset, generate an output clock `clk_div` whose frequency is
+   `clk/5`.
+ - The output duty cycle must be 50% (high and low times equal) by using
+   both rising-edge and falling-edge logic (dual-edge sampling) and a
+   purely combinational merge of the two edge-generated waveforms.
+
+All sequential logic is triggered on the positive or negative edge of
+`clk` as needed.

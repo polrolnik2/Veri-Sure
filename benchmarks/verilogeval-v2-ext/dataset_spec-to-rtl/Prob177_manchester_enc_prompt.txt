@@ -1,0 +1,42 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [7:0] data
+ - output       man_out
+ - output       out_valid
+ - output       busy
+ - output       done
+
+Implement a Manchester encoder that outputs a Manchester-coded stream for
+one input byte.
+
+Encoding rule (G.E. Thomas convention):
+ - For each data bit, output two half-bit levels:
+     bit=0 -> "10" (HIGH then LOW)
+     bit=1 -> "01" (LOW then HIGH)
+
+Bit order and timing:
+ - Bits are encoded MSB-first (data[7] first).
+ - One `clk` cycle corresponds to one Manchester half-bit output.
+ - Therefore, encoding one byte produces exactly 16 output cycles.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: `man_out=1` (idle HIGH), `out_valid=0`, `busy=0`, `done=0`.
+
+Start / busy:
+ - When idle (`busy=0`), if `start` is 1 on a rising edge of `clk`, latch
+   `data` and begin outputting the 16-cycle encoded stream on `man_out`.
+ - While busy, ignore `start`.
+
+Outputs:
+ - `out_valid` must be 1 for each of the 16 output cycles, and 0 otherwise.
+ - After the last half-bit is output, pulse `done` high for exactly 1 `clk`
+   cycle while `busy=0`, then return to idle.
+ - When `out_valid` is 0, `man_out` must hold idle HIGH (1).
+
+All sequential logic is triggered on the positive edge of `clk`.

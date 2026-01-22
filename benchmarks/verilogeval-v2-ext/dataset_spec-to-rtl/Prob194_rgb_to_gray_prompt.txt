@@ -1,0 +1,18 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [7:0] r
+ - input  [7:0] g
+ - input  [7:0] b
+ - output [7:0] gray
+
+Convert an 8-bit RGB pixel to an 8-bit grayscale value using fixed-point
+weighted sum (integer math only).
+
+Use these coefficients (approx. ITU-R BT.601):
+  gray = (77*r + 150*g + 29*b + 128) >> 8
+
+The +128 term is for rounding before the >>8.
+
+All logic must be purely combinational.

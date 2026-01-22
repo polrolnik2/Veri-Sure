@@ -1,0 +1,21 @@
+Implement a combinational IEEE‑754 single-precision (binary32) floating‑point adder with the following exact interface (match port names and widths):
+module TopModule(
+  input  [31:0] src1,
+  input  [31:0] src2,
+  output [31:0] out
+);
+
+Requirements:
+- Interpret inputs as IEEE‑754 binary32: sign at bit 31, 8‑bit exponent at bits 30:23 (bias 127), 23‑bit fraction at bits 22:0.
+- Purely combinational: no clocks or state. Output must reflect input changes combinationally.
+- Use 24‑bit significands for computation: {hidden_bit, fraction}. For normals (exp!=0) hidden_bit=1; for subnormals (exp==0) hidden_bit=0.
+- Exponent alignment: compare magnitudes by exponent first, then significand. Right‑shift the smaller significand by the exponent difference (shifts ≥24 yield zero).
+- Addition/Subtraction:
+  - If signs equal: add aligned significands. If there is a carry, shift right by 1 and increment the working exponent.
+  - If signs differ: subtract the smaller magnitude from the larger; the result sign equals the sign of the larger magnitude. If cancellation yields leading zeros, left‑shift until the leading 1 is restored and decrement the working exponent accordingly (saturate at zero when needed).
+- Normalization: ensure the normalized significand has the hidden bit in position before extracting the 23‑bit fraction for the final result.
+- Rounding: at minimum, implement a simple rounding/truncation scheme consistent with your normalization so that the 23‑bit fraction is produced deterministically (round‑to‑nearest‑even preferred but not required for this task).
+- Special values: handling of NaN/Inf/±0 is not strictly required; match consistent finite‑case behavior (alignment, add/sub, normalize) so that outputs are deterministic for finite inputs.
+
+Deliverables:
+- A single SystemVerilog module named TopModule that matches the exact interface above and implements the described behavior without any clocks or resets.

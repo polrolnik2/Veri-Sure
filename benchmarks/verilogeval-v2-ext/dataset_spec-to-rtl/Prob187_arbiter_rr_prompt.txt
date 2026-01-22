@@ -1,0 +1,28 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input  [3:0] req
+ - output [3:0] grant
+
+Implement a 4-request round-robin arbiter (fair arbitration).
+
+Rules:
+ - `grant` must be one-hot (at most one bit set). If no requests are active,
+   `grant` must be 0.
+ - When one or more bits in `req` are 1, choose exactly one requester to
+   grant based on a rotating priority pointer.
+ - The priority pointer indicates which request index to consider first, and
+   then wraps around (0->1->2->3->0).
+ - After a non-zero `grant` is issued, advance the priority pointer to the
+   next index after the granted one for the next cycle.
+ - If `req` is 0, do not change the pointer.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset, clear `grant` to 0 and set the initial priority pointer so that
+   request 0 has the highest priority.
+
+All sequential logic is triggered on the positive edge of `clk`.

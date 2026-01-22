@@ -1,0 +1,19 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [31:0] x
+ - output [5:0]  count
+
+Implement a 32-bit leading-zero counter (LZC).
+
+`count` is the number of consecutive zero bits starting at the MSB (bit 31)
+and moving toward bit 0.
+
+Examples:
+ - x = 32'h8000_0000 => count = 0
+ - x = 32'h4000_0000 => count = 1
+ - x = 32'h0000_0001 => count = 31
+ - x = 32'h0000_0000 => count = 32
+
+All logic must be purely combinational.

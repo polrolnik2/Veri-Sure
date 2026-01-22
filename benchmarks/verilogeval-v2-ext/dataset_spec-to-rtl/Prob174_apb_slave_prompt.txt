@@ -1,0 +1,37 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input         clk
+ - input         reset
+ - input         psel
+ - input         penable
+ - input         pwrite
+ - input  [7:0]  paddr
+ - input  [31:0] pwdata
+ - output [31:0] prdata
+ - output        pready
+ - output        pslverr
+
+Implement a simple APB slave that exposes four 32-bit registers.
+
+Reset / outputs:
+ - `reset` is active-high synchronous.
+ - On reset, clear all registers to 0 and set `prdata` to 0.
+ - `pready` must always be 1 (zero wait-states).
+ - `pslverr` must always be 0.
+
+APB transfer:
+ - A transfer occurs in the ACCESS phase when `psel=1` and `penable=1`.
+ - If `pwrite=1` during ACCESS, perform a write.
+ - If `pwrite=0` during ACCESS, perform a read and update `prdata`.
+ - Outside of a read ACCESS phase, `prdata` must hold its previous value.
+
+Register map (byte addresses):
+ - 0x00: REG0 (read/write)
+ - 0x04: REG1 (read/write)
+ - 0x08: REG2 (read/write)
+ - 0x0C: REG3 (read/write)
+ - Any other address: reads return 0, writes are ignored.
+
+All sequential logic is triggered on the positive edge of `clk`.

@@ -1,0 +1,45 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  req0
+ - input  req1
+ - input  req2
+ - output [1:0] floor
+ - output [1:0] dir
+ - output door_open
+
+Implement a simple 3-floor elevator controller (floors 0,1,2).
+
+Requests:
+ - `req0/req1/req2` are request inputs for floors 0/1/2.
+ - On each rising edge of `clk`, latch requests into an internal pending
+   bitmask: pending[f] is set if any request for floor f has occurred.
+
+Serving:
+ - If the elevator is at a floor that has a pending request, it must
+   "open the door" for 1 cycle:
+     * `door_open` = 1 for that cycle,
+     * clear the pending bit for that floor,
+     * do not move in that cycle (floor unchanged).
+
+Movement:
+ - Otherwise, if there are pending requests:
+     * `dir` indicates movement direction:
+         2'b00 = IDLE, 2'b01 = UP, 2'b10 = DOWN
+     * If currently moving UP and there is any pending request above the
+       current floor, move up by 1 floor per cycle.
+     * If currently moving DOWN and there is any pending request below
+       the current floor, move down by 1 floor per cycle.
+     * If there are no pending requests in the current direction but
+       there are requests in the opposite direction, reverse direction.
+ - If there are no pending requests anywhere, `dir` must be IDLE and the
+   elevator must not move.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: floor=0, dir=IDLE, door_open=0, pending cleared.
+
+All sequential logic is triggered on the positive edge of `clk`.

@@ -1,0 +1,27 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  clk
+ - input  reset
+ - input  [15:0] inc
+ - output tick
+
+Implement an accumulator-based fractional clock divider that generates a
+1-cycle pulse `tick` at an average rate proportional to `inc`.
+
+Behavior:
+ - Maintain a 16-bit accumulator `acc`.
+ - On each rising edge of `clk` (when not in reset), compute:
+       {carry, acc_next} = acc + inc
+     and update:
+       acc  <= acc_next
+       tick <= carry
+ - Thus, `tick` is asserted for exactly 1 clock cycle whenever the
+   accumulator overflows.
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: `acc=0` and `tick=0`.
+
+This produces an average tick rate of `inc/65536` ticks per input clock.

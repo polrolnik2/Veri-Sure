@@ -1,0 +1,35 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [7:0] dividend
+ - input  [7:0] divisor
+ - output [7:0] quotient
+ - output [7:0] remainder
+ - output       done
+
+Implement an 8-bit unsigned restoring-division integer divider.
+
+Behavior:
+ - `reset` is active-high synchronous. On reset, clear internal state, set
+   `quotient`/`remainder` to 0, and set `done` to 0.
+ - When the divider is idle, if `start` is 1 on a rising clock edge, latch
+   `dividend` and `divisor` and begin a division.
+ - The divider must compute:
+       quotient  = dividend / divisor
+       remainder = dividend % divisor
+   for unsigned integers.
+ - Use an iterative restoring division algorithm that takes exactly 8 clock
+   cycles after `start` is accepted.
+ - While a division is in progress, ignore `start` and ignore changes on
+   `dividend`/`divisor` (use the latched values).
+ - When the division completes, update `quotient` and `remainder` and
+   assert `done` for exactly 1 clock cycle. Then return to idle.
+ - If `divisor` is 0 when `start` is accepted, output `quotient = 8'hFF`
+   and `remainder = dividend`, and assert `done` for 1 cycle (no iterative
+   steps are required).
+
+All sequential logic is triggered on the positive edge of the clock.

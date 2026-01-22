@@ -1,0 +1,60 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        start
+ - input  [6:0] addr
+ - input  [7:0] data
+ - input        sda_in
+ - output       scl_oe
+ - output       sda_oe
+ - output       busy
+ - output       done
+ - output       ack_error
+
+Implement a minimal I2C master that performs one WRITE transaction:
+
+  START + (addr[6:0] + W=0) + ACK + data[7:0] + ACK + STOP
+
+Open-drain modeling:
+ - `scl_oe` and `sda_oe` are drive-low enables (open-drain).
+   `*_oe = 1` means drive the line LOW. `*_oe = 0` means release the line
+   (it will be pulled HIGH externally).
+ - During ACK sampling, input `sda_in` provides the actual SDA line level
+   (0 = ACK, 1 = NACK).
+
+Reset:
+ - `reset` is active-high synchronous.
+ - On reset: release both lines (`scl_oe=0`, `sda_oe=0`), clear `ack_error`,
+   and set `busy=0`, `done=0`.
+
+Start / busy:
+ - When idle (`busy=0`), if `start` is 1 on a rising edge of `clk`, latch
+   `addr` and `data` and begin the transaction. While busy, ignore `start`.
+
+Timing (fully deterministic, one `clk` cycle per bus state):
+ - START is 2 cycles:
+     0) SCL released (HIGH), SDA driven LOW  (start condition)
+     1) SCL driven LOW,     SDA driven LOW
+ - Each data bit is 2 cycles, MSB-first:
+     LOW  cycle: SCL driven LOW, SDA = bit (drive LOW for 0, release for 1)
+     HIGH cycle: SCL released (HIGH), SDA held the same
+ - Each ACK bit is 2 cycles:
+     LOW  cycle: SCL driven LOW, SDA released
+     HIGH cycle: SCL released (HIGH), SDA released, sample `sda_in`
+ - STOP is 3 cycles:
+     0) SCL driven LOW,     SDA driven LOW
+     1) SCL released (HIGH), SDA driven LOW
+     2) SCL released (HIGH), SDA released (stop condition)
+
+ACK handling:
+ - If `sda_in` is 1 during an ACK HIGH cycle, treat it as NACK and set
+   `ack_error` (sticky for the transaction).
+
+Done:
+ - After STOP, pulse `done` high for exactly 1 `clk` cycle while `busy=0`,
+   then return to idle.
+
+All sequential logic is triggered on the positive edge of `clk`.

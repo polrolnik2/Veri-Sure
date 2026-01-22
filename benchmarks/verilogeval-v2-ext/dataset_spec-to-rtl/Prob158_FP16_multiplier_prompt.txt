@@ -1,0 +1,27 @@
+I would like you to implement a module named FP16_multiplier with the following interface:
+input [15:0] a
+input [15:0] b
+output [15:0] result
+This module must compute the multiplication of two 16-bit IEEE 754 half-precision (FP16) floating-point numbers, producing a 16-bit FP16 result.
+
+FP16 Format:
+- Bit 15: Sign bit (1 bit)
+- Bits 14-10: Exponent (5 bits) with bias of 15
+- Bits 9-0: Mantissa/Fraction (10 bits) with implicit leading 1 for normalized numbers
+
+Implementation Requirements:
+1. Extract the sign, exponent, and mantissa components from both input operands a and b.
+2. For normalized numbers, the mantissa should be reconstructed with an implicit leading 1, creating an 11-bit effective mantissa.
+3. Multiply the two mantissas together to produce a 21-bit product (11 × 11 = 21 bits).
+4. Add the exponents together and subtract the bias (15) to obtain the raw exponent.
+5. Normalize the result: if the product mantissa has a bit set at position 20 or higher, right-shift the mantissa and increment the exponent accordingly.
+6. Extract the final 10-bit mantissa (without the implicit leading 1) and combine with the computed exponent and sign.
+7. Handle special cases:
+   - If either input exponent is 5'b11111 (infinity or NaN), output infinity with the appropriate sign.
+   - If either input exponent is 5'b00000 (zero or denormalized), output zero.
+   - If the computed exponent overflows (exceeds 31), output infinity with the computed sign.
+   - If the computed exponent underflows (becomes negative), output zero.
+8. The sign of the result is determined by XORing the signs of the two inputs.
+
+All logic must be purely combinational—there are no clock, reset, or state elements in this module.
+Assume that the inputs can change at any time, and the output result must reflect the correct FP16 product as soon as possible through combinational logic propagation.

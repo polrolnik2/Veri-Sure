@@ -1,0 +1,19 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [3:0] a
+ - input  [3:0] b
+ - output [7:0] product
+
+Implement a 4-bit × 4-bit unsigned parallel array multiplier.
+
+Requirements:
+ - Treat `a` and `b` as unsigned values.
+ - Generate 4 partial products (one per bit of `b`) by ANDing `a` with each
+   bit of `b`, shifting left by the bit index.
+ - Sum the shifted partial products using combinational adders (an adder
+   tree / array structure). Do not use sequential logic.
+ - Do not use the `*` operator in your implementation.
+
+All logic must be purely combinational.

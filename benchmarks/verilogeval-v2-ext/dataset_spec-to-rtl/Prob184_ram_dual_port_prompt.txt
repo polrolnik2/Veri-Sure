@@ -1,0 +1,40 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input        clk
+ - input        reset
+ - input        a_we
+ - input  [3:0] a_addr
+ - input  [7:0] a_din
+ - output [7:0] a_dout
+ - input        b_we
+ - input  [3:0] b_addr
+ - input  [7:0] b_din
+ - output [7:0] b_dout
+
+Implement a true dual-port RAM with two independent ports (A and B).
+
+Memory configuration:
+ - 16 entries, each 8 bits wide.
+
+Reset / outputs:
+ - `reset` is active-high synchronous.
+ - On reset, clear all memory locations to 0 and set both `a_dout` and
+   `b_dout` to 0.
+
+Read/write behavior (on each rising edge of `clk`):
+ - If `a_we=1`, write `a_din` to `mem[a_addr]`.
+ - If `b_we=1`, write `b_din` to `mem[b_addr]`.
+ - Both ports may read and/or write in the same cycle.
+ - Reads are synchronous: update `a_dout` with the read value for `a_addr`,
+   and update `b_dout` with the read value for `b_addr` each clock.
+
+Read-during-write and write conflicts:
+ - Use WRITE-FIRST behavior: if a port reads an address that is written in
+   the same cycle, the read returns the newly written data.
+ - If both ports write the same address in the same cycle, Port B wins (the
+   stored value becomes `b_din`, and any read of that address in the same
+   cycle returns `b_din`).
+
+All sequential logic is triggered on the positive edge of `clk`.

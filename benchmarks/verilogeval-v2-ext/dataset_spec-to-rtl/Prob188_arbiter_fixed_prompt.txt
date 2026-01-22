@@ -1,0 +1,18 @@
+
+I would like you to implement a module named TopModule with the following
+interface.
+
+ - input  [3:0] req
+ - output [3:0] grant
+ - output       grant_valid
+
+Implement a fixed-priority arbiter (combinational).
+
+Rules:
+ - `grant` must be one-hot (at most one bit set). If no requests are active,
+   `grant` must be 0 and `grant_valid` must be 0.
+ - Priority order is fixed: `req[0]` has the highest priority, then `req[1]`,
+   then `req[2]`, then `req[3]`.
+ - If multiple requests are asserted, grant the highest-priority one.
+
+All logic must be purely combinational (no clocked logic).

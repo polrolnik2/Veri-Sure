@@ -1,0 +1,29 @@
+I would like you to implement a module named FP16_adder with the following interface:
+input [15:0] A
+input [15:0] B
+output [15:0] result
+This module must compute the addition of two 16-bit IEEE 754 half-precision (FP16) floating-point numbers, producing a 16-bit FP16 result.
+
+FP16 Format:
+- Bit 15: Sign bit (1 bit)
+- Bits 14-10: Exponent (5 bits) with bias of 15
+- Bits 9-0: Mantissa/Fraction (10 bits) with implicit leading 1 for normalized numbers
+
+Implementation Requirements:
+1. Extract the sign, exponent, and mantissa components from both input operands A and B.
+2. For normalized numbers, the mantissa should be reconstructed with an implicit leading 1, creating an 11-bit effective mantissa.
+3. Align the mantissas by calculating the exponent difference and right-shifting the mantissa of the number with the smaller exponent.
+4. Determine whether to add or subtract the mantissas based on the signs:
+   - If both operands have the same sign, add the mantissas.
+   - If the operands have different signs, subtract the smaller mantissa from the larger one.
+5. Normalize the result by identifying the position of the most significant bit (MSB) in the result mantissa and adjusting the exponent accordingly.
+6. Handle special cases:
+   - If either input exponent is 5'b11111 (infinity or NaN), output infinity with the appropriate sign (if both are infinity, check if they have the same sign).
+   - If either input exponent is 5'b00000 (zero or denormalized), treat it as zero.
+   - If the result mantissa is zero after subtraction, output zero.
+   - If the computed exponent overflows (exceeds 31), output infinity with the computed sign.
+   - If the computed exponent underflows (becomes negative), output zero.
+7. The sign of the result depends on the operation: for same-sign addition, preserve the sign; for subtraction (different signs), the sign is determined by which mantissa is larger.
+
+All logic must be purely combinational—there are no clock, reset, or state elements in this module.
+Assume that the inputs can change at any time, and the output result must reflect the correct FP16 sum as soon as possible through combinational logic propagation.
