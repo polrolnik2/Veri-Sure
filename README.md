@@ -1,5 +1,19 @@
 # Veri-Sure: A Contract-Aware Multi-Agent Framework with Trace-and-Formal Verification for Correct RTL Code Generation
 
+![Veri-Sure Framework Overview](attachments/overall.png)
+
+## Overview
+
+**Veri-Sure** is a state-of-the-art multi-agent framework that combines trace-based verification and formal methods to generate correct RTL code.
+
+### Key Features
+
+- **🏆 State-of-the-Art Performance**: Achieves 93.30% functional correctness on VerilogEval-v2-EXT (Global #1).
+- **🤖 Multi-Agent Architecture**: Six specilized agents for different purposes.
+- **🔍 Dual Verification**: Combines simulation-based trace analysis with formal verification (assertion and boolean proof).
+- **📝 Contract-Aware**: Leverages design contracts for correct implementations.
+- **🔄 Iterative Refinement**: Automated debugging and fixing based on verification feedback
+
 ## VerilogEval-v2-EXT Benchmark
 
 ### **Leaderboard on VerilogEval-v2-EXT @ Pass 1 (%).**
@@ -48,7 +62,7 @@
 | **Veri-Sure (w. GPT-5.2)** | - | 🥇 **100.00** / 🥇 **100.00** | 🥇 **100.00** / 🥇 **95.60** | 🥇 **100.00** / 🥇 **85.07** | 🥇 **100.00** / 🥇 **93.30** |
 
 
-## Veri-Sure Framework
+## Quick Start
 
 ### Environment Setup
 
@@ -94,12 +108,12 @@ export OPENAI_MODEL="gpt-5.2"
 ### Running (prompted)
 
 ```bash
-python -m eda_agent run \\
-  --prompt "Implement a 4-bit adder with inputs a[3:0], b[3:0], and output sum[4:0]" \\
-  --stream \\
-  --temperature 0 \\
-  --top-p 1 \\
-  --sim-max-retry 4 \\
+python -m eda_agent run \
+  --prompt "Implement a 4-bit adder with inputs a[3:0], b[3:0], and output sum[4:0]" \
+  --stream \
+  --temperature 0 \
+  --top-p 1 \
+  --sim-max-retry 4 \
   --max-completion-tokens 2000
 ```
 
@@ -110,9 +124,13 @@ Output will be written to `runs/` (each run creates a directory containing `rtl.
 ### Evaluate on the VerilogEval-v2-EXT Benchmark
 
 ```bash
-python benchmarks/run_verilog_eval_v2.py \\
-  --samples 1 \\
+python benchmarks/run_verilog_eval_v2.py \
+  --samples 1 \
   --stream
 ```
 
-**Please note that every full evaluation on the benchmark costs ~ $80 - $200 depending on retries and tool calls. Please be VERY CAUTIOUS with your usage.**
+**⚠️ Cost Warning**: A full benchmark evaluation costs approximately **$80-$200** depending on the number of retries and tool calls required. Please monitor your API usage carefully.
+
+## License
+
+MIT License.
