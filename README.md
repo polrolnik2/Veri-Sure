@@ -1,4 +1,4 @@
-# Veri-Sure: A Contract-Aware Multi-Agent Framework with Trace-and-Formal Verification for Correct RTL Code Generation
+# Veri-Sure: Contract-Aware RTL Code Generation Agents with Temporal Tracing, Slicing and Formal Verification
 
 ![Veri-Sure Framework Overview](attachments/overall.png)
 
