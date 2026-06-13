@@ -24,6 +24,11 @@ class TopAgentConfig:
     is_ablation: bool = False
     contract_only: bool = True
     debug_max_trials: int = 30
+    # Number of TB lint-repair attempts after the initial generation, in
+    # non-golden mode (no golden TB fallback). The self-generated TB is the only
+    # oracle there, so a single blind retry is too few for complex problems
+    # (e.g. ArchXBench). Each retry feeds back the accumulated lint errors.
+    tb_lint_max_retry: int = 4
 
 
 @dataclass(frozen=True)
@@ -282,11 +287,16 @@ class TopAgent:
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
             testbench = golden_text
         elif not golden_tb_path:
-            # Non-golden mode: lint the generated TB early and give the Verifier one chance to repair it.
+            # Non-golden mode: the self-generated TB is the only oracle (no golden
+            # fallback), so lint it and give the Verifier a bounded repair loop.
+            # Each retry feeds back the accumulated lint errors (set_tb_lint_error
+            # appends), so the model sees the full history rather than one blind shot.
             tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
-            if not tb_ok:
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log.json", content=tb_lint_json)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt.txt", content=tb_lint_excerpt)
+            attempt = 0
+            while not tb_ok and attempt < self.config.tb_lint_max_retry:
+                suffix = "" if attempt == 0 else f"_attempt{attempt}"
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
                 tb_gen.set_tb_lint_error(lint_log=tb_lint_excerpt, previous_tb=testbench)
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
@@ -294,24 +304,27 @@ class TopAgent:
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
 
-                tb_ok2, tb_lint_excerpt2, tb_lint_json2 = self._tb_lint_report(tb_path=tb_path)
-                if not tb_ok2:
-                    self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_retry.json", content=tb_lint_json2)
-                    self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_retry.txt", content=tb_lint_excerpt2)
-                    try:
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="verifier_prompt.txt",
-                            content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
-                        )
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="verifier_raw_output.txt",
-                            content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                    return finish(False, "")
+                attempt += 1
+                tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+
+            if not tb_ok:
+                # Exhausted the repair budget; the TB still does not lint clean.
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_final.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_final.txt", content=tb_lint_excerpt)
+                try:
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="verifier_prompt.txt",
+                        content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
+                    )
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="verifier_raw_output.txt",
+                        content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                return finish(False, "")
         try:
             self._write_output(
                 output_dir_per_run=output_dir_per_run,
