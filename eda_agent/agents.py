@@ -1,10 +1,46 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from agentscope.agent import ReActAgent
-from agentscope.tool import ToolResponse
+from agentscope.message import ToolUseBlock
+from agentscope.tool import Toolkit, ToolResponse
+
+
+class GuidingToolkit(Toolkit):
+    """Toolkit that turns an unknown-tool call into actionable guidance.
+
+    When a model invents a tool (weaker models routinely hallucinate e.g.
+    ``read_file``), the base toolkit returns a bare
+    ``FunctionNotFoundError: Cannot find the function named X``. That gives the
+    model nothing to correct toward, so it loops, inflating context until the
+    request exceeds the model's window. Instead, list the actual available tools
+    so the model re-issues a valid call and closes the loop fast. We do **not**
+    add aliases for hallucinated names — that would entrench the bad behaviour.
+    """
+
+    async def call_tool_function(  # type: ignore[override]
+        self, tool_call: ToolUseBlock
+    ) -> AsyncGenerator[ToolResponse, None]:
+        # The ReActAgent does ``await toolkit.call_tool_function(call)`` and then
+        # iterates the returned async generator, so this coroutine must *return*
+        # an async generator (not itself be one).
+        if tool_call["name"] in self.tools:
+            return await super().call_tool_function(tool_call)
+
+        available = ", ".join(sorted(self.tools))
+        text = (
+            f"ToolError: '{tool_call['name']}' is not an available tool and "
+            f"was not executed. Available tools: {available}. "
+            "Re-issue your request using exactly one of these tool names; "
+            "do not invent tool names."
+        )
+
+        async def _guidance() -> AsyncGenerator[ToolResponse, None]:
+            yield ToolResponse(content=[{"type": "text", "text": text}])
+
+        return _guidance()
 
 
 class SafeReActAgent(ReActAgent):

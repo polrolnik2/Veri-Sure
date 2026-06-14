@@ -10,9 +10,9 @@ from typing import Any, Dict, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
-from agentscope.tool import ToolResponse, Toolkit
+from agentscope.tool import ToolResponse
 
-from .agents import SafeReActAgent, clear_memory_safely
+from .agents import GuidingToolkit, SafeReActAgent, clear_memory_safely
 from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
@@ -417,7 +417,7 @@ class RTLEditor:
         self.max_trials = int(max_trials)
         self._session: _EditSession | None = None
 
-        toolkit = Toolkit()
+        toolkit = GuidingToolkit()
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
         toolkit.register_tool_function(self._tool_replace_block)
