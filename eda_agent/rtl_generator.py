@@ -48,12 +48,17 @@ Write a complete SystemVerilog RTL module that implements the DUT.
 Hard rules:
 - Follow the Architect contract strictly. Do NOT invent behavior/timing not stated in the contract.
 - Match the exact module name and port list.
+- Declare EVERY parameter listed in the contract's `parameters`, with the given
+  names and default values, in a `#( ... )` block. Do NOT drop, rename, or add
+  parameters, and do NOT demote a contract parameter to a localparam — the golden
+  testbench may override it by name or position. Use parameter names (not hard-coded
+  literals) for the widths/values they govern.
 - Produce synthesizable RTL (no delays, no testbench constructs).
 - Keep the code small and readable.
 
 In `reasoning`, write a short summary of key decisions and assumptions (no step-by-step chain-of-thought).
 
-The module interface must EXACTLY match the contract (module name, port names, widths).
+The module interface must EXACTLY match the contract (module name, parameter list with defaults, port names, widths).
 
 <contract_json>
 {contract_json}

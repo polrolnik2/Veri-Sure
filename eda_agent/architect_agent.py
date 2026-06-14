@@ -53,6 +53,11 @@ Requirements:
 What to include (keep it compact):
 - source_of_truth: "spec" or "golden_tb"
 - module_name: usually "TopModule" unless spec/golden TB indicates otherwise
+- parameters: list of module parameters EXACTLY as the spec/golden TB declares them
+  (each: name, default value, and type/notes when known). Include every parameter
+  the interface declares — even ones derived from another (e.g. M = clog2(N));
+  if the golden TB overrides a name via #(.NAME(...)) or positional #(...), that
+  name MUST appear here. Use [] only if the module genuinely has no parameters.
 - io: concise list of ports with direction and bit width when known
 - clocking: whether sequential; clock/reset names and edge semantics if applicable
 - timing: per-output latency expectations (0 = combinational / same-cycle, 1 = next-cycle, etc.) when inferable
@@ -77,7 +82,7 @@ Revise the contract below to fix the reported lint errors.
 Hard rules:
 - Output MUST be a single valid JSON object (no extra text).
 - Do NOT invent new ports unless required by the spec/golden TB.
-- Keep module_name and io consistent with the golden testbench when provided.
+- Keep module_name, parameters and io consistent with the golden testbench when provided.
 - In contract-only mode, all downstream agents will follow this contract strictly.
 
 Lint errors:
@@ -99,11 +104,14 @@ Current contract:
 EXAMPLE_OUTPUT: Dict[str, Any] = {
     "source_of_truth": "spec",
     "module_name": "TopModule",
+    "parameters": [
+        {"name": "WIDTH", "default": "8", "type": "int", "notes": "data bit-width"},
+    ],
     "io": [
         {"name": "clk", "dir": "input", "width": 1, "notes": "posedge clock"},
         {"name": "reset", "dir": "input", "width": 1, "notes": "active-high synchronous reset"},
-        {"name": "in_", "dir": "input", "width": 8, "notes": ""},
-        {"name": "out", "dir": "output", "width": 8, "notes": "registered output"},
+        {"name": "in_", "dir": "input", "width": "WIDTH", "notes": ""},
+        {"name": "out", "dir": "output", "width": "WIDTH", "notes": "registered output"},
     ],
     "clocking": {
         "is_sequential": True,
@@ -141,6 +149,7 @@ EXAMPLE_OUTPUT: Dict[str, Any] = {
 class ContractFormat(BaseModel):
     source_of_truth: str
     module_name: str
+    parameters: List[Dict[str, Any]] = []
     io: List[Dict[str, Any]]
     clocking: Dict[str, Any]
     timing: Dict[str, Any]
@@ -188,6 +197,7 @@ class ArchitectAgent:
             return ContractFormat(
                 source_of_truth="spec",
                 module_name="TopModule",
+                parameters=[],
                 io=[],
                 clocking={},
                 timing={},
