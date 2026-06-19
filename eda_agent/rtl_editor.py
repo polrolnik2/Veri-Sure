@@ -10,9 +10,9 @@ from typing import Any, Dict, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
-from agentscope.tool import ToolResponse, Toolkit
+from agentscope.tool import ToolResponse
 
-from .agents import SafeReActAgent, clear_memory_safely
+from .agents import GuidingToolkit, SafeReActAgent, clear_memory_safely
 from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
@@ -117,8 +117,9 @@ Rules:
 5. Preserve the module interface and the contract's timing assumptions.
 6. Contract-only mode: do NOT change behavior based on input_spec if it conflicts with the contract.
 
-When you are done (simulation passes), finish by calling:
-  generate_response(response="...brief summary...")
+When you are done (simulation passes), finish by calling generate_response with a
+structured plain-string response in EXACTLY this format (use literal newlines between fields):
+  generate_response(response="RTL_FIXED: <one-line summary of what you changed>\nCONTRACT_CLAUSE: <the specific contract requirement that was violated>\nFIX_RATIONALE: <how this change makes the RTL satisfy that requirement>")
 The `response` argument MUST be a plain string (not JSON, not a dict, not a list).
 """
 
@@ -177,8 +178,8 @@ Use tools:
 - replace_block(block_id, new_code)
 - run_simulation()
 
-When simulation passes, end with:
-  generate_response(response="...brief summary...")
+When simulation passes, end with generate_response using this format:
+  generate_response(response="RTL_FIXED: <one-line summary>\nCONTRACT_CLAUSE: <specific contract requirement violated>\nFIX_RATIONALE: <how this change satisfies that requirement>")
 """
 
 
@@ -417,7 +418,7 @@ class RTLEditor:
         self.max_trials = int(max_trials)
         self._session: _EditSession | None = None
 
-        toolkit = Toolkit()
+        toolkit = GuidingToolkit()
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
         toolkit.register_tool_function(self._tool_replace_block)
@@ -488,7 +489,7 @@ class RTLEditor:
         sim_mismatch_cnt: int,
         contract_json: str,
         max_trials: int | None = None,
-    ) -> Tuple[bool, str, int]:
+    ) -> Tuple[bool, str, int, str]:
         self.reset()
         tb_path = f"{output_dir_per_run}/tb.sv"
         rtl_path = f"{output_dir_per_run}/rtl.sv"
@@ -596,20 +597,38 @@ class RTLEditor:
             (Path(output_dir_per_run) / "debugger_prompt.txt").write_text(first_prompt + "\n", encoding="utf-8")
         except Exception:  # noqa: BLE001
             pass
-        await self._agent(Msg("user", first_prompt, role="user"))
+        _justification: str = ""
+        _last_content: str = ""
+
+        response = await self._agent(Msg("user", first_prompt, role="user"))
+        _last_content = str(getattr(response, "content", "") or "")
+        if self._session.is_done:
+            _justification = _last_content
 
         for _ in range(session_max_trials):
             if self._session.is_done:
                 break
-            await self._agent(
+            response = await self._agent(
                 Msg(
                     "user",
                     "Continue debugging. Preserve the contract and module interface. If mismatches remain, pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) once, then run_simulation().",
                     role="user",
                 )
             )
+            _last_content = str(getattr(response, "content", "") or "")
+            if self._session.is_done and not _justification:
+                _justification = _last_content
+
+        # If the model wrote RTL_FIXED:/RTL_CORRECT: as plain text but sim never passed,
+        # extract it as the justification so lessons have player conclusions.
+        if not _justification:
+            for kw in ("RTL_FIXED:", "RTL_CORRECT:"):
+                idx = _last_content.find(kw)
+                if idx != -1:
+                    _justification = _last_content[idx:].strip()
+                    break
 
         with open(rtl_path, "r", encoding="utf-8") as f:
             rtl_code = f.read()
         used = int(getattr(self._session, "action_calls", 0) or 0)
-        return self._session.is_done, rtl_code, used
+        return self._session.is_done, rtl_code, used, _justification

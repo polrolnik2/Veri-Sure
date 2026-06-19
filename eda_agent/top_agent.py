@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -9,13 +11,15 @@ from typing import List, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
+from .consensus_game import ConsensusGame
 from .contract_linter import lint_contract_json, render_contract_issues
 from .config import OpenAIConfig
-from .rtl_editor import RTLEditor
 from .model import get_model_usage
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import SimReviewer
 from .tb_generator import TBGenerator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,14 @@ class TopAgentConfig:
     is_ablation: bool = False
     contract_only: bool = True
     debug_max_trials: int = 30
+    # Number of TB lint-repair attempts after the initial generation, in
+    # non-golden mode (no golden TB fallback). The self-generated TB is the only
+    # oracle there, so a single blind retry is too few for complex problems
+    # (e.g. ArchXBench). Each retry feeds back the accumulated lint errors.
+    tb_lint_max_retry: int = 4
+    # Local iterations budget given to each player in the consensus game.
+    # Set to 0 to disable the consensus phase entirely.
+    consensus_max_local_iterations: int = 3
 
 
 @dataclass(frozen=True)
@@ -37,6 +49,9 @@ class TopAgentResult:
     input_tokens: int = 0
     output_tokens: int = 0
     error: str | None = None
+    # Consensus game verdict — populated as the final step of run().
+    consensus_reached: bool = False
+    consensus_lessons: str = ""
 
 
 class TopAgent:
@@ -214,17 +229,22 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None,
         golden_rtl_blackbox_path: str | None,
-    ) -> Tuple[bool, str, int, int]:
+    ) -> Tuple[bool, str, int, int, bool, str]:
+        """Run one instance of the full agent procedure.
+
+        Returns ``(is_sim_pass, rtl_code, input_tokens, output_tokens,
+        consensus_reached, consensus_lessons)``.  The consensus game is the
+        repair step — RTLEditor no longer runs directly here.
+        """
         architect = ArchitectAgent(self.cfg)
         tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
         sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
-        rtl_edit = RTLEditor(self.cfg, sim_reviewer=sim_reviewer, max_trials=int(self.config.debug_max_trials))
+        # RTLEditor runs only inside the consensus game (as the RTL-player).
         tracked_models = [
             architect._agent.model,
             tb_gen._agent.model,
             rtl_gen._agent.model,
-            rtl_edit._agent.model,
         ]
 
         def usage_totals() -> Tuple[int, int]:
@@ -236,9 +256,14 @@ class TopAgent:
                 total_out += output_tokens
             return total_in, total_out
 
-        def finish(is_sim_pass: bool, rtl_code: str) -> Tuple[bool, str, int, int]:
+        def finish(
+            is_sim_pass: bool,
+            rtl_code: str,
+            consensus_reached: bool = False,
+            lessons: str = "",
+        ) -> Tuple[bool, str, int, int, bool, str]:
             input_tokens, output_tokens = usage_totals()
-            return is_sim_pass, rtl_code, input_tokens, output_tokens
+            return is_sim_pass, rtl_code, input_tokens, output_tokens, consensus_reached, lessons
 
         architect.reset()
         contract_json = await self._build_contract_json(
@@ -282,11 +307,16 @@ class TopAgent:
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
             testbench = golden_text
         elif not golden_tb_path:
-            # Non-golden mode: lint the generated TB early and give the Verifier one chance to repair it.
+            # Non-golden mode: the self-generated TB is the only oracle (no golden
+            # fallback), so lint it and give the Verifier a bounded repair loop.
+            # Each retry feeds back the accumulated lint errors (set_tb_lint_error
+            # appends), so the model sees the full history rather than one blind shot.
             tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
-            if not tb_ok:
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log.json", content=tb_lint_json)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt.txt", content=tb_lint_excerpt)
+            attempt = 0
+            while not tb_ok and attempt < self.config.tb_lint_max_retry:
+                suffix = "" if attempt == 0 else f"_attempt{attempt}"
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
                 tb_gen.set_tb_lint_error(lint_log=tb_lint_excerpt, previous_tb=testbench)
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
@@ -294,24 +324,37 @@ class TopAgent:
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
 
-                tb_ok2, tb_lint_excerpt2, tb_lint_json2 = self._tb_lint_report(tb_path=tb_path)
-                if not tb_ok2:
-                    self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_retry.json", content=tb_lint_json2)
-                    self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_retry.txt", content=tb_lint_excerpt2)
-                    try:
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="verifier_prompt.txt",
-                            content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
-                        )
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="verifier_raw_output.txt",
-                            content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                    return finish(False, "")
+                attempt += 1
+                tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+
+            if not tb_ok:
+                # Exhausted the repair budget; the TB still does not lint clean.
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_final.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_final.txt", content=tb_lint_excerpt)
+                try:
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="verifier_prompt.txt",
+                        content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
+                    )
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="verifier_raw_output.txt",
+                        content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                tb_lint_lesson = (
+                    "TB generation failed: the testbench did not pass Verilator lint "
+                    "after all repair attempts. The contract may be specifying constructs "
+                    "that the Verifier cannot generate correctly.\n"
+                    f"Lint errors:\n{tb_lint_excerpt}\n\n"
+                    "Guidance: revise the contract to avoid constructs that produce these "
+                    "lint errors. For example, avoid 8'sd-X signed literals (write -X instead), "
+                    "avoid static variable initializers in function/task bodies, and avoid "
+                    "SVA temporal operators (##, $past with non-constant delays)."
+                )
+                return finish(False, "", lessons=tb_lint_lesson)
         try:
             self._write_output(
                 output_dir_per_run=output_dir_per_run,
@@ -370,11 +413,10 @@ class TopAgent:
         is_sim_pass = False
         sim_mismatch_cnt = 0
         did_rtl_regen_after_mismatch = False
-
-        # Retry simulation + RTL debug for mismatch-driven failures.
-        # If a golden testbench is provided (e.g., VerilogEval), treat it as fixed and only debug RTL.
-        remaining_debug_trials = int(self.config.debug_max_trials)
         did_fallback_to_golden_tb = False
+
+        # Simulation + repair loop.  The consensus game is the repair step;
+        # RTLEditor no longer runs here directly.
         for _ in range(max(1, int(self.config.sim_max_retry))):
             is_sim_pass, sim_mismatch_cnt, sim_log = await asyncio.to_thread(sim_reviewer.review)
             if is_sim_pass:
@@ -410,25 +452,30 @@ class TopAgent:
                     did_fallback_to_golden_tb = True
                     continue
 
-                # Non-mismatch failures (e.g., harness timeout or runtime error) don't fit the
-                # mismatch-driven debug loop; return the last RTL without crashing.
+                # Non-mismatch failures (harness timeout, runtime error) — no repair possible.
                 self._write_output(
                     output_dir_per_run=output_dir_per_run,
                     file_name="sim_failed_log.json",
                     content=sim_log,
                 )
-                return finish(False, rtl_code)
-
-            if remaining_debug_trials <= 0:
-                self._write_output(
-                    output_dir_per_run=output_dir_per_run,
-                    file_name="debug_budget_exhausted.txt",
-                    content=f"Debugger budget exhausted (debug_max_trials={self.config.debug_max_trials}).\n",
+                try:
+                    _sim_log_obj = json.loads(sim_log)
+                    _sim_excerpt = str(_sim_log_obj.get("stderr") or _sim_log_obj.get("stdout") or sim_log)
+                except Exception:  # noqa: BLE001
+                    _sim_excerpt = sim_log
+                compile_lesson = (
+                    "RTL simulation failed with a compile/lint error — no behavioral "
+                    "mismatches were produced (the simulator could not execute at all).\n"
+                    f"Failure excerpt:\n{_sim_excerpt[:800]}\n\n"
+                    "Guidance: the contract may be specifying RTL constructs that the Coder "
+                    "generates incorrectly. Clarify bit-widths, operator types, and "
+                    "Verilator-compatible constructs."
                 )
-                return finish(False, rtl_code)
+                return finish(False, rtl_code, lessons=compile_lesson)
 
-            # Before trace-based block editing, give the Coder one shot to regenerate RTL using the failure log.
-            # This often fixes systematic contract/timing misunderstandings faster than local patching.
+            # Give the Coder one shot to regenerate RTL from the failure log before
+            # handing off to the consensus game.  This fixes systematic
+            # contract/timing misunderstandings faster than local patching.
             if not did_rtl_regen_after_mismatch:
                 did_rtl_regen_after_mismatch = True
                 try:
@@ -461,33 +508,41 @@ class TopAgent:
                 except Exception:  # noqa: BLE001
                     pass
 
-            # Snapshot the failing state for inspection/debugging.
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="rtl_before_debug.sv",
-                content=rtl_code,
-            )
-            # Write sim failure log as JSON (CommandResult model).
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="sim_failed_log.json",
-                content=sim_log,
-            )
+            # Consensus game — the repair step.  RTLEditor (RTL-player) and
+            # TBReviewer (TB-player) run in isolation inside the game.
+            # Snapshot the pre-game state for diagnostics.
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl_before_debug.sv", content=rtl_code)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="sim_failed_log.json", content=sim_log)
 
-            rtl_edit.reset()
-            is_sim_pass, rtl_code, used_trials = await rtl_edit.chat(
-                spec=(self._contract_only_context(contract_json) if self.config.contract_only else spec),
-                output_dir_per_run=str(output_dir_per_run),
-                sim_failed_log=sim_log,
-                sim_mismatch_cnt=sim_mismatch_cnt,
-                contract_json=contract_json,
-                max_trials=remaining_debug_trials,
-            )
-            remaining_debug_trials = max(0, remaining_debug_trials - int(used_trials))
-            if is_sim_pass:
-                return finish(True, rtl_code)
+            max_iters = int(self.config.consensus_max_local_iterations)
+            if max_iters <= 0:
+                return finish(False, rtl_code)
 
-        # Last check, just in case the final edit improved but didn't re-run.
+            game = ConsensusGame(self.cfg)
+            try:
+                verdict = await game.run(
+                    frozen_rtl=rtl_code,
+                    frozen_tb=testbench,
+                    contract_json=contract_json,
+                    module_name=module_name,
+                    output_dir=output_dir_per_run / "consensus",
+                    max_local_iterations=max_iters,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ConsensusGame raised %s: %s", type(exc).__name__, exc)
+                return finish(False, rtl_code)
+
+            committed_rtl = verdict.committed_rtl if verdict.committed_rtl.strip() else rtl_code
+            committed_tb = verdict.committed_tb if verdict.committed_tb.strip() else testbench
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl.sv", content=committed_rtl)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=committed_tb)
+            rtl_code = committed_rtl
+
+            # Final sim check with committed pair.
+            is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
+            return finish(is_sim_pass, rtl_code, verdict.reached, verdict.lessons)
+
+        # Reached if every loop iteration returned early via pass/fallback.
         is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
         return finish(is_sim_pass, rtl_code)
 
@@ -524,38 +579,47 @@ class TopAgent:
         if tag.exists():
             tag.unlink()
 
+        is_sim_pass = False
+        rtl_code = ""
+        input_tokens = 0
+        output_tokens = 0
+        consensus_reached = False
+        consensus_lessons = ""
+        error: str | None = None
+
         try:
             if self.config.is_ablation:
                 is_sim_pass, rtl_code, input_tokens, output_tokens = await self._run_instance_ablation(
                     spec=spec, output_dir_per_run=output_dir_per_run
                 )
             else:
-                is_sim_pass, rtl_code, input_tokens, output_tokens = await self._run_instance(
+                (
+                    is_sim_pass,
+                    rtl_code,
+                    input_tokens,
+                    output_tokens,
+                    consensus_reached,
+                    consensus_lessons,
+                ) = await self._run_instance(
                     spec=spec,
                     output_dir_per_run=output_dir_per_run,
                     golden_tb_path=golden_tb_path,
                     golden_rtl_blackbox_path=golden_rtl_blackbox_path,
                 )
             tag.write_text("1", encoding="utf-8")
-            return TopAgentResult(
-                output_dir_per_run=str(output_dir_per_run),
-                rtl_path=rtl_path,
-                tb_path=tb_path,
-                if_path=if_path,
-                is_sim_pass=is_sim_pass,
-                rtl_code=rtl_code,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
         except Exception as e:  # noqa: BLE001
-            return TopAgentResult(
-                output_dir_per_run=str(output_dir_per_run),
-                rtl_path=rtl_path,
-                tb_path=tb_path,
-                if_path=if_path,
-                is_sim_pass=False,
-                rtl_code="",
-                input_tokens=0,
-                output_tokens=0,
-                error=f"{type(e).__name__}: {e}",
-            )
+            error = f"{type(e).__name__}: {e}"
+
+        return TopAgentResult(
+            output_dir_per_run=str(output_dir_per_run),
+            rtl_path=rtl_path,
+            tb_path=tb_path,
+            if_path=if_path,
+            is_sim_pass=is_sim_pass,
+            rtl_code=rtl_code,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            error=error,
+            consensus_reached=consensus_reached,
+            consensus_lessons=consensus_lessons,
+        )

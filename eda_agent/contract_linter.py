@@ -71,6 +71,27 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
         elif direction == "output":
             outputs.add(name)
 
+    # parameters is optional (many modules have none) but, when present, each
+    # entry must carry a usable name so the Coder can declare it verbatim.
+    parameters = obj.get("parameters")
+    if parameters is not None:
+        if not isinstance(parameters, list):
+            issues.append(ContractIssue("error", "parameters", "parameters must be a list."))
+        else:
+            seen_params: set[str] = set()
+            for idx, pp in enumerate(parameters):
+                path = f"parameters[{idx}]"
+                if not isinstance(pp, dict):
+                    issues.append(ContractIssue("error", path, "Parameter entry must be an object."))
+                    continue
+                pname = pp.get("name")
+                if not isinstance(pname, str) or not pname.strip():
+                    issues.append(ContractIssue("error", f"{path}.name", "Missing/invalid parameter name."))
+                    continue
+                if pname in seen_params:
+                    issues.append(ContractIssue("error", f"{path}.name", f"Duplicate parameter name: {pname}"))
+                seen_params.add(pname)
+
     clocking = obj.get("clocking")
     if clocking is not None and isinstance(clocking, dict):
         is_seq = clocking.get("is_sequential")
