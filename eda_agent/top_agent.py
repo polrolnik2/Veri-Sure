@@ -14,7 +14,7 @@ from .architect_agent import ArchitectAgent
 from .consensus_game import ConsensusGame
 from .contract_linter import lint_contract_json, render_contract_issues
 from .config import OpenAIConfig
-from .model import get_model_usage
+from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import SimReviewer
 from .tb_generator import TBGenerator
@@ -52,6 +52,7 @@ class TopAgentResult:
     # Consensus game verdict — populated as the final step of run().
     consensus_reached: bool = False
     consensus_lessons: str = ""
+    usage_breakdown: dict | None = None
 
 
 class TopAgent:
@@ -229,41 +230,38 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None,
         golden_rtl_blackbox_path: str | None,
-    ) -> Tuple[bool, str, int, int, bool, str]:
+    ) -> Tuple[bool, str, int, int, bool, str, dict | None]:
         """Run one instance of the full agent procedure.
 
         Returns ``(is_sim_pass, rtl_code, input_tokens, output_tokens,
-        consensus_reached, consensus_lessons)``.  The consensus game is the
-        repair step — RTLEditor no longer runs directly here.
+        consensus_reached, consensus_lessons, usage_breakdown_dict)``.
+        The consensus game is the repair step — RTLEditor no longer runs directly here.
         """
         architect = ArchitectAgent(self.cfg)
         tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
         sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
-        # RTLEditor runs only inside the consensus game (as the RTL-player).
-        tracked_models = [
-            architect._agent.model,
-            tb_gen._agent.model,
-            rtl_gen._agent.model,
-        ]
 
-        def usage_totals() -> Tuple[int, int]:
-            total_in = 0
-            total_out = 0
-            for model in tracked_models:
-                input_tokens, output_tokens = get_model_usage(model)
-                total_in += input_tokens
-                total_out += output_tokens
-            return total_in, total_out
+        consensus_player_tokens: dict[str, tuple[int, int]] = {}
+
+        def build_breakdown() -> UsageBreakdown:
+            return UsageBreakdown(
+                architect=get_model_usage(architect._agent.model),
+                tb_gen=get_model_usage(tb_gen._agent.model),
+                rtl_gen=get_model_usage(rtl_gen._agent.model),
+                consensus_rtl_player=consensus_player_tokens.get("rtl", (0, 0)),
+                consensus_tb_player=consensus_player_tokens.get("tb", (0, 0)),
+            )
 
         def finish(
             is_sim_pass: bool,
             rtl_code: str,
             consensus_reached: bool = False,
             lessons: str = "",
-        ) -> Tuple[bool, str, int, int, bool, str]:
-            input_tokens, output_tokens = usage_totals()
-            return is_sim_pass, rtl_code, input_tokens, output_tokens, consensus_reached, lessons
+        ) -> Tuple[bool, str, int, int, bool, str, dict | None]:
+            breakdown = build_breakdown()
+            total_in, total_out = breakdown.total
+            return is_sim_pass, rtl_code, total_in, total_out, consensus_reached, lessons, breakdown.to_dict()
 
         architect.reset()
         contract_json = await self._build_contract_json(
@@ -528,6 +526,8 @@ class TopAgent:
                     output_dir=output_dir_per_run / "consensus",
                     max_local_iterations=max_iters,
                 )
+                consensus_player_tokens["rtl"] = verdict.rtl_player_tokens
+                consensus_player_tokens["tb"] = verdict.tb_player_tokens
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ConsensusGame raised %s: %s", type(exc).__name__, exc)
                 return finish(False, rtl_code)
@@ -585,6 +585,7 @@ class TopAgent:
         output_tokens = 0
         consensus_reached = False
         consensus_lessons = ""
+        usage_breakdown: dict | None = None
         error: str | None = None
 
         try:
@@ -600,6 +601,7 @@ class TopAgent:
                     output_tokens,
                     consensus_reached,
                     consensus_lessons,
+                    usage_breakdown,
                 ) = await self._run_instance(
                     spec=spec,
                     output_dir_per_run=output_dir_per_run,
@@ -622,4 +624,5 @@ class TopAgent:
             error=error,
             consensus_reached=consensus_reached,
             consensus_lessons=consensus_lessons,
+            usage_breakdown=usage_breakdown,
         )

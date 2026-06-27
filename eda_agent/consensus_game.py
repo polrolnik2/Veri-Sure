@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Canonical implementations live in utils so every player/reviewer shares them.
+from .model import get_model_usage  # noqa: E402
 from .utils import (  # noqa: E402
     failing_test_primitives as _failing_test_primitives,
     failing_test_scenarios,
@@ -115,6 +116,8 @@ class ConsensusVerdict:
     # Named scenarios still in dispute after the committed-pair sim (per-primitive
     # granularity for freeze-settled / shrinking-dispute at Step 4).
     disputed_primitives: tuple[str, ...] = ()
+    rtl_player_tokens: tuple[int, int] = (0, 0)
+    tb_player_tokens: tuple[int, int] = (0, 0)
 
 
 class ConsensusGame:
@@ -160,7 +163,7 @@ class ConsensusGame:
         tb_player_dir = output_dir / "tb_player"
 
         # Both players run in parallel — no shared state.
-        (committed_rtl, rtl_justification), (committed_tb, tb_justification) = (
+        (committed_rtl, rtl_justification, rtl_tokens), (committed_tb, tb_justification, tb_tokens) = (
             await asyncio.gather(
                 self._run_rtl_player(
                     frozen_rtl=frozen_rtl,
@@ -227,6 +230,8 @@ class ConsensusGame:
             rtl_player_changed=rtl_changed,
             tb_player_changed=tb_changed,
             disputed_primitives=disputed,
+            rtl_player_tokens=rtl_tokens,
+            tb_player_tokens=tb_tokens,
         )
 
     # ------------------------------------------------------------------
@@ -241,7 +246,7 @@ class ConsensusGame:
         contract_json: str,
         output_dir: Path,
         max_local_iterations: int,
-    ) -> str:
+    ) -> tuple[str, str, tuple[int, int]]:
         output_dir.mkdir(parents=True, exist_ok=True)
         tb_path = output_dir / "tb.sv"
         rtl_path = output_dir / "rtl.sv"
@@ -257,17 +262,18 @@ class ConsensusGame:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("RTL player: initial sim failed: %s", exc)
-            return frozen_rtl
+            return frozen_rtl, "", (0, 0)
 
         if is_pass:
             logger.debug("RTL player: RTL passes frozen TB — keeping unchanged")
-            return frozen_rtl, ""
+            return frozen_rtl, "", (0, 0)
 
         if mismatch_cnt <= 0:
             logger.debug("RTL player: non-mismatch failure — keeping RTL unchanged")
-            return frozen_rtl, ""
+            return frozen_rtl, "", (0, 0)
 
         justification = ""
+        tokens: tuple[int, int] = (0, 0)
         try:
             sim_reviewer = SimReviewer(str(output_dir), None)
             rtl_edit = RTLEditor(
@@ -281,13 +287,14 @@ class ConsensusGame:
                 contract_json=contract_json,
                 max_trials=max_local_iterations,
             )
+            tokens = get_model_usage(rtl_edit._agent.model)
         except Exception as exc:  # noqa: BLE001
             logger.warning("RTL player: RTLEditor raised %s", exc)
 
         try:
-            return rtl_path.read_text(encoding="utf-8"), justification
+            return rtl_path.read_text(encoding="utf-8"), justification, tokens
         except Exception:  # noqa: BLE001
-            return frozen_rtl, justification
+            return frozen_rtl, justification, tokens
 
     # ------------------------------------------------------------------
     # TB player — TBReviewer on (frozen_rtl, initial_tb)
@@ -302,7 +309,7 @@ class ConsensusGame:
         module_name: str,
         output_dir: Path,
         max_local_iterations: int,
-    ) -> str:
+    ) -> tuple[str, str, tuple[int, int]]:
         output_dir.mkdir(parents=True, exist_ok=True)
         tb_path = output_dir / "tb.sv"
         rtl_path = output_dir / "rtl.sv"
@@ -319,19 +326,18 @@ class ConsensusGame:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("TB player: initial sim failed: %s", exc)
-            return frozen_tb
+            return frozen_tb, "", (0, 0)
 
         if is_pass:
-            # Frozen RTL already passes the frozen TB — no review needed.
             logger.debug("TB player: frozen RTL passes frozen TB — keeping TB unchanged")
-            return frozen_tb, ""
+            return frozen_tb, "", (0, 0)
 
         if mismatch_cnt <= 0:
-            # Non-mismatch failure (compile error, timeout) — TBReviewer cannot engage.
             logger.debug("TB player: non-mismatch failure — keeping TB unchanged")
-            return frozen_tb, ""
+            return frozen_tb, "", (0, 0)
 
         justification = ""
+        tokens: tuple[int, int] = (0, 0)
         try:
             sim_reviewer_obj = SimReviewer(str(output_dir), None)
             tb_review = TBReviewer(
@@ -346,11 +352,11 @@ class ConsensusGame:
                 sim_mismatch_cnt=mismatch_cnt,
                 max_trials=max_local_iterations,
             )
-            # tb_review.chat() writes the committed TB to tb.sv; read it back.
-            return tb_path.read_text(encoding="utf-8"), justification
+            tokens = get_model_usage(tb_review._agent.model)
+            return tb_path.read_text(encoding="utf-8"), justification, tokens
         except Exception as exc:  # noqa: BLE001
             logger.warning("TB player: TBReviewer raised %s", exc)
-            return frozen_tb, justification
+            return frozen_tb, justification, tokens
 
     # ------------------------------------------------------------------
     # Consensus arbiter

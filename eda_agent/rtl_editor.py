@@ -416,10 +416,18 @@ class _EditSession:
 
 
 class RTLEditor:
-    def __init__(self, cfg: OpenAIConfig, *, sim_reviewer: SimReviewer, max_trials: int = 30) -> None:
+    def __init__(
+        self,
+        cfg: OpenAIConfig,
+        *,
+        sim_reviewer: SimReviewer,
+        max_trials: int = 30,
+        memory_window: int = 6,
+    ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self.max_trials = int(max_trials)
+        self._memory_window = int(memory_window)
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
@@ -622,6 +630,12 @@ class RTLEditor:
         for _ in range(session_max_trials):
             if self._session.is_done:
                 break
+            # Sliding window: keep the initial context message + last N messages
+            # to cap per-call input tokens regardless of iteration count.
+            mem = self._agent.memory
+            window = self._memory_window
+            if window > 0 and len(mem.content) > window + 2:
+                mem.content = [mem.content[0]] + mem.content[-(window):]
             response = await self._agent(
                 Msg(
                     "user",

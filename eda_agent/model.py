@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from agentscope.formatter import OpenAIChatFormatter
@@ -203,6 +204,38 @@ class UsageTrackingModel(ChatModelBase):
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._base_model, name)
+
+
+@dataclass
+class UsageBreakdown:
+    """Per-agent token breakdown for observability."""
+
+    architect: tuple[int, int] = (0, 0)
+    tb_gen: tuple[int, int] = (0, 0)
+    rtl_gen: tuple[int, int] = (0, 0)
+    rtl_edit: tuple[int, int] = (0, 0)
+    consensus_rtl_player: tuple[int, int] = (0, 0)
+    consensus_tb_player: tuple[int, int] = (0, 0)
+
+    @property
+    def total(self) -> tuple[int, int]:
+        pairs = [
+            self.architect, self.tb_gen, self.rtl_gen, self.rtl_edit,
+            self.consensus_rtl_player, self.consensus_tb_player,
+        ]
+        return (sum(p[0] for p in pairs), sum(p[1] for p in pairs))
+
+    def to_dict(self) -> dict[str, dict[str, int]]:
+        total_in, total_out = self.total
+        return {
+            "architect": {"input": self.architect[0], "output": self.architect[1]},
+            "tb_gen": {"input": self.tb_gen[0], "output": self.tb_gen[1]},
+            "rtl_gen": {"input": self.rtl_gen[0], "output": self.rtl_gen[1]},
+            "rtl_edit": {"input": self.rtl_edit[0], "output": self.rtl_edit[1]},
+            "consensus_rtl_player": {"input": self.consensus_rtl_player[0], "output": self.consensus_rtl_player[1]},
+            "consensus_tb_player": {"input": self.consensus_tb_player[0], "output": self.consensus_tb_player[1]},
+            "total": {"input": total_in, "output": total_out},
+        }
 
 
 def get_model_usage(model: Any) -> tuple[int, int]:
