@@ -50,6 +50,7 @@ from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer
 from .trace_report import build_trace_report
+from .utils import failing_test_scenarios, format_failing_scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ def _summarize_sim_log(sim_log_json: str, *, max_chars: int = 4000) -> str:
     interesting = [
         ln for ln in stdout.splitlines()
         if any(kw in ln for kw in (
-            "=== MISMATCH", "Hint:", "Mismatches:", "SIMULATION FAILED",
+            "[TEST ", "=== MISMATCH", "Hint:", "Mismatches:", "SIMULATION FAILED",
             "SIMULATION PASSED", "TIMEOUT",
         ))
     ]
@@ -313,11 +314,15 @@ The information below is given to help your review:
 
 EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until done):
-1) Use the contract + trace report to identify which outputs are failing and why.
-2) Call _tool_list_suspect_sections() to see which TB blocks reference the failing signals.
-3) Call _tool_read_section(section_id) for the most relevant one.
-4) Make ONE small targeted change via _tool_replace_section(section_id, new_code).
-5) Call _tool_run_simulation() and iterate based on the new trace.
+1) Consider ALL failing scenarios in <failing_scenarios> together — the testbench
+   runs every named scenario and reports each independently, so do not fixate on a
+   single "first" mismatch. A correct fix usually resolves a whole group of related
+   scenarios at once; look for the common root cause across them.
+2) Use the contract + trace report to identify which outputs are failing and why.
+3) Call _tool_list_suspect_sections() to see which TB blocks reference the failing signals.
+4) Call _tool_read_section(section_id) for the most relevant one.
+5) Make ONE small targeted change via _tool_replace_section(section_id, new_code).
+6) Call _tool_run_simulation() and iterate; track which scenarios still fail.
 
 Rules:
 - Do NOT modify the RTL.
@@ -675,9 +680,10 @@ class TBReviewer:
         except Exception:  # noqa: BLE001
             pass
 
+        sim_excerpt = _summarize_sim_log(sim_failed_log)
         init = INIT_PROMPT.format(
             contract_json=contract_json,
-            sim_failed_log_excerpt=_summarize_sim_log(sim_failed_log),
+            sim_failed_log_excerpt=sim_excerpt,
             frozen_rtl=frozen_rtl[:6000] + ("\n...<snip>...\n" if len(frozen_rtl) > 6000 else ""),
         )
 
@@ -685,8 +691,27 @@ class TBReviewer:
             self._session.trace_summary() if self._session.trace_report else {},
             indent=2,
         )
+
+        # All scenarios that failed, with timing pointers, presented as a set to
+        # resolve together — not a single first-failure. Each line carries the first
+        # mismatch time + the scenario's time window so the reviewer can locate it.
+        scenarios = failing_test_scenarios(sim_excerpt)
+        scenarios_block = (
+            "<failing_scenarios>\n"
+            + (
+                "These named TB scenarios are ALL currently failing — review them "
+                "together, not one-at-a-time. Times index wave.vcd:\n"
+                + format_failing_scenarios(scenarios) + "\n"
+                if scenarios
+                else "(no per-scenario [TEST] markers parsed; rely on the failing "
+                "signals/trace below)\n"
+            )
+            + "</failing_scenarios>"
+        )
+
         first_prompt = (
             f"{init}\n\n"
+            f"{scenarios_block}\n\n"
             f"<trace_report_json>\n{trace_json}\n</trace_report_json>\n\n"
             f"{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling _tool_list_suspect_sections(), then _tool_read_section(section_id) "

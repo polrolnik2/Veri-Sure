@@ -91,7 +91,9 @@ Testbench requirements:
 4) Logging (keep logs small):
    - Do NOT print on every match.
    - On mismatch, display inputs, DUT outputs, and expected outputs.
-   - On the FIRST mismatch, print extra debug context per the display prompt below (moment or queue window).
+   - For the first mismatch only, ADDITIONALLY print extra debug context per the display
+     prompt below (moment or queue window). This is a one-time detail dump for context —
+     it does NOT stop the run; continue executing all remaining checks and scenarios.
 5) Generate a VCD named `wave.vcd`:
    initial begin
      $dumpfile("wave.vcd");
@@ -110,6 +112,24 @@ Testbench requirements:
 8) Sampling:
    - For posedge-sequential designs, compute/update expectations on posedge and check on negedge to avoid races.
    - For pure combinational designs (no clock), check at the moment inputs change (after a tiny delay if needed).
+9) Structured scenarios (per-primitive reporting WITH timing pointers — enables
+   granular, waveform-correlated debugging):
+   - Group stimulus into NAMED, INDEPENDENT test scenarios, one per functional case
+     (e.g. zero, overflow, carry_in, max, random_k). Reset/re-initialize between
+     scenarios where the design is stateful.
+   - Run ALL scenarios to completion — do NOT `$finish` on the first mismatch.
+   - Record, per scenario: its start time, its end time, the count of mismatches, and
+     the simulation time (`$time`) of the FIRST mismatch within that scenario.
+   - At the START of each scenario print: `[TEST <scenario_name>] START at time %0t`
+   - After each scenario print exactly one result line WITH timing, so a reviewer can
+     locate the failure in `wave.vcd`:
+       `[TEST <scenario_name>] PASS (window <t_start>..<t_end>)`
+     or, on any mismatch in that scenario:
+       `[TEST <scenario_name>] FAIL (<n> mismatches, first at time <t_first>, window <t_start>..<t_end>)`
+     where `<t_first>` is `$time` of the first mismatch in the scenario and
+     `<t_start>..<t_end>` bracket when the scenario ran. Print times as integers (`%0t`).
+   - The end-of-sim markers in (6)/(7) are still required and printed once after all
+     scenarios (they aggregate across scenarios, so the harness parsing is unchanged).
 
 In `reasoning`, write a short, practical summary (no step-by-step chain-of-thought).
 

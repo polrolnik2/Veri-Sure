@@ -20,6 +20,7 @@ from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer, check_syntax
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
+from .utils import failing_test_scenarios, format_failing_scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     interesting: list[str] = []
     for line in stdout.splitlines():
         if (
-            "=== MISMATCH DETECTED" in line
+            "[TEST " in line
+            or "=== MISMATCH DETECTED" in line
             or "Hint:" in line
             or line.startswith("Mismatches:")
             or "SIMULATION FAILED" in line
@@ -153,7 +155,9 @@ KMAP_DEBUG_HINT_PROMPT = r"""
 
 EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until pass):
-1) Use the contract + trace report to find the most likely root cause.
+1) Use the contract + trace report + <failing_scenarios> to find the most likely
+   root cause. All listed scenarios fail simultaneously — prefer a single fix that
+   resolves the whole group over patching one failing case at a time.
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
@@ -587,8 +591,18 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             asserter_hint = ""
 
+        # All failing scenarios (with timing pointers into wave.vcd) as a set to fix
+        # together, not a single first-fail.
+        scenarios = failing_test_scenarios(sim_failed_log_excerpt)
+        scenarios_block = (
+            "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "
+            "the common root cause that resolves them together. Times index wave.vcd:\n"
+            + format_failing_scenarios(scenarios) + "\n</failing_scenarios>\n\n"
+            if scenarios else ""
+        )
         first_prompt = (
-            f"{init}\n\n<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
+            f"{init}\n\n{scenarios_block}"
+            f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
             "then apply one replace_block(block_id, new_code), then run_simulation()."

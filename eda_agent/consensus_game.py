@@ -45,7 +45,8 @@ import asyncio
 import difflib
 import json
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -53,6 +54,13 @@ if TYPE_CHECKING:
     from .config import OpenAIConfig
 
 logger = logging.getLogger(__name__)
+
+# Canonical implementations live in utils so every player/reviewer shares them.
+from .utils import (  # noqa: E402
+    failing_test_primitives as _failing_test_primitives,
+    failing_test_scenarios,
+    format_failing_scenarios,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -96,9 +104,17 @@ class ConsensusVerdict:
     committed_rtl: str
     committed_tb: str
     blame: Literal["contract_ambiguous"] | None
+    # ``lessons`` is the **contract-safe** summary that crosses the epoch boundary
+    # (symptom + diagnosis + disputed primitives) — it must NOT embed either
+    # player's source/diffs/justifications (no-shared-access). The full diagnostic
+    # (diffs, suspect code, justifications) is written to ``lessons_full.txt`` for
+    # audit and for the future real Architect, never fed back to the players.
     lessons: str
     rtl_player_changed: bool
     tb_player_changed: bool
+    # Named scenarios still in dispute after the committed-pair sim (per-primitive
+    # granularity for freeze-settled / shrinking-dispute at Step 4).
+    disputed_primitives: tuple[str, ...] = ()
 
 
 class ConsensusGame:
@@ -175,11 +191,13 @@ class ConsensusGame:
         rtl_changed = committed_rtl.strip() != frozen_rtl.strip()
         tb_changed = committed_tb.strip() != frozen_tb.strip()
         sim_log = self._read_check_log(check_dir)
-        lessons = self._make_lessons(
+        disputed = tuple(_failing_test_primitives(sim_log))
+        safe_lessons, full_lessons = self._make_lessons(
             rtl_changed=rtl_changed,
             tb_changed=tb_changed,
             outcome="consensus" if sim_pass else "no_consensus",
             sim_log=sim_log,
+            disputed_primitives=disputed,
             rtl_player_dir=rtl_player_dir,
             frozen_rtl=frozen_rtl,
             committed_rtl=committed_rtl,
@@ -188,10 +206,16 @@ class ConsensusGame:
             rtl_player_justification=rtl_justification,
             tb_player_justification=tb_justification,
         )
+        # Full diagnostic (diffs/justifications/suspect-code) is audit-only — it must
+        # NOT cross the epoch boundary to the players (no-shared-access).
+        try:
+            (output_dir / "lessons_full.txt").write_text(full_lessons, encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
 
         logger.info(
-            "ConsensusGame: module=%s reached=%s rtl_changed=%s tb_changed=%s",
-            module_name, sim_pass, rtl_changed, tb_changed,
+            "ConsensusGame: module=%s reached=%s rtl_changed=%s tb_changed=%s disputed=%s",
+            module_name, sim_pass, rtl_changed, tb_changed, list(disputed),
         )
 
         return ConsensusVerdict(
@@ -199,9 +223,10 @@ class ConsensusGame:
             committed_rtl=committed_rtl,
             committed_tb=committed_tb,
             blame=None if sim_pass else "contract_ambiguous",
-            lessons=lessons,
+            lessons=safe_lessons,
             rtl_player_changed=rtl_changed,
             tb_player_changed=tb_changed,
+            disputed_primitives=disputed,
         )
 
     # ------------------------------------------------------------------
@@ -358,18 +383,42 @@ class ConsensusGame:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _read_check_log(check_dir: Path) -> str:
+    def _read_check_log(check_dir: Path, *, max_chars: int = 8000) -> str:
+        """Return the *runtime* portion of the consensus-check sim log.
+
+        Verilator ``--binary`` echoes the entire C++ build (``c++ -Os ...``,
+        ``verilator_includer``, ``- Verilator: ...``) to stdout **before** the
+        simulation runs, so the runtime markers we care about
+        (``[TEST ...]``/``SIMULATION``/``Mismatches:``/``Hint:``) sit thousands of
+        chars in. Clipping the *head* would capture only build noise (the bug that
+        made ``disputed_primitives`` always empty). Strip build lines and keep the
+        *tail*, where the runtime output lives.
+        """
         p = check_dir / "sim_output.json"
         if not p.exists():
             return ""
         try:
             obj = json.loads(p.read_text(encoding="utf-8"))
-            blob = (
-                str(obj.get("stdout") or "") + "\n" + str(obj.get("stderr") or "")
-            ).strip()
-            return blob[:2000]
         except Exception:  # noqa: BLE001
             return ""
+
+        # The runtime markers can sit anywhere in a long, noisy log (build spam
+        # before, %Warning blocks after), so positional clipping (head OR tail)
+        # is unreliable. Filter to the signal lines directly — position-independent.
+        _SIGNAL = (
+            "[TEST", "SIMULATION", "Mismatches:", "Hint:", "Cycle ", "Last ",
+            "%Error", "syntax error", "mismatch",
+        )
+        combined = str(obj.get("stdout") or "") + "\n" + str(obj.get("stderr") or "")
+        signal_lines = [
+            ln for ln in combined.splitlines()
+            if any(tok in ln for tok in _SIGNAL)
+        ]
+        if signal_lines:
+            return "\n".join(signal_lines)[-max_chars:]
+        # No recognizable runtime signal (e.g. compile failed) — return a clipped
+        # tail of the raw log so the caller still sees the error.
+        return combined.strip()[-max_chars:]
 
     @staticmethod
     def _make_lessons(
@@ -378,6 +427,7 @@ class ConsensusGame:
         tb_changed: bool,
         outcome: str,
         sim_log: str,
+        disputed_primitives: tuple[str, ...] = (),
         # Optional richer context — all default to empty/None for backward compat.
         rtl_player_dir: "Path | None" = None,
         frozen_rtl: str = "",
@@ -386,44 +436,64 @@ class ConsensusGame:
         committed_tb: str = "",
         rtl_player_justification: str = "",
         tb_player_justification: str = "",
-    ) -> str:
-        lines = [f"Consensus game result: {outcome}"]
-        lines.append(
+    ) -> tuple[str, str]:
+        """Return ``(safe_lessons, full_lessons)``.
+
+        ``safe`` is the contract-safe summary that crosses the epoch boundary to
+        the players: outcome, diagnosis, disputed primitives, and symptom-level
+        failing signals — **no** RTL/TB diffs, suspect-block source, or player
+        justifications (those embed a player's private work and would violate
+        no-shared-access if fed to the counterpart). ``full`` = safe + that rich
+        detail, for audit / the future real Architect only.
+        """
+        # ---- contract-safe section (forwarded) ----
+        safe = [f"Consensus game result: {outcome}"]
+        safe.append(
             "  RTL player: "
             + ("revised RTL" if rtl_changed else "kept RTL unchanged (RTL considered correct)")
         )
-        lines.append(
+        safe.append(
             "  TB player:  "
             + ("revised TB" if tb_changed else "kept TB unchanged (TB considered correct)")
         )
 
         if outcome == "no_consensus":
             if not rtl_changed and not tb_changed:
-                lines.append(
+                safe.append(
                     "Diagnosis: Neither player modified their design. "
                     "Both believe the other is at fault. "
                     "The contract is likely ambiguous — clarify the expected behaviour."
                 )
             elif rtl_changed and tb_changed:
-                lines.append(
+                safe.append(
                     "Diagnosis: Both players revised toward different readings. "
                     "The contract has ambiguous behaviour — be more explicit about "
                     "the contested interface/timing."
                 )
             elif rtl_changed and not tb_changed:
-                lines.append(
+                safe.append(
                     "Diagnosis: RTL player revised RTL but committed designs still "
-                    "disagree. TB reviewer confirmed TB is correct; focus the next "
-                    "attempt on the RTL logic identified below."
+                    "disagree. TB reviewer confirmed TB is correct; clarify the contract "
+                    "clause governing the disputed behaviour."
                 )
             else:
-                lines.append(
+                safe.append(
                     "Diagnosis: TB player revised TB but committed RTL does not pass it. "
-                    "The original TB may encode the contract incorrectly — review the "
+                    "The original TB may encode the contract incorrectly — clarify the "
                     "timing / interface specification."
                 )
 
-            # --- Structured signal-level failure from the consensus sim check ---
+            scenarios = failing_test_scenarios(sim_log)
+            if scenarios:
+                safe.append(f"Disputed test primitives ({len(scenarios)}), with timing:")
+                safe.append(format_failing_scenarios(scenarios))
+            elif disputed_primitives:
+                safe.append(
+                    f"Disputed test primitives ({len(disputed_primitives)}): "
+                    + ", ".join(disputed_primitives)
+                )
+
+            # Symptom-level failing signals from the committed-pair sim (not source).
             hint_lines = [
                 ln for ln in sim_log.splitlines()
                 if "Hint:" in ln or "SIMULATION FAILED" in ln or "Mismatches:" in ln
@@ -433,76 +503,67 @@ class ConsensusGame:
                 if ln.startswith("Cycle ") or ln.startswith("Last ")
             ]
             if hint_lines:
-                lines.append("Failing signals (consensus-check simulation):")
-                lines.extend(f"  {ln.strip()}" for ln in hint_lines[:8])
+                safe.append("Failing signals (consensus-check simulation):")
+                safe.extend(f"  {ln.strip()}" for ln in hint_lines[:8])
             if last_cycles:
-                lines.append("Last simulation cycles (consensus check):")
-                lines.extend(f"  {ln.strip()}" for ln in last_cycles[-6:])
+                safe.append("Last simulation cycles (consensus check):")
+                safe.extend(f"  {ln.strip()}" for ln in last_cycles[-6:])
 
-            # --- RTL suspect blocks from the RTL player's trace report ---
+        # ---- full-only detail (audit; never forwarded to players) ----
+        extra: list[str] = []
+        if outcome == "no_consensus":
             if rtl_player_dir is not None:
                 trace = _read_json_safe(Path(rtl_player_dir) / "trace_report.json") or {}
                 blocks = trace.get("suspect_blocks") or []
                 if blocks:
-                    lines.append(
+                    extra.append(
                         f"RTL suspect blocks ({len(blocks)} identified by RTL-player trace):"
                     )
                     for b in blocks[:5]:
                         writes = ", ".join(b.get("writes") or [])[:80]
-                        lines.append(
+                        extra.append(
                             f"  {b.get('id','?')} ({b.get('kind','?')}/{b.get('clocking','?')}) "
                             f"L{b.get('start_line','?')}-{b.get('end_line','?')} "
                             f"writes=[{writes}]"
                         )
-                    # Include the code snippet for the first (most-implicated) block only.
                     snippet = (blocks[0].get("code_snippet") or "").strip()
                     if snippet:
-                        lines.append(
+                        extra.append(
                             f"  Primary suspect block ({blocks[0].get('id')}) code:\n"
                             + "\n".join("    " + ln for ln in snippet.splitlines()[:20])
                         )
-
-            # --- Compact diff of RTL changes ---
             if rtl_changed and frozen_rtl and committed_rtl:
                 diff = _compact_diff(frozen_rtl, committed_rtl, "rtl.sv", max_lines=35)
                 if diff:
-                    lines.append("RTL changes made by RTL player:")
-                    lines.append(diff.rstrip())
-
+                    extra.append("RTL changes made by RTL player:")
+                    extra.append(diff.rstrip())
             if tb_changed and frozen_tb and committed_tb:
                 diff = _compact_diff(frozen_tb, committed_tb, "tb.sv", max_lines=25)
                 if diff:
-                    lines.append("TB changes made by TB player:")
-                    lines.append(diff.rstrip())
+                    extra.append("TB changes made by TB player:")
+                    extra.append(diff.rstrip())
 
-        # --- Player conclusions (contract-grounded justifications) ---
-        # These are the most important input for the next epoch's architect:
-        # each player states which contract clause it was working from and why
-        # it believes its own design is correct.
-        def _extract_justification(raw: str, label: str) -> str:
-            """Strip any agent preamble; return the structured response content."""
+        def _extract_justification(raw: str) -> str:
             if not raw:
                 return ""
-            # The generate_response content is typically buried after tool-call XML.
-            # Look for the verdict keyword and take everything from there.
             for kw in ("RTL_FIXED:", "RTL_CORRECT:", "TB_FIXED:", "TB_CORRECT:"):
                 idx = raw.find(kw)
                 if idx != -1:
                     return raw[idx:].strip()
-            # Fallback: last non-empty paragraph
             paras = [p.strip() for p in raw.split("\n\n") if p.strip()]
             return paras[-1] if paras else raw.strip()
 
-        rtl_just = _extract_justification(rtl_player_justification, "RTL player")
-        tb_just = _extract_justification(tb_player_justification, "TB player")
-
+        rtl_just = _extract_justification(rtl_player_justification)
+        tb_just = _extract_justification(tb_player_justification)
         if rtl_just or tb_just:
-            lines.append("Player conclusions (contract-grounded):")
+            extra.append("Player conclusions (contract-grounded; audit-only):")
             if rtl_just:
-                lines.append("  [RTL player]")
-                lines.extend("    " + ln for ln in rtl_just.splitlines())
+                extra.append("  [RTL player]")
+                extra.extend("    " + ln for ln in rtl_just.splitlines())
             if tb_just:
-                lines.append("  [TB player]")
-                lines.extend("    " + ln for ln in tb_just.splitlines())
+                extra.append("  [TB player]")
+                extra.extend("    " + ln for ln in tb_just.splitlines())
 
-        return "\n".join(lines)
+        safe_text = "\n".join(safe)
+        full_text = safe_text + ("\n\n" + "\n".join(extra) if extra else "")
+        return safe_text, full_text
