@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
-from .consensus_game import ConsensusGame
+from .rtl_editor import RTLEditor
 from .contract_linter import lint_contract_json, render_contract_issues
 from .config import OpenAIConfig
 from .model import UsageBreakdown, get_model_usage
@@ -33,9 +33,6 @@ class TopAgentConfig:
     # oracle there, so a single blind retry is too few for complex problems
     # (e.g. ArchXBench). Each retry feeds back the accumulated lint errors.
     tb_lint_max_retry: int = 4
-    # Local iterations budget given to each player in the consensus game.
-    # Set to 0 to disable the consensus phase entirely.
-    consensus_max_local_iterations: int = 3
 
 
 @dataclass(frozen=True)
@@ -49,9 +46,6 @@ class TopAgentResult:
     input_tokens: int = 0
     output_tokens: int = 0
     error: str | None = None
-    # Consensus game verdict — populated as the final step of run().
-    consensus_reached: bool = False
-    consensus_lessons: str = ""
     usage_breakdown: dict | None = None
 
 
@@ -230,38 +224,35 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None,
         golden_rtl_blackbox_path: str | None,
-    ) -> Tuple[bool, str, int, int, bool, str, dict | None]:
+    ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
         Returns ``(is_sim_pass, rtl_code, input_tokens, output_tokens,
-        consensus_reached, consensus_lessons, usage_breakdown_dict)``.
-        The consensus game is the repair step — RTLEditor no longer runs directly here.
+        usage_breakdown_dict)``. The repair step is the standard RTLEditor debug
+        loop; ``is_sim_pass`` (the self-TB verdict) is the per-node escalation
+        signal consumed by the DAG OR-node.
         """
         architect = ArchitectAgent(self.cfg)
         tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
         sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
-
-        consensus_player_tokens: dict[str, tuple[int, int]] = {}
+        rtl_edit = RTLEditor(self.cfg, sim_reviewer=sim_reviewer, max_trials=int(self.config.debug_max_trials))
 
         def build_breakdown() -> UsageBreakdown:
             return UsageBreakdown(
                 architect=get_model_usage(architect._agent.model),
                 tb_gen=get_model_usage(tb_gen._agent.model),
                 rtl_gen=get_model_usage(rtl_gen._agent.model),
-                consensus_rtl_player=consensus_player_tokens.get("rtl", (0, 0)),
-                consensus_tb_player=consensus_player_tokens.get("tb", (0, 0)),
+                rtl_edit=get_model_usage(rtl_edit._agent.model),
             )
 
         def finish(
             is_sim_pass: bool,
             rtl_code: str,
-            consensus_reached: bool = False,
-            lessons: str = "",
-        ) -> Tuple[bool, str, int, int, bool, str, dict | None]:
+        ) -> Tuple[bool, str, int, int, dict | None]:
             breakdown = build_breakdown()
             total_in, total_out = breakdown.total
-            return is_sim_pass, rtl_code, total_in, total_out, consensus_reached, lessons, breakdown.to_dict()
+            return is_sim_pass, rtl_code, total_in, total_out, breakdown.to_dict()
 
         architect.reset()
         contract_json = await self._build_contract_json(
@@ -352,7 +343,7 @@ class TopAgent:
                     "avoid static variable initializers in function/task bodies, and avoid "
                     "SVA temporal operators (##, $past with non-constant delays)."
                 )
-                return finish(False, "", lessons=tb_lint_lesson)
+                return finish(False, "")
         try:
             self._write_output(
                 output_dir_per_run=output_dir_per_run,
@@ -412,9 +403,10 @@ class TopAgent:
         sim_mismatch_cnt = 0
         did_rtl_regen_after_mismatch = False
         did_fallback_to_golden_tb = False
+        remaining_debug_trials = int(self.config.debug_max_trials)
 
-        # Simulation + repair loop.  The consensus game is the repair step;
-        # RTLEditor no longer runs here directly.
+        # Simulation + repair loop. The repair step is the standard trace-based
+        # RTLEditor debug loop; the leaf's is_sim_pass is the escalation signal.
         for _ in range(max(1, int(self.config.sim_max_retry))):
             is_sim_pass, sim_mismatch_cnt, sim_log = await asyncio.to_thread(sim_reviewer.review)
             if is_sim_pass:
@@ -469,10 +461,10 @@ class TopAgent:
                     "generates incorrectly. Clarify bit-widths, operator types, and "
                     "Verilator-compatible constructs."
                 )
-                return finish(False, rtl_code, lessons=compile_lesson)
+                return finish(False, rtl_code)
 
             # Give the Coder one shot to regenerate RTL from the failure log before
-            # handing off to the consensus game.  This fixes systematic
+            # handing off to the trace-based debugger.  This fixes systematic
             # contract/timing misunderstandings faster than local patching.
             if not did_rtl_regen_after_mismatch:
                 did_rtl_regen_after_mismatch = True
@@ -506,43 +498,28 @@ class TopAgent:
                 except Exception:  # noqa: BLE001
                     pass
 
-            # Consensus game — the repair step.  RTLEditor (RTL-player) and
-            # TBReviewer (TB-player) run in isolation inside the game.
-            # Snapshot the pre-game state for diagnostics.
+            # Standard repair step: trace-based RTLEditor debug loop.
+            # Snapshot the pre-debug state for diagnostics (the leaf harvests these).
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl_before_debug.sv", content=rtl_code)
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="sim_failed_log.json", content=sim_log)
 
-            max_iters = int(self.config.consensus_max_local_iterations)
-            if max_iters <= 0:
+            if remaining_debug_trials <= 0:
                 return finish(False, rtl_code)
 
-            game = ConsensusGame(self.cfg)
-            try:
-                verdict = await game.run(
-                    frozen_rtl=rtl_code,
-                    frozen_tb=testbench,
-                    contract_json=contract_json,
-                    module_name=module_name,
-                    output_dir=output_dir_per_run / "consensus",
-                    max_local_iterations=max_iters,
-                )
-                consensus_player_tokens["rtl"] = verdict.rtl_player_tokens
-                consensus_player_tokens["tb"] = verdict.tb_player_tokens
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("ConsensusGame raised %s: %s", type(exc).__name__, exc)
-                return finish(False, rtl_code)
+            rtl_edit.reset()
+            is_sim_pass, rtl_code, used_trials = await rtl_edit.chat(
+                spec=(self._contract_only_context(contract_json) if self.config.contract_only else spec),
+                output_dir_per_run=str(output_dir_per_run),
+                sim_failed_log=sim_log,
+                sim_mismatch_cnt=sim_mismatch_cnt,
+                contract_json=contract_json,
+                max_trials=remaining_debug_trials,
+            )
+            remaining_debug_trials = max(0, remaining_debug_trials - int(used_trials))
+            if is_sim_pass:
+                return finish(True, rtl_code)
 
-            committed_rtl = verdict.committed_rtl if verdict.committed_rtl.strip() else rtl_code
-            committed_tb = verdict.committed_tb if verdict.committed_tb.strip() else testbench
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl.sv", content=committed_rtl)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=committed_tb)
-            rtl_code = committed_rtl
-
-            # Final sim check with committed pair.
-            is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
-            return finish(is_sim_pass, rtl_code, verdict.reached, verdict.lessons)
-
-        # Reached if every loop iteration returned early via pass/fallback.
+        # Last check, in case the final edit improved but didn't re-run.
         is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
         return finish(is_sim_pass, rtl_code)
 
@@ -583,8 +560,6 @@ class TopAgent:
         rtl_code = ""
         input_tokens = 0
         output_tokens = 0
-        consensus_reached = False
-        consensus_lessons = ""
         usage_breakdown: dict | None = None
         error: str | None = None
 
@@ -599,8 +574,6 @@ class TopAgent:
                     rtl_code,
                     input_tokens,
                     output_tokens,
-                    consensus_reached,
-                    consensus_lessons,
                     usage_breakdown,
                 ) = await self._run_instance(
                     spec=spec,
@@ -622,7 +595,5 @@ class TopAgent:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             error=error,
-            consensus_reached=consensus_reached,
-            consensus_lessons=consensus_lessons,
             usage_breakdown=usage_breakdown,
         )
