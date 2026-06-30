@@ -101,6 +101,65 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     return _clip_text(out, max_chars=max_chars)
 
 
+def _render_contract_sva_body(contract_json: str) -> str | None:
+    """Render contract_sva from the contract JSON as an assertion module body.
+
+    When the orchestrator supplies ``contract_sva`` in the contract, these
+    replace the LLM-generated assertions entirely.  The rendered body is
+    passed as ``assert_body_override`` to :meth:`Asserter.analyze`, so the
+    asserter runs the contract properties instead of inventing its own.
+
+    Returns ``None`` if no contract_sva is present (the asserter then falls
+    back to its normal LLM generation).
+    """
+    try:
+        contract = json.loads(contract_json)
+    except Exception:  # noqa: BLE001
+        return None
+    contract_sva = contract.get("contract_sva")
+    if not contract_sva or not isinstance(contract_sva, list):
+        return None
+
+    clocking = contract.get("clocking") or {}
+    clk_info = (clocking.get("clock") or {}) if isinstance(clocking, dict) else {}
+    rst_info = (clocking.get("reset") or {}) if isinstance(clocking, dict) else {}
+    clk_name = clk_info.get("name", "clk") if isinstance(clk_info, dict) else "clk"
+    rst_name = rst_info.get("name") if isinstance(rst_info, dict) else None
+    rst_active = rst_info.get("active", "high") if isinstance(rst_info, dict) else "high"
+
+    if rst_name:
+        rst_expr = f"({rst_name} == 1'b0)" if rst_active == "low" else rst_name
+    else:
+        rst_expr = None
+
+    lines: list[str] = []
+    lines.append("  // === Contract SVA (orchestrator-supplied, replaces LLM assertions) ===")
+    for prop in contract_sva:
+        if not isinstance(prop, dict):
+            continue
+        name = prop.get("name", "golden_prop")
+        body = prop.get("body", "")
+        if not body:
+            continue
+        prop_clk = prop.get("clk", clk_name)
+        prop_rst = prop.get("rst", rst_name)
+        if prop_rst:
+            prop_rst_expr = f"({prop_rst} == 1'b0)" if rst_active == "low" else prop_rst
+            disable = f" disable iff ({prop_rst_expr})"
+        else:
+            disable = ""
+
+        lines.append(f"  always @(posedge {prop_clk}) begin")
+        lines.append(f"    if ({f'!{prop_rst_expr}' if prop_rst else '1'}) begin")
+        lines.append(f"      {name}_check: assert ({body})")
+        lines.append(f'        else asserter_log("{name}", $sformatf("CONTRACT SVA FAIL: {name}"));')
+        lines.append(f"    end")
+        lines.append(f"  end")
+        lines.append("")
+
+    return "\n".join(lines) if len(lines) > 1 else None
+
+
 SYSTEM_PROMPT = r"""
 You are Debugger, an expert in RTL debugging.
 
@@ -118,6 +177,18 @@ Rules:
 4. Prefer small, targeted edits.
 5. Preserve the module interface and the contract's timing assumptions.
 6. Contract-only mode: do NOT change behavior based on input_spec if it conflicts with the contract.
+7. Contract SVA mode: if the contract JSON contains a `contract_sva` field, these are hard
+   specification constraints your RTL MUST satisfy. Ensure fixes do not violate them.
+8. Child assumes mode: if the contract JSON contains a `child_assumes` field, this RTL is a
+   COMPOSITION/GLUE module with child-facing ports (prefixed with each child module name,
+   e.g. `booth_controller_ready`, `booth_datapath_product`) ALREADY on its port list.
+   - DO NOT instantiate any child module as a fix. There are no child module definitions
+     available to this RTL — child-facing ports connect externally, outside this file.
+   - If a child-facing port appears unconnected, undriven, or X-valued, the fix is to wire
+     it correctly within the GLUE LOGIC (assign/always blocks using existing ports), never
+     to declare or instantiate a module for it.
+   - Each child's `functional_summary`/`timing`/`properties` in `child_assumes` describe what
+     that child guarantees on its ports — use them to determine the correct glue behavior.
 
 When you are done (simulation passes), finish by calling generate_response with a
 structured plain-string response in EXACTLY this format (use literal newlines between fields):
@@ -573,7 +644,9 @@ class RTLEditor:
             boolean_hint = ""
 
         # Best-effort: assertion-based (sequential/timing) hint in a separate sim sandbox.
-        # This is NOT a source of truth; treat it only as parallel guidance.
+        # When contract_sva is present in the contract, use it as assert_body_override
+        # so the Asserter runs the orchestrator-supplied contract SVA instead of
+        # generating its own (potentially wrong) assertions via the LLM.
         asserter_hint = ""
         try:
             fail_sigs: list[str] = []
@@ -581,6 +654,8 @@ class RTLEditor:
                 if isinstance(fo, dict) and isinstance(fo.get("sig"), str) and fo.get("sig"):
                     fail_sigs.append(str(fo.get("sig")))
             fail_sigs = sorted(set(fail_sigs))
+
+            contract_sva_override = _render_contract_sva_body(contract_json)
 
             asserter = Asserter(self._cfg)
             asserter_res = await asserter.analyze(
@@ -590,6 +665,7 @@ class RTLEditor:
                 output_dir=output_dir_per_run,
                 golden_rtl_path=getattr(self.sim_reviewer, "golden_rtl_path", None),
                 target_outputs=fail_sigs,
+                assert_body_override=contract_sva_override,
             )
             asserter_hint = (
                 "<asserter_result_json>\n"

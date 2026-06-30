@@ -26,6 +26,30 @@ Simulator target (important):
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
 - <input_spec> is non-authoritative background and must NOT override the contract.
+
+Contract SVA mode:
+- If the contract JSON contains a `contract_sva` field (a list of SVA property objects),
+  these are **orchestrator-supplied assertions** that the DUT MUST satisfy.
+- Treat them as hard specification constraints alongside the functional_summary.
+- Design your testbench checks to be consistent with these SVA properties.
+
+Child assumes mode (hierarchical decomposition):
+- If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
+  this node is a COMPOSITION NODE with child-facing ports.
+- The child-facing ports are ALREADY on the DUT's port list (prefixed with the child
+  module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+- DO NOT create stub modules for children. DO NOT instantiate any child modules.
+- Instead, treat child-facing ports as REGULAR DUT PORTS that you drive/read directly
+  in the testbench, just like clk/rst/start/A/B.
+- Each child entry has `functional_summary` (prose description of what the
+  child does), `timing` (latency per output), and `properties` (formal SVA).
+  Read `functional_summary`/`timing` FIRST to understand the child's actual
+  behavior, then use `properties` to pin down edge cases precisely — use all
+  three together to write a behavioural model INLINE in the testbench (as
+  always blocks or tasks) that drives the child-output ports realistically.
+- For child-input ports (ports the DUT drives TO the child): just declare wires
+  and connect them to the DUT. You can monitor them for debug.
+- Test the DUT's own contract_sva properties assuming the children behave as specified.
 """
 
 PARSE_REPAIR_PROMPT = r"""

@@ -157,6 +157,12 @@ class ContractFormat(BaseModel):
     corner_cases: List[str]
     test_plan: List[str]
     guidance: Dict[str, Any]
+    # Orchestrator-supplied SVA contract: a first-class peer of io/parameters.
+    # Threaded into ALL downstream agents alongside the interface.  Dual-role:
+    # (a) spec input — generation aims to satisfy these properties;
+    # (b) golden reference — the Asserter binds them as ``assert property``.
+    # None when Veri-Sure runs standalone (no orchestrator).
+    contract_sva: Optional[List[Dict[str, Any]]] = None
 
 
 class ArchitectAgent:

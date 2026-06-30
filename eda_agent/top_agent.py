@@ -224,6 +224,8 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None,
         golden_rtl_blackbox_path: str | None,
+        contract_sva: list[dict] | None = None,
+        child_assumes: dict | None = None,
     ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
@@ -261,8 +263,21 @@ class TopAgent:
             golden_tb_path=golden_tb_path,
             output_dir_per_run=output_dir_per_run,
         )
+        # Inject orchestrator-supplied contract SVA and child assumes into the
+        # contract so they flow to all downstream agents as first-class fields.
+        if contract_sva or child_assumes:
+            try:
+                _cobj = json.loads(contract_json)
+                if contract_sva:
+                    _cobj["contract_sva"] = contract_sva
+                if child_assumes:
+                    _cobj["child_assumes"] = child_assumes
+                contract_json = json.dumps(_cobj, indent=2) + "\n"
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
+            except Exception:  # noqa: BLE001
+                pass
         try:
-            contract_obj = __import__("json").loads(contract_json)
+            contract_obj = json.loads(contract_json)
             module_name = str(contract_obj.get("module_name") or "TopModule")
         except Exception:  # noqa: BLE001
             module_name = "TopModule"
@@ -544,6 +559,8 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None = None,
         golden_rtl_blackbox_path: str | None = None,
+        contract_sva: list[dict] | None = None,
+        child_assumes: dict | None = None,
     ) -> TopAgentResult:
         output_dir_per_run = output_dir_per_run.expanduser().resolve()
         output_dir_per_run.mkdir(parents=True, exist_ok=True)
@@ -580,6 +597,8 @@ class TopAgent:
                     output_dir_per_run=output_dir_per_run,
                     golden_tb_path=golden_tb_path,
                     golden_rtl_blackbox_path=golden_rtl_blackbox_path,
+                    contract_sva=contract_sva,
+                    child_assumes=child_assumes,
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001

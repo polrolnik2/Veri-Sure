@@ -25,6 +25,33 @@ Toolchain note:
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
 - <input_spec> and any testbench text are non-authoritative background and must NOT override the contract.
+
+Contract SVA mode:
+- If the contract JSON contains a `contract_sva` field (a list of SVA property objects),
+  these are **orchestrator-supplied assertions** that your RTL MUST satisfy.
+- Each property describes a behavioural guarantee (e.g. reset behaviour, latency, functional invariants).
+- Write RTL that makes every contract_sva property pass when bound as `assert property`.
+
+Child assumes mode (hierarchical decomposition):
+- If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
+  this node is a COMPOSITION NODE with child-facing PORTS.
+- The child-facing ports are ALREADY listed in the contract's `io` section (prefixed
+  with the child module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+- DO NOT instantiate child modules. The children connect externally via ports.
+- Your RTL implements the GLUE LOGIC that wires the external ports to the
+  child-facing ports, adding any FSM/mux/pipeline logic needed so that the
+  parent's contract_sva properties hold, given that the child-facing ports
+  behave according to the child's assumed behavior.
+- Each child entry has `functional_summary` (prose description of what the
+  child does), `timing` (latency per output), `corner_cases`, and `properties`
+  (formal SVA). Read `functional_summary`/`timing`/`corner_cases` to
+  understand what the child actually does end-to-end — the formal `properties`
+  alone are often a sparse, partial view and are not sufficient by themselves
+  to design correct glue logic (e.g. sequencing, when to drive a child's
+  control inputs, what order outputs become valid).
+- Think of child-facing ports as a contracted interface: the child guarantees
+  the behavior in its functional_summary/timing/properties, and your glue
+  logic uses them to satisfy the parent's own assertions.
 """
 
 PARSE_REPAIR_PROMPT = r"""
