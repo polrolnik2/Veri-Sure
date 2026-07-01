@@ -42,16 +42,20 @@ Child assumes mode (hierarchical decomposition):
   child-facing ports, adding any FSM/mux/pipeline logic needed so that the
   parent's contract_sva properties hold, given that the child-facing ports
   behave according to the child's assumed behavior.
-- Each child entry has `functional_summary` (prose description of what the
-  child does), `timing` (latency per output), `corner_cases`, and `properties`
-  (formal SVA). Read `functional_summary`/`timing`/`corner_cases` to
-  understand what the child actually does end-to-end — the formal `properties`
-  alone are often a sparse, partial view and are not sufficient by themselves
-  to design correct glue logic (e.g. sequencing, when to drive a child's
-  control inputs, what order outputs become valid).
+- Each child entry has `io_behavior` (a BLACK-BOX description of observable
+  input->output behavior), `timing` (latency per output), `corner_cases`, and
+  `properties` (formal SVA). Read `io_behavior`/`timing`/`corner_cases` to
+  understand what the child actually does end-to-end at its INTERFACE — the
+  formal `properties` alone are often a sparse, partial view and are not
+  sufficient by themselves to design correct glue logic (e.g. sequencing,
+  when to drive a child's control inputs, what order outputs become valid).
+- Do NOT use the child's own `functional_summary` field (if present elsewhere
+  in the contract) to reason about the child's behavior — it describes that
+  child's INTERNAL implementation for its own RTL writer, not its observable
+  interface contract. Use `io_behavior` instead.
 - Think of child-facing ports as a contracted interface: the child guarantees
-  the behavior in its functional_summary/timing/properties, and your glue
-  logic uses them to satisfy the parent's own assertions.
+  the behavior in its io_behavior/timing/properties, and your glue logic uses
+  them to satisfy the parent's own assertions.
 """
 
 PARSE_REPAIR_PROMPT = r"""

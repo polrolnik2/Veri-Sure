@@ -187,8 +187,11 @@ Rules:
    - If a child-facing port appears unconnected, undriven, or X-valued, the fix is to wire
      it correctly within the GLUE LOGIC (assign/always blocks using existing ports), never
      to declare or instantiate a module for it.
-   - Each child's `functional_summary`/`timing`/`properties` in `child_assumes` describe what
-     that child guarantees on its ports — use them to determine the correct glue behavior.
+   - Each child's `io_behavior`/`timing`/`properties` in `child_assumes` describe what that
+     child guarantees on its ports — use them to determine the correct glue behavior.
+     `io_behavior` is a BLACK-BOX description (no internal architecture terms); do NOT use
+     a child's `functional_summary` (if present) to reason about its behavior — that field
+     describes the child's own internal RTL implementation, not its observable interface.
 
 When you are done (simulation passes), finish by calling generate_response with a
 structured plain-string response in EXACTLY this format (use literal newlines between fields):
@@ -494,11 +497,18 @@ class RTLEditor:
         sim_reviewer: SimReviewer,
         max_trials: int = 30,
         memory_window: int = 6,
+        stall_rounds: int = 2,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
+        # Consecutive outer-loop rounds with no mismatch-count reduction before
+        # giving up. Distinct from max_trials (a hard action-count cap): this
+        # detects non-convergence early, so a stuck debugger yields back to the
+        # orchestrator (decomposition) instead of grinding through its full
+        # budget on rounds that are structurally not making progress.
+        self._stall_rounds = max(1, int(stall_rounds))
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
@@ -698,13 +708,45 @@ class RTLEditor:
         _justification: str = ""
         _last_content: str = ""
 
+        # Stall detection: tracks whether last_mismatch_cnt strictly improves
+        # round-over-round (it only updates on an ACCEPTED replace_block — a
+        # rolled-back action or a round where the model never acts both leave
+        # it unchanged, so this naturally catches both failure modes).
+        stall_count = 0
+        prev_mismatch_for_stall = int(sim_mismatch_cnt)
+
+        def _update_stall_tracking() -> None:
+            nonlocal stall_count, prev_mismatch_for_stall
+            if self._session.last_mismatch_cnt < prev_mismatch_for_stall:
+                stall_count = 0
+            else:
+                stall_count += 1
+            prev_mismatch_for_stall = self._session.last_mismatch_cnt
+
         response = await self._agent(Msg("user", first_prompt, role="user"))
         _last_content = str(getattr(response, "content", "") or "")
         if self._session.is_done:
             _justification = _last_content
+        else:
+            _update_stall_tracking()
 
         for _ in range(session_max_trials):
             if self._session.is_done:
+                break
+            # Once the session's action budget is exhausted, every further
+            # replace_block() call is refused ("Reached maximum debug trials")
+            # — the agent can no longer make progress. Stop here instead of
+            # burning the remaining outer-loop iterations on calls that are
+            # structurally guaranteed to fail; yield back to the caller
+            # (orchestrator decomposition) immediately.
+            if self._session.action_calls >= self._session.max_trials:
+                break
+            # No-progress detection: several consecutive rounds with no
+            # mismatch-count reduction (rollbacks, no-op reasoning, or edits
+            # that don't help) mean the debugger is not converging on this
+            # bug — stop spending budget and let the caller decide (typically
+            # decompose) rather than grinding to the hard trial cap.
+            if stall_count >= self._stall_rounds:
                 break
             # Sliding window: keep the initial context message + last N messages
             # to cap per-call input tokens regardless of iteration count.
@@ -722,6 +764,8 @@ class RTLEditor:
             _last_content = str(getattr(response, "content", "") or "")
             if self._session.is_done and not _justification:
                 _justification = _last_content
+            elif not self._session.is_done:
+                _update_stall_tracking()
 
         # If the model wrote RTL_FIXED:/RTL_CORRECT: as plain text but sim never passed,
         # extract it as the justification so lessons have player conclusions.

@@ -41,12 +41,19 @@ Child assumes mode (hierarchical decomposition):
 - DO NOT create stub modules for children. DO NOT instantiate any child modules.
 - Instead, treat child-facing ports as REGULAR DUT PORTS that you drive/read directly
   in the testbench, just like clk/rst/start/A/B.
-- Each child entry has `functional_summary` (prose description of what the
-  child does), `timing` (latency per output), and `properties` (formal SVA).
-  Read `functional_summary`/`timing` FIRST to understand the child's actual
-  behavior, then use `properties` to pin down edge cases precisely — use all
-  three together to write a behavioural model INLINE in the testbench (as
-  always blocks or tasks) that drives the child-output ports realistically.
+- Each child entry has `io_behavior` (a BLACK-BOX description of observable
+  input->output behavior — what stimulus produces what result, after how many
+  cycles), `timing` (latency per output), and `properties` (formal SVA).
+- `io_behavior` is the PRIMARY source — model the child's ports to reproduce
+  exactly that observable behavior, nothing more. `properties` pins down exact
+  edge-case values precisely.
+- DO NOT attempt to mimic any internal architecture (registers, FSM states,
+  accumulators, recoding logic, etc.) even if such terms appear elsewhere in
+  the contract (e.g. in the child's own `functional_summary`, which describes
+  THAT child's internal RTL implementation, not its black-box behavior — do
+  not use `functional_summary` to model child behavior in this testbench).
+  Write a black-box model INLINE (always blocks or tasks) that drives the
+  child-output ports to match `io_behavior` + `properties` only.
 - For child-input ports (ports the DUT drives TO the child): just declare wires
   and connect them to the DUT. You can monitor them for debug.
 - Test the DUT's own contract_sva properties assuming the children behave as specified.
