@@ -17,6 +17,7 @@ from .config import OpenAIConfig
 from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import SimReviewer
+from .tb_editor import TBEditor
 from .tb_generator import TBGenerator
 
 logger = logging.getLogger(__name__)
@@ -27,12 +28,17 @@ class TopAgentConfig:
     sim_max_retry: int = 4
     is_ablation: bool = False
     contract_only: bool = True
-    debug_max_trials: int = 30
+    debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
     # non-golden mode (no golden TB fallback). The self-generated TB is the only
     # oracle there, so a single blind retry is too few for complex problems
     # (e.g. ArchXBench). Each retry feeds back the accumulated lint errors.
     tb_lint_max_retry: int = 4
+    # Bounded repair loop that aligns a composition node's inline child
+    # behavioral model against child_assumes SVA (via a mock-DUT + Verilator
+    # check) BEFORE the TB is used to gate the real glue RTL. No-op when the
+    # contract carries no child_assumes.
+    tb_align_max_trials: int = 15
 
 
 @dataclass(frozen=True)
@@ -372,6 +378,30 @@ class TopAgent:
             )
         except Exception:  # noqa: BLE001
             pass
+
+        # TB alignment pass (composition nodes only): before the TB is used to
+        # gate the real glue RTL, verify its inline child behavioral model
+        # actually satisfies child_assumes SVA, using a mock DUT + Verilator —
+        # independent of whatever the (not-yet-correct) glue RTL does. A TB
+        # bug here would otherwise silently poison the self-TB gate: either
+        # penalizing correct glue RTL, or letting broken glue RTL pass because
+        # the TB's child model never exercised the violated property.
+        if child_assumes:
+            tb_editor = TBEditor(self.cfg, max_trials=int(self.config.tb_align_max_trials))
+            aligned, aligned_tb, tb_align_trials, tb_align_log = await tb_editor.chat(
+                contract_json=contract_json,
+                tb_code=testbench,
+                output_dir_per_run=str(output_dir_per_run),
+            )
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_align_log.txt", content=tb_align_log + "\n")
+            if aligned_tb:
+                testbench = aligned_tb
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            if not aligned:
+                logger.warning(
+                    "TB did not fully align with child_assumes after %d trial(s) (continuing with best effort): %s",
+                    tb_align_trials, tb_align_log,
+                )
 
         rtl_gen.reset()
         rtl_path = str(output_dir_per_run / "rtl.sv")

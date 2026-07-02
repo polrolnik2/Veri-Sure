@@ -56,6 +56,15 @@ Child assumes mode (hierarchical decomposition):
 - Think of child-facing ports as a contracted interface: the child guarantees
   the behavior in its io_behavior/timing/properties, and your glue logic uses
   them to satisfy the parent's own assertions.
+- GAP ANALYSIS: the contract's `functional_summary` for a composition node
+  states what the ORIGINAL (pre-decomposition) requirement was, alongside what
+  each child guarantees. Do not treat this module as pure port-forwarding by
+  default — actively identify anything the original requirement needs that no
+  child's guarantee covers (sequencing/launch order, arbitrating between
+  children, combining two children's outputs, holding or latching a result
+  across cycles that no child holds, translating between representations no
+  child mentions). That residual behavior must be IMPLEMENTED here as
+  FSM/mux/register logic, not assumed to fall out of wiring.
 """
 
 PARSE_REPAIR_PROMPT = r"""

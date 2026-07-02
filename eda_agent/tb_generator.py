@@ -57,6 +57,15 @@ Child assumes mode (hierarchical decomposition):
 - For child-input ports (ports the DUT drives TO the child): just declare wires
   and connect them to the DUT. You can monitor them for debug.
 - Test the DUT's own contract_sva properties assuming the children behave as specified.
+- GAP-focused testing: `functional_summary` states the ORIGINAL (pre-decomposition)
+  requirement alongside what each child guarantees. The DUT is not pure wiring —
+  it is responsible for whatever the original requirement needs that no child
+  guarantee covers (sequencing/launch order, arbitrating between children,
+  combining two children's outputs, holding/latching state across cycles,
+  format translation). Write scenarios that specifically stress THAT residual
+  behavior, not just pass-through/wiring correctness — e.g. cases where a
+  naive port-forwarding implementation would satisfy each child's own contract
+  in isolation but still fail the parent's own contract_sva.
 """
 
 PARSE_REPAIR_PROMPT = r"""
