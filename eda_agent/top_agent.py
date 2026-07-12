@@ -22,6 +22,33 @@ from .tb_generator import TBGenerator
 
 logger = logging.getLogger(__name__)
 
+# Verilator error text is sometimes too cryptic for the TB lint-repair loop to
+# act on (a recorded run regenerated the identical declaration-after-statement
+# defect 4 times because the excerpt only said `expecting "'{"`). Each
+# (pattern, hint) pair appends a plain-English translation to the excerpt
+# before it is fed back to the Verifier; add new translations here.
+_LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"""unexpected IDENTIFIER, expecting "'\{\""""),
+        "HINT: `syntax error, unexpected IDENTIFIER, expecting \"'{\"` at a line "
+        "inside a task/begin block almost always means a DECLARATION (e.g. `time t;` "
+        "/ `int n;`) appears AFTER a statement. SystemVerilog requires all local "
+        "declarations at the TOP of the task/block body, before any statement. Move "
+        "every declaration in the flagged tasks to the top of that task.",
+    ),
+]
+
+
+def _augment_lint_excerpt(excerpt: str) -> str:
+    """Append plain-English hints for known-cryptic Verilator errors in ``excerpt``.
+
+    Pure function; returns the excerpt unchanged when no pattern matches.
+    """
+    hints = [hint for pattern, hint in _LINT_EXCERPT_TRANSLATIONS if pattern.search(excerpt)]
+    if not hints:
+        return excerpt
+    return excerpt.rstrip("\n") + "\n\n" + "\n\n".join(hints) + "\n"
+
 
 @dataclass(frozen=True)
 class TopAgentConfig:
@@ -39,6 +66,13 @@ class TopAgentConfig:
     # check) BEFORE the TB is used to gate the real glue RTL. No-op when the
     # contract carries no child_assumes.
     tb_align_max_trials: int = 15
+    # TBEditor gives up early if the property-violation count doesn't improve
+    # for this many consecutive rounds — a separate cutoff from
+    # tb_align_max_trials. Observed live (booth_reset_coherent): TBEditor
+    # stopped at trial 6/15 via stall detection, never exhausting the trial
+    # budget, so this (not tb_align_max_trials) is the lever that actually
+    # bounds how much repair the alignment pass gets to attempt.
+    tb_align_stall_rounds: int = 2
 
 
 @dataclass(frozen=True)
@@ -328,7 +362,9 @@ class TopAgent:
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
-                tb_gen.set_tb_lint_error(lint_log=tb_lint_excerpt, previous_tb=testbench)
+                tb_gen.set_tb_lint_error(
+                    lint_log=_augment_lint_excerpt(tb_lint_excerpt), previous_tb=testbench
+                )
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
                 testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
@@ -387,13 +423,42 @@ class TopAgent:
         # penalizing correct glue RTL, or letting broken glue RTL pass because
         # the TB's child model never exercised the violated property.
         if child_assumes:
-            tb_editor = TBEditor(self.cfg, max_trials=int(self.config.tb_align_max_trials))
+            # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
+            # so a post-mortem can attribute a defect to TBGenerator's own
+            # draft vs. something TBEditor introduced/failed to resolve while
+            # patching — otherwise unanswerable once tb.sv is overwritten below.
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_before_align.sv", content=testbench)
+            tb_editor = TBEditor(
+                self.cfg,
+                max_trials=int(self.config.tb_align_max_trials),
+                stall_rounds=int(self.config.tb_align_stall_rounds),
+            )
             aligned, aligned_tb, tb_align_trials, tb_align_log = await tb_editor.chat(
                 contract_json=contract_json,
                 tb_code=testbench,
                 output_dir_per_run=str(output_dir_per_run),
             )
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_align_log.txt", content=tb_align_log + "\n")
+            # Structured, machine-readable assurance record. The free-text log
+            # alone cannot answer "was the TB's child model actually verified
+            # against child_assumes?" — downstream consumers (gating policy,
+            # stage evals, triage) need the verdict, not a narrative. aligned
+            # False here means the self-TB gate is running on an UNVERIFIED
+            # child model; the certificate consumer can decide what to do
+            # with that, but it must be visible.
+            self._write_output(
+                output_dir_per_run=output_dir_per_run,
+                file_name="tb_align_verdict.json",
+                content=json.dumps(
+                    {
+                        "aligned": bool(aligned),
+                        "trials_used": int(tb_align_trials),
+                        "max_trials": int(self.config.tb_align_max_trials),
+                        "log_tail": tb_align_log[-2000:],
+                    },
+                    indent=2,
+                ) + "\n",
+            )
             if aligned_tb:
                 testbench = aligned_tb
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
@@ -552,7 +617,7 @@ class TopAgent:
                 return finish(False, rtl_code)
 
             rtl_edit.reset()
-            is_sim_pass, rtl_code, used_trials = await rtl_edit.chat(
+            is_sim_pass, rtl_code, used_trials, _edit_justification = await rtl_edit.chat(
                 spec=(self._contract_only_context(contract_json) if self.config.contract_only else spec),
                 output_dir_per_run=str(output_dir_per_run),
                 sim_failed_log=sim_log,

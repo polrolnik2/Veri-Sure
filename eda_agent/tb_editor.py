@@ -70,7 +70,8 @@ from .asserter import _ASSERTER_FAIL_RE  # reuse the same failure marker/regex
 from .bash_tools import CommandResult, run_bash_command
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .sim_reviewer import _require_executable
+from .sim_reviewer import _has_multidriven_warning, _require_executable
+from .trace_slicer import _extract_writes as _extract_rtl_writes
 from .utils import clip_text
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,40 @@ def _rename_body(body: str, rename: dict[str, str]) -> str:
     for short, long in sorted(rename.items(), key=lambda x: -len(x[0])):
         body = re.sub(rf"\b{re.escape(short)}\b", long, body)
     return body
+
+
+_PAST_RE = re.compile(r"\$past\(\s*(\w+)")
+
+
+def _extract_prop_signal_refs(sim_body: str, io_names: set[str]) -> list[str]:
+    """Identifier tokens in an (already-renamed) property body that are actual
+    mock-DUT port names — filters out numeric literals, $past/$isunknown etc.,
+    and local names. Called AFTER _rename_body, so short child-local names are
+    already prefixed and directly comparable against io_names.
+
+    Used to enrich the assert-failure message with concrete runtime values —
+    the adapted analog of RTLEditor's (expected, actual) value pairs. TBEditor
+    has no second oracle trace to diff against (this is a boolean assert-fired
+    check, not a value-mismatch check against a golden reference), so a VCD-
+    based alignment diagnosis isn't meaningful here; reporting what the
+    referenced signals actually held at fail time is the adapted equivalent.
+    """
+    tokens = set(re.findall(r"\b([A-Za-z_]\w*)\b", sim_body))
+    return sorted(t for t in tokens if t in io_names)
+
+
+def _extract_prop_past_refs(sim_body: str, io_names: set[str]) -> list[str]:
+    """Ports referenced via $past(...) in an already-renamed property body."""
+    tokens = set(_PAST_RE.findall(sim_body))
+    return sorted(t for t in tokens if t in io_names)
+
+
+def _fmt_spec(width: Any) -> str:
+    try:
+        wi = int(width)
+    except (TypeError, ValueError):
+        wi = 1
+    return "%0b" if wi <= 1 else "%0h"
 
 
 @dataclass(frozen=True)
@@ -156,7 +191,30 @@ def build_mock_dut(contract_obj: dict[str, Any], child_assumes: dict[str, Any]) 
         d = p.get("dir", "input")
         port_lines.append(f"  {d} logic{_width_str(p.get('width', 1))} {p['name']}")
 
-    lines: list[str] = [f"module {module_name} ("]
+    # The mock must be a drop-in for the real module INCLUDING its parameter
+    # port list: the TB instantiates it as `<module> #(.N(N)) dut (...)`, and
+    # Verilator rejects a parameter override on a module that declares none.
+    # (Observed live: alignment surrendered on exactly this compile error while
+    # the TB's own child model went unchecked.)
+    param_lines: list[str] = []
+    params = contract_obj.get("parameters", [])
+    if isinstance(params, list):
+        for pr in params:
+            if not isinstance(pr, dict) or not pr.get("name"):
+                continue
+            ptype = str(pr.get("type") or "int").strip() or "int"
+            if ptype in ("string",):
+                default = pr.get("default", '""')
+            else:
+                default = pr.get("default", "0")
+            param_lines.append(f"  parameter {ptype} {pr['name']} = {default}")
+
+    if param_lines:
+        lines: list[str] = [f"module {module_name} #("]
+        lines.append(",\n".join(param_lines))
+        lines.append(") (")
+    else:
+        lines = [f"module {module_name} ("]
     lines.append(",\n".join(port_lines))
     lines.append(");")
     lines.append("")
@@ -209,6 +267,8 @@ def build_mock_dut(contract_obj: dict[str, Any], child_assumes: dict[str, Any]) 
     lines.append("  endtask")
     lines.append("")
 
+    io_width_by_name = {p["name"]: p.get("width", 1) for p in io if isinstance(p, dict) and p.get("name")}
+
     checked = 0
     skipped = 0
     for cname, ca in child_assumes.items():
@@ -231,9 +291,28 @@ def build_mock_dut(contract_obj: dict[str, Any], child_assumes: dict[str, Any]) 
             p_rst = prop.get("rst") or rst_name
             p_clk = rename.get(p_clk, p_clk) if p_clk not in io_names else p_clk
             p_rst = rename.get(p_rst, p_rst) if p_rst not in io_names else p_rst
+
+            # Value-enriched failure message — the adapted analog of RTLEditor's
+            # (expected, actual) value pairs (see _extract_prop_signal_refs).
+            ref_signals = _extract_prop_signal_refs(sim_body, io_names)
+            past_signals = _extract_prop_past_refs(sim_body, io_names)
+            value_parts: list[str] = []
+            value_args: list[str] = []
+            for sig in ref_signals:
+                value_parts.append(f"{sig}={_fmt_spec(io_width_by_name.get(sig, 1))}")
+                value_args.append(sig)
+            for sig in past_signals:
+                value_parts.append(f"$past({sig})={_fmt_spec(io_width_by_name.get(sig, 1))}")
+                value_args.append(f"$past({sig})")
+            if value_parts:
+                fmt_str = "child assumption violated: " + " ".join(value_parts)
+                msg_expr = "$sformatf(" + ", ".join([f'"{fmt_str}"'] + value_args) + ")"
+            else:
+                msg_expr = '"child assumption violated"'
+
             lines.append(f"  // assume-as-assert: {cname}.{name}")
             lines.append(f"  always @({clk_edge} {p_clk}) if (!{p_rst}) begin")
-            lines.append(f'    assert ({sim_body}) else asserter_log("{cname}.{name}", "child assumption violated");')
+            lines.append(f'    assert ({sim_body}) else asserter_log("{cname}.{name}", {msg_expr});')
             lines.append("  end")
             checked += 1
 
@@ -323,6 +402,7 @@ class TbSection:
     end_line: int    # 1-based, inclusive
     trigger: str     # "@(posedge clk)" etc.; empty for non-always blocks
     refs: List[str]  # identifiers referenced in this block (for suspect detection)
+    writes: List[str]  # identifiers this block WRITES (<= or = LHS) — dataflow slicing
     code: str        # full source text of the block
 
 
@@ -402,6 +482,7 @@ def _parse_tb_sections(tb_code: str) -> list[TbSection]:
 
         code = "\n".join(lines[start : end + 1])
         refs = sorted(set(re.findall(r"\b([A-Za-z_]\w*)\b", code)))
+        writes = sorted(_extract_rtl_writes(code))
 
         idx = counters.get(base, 0)
         counters[base] = idx + 1
@@ -415,6 +496,7 @@ def _parse_tb_sections(tb_code: str) -> list[TbSection]:
                 end_line=end + 1,
                 trigger=trigger,
                 refs=refs,
+                writes=writes,
                 code=code,
             )
         )
@@ -424,27 +506,286 @@ def _parse_tb_sections(tb_code: str) -> list[TbSection]:
 
 
 def _suspect_sections(sections: list[TbSection], driven_signals: list[str]) -> list[TbSection]:
-    """Sections that reference at least one child-driven signal."""
+    """Sections that reference at least one child-driven signal.
+
+    Coarse fallback selector: used only when property-seeded slicing
+    (``_tb_backward_slice``) has no seed signals to work from (e.g. a fatal
+    compile error line with no parseable property id) — see ``_refresh_sections``.
+    """
     if not driven_signals:
         return sections
     suspects = [s for s in sections if any(sig in s.refs for sig in driven_signals)]
     return suspects if suspects else sections
 
 
-def _lint_tb(tb_path: str) -> Tuple[bool, str]:
-    """Verilator lint-only on the testbench in isolation.
+def _build_tb_driver_map(sections: list[TbSection]) -> Dict[str, list[TbSection]]:
+    """signal -> sections that WRITE it. Direct structural port of
+    trace_slicer.build_driver_map, adapted to TbSection.
+    """
+    drivers: Dict[str, list[TbSection]] = {}
+    for s in sections:
+        for w in s.writes:
+            drivers.setdefault(w, []).append(s)
+    return drivers
 
-    Missing-module errors are ignored (the mock DUT is a separate file).
+
+def _tb_backward_slice(
+    *,
+    seed_signals: list[str],
+    drivers: Dict[str, list[TbSection]],
+    continuous_drivers: Dict[str, "_ContinuousDriver"] | None = None,
+    max_depth: int = 3,
+) -> list[TbSection]:
+    """Coarse backward slice from seed signals via the TB driver graph.
+
+    Direct structural port of trace_slicer.dynamic_slice: instead of a blanket
+    "does this section merely MENTION a child-driven signal" filter
+    (_suspect_sections), this walks backward from the SPECIFIC signals the
+    currently-violated property references, through what each driving
+    section itself reads (refs minus its own writes), the same way RTLEditor's
+    suspect blocks are causally linked to the specific failing output rather
+    than to every output the RTL happens to touch.
+
+    A seed/frontier signal is very often the PORT itself (e.g.
+    ``booth_controller_ready``), which is typically driven by a continuous
+    ``assign <port> = <shadow_reg>;`` (see _find_continuous_drivers), not
+    directly by a procedural section — build_driver_map only tracks
+    PROCEDURAL writes, so without this, the walk dead-ends at the port and
+    never reaches the always-block that actually drives the shadow register.
+    When a frontier signal has a continuous (not procedural) driver, the walk
+    continues through that assign's RHS identifiers instead of stopping —
+    the continuous-assign line itself is never added as a "section" (it isn't
+    editable via replace_section; _driver_conflict_notes already handles
+    surfacing it to the model separately).
+    """
+    continuous_drivers = continuous_drivers or {}
+    frontier = set(seed_signals)
+    seen_signals = set(frontier)
+    seen_sections: dict[str, TbSection] = {}
+
+    for _ in range(max(1, int(max_depth))):
+        next_frontier: set[str] = set()
+        for sig in frontier:
+            for section in drivers.get(sig, []):
+                seen_sections[section.id] = section
+                reads = set(section.refs) - set(section.writes)
+                for r in reads:
+                    if r not in seen_signals:
+                        seen_signals.add(r)
+                        next_frontier.add(r)
+            cd = continuous_drivers.get(sig)
+            if cd is not None:
+                for r in re.findall(r"\b([A-Za-z_]\w*)\b", cd.rhs):
+                    if r not in seen_signals:
+                        seen_signals.add(r)
+                        next_frontier.add(r)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    return list(seen_sections.values())
+
+
+def _violated_property_signals(
+    violation_log: str, child_assumes: dict[str, Any], io_names: set[str],
+) -> list[str]:
+    """Signals referenced by the property(ies) currently failing, per the
+    violation log's ``ASSERTER_FAIL: <cname>.<pname> t=...`` lines — the seed
+    set for ``_tb_backward_slice``. Falls back to an empty list (letting the
+    caller fall back to the blanket ``_suspect_sections`` filter) when no
+    property id is parseable, e.g. a fatal compile error with no assertions
+    reached yet.
+    """
+    signals: set[str] = set()
+    for m in _ASSERTER_FAIL_RE.finditer(violation_log):
+        prop_id = m.group("id")
+        if "." not in prop_id:
+            continue
+        cname, pname = prop_id.split(".", 1)
+        ca = child_assumes.get(cname)
+        if not isinstance(ca, dict):
+            continue
+        rename = _child_rename_map(io_names, cname)
+        for prop in ca.get("properties", []) or []:
+            if not isinstance(prop, dict) or prop.get("name") != pname:
+                continue
+            body = _rename_body(str(prop.get("body", "")), rename)
+            signals.update(_extract_prop_signal_refs(body, io_names))
+            signals.update(_extract_prop_past_refs(body, io_names))
+    return sorted(signals)
+
+
+_ASSIGN_RE = re.compile(r"^\s*assign\s+(\w+)\s*=\s*(.+?);\s*$", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class _ContinuousDriver:
+    line: int   # 1-based
+    rhs: str    # the exact expression on the assign's right-hand side
+
+
+def _find_continuous_drivers(tb_code: str) -> Dict[str, _ContinuousDriver]:
+    """Map signal -> its (first) continuous ``assign``'s line and RHS.
+
+    ``_parse_tb_sections`` only recognizes procedural blocks (initial/always/
+    task/function); a bare ``assign x = y;`` at module scope is invisible to
+    it. Without this, a repair that must satisfy a property named after a
+    port that already has a continuous driver elsewhere has no way to know
+    that — it writes a NEW procedural driver for the same port and creates a
+    multi-driver conflict (observed live: booth_reset_coherent, multiple
+    live drives, always on `<child>_iteration_complete`-shaped signals).
+    Lint-and-rollback catches the resulting BLKANDNBLK error, but the model
+    then has nothing new to act on and just repeats the same mistake until
+    it stalls — because the pre-existing driver was never shown to it.
+
+    Capturing the RHS (not just the line number) matters: a first version of
+    this note only pointed at the line ("go see what it reads from"), but a
+    bare `assign` line isn't a readable section either — the model correctly
+    avoided the multi-driver conflict but then stalled anyway, unable to
+    dereference its own pointer (observed live, bundle 20260709T190451Z:
+    "without access to the specific assign statements at lines 97 and 119...
+    I cannot provide the precise fix"). Naming the RHS directly removes that
+    second hop.
+    """
+    lines = tb_code.splitlines()
+    drivers: Dict[str, _ContinuousDriver] = {}
+    for i, line in enumerate(lines):
+        m = _ASSIGN_RE.match(line)
+        if m and m.group(1) not in drivers:
+            drivers[m.group(1)] = _ContinuousDriver(line=i + 1, rhs=m.group(2).strip())
+    return drivers
+
+
+def _driver_conflict_notes(
+    section: TbSection,
+    continuous_drivers: Dict[str, _ContinuousDriver],
+    driven_signals: list[str],
+    driver_map: Dict[str, list["TbSection"]] | None = None,
+) -> list[str]:
+    """Warn about child-driven signals this section references that already
+    have a continuous driver elsewhere — the fix belongs on the driver's
+    source (typically a shadow reg), not a second direct write to the port.
+
+    ``driver_map`` (signal -> sections that WRITE it, built over ALL sections
+    in the file, not just the suspect-filtered subset — the true driving
+    section may not itself reference a child-driven port and so wouldn't be
+    classified "suspect") lets this name WHICH section already writes the
+    shadow register, not just its name. Observed live, twice: the model saw
+    "write to controller_ready_reg" and, with no pointer to WHERE that
+    register is already written, added a brand-new, redundant driver for it
+    inside the section it happened to be looking at — producing a real
+    MULTIDRIVEN conflict on the shadow register itself, repeating the mistake
+    before exhausting its budget. Four cases, verified against a real archived
+    fixture (tests/stage_eval/fixtures/authored/tb_lint_multidriven_cross_file/):
+    no existing writer (legitimately new — must not claim a nonexistent
+    section), a single writer that IS this section (extend in place, not a
+    circular pointer), a single writer elsewhere (name it, tell the model to
+    read_section it first), and multiple writers (a pre-existing multi-driver
+    condition independent of this edit — confirmed this genuinely occurs in
+    that fixture; needs its own cautious phrasing, not an arbitrary pick).
+    """
+    notes: list[str] = []
+    for sig in sorted(set(section.refs) & set(driven_signals) & continuous_drivers.keys()):
+        d = continuous_drivers[sig]
+        pointer = ""
+        if driver_map is not None:
+            writers = [s.id for s in driver_map.get(d.rhs, [])]
+            if not writers:
+                pointer = f" (no existing section writes `{d.rhs}` yet — write it here.)"
+            elif len(writers) == 1 and writers[0] == section.id:
+                pointer = f" `{d.rhs}` is already written IN THIS SECTION — extend the existing logic, do not add a second driver."
+            elif len(writers) == 1:
+                pointer = (
+                    f" `{d.rhs}` is already written in section `{writers[0]}` — call "
+                    f"read_section('{writers[0]}') to see its current logic and extend "
+                    f"it there; do not add a new driver here."
+                )
+            else:
+                pointer = (
+                    f" `{d.rhs}` is ALREADY written in MULTIPLE sections "
+                    f"({', '.join(writers)}) — this is already a multi-driver conflict "
+                    f"independent of your edit; consider which of those sections' "
+                    f"writes should be removed rather than adding a third."
+                )
+        notes.append(
+            f"NOTE: '{sig}' already has a continuous driver at line {d.line} "
+            f"(`assign {sig} = {d.rhs};`). Do NOT add another procedural driver "
+            f"for '{sig}' itself in this section — that creates a multi-driver "
+            f"conflict. Instead, write to `{d.rhs}` (the shadow register the "
+            f"assign reads from).{pointer}"
+        )
+    return notes
+
+
+def _expand_with_pointed_sections(
+    suspects: list[TbSection],
+    *,
+    continuous_drivers: Dict[str, _ContinuousDriver],
+    driven_signals: list[str],
+    driver_map: Dict[str, list[TbSection]],
+) -> list[TbSection]:
+    """Union in every section a driver-conflict note would point at, so
+    ``read_section``/``replace_section`` can actually reach it.
+
+    Bug this fixes, observed live: the note correctly named an existing
+    driver's section (e.g. "already written in section `always_0` — call
+    read_section('always_0')"), the model followed that instruction exactly,
+    and got back "ERROR: Unknown section_id 'always_0'" — because
+    ``driver_map`` is built over ALL sections (so it can compute a correct
+    pointer even for a non-suspect section), but ``sections_by_id`` (what the
+    tools actually expose) was still the suspect-filtered subset alone. A
+    note that points somewhere the tools then refuse to go is worse than no
+    pointer at all — it burns real trials on the discovery. Fix: for every
+    suspect section, for every driven signal it references with a continuous
+    driver, pull in whichever section(s) actually write that driver's shadow
+    register.
+    """
+    expanded: dict[str, TbSection] = {s.id: s for s in suspects}
+    for s in suspects:
+        for sig in set(s.refs) & set(driven_signals) & continuous_drivers.keys():
+            rhs = continuous_drivers[sig].rhs
+            for writer in driver_map.get(rhs, []):
+                expanded[writer.id] = writer
+    return list(expanded.values())
+
+
+def _lint_tb(tb_path: str, mock_dut_path: str | None = None) -> Tuple[bool, str]:
+    """Verilator lint-only on the testbench (plus the mock DUT, if given).
+
+    Missing-module errors are ignored (relevant when mock_dut_path is None).
+    Also rejects %Warning-MULTIDRIVEN (see sim_reviewer._has_multidriven_warning):
+    an edit that leaves a signal driven by two blocks with different clocking
+    is a genuine correctness defect, not a style nit — observed live accepting
+    such an edit that didn't fix the target property and left the TB
+    architecturally worse, silently consuming a repair trial for nothing.
+    build_mock_dut's own generated scaffolding never legitimately produces
+    this warning (verified: every generated driver is single-source), so
+    there is no benign case here to protect against, unlike RTLEditor's
+    glue-RTL path (sim_reviewer.check_syntax deliberately does NOT apply this
+    same tightening — see that function's docstring).
+
+    IMPORTANT: linting tb_path alone (without mock_dut_path) MISSES some
+    MULTIDRIVEN cases that the full --binary build (mock_dut_review) does
+    catch — verified directly: `--lint-only` on tb.sv in isolation cannot
+    fully elaborate the design without the DUT instantiation resolved, so a
+    real cross-block driver conflict silently produced ZERO warnings, while
+    the exact same source linted together with mock_dut.sv (or built via
+    --binary) correctly reports it. An edit that introduced this passed
+    _lint_tb's gate and was wrongly accepted as fully aligned in a live replay
+    before mock_dut_path was threaded through here — always pass it.
     Returns (is_ok, error_excerpt).
     """
     if shutil.which("verilator") is None:
         return True, ""
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {tb_path}"
+    srcs = f"{tb_path} {mock_dut_path}" if mock_dut_path else tb_path
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {srcs}"
     _ok, raw = run_bash_command(cmd, timeout=60, cwd=str(Path(tb_path).parent))
     try:
         obj = CommandResult.model_validate_json(raw)
-        text = f"{obj.stdout or ''}\n{obj.stderr or ''}"
+        stdout, stderr = obj.stdout or "", obj.stderr or ""
+        text = f"{stdout}\n{stderr}"
     except Exception:  # noqa: BLE001
+        stdout, stderr = raw, ""
         text = raw
     error_lines = [
         ln.strip()
@@ -453,8 +794,14 @@ def _lint_tb(tb_path: str) -> Tuple[bool, str]:
         and "-MODMISSING:" not in ln
         and "Exiting due to" not in ln
     ]
-    is_ok = not error_lines and "syntax error" not in text.lower()
-    return is_ok, "\n".join(error_lines)
+    has_multidriven = _has_multidriven_warning(stdout, stderr)
+    multidriven_lines = (
+        [ln.strip() for ln in text.splitlines() if ln.lstrip().startswith("%Warning-MULTIDRIVEN")]
+        if has_multidriven
+        else []
+    )
+    is_ok = not error_lines and not has_multidriven and "syntax error" not in text.lower()
+    return is_ok, "\n".join(error_lines + multidriven_lines)
 
 
 def _summarize_sim_log(sim_log_json: str, *, max_chars: int = 4000) -> str:
@@ -483,11 +830,27 @@ class _TBAlignSession:
     last_fail_count: int
     max_trials: int
     driven_signals: List[str] = field(default_factory=list)
+    continuous_drivers: Dict[str, "_ContinuousDriver"] = field(default_factory=dict)
+    # signal -> sections that WRITE it, over ALL sections in the file (not just
+    # the suspect-filtered subset — see _driver_conflict_notes). Lets a note
+    # name WHICH section already drives a shadow register, not just its name.
+    driver_map: Dict[str, list["TbSection"]] = field(default_factory=dict)
+    # Needed to re-derive violated_signals (below) from a fresh violation log.
+    child_assumes: Dict[str, Any] = field(default_factory=dict)
+    io_names: "set[str]" = field(default_factory=set)
 
     is_done: bool = False
     action_calls: int = 0
     sections_by_id: Dict[str, TbSection] | None = None
     violation_log: str = ""
+    # Signals referenced by the CURRENTLY failing property(ies) — the seed set
+    # for property-seeded suspect selection (_tb_backward_slice), recomputed
+    # every time violation_log refreshes. Empty when no property id was
+    # parseable (e.g. a fatal compile error before any assertion ran), in
+    # which case _refresh_sections falls back to the blanket driven_signals
+    # filter (_suspect_sections) — same "never return an empty list" guarantee
+    # that filter already had on its own.
+    violated_signals: List[str] = field(default_factory=list)
 
     def read_tb(self) -> str:
         return Path(self.tb_path).read_text(encoding="utf-8")
@@ -503,6 +866,9 @@ class _TBAlignSession:
         )
         self.last_fail_count = fail_count
         self.violation_log = _summarize_sim_log(sim_output)
+        self.violated_signals = _violated_property_signals(
+            self.violation_log, self.child_assumes, self.io_names
+        )
         if is_aligned:
             self.is_done = True
         return {
@@ -514,23 +880,31 @@ class _TBAlignSession:
     def list_suspect_sections(self) -> list[dict[str, Any]]:
         if self.sections_by_id is None:
             return []
-        return [
-            {
+        result = []
+        for s in self.sections_by_id.values():
+            entry: dict[str, Any] = {
                 "id": s.id,
                 "kind": s.kind,
                 "trigger": s.trigger,
                 "start_line": s.start_line,
                 "end_line": s.end_line,
             }
-            for s in self.sections_by_id.values()
-        ]
+            notes = _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+            if notes:
+                entry["notes"] = notes
+            result.append(entry)
+        return result
 
     def read_section(self, section_id: str) -> str:
         if not self.sections_by_id or section_id not in self.sections_by_id:
             return f"ERROR: Unknown section_id '{section_id}'. Use list_suspect_sections() first."
         s = self.sections_by_id[section_id]
         lines = s.code.splitlines()
-        return "\n".join(f"{s.start_line + i}: {ln}" for i, ln in enumerate(lines)) + "\n"
+        body = "\n".join(f"{s.start_line + i}: {ln}" for i, ln in enumerate(lines)) + "\n"
+        notes = _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+        if notes:
+            body = "\n".join(notes) + "\n\n" + body
+        return body
 
     def replace_section(self, section_id: str, new_code: str) -> Dict[str, Any]:
         if not self.sections_by_id or section_id not in self.sections_by_id:
@@ -565,7 +939,7 @@ class _TBAlignSession:
         new_text = "\n".join(new_lines) + ("\n" if old_text.endswith("\n") else "")
         self.write_tb(new_text)
 
-        is_ok, lint_excerpt = _lint_tb(self.tb_path)
+        is_ok, lint_excerpt = _lint_tb(self.tb_path, self.mock_dut_path)
         if not is_ok:
             self.write_tb(old_text)
             return {
@@ -579,9 +953,39 @@ class _TBAlignSession:
 
     def _refresh_sections(self) -> None:
         try:
-            all_sections = _parse_tb_sections(self.read_tb())
-            suspects = _suspect_sections(all_sections, self.driven_signals)
+            tb_text = self.read_tb()
+            all_sections = _parse_tb_sections(tb_text)
+            continuous_drivers = _find_continuous_drivers(tb_text)
+            # Built over ALL sections (not just the suspect subset) so
+            # _driver_conflict_notes can find the true driving section even
+            # when it isn't itself "suspect" (references no child-driven
+            # port directly). Was previously only computed inside the
+            # `if self.violated_signals:` branch below and discarded — hoisted
+            # here so it's always available and persisted on self.
+            drivers = _build_tb_driver_map(all_sections)
+            suspects: list[TbSection] = []
+            if self.violated_signals:
+                suspects = _tb_backward_slice(
+                    seed_signals=self.violated_signals,
+                    drivers=drivers,
+                    continuous_drivers=continuous_drivers,
+                )
+            if not suspects:
+                # No violated-property signals parseable yet (or the slice found
+                # nothing), or no property has failed at all — fall back to the
+                # coarse "mentions a child-driven signal" filter, which itself
+                # falls back to ALL sections if even that finds nothing. Never
+                # returns an empty suspect list.
+                suspects = _suspect_sections(all_sections, self.driven_signals)
+            suspects = _expand_with_pointed_sections(
+                suspects,
+                continuous_drivers=continuous_drivers,
+                driven_signals=self.driven_signals,
+                driver_map=drivers,
+            )
             self.sections_by_id = {s.id: s for s in suspects}
+            self.continuous_drivers = continuous_drivers
+            self.driver_map = drivers
         except Exception:  # noqa: BLE001
             pass
 
@@ -617,6 +1021,8 @@ Rules:
    child-output-mapped ports (the ones named in the violated properties).
 5. Verilator target: keep the TB compatible (no unsupported SVA, prefer
    simple procedural assertions and $past()).
+6. Always respect the alignment check result. Keep repairing as long as
+   violations exist — do not conclude PROPERTY_SUSPECT as a first resort.
 
 When done, finish by calling generate_response with a structured plain-string
 response in EXACTLY this format:
@@ -624,8 +1030,14 @@ response in EXACTLY this format:
   If you fixed the child model:
     generate_response(response="TB_ALIGNED: <one-line summary of what you changed>\nPROPERTY: <the specific child assumption the original model violated>\nFIX_RATIONALE: <how the change now satisfies it>")
 
-  If you believe the property itself is unsatisfiable as stated (rare):
-    generate_response(response="PROPERTY_SUSPECT: <one-line summary>\nPROPERTY: <the property>\nREASON: <why it looks unsatisfiable>")
+  If you believe the property itself is unsatisfiable as stated (rare — only
+  after real attempts, not as a first resort):
+    generate_response(response="PROPERTY_SUSPECT: <one-line summary>\nPROPERTY: <the property>\nREASON: <why it looks unsatisfiable>\nATTEMPTED: <the distinct edits you already tried via replace_section and what happened to each>")
+    You must have already made at least 2 distinct replace_section attempts
+    targeting this property's signals, with the violation persisting unchanged
+    or worsening after both, before this response will be accepted. Citing
+    fewer than 2 real attempts will be rejected and you will be asked to try
+    a real edit first.
 
 The `response` argument MUST be a plain string (not JSON, not a dict).
 """
@@ -670,10 +1082,58 @@ _CONTINUE_MSG = (
     "once, then run_alignment_check()."
 )
 
+# Code-level gate, not just a prompt instruction: a prompt-only "please try
+# harder first" is exactly the kind of soft constraint this parity effort is
+# moving away from (see _SYSTEM_PROMPT rule 6 and the PROPERTY_SUSPECT format
+# — both prompt-level asks). This message is substituted for _CONTINUE_MSG
+# whenever the model claims PROPERTY_SUSPECT with fewer than 2 real
+# replace_section attempts on record (self._session.action_calls), forcing at
+# least 2 genuine edit attempts before the escape hatch can be used.
+_PROPERTY_SUSPECT_REJECTED_MSG = (
+    "You concluded PROPERTY_SUSPECT, but you have not yet made 2 distinct "
+    "replace_section attempts targeting this property's signals (only {n} so "
+    "far). That conclusion is not accepted yet. Try a real edit first: call "
+    "list_suspect_sections(), then read_section(section_id) for the most "
+    "relevant one, then replace_section(section_id, new_code), then "
+    "run_alignment_check(). Only return to PROPERTY_SUSPECT after at least 2 "
+    "such attempts, citing what you tried and what happened to each."
+)
 
+_MIN_ACTION_CALLS_FOR_PROPERTY_SUSPECT = 2
+
+
+def _gate_continue_message(resp: Any, action_calls: int) -> str:
+    """Pure gate logic for the PROPERTY_SUSPECT escape hatch (parity item 3).
+
+    Returns the corrective rejection message if `resp` claims PROPERTY_SUSPECT
+    with fewer than _MIN_ACTION_CALLS_FOR_PROPERTY_SUSPECT real replace_section
+    attempts on record; otherwise the normal continuation message. Does not
+    affect TB_ALIGNED responses — those terminate via self._session.is_done,
+    which only a genuinely passing run_alignment_check() sets, never this gate.
+    """
+    if _response_claims_property_suspect(resp) and action_calls < _MIN_ACTION_CALLS_FOR_PROPERTY_SUSPECT:
+        return _PROPERTY_SUSPECT_REJECTED_MSG.format(n=action_calls)
+    return _CONTINUE_MSG
+
+
+# NOTE: this used to also gate justification-capture in chat()'s main loop
+# (`if self._session.is_done or _response_is_terminal(response): ...`). That was a
+# bug: a bare substring match over the FULL response text fires even when the model
+# merely narrates "TB_ALIGNED" mid-reasoning on a non-final turn, and the `and not
+# _justification` guard downstream meant a later, real completion could never
+# overwrite the false-early capture. Fixed by gating justification-capture on
+# `self._session.is_done` alone (the real ground-truth boolean), mirroring
+# rtl_editor.py, which never had a text-substring check in that path at all. This
+# function is now used ONLY by the PROPERTY_SUSPECT action-count gate below — do not
+# reintroduce it into the justification-capture conditions.
 def _response_is_terminal(msg: Any) -> bool:
     content = str(getattr(msg, "content", "") or "")
     return bool(re.search(r"\bTB_ALIGNED\b|\bPROPERTY_SUSPECT\b", content))
+
+
+def _response_claims_property_suspect(msg: Any) -> bool:
+    content = str(getattr(msg, "content", "") or "")
+    return bool(re.search(r"\bPROPERTY_SUSPECT\b", content))
 
 
 # ---------------------------------------------------------------------------
@@ -804,6 +1264,9 @@ class TBEditor:
             last_fail_count=0,
             max_trials=session_max,
             driven_signals=mock.child_driven_signals,
+            continuous_drivers=_find_continuous_drivers(tb_code),
+            child_assumes=child_assumes,
+            io_names=io_names,
             sections_by_id={s.id: s for s in suspects},
         )
 
@@ -811,6 +1274,13 @@ class TBEditor:
             check = self._session.run_alignment_check()
         except FileNotFoundError as e:
             return False, tb_code, 0, f"TB alignment skipped: {e}"
+
+        # Now that violation_log/violated_signals are known, refresh the
+        # suspect list once so the model's very FIRST list_suspect_sections()
+        # call already benefits from property-seeded selection, not just after
+        # its first edit (which is when _refresh_sections was previously first
+        # invoked, via replace_section).
+        self._session._refresh_sections()
 
         if self._session.is_done:
             return True, self._session.read_tb(), 0, (
@@ -836,18 +1306,31 @@ class TBEditor:
 
         stall_count = 0
         prev_fail_for_stall = int(self._session.last_fail_count)
+        prev_action_calls_for_stall = int(self._session.action_calls)
 
         def _update_stall_tracking() -> None:
-            nonlocal stall_count, prev_fail_for_stall
+            nonlocal stall_count, prev_fail_for_stall, prev_action_calls_for_stall
+            # A turn only counts toward "stalling" if an edit was actually
+            # attempted (action_calls increased). Otherwise a model that
+            # spends turns exploring (list/read sections) without ever
+            # calling replace_section gets cut off by stall detection before
+            # making a single attempt — observed live (booth_reset_coherent,
+            # bundle 20260711T074901Z): trials_used=0, stall exit after just
+            # 2 non-productive turns, no replace_section call ever made.
+            if self._session.action_calls == prev_action_calls_for_stall:
+                prev_fail_for_stall = self._session.last_fail_count
+                prev_action_calls_for_stall = self._session.action_calls
+                return
             if self._session.last_fail_count < prev_fail_for_stall:
                 stall_count = 0
             else:
                 stall_count += 1
             prev_fail_for_stall = self._session.last_fail_count
+            prev_action_calls_for_stall = self._session.action_calls
 
         response = await self._agent(Msg("user", first_prompt, role="user"))
         _last_content = str(getattr(response, "content", "") or "")
-        if self._session.is_done or _response_is_terminal(response):
+        if self._session.is_done:
             _justification = _last_content
         else:
             _update_stall_tracking()
@@ -863,9 +1346,10 @@ class TBEditor:
             window = self._memory_window
             if window > 0 and len(mem.content) > window + 2:
                 mem.content = [mem.content[0]] + mem.content[-(window):]
-            response = await self._agent(Msg("user", _CONTINUE_MSG, role="user"))
+            next_msg = _gate_continue_message(response, self._session.action_calls)
+            response = await self._agent(Msg("user", next_msg, role="user"))
             _last_content = str(getattr(response, "content", "") or "")
-            if (self._session.is_done or _response_is_terminal(response)) and not _justification:
+            if self._session.is_done and not _justification:
                 _justification = _last_content
             if not self._session.is_done:
                 _update_stall_tracking()
