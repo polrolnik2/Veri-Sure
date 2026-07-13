@@ -505,6 +505,80 @@ def _parse_tb_sections(tb_code: str) -> list[TbSection]:
     return sections
 
 
+_MODULE_HDR_RE = re.compile(r"^\s*module\s+\w+")
+_DECL_LINE_RE = re.compile(
+    r"^\s*(parameter|localparam|logic|reg|wire|int|integer|bit|time"
+    r"|byte|shortint|longint|real|string)\b"
+)
+_COMMENT_OR_BLANK_RE = re.compile(r"^\s*(//.*)?$")
+
+
+def _find_declarations_section(
+    tb_code: str, first_proc_start_line: int | None
+) -> TbSection | None:
+    """The module-scope declaration block, exposed as its own editable section.
+
+    Neither TBEditor's ``_parse_tb_sections`` nor RTLEditor's
+    ``trace_slicer.parse_rtl_blocks`` treats bare declarations (outside any
+    always/initial/task/function) as an editable region — both only recognize
+    procedural blocks. Observed live: a repair that needed a new edge-detect
+    register (to resolve a genuine cross-block FSM/timing coupling) had no
+    section to declare it in, and was twice rejected by _lint_tb as an
+    "undeclared variable" error — the model correctly diagnosed the fix but
+    had no reachable place to put it. This exposes the declaration block
+    (module header -> first procedural section) as its own section so
+    replace_section can extend it; any dangling reference left by removing a
+    still-used declaration is caught by the existing _lint_tb rollback gate,
+    same safety net every other section already relies on.
+    """
+    lines = tb_code.splitlines()
+    n = len(lines)
+    hdr_idx = next((i for i, ln in enumerate(lines) if _MODULE_HDR_RE.match(ln)), None)
+    if hdr_idx is None:
+        return None
+
+    depth = 0
+    header_end = None
+    for j in range(hdr_idx, n):
+        depth += lines[j].count("(") - lines[j].count(")")
+        if depth <= 0 and ";" in lines[j]:
+            header_end = j
+            break
+    if header_end is None:
+        return None
+
+    start = header_end + 1
+    limit = min(first_proc_start_line - 1, n) if first_proc_start_line is not None else n
+
+    end = start - 1
+    saw_decl = False
+    for k in range(start, limit):
+        line = lines[k]
+        if _DECL_LINE_RE.match(line):
+            saw_decl = True
+            end = k
+        elif _COMMENT_OR_BLANK_RE.match(line):
+            continue
+        else:
+            break
+
+    if not saw_decl or end < start:
+        return None
+
+    code = "\n".join(lines[start : end + 1])
+    refs = sorted(set(re.findall(r"\b([A-Za-z_]\w*)\b", code)))
+    return TbSection(
+        id="declarations",
+        kind="declarations",
+        start_line=start + 1,
+        end_line=end + 1,
+        trigger="",
+        refs=refs,
+        writes=[],
+        code=code,
+    )
+
+
 def _suspect_sections(sections: list[TbSection], driven_signals: list[str]) -> list[TbSection]:
     """Sections that reference at least one child-driven signal.
 
@@ -851,6 +925,15 @@ class _TBAlignSession:
     # filter (_suspect_sections) — same "never return an empty list" guarantee
     # that filter already had on its own.
     violated_signals: List[str] = field(default_factory=list)
+    # Snapshot of tb.sv text at its lowest-ever fail_count, so a regression
+    # can be cheaply undone (revert_to_best) instead of costing several
+    # trials of blind rediscovery. Observed live, twice, independently: the
+    # model reaches a genuinely better state, then a later edit regresses it
+    # and the better design (and the reasoning behind it) is never
+    # recovered — e.g. a correct multi-cycle datapath model built over two
+    # trials, discarded one trial later for a worse one-shot rewrite.
+    best_fail_count: int | None = None
+    best_tb_text: str | None = None
 
     def read_tb(self) -> str:
         return Path(self.tb_path).read_text(encoding="utf-8")
@@ -869,6 +952,9 @@ class _TBAlignSession:
         self.violated_signals = _violated_property_signals(
             self.violation_log, self.child_assumes, self.io_names
         )
+        if self.best_fail_count is None or fail_count < self.best_fail_count:
+            self.best_fail_count = fail_count
+            self.best_tb_text = self.read_tb()
         if is_aligned:
             self.is_done = True
         return {
@@ -876,6 +962,33 @@ class _TBAlignSession:
             "fail_count": fail_count,
             "violation_log_excerpt": self.violation_log,
         }
+
+    def revert_to_best(self) -> Dict[str, Any]:
+        """Restore tb.sv to its lowest-ever-fail_count snapshot and re-check.
+
+        Costs a trial like replace_section does (action_calls increments) —
+        cheap recovery, not a free exploration loop.
+        """
+        self.action_calls += 1
+        if self.action_calls > self.max_trials:
+            return {
+                "is_action_executed": False,
+                "error_msg": "Reached maximum alignment trials; refusing further edits.",
+            }
+        if self.best_tb_text is None:
+            return {
+                "is_action_executed": False,
+                "error_msg": "No best-known state recorded yet (run_alignment_check hasn't run).",
+            }
+        if self.read_tb() == self.best_tb_text:
+            return {
+                "is_action_executed": False,
+                "error_msg": f"Already at the best-known state (fail_count={self.best_fail_count}).",
+            }
+        self.write_tb(self.best_tb_text)
+        check_result = self.run_alignment_check()
+        self._refresh_sections()
+        return {"is_action_executed": True, **check_result}
 
     def list_suspect_sections(self) -> list[dict[str, Any]]:
         if self.sections_by_id is None:
@@ -889,7 +1002,11 @@ class _TBAlignSession:
                 "start_line": s.start_line,
                 "end_line": s.end_line,
             }
-            notes = _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+            notes = (
+                _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+                if s.kind != "declarations"
+                else []
+            )
             if notes:
                 entry["notes"] = notes
             result.append(entry)
@@ -901,7 +1018,11 @@ class _TBAlignSession:
         s = self.sections_by_id[section_id]
         lines = s.code.splitlines()
         body = "\n".join(f"{s.start_line + i}: {ln}" for i, ln in enumerate(lines)) + "\n"
-        notes = _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+        notes = (
+            _driver_conflict_notes(s, self.continuous_drivers, self.driven_signals, self.driver_map)
+            if s.kind != "declarations"
+            else []
+        )
         if notes:
             body = "\n".join(notes) + "\n\n" + body
         return body
@@ -983,6 +1104,14 @@ class _TBAlignSession:
                 driven_signals=self.driven_signals,
                 driver_map=drivers,
             )
+            # Always reachable, not suspect-filtered: a fix needing new
+            # persistent state (an edge-detect register, a shadow counter)
+            # has to be able to find this section without it ever showing up
+            # as "referencing a child-driven signal" on its own merits.
+            decl_start = min((s.start_line for s in all_sections), default=None)
+            decl_section = _find_declarations_section(tb_text, decl_start)
+            if decl_section is not None:
+                suspects = [*suspects, decl_section]
             self.sections_by_id = {s.id: s for s in suspects}
             self.continuous_drivers = continuous_drivers
             self.driver_map = drivers
@@ -997,10 +1126,14 @@ class _TBAlignSession:
 _SYSTEM_PROMPT = r"""You are TBEditor, an expert in SystemVerilog testbench
 debugging, specialized in composition (glue) node testbenches.
 
-Goal: use tool calls to minimally edit the testbench's INLINE CHILD
-BEHAVIORAL MODEL — the always blocks/tasks that stand in for a not-yet-built
-child module, driving its output ports — so that it satisfies each child's
-own formal assume properties.
+Goal: use tool calls to edit the testbench's INLINE CHILD BEHAVIORAL MODEL —
+the always blocks/tasks that stand in for a not-yet-built child module,
+driving its output ports — so that it satisfies each child's own formal
+assume properties. Prefer a small, targeted change when the bug is local; if
+a section's current approach is fundamentally the wrong design for the
+property (not just a local mistake), rewrite that section's logic coherently
+rather than patching around a design that can't work — do not water down a
+proper fix just to keep the diff small.
 
 The DUT you simulate against is a MOCK — a stub with the same ports as the
 real glue module, NOT the real glue logic. It exists only to check your
@@ -1021,6 +1154,19 @@ Rules:
    child-output-mapped ports (the ones named in the violated properties).
 5. Verilator target: keep the TB compatible (no unsupported SVA, prefer
    simple procedural assertions and $past()).
+5a. If a fix needs NEW persistent state (e.g. an edge-detect register to
+   distinguish "signal held from before" vs. "signal just asserted", a
+   shadow counter, etc.), a 'declarations' section is available:
+   read_section('declarations') to see the existing module-scope
+   declarations, then replace_section('declarations', ...) to add your new
+   one there before wiring it up in the relevant always block. Do not try to
+   reference a register you never declared anywhere — that is a lint error
+   and wastes a trial.
+5b. If replace_section's result shows fail_count went UP compared to the
+   check before it (a regression), do not try to manually reconstruct the
+   previous design from memory — call revert_to_best() to cheaply restore
+   the testbench to its own best-ever state (lowest fail_count reached so
+   far this session) before trying a different edit.
 6. Always respect the alignment check result. Keep repairing as long as
    violations exist — do not conclude PROPERTY_SUSPECT as a first resort.
 
@@ -1063,23 +1209,30 @@ Workflow (repeat until done):
 2) Call list_suspect_sections() to see which TB blocks reference the
    child-driven signals involved in those properties.
 3) Call read_section(section_id) for the most relevant one.
-4) Make ONE small targeted change via replace_section(section_id, new_code).
+4) Make a targeted change via replace_section(section_id, new_code) — small
+   if you're fixing a local bug, a coherent rewrite of that section if its
+   current design can't satisfy the property at all. If the fix needs new
+   persistent state, use replace_section('declarations', ...) first (see
+   system prompt rule 5a) rather than referencing an undeclared register.
 5) Call run_alignment_check() and iterate.
 
 Use tools:
 - list_suspect_sections()
 - read_section(section_id)
-- replace_section(section_id, new_code)
+- replace_section(section_id, new_code)  # section_id may be 'declarations'
 - run_alignment_check()
+- revert_to_best()  # restore your own best-ever state after a regression
 
 When all properties hold (or you conclude a property is unsatisfiable), call
 generate_response using the structured format from the system prompt.
 """
 
 _CONTINUE_MSG = (
-    "Continue aligning. If violations remain, pick 1 suspect section and call "
+    "Continue aligning. If violations remain, pick 1 suspect section (or "
+    "'declarations' if you need to add new state) and call "
     "read_section(section_id), then call replace_section(section_id, new_code) "
-    "once, then run_alignment_check()."
+    "once — small if it's a local bug, a coherent rewrite if the section's "
+    "design can't satisfy the property — then run_alignment_check()."
 )
 
 # Code-level gate, not just a prompt instruction: a prompt-only "please try
@@ -1155,7 +1308,21 @@ class TBEditor:
         cfg: OpenAIConfig,
         *,
         max_trials: int = 15,
-        memory_window: int = 6,
+        # 6 (RTLEditor's default, shared via the same sliding-window
+        # mechanism) collapses memory to [first prompt] + [last 6 messages]
+        # between every trial -- a single ReAct sub-loop (max_iters=10)
+        # commonly emits more than 8 messages on its own, so this window was
+        # observed live to collapse within a single trial. TBEditor's task
+        # (multi-trial coupled-section FSM/timing repair) needs continuity
+        # across several trials' worth of reasoning about WHY a design
+        # choice was made -- unlike RTLEditor's typical single-local-bug-fix
+        # task, which rarely depends on remembering prior trials. Observed
+        # live: a genuinely correct multi-cycle datapath model (reaching the
+        # run's best fail_count) was abandoned one trial later and never
+        # rebuilt, with the registers it declared left unused for the rest
+        # of the run -- consistent with the model having lost the reasoning
+        # for why it built that design, not having reconsidered it.
+        memory_window: int = 50,
         stall_rounds: int = 2,
     ) -> None:
         self._cfg = cfg
@@ -1169,6 +1336,7 @@ class TBEditor:
         toolkit.register_tool_function(self._tool_read_section)
         toolkit.register_tool_function(self._tool_replace_section)
         toolkit.register_tool_function(self._tool_run_alignment_check)
+        toolkit.register_tool_function(self._tool_revert_to_best)
 
         self._agent = SafeReActAgent(
             name="TBEditor",
@@ -1213,6 +1381,17 @@ class TBEditor:
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active session."}])
         result = await asyncio.to_thread(self._session.run_alignment_check)
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_revert_to_best(self) -> ToolResponse:
+        """Restore the testbench to its lowest-ever fail_count state, then re-check.
+
+        Use this after an edit made fail_count HIGHER instead of trying to
+        manually reconstruct a design you already had.
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active session."}])
+        result = await asyncio.to_thread(self._session.revert_to_best)
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     # ------------------------------------------------------------------
