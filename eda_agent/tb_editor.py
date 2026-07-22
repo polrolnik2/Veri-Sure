@@ -1308,21 +1308,26 @@ class TBEditor:
         cfg: OpenAIConfig,
         *,
         max_trials: int = 15,
-        # 6 (RTLEditor's default, shared via the same sliding-window
-        # mechanism) collapses memory to [first prompt] + [last 6 messages]
-        # between every trial -- a single ReAct sub-loop (max_iters=10)
-        # commonly emits more than 8 messages on its own, so this window was
-        # observed live to collapse within a single trial. TBEditor's task
-        # (multi-trial coupled-section FSM/timing repair) needs continuity
-        # across several trials' worth of reasoning about WHY a design
-        # choice was made -- unlike RTLEditor's typical single-local-bug-fix
-        # task, which rarely depends on remembering prior trials. Observed
-        # live: a genuinely correct multi-cycle datapath model (reaching the
-        # run's best fail_count) was abandoned one trial later and never
-        # rebuilt, with the registers it declared left unused for the rest
-        # of the run -- consistent with the model having lost the reasoning
-        # for why it built that design, not having reconsidered it.
-        memory_window: int = 50,
+        # 0 disables the sliding window entirely -- no truncation, ever.
+        # Previously 50 (raised from RTLEditor's original 6: a single ReAct
+        # sub-loop, max_iters=10, commonly emits more than 8 messages on its
+        # own, so 6 was observed live to collapse within a single trial;
+        # TBEditor's multi-trial coupled-section FSM/timing repair needs
+        # continuity across trials' worth of reasoning about WHY a design
+        # choice was made, unlike RTLEditor's typical single-local-bug-fix
+        # task -- observed live: a genuinely correct multi-cycle datapath
+        # model, reaching the run's best fail_count, was abandoned one
+        # trial later and never rebuilt, registers left unused for the rest
+        # of the run, consistent with the model losing the reasoning for
+        # why it built that design). Going all the way to 0 is a second,
+        # independent argument on top of that: OpenRouter's DeepSeek caching
+        # is automatic, cache reads are 0.1x the normal input price, and
+        # cache WRITES cost the same as an uncached call -- a never-
+        # truncated, only-ever-growing prefix is strictly cheaper across a
+        # multi-trial loop than periodically deleting the middle, which
+        # breaks prefix-matching and forces the entire remaining context to
+        # reprice as fresh (uncached) tokens.
+        memory_window: int = 0,
         stall_rounds: int = 2,
     ) -> None:
         self._cfg = cfg

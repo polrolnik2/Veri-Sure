@@ -496,7 +496,21 @@ class RTLEditor:
         *,
         sim_reviewer: SimReviewer,
         max_trials: int = 30,
-        memory_window: int = 6,
+        # 0 disables the sliding window (see below) entirely -- no
+        # truncation, ever. Was 6, chosen purely to cap per-call token
+        # count; that reasoning predates accounting for prompt caching.
+        # OpenRouter's DeepSeek caching is automatic (no cache_control
+        # needed): cache reads are 0.1x the normal input price, and cache
+        # WRITES cost the same as an uncached call -- there is no penalty
+        # for a growing, never-truncated prefix. Truncating the middle of
+        # the conversation, by contrast, breaks prefix-matching for every
+        # request after that point, forcing the entire remaining context to
+        # be repriced as fresh (uncached) tokens even though the message
+        # list is shorter -- strictly worse for total cost across a
+        # multi-trial loop, not better. See tb_editor.py's TBEditor for the
+        # matching default and a case where losing history also hurt
+        # convergence quality, independent of cost.
+        memory_window: int = 0,
         stall_rounds: int = 2,
     ) -> None:
         self._cfg = cfg
