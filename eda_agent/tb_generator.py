@@ -144,6 +144,19 @@ Hard rules:
 Testbench requirements:
 1) Instantiate the DUT according to the interface (instance name `dut`).
 2) Drive stimuli and compute expected outputs consistent with the contract (including any stated latency).
+   - LATENT / REGISTERED OUTPUTS (any output whose contract timing has latency_cycles > 0,
+     and/or whose notes say it "holds" its value): the expected value you compare against
+     the DUT EVERY cycle MUST match what the DUT actually holds THAT cycle. Do NOT assign the
+     expected output its final/next-result value in the same cycle you apply the stimulus that
+     produces it. Instead: when you launch an operation, record the pending result and start a
+     per-output countdown of `latency_cycles`; hold the expected output at its PREVIOUS value
+     during the countdown, and reveal the new expected value only on the cycle the output
+     actually becomes valid (countdown reaches 0). Then keep it at that value per the
+     contract's hold semantics (e.g. "holds while ready asserted") until the next update event.
+     A COMMON, FATAL BUG that fails correct RTL is: computing `expected = f(inputs)` in the
+     same cycle the stimulus is applied while comparing every cycle — this mismatches on every
+     cycle of the entire latency window even though the DUT is correct. The expected model must
+     track the DUT's real cycle-by-cycle timing, not jump to the answer early.
 3) Count mismatches between DUT outputs and expected outputs.
 4) Logging (keep logs small):
    - Do NOT print on every match.
