@@ -50,6 +50,20 @@ def _augment_lint_excerpt(excerpt: str) -> str:
     return excerpt.rstrip("\n") + "\n\n" + "\n\n".join(hints) + "\n"
 
 
+def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
+    """Append real child module source(s) into the testbench text.
+
+    SystemVerilog allows multiple module definitions per file, so this makes
+    the child modules resolvable wherever ``tb.sv`` is compiled (lint check,
+    RTLEditor's debug loop, Asserter, final self-TB) with zero changes to any
+    of those callers' file lists — they all just read ``tb.sv`` from disk.
+    Pure function; returns ``testbench`` unchanged if ``child_rtl`` is empty.
+    """
+    if not child_rtl:
+        return testbench
+    return testbench.rstrip("\n") + "\n\n" + "\n\n".join(child_rtl.values()) + "\n"
+
+
 @dataclass(frozen=True)
 class TopAgentConfig:
     sim_max_retry: int = 4
@@ -266,6 +280,7 @@ class TopAgent:
         golden_rtl_blackbox_path: str | None,
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
+        child_rtl: dict[str, str] | None = None,
     ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
@@ -273,6 +288,14 @@ class TopAgent:
         usage_breakdown_dict)``. The repair step is the standard RTLEditor debug
         loop; ``is_sim_pass`` (the self-TB verdict) is the per-node escalation
         signal consumed by the DAG OR-node.
+
+        ``child_rtl`` (module_name -> real, already-verified RTL source):
+        when given, TBGenerator instantiates these children directly instead
+        of writing an inline behavioral stand-in, and the mock-DUT/TBEditor
+        alignment pass is skipped entirely (there is no invented model to
+        align — the TB wires real RTL). Only meaningful for children also
+        present in ``child_assumes`` (their prefixed port names come from
+        there); a name in ``child_rtl`` but not ``child_assumes`` is ignored.
         """
         architect = ArchitectAgent(self.cfg)
         tb_gen = TBGenerator(self.cfg)
@@ -312,6 +335,10 @@ class TopAgent:
                     _cobj["contract_sva"] = contract_sva
                 if child_assumes:
                     _cobj["child_assumes"] = child_assumes
+                if child_rtl:
+                    for _name in child_rtl:
+                        if _name in _cobj.get("child_assumes", {}):
+                            _cobj["child_assumes"][_name]["rtl_available"] = True
                 contract_json = json.dumps(_cobj, indent=2) + "\n"
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
             except Exception:  # noqa: BLE001
@@ -340,6 +367,7 @@ class TopAgent:
         tb_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
         testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
         testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+        testbench = _append_child_rtl(testbench, child_rtl)
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
         # If we were given a golden TB and the LLM accidentally broke its syntax,
@@ -348,6 +376,7 @@ class TopAgent:
         if golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
             golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
             golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
+            golden_text = _append_child_rtl(golden_text, child_rtl)
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
             testbench = golden_text
         elif not golden_tb_path:
@@ -367,6 +396,7 @@ class TopAgent:
                 )
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
                 testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+                testbench = _append_child_rtl(testbench, child_rtl)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
 
@@ -422,7 +452,13 @@ class TopAgent:
         # bug here would otherwise silently poison the self-TB gate: either
         # penalizing correct glue RTL, or letting broken glue RTL pass because
         # the TB's child model never exercised the violated property.
-        if child_assumes:
+        #
+        # Skipped when child_rtl is given: the TB already wires REAL,
+        # already-verified child RTL (see _append_child_rtl above) instead of
+        # an inline behavioral stand-in, so there is no invented model to
+        # align — child_assumes is only used above for prompt guidance (drive
+        # instantiation, not a stand-in) and for contract_sva's assert side.
+        if child_assumes and not child_rtl:
             # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
             # so a post-mortem can attribute a defect to TBGenerator's own
             # draft vs. something TBEditor introduced/failed to resolve while
@@ -656,6 +692,7 @@ class TopAgent:
         golden_rtl_blackbox_path: str | None = None,
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
+        child_rtl: dict[str, str] | None = None,
     ) -> TopAgentResult:
         output_dir_per_run = output_dir_per_run.expanduser().resolve()
         output_dir_per_run.mkdir(parents=True, exist_ok=True)
@@ -694,6 +731,7 @@ class TopAgent:
                     golden_rtl_blackbox_path=golden_rtl_blackbox_path,
                     contract_sva=contract_sva,
                     child_assumes=child_assumes,
+                    child_rtl=child_rtl,
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001

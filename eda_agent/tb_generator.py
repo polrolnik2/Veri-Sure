@@ -38,6 +38,23 @@ Child assumes mode (hierarchical decomposition):
   this node is a COMPOSITION NODE with child-facing ports.
 - The child-facing ports are ALREADY on the DUT's port list (prefixed with the child
   module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+
+REAL child instantiation (only for entries with `"rtl_available": true`):
+- These children are ALREADY implemented and verified — their real RTL will be
+  compiled alongside this testbench (you do not write or see their source).
+- For these children ONLY: declare an instance of the module (module name =
+  the child's key in `child_assumes`, e.g. `booth_datapath`), and connect each
+  of its OWN ports (named in that child's `interface` list, UNPREFIXED — e.g.
+  `A`, `B`, `ready`) to the corresponding PREFIXED DUT port (prefix = child
+  name + `_`, e.g. `booth_datapath_A`, `booth_datapath_ready`).
+- Do NOT write an inline behavioral stand-in for these children — no always
+  blocks/tasks driving their prefixed ports. The real instance drives/reads
+  them directly. `io_behavior`/`properties` for these entries are supporting
+  context only (what the real RTL already guarantees), not something to model.
+- Everything else in this section (black-box inline modeling, gap-focused
+  testing) still applies to any child WITHOUT `"rtl_available": true`.
+
+For children WITHOUT `"rtl_available": true`:
 - DO NOT create stub modules for children. DO NOT instantiate any child modules.
 - Instead, treat child-facing ports as REGULAR DUT PORTS that you drive/read directly
   in the testbench, just like clk/rst/start/A/B.
