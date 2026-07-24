@@ -161,7 +161,22 @@ Hard rules:
 Testbench requirements:
 1) Instantiate the DUT according to the interface (instance name `dut`).
 2) Drive stimuli and compute expected outputs consistent with the contract (including any stated latency).
-   - LATENT / REGISTERED OUTPUTS (any output whose contract timing has latency_cycles > 0,
+   - HANDSHAKE-QUALIFIED OUTPUTS (STRONGLY PREFERRED when applicable): if an output's validity is
+     gated by a ready/valid/done/complete signal (i.e. the contract says the output is valid "when
+     ready" / "when valid_out" / after a `done` pulse), check it READY-QUALIFIED and LATENCY-AGNOSTIC:
+     assert the output equals its plain declarative value (e.g. `product == $signed(A0)*$signed(B0)`,
+     using the operands A0/B0 you latched at the start of THIS operation) on EVERY cycle the
+     qualifier is asserted, and do NOT constrain it (nor the exact cycle it becomes valid) otherwise.
+     Do NOT model a fixed `latency_cycles` countdown for such an output. Rationale: the exact
+     end-to-end latency of a composition is easy to reason off-by-one (N+1 vs N+2), and a
+     fixed-latency oracle then fails a CORRECT design (or passes a wrongly-timed one); a
+     ready-qualified check is immune to that — it only asserts "whenever you say you're ready, the
+     answer is right," which is the true contract. This is the correct oracle for a composition/glue
+     node whose external output is ready-qualified (e.g. booth_multiplier's `product` valid when
+     `ready`). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
+     handshake qualifier.
+   - LATENT / REGISTERED OUTPUTS WITHOUT A HANDSHAKE (any output whose contract timing has
+     latency_cycles > 0 and which is NOT ready/valid-qualified per the bullet above,
      and/or whose notes say it "holds" its value): the expected value you compare against
      the DUT EVERY cycle MUST match what the DUT actually holds THAT cycle. Do NOT assign the
      expected output its final/next-result value in the same cycle you apply the stimulus that
