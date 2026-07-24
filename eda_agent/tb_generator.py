@@ -20,12 +20,86 @@ produce clear, minimal logs when failures happen.
 
 You always generate syntactically-correct SystemVerilog.
 
+Oracle independence (critical — a testbench that violates this can pass a functionally
+wrong DUT and no one will notice):
+- Compute each expected output from the contract's DECLARATIVE input/output relationship
+  (e.g. `product = A * B`, `sum = A + B`), using plain SystemVerilog operators — NOT by
+  re-implementing the DUT's own internal step-by-step algorithm (registers, iteration
+  counters, accumulate-and-shift, FSM states, recoding), even when `functional_summary`
+  describes that internal implementation in detail. `functional_summary` documents HOW the
+  DUT is built inside; it is not what your expected-value model should replay.
+- The reason this matters: a shadow model that mirrors the DUT's own algorithm will agree
+  with a DUT that has a bug in that exact algorithm, by construction — two copies of the
+  same mistake produce a testbench that always "passes" a broken design. Only a model
+  derived from the plain operator semantics is an independent check.
+- If you additionally write any secondary/"double-check" comparison against ground truth,
+  it MUST feed into the same mismatch counter used for the pass/fail verdict. Never write
+  a ground-truth comparison as a print-only note that doesn't affect whether the testbench
+  reports PASS or FAIL — an independent check that can't fail the run is worthless.
+
 Simulator target (important):
 - The harness uses Verilator. Keep the testbench compatible with Verilator's SystemVerilog support.
 
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
 - <input_spec> is non-authoritative background and must NOT override the contract.
+
+Contract SVA mode:
+- If the contract JSON contains a `contract_sva` field (a list of SVA property objects),
+  these are **orchestrator-supplied assertions** that the DUT MUST satisfy.
+- Treat them as hard specification constraints alongside the functional_summary.
+- Design your testbench checks to be consistent with these SVA properties.
+
+Child assumes mode (hierarchical decomposition):
+- If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
+  this node is a COMPOSITION NODE with child-facing ports.
+- The child-facing ports are ALREADY on the DUT's port list (prefixed with the child
+  module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+
+REAL child instantiation (only for entries with `"rtl_available": true`):
+- These children are ALREADY implemented and verified — their real RTL will be
+  compiled alongside this testbench (you do not write or see their source).
+- For these children ONLY: declare an instance of the module (module name =
+  the child's key in `child_assumes`, e.g. `booth_datapath`), and connect each
+  of its OWN ports (named in that child's `interface` list, UNPREFIXED — e.g.
+  `A`, `B`, `ready`) to the corresponding PREFIXED DUT port (prefix = child
+  name + `_`, e.g. `booth_datapath_A`, `booth_datapath_ready`).
+- Do NOT write an inline behavioral stand-in for these children — no always
+  blocks/tasks driving their prefixed ports. The real instance drives/reads
+  them directly. `io_behavior`/`properties` for these entries are supporting
+  context only (what the real RTL already guarantees), not something to model.
+- Everything else in this section (black-box inline modeling, gap-focused
+  testing) still applies to any child WITHOUT `"rtl_available": true`.
+
+For children WITHOUT `"rtl_available": true`:
+- DO NOT create stub modules for children. DO NOT instantiate any child modules.
+- Instead, treat child-facing ports as REGULAR DUT PORTS that you drive/read directly
+  in the testbench, just like clk/rst/start/A/B.
+- Each child entry has `io_behavior` (a BLACK-BOX description of observable
+  input->output behavior — what stimulus produces what result, after how many
+  cycles), `timing` (latency per output), and `properties` (formal SVA).
+- `io_behavior` is the PRIMARY source — model the child's ports to reproduce
+  exactly that observable behavior, nothing more. `properties` pins down exact
+  edge-case values precisely.
+- DO NOT attempt to mimic any internal architecture (registers, FSM states,
+  accumulators, recoding logic, etc.) even if such terms appear elsewhere in
+  the contract (e.g. in the child's own `functional_summary`, which describes
+  THAT child's internal RTL implementation, not its black-box behavior — do
+  not use `functional_summary` to model child behavior in this testbench).
+  Write a black-box model INLINE (always blocks or tasks) that drives the
+  child-output ports to match `io_behavior` + `properties` only.
+- For child-input ports (ports the DUT drives TO the child): just declare wires
+  and connect them to the DUT. You can monitor them for debug.
+- Test the DUT's own contract_sva properties assuming the children behave as specified.
+- GAP-focused testing: `functional_summary` states the ORIGINAL (pre-decomposition)
+  requirement alongside what each child guarantees. The DUT is not pure wiring —
+  it is responsible for whatever the original requirement needs that no child
+  guarantee covers (sequencing/launch order, arbitrating between children,
+  combining two children's outputs, holding/latching state across cycles,
+  format translation). Write scenarios that specifically stress THAT residual
+  behavior, not just pass-through/wiring correctness — e.g. cases where a
+  naive port-forwarding implementation would satisfy each child's own contract
+  in isolation but still fail the parent's own contract_sva.
 """
 
 PARSE_REPAIR_PROMPT = r"""
@@ -87,11 +161,48 @@ Hard rules:
 Testbench requirements:
 1) Instantiate the DUT according to the interface (instance name `dut`).
 2) Drive stimuli and compute expected outputs consistent with the contract (including any stated latency).
-3) Count mismatches between DUT outputs and expected outputs.
+   - HANDSHAKE-QUALIFIED OUTPUTS (STRONGLY PREFERRED when applicable): if an output's validity is
+     gated by a ready/valid/done/complete signal (i.e. the contract says the output is valid "when
+     ready" / "when valid_out" / after a `done` pulse), check it READY-QUALIFIED and LATENCY-AGNOSTIC:
+     assert the output equals its plain declarative value (e.g. `product == $signed(A0)*$signed(B0)`,
+     using the operands A0/B0 you latched at the start of THIS operation) on EVERY cycle the
+     qualifier is asserted, and do NOT constrain it (nor the exact cycle it becomes valid) otherwise.
+     Do NOT model a fixed `latency_cycles` countdown for such an output. Rationale: the exact
+     end-to-end latency of a composition is easy to reason off-by-one (N+1 vs N+2), and a
+     fixed-latency oracle then fails a CORRECT design (or passes a wrongly-timed one); a
+     ready-qualified check is immune to that — it only asserts "whenever you say you're ready, the
+     answer is right," which is the true contract. This is the correct oracle for a composition/glue
+     node whose external output is ready-qualified (e.g. booth_multiplier's `product` valid when
+     `ready`). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
+     handshake qualifier.
+   - LATENT / REGISTERED OUTPUTS WITHOUT A HANDSHAKE (any output whose contract timing has
+     latency_cycles > 0 and which is NOT ready/valid-qualified per the bullet above,
+     and/or whose notes say it "holds" its value): the expected value you compare against
+     the DUT EVERY cycle MUST match what the DUT actually holds THAT cycle. Do NOT assign the
+     expected output its final/next-result value in the same cycle you apply the stimulus that
+     produces it. Instead: when you launch an operation, record the pending result and start a
+     per-output countdown of `latency_cycles`; hold the expected output at its PREVIOUS value
+     during the countdown, and reveal the new expected value only on the cycle the output
+     actually becomes valid (countdown reaches 0). Then keep it at that value per the
+     contract's hold semantics (e.g. "holds while ready asserted") until the next update event.
+     A COMMON, FATAL BUG that fails correct RTL is: computing `expected = f(inputs)` in the
+     same cycle the stimulus is applied while comparing every cycle — this mismatches on every
+     cycle of the entire latency window even though the DUT is correct. The expected model must
+     track the DUT's real cycle-by-cycle timing, not jump to the answer early.
+   - `f(inputs)` itself must be the contract's plain declarative relationship (see "Oracle
+     independence" above) — e.g. `A * B` for a multiplier — never a re-implementation of the
+     DUT's internal algorithm. Getting the TIMING of the reveal right (previous bullet) and
+     getting the VALUE right (this one) are both required and are independent failure modes.
+3) Count mismatches between DUT outputs and expected outputs. This is the ONLY mismatch
+   counter — if you write any additional ground-truth comparison anywhere in the testbench,
+   route its result into this same counter; do not print it as a side note that leaves the
+   pass/fail verdict unaffected.
 4) Logging (keep logs small):
    - Do NOT print on every match.
    - On mismatch, display inputs, DUT outputs, and expected outputs.
-   - On the FIRST mismatch, print extra debug context per the display prompt below (moment or queue window).
+   - For the first mismatch only, ADDITIONALLY print extra debug context per the display
+     prompt below (moment or queue window). This is a one-time detail dump for context —
+     it does NOT stop the run; continue executing all remaining checks and scenarios.
 5) Generate a VCD named `wave.vcd`:
    initial begin
      $dumpfile("wave.vcd");
@@ -110,6 +221,24 @@ Testbench requirements:
 8) Sampling:
    - For posedge-sequential designs, compute/update expectations on posedge and check on negedge to avoid races.
    - For pure combinational designs (no clock), check at the moment inputs change (after a tiny delay if needed).
+9) Structured scenarios (per-primitive reporting WITH timing pointers — enables
+   granular, waveform-correlated debugging):
+   - Group stimulus into NAMED, INDEPENDENT test scenarios, one per functional case
+     (e.g. zero, overflow, carry_in, max, random_k). Reset/re-initialize between
+     scenarios where the design is stateful.
+   - Run ALL scenarios to completion — do NOT `$finish` on the first mismatch.
+   - Record, per scenario: its start time, its end time, the count of mismatches, and
+     the simulation time (`$time`) of the FIRST mismatch within that scenario.
+   - At the START of each scenario print: `[TEST <scenario_name>] START at time %0t`
+   - After each scenario print exactly one result line WITH timing, so a reviewer can
+     locate the failure in `wave.vcd`:
+       `[TEST <scenario_name>] PASS (window <t_start>..<t_end>)`
+     or, on any mismatch in that scenario:
+       `[TEST <scenario_name>] FAIL (<n> mismatches, first at time <t_first>, window <t_start>..<t_end>)`
+     where `<t_first>` is `$time` of the first mismatch in the scenario and
+     `<t_start>..<t_end>` bracket when the scenario ran. Print times as integers (`%0t`).
+   - The end-of-sim markers in (6)/(7) are still required and printed once after all
+     scenarios (they aggregate across scenarios, so the harness parsing is unchanged).
 
 In `reasoning`, write a short, practical summary (no step-by-step chain-of-thought).
 

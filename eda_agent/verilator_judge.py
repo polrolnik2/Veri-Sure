@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
+import signal
+import sys
 from pathlib import Path
 import re
 import shutil
@@ -85,12 +88,25 @@ def run_verilator_testbench_sync(
     log_lines: list[str] = []
     log_lines.append(f"INFO: Running command: {' '.join(cmd_compile)}\n")
 
-    cp = subprocess.run(
-        cmd_compile,
-        cwd=str(run_dir),
-        capture_output=True,
-        text=True,
-    )
+    pgroup_kwargs: dict = {}
+    if sys.platform != "win32":
+        pgroup_kwargs["start_new_session"] = True
+
+    try:
+        cp = subprocess.run(
+            cmd_compile,
+            cwd=str(run_dir),
+            capture_output=True,
+            text=True,
+            timeout=max(timeout_s, 300.0),
+            **pgroup_kwargs,
+        )
+    except subprocess.TimeoutExpired:
+        log = "".join(log_lines) + "TIMEOUT during compile\n"
+        return VerilatorRunResult(
+            passed=False, mismatches=None, timed_out=True,
+            compile_returncode=-1, run_returncode=None, log=log, run_dir=str(run_dir),
+        )
     if cp.stdout:
         log_lines.append(cp.stdout)
     if cp.stderr:
@@ -119,6 +135,7 @@ def run_verilator_testbench_sync(
             capture_output=True,
             text=True,
             timeout=timeout_s,
+            **pgroup_kwargs,
         )
         run_returncode = rp.returncode
         if rp.stdout:
@@ -129,9 +146,9 @@ def run_verilator_testbench_sync(
     except subprocess.TimeoutExpired as e:
         timed_out = True
         if e.stdout:
-            log_lines.append(e.stdout)
+            log_lines.append(e.stdout if isinstance(e.stdout, str) else e.stdout.decode(errors="replace"))
         if e.stderr:
-            log_lines.append(e.stderr)
+            log_lines.append(e.stderr if isinstance(e.stderr, str) else e.stderr.decode(errors="replace"))
         log_lines.append("TIMEOUT\n")
 
     log = "".join(log_lines)

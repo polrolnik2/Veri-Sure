@@ -23,6 +23,28 @@ def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
     return ("syntax error" in text) or ("error:" in text)
 
 
+_MULTIDRIVEN_RE = re.compile(r"^%Warning-MULTIDRIVEN", re.MULTILINE)
+
+
+def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
+    """True iff Verilator flagged a signal with multiple driving blocks.
+
+    NOT folded into `_verilator_has_fatal` — that function is shared by
+    `check_syntax` AND `sim_review` (RTLEditor's actual pass/fail oracle), and
+    real captured glue-RTL (tests/stage_eval/fixtures/stages/booth_multiplier/
+    .../parent_0/rtl.sv) legitimately produces this warning from two
+    textually-identical duplicate `assign` statements — inert, not a real
+    race, and the run correctly proceeded. Tightening the shared fatal check
+    would regress that already-passing real run. This is a narrow, opt-in
+    helper each caller decides whether to treat as fatal for its own context
+    (see tb_editor.py::_lint_tb, which does; sim_reviewer.py::check_syntax,
+    which deliberately does not — TBEditor's mock-DUT scaffolding never
+    legitimately produces this warning, so there's no benign case there to
+    protect, unlike glue-RTL generation).
+    """
+    return bool(_MULTIDRIVEN_RE.search(stdout) or _MULTIDRIVEN_RE.search(stderr))
+
+
 def check_syntax(rtl_path: str) -> Tuple[bool, str]:
     _require_executable("verilator")
     cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {rtl_path}"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from agentscope.formatter import OpenAIChatFormatter
@@ -205,6 +206,38 @@ class UsageTrackingModel(ChatModelBase):
         return getattr(self._base_model, name)
 
 
+@dataclass
+class UsageBreakdown:
+    """Per-agent token breakdown for observability."""
+
+    architect: tuple[int, int] = (0, 0)
+    tb_gen: tuple[int, int] = (0, 0)
+    rtl_gen: tuple[int, int] = (0, 0)
+    rtl_edit: tuple[int, int] = (0, 0)
+    consensus_rtl_player: tuple[int, int] = (0, 0)
+    consensus_tb_player: tuple[int, int] = (0, 0)
+
+    @property
+    def total(self) -> tuple[int, int]:
+        pairs = [
+            self.architect, self.tb_gen, self.rtl_gen, self.rtl_edit,
+            self.consensus_rtl_player, self.consensus_tb_player,
+        ]
+        return (sum(p[0] for p in pairs), sum(p[1] for p in pairs))
+
+    def to_dict(self) -> dict[str, dict[str, int]]:
+        total_in, total_out = self.total
+        return {
+            "architect": {"input": self.architect[0], "output": self.architect[1]},
+            "tb_gen": {"input": self.tb_gen[0], "output": self.tb_gen[1]},
+            "rtl_gen": {"input": self.rtl_gen[0], "output": self.rtl_gen[1]},
+            "rtl_edit": {"input": self.rtl_edit[0], "output": self.rtl_edit[1]},
+            "consensus_rtl_player": {"input": self.consensus_rtl_player[0], "output": self.consensus_rtl_player[1]},
+            "consensus_tb_player": {"input": self.consensus_tb_player[0], "output": self.consensus_tb_player[1]},
+            "total": {"input": total_in, "output": total_out},
+        }
+
+
 def get_model_usage(model: Any) -> tuple[int, int]:
     input_tokens = getattr(model, "total_input_tokens", None)
     output_tokens = getattr(model, "total_output_tokens", None)
@@ -220,7 +253,21 @@ def _is_llama_model(model_name: str) -> bool:
 
 
 def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
-    client_args: dict[str, Any] = {}
+    # Raise the OpenAI SDK's retry count (default 2) so rate-limit (429) and
+    # transient 5xx/connection errors are ridden out via the SDK's built-in
+    # exponential backoff + jitter (which also honors Retry-After /
+    # x-ratelimit-reset headers). The default 2 only absorbs brief bursts; on a
+    # shared free-tier key running many parallel problems, sustained throttling
+    # outlasts 2 retries and surfaces as a spurious leaf failure — or crashes the
+    # run at the unwrapped Architect/Proposer calls. 8 retries ~= up to a minute
+    # of cumulative backoff, enough to cross a per-minute free-tier window.
+    # Overridable via OPENAI_MAX_RETRIES.
+    import os as _os
+    try:
+        _max_retries = int(_os.environ.get("OPENAI_MAX_RETRIES", "8"))
+    except ValueError:
+        _max_retries = 8
+    client_args: dict[str, Any] = {"max_retries": _max_retries}
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 

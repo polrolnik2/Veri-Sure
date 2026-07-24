@@ -122,6 +122,32 @@ def _extract_module_name_from_contract(output_dir: Path) -> str | None:
     return name.strip()
 
 
+def _extract_child_facing_outputs(output_dir: Path, *, outputs: list[str]) -> list[str]:
+    """Output ports that are child-facing exports (``<child>_<port>``).
+
+    Composition-node contracts carry a ``child_assumes`` dict keyed by child
+    module name. Child-facing exports on the glue module are pure outputs that
+    the TB-checked fan-in never reaches, so they must seed the trace roots
+    explicitly (see AGENTS.md: suspect-block blind spot).
+    """
+    p = output_dir / "contract.json"
+    if not p.exists():
+        return []
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(obj, dict):
+        return []
+    child_assumes = obj.get("child_assumes")
+    if not isinstance(child_assumes, dict) or not child_assumes:
+        return []
+    prefixes = tuple(f"{child}_" for child in child_assumes if isinstance(child, str) and child)
+    if not prefixes:
+        return []
+    return [o for o in outputs if o.startswith(prefixes)]
+
+
 def _extract_dut_instance_name(tb_text: str, *, module_name: str) -> str | None:
     # Best-effort: match `<module_name> <inst>(` in the testbench.
     m = re.search(rf"\b{re.escape(module_name)}\b\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", tb_text)
@@ -272,6 +298,12 @@ def build_trace_report(
     ]
     if not fail_signal_names:
         fail_signal_names = ports["outputs"]
+
+    # Composition nodes: child-facing exports (<child>_<port>) are not in the
+    # TB-checked fan-in, so seed the trace roots with them explicitly.
+    for extra in _extract_child_facing_outputs(output_dir, outputs=ports["outputs"]):
+        if extra not in fail_signal_names:
+            fail_signal_names.append(extra)
 
     suspect_blocks = dynamic_slice(
         fail_signals=fail_signal_names,

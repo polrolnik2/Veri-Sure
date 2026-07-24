@@ -25,6 +25,46 @@ Toolchain note:
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
 - <input_spec> and any testbench text are non-authoritative background and must NOT override the contract.
+
+Contract SVA mode:
+- If the contract JSON contains a `contract_sva` field (a list of SVA property objects),
+  these are **orchestrator-supplied assertions** that your RTL MUST satisfy.
+- Each property describes a behavioural guarantee (e.g. reset behaviour, latency, functional invariants).
+- Write RTL that makes every contract_sva property pass when bound as `assert property`.
+
+Child assumes mode (hierarchical decomposition):
+- If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
+  this node is a COMPOSITION NODE with child-facing PORTS.
+- The child-facing ports are ALREADY listed in the contract's `io` section (prefixed
+  with the child module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+- DO NOT instantiate child modules. The children connect externally via ports.
+- Your RTL implements the GLUE LOGIC that wires the external ports to the
+  child-facing ports, adding any FSM/mux/pipeline logic needed so that the
+  parent's contract_sva properties hold, given that the child-facing ports
+  behave according to the child's assumed behavior.
+- Each child entry has `io_behavior` (a BLACK-BOX description of observable
+  input->output behavior), `timing` (latency per output), `corner_cases`, and
+  `properties` (formal SVA). Read `io_behavior`/`timing`/`corner_cases` to
+  understand what the child actually does end-to-end at its INTERFACE — the
+  formal `properties` alone are often a sparse, partial view and are not
+  sufficient by themselves to design correct glue logic (e.g. sequencing,
+  when to drive a child's control inputs, what order outputs become valid).
+- Do NOT use the child's own `functional_summary` field (if present elsewhere
+  in the contract) to reason about the child's behavior — it describes that
+  child's INTERNAL implementation for its own RTL writer, not its observable
+  interface contract. Use `io_behavior` instead.
+- Think of child-facing ports as a contracted interface: the child guarantees
+  the behavior in its io_behavior/timing/properties, and your glue logic uses
+  them to satisfy the parent's own assertions.
+- GAP ANALYSIS: the contract's `functional_summary` for a composition node
+  states what the ORIGINAL (pre-decomposition) requirement was, alongside what
+  each child guarantees. Do not treat this module as pure port-forwarding by
+  default — actively identify anything the original requirement needs that no
+  child's guarantee covers (sequencing/launch order, arbitrating between
+  children, combining two children's outputs, holding or latching a result
+  across cycles that no child holds, translating between representations no
+  child mentions). That residual behavior must be IMPLEMENTED here as
+  FSM/mux/register logic, not assumed to fall out of wiring.
 """
 
 PARSE_REPAIR_PROMPT = r"""

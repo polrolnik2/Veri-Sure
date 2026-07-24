@@ -357,6 +357,33 @@ def _render_asserter_sv(
     )
 
 
+def _has_contract_sva(contract: dict[str, Any]) -> bool:
+    """Check if the contract carries orchestrator-supplied contract SVA properties."""
+    gsva = contract.get("contract_sva")
+    return isinstance(gsva, list) and len(gsva) > 0
+
+
+def _render_contract_sva_body(
+    contract: dict[str, Any], *, clk_name: str, clk_edge: str,
+) -> str:
+    """Render contract SVA properties as immediate assertions for Verilator."""
+    gsva = contract.get("contract_sva", [])
+    lines: list[str] = []
+    for prop in gsva:
+        if not isinstance(prop, dict):
+            continue
+        name = prop.get("name", "golden")
+        body = prop.get("body", "")
+        if not body:
+            continue
+        lines.append(f"  // contract SVA: {name}")
+        lines.append(f"  always @({clk_edge} {clk_name}) begin")
+        lines.append(f"    assert({body}) else asserter_log(\"{name}\", \"contract SVA violated\");")
+        lines.append(f"  end")
+        lines.append("")
+    return "\n".join(lines)
+
+
 class Asserter:
     def __init__(
         self,
@@ -416,7 +443,7 @@ class Asserter:
             return res
 
         monitored_names, selection_meta = _select_monitored_outputs(contract=contract, ports=ports, target_outputs=target_outputs)
-        if not monitored_names:
+        if not monitored_names and assert_body_override is None:
             res = AsserterResult(
                 status="skip",
                 summary="Skipped asserter: no outputs selected for sequential/timing monitoring.",
@@ -468,6 +495,9 @@ class Asserter:
         spec: AsserterSpec
         if assert_body_override is not None:
             spec = AsserterSpec(reasoning="(assert_body_override)", assert_body=assert_body_override)
+        elif _has_contract_sva(contract):
+            golden_body = _render_contract_sva_body(contract, clk_name=str(clk_name), clk_edge=str(clk_edge))
+            spec = AsserterSpec(reasoning="(contract_sva from orchestrator contract)", assert_body=golden_body)
         elif self._cfg.api_key is None:
             spec = AsserterSpec(reasoning="(no api_key; baseline-only asserter)", assert_body="")
         else:

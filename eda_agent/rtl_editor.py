@@ -20,6 +20,7 @@ from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer, check_syntax
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
+from .utils import failing_test_scenarios, format_failing_scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     interesting: list[str] = []
     for line in stdout.splitlines():
         if (
-            "=== MISMATCH DETECTED" in line
+            "[TEST " in line
+            or "=== MISMATCH DETECTED" in line
             or "Hint:" in line
             or line.startswith("Mismatches:")
             or "SIMULATION FAILED" in line
@@ -97,6 +99,65 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     if stderr.strip():
         out = out + "\n\n[stderr excerpt]\n" + _clip_text(stderr, max_chars=max(800, max_chars // 3))
     return _clip_text(out, max_chars=max_chars)
+
+
+def _render_contract_sva_body(contract_json: str) -> str | None:
+    """Render contract_sva from the contract JSON as an assertion module body.
+
+    When the orchestrator supplies ``contract_sva`` in the contract, these
+    replace the LLM-generated assertions entirely.  The rendered body is
+    passed as ``assert_body_override`` to :meth:`Asserter.analyze`, so the
+    asserter runs the contract properties instead of inventing its own.
+
+    Returns ``None`` if no contract_sva is present (the asserter then falls
+    back to its normal LLM generation).
+    """
+    try:
+        contract = json.loads(contract_json)
+    except Exception:  # noqa: BLE001
+        return None
+    contract_sva = contract.get("contract_sva")
+    if not contract_sva or not isinstance(contract_sva, list):
+        return None
+
+    clocking = contract.get("clocking") or {}
+    clk_info = (clocking.get("clock") or {}) if isinstance(clocking, dict) else {}
+    rst_info = (clocking.get("reset") or {}) if isinstance(clocking, dict) else {}
+    clk_name = clk_info.get("name", "clk") if isinstance(clk_info, dict) else "clk"
+    rst_name = rst_info.get("name") if isinstance(rst_info, dict) else None
+    rst_active = rst_info.get("active", "high") if isinstance(rst_info, dict) else "high"
+
+    if rst_name:
+        rst_expr = f"({rst_name} == 1'b0)" if rst_active == "low" else rst_name
+    else:
+        rst_expr = None
+
+    lines: list[str] = []
+    lines.append("  // === Contract SVA (orchestrator-supplied, replaces LLM assertions) ===")
+    for prop in contract_sva:
+        if not isinstance(prop, dict):
+            continue
+        name = prop.get("name", "golden_prop")
+        body = prop.get("body", "")
+        if not body:
+            continue
+        prop_clk = prop.get("clk", clk_name)
+        prop_rst = prop.get("rst", rst_name)
+        if prop_rst:
+            prop_rst_expr = f"({prop_rst} == 1'b0)" if rst_active == "low" else prop_rst
+            disable = f" disable iff ({prop_rst_expr})"
+        else:
+            disable = ""
+
+        lines.append(f"  always @(posedge {prop_clk}) begin")
+        lines.append(f"    if ({f'!{prop_rst_expr}' if prop_rst else '1'}) begin")
+        lines.append(f"      {name}_check: assert ({body})")
+        lines.append(f'        else asserter_log("{name}", $sformatf("CONTRACT SVA FAIL: {name}"));')
+        lines.append(f"    end")
+        lines.append(f"  end")
+        lines.append("")
+
+    return "\n".join(lines) if len(lines) > 1 else None
 
 
 SYSTEM_PROMPT = r"""
@@ -116,6 +177,21 @@ Rules:
 4. Prefer small, targeted edits.
 5. Preserve the module interface and the contract's timing assumptions.
 6. Contract-only mode: do NOT change behavior based on input_spec if it conflicts with the contract.
+7. Contract SVA mode: if the contract JSON contains a `contract_sva` field, these are hard
+   specification constraints your RTL MUST satisfy. Ensure fixes do not violate them.
+8. Child assumes mode: if the contract JSON contains a `child_assumes` field, this RTL is a
+   COMPOSITION/GLUE module with child-facing ports (prefixed with each child module name,
+   e.g. `booth_controller_ready`, `booth_datapath_product`) ALREADY on its port list.
+   - DO NOT instantiate any child module as a fix. There are no child module definitions
+     available to this RTL — child-facing ports connect externally, outside this file.
+   - If a child-facing port appears unconnected, undriven, or X-valued, the fix is to wire
+     it correctly within the GLUE LOGIC (assign/always blocks using existing ports), never
+     to declare or instantiate a module for it.
+   - Each child's `io_behavior`/`timing`/`properties` in `child_assumes` describe what that
+     child guarantees on its ports — use them to determine the correct glue behavior.
+     `io_behavior` is a BLACK-BOX description (no internal architecture terms); do NOT use
+     a child's `functional_summary` (if present) to reason about its behavior — that field
+     describes the child's own internal RTL implementation, not its observable interface.
 
 When you are done (simulation passes), finish by calling generate_response with a
 structured plain-string response in EXACTLY this format (use literal newlines between fields):
@@ -153,7 +229,9 @@ KMAP_DEBUG_HINT_PROMPT = r"""
 
 EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until pass):
-1) Use the contract + trace report to find the most likely root cause.
+1) Use the contract + trace report + <failing_scenarios> to find the most likely
+   root cause. All listed scenarios fail simultaneously — prefer a single fix that
+   resolves the whole group over patching one failing case at a time.
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
@@ -412,10 +490,39 @@ class _EditSession:
 
 
 class RTLEditor:
-    def __init__(self, cfg: OpenAIConfig, *, sim_reviewer: SimReviewer, max_trials: int = 30) -> None:
+    def __init__(
+        self,
+        cfg: OpenAIConfig,
+        *,
+        sim_reviewer: SimReviewer,
+        max_trials: int = 30,
+        # 0 disables the sliding window (see below) entirely -- no
+        # truncation, ever. Was 6, chosen purely to cap per-call token
+        # count; that reasoning predates accounting for prompt caching.
+        # OpenRouter's DeepSeek caching is automatic (no cache_control
+        # needed): cache reads are 0.1x the normal input price, and cache
+        # WRITES cost the same as an uncached call -- there is no penalty
+        # for a growing, never-truncated prefix. Truncating the middle of
+        # the conversation, by contrast, breaks prefix-matching for every
+        # request after that point, forcing the entire remaining context to
+        # be repriced as fresh (uncached) tokens even though the message
+        # list is shorter -- strictly worse for total cost across a
+        # multi-trial loop, not better. See tb_editor.py's TBEditor for the
+        # matching default and a case where losing history also hurt
+        # convergence quality, independent of cost.
+        memory_window: int = 0,
+        stall_rounds: int = 2,
+    ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self.max_trials = int(max_trials)
+        self._memory_window = int(memory_window)
+        # Consecutive outer-loop rounds with no mismatch-count reduction before
+        # giving up. Distinct from max_trials (a hard action-count cap): this
+        # detects non-convergence early, so a stuck debugger yields back to the
+        # orchestrator (decomposition) instead of grinding through its full
+        # budget on rounds that are structurally not making progress.
+        self._stall_rounds = max(1, int(stall_rounds))
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
@@ -561,7 +668,9 @@ class RTLEditor:
             boolean_hint = ""
 
         # Best-effort: assertion-based (sequential/timing) hint in a separate sim sandbox.
-        # This is NOT a source of truth; treat it only as parallel guidance.
+        # When contract_sva is present in the contract, use it as assert_body_override
+        # so the Asserter runs the orchestrator-supplied contract SVA instead of
+        # generating its own (potentially wrong) assertions via the LLM.
         asserter_hint = ""
         try:
             fail_sigs: list[str] = []
@@ -569,6 +678,8 @@ class RTLEditor:
                 if isinstance(fo, dict) and isinstance(fo.get("sig"), str) and fo.get("sig"):
                     fail_sigs.append(str(fo.get("sig")))
             fail_sigs = sorted(set(fail_sigs))
+
+            contract_sva_override = _render_contract_sva_body(contract_json)
 
             asserter = Asserter(self._cfg)
             asserter_res = await asserter.analyze(
@@ -578,6 +689,7 @@ class RTLEditor:
                 output_dir=output_dir_per_run,
                 golden_rtl_path=getattr(self.sim_reviewer, "golden_rtl_path", None),
                 target_outputs=fail_sigs,
+                assert_body_override=contract_sva_override,
             )
             asserter_hint = (
                 "<asserter_result_json>\n"
@@ -587,8 +699,18 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             asserter_hint = ""
 
+        # All failing scenarios (with timing pointers into wave.vcd) as a set to fix
+        # together, not a single first-fail.
+        scenarios = failing_test_scenarios(sim_failed_log_excerpt)
+        scenarios_block = (
+            "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "
+            "the common root cause that resolves them together. Times index wave.vcd:\n"
+            + format_failing_scenarios(scenarios) + "\n</failing_scenarios>\n\n"
+            if scenarios else ""
+        )
         first_prompt = (
-            f"{init}\n\n<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
+            f"{init}\n\n{scenarios_block}"
+            f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
             "then apply one replace_block(block_id, new_code), then run_simulation()."
@@ -600,14 +722,52 @@ class RTLEditor:
         _justification: str = ""
         _last_content: str = ""
 
+        # Stall detection: tracks whether last_mismatch_cnt strictly improves
+        # round-over-round (it only updates on an ACCEPTED replace_block — a
+        # rolled-back action or a round where the model never acts both leave
+        # it unchanged, so this naturally catches both failure modes).
+        stall_count = 0
+        prev_mismatch_for_stall = int(sim_mismatch_cnt)
+
+        def _update_stall_tracking() -> None:
+            nonlocal stall_count, prev_mismatch_for_stall
+            if self._session.last_mismatch_cnt < prev_mismatch_for_stall:
+                stall_count = 0
+            else:
+                stall_count += 1
+            prev_mismatch_for_stall = self._session.last_mismatch_cnt
+
         response = await self._agent(Msg("user", first_prompt, role="user"))
         _last_content = str(getattr(response, "content", "") or "")
         if self._session.is_done:
             _justification = _last_content
+        else:
+            _update_stall_tracking()
 
         for _ in range(session_max_trials):
             if self._session.is_done:
                 break
+            # Once the session's action budget is exhausted, every further
+            # replace_block() call is refused ("Reached maximum debug trials")
+            # — the agent can no longer make progress. Stop here instead of
+            # burning the remaining outer-loop iterations on calls that are
+            # structurally guaranteed to fail; yield back to the caller
+            # (orchestrator decomposition) immediately.
+            if self._session.action_calls >= self._session.max_trials:
+                break
+            # No-progress detection: several consecutive rounds with no
+            # mismatch-count reduction (rollbacks, no-op reasoning, or edits
+            # that don't help) mean the debugger is not converging on this
+            # bug — stop spending budget and let the caller decide (typically
+            # decompose) rather than grinding to the hard trial cap.
+            if stall_count >= self._stall_rounds:
+                break
+            # Sliding window: keep the initial context message + last N messages
+            # to cap per-call input tokens regardless of iteration count.
+            mem = self._agent.memory
+            window = self._memory_window
+            if window > 0 and len(mem.content) > window + 2:
+                mem.content = [mem.content[0]] + mem.content[-(window):]
             response = await self._agent(
                 Msg(
                     "user",
@@ -618,6 +778,8 @@ class RTLEditor:
             _last_content = str(getattr(response, "content", "") or "")
             if self._session.is_done and not _justification:
                 _justification = _last_content
+            elif not self._session.is_done:
+                _update_stall_tracking()
 
         # If the model wrote RTL_FIXED:/RTL_CORRECT: as plain text but sim never passed,
         # extract it as the justification so lessons have player conclusions.

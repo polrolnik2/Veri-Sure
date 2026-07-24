@@ -11,15 +11,57 @@ from typing import List, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
-from .consensus_game import ConsensusGame
+from .rtl_editor import RTLEditor
 from .contract_linter import lint_contract_json, render_contract_issues
 from .config import OpenAIConfig
-from .model import get_model_usage
+from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import SimReviewer
+from .tb_editor import TBEditor
 from .tb_generator import TBGenerator
 
 logger = logging.getLogger(__name__)
+
+# Verilator error text is sometimes too cryptic for the TB lint-repair loop to
+# act on (a recorded run regenerated the identical declaration-after-statement
+# defect 4 times because the excerpt only said `expecting "'{"`). Each
+# (pattern, hint) pair appends a plain-English translation to the excerpt
+# before it is fed back to the Verifier; add new translations here.
+_LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"""unexpected IDENTIFIER, expecting "'\{\""""),
+        "HINT: `syntax error, unexpected IDENTIFIER, expecting \"'{\"` at a line "
+        "inside a task/begin block almost always means a DECLARATION (e.g. `time t;` "
+        "/ `int n;`) appears AFTER a statement. SystemVerilog requires all local "
+        "declarations at the TOP of the task/block body, before any statement. Move "
+        "every declaration in the flagged tasks to the top of that task.",
+    ),
+]
+
+
+def _augment_lint_excerpt(excerpt: str) -> str:
+    """Append plain-English hints for known-cryptic Verilator errors in ``excerpt``.
+
+    Pure function; returns the excerpt unchanged when no pattern matches.
+    """
+    hints = [hint for pattern, hint in _LINT_EXCERPT_TRANSLATIONS if pattern.search(excerpt)]
+    if not hints:
+        return excerpt
+    return excerpt.rstrip("\n") + "\n\n" + "\n\n".join(hints) + "\n"
+
+
+def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
+    """Append real child module source(s) into the testbench text.
+
+    SystemVerilog allows multiple module definitions per file, so this makes
+    the child modules resolvable wherever ``tb.sv`` is compiled (lint check,
+    RTLEditor's debug loop, Asserter, final self-TB) with zero changes to any
+    of those callers' file lists — they all just read ``tb.sv`` from disk.
+    Pure function; returns ``testbench`` unchanged if ``child_rtl`` is empty.
+    """
+    if not child_rtl:
+        return testbench
+    return testbench.rstrip("\n") + "\n\n" + "\n\n".join(child_rtl.values()) + "\n"
 
 
 @dataclass(frozen=True)
@@ -27,15 +69,24 @@ class TopAgentConfig:
     sim_max_retry: int = 4
     is_ablation: bool = False
     contract_only: bool = True
-    debug_max_trials: int = 30
+    debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
     # non-golden mode (no golden TB fallback). The self-generated TB is the only
     # oracle there, so a single blind retry is too few for complex problems
     # (e.g. ArchXBench). Each retry feeds back the accumulated lint errors.
     tb_lint_max_retry: int = 4
-    # Local iterations budget given to each player in the consensus game.
-    # Set to 0 to disable the consensus phase entirely.
-    consensus_max_local_iterations: int = 3
+    # Bounded repair loop that aligns a composition node's inline child
+    # behavioral model against child_assumes SVA (via a mock-DUT + Verilator
+    # check) BEFORE the TB is used to gate the real glue RTL. No-op when the
+    # contract carries no child_assumes.
+    tb_align_max_trials: int = 15
+    # TBEditor gives up early if the property-violation count doesn't improve
+    # for this many consecutive rounds — a separate cutoff from
+    # tb_align_max_trials. Observed live (booth_reset_coherent): TBEditor
+    # stopped at trial 6/15 via stall detection, never exhausting the trial
+    # budget, so this (not tb_align_max_trials) is the lever that actually
+    # bounds how much repair the alignment pass gets to attempt.
+    tb_align_stall_rounds: int = 2
 
 
 @dataclass(frozen=True)
@@ -49,9 +100,7 @@ class TopAgentResult:
     input_tokens: int = 0
     output_tokens: int = 0
     error: str | None = None
-    # Consensus game verdict — populated as the final step of run().
-    consensus_reached: bool = False
-    consensus_lessons: str = ""
+    usage_breakdown: dict | None = None
 
 
 class TopAgent:
@@ -229,41 +278,46 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None,
         golden_rtl_blackbox_path: str | None,
-    ) -> Tuple[bool, str, int, int, bool, str]:
+        contract_sva: list[dict] | None = None,
+        child_assumes: dict | None = None,
+        child_rtl: dict[str, str] | None = None,
+    ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
         Returns ``(is_sim_pass, rtl_code, input_tokens, output_tokens,
-        consensus_reached, consensus_lessons)``.  The consensus game is the
-        repair step — RTLEditor no longer runs directly here.
+        usage_breakdown_dict)``. The repair step is the standard RTLEditor debug
+        loop; ``is_sim_pass`` (the self-TB verdict) is the per-node escalation
+        signal consumed by the DAG OR-node.
+
+        ``child_rtl`` (module_name -> real, already-verified RTL source):
+        when given, TBGenerator instantiates these children directly instead
+        of writing an inline behavioral stand-in, and the mock-DUT/TBEditor
+        alignment pass is skipped entirely (there is no invented model to
+        align — the TB wires real RTL). Only meaningful for children also
+        present in ``child_assumes`` (their prefixed port names come from
+        there); a name in ``child_rtl`` but not ``child_assumes`` is ignored.
         """
         architect = ArchitectAgent(self.cfg)
         tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
         sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
-        # RTLEditor runs only inside the consensus game (as the RTL-player).
-        tracked_models = [
-            architect._agent.model,
-            tb_gen._agent.model,
-            rtl_gen._agent.model,
-        ]
+        rtl_edit = RTLEditor(self.cfg, sim_reviewer=sim_reviewer, max_trials=int(self.config.debug_max_trials))
 
-        def usage_totals() -> Tuple[int, int]:
-            total_in = 0
-            total_out = 0
-            for model in tracked_models:
-                input_tokens, output_tokens = get_model_usage(model)
-                total_in += input_tokens
-                total_out += output_tokens
-            return total_in, total_out
+        def build_breakdown() -> UsageBreakdown:
+            return UsageBreakdown(
+                architect=get_model_usage(architect._agent.model),
+                tb_gen=get_model_usage(tb_gen._agent.model),
+                rtl_gen=get_model_usage(rtl_gen._agent.model),
+                rtl_edit=get_model_usage(rtl_edit._agent.model),
+            )
 
         def finish(
             is_sim_pass: bool,
             rtl_code: str,
-            consensus_reached: bool = False,
-            lessons: str = "",
-        ) -> Tuple[bool, str, int, int, bool, str]:
-            input_tokens, output_tokens = usage_totals()
-            return is_sim_pass, rtl_code, input_tokens, output_tokens, consensus_reached, lessons
+        ) -> Tuple[bool, str, int, int, dict | None]:
+            breakdown = build_breakdown()
+            total_in, total_out = breakdown.total
+            return is_sim_pass, rtl_code, total_in, total_out, breakdown.to_dict()
 
         architect.reset()
         contract_json = await self._build_contract_json(
@@ -272,8 +326,25 @@ class TopAgent:
             golden_tb_path=golden_tb_path,
             output_dir_per_run=output_dir_per_run,
         )
+        # Inject orchestrator-supplied contract SVA and child assumes into the
+        # contract so they flow to all downstream agents as first-class fields.
+        if contract_sva or child_assumes:
+            try:
+                _cobj = json.loads(contract_json)
+                if contract_sva:
+                    _cobj["contract_sva"] = contract_sva
+                if child_assumes:
+                    _cobj["child_assumes"] = child_assumes
+                if child_rtl:
+                    for _name in child_rtl:
+                        if _name in _cobj.get("child_assumes", {}):
+                            _cobj["child_assumes"][_name]["rtl_available"] = True
+                contract_json = json.dumps(_cobj, indent=2) + "\n"
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
+            except Exception:  # noqa: BLE001
+                pass
         try:
-            contract_obj = __import__("json").loads(contract_json)
+            contract_obj = json.loads(contract_json)
             module_name = str(contract_obj.get("module_name") or "TopModule")
         except Exception:  # noqa: BLE001
             module_name = "TopModule"
@@ -296,6 +367,7 @@ class TopAgent:
         tb_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
         testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
         testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+        testbench = _append_child_rtl(testbench, child_rtl)
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
         # If we were given a golden TB and the LLM accidentally broke its syntax,
@@ -304,6 +376,7 @@ class TopAgent:
         if golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
             golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
             golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
+            golden_text = _append_child_rtl(golden_text, child_rtl)
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
             testbench = golden_text
         elif not golden_tb_path:
@@ -318,9 +391,12 @@ class TopAgent:
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
-                tb_gen.set_tb_lint_error(lint_log=tb_lint_excerpt, previous_tb=testbench)
+                tb_gen.set_tb_lint_error(
+                    lint_log=_augment_lint_excerpt(tb_lint_excerpt), previous_tb=testbench
+                )
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
                 testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+                testbench = _append_child_rtl(testbench, child_rtl)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
 
@@ -354,7 +430,7 @@ class TopAgent:
                     "avoid static variable initializers in function/task bodies, and avoid "
                     "SVA temporal operators (##, $past with non-constant delays)."
                 )
-                return finish(False, "", lessons=tb_lint_lesson)
+                return finish(False, "")
         try:
             self._write_output(
                 output_dir_per_run=output_dir_per_run,
@@ -368,6 +444,65 @@ class TopAgent:
             )
         except Exception:  # noqa: BLE001
             pass
+
+        # TB alignment pass (composition nodes only): before the TB is used to
+        # gate the real glue RTL, verify its inline child behavioral model
+        # actually satisfies child_assumes SVA, using a mock DUT + Verilator —
+        # independent of whatever the (not-yet-correct) glue RTL does. A TB
+        # bug here would otherwise silently poison the self-TB gate: either
+        # penalizing correct glue RTL, or letting broken glue RTL pass because
+        # the TB's child model never exercised the violated property.
+        #
+        # Skipped when child_rtl is given: the TB already wires REAL,
+        # already-verified child RTL (see _append_child_rtl above) instead of
+        # an inline behavioral stand-in, so there is no invented model to
+        # align — child_assumes is only used above for prompt guidance (drive
+        # instantiation, not a stand-in) and for contract_sva's assert side.
+        if child_assumes and not child_rtl:
+            # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
+            # so a post-mortem can attribute a defect to TBGenerator's own
+            # draft vs. something TBEditor introduced/failed to resolve while
+            # patching — otherwise unanswerable once tb.sv is overwritten below.
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_before_align.sv", content=testbench)
+            tb_editor = TBEditor(
+                self.cfg,
+                max_trials=int(self.config.tb_align_max_trials),
+                stall_rounds=int(self.config.tb_align_stall_rounds),
+            )
+            aligned, aligned_tb, tb_align_trials, tb_align_log = await tb_editor.chat(
+                contract_json=contract_json,
+                tb_code=testbench,
+                output_dir_per_run=str(output_dir_per_run),
+            )
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_align_log.txt", content=tb_align_log + "\n")
+            # Structured, machine-readable assurance record. The free-text log
+            # alone cannot answer "was the TB's child model actually verified
+            # against child_assumes?" — downstream consumers (gating policy,
+            # stage evals, triage) need the verdict, not a narrative. aligned
+            # False here means the self-TB gate is running on an UNVERIFIED
+            # child model; the certificate consumer can decide what to do
+            # with that, but it must be visible.
+            self._write_output(
+                output_dir_per_run=output_dir_per_run,
+                file_name="tb_align_verdict.json",
+                content=json.dumps(
+                    {
+                        "aligned": bool(aligned),
+                        "trials_used": int(tb_align_trials),
+                        "max_trials": int(self.config.tb_align_max_trials),
+                        "log_tail": tb_align_log[-2000:],
+                    },
+                    indent=2,
+                ) + "\n",
+            )
+            if aligned_tb:
+                testbench = aligned_tb
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            if not aligned:
+                logger.warning(
+                    "TB did not fully align with child_assumes after %d trial(s) (continuing with best effort): %s",
+                    tb_align_trials, tb_align_log,
+                )
 
         rtl_gen.reset()
         rtl_path = str(output_dir_per_run / "rtl.sv")
@@ -414,9 +549,10 @@ class TopAgent:
         sim_mismatch_cnt = 0
         did_rtl_regen_after_mismatch = False
         did_fallback_to_golden_tb = False
+        remaining_debug_trials = int(self.config.debug_max_trials)
 
-        # Simulation + repair loop.  The consensus game is the repair step;
-        # RTLEditor no longer runs here directly.
+        # Simulation + repair loop. The repair step is the standard trace-based
+        # RTLEditor debug loop; the leaf's is_sim_pass is the escalation signal.
         for _ in range(max(1, int(self.config.sim_max_retry))):
             is_sim_pass, sim_mismatch_cnt, sim_log = await asyncio.to_thread(sim_reviewer.review)
             if is_sim_pass:
@@ -471,10 +607,10 @@ class TopAgent:
                     "generates incorrectly. Clarify bit-widths, operator types, and "
                     "Verilator-compatible constructs."
                 )
-                return finish(False, rtl_code, lessons=compile_lesson)
+                return finish(False, rtl_code)
 
             # Give the Coder one shot to regenerate RTL from the failure log before
-            # handing off to the consensus game.  This fixes systematic
+            # handing off to the trace-based debugger.  This fixes systematic
             # contract/timing misunderstandings faster than local patching.
             if not did_rtl_regen_after_mismatch:
                 did_rtl_regen_after_mismatch = True
@@ -508,41 +644,28 @@ class TopAgent:
                 except Exception:  # noqa: BLE001
                     pass
 
-            # Consensus game — the repair step.  RTLEditor (RTL-player) and
-            # TBReviewer (TB-player) run in isolation inside the game.
-            # Snapshot the pre-game state for diagnostics.
+            # Standard repair step: trace-based RTLEditor debug loop.
+            # Snapshot the pre-debug state for diagnostics (the leaf harvests these).
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl_before_debug.sv", content=rtl_code)
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="sim_failed_log.json", content=sim_log)
 
-            max_iters = int(self.config.consensus_max_local_iterations)
-            if max_iters <= 0:
+            if remaining_debug_trials <= 0:
                 return finish(False, rtl_code)
 
-            game = ConsensusGame(self.cfg)
-            try:
-                verdict = await game.run(
-                    frozen_rtl=rtl_code,
-                    frozen_tb=testbench,
-                    contract_json=contract_json,
-                    module_name=module_name,
-                    output_dir=output_dir_per_run / "consensus",
-                    max_local_iterations=max_iters,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("ConsensusGame raised %s: %s", type(exc).__name__, exc)
-                return finish(False, rtl_code)
+            rtl_edit.reset()
+            is_sim_pass, rtl_code, used_trials, _edit_justification = await rtl_edit.chat(
+                spec=(self._contract_only_context(contract_json) if self.config.contract_only else spec),
+                output_dir_per_run=str(output_dir_per_run),
+                sim_failed_log=sim_log,
+                sim_mismatch_cnt=sim_mismatch_cnt,
+                contract_json=contract_json,
+                max_trials=remaining_debug_trials,
+            )
+            remaining_debug_trials = max(0, remaining_debug_trials - int(used_trials))
+            if is_sim_pass:
+                return finish(True, rtl_code)
 
-            committed_rtl = verdict.committed_rtl if verdict.committed_rtl.strip() else rtl_code
-            committed_tb = verdict.committed_tb if verdict.committed_tb.strip() else testbench
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl.sv", content=committed_rtl)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=committed_tb)
-            rtl_code = committed_rtl
-
-            # Final sim check with committed pair.
-            is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
-            return finish(is_sim_pass, rtl_code, verdict.reached, verdict.lessons)
-
-        # Reached if every loop iteration returned early via pass/fallback.
+        # Last check, in case the final edit improved but didn't re-run.
         is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
         return finish(is_sim_pass, rtl_code)
 
@@ -567,6 +690,9 @@ class TopAgent:
         output_dir_per_run: Path,
         golden_tb_path: str | None = None,
         golden_rtl_blackbox_path: str | None = None,
+        contract_sva: list[dict] | None = None,
+        child_assumes: dict | None = None,
+        child_rtl: dict[str, str] | None = None,
     ) -> TopAgentResult:
         output_dir_per_run = output_dir_per_run.expanduser().resolve()
         output_dir_per_run.mkdir(parents=True, exist_ok=True)
@@ -583,8 +709,7 @@ class TopAgent:
         rtl_code = ""
         input_tokens = 0
         output_tokens = 0
-        consensus_reached = False
-        consensus_lessons = ""
+        usage_breakdown: dict | None = None
         error: str | None = None
 
         try:
@@ -598,13 +723,15 @@ class TopAgent:
                     rtl_code,
                     input_tokens,
                     output_tokens,
-                    consensus_reached,
-                    consensus_lessons,
+                    usage_breakdown,
                 ) = await self._run_instance(
                     spec=spec,
                     output_dir_per_run=output_dir_per_run,
                     golden_tb_path=golden_tb_path,
                     golden_rtl_blackbox_path=golden_rtl_blackbox_path,
+                    contract_sva=contract_sva,
+                    child_assumes=child_assumes,
+                    child_rtl=child_rtl,
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001
@@ -620,6 +747,5 @@ class TopAgent:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             error=error,
-            consensus_reached=consensus_reached,
-            consensus_lessons=consensus_lessons,
+            usage_breakdown=usage_breakdown,
         )

@@ -1,11 +1,84 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, AsyncGenerator
 
 from agentscope.agent import ReActAgent
 from agentscope.message import ToolUseBlock
 from agentscope.tool import Toolkit, ToolResponse
+
+# Fullwidth vertical bar '｜' (U+FF5C) — the separator observed in leaked
+# chat-template/tool-call special tokens from a DeepSeek-family model served
+# via OpenRouter (e.g. "<｜DSML｜tool_calls>...<｜DSML｜invoke name=...>").
+# When the upstream model/gateway fails to emit a structured tool call, this
+# literal template text lands in the assistant message's plain `content`
+# field instead — ReActAgent cannot distinguish it from a genuine answer, so
+# it silently becomes the "final" response for that turn, wasting it. This is
+# a serving-layer artifact (not something any local formatter choice
+# controls: formatters only shape the OUTBOUND request; response/tool-call
+# parsing happens entirely inside agentscope's model client, with zero
+# model-family branching) affecting every agent in this package equally,
+# since all of them (RTLEditor/Debugger, TBEditor, ArchitectAgent,
+# BooleanProoferAgent, AsserterAgent, RTLGenerator, TBGenerator) construct
+# their SafeReActAgent via the identical make_openai_model/make_formatter
+# pair. Fixed once, here, benefits all of them.
+_LEAK_PIPE = "｜"
+_LEAK_KEYWORD_RE = re.compile(
+    rf"{_LEAK_PIPE}[^\n]{{0,60}}(tool_calls|invoke|parameter)", re.IGNORECASE,
+)
+
+
+def _looks_like_leaked_tool_call(content: str) -> bool:
+    """True iff `content` looks like leaked chat-template markup rather than
+    a genuine natural-language (or SystemVerilog) answer.
+
+    Deliberately conservative: the fullwidth pipe essentially never occurs in
+    legitimate text or SV (which may contain the ordinary ASCII bitwise-or
+    `|`, never `｜`), so requiring it to co-occur near a tool-call-shaped
+    keyword keeps false positives near zero — a stray unicode character
+    alone is not enough to trip this.
+    """
+    if not content or _LEAK_PIPE not in content:
+        return False
+    return bool(_LEAK_KEYWORD_RE.search(content))
+
+
+def _leak_repair_response(response: str) -> ToolResponse | None:
+    """If `response` looks like a leaked tool-call, return the corrective
+    "not really finished" ToolResponse; otherwise None.
+
+    The {"success": False, "response_msg": None} shape is agentscope's own
+    existing "the conversation is NOT actually finished" signal (used today
+    by ReActAgent's structured-output ValidationError branch) — it does not
+    terminate the ReAct loop; it's added to memory as an ordinary tool
+    result, so the model sees the corrective text on its very next turn. Same
+    idiom GuidingToolkit.call_tool_function already uses for a different
+    malformed-model-action class (hallucinated tool names).
+
+    Re-prompting (not regex-extracting the leaked call) is deliberate: the
+    exact leaked token spelling is a snapshot of one serving-layer bug, not a
+    stable contract, and a single confirmed occurrence doesn't yet justify
+    parsing complexity tied to today's exact shape. If recurrence with a
+    stable, parseable shape is later confirmed, extraction could be layered
+    in as a fallback tried before this re-prompt — not built now.
+    """
+    if not _looks_like_leaked_tool_call(response):
+        return None
+    return ToolResponse(
+        content=[{
+            "type": "text",
+            "text": (
+                "ToolError: your previous response contained garbled special-token/"
+                "template text instead of a valid tool call or a plain answer (a "
+                "serving-layer formatting glitch, not something the user sent). "
+                "Re-issue your intended action using the actual tool-call mechanism "
+                "(not by writing markup/tags in your reply text). If you intended to "
+                "finish, call generate_response again with a plain-text response."
+            ),
+        }],
+        metadata={"success": False, "response_msg": None},
+    )
 
 
 class GuidingToolkit(Toolkit):
@@ -59,6 +132,9 @@ class SafeReActAgent(ReActAgent):
                 response = json.dumps(response, ensure_ascii=False)
             except Exception:  # noqa: BLE001
                 response = str(response)
+        repair = _leak_repair_response(response)
+        if repair is not None:
+            return repair
         return super().generate_response(response=response, **kwargs)
 
 
