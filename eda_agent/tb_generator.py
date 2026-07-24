@@ -20,6 +20,23 @@ produce clear, minimal logs when failures happen.
 
 You always generate syntactically-correct SystemVerilog.
 
+Oracle independence (critical — a testbench that violates this can pass a functionally
+wrong DUT and no one will notice):
+- Compute each expected output from the contract's DECLARATIVE input/output relationship
+  (e.g. `product = A * B`, `sum = A + B`), using plain SystemVerilog operators — NOT by
+  re-implementing the DUT's own internal step-by-step algorithm (registers, iteration
+  counters, accumulate-and-shift, FSM states, recoding), even when `functional_summary`
+  describes that internal implementation in detail. `functional_summary` documents HOW the
+  DUT is built inside; it is not what your expected-value model should replay.
+- The reason this matters: a shadow model that mirrors the DUT's own algorithm will agree
+  with a DUT that has a bug in that exact algorithm, by construction — two copies of the
+  same mistake produce a testbench that always "passes" a broken design. Only a model
+  derived from the plain operator semantics is an independent check.
+- If you additionally write any secondary/"double-check" comparison against ground truth,
+  it MUST feed into the same mismatch counter used for the pass/fail verdict. Never write
+  a ground-truth comparison as a print-only note that doesn't affect whether the testbench
+  reports PASS or FAIL — an independent check that can't fail the run is worthless.
+
 Simulator target (important):
 - The harness uses Verilator. Keep the testbench compatible with Verilator's SystemVerilog support.
 
@@ -157,7 +174,14 @@ Testbench requirements:
      same cycle the stimulus is applied while comparing every cycle — this mismatches on every
      cycle of the entire latency window even though the DUT is correct. The expected model must
      track the DUT's real cycle-by-cycle timing, not jump to the answer early.
-3) Count mismatches between DUT outputs and expected outputs.
+   - `f(inputs)` itself must be the contract's plain declarative relationship (see "Oracle
+     independence" above) — e.g. `A * B` for a multiplier — never a re-implementation of the
+     DUT's internal algorithm. Getting the TIMING of the reveal right (previous bullet) and
+     getting the VALUE right (this one) are both required and are independent failure modes.
+3) Count mismatches between DUT outputs and expected outputs. This is the ONLY mismatch
+   counter — if you write any additional ground-truth comparison anywhere in the testbench,
+   route its result into this same counter; do not print it as a side note that leaves the
+   pass/fail verdict unaffected.
 4) Logging (keep logs small):
    - Do NOT print on every match.
    - On mismatch, display inputs, DUT outputs, and expected outputs.
