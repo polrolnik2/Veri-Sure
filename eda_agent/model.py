@@ -253,7 +253,21 @@ def _is_llama_model(model_name: str) -> bool:
 
 
 def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
-    client_args: dict[str, Any] = {}
+    # Raise the OpenAI SDK's retry count (default 2) so rate-limit (429) and
+    # transient 5xx/connection errors are ridden out via the SDK's built-in
+    # exponential backoff + jitter (which also honors Retry-After /
+    # x-ratelimit-reset headers). The default 2 only absorbs brief bursts; on a
+    # shared free-tier key running many parallel problems, sustained throttling
+    # outlasts 2 retries and surfaces as a spurious leaf failure — or crashes the
+    # run at the unwrapped Architect/Proposer calls. 8 retries ~= up to a minute
+    # of cumulative backoff, enough to cross a per-minute free-tier window.
+    # Overridable via OPENAI_MAX_RETRIES.
+    import os as _os
+    try:
+        _max_retries = int(_os.environ.get("OPENAI_MAX_RETRIES", "8"))
+    except ValueError:
+        _max_retries = 8
+    client_args: dict[str, Any] = {"max_retries": _max_retries}
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
