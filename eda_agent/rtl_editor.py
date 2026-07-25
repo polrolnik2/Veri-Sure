@@ -275,6 +275,15 @@ class _EditSession:
     trace_report: Dict[str, Any] | None = None
     blocks_by_id: Dict[str, RtlBlock] | None = None
     last_fail_time: int | None = None
+    # The full result dict of the MOST RECENT replace_block()/run_simulation()
+    # call, regardless of whether it was accepted or rolled back. Set by the
+    # tool wrappers (_tool_replace_block/_tool_run_simulation), read by
+    # chat()'s "continue debugging" re-prompt so the model is handed the
+    # concrete outcome of what it just tried instead of a bare "keep going" —
+    # relying solely on the model re-deriving/recalling this from its own
+    # conversation history is not good feedback, especially after several
+    # rounds of exploration in between.
+    last_action_result: Dict[str, Any] | None = None
 
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
@@ -489,6 +498,44 @@ class _EditSession:
         return self._judge_replace_action_execution(old_file_content=old_file_content)
 
 
+def _render_continue_debug_prompt(session: "_EditSession") -> str:
+    """Build the re-prompt sent after each debug round.
+
+    Explicitly restates the outcome of the LAST action (accepted / rolled
+    back, and why) and the current accepted baseline (mismatch count, first
+    failure time), instead of a bare "keep going" that relies on the model
+    correctly recalling/re-deriving this from its own conversation history —
+    not reliable across a long debug session with many intervening
+    read_block/list_suspect_blocks calls, and especially not if the model
+    just tried (incorrectly) to finish via generate_response, which on its
+    own changes nothing about the actual simulation state.
+    """
+    last = session.last_action_result or {}
+    last_action_block = ""
+    if last:
+        outcome = "ACCEPTED" if last.get("is_action_executed") else "ROLLED BACK / REJECTED"
+        detail = last.get("error_msg") or last.get("accept_reason") or ""
+        last_action_block = (
+            f"Your last action's outcome: {outcome}"
+            + (f" — {detail}" if detail else "")
+            + f"\n(is_sim_pass={last.get('is_sim_pass')}, sim_mismatch_cnt={last.get('sim_mismatch_cnt')})\n\n"
+        )
+
+    fail_time_note = (
+        f", first failure at time {session.last_fail_time}"
+        if session.last_fail_time is not None else ""
+    )
+
+    return (
+        f"{last_action_block}"
+        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n\n"
+        "Continue debugging. Preserve the contract and module interface. If mismatches remain, "
+        "pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) "
+        "once, then run_simulation(). Do NOT call generate_response until run_simulation() reports "
+        "is_sim_pass=true with 0 mismatches — an unverified claim of success is not accepted as done."
+    )
+
+
 class RTLEditor:
     def __init__(
         self,
@@ -574,6 +621,7 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             # Tooling should never crash due to trace refresh; keep sim result.
             pass
+        self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
@@ -585,6 +633,7 @@ class RTLEditor:
         # so the agent can re-ground itself quickly.
         if self._session.trace_report:
             result.setdefault("trace_summary", self._session.trace_summary())
+        self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def chat(
@@ -771,7 +820,7 @@ class RTLEditor:
             response = await self._agent(
                 Msg(
                     "user",
-                    "Continue debugging. Preserve the contract and module interface. If mismatches remain, pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) once, then run_simulation().",
+                    _render_continue_debug_prompt(self._session),
                     role="user",
                 )
             )
