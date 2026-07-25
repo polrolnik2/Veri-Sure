@@ -127,6 +127,32 @@ class SafeReActAgent(ReActAgent):
 
     def generate_response(self, response: str, **kwargs: Any) -> ToolResponse:  # type: ignore[override]
         """Finish the conversation with a plain string response."""
+        if response is None:
+            # A model call with response=null (JSON null; runtime doesn't
+            # enforce the `str` type hint, so this reaches here rather than
+            # raising) is NOT a valid final answer. The `isinstance` coercion
+            # below would silently stringify it via json.dumps(None) ==
+            # "null" and let the conversation terminate as if that were real
+            # content. Confirmed live: a downstream Coder call whose prompt
+            # was built from exactly this 4-character string produced a
+            # placeholder module instead of real RTL ("No contract JSON...
+            # previous response was 'null' which failed parsing") -- the
+            # vestigial-glue structural check caught the placeholder, but
+            # only after an entire glue-generation attempt was burned on it.
+            # Treat it the same way `_leak_repair_response` treats garbled
+            # tool-call leakage: a corrective re-prompt, not a silently
+            # accepted answer.
+            return ToolResponse(
+                content=[{
+                    "type": "text",
+                    "text": (
+                        "ToolError: generate_response was called with response=null. "
+                        "This is not a valid final answer. Call generate_response "
+                        "again with your actual answer as the response argument."
+                    ),
+                }],
+                metadata={"success": False, "response_msg": None},
+            )
         if not isinstance(response, str):
             try:
                 response = json.dumps(response, ensure_ascii=False)
