@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Tuple
+import json
+import re
+from typing import List, Optional, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
@@ -72,6 +74,26 @@ Your previous response could not be parsed by the program.
 
 Parser error:
 {parse_error}
+
+Previous response (truncated):
+<bad_output>
+{bad_output}
+</bad_output>
+
+Please output again, strictly following the required tags in <output_format>, and output NOTHING else.
+Do NOT output JSON. Do NOT wrap code in Markdown code fences (```).
+"""
+
+PLACEHOLDER_REPAIR_PROMPT = r"""
+Your previous response does not look like a real implementation attempt: {reason}
+
+The contract JSON was already provided to you at the start of this conversation and is repeated below for reference -- it is NOT missing.
+
+<contract_json>
+{contract_json}
+</contract_json>
+
+Write the ACTUAL RTL module implementing this contract now. Do NOT output a placeholder, a stub, or a request for more information -- implement the real module per the contract above.
 
 Previous response (truncated):
 <bad_output>
@@ -174,6 +196,63 @@ Concise rationale + key assumptions (no step-by-step chain-of-thought)
 Complete synthesizable SystemVerilog RTL module
 </module>
 """
+
+
+def looks_like_placeholder(rtl_code: str, contract_json: str) -> Optional[str]:
+    """Cheap structural sanity check: does `rtl_code` look like a genuine
+    implementation attempt against `contract_json`, or a stub/refusal (e.g.
+    "Placeholder module - contract JSON not yet provided")?
+
+    This is NOT a correctness check -- the simulation/debug loop downstream
+    still verifies actual behavior. It exists because `chat()`'s retry loop
+    previously accepted ANY response that (a) had a non-empty <module> block
+    and (b) passed a bare `verilator --lint-only` syntax check -- neither of
+    which distinguishes a real (if buggy) attempt from a generic stub module
+    the model emits when it (incorrectly) believes the contract is missing.
+    Confirmed live on booth_multiplier (2026-07-25 sweep, job 7799101): 5 of
+    13 glue attempts (4, 6, 7, 8, 12) produced exactly this stub -- the
+    Coder's own conversation history DOES contain <contract_json> from the
+    very first turn, so this is the model losing track under a long
+    conversation / cheap-model context confusion, not a plumbing gap -- but
+    downstream nothing caught it, so the debug loop then burned its full
+    trial budget trying to fix a module that was never attempting the real
+    function, discarding a legitimately-reasonable earlier draft along the
+    way (see rtl_regen_after_mismatch.sv overwriting a good rtl_code2 in
+    top_agent.py).
+
+    Returns a human-readable reason string if `rtl_code` looks like a stub,
+    else ``None``. Deliberately lenient (a real module name match with SOME
+    expected ports present is accepted) -- the goal is only to catch "the
+    model didn't even try," never to reject a genuine but imperfect attempt
+    (which the normal syntax/simulation/debug loop already handles).
+    """
+    try:
+        contract = json.loads(contract_json)
+    except Exception:  # noqa: BLE001
+        return None  # can't validate without a parseable contract; don't block
+
+    expected_name = contract.get("module_name")
+    name_match = re.search(r"\bmodule\s+(\w+)", rtl_code)
+    actual_name = name_match.group(1) if name_match else None
+    if expected_name and actual_name and actual_name != expected_name:
+        return f"module name mismatch: expected '{expected_name}', got '{actual_name}'"
+
+    expected_ports = [
+        p.get("name") for p in contract.get("io", [])
+        if isinstance(p, dict) and p.get("name")
+    ]
+    if expected_ports:
+        present = sum(
+            1 for name in expected_ports
+            if re.search(r"\b" + re.escape(name) + r"\b", rtl_code)
+        )
+        if present < max(1, len(expected_ports) // 2):
+            return (
+                f"only {present}/{len(expected_ports)} expected contract ports "
+                "appear anywhere in the generated module -- looks like a stub, "
+                "not a real implementation attempt"
+            )
+    return None
 
 
 class RTLOutputFormat(BaseModel):
@@ -303,6 +382,15 @@ class RTLGenerator:
             if resp_obj.reasoning.startswith("Parse Error"):
                 repair = PARSE_REPAIR_PROMPT.format(
                     parse_error=resp_obj.reasoning,
+                    bad_output=clip_text(response_text, max_chars=6000),
+                )
+                prompt = f"{repair}\n\n{order}"
+                continue
+            placeholder_reason = looks_like_placeholder(resp_obj.module, contract_json)
+            if placeholder_reason:
+                repair = PLACEHOLDER_REPAIR_PROMPT.format(
+                    reason=placeholder_reason,
+                    contract_json=contract_json,
                     bad_output=clip_text(response_text, max_chars=6000),
                 )
                 prompt = f"{repair}\n\n{order}"
