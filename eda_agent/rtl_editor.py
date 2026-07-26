@@ -192,6 +192,18 @@ Rules:
      `io_behavior` is a BLACK-BOX description (no internal architecture terms); do NOT use
      a child's `functional_summary` (if present) to reason about its behavior — that field
      describes the child's own internal RTL implementation, not its observable interface.
+   - VESTIGIAL GLUE is a rejection criterion unique to composition modules, and it is
+     checked MECHANICALLY BEFORE any simulation runs: every child-facing INPUT port (a
+     port carrying a child's RESULT into this module) must be READ somewhere in the body.
+     A glue module that declares such a port and never references it has recomputed that
+     child's function inline instead of composing through it, and is rejected however
+     well it simulates.
+   - So if you are told the composition failed and you cannot find a functional bug, check
+     this FIRST: for each child-facing input port, find where its value is consumed. If a
+     port has no consumer, the fix is to route it into the external output (or sibling
+     child input) it belongs to and DELETE the inline logic that was recomputing it —
+     not to add more logic. Deleting a redundant computation is a valid, often correct fix
+     here, which is not true when debugging a leaf module.
 
 When you are done (simulation passes), finish by calling generate_response with a
 structured plain-string response in EXACTLY this format (use literal newlines between fields):
