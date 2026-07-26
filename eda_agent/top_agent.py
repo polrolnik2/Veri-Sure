@@ -281,6 +281,7 @@ class TopAgent:
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
+        external_tb: str | None = None,
     ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
@@ -365,15 +366,48 @@ class TopAgent:
         tb_gen.reset()
         tb_gen.set_golden_tb_path(golden_tb_path)
         tb_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
-        testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
-        testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
-        testbench = _append_child_rtl(testbench, child_rtl)
-        self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-        self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
+
+        if external_tb is not None:
+            # An oracle was supplied, so generate nothing: this TB IS the gate.
+            # Used for composition (glue) nodes, which are handed the parent's
+            # own original-interface TB. Together with `child_rtl` (the real,
+            # already-certified children appended below) the sim/debug loop
+            # downstream is exactly the composed-simulation check — the glue is
+            # written and repaired against the same assembly and the same
+            # oracle that decides whether it certifies.
+            #
+            # This is NOT `golden_tb_path`, which still regenerates a TB and
+            # only falls back to the golden text on a syntax error. Here the
+            # supplied text is authoritative and never redrawn, so there is no
+            # second, invented oracle anywhere in a composition's pipeline.
+            testbench = self._augment_dumpvars_with_dut_scope(external_tb, module_name=module_name)
+            testbench = _append_child_rtl(testbench, child_rtl)
+            interface = ""
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=output_dir_per_run / "tb.sv")
+            if not tb_ok:
+                # A supplied oracle that will not elaborate is a broken ORACLE,
+                # not a broken design. There is no repair path here (we must not
+                # rewrite the caller's gate), so surface it instead of letting
+                # the Coder burn its budget against an unusable testbench.
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt.txt", content=tb_lint_excerpt)
+                logger.error("Supplied external TB does not lint; aborting this attempt:\n%s", tb_lint_excerpt)
+                return finish(False, "")
+        else:
+            testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
+            testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+            testbench = _append_child_rtl(testbench, child_rtl)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
         # If we were given a golden TB and the LLM accidentally broke its syntax,
         # fall back to the original golden TB (plus our safe dumpvars augmentation).
         tb_path = output_dir_per_run / "tb.sv"
-        if golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
+        if external_tb is not None:
+            # Already linted above and authoritative by construction — neither
+            # the golden fallback nor the Verifier repair loop may touch it.
+            pass
+        elif golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
             golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
             golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
             golden_text = _append_child_rtl(golden_text, child_rtl)
@@ -693,6 +727,7 @@ class TopAgent:
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
+        external_tb: str | None = None,
     ) -> TopAgentResult:
         output_dir_per_run = output_dir_per_run.expanduser().resolve()
         output_dir_per_run.mkdir(parents=True, exist_ok=True)
@@ -732,6 +767,7 @@ class TopAgent:
                     contract_sva=contract_sva,
                     child_assumes=child_assumes,
                     child_rtl=child_rtl,
+                    external_tb=external_tb,
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001
