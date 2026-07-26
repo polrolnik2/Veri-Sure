@@ -267,7 +267,24 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
         _max_retries = int(_os.environ.get("OPENAI_MAX_RETRIES", "8"))
     except ValueError:
         _max_retries = 8
-    client_args: dict[str, Any] = {"max_retries": _max_retries}
+    # A per-request TIMEOUT. Without one the SDK waits indefinitely, so a single
+    # stalled request silently consumes a run's entire wall clock with no log
+    # output at all. Observed live (booth 7803027, 2026-07-26): 8+ minutes with
+    # one in-flight request and zero output, which read as a hang -- the job was
+    # cancelled on that assumption while it was in fact still progressing.
+    #
+    # This is a per-ATTEMPT bound, and max_retries above still applies, so a
+    # genuinely slow-but-alive call is retried rather than lost. Generous by
+    # default because reasoning models on ~20K-token composition prompts
+    # legitimately take minutes. Overridable via OPENAI_TIMEOUT_S.
+    try:
+        _timeout_s = float(_os.environ.get("OPENAI_TIMEOUT_S", "600"))
+    except ValueError:
+        _timeout_s = 600.0
+    client_args: dict[str, Any] = {
+        "max_retries": _max_retries,
+        "timeout": _timeout_s,
+    }
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
