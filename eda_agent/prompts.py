@@ -652,3 +652,139 @@ Rules:
 - Do NOT output JSON.
 - Do NOT wrap code in Markdown code fences (```).
 """
+
+
+# ---------------------------------------------------------------------------
+# GLUE (composition-node) few-shot examples.
+#
+# RTL_4_SHOT_EXAMPLES demonstrates four monolithic `TopModule` leaves. Measured
+# on a real composition prompt (booth/fp_adder, 2026-07-26): the assembled glue
+# coder prompt was 85,795 chars with FOUR leaf exemplars and ELEVEN total
+# mentions of glue guidance. Instructions said "you are a COMPOSITION NODE, do
+# not reimplement the children"; every worked example showed a self-contained
+# module implementing a spec end-to-end. Demonstrations win, and the observed
+# failure was exactly that: VESTIGIAL GLUE -- the module declares child-output
+# ports and never reads them, having recomputed the children's function inline.
+#
+# These exemplars demonstrate the opposite discipline: EVERY child output port
+# is consumed, and no child's function is recomputed.
+# ---------------------------------------------------------------------------
+GLUE_4_SHOT_EXAMPLES = r"""
+Here are worked examples of GLUE (composition) modules. Study what they do NOT
+do: they never recompute a child's function, and every child-facing OUTPUT port
+appears on the right-hand side of an assignment.
+
+<example_1>
+Contract: parent `acc_unit` composes child `adder` (child_assumes: adder).
+Child-facing ports: adder_a, adder_b (parent->child), adder_sum (child->parent).
+External: clk, rst, in_val, out_acc.
+
+<answer>
+module acc_unit (
+  input  logic        clk,
+  input  logic        rst,
+  input  logic [7:0]  in_val,
+  output logic [15:0] out_acc,
+  // child-facing
+  output logic [7:0]  adder_a,
+  output logic [7:0]  adder_b,
+  input  logic [15:0] adder_sum
+);
+  logic [15:0] acc_q;
+  // Drive the child's inputs.
+  assign adder_a = in_val;
+  assign adder_b = acc_q[7:0];
+  // CONSUME the child's output. The sum is NOT recomputed here.
+  always_ff @(posedge clk) begin
+    if (rst) acc_q <= '0;
+    else     acc_q <= adder_sum;
+  end
+  assign out_acc = acc_q;
+endmodule
+</answer>
+Note: `out_acc` is derived from `adder_sum`. Writing `acc_q <= acc_q + in_val`
+would be VESTIGIAL GLUE -- correct-looking, but the child is unused.
+</example_1>
+
+<example_2>
+Contract: parent `ctrl_dp` composes children `ctrl` and `dp`.
+Child-facing: ctrl_start, ctrl_done (child->parent), dp_en, dp_result (child->parent).
+External: clk, rst, start, done, result.
+
+<answer>
+module ctrl_dp (
+  input  logic        clk,
+  input  logic        rst,
+  input  logic        start,
+  output logic        done,
+  output logic [15:0] result,
+  // child-facing
+  output logic        ctrl_start,
+  input  logic        ctrl_done,
+  output logic        dp_en,
+  input  logic [15:0] dp_result
+);
+  // Route external control INTO the controller child.
+  assign ctrl_start = start;
+  // Sibling wiring: one child's output drives another child's input.
+  assign dp_en      = ctrl_done ? 1'b0 : ctrl_start;
+  // CONSUME both children's outputs on the external interface.
+  assign done       = ctrl_done;
+  assign result     = dp_result;
+endmodule
+</answer>
+Note: every child-facing INPUT (ctrl_done, dp_result) is read. A glue module
+that implemented its own FSM and its own datapath would leave them dangling.
+</example_2>
+
+<example_3>
+Contract: parent `gated_out` composes child `core`, and must suppress the
+child's output for one cycle after reset (a guarantee the child does not make).
+Child-facing: core_valid, core_data (child->parent).
+
+<answer>
+module gated_out (
+  input  logic        clk,
+  input  logic        rst,
+  output logic        valid,
+  output logic [7:0]  data,
+  // child-facing
+  input  logic        core_valid,
+  input  logic [7:0]  core_data
+);
+  logic started_q;
+  always_ff @(posedge clk) begin
+    if (rst) started_q <= 1'b0;
+    else     started_q <= 1'b1;
+  end
+  // Glue adds ONLY the missing guarantee (post-reset suppression) and
+  // otherwise passes the child's results straight through.
+  assign valid = core_valid & started_q;
+  assign data  = core_data;
+endmodule
+</answer>
+Note: the glue's job here is a one-bit qualifier. It does not re-derive `data`.
+</example_3>
+"""
+
+
+# Emitted LAST in the glue user message, so the composition obligation is the
+# most recent thing in context rather than buried ~21K tokens up. The port
+# checklist turns the vestigial-glue rejection into a generation-time
+# obligation instead of a post-hoc gate failure.
+GLUE_PORT_CHECKLIST_PROMPT = r"""
+BEFORE YOU WRITE THE MODULE — composition checklist (this node is GLUE):
+
+1. List every child-facing port whose direction is INPUT to this module
+   (these carry a child's RESULTS into your glue).
+2. For each one, name the external output or sibling child input it feeds.
+   If you cannot name a consumer for a child-facing input, your design is
+   WRONG: you have recomputed that child's function instead of using it.
+3. You may add registers, muxes, qualifiers and FSM logic to reconcile timing
+   or add guarantees the children do not make. You may NOT recompute anything
+   a child already produces.
+4. Do NOT instantiate child modules. They are connected externally by ports.
+
+A composition whose child-facing inputs are unread is rejected automatically by
+the harness before simulation, however plausible the RTL looks.
+"""

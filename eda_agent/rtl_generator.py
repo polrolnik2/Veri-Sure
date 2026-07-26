@@ -12,7 +12,13 @@ from pydantic import BaseModel
 from .agents import SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .prompts import FAILED_TRIAL_PROMPT, RTL_4_SHOT_EXAMPLES, TAG_ORDER_PROMPT
+from .prompts import (
+    FAILED_TRIAL_PROMPT,
+    GLUE_4_SHOT_EXAMPLES,
+    GLUE_PORT_CHECKLIST_PROMPT,
+    RTL_4_SHOT_EXAMPLES,
+    TAG_ORDER_PROMPT,
+)
 from .sim_reviewer import check_syntax
 from .utils import add_lineno, clip_text, extract_xml_tag, strip_markdown_code_fences
 
@@ -68,6 +74,71 @@ Child assumes mode (hierarchical decomposition):
   child mentions). That residual behavior must be IMPLEMENTED here as
   FSM/mux/register logic, not assumed to fall out of wiring.
 """
+
+
+# A composition node and a leaf have OPPOSITE success criteria: a leaf is
+# rewarded for implementing behaviour, a glue module is REJECTED for it.
+# Multiplexing both through one system prompt with an `if child_assumes`
+# paragraph is what produced an 85K-char glue prompt carrying four monolithic
+# exemplars and ~11 mentions of glue guidance. This is the composition-node
+# system prompt; it states the inverted objective first, not as a caveat.
+GLUE_SYSTEM_PROMPT = r"""
+You are Coder, writing the GLUE module of a hierarchical composition.
+
+Your module does NOT implement the design's function. Its children already do.
+Your only job is to WIRE them: route external inputs to child-facing inputs,
+route child-facing outputs to external outputs and to sibling children, and add
+the minimum reconciliation logic (registers, muxes, qualifiers, small FSMs)
+needed for the parent's contract_sva to hold.
+
+The single most common failure in this role is writing a correct-looking module
+that recomputes what a child already produces, leaving the child's output ports
+unread. That is called VESTIGIAL GLUE. It is detected mechanically and rejected
+before simulation, no matter how good the RTL is. Every child-facing INPUT port
+must be read.
+
+Toolchain note:
+- The harness uses Verilator. Keep RTL compatible with Verilator (standard
+  synthesizable SystemVerilog).
+
+Contract-only mode:
+- Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
+- <input_spec> and any testbench text are non-authoritative background and must
+  NOT override the contract.
+
+Contract SVA mode:
+- `contract_sva` properties are orchestrator-supplied assertions your glue MUST
+  satisfy, given the children behave as their `child_assumes` entries describe.
+
+Reading the children:
+- `child_assumes` is a dict keyed by child module name. Child-facing ports are
+  ALREADY in the contract `io`, prefixed with the child module name
+  (e.g. `booth_datapath_product`).
+- DO NOT instantiate child modules. They are connected externally via ports.
+- Use each child's `io_behavior`, `timing` and `corner_cases` to determine WHEN
+  its outputs are valid and HOW to sequence its control inputs. The formal
+  `properties` alone are a sparse, partial view and are not sufficient to design
+  correct glue.
+- Do NOT use a child's `functional_summary` — it describes that child's INTERNAL
+  implementation for its own RTL writer, not its observable interface.
+"""
+
+
+def _is_composition_contract(contract_json: str) -> bool:
+    """True when this coder call is for a GLUE node rather than a leaf.
+
+    Keyed on `child_assumes`, the same field the orchestrator injects and the
+    vestigial-glue checker keys on, so prompt selection and rejection criteria
+    cannot drift apart.
+    """
+    if not contract_json:
+        return False
+    try:
+        obj = json.loads(contract_json)
+    except (ValueError, TypeError):
+        return "child_assumes" in contract_json
+    return bool(isinstance(obj, dict) and obj.get("child_assumes"))
+
 
 PARSE_REPAIR_PROMPT = r"""
 Your previous response could not be parsed by the program.
@@ -277,10 +348,10 @@ class RTLGenerator:
     def reset(self):
         clear_memory_safely(self._agent)
 
-    def _new_agent(self, *, name: str) -> SafeReActAgent:
+    def _new_agent(self, *, name: str, composition: bool = False) -> SafeReActAgent:
         return SafeReActAgent(
             name=name,
-            sys_prompt=SYSTEM_PROMPT,
+            sys_prompt=GLUE_SYSTEM_PROMPT if composition else SYSTEM_PROMPT,
             model=make_openai_model(self._cfg),
             formatter=make_formatter(self._cfg.model),
             memory=InMemoryMemory(),
@@ -309,10 +380,16 @@ class RTLGenerator:
             text = f"{input_spec}\n{contract_json}".lower()
             return any(k in text for k in ["kmap", "k-map", "karnaugh"])
 
+        composition = _is_composition_contract(contract_json)
         parts: list[str] = [
             GENERATION_PROMPT.format(
                 input_spec=input_spec,
-                examples_prompt=RTL_4_SHOT_EXAMPLES,
+                # A glue node gets GLUE exemplars. Handing it the monolithic
+                # TopModule leaves demonstrates precisely the behaviour the
+                # vestigial-glue check rejects.
+                examples_prompt=(
+                    GLUE_4_SHOT_EXAMPLES if composition else RTL_4_SHOT_EXAMPLES
+                ),
                 contract_json=contract_json,
             )
         ]
@@ -323,6 +400,10 @@ class RTLGenerator:
         parts.extend(self.failed_trial)
         if self.generated_if:
             parts.append(IF_PROMPT.format(module_interface=self.generated_if))
+        if composition:
+            # LAST, deliberately: the composition obligation is otherwise buried
+            # ~21K tokens up, behind a port list that is 35% of the prompt.
+            parts.append(GLUE_PORT_CHECKLIST_PROMPT)
         return [Msg("user", "\n\n".join(parts), role="user")]
 
     def get_order_prompt_messages(self) -> List[Msg]:
@@ -370,6 +451,13 @@ class RTLGenerator:
         self.reset()
         self.generated_tb = testbench
         self.generated_if = interface
+
+        # The agent is constructed in __init__, before any contract is known, so
+        # it starts on the LEAF system prompt. A composition node needs the
+        # inverted objective ("do not implement, wire") in its SYSTEM role, not
+        # merely mentioned in the user turn -- rebuild it here.
+        if _is_composition_contract(contract_json):
+            self._agent = self._new_agent(name="Coder", composition=True)
 
         init = self.get_init_prompt_messages(input_spec, contract_json=contract_json)[0].content
         order = self.get_order_prompt_messages()[0].content
