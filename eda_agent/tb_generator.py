@@ -57,6 +57,18 @@ Contract SVA mode:
 - Treat them as hard specification constraints alongside the functional_summary.
 - Design your testbench checks to be consistent with these SVA properties.
 
+SystemVerilog declaration rule (this silently destroys testbenches):
+- NEVER declare a variable WITH an initialiser inside an always/initial block
+  unless you mark it `automatic`. A procedural declaration with an initialiser
+  is STATIC: the initialiser runs ONCE at time 0, not on each execution.
+- WRONG:   always @(posedge clk) begin ... my_t x = queue.pop_front(); ... end
+           (pop_front() runs once, against an empty queue; every later
+            comparison then uses that one stale value and the check is dead)
+- RIGHT:   always @(posedge clk) begin ... automatic my_t x = queue.pop_front(); ... end
+- This has already nullified a real testbench: every product was compared
+  against a constant 0, so correct designs failed and the defect was invisible
+  in the log.
+
 Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing ports.
