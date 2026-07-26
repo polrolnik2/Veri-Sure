@@ -788,3 +788,85 @@ BEFORE YOU WRITE THE MODULE — composition checklist (this node is GLUE):
 A composition whose child-facing inputs are unread is rejected automatically by
 the harness before simulation, however plausible the RTL looks.
 """
+
+
+# ---------------------------------------------------------------------------
+# GLUE (composition-node) testbench exemplar.
+#
+# TB_4_SHOT_EXAMPLES is 16,280 chars demonstrating four LEAF testbenches, with
+# zero occurrences of child_assumes, rtl_available, or child instantiation. The
+# composition TB task is strictly harder than the leaf one -- it must
+# instantiate the REAL child modules and bridge each child's UNPREFIXED ports
+# to the DUT's PREFIXED child-facing ports -- and had no worked example at all.
+#
+# Live consequence (fp_adder stage5_round_pack, 2026-07-26): the generated
+# self-TB instantiated a helper module `signed_mult_16` that does not exist,
+# so the oracle could not elaborate (%Error-MODMISSING) and the composition
+# gate could never pass regardless of the glue.
+# ---------------------------------------------------------------------------
+GLUE_TB_EXAMPLE = r"""
+Here is a worked COMPOSITION testbench. The DUT is glue; its child-facing ports
+are driven by the children's REAL modules, instantiated alongside it.
+
+<example>
+Contract: DUT `acc_unit`, child_assumes {"adder": {..., "rtl_available": true,
+"interface": [{"name":"a"},{"name":"b"},{"name":"sum"}]}}.
+DUT child-facing ports: adder_a, adder_b (out), adder_sum (in).
+
+<answer>
+`timescale 1ns/1ps
+module tb;
+  logic clk = 0, rst;
+  logic [7:0]  in_val;
+  logic [15:0] out_acc;
+  // child-facing nets of the DUT
+  logic [7:0]  adder_a, adder_b;
+  logic [15:0] adder_sum;
+
+  always #5 clk = ~clk;
+
+  // DUT (the glue)
+  acc_unit dut (
+    .clk(clk), .rst(rst), .in_val(in_val), .out_acc(out_acc),
+    .adder_a(adder_a), .adder_b(adder_b), .adder_sum(adder_sum)
+  );
+
+  // REAL child. Its OWN ports are UNPREFIXED; wire them to the DUT's
+  // PREFIXED child-facing ports. Do NOT write a behavioural stand-in.
+  adder u_adder (
+    .a(adder_a), .b(adder_b), .sum(adder_sum)
+  );
+
+  int mismatch_count = 0;
+  logic [15:0] expected;
+
+  initial begin
+    rst = 1; in_val = '0; repeat (2) @(posedge clk); rst = 0;
+    expected = '0;
+    for (int i = 1; i <= 8; i++) begin
+      in_val = i[7:0];
+      @(posedge clk); #1;
+      expected = expected + i;
+      if (out_acc !== expected) begin
+        $display("Mismatch at time %0t: out_acc expected %0d got %0d",
+                 $time, expected, out_acc);
+        mismatch_count++;
+      end
+    end
+    $display("Mismatches: %0d in %0d samples", mismatch_count, 8);
+    if (mismatch_count == 0) $display("SIMULATION PASSED");
+    else $display("SIMULATION FAILED - %0d MISMATCHES DETECTED", mismatch_count);
+    $finish;
+  end
+endmodule
+</answer>
+
+Rules this example follows, which you must follow too:
+- Instantiate ONLY modules that exist: the DUT, and children marked
+  `"rtl_available": true`. Never invent a helper module -- an undefined module
+  makes the whole testbench fail to elaborate, and nothing can be verified.
+- Connect each real child's UNPREFIXED ports to the DUT's PREFIXED ones.
+- Do not drive a real child's prefixed ports yourself; the child drives them.
+- Model the EXPECTED value from the contract, not from the DUT's internals.
+</example>
+"""

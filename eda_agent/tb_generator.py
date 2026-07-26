@@ -9,7 +9,14 @@ from pydantic import BaseModel
 from .agents import SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .prompts import FAILED_TRIAL_PROMPT, TAG_ORDER_PROMPT, TB_4_SHOT_EXAMPLES
+import json
+
+from .prompts import (
+    FAILED_TRIAL_PROMPT,
+    GLUE_TB_EXAMPLE,
+    TAG_ORDER_PROMPT,
+    TB_4_SHOT_EXAMPLES,
+)
 from .utils import add_lineno, clip_text, extract_xml_tag, strip_markdown_code_fences
 
 SYSTEM_PROMPT = r"""
@@ -464,9 +471,26 @@ class TBGenerator:
                 contract_json=contract_json,
             )
         else:
+            # A composition TB must instantiate the REAL children and bridge
+            # their UNPREFIXED ports to the DUT's PREFIXED child-facing ports.
+            # TB_4_SHOT_EXAMPLES is 16,280 chars of LEAF testbenches with zero
+            # coverage of that pattern, so the hardest part of the task had no
+            # worked example at all. Live consequence: a generated self-TB
+            # instantiated a helper module that does not exist and the oracle
+            # could not elaborate (%Error-MODMISSING), making the composition
+            # gate unpassable regardless of the glue.
+            _is_composition = False
+            if contract_json:
+                try:
+                    _is_composition = bool(json.loads(contract_json).get("child_assumes"))
+                except (ValueError, TypeError, AttributeError):
+                    _is_composition = "child_assumes" in contract_json
             generation_content = NON_GOLDEN_TB_PROMPT.format(
                 input_spec=input_spec,
-                examples_prompt=TB_4_SHOT_EXAMPLES,
+                examples_prompt=(
+                    TB_4_SHOT_EXAMPLES + "\n\n" + GLUE_TB_EXAMPLE
+                    if _is_composition else TB_4_SHOT_EXAMPLES
+                ),
                 display_prompt=display_prompt,
                 contract_json=contract_json,
             )
