@@ -80,8 +80,25 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
         return _clip_text(sim_log_json, max_chars=max_chars)
 
     # Keep the most informative bits: mismatch banner + hints + summary.
+    #
+    # The original vocabulary here was written for LEAF testbenches
+    # ("[TEST ...]", "=== MISMATCH DETECTED", "Mismatches: N in M"). COMPOSED
+    # testbenches report through SVA assertions instead:
+    #
+    #   === Scenario 2: Multiply by zero (0*7) ===
+    #   [145] %Error: tb.sv:156: Assertion failed in tb.a_product_valid:
+    #         FAIL [cycle 14]: product_valid_when_ready
+    #
+    # None of that matched, so `interesting` came back EMPTY and the function
+    # fell through to a head+tail clip of raw stdout -- whose head is
+    # "make: Entering directory ...". Observed live on booth: the debugger's
+    # very first run_simulation returned an excerpt beginning with compile
+    # chatter, so it never saw the assertion, the cycle, or the scenario it was
+    # supposed to fix. A glue-only blind spot: leaf TBs speak the matched
+    # vocabulary, composed TBs do not.
     interesting: list[str] = []
     for line in stdout.splitlines():
+        low = line.lower()
         if (
             "[TEST " in line
             or "=== MISMATCH DETECTED" in line
@@ -90,11 +107,28 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
             or "SIMULATION FAILED" in line
             or "SIMULATION PASSED" in line
             or line.strip() == "TIMEOUT"
+            # --- composed/SVA vocabulary ---
+            or "assertion failed" in low
+            or "%error" in low
+            or "fail [cycle" in low
+            or line.strip().startswith("=== Scenario")
+            or ("mismatch" in low and "detected" in low)
         ):
             interesting.append(line)
     out = "\n".join(interesting).strip()
     if not out:
-        out = _clip_text(stdout, max_chars=max_chars)
+        # Still nothing recognised: hand back the TAIL of the meaningful lines
+        # rather than a head-clip dominated by the build transcript. A single
+        # g++ command line is ~700 chars and would consume the whole budget.
+        meaningful = [
+            l for l in stdout.splitlines()
+            if l.strip() and not l.startswith((
+                "g++", "make:", "make[", "python3 ", "rm ", "verilator ",
+                "- Verilator:", "- V e r i l a t i o n", "- S i m u l a t i o n",
+                "ar ", "ranlib",
+            ))
+        ]
+        out = "\n".join(meaningful[-40:]) if meaningful else _clip_text(stdout, max_chars=max_chars)
 
     if stderr.strip():
         out = out + "\n\n[stderr excerpt]\n" + _clip_text(stderr, max_chars=max(800, max_chars // 3))
