@@ -785,6 +785,25 @@ BEFORE YOU WRITE THE MODULE — composition checklist (this node is GLUE):
    a child already produces.
 4. Do NOT instantiate child modules. They are connected externally by ports.
 
+5. TIMING — do this per external output, and do not skip it. Child latencies do
+   NOT compose by addition, and this is the single most common way a glue that
+   looks right fails. For EACH external output, state to yourself:
+     (a) which child port sources it;
+     (b) the cycle that source is actually valid — a REGISTERED child output is
+         valid one cycle AFTER the condition that produced it;
+     (c) the cycle the spec requires this output valid, and relative to which
+         other signal (e.g. "product valid the same cycle ready rises");
+     (d) the realignment the glue must add to close (b) -> (c).
+   If (b) != (c) you MUST add the register/hold/gate that closes the gap. Two
+   children that each correctly claim "N+1 cycles" compose to N+3 across a
+   registered handshake, because each handshake signal costs a cycle that
+   neither child's own contract can see.
+
+6. A status/valid output (`ready`, `done`, `valid`) must be qualified by the
+   glue's own state, never wired straight through from a child. A child's
+   "I am idle" is not the parent's "the requested operation has completed":
+   asserting it out of reset, before any operation was requested, is a failure.
+
 A composition whose child-facing inputs are unread is rejected automatically by
 the harness before simulation, however plausible the RTL looks.
 """
