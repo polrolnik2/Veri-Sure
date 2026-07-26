@@ -25,6 +25,45 @@ def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
 
 _MULTIDRIVEN_RE = re.compile(r"^%Warning-MULTIDRIVEN", re.MULTILINE)
 
+# An explicit, self-declared overall PASS verdict in a form other than the two
+# canonical markers ("SIMULATION PASSED", "Mismatches: N in M samples").
+#
+# Self-generated testbenches do not reliably emit either. The golden booth
+# composition -- proven correct by
+# tests/fixtures/golden_children/booth/verify.sh and printing
+#
+#     PASS: All 11 scenarios passed
+#
+# after eleven individual PASS lines -- was scored as a DESIGN FAILURE by this
+# function purely because that phrasing was unrecognised. In a real run that
+# spends the whole glue-retry budget redrawing a composition which already
+# works, and the recorded failure_summary is whatever line the summariser
+# happened to grab (observed: a bare "====" separator), so nothing in the log
+# says the verdict was a scoring artefact.
+#
+# Deliberately narrow. A false POSITIVE certifies broken hardware, which is far
+# worse than a false negative, so this requires an unambiguous whole-run
+# claim -- "all ... passed", not a bare per-case "PASS" line -- and the caller
+# additionally requires zero mismatches and no failure markers.
+_EXPLICIT_PASS_RE = re.compile(
+    r"^[^\S\n]*(?:PASS|SUCCESS)\b[^\n]*?\ball\b[^\n]*?\bpass(?:ed)?\b"
+    r"|^[^\S\n]*ALL\s+(?:\d+\s+)?(?:TESTS?|SCENARIOS?|CASES?)\s+PASSED\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_ANY_FAILURE_MARKER_RE = re.compile(
+    r"\bSIMULATION\s+FAILED\b|^[^\S\n]*FAIL\b|\bassertion\s+failed\b|\bMISMATCH",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def has_explicit_pass_verdict(stdout: str) -> bool:
+    """True iff `stdout` declares an unambiguous whole-run PASS and nothing
+    anywhere in it reports a failure."""
+    if not stdout:
+        return False
+    return bool(_EXPLICIT_PASS_RE.search(stdout)) and not _ANY_FAILURE_MARKER_RE.search(stdout)
+
 
 def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
     """True iff Verilator flagged a signal with multiple driving blocks.
@@ -110,7 +149,11 @@ def sim_review(
     # Determine pass/fail primarily from the testbench's explicit result markers,
     # instead of the process return code. Some testbenches may exit non-zero
     # despite printing "SIMULATION PASSED" (or "Mismatches: 0 ...").
-    has_pass_marker = "SIMULATION PASSED" in stdout
+    # The canonical marker, or an unambiguous whole-run PASS verdict in another
+    # phrasing (see _EXPLICIT_PASS_RE) with zero mismatches.
+    has_pass_marker = "SIMULATION PASSED" in stdout or (
+        mismatch_cnt == 0 and has_explicit_pass_verdict(stdout)
+    )
     has_mismatch_summary = bool(
         re.search(r"^Mismatches:\s*\d+\s*in\s*\d+\s*samples$", stdout, re.MULTILINE)
     )
