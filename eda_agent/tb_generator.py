@@ -246,6 +246,23 @@ Testbench requirements:
    - Group stimulus into NAMED, INDEPENDENT test scenarios, one per functional case
      (e.g. zero, overflow, carry_in, max, random_k). Reset/re-initialize between
      scenarios where the design is stateful.
+   - BOUNDARIES ARE MANDATORY, not one scenario among many. Typical values do not
+     distinguish a correct design from an off-by-one, and an oracle that only
+     exercises typical values passes a design that is wrong at exactly one point.
+     For EVERY numeric input and EVERY internal count or index the spec implies,
+     drive at least:
+       * the minimum, and one below it where the type allows (0, and wraparound);
+       * the maximum, and one above it (overflow / saturation / wraparound);
+       * for anything ITERATED or COUNTED N times: the LAST iteration (N-1), the
+         boundary itself (N), and one past it (N+1). A loop that runs N-1 times
+         instead of N produces correct-looking output on every earlier cycle.
+       * for every COMPARISON the spec states (`<`, `<=`, `>=`, threshold,
+         "when counter reaches K"): the value just below the threshold, the
+         threshold EXACTLY, and just above. `<` and `<=` differ only at that one
+         value, so a testbench that never drives it cannot tell them apart.
+     This is not a style preference. Measured over 24 certified modules, five of
+     the six faults their own testbenches FAILED to catch were exactly these two
+     shapes — a `<` silently widened to `<=`, and a `+ 1` silently become `+ 2`.
    - Run ALL scenarios to completion — do NOT `$finish` on the first mismatch.
    - Record, per scenario: its start time, its end time, the count of mismatches, and
      the simulation time (`$time`) of the FIRST mismatch within that scenario.
