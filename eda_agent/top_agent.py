@@ -50,6 +50,63 @@ def _augment_lint_excerpt(excerpt: str) -> str:
     return excerpt.rstrip("\n") + "\n\n" + "\n\n".join(hints) + "\n"
 
 
+def _tb_is_acceptable(
+    tb_text: str, module_name: str, contract_json: str
+) -> tuple[bool, str]:
+    """Is this testbench a plausible ORACLE, beyond merely linting clean?
+
+    Lint-clean is necessary, not sufficient, and the gap is not theoretical.
+    The repair loop below exits the moment Verilator is happy, and a generic
+    stub is trivially happy:
+
+        module tb_dut_top;
+          ...
+          $display("ERROR: No contract provided - testbench cannot verify DUT");
+          $finish(1);
+        endmodule
+
+    Two nodes in the persisted corpus collapsed to exactly that after their
+    real testbenches failed lint several times, and the stub then became the
+    node's cached oracle and gated real glue attempts. So the loop needs a
+    CONTENT invariant as well as a syntactic one.
+
+    Pure, so the predicate is testable against the real persisted stubs without
+    a model call. Returns (ok, reason) — `reason` is fed back to the generator.
+    """
+    if not tb_text or not tb_text.strip():
+        return False, "the testbench is empty"
+
+    from .contract_linter import tb_instantiates_module
+
+    if not tb_instantiates_module(tb_text, module_name):
+        return False, (
+            f"the testbench never instantiates `{module_name}`. A testbench that "
+            f"drives some other module is not an oracle for this one. Instantiate "
+            f"`{module_name}` as the DUT and drive its real ports."
+        )
+
+    # A TB may legitimately leave some ports unread, but one that mentions
+    # almost none of them is not exercising the interface it claims to check.
+    try:
+        ports = [
+            p.get("name")
+            for p in (json.loads(contract_json) or {}).get("io", [])
+            if isinstance(p, dict) and p.get("name")
+        ]
+    except (ValueError, TypeError):
+        ports = []
+    if ports:
+        seen = [p for p in ports if re.search(rf"\b{re.escape(p)}\b", tb_text)]
+        if len(seen) * 2 < len(ports):
+            missing = [p for p in ports if p not in seen][:6]
+            return False, (
+                f"the testbench references only {len(seen)} of {len(ports)} contract "
+                f"ports (missing e.g. {', '.join(missing)}). Drive and check the "
+                f"module's real interface."
+            )
+    return True, ""
+
+
 def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
     """Append real child module source(s) into the testbench text.
 
@@ -419,15 +476,24 @@ class TopAgent:
             # Each retry feeds back the accumulated lint errors (set_tb_lint_error
             # appends), so the model sees the full history rather than one blind shot.
             tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+            inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
             attempt = 0
-            while not tb_ok and attempt < self.config.tb_lint_max_retry:
+            while (not tb_ok or not inv_ok) and attempt < self.config.tb_lint_max_retry:
                 suffix = "" if attempt == 0 else f"_attempt{attempt}"
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
-                tb_gen.set_tb_lint_error(
-                    lint_log=_augment_lint_excerpt(tb_lint_excerpt), previous_tb=testbench
-                )
+                # A TB that lints clean but fails the ORACLE invariant gets the
+                # invariant as its feedback, not a stale lint log — otherwise
+                # the model is told to fix errors it has already fixed and
+                # collapsing further to a stub looks like progress.
+                feedback = _augment_lint_excerpt(tb_lint_excerpt) if not tb_ok else ""
+                if not inv_ok:
+                    logger.warning("Generated TB rejected by the oracle invariant: %s", inv_reason)
+                    feedback = (feedback + "\n\n" if feedback else "") + (
+                        "The testbench is not a usable ORACLE: " + inv_reason
+                    )
+                tb_gen.set_tb_lint_error(lint_log=feedback, previous_tb=testbench)
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
                 testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
                 testbench = _append_child_rtl(testbench, child_rtl)
@@ -436,9 +502,13 @@ class TopAgent:
 
                 attempt += 1
                 tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+                inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
 
-            if not tb_ok:
-                # Exhausted the repair budget; the TB still does not lint clean.
+            if not tb_ok or not inv_ok:
+                # Exhausted the repair budget: the TB still does not lint clean,
+                # or it lints but is not an oracle. Both are unusable, and the
+                # invariant failure is the more dangerous of the two because it
+                # would otherwise be CACHED and gate every later attempt.
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_final.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_final.txt", content=tb_lint_excerpt)
                 try:

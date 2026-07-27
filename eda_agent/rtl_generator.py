@@ -44,7 +44,7 @@ Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing PORTS.
 - The child-facing ports are ALREADY listed in the contract's `io` section (prefixed
-  with the child module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+  with the child module name: child `foo`'s port `ready` is the port `foo_ready`).
 - DO NOT instantiate child modules. The children connect externally via ports.
 - Your RTL implements the GLUE LOGIC that wires the external ports to the
   child-facing ports, adding any FSM/mux/pipeline logic needed so that the
@@ -113,7 +113,7 @@ Contract SVA mode:
 Reading the children:
 - `child_assumes` is a dict keyed by child module name. Child-facing ports are
   ALREADY in the contract `io`, prefixed with the child module name
-  (e.g. `booth_datapath_product`).
+  (child `foo`'s output `y` is the port `foo_y`).
 - DO NOT instantiate child modules. They are connected externally via ports.
 - Use each child's `io_behavior`, `timing` and `corner_cases` to determine WHEN
   its outputs are valid and HOW to sequence its control inputs. The formal

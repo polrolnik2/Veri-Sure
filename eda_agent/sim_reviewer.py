@@ -13,14 +13,29 @@ def _require_executable(name: str) -> None:
         raise FileNotFoundError(f"Required executable '{name}' not found in PATH.")
 
 
+# A compiler/simulator diagnostic, which always carries a source location:
+#   tb.sv:412:9: error: ...        gcc/clang/verilator style
+#   %Error-MODMISSING: ...         verilator's own tagged form
+# Deliberately NOT a bare "error:" substring. The design under test prints to
+# the same stream, so a testbench emitting a diagnostic of its own -- e.g.
+# `$display("INTERNAL ERROR: walking-ones expected_pp has %0d ones", n)`, which
+# a real persisted booth oracle does -- was being read as a BUILD failure and
+# forced an unconditional fail. That made the testbench's own instrumentation
+# capable of vetoing its design, which is backwards.
+_TOOLCHAIN_ERROR_RE = re.compile(
+    r"^[^\n]*?:\d+:(?:\d+:)?\s*error\b|^%Error", re.IGNORECASE | re.MULTILINE
+)
+
+
 def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
     # Verilator typically reports as "%Error:" / "%Error-<TAG>:".
     fatal_re = re.compile(r"^%Error", re.MULTILINE)
     if fatal_re.search(stderr) or fatal_re.search(stdout):
         return True
-    # Some toolchains may prefix with "Error:" without the % marker.
-    text = f"{stdout}\n{stderr}".lower()
-    return ("syntax error" in text) or ("error:" in text)
+    text = f"{stdout}\n{stderr}"
+    if "syntax error" in text.lower():
+        return True
+    return bool(_TOOLCHAIN_ERROR_RE.search(text))
 
 
 _MULTIDRIVEN_RE = re.compile(r"^%Warning-MULTIDRIVEN", re.MULTILINE)
@@ -45,9 +60,22 @@ _MULTIDRIVEN_RE = re.compile(r"^%Warning-MULTIDRIVEN", re.MULTILINE)
 # worse than a false negative, so this requires an unambiguous whole-run
 # claim -- "all ... passed", not a bare per-case "PASS" line -- and the caller
 # additionally requires zero mismatches and no failure markers.
+#
+# The leading class is `[\s*=#~+-]*`, not `[^\S\n]*`, because testbenches
+# routinely decorate their summary line and the whitespace-only anchor silently
+# rejected every decorated form. Measured over the 30 persisted composed
+# oracles, five could never print a marker this function accepts, and two of
+# those printed exactly
+#
+#     *** ALL TESTS PASSED ***
+#
+# so composed_sim was MATHEMATICALLY unable to return pass for those nodes
+# regardless of the RTL. Only banner punctuation is allowed in -- letters and
+# digits still cannot precede the claim, so "NOT ALL TESTS PASSED" and
+# "0 ALL TESTS PASSED" remain rejected.
 _EXPLICIT_PASS_RE = re.compile(
-    r"^[^\S\n]*(?:PASS|SUCCESS)\b[^\n]*?\ball\b[^\n]*?\bpass(?:ed)?\b"
-    r"|^[^\S\n]*ALL\s+(?:\d+\s+)?(?:TESTS?|SCENARIOS?|CASES?)\s+PASSED\b",
+    r"^[\s*=#~+-]*(?:PASS|SUCCESS)\b[^\n]*?\ball\b[^\n]*?\bpass(?:ed)?\b"
+    r"|^[\s*=#~+-]*ALL\s+(?:\d+\s+)?(?:TESTS?|SCENARIOS?|CASES?)\s+PASSED\b",
     re.IGNORECASE | re.MULTILINE,
 )
 

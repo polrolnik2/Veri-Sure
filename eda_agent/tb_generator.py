@@ -73,16 +73,17 @@ Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing ports.
 - The child-facing ports are ALREADY on the DUT's port list (prefixed with the child
-  module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+  module name, e.g. for a child `foo` with port `ready`, the DUT port is `foo_ready`).
 
 REAL child instantiation (only for entries with `"rtl_available": true`):
 - These children are ALREADY implemented and verified — their real RTL will be
   compiled alongside this testbench (you do not write or see their source).
 - For these children ONLY: declare an instance of the module (module name =
-  the child's key in `child_assumes`, e.g. `booth_datapath`), and connect each
+  the child's key in `child_assumes` — use THAT name, not an example name),
+  and connect each
   of its OWN ports (named in that child's `interface` list, UNPREFIXED — e.g.
-  `A`, `B`, `ready`) to the corresponding PREFIXED DUT port (prefix = child
-  name + `_`, e.g. `booth_datapath_A`, `booth_datapath_ready`).
+  a child port `x`) to the corresponding PREFIXED DUT port (prefix = child
+  name + `_`, so child `foo`'s port `x` connects to DUT port `foo_x`).
 - Do NOT write an inline behavioral stand-in for these children — no always
   blocks/tasks driving their prefixed ports. The real instance drives/reads
   them directly. `io_behavior`/`properties` for these entries are supporting
@@ -191,8 +192,8 @@ Testbench requirements:
      fixed-latency oracle then fails a CORRECT design (or passes a wrongly-timed one); a
      ready-qualified check is immune to that — it only asserts "whenever you say you're ready, the
      answer is right," which is the true contract. This is the correct oracle for a composition/glue
-     node whose external output is ready-qualified (e.g. booth_multiplier's `product` valid when
-     `ready`). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
+     node whose external output is ready-qualified (i.e. a result port that is only meaningful on
+     the cycle its companion `ready`/`valid` is asserted). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
      handshake qualifier.
    - LATENT / REGISTERED OUTPUTS WITHOUT A HANDSHAKE (any output whose contract timing has
      latency_cycles > 0 and which is NOT ready/valid-qualified per the bullet above,

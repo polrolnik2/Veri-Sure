@@ -215,7 +215,7 @@ Rules:
    specification constraints your RTL MUST satisfy. Ensure fixes do not violate them.
 8. Child assumes mode: if the contract JSON contains a `child_assumes` field, this RTL is a
    COMPOSITION/GLUE module with child-facing ports (prefixed with each child module name,
-   e.g. `booth_controller_ready`, `booth_datapath_product`) ALREADY on its port list.
+   so a child `foo` with port `ready` appears as `foo_ready`) ALREADY on its port list.
    - DO NOT instantiate any child module as a fix. There are no child module definitions
      available to this RTL — child-facing ports connect externally, outside this file.
    - If a child-facing port appears unconnected, undriven, or X-valued, the fix is to wire

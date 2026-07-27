@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
@@ -10,6 +11,34 @@ class ContractIssue:
     severity: str  # "error" | "warning"
     path: str
     message: str
+
+
+def tb_instantiates_module(tb_code: str, module_name: str) -> bool:
+    """Does this testbench actually drive `module_name`?
+
+    A testbench that instantiates some OTHER module is not an oracle for this
+    node -- it is a broken oracle, and every verdict it produces is about a
+    design that was never simulated. Measured over the persisted corpus, 8 of
+    34 cached oracles were in exactly that state: nodes named `fp_*` judged by
+    testbenches driving `booth_composition`, `booth_multiplier`, or a generic
+    `dut_top` stub. Two of them gated real glue attempts.
+
+    Deliberately permissive: this decides whether to RETIRE an oracle, so a
+    false positive throws away a good testbench. Anything ambiguous reads as
+    "fine". Comments are stripped first so a commented-out instantiation does
+    not count.
+    """
+    if not tb_code or not module_name:
+        return False
+    body = re.sub(r"//[^\n]*", "", tb_code)
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+    return bool(
+        re.search(
+            rf"\b{re.escape(module_name)}\b\s*(?:#\s*\([^;]*?\))?\s*\w+\s*\(",
+            body,
+            re.S,
+        )
+    )
 
 
 def _as_int(val: Any) -> int | None:
