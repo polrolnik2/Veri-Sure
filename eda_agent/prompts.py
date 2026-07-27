@@ -804,6 +804,19 @@ BEFORE YOU WRITE THE MODULE — composition checklist (this node is GLUE):
    "I am idle" is not the parent's "the requested operation has completed":
    asserting it out of reset, before any operation was requested, is a failure.
 
+7. REPLICATED CHILDREN. If a child's contract carries `replication_count: N`
+   with N > 1, the parent instantiates N copies of it and your child-facing
+   ports for that child are FLATTENED BUSES, not single values: a port of width
+   W becomes a bus of width N*W carrying every instance's copy, low instance in
+   the low bits. Drive and read instance `i`'s slice as
+
+       <child>_<port>[(i+1)*W-1 -: W]        // W > 1
+       <child>_<port>[i]                     // W == 1
+
+   Wiring such a bus as if it were one scalar connects instance 0 and leaves
+   every other instance undriven, which simulates as a partially-correct result
+   rather than an error.
+
 A composition whose child-facing inputs are unread is rejected automatically by
 the harness before simulation, however plausible the RTL looks.
 """
