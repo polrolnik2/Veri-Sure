@@ -153,6 +153,12 @@ Previous response (truncated):
 
 Please output again, strictly following the required tags in <output_format>, and output NOTHING else.
 Do NOT output JSON. Do NOT wrap code in Markdown code fences (```).
+
+The <bad_output> above is shown ONLY so you can see what failed to parse. It is
+not a draft to tidy up. If it describes a different module than the contract
+above -- different module name, different ports -- discard it completely and
+write the contract's module from scratch. Re-read the contract and confirm the
+module name and every port name match it before you answer.
 """
 
 PLACEHOLDER_REPAIR_PROMPT = r"""
@@ -472,7 +478,7 @@ class RTLGenerator:
                     parse_error=resp_obj.reasoning,
                     bad_output=clip_text(response_text, max_chars=6000),
                 )
-                prompt = f"{repair}\n\n{order}"
+                prompt = f"{init}\n\n{repair}\n\n{order}"
                 continue
             placeholder_reason = looks_like_placeholder(resp_obj.module, contract_json)
             if placeholder_reason:
@@ -513,7 +519,7 @@ class RTLGenerator:
                     parse_error=resp_obj.reasoning,
                     bad_output=clip_text(response_text, max_chars=6000),
                 )
-                prompt = f"{repair}\n\n{order}"
+                prompt = f"{init}\n\n{repair}\n\n{order}"
                 continue
             rtl_code = resp_obj.module
             with open(rtl_path, "w") as f:

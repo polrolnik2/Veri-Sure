@@ -93,6 +93,12 @@ Previous response (truncated):
 
 Please output again, strictly following the required tags in <output_format>, and output NOTHING else.
 Do NOT output JSON. Do NOT wrap code in Markdown code fences (```).
+
+The <bad_output> above is shown ONLY so you can see what failed to parse. It is
+not a draft to tidy up. If it describes a different module than the contract
+above -- different module name, different ports -- discard it completely and
+write the contract's module from scratch. Re-read the contract and confirm the
+module name and every port name match it before you answer.
 """
 
 
@@ -135,7 +141,8 @@ class BooleanProoferAgent:
         self.reset()
         order = TAG_ORDER_PROMPT.format(output_format=EXAMPLE_OUTPUT_FORMAT)
         targets = "\n".join(f"- {s}" for s in target_outputs if isinstance(s, str) and s.strip())
-        prompt = f"{GENERATION_PROMPT.format(contract_json=contract_json, module_header=module_header, target_outputs=targets)}\n\n{order}"
+        task = GENERATION_PROMPT.format(contract_json=contract_json, module_header=module_header, target_outputs=targets)
+        prompt = f"{task}\n\n{order}"
 
         last: BooleanProoferSpec = BooleanProoferSpec(reasoning="Parse Error: unknown", spec_body="")
         for _ in range(max(1, int(self.max_trials))):
@@ -147,6 +154,6 @@ class BooleanProoferAgent:
                 parse_error=last.reasoning,
                 bad_output=clip_text(text, max_chars=6000),
             )
-            prompt = f"{repair}\n\n{order}"
+            prompt = f"{task}\n\n{repair}\n\n{order}"
 
         return last
