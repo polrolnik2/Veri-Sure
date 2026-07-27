@@ -281,9 +281,11 @@ Workflow (repeat until pass):
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
-3) Call list_suspect_blocks(), then read_block(block_id) for the most relevant one.
-4) Make ONE small change in ONE block via replace_block(block_id, new_code).
-5) Immediately call run_simulation() and iterate based on the new trace summary.
+3) Call _tool_list_suspect_blocks(), then _tool_read_block(block_id) for the most
+   relevant one. Never guess a block_id -- list them first; an invented id costs
+   a whole iteration and returns nothing.
+4) Make ONE small change in ONE block via _tool_replace_block(block_id, new_code).
+5) Immediately call _tool_run_simulation() and iterate on the new trace summary.
 
 Rules:
 - Do not modify the testbench. Only modify the RTL code.
@@ -297,10 +299,16 @@ You will also receive a structured trace-grounded bug report (JSON) that include
 
 You MUST only modify code inside suspect blocks.
 Use tools:
-- list_suspect_blocks()
-- read_block(block_id)
-- replace_block(block_id, new_code)
-- run_simulation()
+- _tool_list_suspect_blocks()
+- _tool_read_block(block_id)
+- _tool_replace_block(block_id, new_code)
+- _tool_run_simulation()
+
+These are the exact names the tool schema exposes. Earlier revisions of this
+prompt named them without the `_tool_` prefix, which is not what is registered:
+across a full live run the model made 0 calls to any bare name, and its attempts
+to guess block ids (`Unknown block_id 'A1'`) came from skipping the listing step
+rather than calling it under a name the prompt had got wrong.
 
 When simulation passes, end with generate_response using this format:
   generate_response(response="RTL_FIXED: <one-line summary>\nCONTRACT_CLAUSE: <specific contract requirement violated>\nFIX_RATIONALE: <how this change satisfies that requirement>")
