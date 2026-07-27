@@ -121,6 +121,52 @@ def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
     return testbench.rstrip("\n") + "\n\n" + "\n\n".join(child_rtl.values()) + "\n"
 
 
+def tb_lint_report(*, tb_path: Path) -> tuple[bool, str, str]:
+    """Return (is_ok, excerpt, raw_json) from `verilator --lint-only` on the testbench.
+
+    This lints the TB in isolation; missing DUT module definitions are expected and ignored.
+
+Module-level so callers OUTSIDE this class get the SAME verdict. The
+filtering is not incidental: warnings are ignored, `-MODMISSING` is ignored
+(the DUT is deliberately absent when a TB is linted alone), and "Exiting due
+to" is ignored. A caller that substitutes a generic syntax check gets a
+different answer -- `check_syntax` on a lone oracle fails on a missing
+trailing newline AND on the absent DUT, so every oracle looks broken, which
+would disable the unified glue loop everywhere it gates.
+    """
+    if shutil.which("verilator") is None:
+        return True, "", ""
+
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {tb_path}"
+    _ok, out = run_bash_command(cmd, timeout=60, cwd=str(tb_path.parent))
+    try:
+        obj = CommandResult.model_validate_json(out)
+    except Exception:  # noqa: BLE001
+        return False, out, out
+
+    stdout = obj.stdout or ""
+    stderr = obj.stderr or ""
+    text = f"{stdout}\n{stderr}"
+
+    error_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.lstrip().startswith("%Error")
+    ]
+    real_error_lines = [
+        line
+        for line in error_lines
+        if ("-MODMISSING:" not in line)
+        and (not line.startswith("%Error: Exiting due to"))
+    ]
+
+    is_ok = not real_error_lines and ("syntax error" not in text.lower()) and ("malformed statement" not in text.lower())
+    excerpt = "\n".join(real_error_lines).strip() or text.strip()
+    if len(excerpt) > 6000:
+        excerpt = excerpt[:6000] + "\n...<snip>...\n"
+    return is_ok, excerpt + ("\n" if excerpt and not excerpt.endswith("\n") else ""), out
+
+
 @dataclass(frozen=True)
 class TopAgentConfig:
     sim_max_retry: int = 4
@@ -236,41 +282,8 @@ class TopAgent:
         return ("syntax error" in text) or ("malformed statement" in text)
 
     def _tb_lint_report(self, *, tb_path: Path) -> tuple[bool, str, str]:
-        """Return (is_ok, excerpt, raw_json) from `verilator --lint-only` on the testbench.
-
-        This lints the TB in isolation; missing DUT module definitions are expected and ignored.
-        """
-        if shutil.which("verilator") is None:
-            return True, "", ""
-
-        cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {tb_path}"
-        _ok, out = run_bash_command(cmd, timeout=60, cwd=str(tb_path.parent))
-        try:
-            obj = CommandResult.model_validate_json(out)
-        except Exception:  # noqa: BLE001
-            return False, out, out
-
-        stdout = obj.stdout or ""
-        stderr = obj.stderr or ""
-        text = f"{stdout}\n{stderr}"
-
-        error_lines = [
-            line.strip()
-            for line in text.splitlines()
-            if line.lstrip().startswith("%Error")
-        ]
-        real_error_lines = [
-            line
-            for line in error_lines
-            if ("-MODMISSING:" not in line)
-            and (not line.startswith("%Error: Exiting due to"))
-        ]
-
-        is_ok = not real_error_lines and ("syntax error" not in text.lower()) and ("malformed statement" not in text.lower())
-        excerpt = "\n".join(real_error_lines).strip() or text.strip()
-        if len(excerpt) > 6000:
-            excerpt = excerpt[:6000] + "\n...<snip>...\n"
-        return is_ok, excerpt + ("\n" if excerpt and not excerpt.endswith("\n") else ""), out
+        """Instance-side alias for :func:`tb_lint_report`."""
+        return tb_lint_report(tb_path=tb_path)
 
     async def _build_contract_json(
         self,
