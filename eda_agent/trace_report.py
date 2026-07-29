@@ -20,6 +20,56 @@ _HINT_RE = re.compile(
 _FAILED_RE = re.compile(r"SIMULATION FAILED - (?P<cnt>\d+)\s+MISMATCHES DETECTED.*FIRST AT TIME\s+(?P<t>\d+)", re.IGNORECASE)
 _MISMATCHES_RE = re.compile(r"^Mismatches:\s*(?P<cnt>\d+)\s*in\s*(?P<samples>\d+)\s*samples$", re.MULTILINE)
 
+# The VALUES, which `Hint:` lines never carry. Testbenches print them right next
+# to the signal name and the extractor used to drop them, so `fail_outputs`
+# reached the debugger as `{"sig": "result_out", "expected": null, "actual": null}`
+# -- a list of names with no data.
+#
+# That is why the debugger invented a timing theory on stage_roundpack: with no
+# expected-vs-actual it cannot see "right value, one cycle late", only "wrong at
+# t=30000", and a sampling guess is a reasonable inference from a name alone. It
+# then rewrote `always_ff` to `always_comb` to fit the guess and broke the
+# contract's 1-cycle latency (B21).
+#
+# Two emitted shapes are covered, both observed in this project:
+#   Mismatch at time 30000: result_out
+#     Expected: 3f800000, Actual: 00000000
+#   MISMATCH [SMALL_EXP_DIFF] at time 60000: sig_b_out=0100000 exp=0800000
+# `Expected:` does not always follow the header directly -- testbenches commonly
+# print an `Inputs: ...` line between them, and requiring adjacency silently lost
+# result_out (the signal that mattered) while recovering valid_out. Allow a few
+# intervening lines, but never cross into the NEXT mismatch header, or one
+# signal's values get attributed to another.
+_PAIRED_RE = re.compile(
+    r"[Mm]ismatch(?:\s*\[[^\]]*\])?\s+at\s+time\s+(?P<t>\d+)\s*:\s*(?P<sig>\w+)\s*\n"
+    r"(?P<between>(?:(?![Mm]ismatch\b).*\n){0,4}?)"
+    r"\s*Expected:\s*(?P<exp>\S+?),?\s+Actual:\s*(?P<act>\S+)",
+)
+_INLINE_RE = re.compile(
+    r"[Mm]ismatch(?:\s*\[[^\]]*\])?\s+at\s+time\s+(?P<t>\d+)\s*:\s*"
+    r"(?P<sig>\w+)\s*=\s*(?P<act>\S+)\s+exp(?:ected)?\s*=\s*(?P<exp>\S+)",
+)
+
+
+def _extract_values(stdout: str) -> dict[str, dict[str, str]]:
+    """First observed expected/actual pair per signal.
+
+    FIRST, not last: the earliest divergence is the one that explains the
+    others, and a later sample is usually downstream corruption.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for rx in (_PAIRED_RE, _INLINE_RE):
+        for m in rx.finditer(stdout):
+            sig = m.group("sig")
+            if sig in out:
+                continue
+            out[sig] = {
+                "expected": m.group("exp").rstrip(","),
+                "actual": m.group("act").rstrip(","),
+                "at_time": m.group("t"),
+            }
+    return out
+
 
 def _extract_fail_signals_and_time(stdout: str) -> tuple[int | None, list[dict[str, Any]]]:
     fail_outputs: list[dict[str, Any]] = []
@@ -269,6 +319,24 @@ def build_trace_report(
 
     fail_time, fail_outputs = _extract_fail_signals_and_time(stdout)
     total_mismatches = _extract_total_mismatches(stdout)
+
+    # Attach the values the testbench printed. Without these the debugger gets
+    # signal NAMES and nothing else, which is what produced B21.
+    values = _extract_values(stdout)
+    for fo in fail_outputs:
+        v = values.get(fo.get("sig") or "")
+        if v:
+            fo["expected"] = v["expected"]
+            fo["actual"] = v["actual"]
+    # Signals the TB reported values for but that produced no Hint line still
+    # carry evidence; losing them would repeat the same mistake one level down.
+    known = {fo.get("sig") for fo in fail_outputs}
+    for sig, v in values.items():
+        if sig not in known:
+            fail_outputs.append({
+                "sig": sig, "mismatches": None, "time": int(v["at_time"]),
+                "expected": v["expected"], "actual": v["actual"],
+            })
 
     blocks = parse_rtl_blocks(rtl_text)
     if not blocks:
