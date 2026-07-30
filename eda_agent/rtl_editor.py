@@ -338,6 +338,15 @@ class _EditSession:
     # conversation history is not good feedback, especially after several
     # rounds of exploration in between.
     last_action_result: Dict[str, Any] | None = None
+    # Monotonic index for the append-only trajectory record. The debug loop used
+    # to leave NO evidence of what it did: `debug_sim_output.json` and
+    # `trace_report.json` are written to the same path every round, so each
+    # iteration destroyed the previous one's, and no model response, tool call,
+    # edit diff or per-iteration mismatch count was persisted at all. 79 minutes
+    # of debugging on stage_roundpack left one prompt and one final RTL, which
+    # made "why did it not converge" unanswerable -- every hypothesis about it
+    # was a guess because the falsifying data did not exist.
+    traj_iter: int = 0
 
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
@@ -356,6 +365,15 @@ class _EditSession:
         # Persist full sim output for human inspection; provide excerpt to the agent.
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
+            # ALSO keep this iteration's copy. The unsuffixed file is overwritten
+            # every round, so a post-mortem could only ever see the last one --
+            # which is how 79 minutes of stage_roundpack debugging left no record
+            # of the iteration where it went wrong.
+            try:
+                Path(self.output_dir, f"debug_sim_output_i{self.traj_iter + 1}.json").write_text(
+                    sim_output, encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001
             pass
         return {
@@ -443,6 +461,49 @@ class _EditSession:
             "vcd_available": ((tr.get("notes") or {}).get("vcd_available")),
         }
 
+    def _record_trajectory(
+        self,
+        action: str,
+        *,
+        result: Dict[str, Any] | None = None,
+        block_id: str | None = None,
+        diff: str | None = None,
+        model_text: str | None = None,
+    ) -> None:
+        """Append one line to `debug_trajectory.jsonl`. Never raises.
+
+        Most of this already exists in the result dict `_judge_replace_action_execution`
+        builds -- prev_mismatch_cnt, new_fail_time, error_msg, accept_reason,
+        is_action_executed -- and was handed to the model and then dropped on the
+        floor. Recording it costs a diff and a few integers per iteration.
+        """
+        try:
+            self.traj_iter += 1
+            r = result or {}
+            row = {
+                "iter": self.traj_iter,
+                "action": action,
+                "block_id": block_id,
+                "accepted": bool(r.get("is_action_executed")),
+                "syntax_ok": r.get("is_syntax_correct"),
+                "sim_pass": r.get("is_sim_pass"),
+                "mismatch_before": r.get("prev_mismatch_cnt"),
+                "mismatch_after": r.get("sim_mismatch_cnt"),
+                "fail_time_before": r.get("prev_fail_time"),
+                "fail_time_after": r.get("new_fail_time"),
+                "rollback_reason": (r.get("error_msg") or None),
+                "accept_reason": (r.get("accept_reason") or None),
+                "action_calls": self.action_calls,
+                "diff": (diff or "")[:4000] or None,
+                "model_text": (model_text or "")[:1500] or None,
+            }
+            path = Path(self.output_dir, "debug_trajectory.jsonl")
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except Exception:  # noqa: BLE001
+            # Observability must never break the loop it observes.
+            pass
+
     def _base_result(self) -> Dict[str, Any]:
         return {
             "is_action_executed": False,
@@ -471,6 +532,15 @@ class _EditSession:
         result["sim_mismatch_cnt"] = sim_mismatch_cnt
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
+            # ALSO keep this iteration's copy. The unsuffixed file is overwritten
+            # every round, so a post-mortem could only ever see the last one --
+            # which is how 79 minutes of stage_roundpack debugging left no record
+            # of the iteration where it went wrong.
+            try:
+                Path(self.output_dir, f"debug_sim_output_i{self.traj_iter + 1}.json").write_text(
+                    sim_output, encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001
             pass
         result["sim_output_excerpt"] = _summarize_sim_log_json(sim_output)
@@ -676,13 +746,30 @@ class RTLEditor:
             # Tooling should never crash due to trace refresh; keep sim result.
             pass
         self._session.last_action_result = result
+        self._session._record_trajectory("run_simulation", result=result)
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
         """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        blk = (self._session.blocks_by_id or {}).get(block_id)
+        before = getattr(blk, "code", "") if blk is not None else ""
         result = await asyncio.to_thread(self._session.replace_block, block_id, new_code)
+        # The DIFF, not the whole file: what the model actually tried is the
+        # thing that was never recorded, and it is what a post-mortem needs.
+        try:
+            import difflib
+            diff = "".join(difflib.unified_diff(
+                (before or "").splitlines(keepends=True),
+                (new_code or "").splitlines(keepends=True),
+                fromfile=f"{block_id}.before", tofile=f"{block_id}.after", n=2,
+            ))
+        except Exception:  # noqa: BLE001
+            diff = None
+        self._session._record_trajectory(
+            "replace_block", result=result, block_id=block_id, diff=diff,
+        )
         # Even if the action was rolled back, return the latest available trace pointer/summary
         # so the agent can re-ground itself quickly.
         if self._session.trace_report:
@@ -879,6 +966,11 @@ class RTLEditor:
                 )
             )
             _last_content = str(getattr(response, "content", "") or "")
+            # The reasoning, recorded against the iteration it belongs to. Without
+            # it the record shows WHAT changed but never why the model thought so
+            # -- and on stage_roundpack the reasoning is the whole story: it wrote
+            # its (mistaken) negedge theory into a comment in the RTL.
+            self._session._record_trajectory("model_turn", model_text=_last_content)
             if self._session.is_done and not _justification:
                 _justification = _last_content
             elif not self._session.is_done:

@@ -71,6 +71,79 @@ def _extract_values(stdout: str) -> dict[str, dict[str, str]]:
     return out
 
 
+# `Cycle N: ... | got_res=<v> exp_res=<v> got_val=<v> exp_val=<v>` — the
+# per-cycle history testbenches dump on first mismatch.
+_CYCLE_DUMP_RE = re.compile(r"^Cycle\s+(?P<n>\d+)\s*:(?P<body>.*)$", re.MULTILINE)
+_GOT_EXP_RE = re.compile(r"\bgot_(?P<name>\w+)\s*=\s*(?P<got>\S+)")
+
+
+def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
+    """Alignment diagnosis WITHOUT a VCD, from the testbench's cycle dump.
+
+    The VCD-based path below is the better one, but it needs a waveform and
+    `trace_vcd_path` is frequently null — in which case `alignment_diagnosis`
+    came back EMPTY while the debugger prompt's step 2 says, first thing:
+
+        2) Check `trace_summary.alignment_diagnosis` first
+
+    So the debugger's opening diagnostic move landed on a missing field, found
+    nothing, and fell back to guessing. On stage_roundpack (job 7829273) it
+    guessed a sampling theory and rewrote `always_ff` to `always_comb`, breaking
+    the contract's 1-cycle latency (B21) — when the true answer, "the DUT leads
+    expected by one cycle", is computable from data the testbench had already
+    printed.
+
+    Same match-rate comparison as the VCD path so the two agree: current vs
+    dut_lag1 vs dut_lead1, best wins.
+    """
+    rows: list[dict[str, tuple[str, str]]] = []
+    for m in _CYCLE_DUMP_RE.finditer(stdout):
+        body = m.group("body")
+        pairs: dict[str, tuple[str, str]] = {}
+        for g in _GOT_EXP_RE.finditer(body):
+            name = g.group("name")
+            exp_m = re.search(rf"\bexp_{re.escape(name)}\s*=\s*(\S+)", body)
+            if exp_m:
+                pairs[name] = (exp_m.group(1), g.group("got"))
+        if pairs:
+            rows.append(pairs)
+    if len(rows) < 3:
+        # Two samples cannot distinguish a lag from a lead; reporting one would
+        # be worse than reporting nothing.
+        return {}
+
+    out: dict[str, Any] = {}
+    names = set().union(*(set(r) for r in rows))
+    for name in sorted(names):
+        seq = [r.get(name) for r in rows]
+        exp_seq = [s[0] if s else None for s in seq]
+        act_seq = [s[1] if s else None for s in seq]
+
+        def rate(pairs) -> float | None:
+            tot = ok = 0
+            for e, a in pairs:
+                if e is None or a is None:
+                    continue
+                tot += 1
+                ok += _wildcard_match(e, a)
+            return (ok / tot) if tot else None
+
+        cur = rate(list(zip(exp_seq, act_seq)))
+        lag = rate(list(zip(exp_seq[1:], act_seq[:-1])))
+        lead = rate(list(zip(exp_seq[:-1], act_seq[1:])))
+        choices = {"current": cur, "dut_lag1": lag, "dut_lead1": lead}
+        best = max(choices.items(), key=lambda kv: (-1.0 if kv[1] is None else kv[1]))
+        out[name] = {
+            "samples_considered": len(rows),
+            "source": "cycle_dump",
+            "match_rate_current": cur,
+            "match_rate_dut_lag1": lag,
+            "match_rate_dut_lead1": lead,
+            "best_alignment": best[0] if best[1] is not None else None,
+        }
+    return out
+
+
 def _extract_fail_signals_and_time(stdout: str) -> tuple[int | None, list[dict[str, Any]]]:
     fail_outputs: list[dict[str, Any]] = []
     times: list[int] = []
@@ -569,7 +642,9 @@ def build_trace_report(
         "total_mismatches": total_mismatches,
         "fail_outputs": fail_details or fail_outputs,
         "input_window": input_window,
-        "alignment_diagnosis": alignment_diagnosis,
+        # Fall back to the cycle dump when the VCD path produced nothing, so the
+        # debugger's first diagnostic step is never handed an empty field.
+        "alignment_diagnosis": alignment_diagnosis or _alignment_from_cycle_dump(stdout),
         "suspect_blocks": [
             {
                 "id": b.id,
