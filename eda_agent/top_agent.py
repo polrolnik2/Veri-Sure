@@ -298,8 +298,23 @@ class TopAgent:
         except OSError:
             return testbench
 
-        # the glue instantiation inside the wrapper
-        m = re.search(rf"\b{re.escape(module_name)}_glue\b\s+(\w+)\s*\((.*?)\);", asm, re.S)
+        # In the UNIFIED glue solve, `module_name` is already the glue's own name
+        # (`glue_spec_for_solve["module_name"] = f"{parent}_glue"`), so appending
+        # `_glue` looks for `<parent>_glue_glue` and matches nothing -- the probe
+        # then returns the testbench unchanged and the whole visibility fix is a
+        # silent no-op. That is exactly how it shipped: the run produced a tb.sv
+        # byte-identical to the oracle, with zero GLUEPROBE lines and no error.
+        #
+        # Derive both names instead of assuming which one was handed in:
+        #   glue    -- the module instantiated inside the assembled composition
+        #   wrapper -- what the TESTBENCH drives, and the scope the hierarchical
+        #              reference must be rooted at
+        if module_name.endswith("_glue"):
+            glue_name, wrapper_name = module_name, module_name[: -len("_glue")]
+        else:
+            glue_name, wrapper_name = f"{module_name}_glue", module_name
+
+        m = re.search(rf"\b{re.escape(glue_name)}\b\s+(\w+)\s*\((.*?)\);", asm, re.S)
         if not m:
             return testbench
         conn = m.group(2)
@@ -315,8 +330,10 @@ class TopAgent:
         if not ports:
             return testbench
 
+        # Root the hierarchical reference at the module the TESTBENCH drives --
+        # the wrapper -- not at the glue, which the testbench never names.
         inst = None
-        mi = re.search(rf"\b{re.escape(module_name)}\b\s+([a-zA-Z_]\w*)\s*\(", testbench)
+        mi = re.search(rf"\b{re.escape(wrapper_name)}\b\s+([a-zA-Z_]\w*)\s*\(", testbench)
         if mi:
             inst = mi.group(1)
         if not inst:
