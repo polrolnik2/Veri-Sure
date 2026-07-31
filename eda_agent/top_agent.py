@@ -552,7 +552,8 @@ class TopAgent:
             # construction: values for every port it can drive, not just the
             # wrapper's two external outputs.
             testbench = self._augment_glue_port_probes(
-                testbench, module_name=module_name, assembled_rtl_path=golden_rtl_path,
+                testbench, module_name=module_name,
+                assembled_rtl_path=golden_rtl_blackbox_path,
             )
             testbench = _append_child_rtl(testbench, child_rtl)
             interface = ""
