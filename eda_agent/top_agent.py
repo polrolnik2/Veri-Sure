@@ -696,7 +696,28 @@ class TopAgent:
         # an inline behavioral stand-in, so there is no invented model to
         # align — child_assumes is only used above for prompt guidance (drive
         # instantiation, not a stand-in) and for contract_sva's assert side.
-        if child_assumes and not child_rtl:
+        # ...and equally when `external_tb` is set. That is the UNIFIED glue
+        # loop, where the children are just as real -- they are compiled into
+        # the assembled composition (`fixed.sv`) alongside the wrapper instead
+        # of being spliced into the testbench text. The guard tested HOW the
+        # children arrived rather than WHETHER they exist, so under `unified`
+        # (which passes child_rtl=None by design) it ran anyway.
+        #
+        # There is nothing to align in that path: the composed testbench drives
+        # the WRAPPER, so it contains no inline child model. The pass fabricated
+        # a stub for a glue about to be generated, injected assumption asserts
+        # built from model-authored expressions, and on stage_roundpack one of
+        # them was `(...)[24]` -- a bit-select on a parenthesised expression,
+        # illegal SystemVerilog -- so mock_dut.sv failed to compile, all 24
+        # assertions were lost, and the agent spent a trial diagnosing a
+        # testbench that was never at fault while being forbidden to touch the
+        # file that was. Same warning on stage_addsub and stage_normalize with a
+        # different illegal expression each time.
+        #
+        # Bottom-up composition is what makes this unnecessary: the children are
+        # already CERTIFIED, so a check that the testbench's imagined children
+        # match their contracts has nothing left to verify.
+        if child_assumes and not child_rtl and external_tb is None:
             # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
             # so a post-mortem can attribute a defect to TBGenerator's own
             # draft vs. something TBEditor introduced/failed to resolve while
