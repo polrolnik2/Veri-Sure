@@ -73,6 +73,11 @@ def _extract_values(stdout: str) -> dict[str, dict[str, str]]:
 
 # `Cycle N: ... | got_res=<v> exp_res=<v> got_val=<v> exp_val=<v>` — the
 # per-cycle history testbenches dump on first mismatch.
+# A shift claim needs enough samples to be a measurement rather than an accident,
+# and enough VARIETY that a shifted window is not just re-comparing constants.
+_ALIGN_MIN_SAMPLES = 6
+_ALIGN_MIN_DISTINCT = 2
+
 _CYCLE_DUMP_RE = re.compile(r"^Cycle\s+(?P<n>\d+)\s*:(?P<body>.*)$", re.MULTILINE)
 _GOT_EXP_RE = re.compile(r"\bgot_(?P<name>\w+)\s*=\s*(?P<got>\S+)")
 
@@ -107,9 +112,9 @@ def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
                 pairs[name] = (exp_m.group(1), g.group("got"))
         if pairs:
             rows.append(pairs)
-    if len(rows) < 3:
-        # Two samples cannot distinguish a lag from a lead; reporting one would
-        # be worse than reporting nothing.
+    if len(rows) < _ALIGN_MIN_SAMPLES:
+        # Too few samples to distinguish a real shift from an accident of the
+        # window. Reporting one would be worse than reporting nothing.
         return {}
 
     out: dict[str, Any] = {}
@@ -127,6 +132,20 @@ def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
                 tot += 1
                 ok += _wildcard_match(e, a)
             return (ok / tot) if tot else None
+
+        # A window dominated by one repeated value (reset cycles are all zeros)
+        # makes ANY shift score perfectly, because shifting simply drops the one
+        # interesting sample out of the comparison. Measured live on
+        # stage_roundpack parent_4: 3 rows, two of them all-zero reset cycles,
+        # produced lag1=1.00 on both signals -- a phantom one-cycle shift, when
+        # the real defect was a special-case PRIORITY disagreement
+        # (result_out expected 00000000, actual 7fc00000 = quiet NaN, on an
+        # input with nan/inf/zero/denorm all asserted at once). Handing that to
+        # the debugger would send it chasing a timing bug that does not exist --
+        # exactly the mistake B21's debugger made unaided.
+        distinct_exp = {e for e in exp_seq if e is not None}
+        if len(distinct_exp) < _ALIGN_MIN_DISTINCT:
+            continue
 
         cur = rate(list(zip(exp_seq, act_seq)))
         lag = rate(list(zip(exp_seq[1:], act_seq[:-1])))
