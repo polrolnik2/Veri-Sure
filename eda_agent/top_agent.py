@@ -121,6 +121,26 @@ def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
     return testbench.rstrip("\n") + "\n\n" + "\n\n".join(child_rtl.values()) + "\n"
 
 
+def _is_absent_dut_artifact(line: str) -> bool:
+    """True if this verilator error exists ONLY because the DUT was left out.
+
+    A TB is linted alone on purpose, so `-MODMISSING` is expected. The two
+    dotted-reference errors are the same artifact one step further in: once a
+    testbench reaches INTO the DUT (`dut.some_port`), verilator cannot resolve
+    the path without the module, and reports it as a hard error rather than as
+    MODMISSING. Treating those as real syntax errors would fail every glue
+    testbench carrying a hierarchical probe, and `_tb_has_syntax_error` would
+    then silently swap the glue oracle for the golden TB -- turning added
+    visibility into a lost verdict.
+    """
+    return (
+        "-MODMISSING:" in line
+        or line.startswith("%Error: Exiting due to")
+        or "Dotted reference to instance that refers to missing module" in line
+        or "in dotted variable/method:" in line
+    )
+
+
 def tb_lint_report(*, tb_path: Path) -> tuple[bool, str, str]:
     """Return (is_ok, excerpt, raw_json) from `verilator --lint-only` on the testbench.
 
@@ -156,8 +176,7 @@ would disable the unified glue loop everywhere it gates.
     real_error_lines = [
         line
         for line in error_lines
-        if ("-MODMISSING:" not in line)
-        and (not line.startswith("%Error: Exiting due to"))
+        if not _is_absent_dut_artifact(line)
     ]
 
     is_ok = not real_error_lines and ("syntax error" not in text.lower()) and ("malformed statement" not in text.lower())
@@ -245,6 +264,85 @@ class TopAgent:
         lines.insert(insert_after + 1, f"{indent}$dumpvars(0, {inst});")
         return "\n".join(lines) + ("\n" if testbench.endswith("\n") else "")
 
+    def _augment_glue_port_probes(
+        self,
+        testbench: str,
+        *,
+        module_name: str,
+        assembled_rtl_path: str | None,
+    ) -> str:
+        """Print the glue's CHILD-FACING ports every cycle, via hierarchical reference.
+
+        A leaf debugger sees expected-vs-actual for every signal it can change,
+        because `rtl.sv` IS the DUT and the testbench drives and prints its ports.
+        A glue debugger does not: the testbench drives the WRAPPER, so it prints
+        only the wrapper's external outputs, while the glue's child-facing ports
+        are internal nodes one level down.
+
+        Measured on stage_roundpack: 13 failing signals, of which 11 were
+        child-facing and the testbench printed values for NONE. The glue drives
+        13 of its 14 editable blocks into those ports, so it was editing almost
+        entirely blind -- which is a far better explanation of "leaves converge,
+        glue does not" than anything about tools or prompts.
+
+        The wrapper connects each child-facing port to a same-named wire
+        (`.special_case_unit_sign_in(special_case_unit_sign_in)`), so
+        `<dut_inst>.<port>` reaches it. Emitted as one GLUEPROBE line per cycle
+        so the values can be correlated with the mismatch times the testbench
+        already reports.
+        """
+        if not assembled_rtl_path:
+            return testbench
+        try:
+            asm = Path(assembled_rtl_path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return testbench
+
+        # the glue instantiation inside the wrapper
+        m = re.search(rf"\b{re.escape(module_name)}_glue\b\s+(\w+)\s*\((.*?)\);", asm, re.S)
+        if not m:
+            return testbench
+        conn = m.group(2)
+        # `.child_port(wire)` where the port is child-facing: `<child>_<signal>`
+        ports = [
+            g for g in re.findall(r"\.\s*(\w+)\s*\(", conn)
+            if re.search(r"_(in|out)$", g) and g.count("_") >= 2
+        ]
+        # external ports of the parent are connected too; keep only those that are
+        # NOT declared as ports of the testbench's own DUT interface, i.e. the ones
+        # carrying a child module's name prefix.
+        ports = [p for p in ports if not re.match(r"^(clk|rst|valid|sign|exp|sig|is|result)_", p)]
+        if not ports:
+            return testbench
+
+        inst = None
+        mi = re.search(rf"\b{re.escape(module_name)}\b\s+([a-zA-Z_]\w*)\s*\(", testbench)
+        if mi:
+            inst = mi.group(1)
+        if not inst:
+            return testbench
+        if "GLUEPROBE" in testbench:
+            return testbench
+
+        clk = "clk" if re.search(r"\bclk\b", testbench) else None
+        if not clk:
+            return testbench
+
+        fmt = " ".join(f"{p}=%h" for p in ports)
+        args = ", ".join(f"{inst}.{p}" for p in ports)
+        probe = (
+            "\n// --- injected: child-facing port visibility for the glue debugger ---\n"
+            "// The testbench drives the WRAPPER, so these ports are internal nodes it\n"
+            "// would otherwise never print. Without them the glue agent edits blind.\n"
+            f"always @(negedge {clk}) begin\n"
+            f'    $display("GLUEPROBE t=%0t {fmt}", $time, {args});\n'
+            "end\n"
+        )
+        idx = testbench.rfind("endmodule")
+        if idx == -1:
+            return testbench
+        return testbench[:idx] + probe + testbench[idx:]
+
     def _tb_has_syntax_error(self, *, tb_path: Path) -> bool:
         """Return True if `tb_path` contains a real syntax error (not just missing module defs)."""
         if shutil.which("verilator") is None:
@@ -272,8 +370,7 @@ class TopAgent:
         real_error_lines = [
             line
             for line in error_lines
-            if ("-MODMISSING:" not in line)
-            and (not line.startswith("%Error: Exiting due to"))
+            if not _is_absent_dut_artifact(line)
         ]
         if real_error_lines:
             return True
@@ -451,6 +548,12 @@ class TopAgent:
             # supplied text is authoritative and never redrawn, so there is no
             # second, invented oracle anywhere in a composition's pipeline.
             testbench = self._augment_dumpvars_with_dut_scope(external_tb, module_name=module_name)
+            # Give the glue debugger the same visibility a leaf debugger has by
+            # construction: values for every port it can drive, not just the
+            # wrapper's two external outputs.
+            testbench = self._augment_glue_port_probes(
+                testbench, module_name=module_name, assembled_rtl_path=golden_rtl_path,
+            )
             testbench = _append_child_rtl(testbench, child_rtl)
             interface = ""
             self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)

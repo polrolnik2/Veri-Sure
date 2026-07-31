@@ -392,6 +392,58 @@ def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int
     return sorted(times)[-min(len(times), k_edges + 2) :]
 
 
+_GLUEPROBE_RE = re.compile(r"^GLUEPROBE\s+t=(\d+)\s+(.*)$", re.M)
+
+
+def _glueprobe_values(stdout: str, fail_time: int | None) -> dict[str, str]:
+    """Observed values of the glue's CHILD-FACING ports at the failing time.
+
+    The testbench drives the WRAPPER, so it only ever prints expected-vs-actual
+    for the wrapper's external outputs. Every port the glue drives into a child
+    is an internal node, and on stage_roundpack that was 11 of the 13 failing
+    signals -- reported to the debugger as `expected: null, actual: null`, a
+    name with no evidence attached.
+
+    There is no `expected` to report for these: the oracle models the
+    composition's outputs, not its internal wiring. What the debugger gets is
+    the value it is actually driving at the moment the composition fails, which
+    is the difference between reasoning about a routing bug and guessing at one.
+    """
+    if fail_time is None:
+        return {}
+    best: dict[str, str] = {}
+    best_t = None
+    for m in _GLUEPROBE_RE.finditer(stdout):
+        t = int(m.group(1))
+        if t > fail_time:
+            continue
+        if best_t is None or t >= best_t:
+            best_t = t
+            best = dict(re.findall(r"(\w+)=([0-9a-fA-FxXzZ?]+)", m.group(2)))
+    return best
+
+
+def _fill_from_probe(
+    fail_outputs: list[dict[str, Any]], stdout: str, fail_time: int | None
+) -> list[dict[str, Any]]:
+    """Attach probe-observed values to signals the testbench could not print.
+
+    Applied to the list that actually ships. The VCD-derived `fail_details`
+    REPLACES `fail_outputs` wholesale, and it is precisely the branch carrying
+    the child-facing ports -- so filling the other list would have looked
+    correct on a log with no VCD and done nothing in the case this exists for.
+    """
+    probe = _glueprobe_values(stdout, fail_time)
+    if not probe:
+        return fail_outputs
+    for fo in fail_outputs:
+        sig = fo.get("sig") or ""
+        if fo.get("actual") is None and sig in probe:
+            fo["actual"] = probe[sig]
+            fo["observed_via"] = "hierarchical_probe"
+    return fail_outputs
+
+
 def build_trace_report(
     *,
     rtl_path: Path,
@@ -659,7 +711,7 @@ def build_trace_report(
     report: dict[str, Any] = {
         "fail_time": fail_time_star,
         "total_mismatches": total_mismatches,
-        "fail_outputs": fail_details or fail_outputs,
+        "fail_outputs": _fill_from_probe(fail_details or fail_outputs, stdout, fail_time),
         "input_window": input_window,
         # Fall back to the cycle dump when the VCD path produced nothing, so the
         # debugger's first diagnostic step is never handed an empty field.
