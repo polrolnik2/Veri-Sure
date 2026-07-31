@@ -302,10 +302,66 @@ def _extract_dut_instance_name(tb_text: str, *, module_name: str) -> str | None:
     return None
 
 
+def _vcd_signal_names(vcd: Any) -> list[str]:
+    """Every signal path in the dump, across vcdvcd API versions.
+
+    This existed as a bare `getattr(vcd, "signals", [])`, and the installed
+    vcdvcd exposes NO `signals` attribute -- only `get_signals()` and a private
+    `_signals`. So the getattr returned `[]` on every call and
+    `_vcd_find_signal` answered None for every signal in every session, which
+    silently disabled ALL waveform analysis: fail_details values, the input
+    window, and alignment_diagnosis alike.
+
+    That is why 0 of 471 failing signals across 107 recorded reports carried a
+    value, and why the debugger prompt's "check alignment_diagnosis first"
+    always landed on an empty field -- for leaves exactly as much as for glue.
+    A silent default hid a total failure behind a plausible-looking empty result.
+    """
+    got = getattr(vcd, "signals", None)
+    if got:
+        return list(got)
+    getter = getattr(vcd, "get_signals", None)
+    if callable(getter):
+        try:
+            return list(getter())
+        except Exception:  # noqa: BLE001
+            pass
+    return list(getattr(vcd, "_signals", None) or [])
+
+
+def _vcd_tv(vcd: Any, name: str) -> list[tuple[int, str]]:
+    """Time/value series for a signal path, across vcdvcd API versions.
+
+    The call sites used `vcd[name].tv`, and the installed vcdvcd is NOT
+    subscriptable -- it exposes `get_data()` keyed by short id, each entry
+    holding `references` (the full paths) and `tv`. That TypeError was never
+    observed because `_vcd_find_signal` returned None first (see
+    `_vcd_signal_names`), so execution never reached the subscript. Two
+    independent API mismatches, the first masking the second, which is why the
+    whole waveform path looked merely empty rather than broken.
+    """
+    try:
+        return list(vcd[name].tv)  # newer vcdvcd
+    except TypeError:
+        pass
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        data = vcd.get_data()
+    except Exception:  # noqa: BLE001
+        return []
+    for entry in (data or {}).values():
+        if not hasattr(entry, "get"):
+            continue
+        if name in (entry.get("references") or []):
+            return list(entry.get("tv") or [])
+    return []
+
+
 def _vcd_find_signal(vcd: Any, leaf: str, *, prefer_substrings: list[str] | None = None) -> str | None:
     leaf = leaf.strip()
     candidates: list[str] = []
-    for s in getattr(vcd, "signals", []):
+    for s in _vcd_signal_names(vcd):
         last = s.split(".")[-1]
         if last == leaf or last.startswith(f"{leaf}["):
             candidates.append(s)
@@ -366,7 +422,7 @@ def _wildcard_match(expected: str | None, actual: str | None) -> bool:
 def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int]:
     clk_sig = _vcd_find_signal(vcd, "clk")
     if clk_sig:
-        tv = vcd[clk_sig].tv  # type: ignore[index]
+        tv = _vcd_tv(vcd, clk_sig)
         edges: list[int] = []
         prev = None
         for tt, vv in tv:
@@ -384,7 +440,7 @@ def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int
     times = {t_star}
     for s in getattr(vcd, "signals", [])[:200]:
         try:
-            for tt, _vv in vcd[s].tv:  # type: ignore[index]
+            for tt, _vv in _vcd_tv(vcd, s):
                 if tt <= t_star:
                     times.add(tt)
         except Exception:  # noqa: BLE001
@@ -421,6 +477,34 @@ def _glueprobe_values(stdout: str, fail_time: int | None) -> dict[str, str]:
             best_t = t
             best = dict(re.findall(r"(\w+)=([0-9a-fA-FxXzZ?]+)", m.group(2)))
     return best
+
+
+def _fill_from_stdout(
+    fail_outputs: list[dict[str, Any]], values: dict[str, dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Restore the values the testbench PRINTED onto the list that ships.
+
+    `fail_details` (VCD-derived) replaces `fail_outputs` wholesale, and it looks
+    up `<sig>_ref` / `<sig>_dut` -- a self-checking scaffold convention that NO
+    generated testbench actually uses. Measured: zero `_ref`/`_dut` wires in the
+    glue TB and zero in the leaf TB, so that lookup returns None for every
+    signal and `fail_details` is all-null by construction.
+
+    The effect was that the weakest evidence silently displaced the strongest:
+    stdout carried `result_out expected=00000000 actual=7fc00000` -- a full
+    expected/actual PAIR -- and the recorded report still showed
+    `expected: null, actual: null` for it, because 13 null VCD rows won the
+    `or`. Merge instead of replace; a printed value is never overwritten.
+    """
+    for fo in fail_outputs:
+        v = values.get(fo.get("sig") or "")
+        if not v:
+            continue
+        if fo.get("expected") is None:
+            fo["expected"] = v["expected"]
+        if fo.get("actual") is None:
+            fo["actual"] = v["actual"]
+    return fail_outputs
 
 
 def _fill_from_probe(
@@ -552,7 +636,7 @@ def build_trace_report(
         clk_full = _vcd_find_signal(vcd, "clk")
         if clk_full:
             prev = None
-            for tt, vv in vcd[clk_full].tv:  # type: ignore[index]
+            for tt, vv in _vcd_tv(vcd, clk_full):
                 if prev is not None and vv != prev:
                     if prev != "1" and vv == "1":
                         edge_at_time[tt] = "posedge"
@@ -587,23 +671,40 @@ def build_trace_report(
 
         key_signals = sorted({s for s in key_signals if s})
 
-        def sample_signal(*, leaf: str, t: int) -> str | None:
+        def sample_signal(*, leaf: str, t: int, in_dut: bool = False) -> str | None:
             prefer_substrings = None
-            if dut_instance and leaf in internal_candidate_set:
+            if dut_instance and (in_dut or leaf in internal_candidate_set):
                 prefer_substrings = [f".{dut_instance}."]
             full = _vcd_find_signal(vcd, leaf, prefer_substrings=prefer_substrings)
             if not full:
                 return None
             inclusive = (leaf == "clk") or (t == 0)
             try:
-                return _vcd_value_at(vcd[full].tv, t, inclusive=inclusive)  # type: ignore[index]
+                return _vcd_value_at(_vcd_tv(vcd, full), t, inclusive=inclusive)
             except Exception:  # noqa: BLE001
                 return None
 
         # fail output expected/actual at t*
+        #
+        # `<sig>_ref` / `<sig>_dut` is a self-checking-harness convention that NO
+        # generated testbench actually uses: measured across every recorded run,
+        # zero such wires exist in 134 leaf TBs and zero in 26 glue TBs. The
+        # generators emit a local reference model plus
+        # `$display("Mismatch at time %0t: <sig>")` instead. So this lookup
+        # returned None for every signal in every session, and `fail_details`
+        # was all-null by construction -- 0 of 471 failing signals across 107
+        # reports carried a value, for LEAVES as much as for glue.
+        #
+        # Fall back to the signal's own name, preferring the copy inside the DUT
+        # hierarchy. That is what a waveform can actually answer: the VCD holds
+        # what the design DID, at any depth, including internal nodes no
+        # testbench prints. It cannot supply `expected` -- there is no reference
+        # in the dump -- so that side stays with the stdout path.
         for sig in fail_signal_names:
             exp = sample_signal(leaf=f"{sig}_ref", t=fail_time_star)
             act = sample_signal(leaf=f"{sig}_dut", t=fail_time_star)
+            if act is None:
+                act = sample_signal(leaf=sig, t=fail_time_star, in_dut=True)
             fail_details.append({"sig": sig, "expected": exp, "actual": act})
 
         # input window values
@@ -711,7 +812,9 @@ def build_trace_report(
     report: dict[str, Any] = {
         "fail_time": fail_time_star,
         "total_mismatches": total_mismatches,
-        "fail_outputs": _fill_from_probe(fail_details or fail_outputs, stdout, fail_time),
+        "fail_outputs": _fill_from_probe(
+            _fill_from_stdout(fail_details or fail_outputs, values), stdout, fail_time
+        ),
         "input_window": input_window,
         # Fall back to the cycle dump when the VCD path produced nothing, so the
         # debugger's first diagnostic step is never handed an empty field.
