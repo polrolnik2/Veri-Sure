@@ -500,10 +500,20 @@ def _fill_from_stdout(
         v = values.get(fo.get("sig") or "")
         if not v:
             continue
-        if fo.get("expected") is None:
-            fo["expected"] = v["expected"]
-        if fo.get("actual") is None:
-            fo["actual"] = v["actual"]
+        # The testbench's own pair WINS over the waveform's actual, even though
+        # the waveform is more precise. Both sides then share one radix.
+        #
+        # The VCD reports raw bits, the testbench reports whatever it formatted:
+        # on stage_roundpack that yielded `expected=00000000` against
+        # `actual=01111111110000000000000000000000`. Both name the same quiet
+        # NaN (0x7FC00000) and no reader -- model or human -- can see that at a
+        # glance. A debugger comparing those two strings concludes the output is
+        # wrong in some spectacular way and starts rewriting arithmetic.
+        #
+        # The waveform keeps its monopoly where it is the only witness: internal
+        # nodes the testbench never printed, which is most of what a glue drives.
+        fo["expected"] = v["expected"] if v.get("expected") is not None else fo.get("expected")
+        fo["actual"] = v["actual"] if v.get("actual") is not None else fo.get("actual")
     return fail_outputs
 
 
