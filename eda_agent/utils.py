@@ -492,6 +492,111 @@ def constant_output_lag_note(sim_log: str, *, min_pairs: int = 8) -> str:
     )
 
 
+# A mismatch line that carries its INPUTS as well as got/exp, across the TB
+# dialects in this corpus. Operand fields are captured wholesale and filtered
+# by width below, because their names vary per problem (a/b, x/y, op1/op2).
+_ROW_WITH_INPUTS_RES = (
+    re.compile(
+        r"MISMATCH[^:\n]*:\s*(?P<ins>[^|\n]*)\|\s*got=(?P<got>[0-9a-fA-F]+)\s+"
+        r"exp=(?P<exp>[0-9a-fA-F]+)",
+    ),
+    re.compile(
+        r"Cycle\s+\d+:\s*(?P<ins>[^|\n]*)\|\s*\w+=(?P<got>[0-9a-fA-F]+)\s+"
+        r"exp=(?P<exp>[0-9a-fA-F]+)",
+    ),
+    re.compile(
+        r"Inputs?:\s*(?P<ins>[^\n]*)\n\s*Expected:\s*(?P<exp>[0-9a-fA-F]+),\s*"
+        r"Actual:\s*(?P<got>[0-9a-fA-F]+)",
+    ),
+)
+
+_FIELD_RE = re.compile(r"\b\w+=([0-9a-fA-F]+)\b")
+
+
+def operand_passthrough_note(sim_log: str, *, min_rows: int = 8, min_rate: float = 0.30) -> str:
+    """Say when the output is a COPY OF AN INPUT rather than a function of them.
+
+    A datapath that selects an operand instead of combining them fails with
+    values that are individually plausible -- correct width, correct-looking
+    exponent field, sometimes the correct sign -- and scattered enough across a
+    log to read as an accuracy problem. The debugger then goes after rounding,
+    normalisation and guard bits, none of which are reached on these vectors,
+    because the computed result is not what leaves the module.
+
+    Measured on the `fp_adder` level-3 leaf (run `fp_adder_e2e`, 2026-08-02).
+    122 SUM mismatches, of which
+
+        got == a verbatim                35   (29%)
+        got == b verbatim                16   (13%)
+        magnitude of b with the sign of a 11   (9%)
+        magnitude of a with the sign of b  1   (1%)
+        ------------------------------------------
+        output IS an operand             63   (52%)
+
+    The prompt described those 122 rows only as mismatched hex, so half the
+    evidence -- that the adder is passing an operand straight through -- had no
+    way to reach the reader.
+
+    Only rows the testbench already flagged as WRONG are counted. That matters:
+    an FP add whose second operand is negligible correctly returns the first,
+    and counting agreeing rows would report that textbook behaviour as a defect.
+    Operands are matched only against outputs of the SAME width, so narrow
+    control fields (`rnd=4`) cannot coincide with a 32-bit result.
+    """
+    rows: list[tuple[str, str, str]] = []
+    for rx in _ROW_WITH_INPUTS_RES:
+        found = [(m.group("ins"), m.group("got"), m.group("exp")) for m in rx.finditer(sim_log or "")]
+        if len(found) > len(rows):
+            rows = found
+    # Only rows that actually disagree -- see the docstring.
+    rows = [r for r in rows if int(r[1], 16) != int(r[2], 16)]
+    if len(rows) < min_rows:
+        return ""
+
+    exact = signflip = evaluable = 0
+    for ins, got, _exp in rows:
+        width = len(got)
+        operands = [v for v in _FIELD_RE.findall(ins) if len(v) == width]
+        if not operands:
+            # No operand of this output's width -- a narrow flag field against
+            # wide data, typically. The row cannot be judged either way, so it
+            # is not counted as evidence AGAINST passthrough; folding it into
+            # the denominator would report "could not check" as "checked and
+            # found none" and silently dilute the rate below the threshold.
+            continue
+        evaluable += 1
+        g = int(got, 16)
+        msb = 1 << (4 * width - 1)
+        if any(g == int(v, 16) for v in operands):
+            exact += 1
+        elif any((g ^ int(v, 16)) == msb for v in operands):
+            signflip += 1
+
+    if evaluable < min_rows:
+        return ""
+    hits = exact + signflip
+    rate = hits / evaluable
+    if rate < min_rate:
+        return ""
+
+    detail = f"{exact} of them identical to an operand"
+    if signflip:
+        detail += f", {signflip} identical except the most significant bit"
+    return (
+        "YOUR OUTPUT IS A COPY OF AN INPUT — the operands are being SELECTED, not "
+        "combined.\n"
+        f"  In {hits} of {evaluable} mismatching samples ({rate:.0%}) the value produced "
+        f"equals one of that sample's own inputs ({detail}).\n"
+        "  A rounding, normalisation or guard-bit error cannot do that: those perturb a "
+        "computed sum, they do not reproduce an input exactly. Something is routing an "
+        "operand to the output instead of the computed result — a mux default or select "
+        "that picks the wrong side, a special-case branch (zero/inf/NaN/equal-exponent) "
+        "taken far too often, or a sum that is never written back.\n"
+        "  Find where the result is CHOSEN before touching the arithmetic that computes "
+        "it; on these samples that arithmetic is not reaching the output at all.\n"
+    )
+
+
 def add_lineno(file_content: str) -> str:
     lines = file_content.split("\n")
     ret = ""

@@ -22,6 +22,7 @@ from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
 from .utils import (
     constant_output_lag_note,
+    operand_passthrough_note,
     failing_test_scenarios,
     format_failing_scenarios,
     latency_carrier_mismatch_note,
@@ -993,6 +994,15 @@ class RTLEditor:
             or latency_carrier_mismatch_note(sim_failed_log_excerpt)
         )
         latency_block = f"{latency_note}\n" if latency_note else ""
+        # Ahead of the latency note, and of everything else: if the output is a
+        # verbatim copy of an input then the computed result is not reaching the
+        # output at all, and no question about WHEN it arrives -- or about the
+        # arithmetic that produced it -- is worth asking yet. Kept separate from
+        # the latency chain rather than folded into it because the two are not
+        # alternatives: a design can be both mis-routed and mis-timed, and the
+        # `or` chain would report only whichever ran first.
+        passthrough_note = operand_passthrough_note(sim_failed_log_excerpt)
+        passthrough_block = f"{passthrough_note}\n" if passthrough_note else ""
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
         # the thing it corrects, not after.
@@ -1012,7 +1022,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{skew_block}{latency_block}{scenarios_block}"
+            f"{init}\n\n{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
