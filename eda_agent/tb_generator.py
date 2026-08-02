@@ -69,6 +69,18 @@ SystemVerilog declaration rule (this silently destroys testbenches):
   against a constant 0, so correct designs failed and the defect was invisible
   in the log.
 
+SystemVerilog declaration PLACEMENT rule (this fails to compile at all):
+- Every declaration in a `begin ... end` must come BEFORE the first statement of
+  that block. A declaration after a statement is a SYNTAX ERROR, not a style
+  issue, and Verilator reports it far from the real cause as
+  `syntax error, unexpected IDENTIFIER, expecting "'{"`.
+- WRONG:   begin  int a; a = 1;  int b;  b = 2;  end
+- RIGHT:   begin  int a, b;  a = 1;  b = 2;  end
+- RIGHT:   begin  int a; a = 1;  begin int b; b = 2; end  end
+           (a nested block starts a new declaration region)
+- If you realise mid-block that you need another temporary, hoist it to the top
+  of the block or open a nested `begin ... end` — never declare it in place.
+
 Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing ports.
