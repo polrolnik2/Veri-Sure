@@ -210,6 +210,65 @@ def measure_sample_latency(sim_log: str) -> int | None:
     return best_lag
 
 
+def latency_carrier_mismatch_note(sim_log: str) -> str:
+    """Say it plainly when the LATENCY CARRIER itself is wrong.
+
+    `latency_confirmed_note` handles the clean case: valid_out matching on every
+    sample proves the register structure right, so stop editing it. This is its
+    counterpart, and it is the more urgent of the two -- while the valid path's
+    depth disagrees with the oracle, every data mismatch is AMBIGUOUS. A data
+    output can differ because it computes the wrong value, or because it
+    computes the right value and is compared a cycle early or late, and nothing
+    in the log distinguishes those two while valid is also wrong.
+
+    Measured on stage_roundpack (2026-08-02, live). The glue registered
+    result_out through two stages but valid_out through one:
+
+        result_mux_d <= result_mux;      // stage 1
+        result_out   <= result_mux_d;    // stage 2   -- 2 cycles
+        valid_out    <= valid_in;        //           -- 1 cycle
+
+    against an oracle whose reference pipelines BOTH through two. The debugger
+    spent seven edits without addressing it, while the log said `valid_out has
+    31 mismatches` the whole time. Giving the valid path a matching second stage
+    takes valid_out 31 -> 0 and, with the data path then unambiguous, the
+    remaining defect is reachable.
+
+    Derived entirely from the oracle's own per-output counts -- no golden
+    reference, nothing invented.
+    """
+    counts: dict[str, int] = {}
+    for m in _HINT_OUTPUT_RE.finditer(sim_log or ""):
+        counts[m.group("sig")] = int(m.group("cnt"))
+    if not counts:
+        return ""
+    carriers = sorted(
+        s for s, c in counts.items() if c > 0 and re.search(r"valid|ready|ack|done", s, re.I)
+    )
+    if not carriers:
+        return ""
+    others = sorted(s for s, c in counts.items() if c > 0 and s not in carriers)
+    lines = [
+        "THE LATENCY CARRIER ITSELF IS MISMATCHING — fix this before the data path.",
+        f"  {', '.join(carriers)} does not match the oracle. That signal carries this "
+        "module's timing, so its registered DEPTH disagrees with what the testbench "
+        "expects — this is a latency defect, not a value defect.",
+    ]
+    if others:
+        lines.append(
+            f"  While it is wrong, every mismatch on {', '.join(others)} is AMBIGUOUS: "
+            "the value may be wrong, or it may be right and sampled a cycle early or "
+            "late. You cannot tell which from this log."
+        )
+    lines.append(
+        "  Count the register stages on the handshake path and make them match the "
+        "stages on the data path — an output and the valid that qualifies it must be "
+        "produced with the SAME latency. Fixing this first makes the remaining "
+        "mismatches interpretable."
+    )
+    return "\n".join(lines) + "\n"
+
+
 _CLOCKED_BLOCK_RE = re.compile(r"\balways_ff\b|\balways\s*@\s*\(\s*posedge\b", re.I)
 
 

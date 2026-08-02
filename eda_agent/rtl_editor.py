@@ -23,6 +23,7 @@ from .trace_slicer import RtlBlock
 from .utils import (
     failing_test_scenarios,
     format_failing_scenarios,
+    latency_carrier_mismatch_note,
     latency_confirmed_note,
     mismatch_input_skew_note,
 )
@@ -950,7 +951,12 @@ class RTLEditor:
         # Placed BEFORE the scenario list on purpose: that list is where the
         # timing hypothesis forms, and this is its refutation. Empty unless the
         # oracle actually proves the latency correct.
-        latency_note = latency_confirmed_note(sim_failed_log_excerpt)
+        # Exactly one of these can be non-empty: the carrier either matches on
+        # every sample or it does not. Clean -> "latency is proven right, stop
+        # editing it"; dirty -> "fix the latency FIRST, the data mismatches are
+        # ambiguous until you do".
+        latency_note = latency_confirmed_note(sim_failed_log_excerpt) or \
+            latency_carrier_mismatch_note(sim_failed_log_excerpt)
         latency_block = f"{latency_note}\n" if latency_note else ""
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
