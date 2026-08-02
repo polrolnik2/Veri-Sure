@@ -229,6 +229,28 @@ Other requirements:
 5. NEVER USE 'inside' operator in RTL code. Code like 'state inside {STATE_B, STATE_C, STATE_D}' should NOT be used.
 6. Never USE 'unique' or 'unique0' keywords in RTL code. Code like 'unique case' should NOT be used.
 7. Respect any explicit latency/timing described in the contract (e.g., next-cycle outputs).
+8. LATENCY IS A HARD CONSTRAINT, NOT A PREFERENCE. `timing.<output>.latency_cycles`
+   is the EXACT number of clocked stages between an input being presented and that
+   output being observable. Count the registers on the path before you finish:
+
+     latency_cycles = 0  -> purely combinational. The output must NOT be assigned
+                            with `<=` in any clocked block.
+     latency_cycles = 1  -> EXACTLY ONE register. The combinational datapath reads
+                            the INPUT PORTS directly and only the result is
+                            registered.
+     latency_cycles = N  -> exactly N registers in series on that path.
+
+   Registering the inputs into `*_reg`/`*_s1` AND registering the result is TWO
+   stages, not one — that is the single most common way this goes wrong. If the
+   contract says 1, there must be no `a_reg <= a` stage feeding the datapath.
+   Splitting a long computation into `_s1`/`_s2`/`_s3` pipeline stages is a
+   sensible instinct and is WRONG here unless the contract asked for that depth:
+   a deeper pipeline is not a better design, it is a different contract.
+
+   Nothing downstream will catch a mistake here. The testbench compares against a
+   queue that realigns to whatever latency your design happens to have, so a
+   design of the wrong depth passes its own checks and fails every consumer that
+   holds it to the contract. Getting this right is your responsibility alone.
 """
 # Some prompts above comes from:
 # @misc{ho2024verilogcoderautonomousverilogcoding,
