@@ -48,6 +48,29 @@ def _as_int(val: Any) -> int | None:
         return None
 
 
+_COMPLETION_WORDS = frozenset({"valid", "ready", "ack", "done", "busy", "complete"})
+_NAME_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _has_completion_signal(outputs) -> bool:
+    """Does any OUTPUT tell a consumer when the data outputs are usable?
+
+    Names only -- the contract has no other handle on intent.
+
+    Matching is per WORD, not by substring, and the split has to happen on
+    underscores and camelCase rather than regex word boundaries: `_` is a word
+    character, so `\\bvalid\\b` matches neither `valid_out` nor `data_valid` --
+    i.e. exactly the two spellings the check exists to catch. Splitting first
+    keeps `invalid_flag` out, which a substring search would wrongly accept as
+    a handshake.
+    """
+    for name in outputs or []:
+        parts = {p.lower() for p in _NAME_SPLIT_RE.split(str(name) or "") if p}
+        if parts & _COMPLETION_WORDS:
+            return True
+    return False
+
+
 def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
@@ -157,6 +180,29 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                 l = _as_int(lat)
                 if l is None or l < 0:
                     issues.append(ContractIssue("error", f"timing.{out}.latency_cycles", f"Invalid latency_cycles: {lat!r}"))
+                elif l > 1 and not _has_completion_signal(outputs):
+                    # A latency beyond a registered output is only integrable if a
+                    # consumer can learn when the value is ready -- either from a
+                    # completion signal, or from a latency the spec states outright.
+                    # With neither, every consumer must guess, and the guess that
+                    # a registered interface implies one cycle is the obvious one.
+                    #
+                    # Measured on fp_adder (level-3): the spec offers `clk`, `rst`,
+                    # `a`, `b`, `rnd_mode` -> `sum`, `exception_flags`, declares the
+                    # outputs `output reg`, states no cycle count, and carries no
+                    # valid/ready/done anywhere -- while its prose says "Consider a
+                    # pipelined structure". The contract came back with a 3-cycle
+                    # latency, which is self-consistent with the testbench generated
+                    # FROM that contract and unusable to anything else.
+                    issues.append(ContractIssue(
+                        "warning", f"timing.{out}.latency_cycles",
+                        f"latency_cycles={l} but the interface has no completion signal "
+                        f"(no valid/ready/done/valid_out output). Nothing tells a consumer "
+                        f"when {out} is ready, so a multi-cycle latency is unobservable "
+                        f"from outside this module. Unless the spec names a specific cycle "
+                        f"count, state the MINIMUM latency the function needs (0 for "
+                        f"combinational, 1 for a registered output).",
+                    ))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")
