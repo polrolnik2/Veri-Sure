@@ -125,6 +125,45 @@ def check_syntax(rtl_path: str) -> Tuple[bool, str]:
     return is_pass, sim_output
 
 
+# NB: distinct from _MULTIDRIVEN_RE above, which is a presence test for lint_tb.
+# Defining a second _MULTIDRIVEN_RE shadowed that one and silently disarmed the
+# testbench multidriven lint -- caught only by running the full unit tier.
+_MULTIDRIVEN_SIGNAL_RE = re.compile(r"%Warning-MULTIDRIVEN:.*?signal '([^']+)'", re.S)
+
+
+def multidriven_signals(rtl_path: str) -> set[str]:
+    """Signals with more than one continuous driver, per Verilator.
+
+    `check_syntax` is deliberately permissive about warnings, which is right for
+    WIDTHTRUNC and friends but wrong for this one: two continuous drivers on the
+    same signal is not a style preference, it is a design error that synthesis
+    rejects and that simulates as X or as a silent last-writer-wins.
+
+    Measured on the recorded fp_adder tree, output_registers glue:
+
+        parent_1  assign valid_out ... x1   (a fresh draw -- correct)
+        parent_0  assign valid_out ... x2
+        parent_2  assign valid_out ... x3
+
+    The count GROWS across debug attempts. The model's replacement text
+    re-declares statements that also live outside the block being replaced, the
+    splice duplicates them, and nothing rejects the result -- so each edit
+    corrupts the file a little more while the harness reports the attempt as
+    syntactically fine.
+
+    Returns a SET so callers can compare before and after an edit and reject
+    only what that edit introduced, rather than refusing to work on RTL that
+    arrived already broken.
+    """
+    try:
+        ok, out = check_syntax(rtl_path)
+        obj = CommandResult.model_validate_json(out)
+        text = (obj.stdout or "") + "\n" + (obj.stderr or "")
+    except Exception:  # noqa: BLE001
+        return set()
+    return set(_MULTIDRIVEN_SIGNAL_RE.findall(text))
+
+
 def sim_review_mismatch_cnt(stdout: str) -> int:
     mismatch_cnt = 0
     if "SIMULATION FAILED" in stdout:

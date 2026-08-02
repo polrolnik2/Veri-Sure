@@ -17,7 +17,7 @@ from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .sim_reviewer import SimReviewer, check_syntax
+from .sim_reviewer import SimReviewer, check_syntax, multidriven_signals
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
 from .utils import (
@@ -567,7 +567,9 @@ class _EditSession:
             "error_msg": "",
         }
 
-    def _judge_replace_action_execution(self, *, old_file_content: str) -> Dict[str, Any]:
+    def _judge_replace_action_execution(
+        self, *, old_file_content: str, pre_multidriven: set[str] | None = None,
+    ) -> Dict[str, Any]:
         result = self._base_result()
         prev_mismatch_cnt = int(self.last_mismatch_cnt)
         prev_fail_time = self.last_fail_time
@@ -577,6 +579,26 @@ class _EditSession:
         if not is_syntax_correct:
             self.write_rtl(old_file_content)
             result["error_msg"] = "Syntax error. Action rolled back."
+            return result
+
+        # A duplicated continuous assignment is a design error, not a style
+        # nit, and check_syntax is deliberately permissive about warnings so it
+        # sails through. Reject BEFORE simulating: the sim would either mask it
+        # (last-writer-wins) or blame the datapath for an X.
+        new_multi = multidriven_signals(self.rtl_path)
+        introduced = new_multi - (pre_multidriven or set())
+        if introduced:
+            self.write_rtl(old_file_content)
+            result = self._base_result()
+            result["is_syntax_correct"] = True
+            result["error_msg"] = (
+                "Edit rolled back: it gave "
+                + ", ".join(sorted(introduced))
+                + " MORE THAN ONE continuous driver. Your replacement text re-declares "
+                "assignments that already exist OUTSIDE the block you replaced, so the "
+                "splice duplicated them. Replace ONLY the lines inside the block, and do "
+                "not repeat assignments that live elsewhere in the module."
+            )
             return result
 
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
@@ -651,6 +673,9 @@ class _EditSession:
 
         old_file_content = self.read_rtl()
         old_lines = old_file_content.splitlines()
+        # Snapshot BEFORE the splice so the guard can reject only what this edit
+        # introduces, rather than refusing to work on RTL that arrived broken.
+        pre_multidriven = multidriven_signals(self.rtl_path)
         block = self.blocks_by_id[block_id]
         start = block.start_line - 1
         end = block.end_line - 1
@@ -671,7 +696,9 @@ class _EditSession:
         new_lines = old_lines[:start] + new_block_lines + old_lines[end + 1 :]
         self.write_rtl("\n".join(new_lines) + ("\n" if old_file_content.endswith("\n") else ""))
 
-        return self._judge_replace_action_execution(old_file_content=old_file_content)
+        return self._judge_replace_action_execution(
+            old_file_content=old_file_content, pre_multidriven=pre_multidriven,
+        )
 
 
 def _render_continue_debug_prompt(session: "_EditSession") -> str:
