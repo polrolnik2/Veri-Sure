@@ -269,6 +269,42 @@ def latency_carrier_mismatch_note(sim_log: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _valid_low_failure_advice(sim_log: str) -> str:
+    """The gating hint, derived WITHOUT needing the pipeline depth.
+
+    A cycle-dump row where got_res != exp_res while exp_val is 0 says directly
+    that the oracle compared a sample it does not consider valid, and the design
+    disagreed there. That needs no lag: the row carries the outputs and the
+    expected-valid together.
+
+    It matters that this is independent, because it is the only ACTIONABLE part
+    of the skew note and the lag is often unmeasurable. Measured on
+    stage_roundpack: of the 22 recorded mismatch blocks, 15 are cured by gating
+    the output register on valid_in -- and 13 of those 15 were displayed with
+    valid_in=1, so the printed inputs point away from the fix. Without this
+    paragraph the debugger gets a warning that its evidence is skewed and no
+    indication of what to do instead.
+    """
+    n = 0
+    for m in _CYCLE_ROW_RE.finditer(sim_log or ""):
+        body = m.group("body")
+        got = re.search(r"\bgot_res=(\S+)", body)
+        exp = re.search(r"\bexp_res=(\S+)", body)
+        ev = _EXP_VAL_RE.search(body)
+        if got and exp and ev and got.group(1) != exp.group(1) and ev.group("v") == "0":
+            n += 1
+    if not n:
+        return ""
+    return (
+        f"  {n} failing sample(s) in the cycle dump occur while valid_out is LOW. On "
+        "those cycles the testbench's reference HOLDS its previous result instead of "
+        "following the inputs, so it is checking a value the contract does not define. "
+        "If your output register updates unconditionally, gate it (hold when the input "
+        "is not valid) -- that is a control-path fix, not a datapath one, and changing "
+        "the arithmetic will not resolve these samples.\n"
+    )
+
+
 _CLOCKED_BLOCK_RE = re.compile(r"\balways_ff\b|\balways\s*@\s*\(\s*posedge\b", re.I)
 
 
@@ -333,6 +369,7 @@ def mismatch_input_skew_note(sim_log: str, rtl: str | None = None) -> str:
             "  (The exact skew could not be measured here — the testbench's cycle dump "
             "was too short — so no corrected pairing is offered. Trust the waveform and "
             "the contract's latency, not these adjacent lines.)\n"
+            + _valid_low_failure_advice(sim_log)
         )
 
     rows = list(_CYCLE_ROW_RE.finditer(sim_log or ""))
@@ -374,23 +411,9 @@ def mismatch_input_skew_note(sim_log: str, rtl: str | None = None) -> str:
             f"(stimulus shifted back by {lag}):"
         )
         lines.extend(paired[:8])
-    if invalid_fails:
-        # The single most actionable thing in this note. The testbench checks
-        # result_out on EVERY sample, including those where its own valid_out is
-        # low, and on those samples its reference holds the last valid result
-        # rather than tracking the inputs. A design that recomputes its output
-        # register unconditionally therefore fails on cycles whose value the
-        # contract never defines -- and no amount of fixing the DATAPATH makes
-        # those samples agree, because the disagreement is about WHEN the
-        # register may update, not about what it computes.
-        lines.append(
-            f"  {invalid_fails} of the failing samples above occur while valid_out is LOW. "
-            "On those cycles the testbench's reference HOLDS its previous result instead "
-            "of following the inputs, so it is checking a value the contract does not "
-            "define. If your output register updates unconditionally, gate it (hold when "
-            "the input is not valid) -- that is a control-path fix, not a datapath one, "
-            "and changing the arithmetic will not resolve these samples."
-        )
+    advice = _valid_low_failure_advice(sim_log)
+    if advice:
+        lines.append(advice.rstrip("\n"))
     return "\n".join(lines) + "\n"
 
 
