@@ -509,6 +509,52 @@ class _EditSession:
             # Observability must never break the loop it observes.
             pass
 
+    def backfill_model_text(self, first_iter: int, text: str | None) -> None:
+        """Attach a completed turn's reasoning to the edits it produced.
+
+        Reading the agent's memory at TOOL time does not work: in agentscope's
+        ReAct loop the tool executes before the assistant message is committed,
+        so `replace_block` is logged while the reasoning for that very turn does
+        not exist yet. Measured live on stage_roundpack 2026-08-02 — four
+        trajectory entries, `model_text` None on every one, and no `model_turn`
+        entry at all because the turn had not returned. An earlier attempt to
+        read `self._agent.memory` from inside the tool passed its unit tests
+        against a hand-built memory and produced nothing whatsoever in
+        production, which is the same shape of mistake as B23: a probe verified
+        only against the caller it was written for.
+
+        So do it from the other side. `chat()` knows the reasoning once the turn
+        returns, and knows which trajectory rows that turn wrote; this rewrites
+        exactly those rows. Never raises: observability must not break the loop
+        it observes.
+        """
+        if not text:
+            return
+        try:
+            path = Path(self.output_dir, "debug_trajectory.jsonl")
+            if not path.exists():
+                return
+            rows = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    rows.append(line)
+                    continue
+                if (
+                    isinstance(row, dict)
+                    and row.get("iter", 0) >= first_iter
+                    and row.get("action") == "replace_block"
+                    and not row.get("model_text")
+                ):
+                    row["model_text"] = text[:1500]
+                rows.append(json.dumps(row, ensure_ascii=False) if isinstance(row, dict) else row)
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+
     def _base_result(self) -> Dict[str, Any]:
         return {
             "is_action_executed": False,
@@ -754,43 +800,6 @@ class RTLEditor:
         self._session._record_trajectory("run_simulation", result=result)
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
-    def _latest_model_reasoning(self) -> str | None:
-        """The assistant text accompanying the tool call currently executing.
-
-        `chat()` records `model_text` on `model_turn` only, and only after the
-        agent's whole ReAct turn returns -- but `replace_block` is logged from
-        inside that turn, so an edit never carried the reasoning that produced
-        it. Measured on stage_roundpack (job 7846415): `model_text` was None on
-        all 8 recorded `replace_block` entries, and the diagnosis of why the
-        debugger kept de-registering had to be reconstructed from diffs and
-        prompt archaeology because its stated reason was never persisted.
-
-        The reasoning is already in the agent's memory by the time the tool
-        runs -- the assistant message carrying this tool call. Read it there.
-        """
-        try:
-            for msg in reversed(getattr(self._agent.memory, "content", None) or []):
-                if getattr(msg, "role", None) != "assistant":
-                    continue
-                content = getattr(msg, "content", None)
-                if isinstance(content, str):
-                    text = content
-                elif isinstance(content, list):
-                    text = "\n".join(
-                        str(b.get("text") or "")
-                        for b in content
-                        if isinstance(b, dict) and b.get("type") == "text"
-                    )
-                else:
-                    text = ""
-                if text.strip():
-                    return text.strip()
-        except Exception:  # noqa: BLE001
-            # Same contract as _record_trajectory: observability must never
-            # break the loop it observes.
-            return None
-        return None
-
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
         """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
         if self._session is None:
@@ -809,9 +818,12 @@ class RTLEditor:
             ))
         except Exception:  # noqa: BLE001
             diff = None
+        # model_text is filled in by chat()'s backfill once the turn returns --
+        # at THIS point in agentscope's ReAct loop the assistant message for the
+        # current turn has not been committed to memory yet, so there is nothing
+        # here to read. See _EditSession.backfill_model_text.
         self._session._record_trajectory(
             "replace_block", result=result, block_id=block_id, diff=diff,
-            model_text=self._latest_model_reasoning(),
         )
         # Even if the action was rolled back, return the latest available trace pointer/summary
         # so the agent can re-ground itself quickly.
@@ -980,8 +992,10 @@ class RTLEditor:
                 stall_count += 1
             prev_mismatch_for_stall = self._session.last_mismatch_cnt
 
+        _turn_start_iter = self._session.traj_iter + 1
         response = await self._agent(Msg("user", first_prompt, role="user"))
         _last_content = str(getattr(response, "content", "") or "")
+        self._session.backfill_model_text(_turn_start_iter, _last_content)
         if self._session.is_done:
             _justification = _last_content
         else:
@@ -1011,6 +1025,7 @@ class RTLEditor:
             window = self._memory_window
             if window > 0 and len(mem.content) > window + 2:
                 mem.content = [mem.content[0]] + mem.content[-(window):]
+            _turn_start_iter = self._session.traj_iter + 1
             response = await self._agent(
                 Msg(
                     "user",
@@ -1019,6 +1034,7 @@ class RTLEditor:
                 )
             )
             _last_content = str(getattr(response, "content", "") or "")
+            self._session.backfill_model_text(_turn_start_iter, _last_content)
             # The reasoning, recorded against the iteration it belongs to. Without
             # it the record shows WHAT changed but never why the model thought so
             # -- and on stage_roundpack the reasoning is the whole story: it wrote
