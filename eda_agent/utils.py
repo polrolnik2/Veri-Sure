@@ -417,6 +417,81 @@ def mismatch_input_skew_note(sim_log: str, rtl: str | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
+# Ordered (got, exp) pairs, across the TB dialects seen in this corpus.
+_GOT_EXP_PAIR_RES = (
+    re.compile(r"Got:\s+(?P<got>\w+)[^\n]*\n\s*Exp:\s+(?P<exp>\w+)", re.I),
+    re.compile(r"\bgot=(?P<got>\w+)\s+exp=(?P<exp>\w+)", re.I),
+    re.compile(r"got_res=(?P<got>\w+)\s+exp_res=(?P<exp>\w+)", re.I),
+)
+
+
+def constant_output_lag_note(sim_log: str, *, min_pairs: int = 8) -> str:
+    """Say when the outputs are RIGHT but arrive LATE.
+
+    A design whose arithmetic is correct but whose pipeline is deeper than the
+    testbench expects fails every single check, and fails them with values that
+    look arbitrarily wrong -- scattered sign, exponent and fraction errors. There
+    is nothing in a mismatch count to distinguish that from a broken datapath,
+    and the natural reading is the wrong one.
+
+    Measured on the `fp_adder` level-3 leaf (2026-08-02). The golden testbench
+    drives its inputs, waits ONE posedge and checks; the generated RTL is four
+    stages deep. Result: 34 of 36 golden tests failed, including
+    `Basic: 1.0 + 2.0 = 3.0`, and the self-TB reported 159 mismatches spread
+    across every field. Sweeping the sample point proved the arithmetic was
+    correct at **12 of 12** vectors with a 4-cycle lag and **0 of 12** at the
+    1-cycle lag the testbench uses. The design worked; only its depth was wrong.
+
+    Detection needs no handshake signal, which matters because `valid_out`-style
+    carriers (what `latency_carrier_mismatch_note` keys on) simply do not exist
+    on a combinational-interface module like this one. If the outputs are k
+    transactions late then ``got[i]`` is the answer for ``exp[i-k]``, and the
+    ordered pairs the log already prints are enough to see it.
+
+    Deliberately conservative: this fires only when the current alignment
+    explains almost nothing AND some shift explains substantially more, because
+    a design that is merely inaccurate will match poorly at every k.
+    """
+    pairs: list[tuple[str, str]] = []
+    for rx in _GOT_EXP_PAIR_RES:
+        found = [(m.group("got"), m.group("exp")) for m in rx.finditer(sim_log or "")]
+        if len(found) > len(pairs):
+            pairs = found
+    if len(pairs) < min_pairs:
+        return ""
+    got = [g for g, _ in pairs]
+    exp = [e for _, e in pairs]
+
+    def rate(k: int) -> float:
+        total = len(got) - k
+        if total <= 0:
+            return 0.0
+        return sum(1 for i in range(k, len(got)) if got[i] == exp[i - k]) / total
+
+    here = rate(0)
+    best_k, best = 0, here
+    for k in range(1, min(6, len(got))):
+        r = rate(k)
+        if r > best:
+            best_k, best = k, r
+    # "Almost nothing matches now" AND "a shift explains a lot more".
+    if best_k == 0 or here > 0.10 or best < 0.30 or best < here * 3:
+        return ""
+    return (
+        "YOUR OUTPUTS MAY BE CORRECT BUT LATE — check the pipeline DEPTH before the "
+        "arithmetic.\n"
+        f"  At the point the testbench samples, {here:.0%} of outputs match. Shifted by "
+        f"{best_k} transaction(s), {best:.0%} match.\n"
+        "  That pattern means the values being produced are the right answers for an "
+        "EARLIER input: the datapath computes correctly and the result arrives too late. "
+        "A wrong datapath matches poorly at EVERY shift; this one does not.\n"
+        f"  Count the register stages between input and output and compare them with the "
+        f"latency the contract and testbench assume. Removing {best_k} stage(s) — or "
+        "registering fewer intermediate results — is the fix. Do NOT rewrite the "
+        "arithmetic: the mismatched values are not evidence about it.\n"
+    )
+
+
 def add_lineno(file_content: str) -> str:
     lines = file_content.split("\n")
     ret = ""

@@ -21,6 +21,7 @@ from .sim_reviewer import SimReviewer, check_syntax, multidriven_signals
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
 from .utils import (
+    constant_output_lag_note,
     failing_test_scenarios,
     format_failing_scenarios,
     latency_carrier_mismatch_note,
@@ -982,8 +983,15 @@ class RTLEditor:
         # every sample or it does not. Clean -> "latency is proven right, stop
         # editing it"; dirty -> "fix the latency FIRST, the data mismatches are
         # ambiguous until you do".
-        latency_note = latency_confirmed_note(sim_failed_log_excerpt) or \
-            latency_carrier_mismatch_note(sim_failed_log_excerpt)
+        # Order matters. The lag check goes FIRST: when the outputs are merely
+        # late, every other note would be describing values that are not
+        # evidence about the logic at all. It also covers the case the carrier
+        # notes cannot see -- a module with no valid/ready handshake.
+        latency_note = (
+            constant_output_lag_note(sim_failed_log_excerpt)
+            or latency_confirmed_note(sim_failed_log_excerpt)
+            or latency_carrier_mismatch_note(sim_failed_log_excerpt)
+        )
         latency_block = f"{latency_note}\n" if latency_note else ""
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
