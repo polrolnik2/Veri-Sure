@@ -422,6 +422,10 @@ _GOT_EXP_PAIR_RES = (
     re.compile(r"Got:\s+(?P<got>\w+)[^\n]*\n\s*Exp:\s+(?P<exp>\w+)", re.I),
     re.compile(r"\bgot=(?P<got>\w+)\s+exp=(?P<exp>\w+)", re.I),
     re.compile(r"got_res=(?P<got>\w+)\s+exp_res=(?P<exp>\w+)", re.I),
+    # `sum=13000000 (exp=2156f971)` -- the expected value in parentheses beside
+    # the observed one. Seen on the fp_adder level-3 leaf; without this the
+    # value detectors parse ZERO pairs from a log that does contain some.
+    re.compile(r"=(?P<got>[0-9a-fA-F]+)\s*\(exp=(?P<exp>[0-9a-fA-F]+)\)", re.I),
 )
 
 
@@ -501,8 +505,8 @@ _ROW_WITH_INPUTS_RES = (
         r"exp=(?P<exp>[0-9a-fA-F]+)",
     ),
     re.compile(
-        r"Cycle\s+\d+:\s*(?P<ins>[^|\n]*)\|\s*\w+=(?P<got>[0-9a-fA-F]+)\s+"
-        r"exp=(?P<exp>[0-9a-fA-F]+)",
+        r"Cycle\s+\d+:\s*(?P<ins>[^|\n]*)\|\s*\w+=(?P<got>[0-9a-fA-F]+)\s*"
+        r"\(?exp=(?P<exp>[0-9a-fA-F]+)\)?",
     ),
     re.compile(
         r"Inputs?:\s*(?P<ins>[^\n]*)\n\s*Expected:\s*(?P<exp>[0-9a-fA-F]+),\s*"
@@ -594,6 +598,67 @@ def operand_passthrough_note(sim_log: str, *, min_rows: int = 8, min_rate: float
         "taken far too often, or a sum that is never written back.\n"
         "  Find where the result is CHOSEN before touching the arithmetic that computes "
         "it; on these samples that arithmetic is not reaching the output at all.\n"
+    )
+
+
+_REPORTED_TOTAL_RES = (
+    re.compile(r"SIMULATION FAILED\s*-\s*(\d+)\s+MISMATCHES DETECTED", re.I),
+    re.compile(r"^Mismatches:\s*(\d+)\s+in\s+\d+\s+samples", re.I | re.M),
+)
+
+
+def missing_output_evidence_note(sim_log: str, *, min_reported: int = 8) -> str:
+    """Say when the log counts mismatches it never shows the VALUES for.
+
+    A testbench that prints one line per failing sample produces a log that
+    looks dense with evidence and can contain almost none of the kind that
+    matters. Every value-based check here -- the lag detector, the operand
+    passthrough detector, the input-skew re-pairing -- needs ordered
+    (observed, expected) pairs. Counting mismatches is not the same as
+    recording them, and a reader given 210 lines beginning `MISMATCH` will
+    reasonably assume 210 observations.
+
+    Measured on the `fp_adder` level-3 leaf (run `fp_adder_e2e`, 2026-08-02):
+
+        210  lines of the form `MISMATCH SUM at time 30000: a=... b=... rnd=...`
+          2  lines carrying an actual value, in a block headed
+             `First mismatch context (last 2 cycles)` -- and one of those MATCHES
+
+    So one observed wrong output, for 210 failures. The generator prompt does
+    require "on mismatch, display inputs, DUT outputs, and expected outputs";
+    this testbench printed the inputs and dropped the rest, and nothing measured
+    the omission. Silence from the value detectors then reads as "checked and
+    found nothing" when it is "there was nothing to check" -- the same
+    conflation as B26/B29/B31.
+
+    Deliberately quiet unless the gap is stark: a testbench that records a
+    reasonable sample of its mismatches is doing its job, and a handful of
+    failures needs no sampling at all.
+    """
+    text = sim_log or ""
+    reported = 0
+    for rx in _REPORTED_TOTAL_RES:
+        for m in rx.finditer(text):
+            reported = max(reported, int(m.group(1)))
+    if reported < min_reported:
+        return ""
+    recorded = 0
+    for rx in _GOT_EXP_PAIR_RES:
+        recorded = max(recorded, len(rx.findall(text)))
+    if recorded >= max(3, reported // 10):
+        return ""
+    return (
+        "THE LOG DOES NOT CONTAIN THE VALUES NEEDED TO DIAGNOSE THIS.\n"
+        f"  The testbench reports {reported} mismatching sample(s) but records the "
+        f"observed-vs-expected VALUES for only {recorded} of them.\n"
+        "  Every value-based conclusion below is therefore drawn from those "
+        f"{recorded} sample(s), not from {reported}. Do not read a large mismatch "
+        "count as a large body of evidence, and do not treat the absence of a "
+        "reported pattern as evidence that no pattern exists — most of these "
+        "failures were counted, not observed.\n"
+        "  Use `wave.vcd` and the trace report for the actual signal values; the "
+        "scenario windows tell you where to look. A hypothesis you cannot check "
+        "against a value is a guess.\n"
     )
 
 

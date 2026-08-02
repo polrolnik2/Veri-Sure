@@ -23,6 +23,7 @@ from .trace_slicer import RtlBlock
 from .utils import (
     constant_output_lag_note,
     operand_passthrough_note,
+    missing_output_evidence_note,
     failing_test_scenarios,
     format_failing_scenarios,
     latency_carrier_mismatch_note,
@@ -1003,6 +1004,13 @@ class RTLEditor:
         # `or` chain would report only whichever ran first.
         passthrough_note = operand_passthrough_note(sim_failed_log_excerpt)
         passthrough_block = f"{passthrough_note}\n" if passthrough_note else ""
+        # Ahead of every value-based note, because it says how much they are
+        # worth. A testbench that counts mismatches without recording them
+        # produces a log that looks dense with evidence and carries almost
+        # none; the notes below then go quiet, and quiet reads as "checked and
+        # found nothing" rather than "there was nothing to check".
+        evidence_note = missing_output_evidence_note(sim_failed_log_excerpt)
+        evidence_block = f"{evidence_note}\n" if evidence_note else ""
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
         # the thing it corrects, not after.
@@ -1022,7 +1030,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
+            f"{init}\n\n{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
