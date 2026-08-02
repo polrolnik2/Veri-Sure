@@ -82,6 +82,28 @@ _CYCLE_DUMP_RE = re.compile(r"^Cycle\s+(?P<n>\d+)\s*:(?P<body>.*)$", re.MULTILIN
 _GOT_EXP_RE = re.compile(r"\bgot_(?P<name>\w+)\s*=\s*(?P<got>\S+)")
 
 
+def _alignment_row_is_hollow(row: dict[str, Any]) -> bool:
+    """Did this alignment row consider samples and conclude nothing?
+
+    On the VCD path, expected and actual are sampled independently, so a signal
+    can produce N samples with no single sample carrying BOTH -- every match
+    rate then comes back None while `samples_considered` still reads N.
+
+    Emitting such a row is actively harmful, not merely verbose. Measured on
+    stage_roundpack (job 7846415), all 12 failing signals landed here: 60
+    null-valued `match_rate` lines inside the trace report, which is already 40%
+    of a 1,755-line debugger prompt. And a row that cannot claim a shift cannot
+    RULE ONE OUT either, so the timing hypothesis survives contact with it --
+    precisely the hypothesis that cost that session 6 of its 7 edits, every one
+    removing a pipeline register the contract required.
+
+    "Couldn't check" must not be rendered as "checked, found nothing". Omit the
+    row; absence is honestly silent.
+    """
+    rates = [v for k, v in row.items() if k.startswith("match_rate")]
+    return bool(rates) and all(v is None for v in rates)
+
+
 def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
     """Alignment diagnosis WITHOUT a VCD, from the testbench's cycle dump.
 
@@ -150,6 +172,11 @@ def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
         cur = rate(list(zip(exp_seq, act_seq)))
         lag = rate(list(zip(exp_seq[1:], act_seq[:-1])))
         lead = rate(list(zip(exp_seq[:-1], act_seq[1:])))
+        # No hollow-row guard here, deliberately: this path only pairs a signal
+        # when the SAME cycle line carried both got_<sig> and exp_<sig>, so any
+        # signal that reaches this loop has at least one complete sample and
+        # `cur` cannot be None. The guard belongs on the VCD path, where exp and
+        # act are sampled independently and can both be missing.
         choices = {"current": cur, "dut_lag1": lag, "dut_lead1": lead}
         best = max(choices.items(), key=lambda kv: (-1.0 if kv[1] is None else kv[1]))
         out[name] = {
@@ -809,7 +836,7 @@ def build_trace_report(
                     "dut_lead1": lead_rate,
                 }
                 best = max(choices.items(), key=lambda kv: (-1.0 if kv[1] is None else kv[1]))
-                alignment_diagnosis[sig] = {
+                row = {
                     "samples_considered": len(seq),
                     "match_rate_current": cur_rate,
                     "match_rate_dut_lag1": lag_rate,
@@ -818,6 +845,9 @@ def build_trace_report(
                     "match_rate_negedge": neg_rate,
                     "best_alignment": best[0] if best[1] is not None else None,
                 }
+                if _alignment_row_is_hollow(row):
+                    continue
+                alignment_diagnosis[sig] = row
 
     report: dict[str, Any] = {
         "fail_time": fail_time_star,

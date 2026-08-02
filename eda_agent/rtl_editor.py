@@ -20,7 +20,7 @@ from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer, check_syntax
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
-from .utils import failing_test_scenarios, format_failing_scenarios
+from .utils import failing_test_scenarios, format_failing_scenarios, latency_confirmed_note
 
 logger = logging.getLogger(__name__)
 
@@ -749,6 +749,43 @@ class RTLEditor:
         self._session._record_trajectory("run_simulation", result=result)
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
+    def _latest_model_reasoning(self) -> str | None:
+        """The assistant text accompanying the tool call currently executing.
+
+        `chat()` records `model_text` on `model_turn` only, and only after the
+        agent's whole ReAct turn returns -- but `replace_block` is logged from
+        inside that turn, so an edit never carried the reasoning that produced
+        it. Measured on stage_roundpack (job 7846415): `model_text` was None on
+        all 8 recorded `replace_block` entries, and the diagnosis of why the
+        debugger kept de-registering had to be reconstructed from diffs and
+        prompt archaeology because its stated reason was never persisted.
+
+        The reasoning is already in the agent's memory by the time the tool
+        runs -- the assistant message carrying this tool call. Read it there.
+        """
+        try:
+            for msg in reversed(getattr(self._agent.memory, "content", None) or []):
+                if getattr(msg, "role", None) != "assistant":
+                    continue
+                content = getattr(msg, "content", None)
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list):
+                    text = "\n".join(
+                        str(b.get("text") or "")
+                        for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                else:
+                    text = ""
+                if text.strip():
+                    return text.strip()
+        except Exception:  # noqa: BLE001
+            # Same contract as _record_trajectory: observability must never
+            # break the loop it observes.
+            return None
+        return None
+
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
         """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
         if self._session is None:
@@ -769,6 +806,7 @@ class RTLEditor:
             diff = None
         self._session._record_trajectory(
             "replace_block", result=result, block_id=block_id, diff=diff,
+            model_text=self._latest_model_reasoning(),
         )
         # Even if the action was rolled back, return the latest available trace pointer/summary
         # so the agent can re-ground itself quickly.
@@ -892,6 +930,11 @@ class RTLEditor:
         # All failing scenarios (with timing pointers into wave.vcd) as a set to fix
         # together, not a single first-fail.
         scenarios = failing_test_scenarios(sim_failed_log_excerpt)
+        # Placed BEFORE the scenario list on purpose: that list is where the
+        # timing hypothesis forms, and this is its refutation. Empty unless the
+        # oracle actually proves the latency correct.
+        latency_note = latency_confirmed_note(sim_failed_log_excerpt)
+        latency_block = f"{latency_note}\n" if latency_note else ""
         scenarios_block = (
             "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "
             "the common root cause that resolves them together. Times index wave.vcd:\n"
@@ -899,7 +942,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{scenarios_block}"
+            f"{init}\n\n{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
