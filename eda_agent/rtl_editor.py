@@ -955,7 +955,14 @@ class RTLEditor:
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
         # the thing it corrects, not after.
-        skew_note = mismatch_input_skew_note(sim_failed_log_excerpt)
+        # The RTL is passed so the warning can still be issued when the cycle
+        # dump is too short to measure the exact skew: a clocked block is
+        # sufficient to know the pairing is wrong, even when the depth is not.
+        try:
+            _rtl_for_skew = Path(rtl_path).read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            _rtl_for_skew = None
+        skew_note = mismatch_input_skew_note(sim_failed_log_excerpt, _rtl_for_skew)
         skew_block = f"{skew_note}\n" if skew_note else ""
         scenarios_block = (
             "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "

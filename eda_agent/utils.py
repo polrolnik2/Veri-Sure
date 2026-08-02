@@ -210,7 +210,10 @@ def measure_sample_latency(sim_log: str) -> int | None:
     return best_lag
 
 
-def mismatch_input_skew_note(sim_log: str) -> str:
+_CLOCKED_BLOCK_RE = re.compile(r"\balways_ff\b|\balways\s*@\s*\(\s*posedge\b", re.I)
+
+
+def mismatch_input_skew_note(sim_log: str, rtl: str | None = None) -> str:
     """Stop the `Inputs:` beside a mismatch being read as its stimulus.
 
     The testbench samples inputs and outputs at the SAME instant, then prints
@@ -240,8 +243,38 @@ def mismatch_input_skew_note(sim_log: str) -> str:
     if not blocks:
         return ""
     lag = measure_sample_latency(sim_log)
-    if not lag:  # None (unmeasurable) or 0 (combinational: the pairing is true)
+    if lag == 0:
+        # Combinational: the printed pairing is TRUE and correcting it would be
+        # the lie. Say nothing.
         return ""
+    if lag is None:
+        # The cycle dump was too short to measure a lag exactly, and a guessed
+        # depth makes every sentence below wrong. But the WARNING does not need
+        # the number -- for any registered output the inputs printed beside a
+        # mismatch are sampled later than the stimulus that produced it, whatever
+        # the depth. So if the RTL has a clocked block, still say that much.
+        #
+        # This is not hypothetical. Measured live on stage_roundpack
+        # (2026-08-02): the TB emitted only 3 dump rows, this function returned
+        # "", and the debugger then reasoned in its own words "at t=30000 ...
+        # valid_in=1 and the flags are all 1 ... but the test expects 0" --
+        # pairing an output against inputs that did not produce it, which is
+        # precisely the error this note exists to prevent. Withholding the
+        # number is right; withholding the warning was not.
+        if not (rtl and _CLOCKED_BLOCK_RE.search(rtl)):
+            return ""
+        return (
+            "INPUT/OUTPUT PAIRING IN THE MISMATCH LINES IS SKEWED — do not read it literally.\n"
+            "  This design registers its outputs, so 'Expected'/'Actual' at time T were "
+            "produced by inputs from an EARLIER cycle than the 'Inputs:' line printed "
+            "beside them.\n"
+            "  Those two lines are NOT a stimulus/response pair. Do not infer the "
+            "input-to-output mapping from them, and do not conclude the logic is wrong "
+            "because the printed inputs cannot produce the printed expected value.\n"
+            "  (The exact skew could not be measured here — the testbench's cycle dump "
+            "was too short — so no corrected pairing is offered. Trust the waveform and "
+            "the contract's latency, not these adjacent lines.)\n"
+        )
 
     rows = list(_CYCLE_ROW_RE.finditer(sim_log or ""))
     lines = [
