@@ -20,7 +20,12 @@ from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer, check_syntax
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
-from .utils import failing_test_scenarios, format_failing_scenarios, latency_confirmed_note
+from .utils import (
+    failing_test_scenarios,
+    format_failing_scenarios,
+    latency_confirmed_note,
+    mismatch_input_skew_note,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -935,6 +940,11 @@ class RTLEditor:
         # oracle actually proves the latency correct.
         latency_note = latency_confirmed_note(sim_failed_log_excerpt)
         latency_block = f"{latency_note}\n" if latency_note else ""
+        # Same placement rationale as the latency note: the mismatch lines are
+        # read before the trace report, so the correction has to arrive before
+        # the thing it corrects, not after.
+        skew_note = mismatch_input_skew_note(sim_failed_log_excerpt)
+        skew_block = f"{skew_note}\n" if skew_note else ""
         scenarios_block = (
             "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "
             "the common root cause that resolves them together. Times index wave.vcd:\n"
@@ -942,7 +952,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{latency_block}{scenarios_block}"
+            f"{init}\n\n{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "

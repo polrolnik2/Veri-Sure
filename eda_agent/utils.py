@@ -158,6 +158,150 @@ def latency_confirmed_note(sim_log: str) -> str:
     )
 
 
+_CYCLE_ROW_RE = re.compile(
+    r"^Cycle\s+(?P<n>\d+):\s*(?P<body>.*?valid_in=(?P<vin>[01]).*)$", re.MULTILINE
+)
+_EXP_VAL_RE = re.compile(r"\bexp_val=(?P<v>[01])")
+_MISMATCH_BLOCK_RE = re.compile(
+    r"^Mismatch at time (?P<t>\d+): (?P<sig>\w+)\n"
+    r"\s+Inputs:\s*(?P<inputs>[^\n]*)\n"
+    r"\s+Expected:\s*(?P<exp>\S+),\s*Actual:\s*(?P<act>\S+)",
+    re.MULTILINE,
+)
+
+
+def measure_sample_latency(sim_log: str) -> int | None:
+    """How many samples separate a stimulus from the output it produces?
+
+    Measured, not assumed, and without needing the testbench's reference
+    function: ``valid_out`` is a PURE DELAY of ``valid_in``, so the lag that
+    best explains the expected-valid series from the driven-valid series IS the
+    pipeline depth in sample units. The TB's own cycle dump prints both.
+
+    Returns None when the dump is absent or too short to distinguish a lag.
+    """
+    rows = list(_CYCLE_ROW_RE.finditer(sim_log or ""))
+    vin: list[int] = []
+    exp_val: list[int] = []
+    for m in rows:
+        ev = _EXP_VAL_RE.search(m.group("body"))
+        if ev is None:
+            return None
+        vin.append(int(m.group("vin")))
+        exp_val.append(int(ev.group("v")))
+    if len(vin) < 4:
+        return None
+
+    best_lag, best_score = None, -1.0
+    for lag in range(0, min(4, len(vin))):
+        total = len(vin) - lag
+        if total <= 0:
+            continue
+        hits = sum(1 for i in range(lag, len(vin)) if exp_val[i] == vin[i - lag])
+        score = hits / total
+        # Strict >: ties resolve to the SMALLEST lag, so a constant-valid window
+        # cannot manufacture a deep phantom pipeline.
+        if score > best_score:
+            best_lag, best_score = lag, score
+    # Only trust an exact explanation. A partial match means something other
+    # than a pure delay is going on, and a guessed depth is worse than none.
+    if best_score < 1.0:
+        return None
+    return best_lag
+
+
+def mismatch_input_skew_note(sim_log: str) -> str:
+    """Stop the `Inputs:` beside a mismatch being read as its stimulus.
+
+    The testbench samples inputs and outputs at the SAME instant, then prints
+    them together::
+
+        Mismatch at time 80000: result_out
+          Inputs: sign=0 ... nan=0 inf=1 zero=1 denorm=1 valid_in=1
+          Expected: ffc00000, Actual: 00000000
+
+    For a registered output those inputs are the ones arriving L cycles AFTER
+    the stimulus that produced `Expected`. The pairing shown is therefore false,
+    and on a pipelined design it is not merely imprecise but *unsatisfiable*:
+    above, `nan=0` sits beside an expected value of `ffc00000`, which is a
+    NEGATIVE quiet NaN, next to `sign=0`. No priority logic can satisfy that.
+
+    Measured on stage_roundpack (job 7846415): of the printed pairs, **0 of 5**
+    were self-consistent, while **4 of 4** matched at a lag of one sample. A
+    debugger reasoning from those lines is being asked to satisfy constraints
+    that no correct implementation meets, which is the same failure mode as the
+    global first-mismatch time (see `_first_fail_time_is_per_scenario`): the
+    harness faithfully relaying evidence that is false at the source.
+
+    So say the skew out loud, and -- where the TB's cycle dump makes it possible
+    -- hand back the CORRECTLY paired stimulus instead of only a warning.
+    """
+    blocks = list(_MISMATCH_BLOCK_RE.finditer(sim_log or ""))
+    if not blocks:
+        return ""
+    lag = measure_sample_latency(sim_log)
+    if not lag:  # None (unmeasurable) or 0 (combinational: the pairing is true)
+        return ""
+
+    rows = list(_CYCLE_ROW_RE.finditer(sim_log or ""))
+    lines = [
+        "INPUT/OUTPUT PAIRING IN THE MISMATCH LINES IS SKEWED — do not read it literally.",
+        f"  This design's outputs are registered: measured latency is {lag} sample(s), "
+        f"from the testbench's own valid_in -> exp_val delay.",
+        "  Each 'Mismatch at time T' block prints the inputs sampled AT T, but "
+        f"'Expected'/'Actual' at T were produced by the inputs {lag} sample(s) EARLIER.",
+        "  Those two lines are therefore NOT a stimulus/response pair. Do not infer "
+        "the input-to-output mapping from them, and do not conclude the logic is "
+        "wrong because the printed inputs cannot produce the printed expected value "
+        "-- that is an artefact of when the testbench prints, not a defect.",
+    ]
+
+    # The cycle dump carries inputs and expected/actual per cycle, so the true
+    # pairing can be reconstructed rather than merely warned about.
+    paired: list[str] = []
+    invalid_fails = 0
+    for i in range(lag, len(rows)):
+        stim = rows[i - lag].group("body")
+        out = rows[i].group("body")
+        got = re.search(r"\bgot_res=(\S+)", out)
+        exp = re.search(r"\bexp_res=(\S+)", out)
+        if not (got and exp) or got.group(1) == exp.group(1):
+            continue
+        ev = _EXP_VAL_RE.search(out)
+        if ev and ev.group("v") == "0":
+            invalid_fails += 1
+        stim_clean = re.sub(r"\s*\|.*$", "", stim).strip()
+        paired.append(
+            f"    stimulus @cycle {rows[i - lag].group('n')}: {stim_clean}\n"
+            f"      -> @cycle {rows[i].group('n')}: expected={exp.group(1)} actual={got.group(1)}"
+            + (" [valid_out LOW on this sample]" if ev and ev.group("v") == "0" else "")
+        )
+    if paired:
+        lines.append(
+            f"  CORRECTED pairing for the failing samples in the cycle dump "
+            f"(stimulus shifted back by {lag}):"
+        )
+        lines.extend(paired[:8])
+    if invalid_fails:
+        # The single most actionable thing in this note. The testbench checks
+        # result_out on EVERY sample, including those where its own valid_out is
+        # low, and on those samples its reference holds the last valid result
+        # rather than tracking the inputs. A design that recomputes its output
+        # register unconditionally therefore fails on cycles whose value the
+        # contract never defines -- and no amount of fixing the DATAPATH makes
+        # those samples agree, because the disagreement is about WHEN the
+        # register may update, not about what it computes.
+        lines.append(
+            f"  {invalid_fails} of the failing samples above occur while valid_out is LOW. "
+            "On those cycles the testbench's reference HOLDS its previous result instead "
+            "of following the inputs, so it is checking a value the contract does not "
+            "define. If your output register updates unconditionally, gate it (hold when "
+            "the input is not valid) -- that is a control-path fix, not a datapath one, "
+            "and changing the arithmetic will not resolve these samples."
+        )
+    return "\n".join(lines) + "\n"
+
+
 def add_lineno(file_content: str) -> str:
     lines = file_content.split("\n")
     ret = ""
