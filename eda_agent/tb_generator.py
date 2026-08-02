@@ -225,10 +225,26 @@ Testbench requirements:
    pass/fail verdict unaffected.
 4) Logging (keep logs small):
    - Do NOT print on every match.
-   - On mismatch, display inputs, DUT outputs, and expected outputs.
+   - On EVERY mismatch — not just the first — the display line MUST carry the DUT's
+     actual output value AND the expected value, for the signal that mismatched:
+
+         MISMATCH <sig> at time <t>: <inputs> | got=<actual> exp=<expected>
+
+     Inputs alone are NOT enough and a bare count is worthless. The debugger cannot
+     diagnose a value it was never shown, and every timing/aliasing check downstream
+     works by comparing the ORDERED SEQUENCE of (actual, expected) pairs — one pair
+     is not a sequence. A run that prints 210 mismatch lines carrying only inputs
+     supplies exactly as much value evidence as a run that prints none, while
+     looking like it supplies 210 times as much. (Measured: an fp_adder leaf did
+     precisely this — 210 mismatch lines, 2 recorded values.)
+     If you must cap the volume, cap it at no fewer than 30 fully-recorded
+     mismatches per scenario and say how many were suppressed; never degrade the
+     line to inputs-only.
    - For the first mismatch only, ADDITIONALLY print extra debug context per the display
      prompt below (moment or queue window). This is a one-time detail dump for context —
      it does NOT stop the run; continue executing all remaining checks and scenarios.
+     This context block is IN ADDITION TO the per-mismatch lines above, never a
+     substitute for them.
 5) Generate a VCD named `wave.vcd`:
    initial begin
      $dumpfile("wave.vcd");
