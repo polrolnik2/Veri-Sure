@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +19,8 @@ from agentscope.message import (
 from agentscope.model import ChatModelBase, OpenAIChatModel
 
 from eda_agent.config import OpenAIConfig
+
+logger = logging.getLogger(__name__)
 
 
 class Llama4ChatFormatter(TruncatedFormatterBase):
@@ -188,8 +192,50 @@ class UsageTrackingModel(ChatModelBase):
         self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
 
+    # A provider can answer HTTP 200 with a body that is not valid JSON — a
+    # truncated stream, or an error page — and the OpenAI client raises
+    # `json.JSONDecodeError` out of `response.json()` with no retry of its own
+    # (its retry logic covers status codes and connection errors, not a body it
+    # could not parse). That exception unwinds through the whole agent stack and
+    # kills the leaf.
+    #
+    # Measured on fp_align_add (run fp_adder_e2e, 2026-08-03 12:39):
+    #
+    #     json.decoder.JSONDecodeError: Expecting value: line 1547 column 1 (char 8503)
+    #
+    # The attempt had already written rtl.sv, run six debug iterations and
+    # regenerated after a mismatch — roughly an hour — and was recorded as
+    # "produced no RTL". Every one of the run's 92 HTTP responses was 200 OK,
+    # which is exactly why this was invisible until the exception was surfaced
+    # (B45/F28).
+    #
+    # Deliberately narrow. Only a response the client could not decode is
+    # retried: that is unambiguously a transport-layer defect and the request is
+    # idempotent, so re-asking is safe. Anything else — a refusal, a tool error,
+    # a malformed-but-parseable answer — is a real answer and must reach the
+    # caller unchanged, because swallowing those is how a defect becomes a
+    # silent retry loop.
+    _DECODE_RETRIES = 3
+
     async def __call__(self, *args: Any, **kwargs: Any):  # type: ignore[override]
-        res = await self._base_model(*args, **kwargs)
+        for attempt in range(self._DECODE_RETRIES):
+            try:
+                res = await self._base_model(*args, **kwargs)
+                break
+            except json.JSONDecodeError as e:
+                if attempt == self._DECODE_RETRIES - 1:
+                    logger.error(
+                        "Model response was not decodable JSON after %d attempts "
+                        "(%s); giving up and letting the caller see it",
+                        self._DECODE_RETRIES, e,
+                    )
+                    raise
+                logger.warning(
+                    "Model response was not decodable JSON (%s) — provider sent a "
+                    "truncated or non-JSON body over a 200; retrying (%d/%d)",
+                    e, attempt + 1, self._DECODE_RETRIES - 1,
+                )
+                await asyncio.sleep(min(2.0 ** attempt, 8.0))
         if self._base_model.stream:
             async def _gen():
                 seen_usage = False
