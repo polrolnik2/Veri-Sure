@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 import shutil
+import traceback
 from typing import List, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
@@ -1014,6 +1015,27 @@ class TopAgent:
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             error = f"{type(e).__name__}: {e}"
+            # Recording the message on the result is not the same as reporting
+            # it. Before this, a leaf whose TB stage raised returned normally
+            # with `error` set, wrote no artifact and logged nothing, so the
+            # re-decomposition that read its failure report got
+            # "(no structured failure artifacts captured)" -- accurate, and
+            # useless. Measured on fp_pack_invalid (run fp_adder_e2e,
+            # 2026-08-03): two independent attempts, ~45 minutes each, both
+            # leaving only the Architect's four files and no cause anywhere.
+            #
+            # Both halves are needed. The log line makes it diagnosable while
+            # the run is alive; the artifact makes it diagnosable afterwards,
+            # and is what `_harvest_failure` reads back into the digest.
+            logger.exception("Leaf run failed for %s", output_dir_per_run.name)
+            try:
+                self._write_output(
+                    output_dir_per_run=output_dir_per_run,
+                    file_name="leaf_exception.txt",
+                    content=f"{error}\n\n{traceback.format_exc()}",
+                )
+            except Exception:  # noqa: BLE001 — reporting a failure must not raise
+                logger.debug("could not write leaf_exception.txt", exc_info=True)
 
         return TopAgentResult(
             output_dir_per_run=str(output_dir_per_run),
