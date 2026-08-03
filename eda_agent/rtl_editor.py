@@ -105,7 +105,19 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     # chatter, so it never saw the assertion, the cycle, or the scenario it was
     # supposed to fix. A glue-only blind spot: leaf TBs speak the matched
     # vocabulary, composed TBs do not.
+    # The composition context (the assembler's port maps) is prepended to
+    # stdout by the caller so the payload stays valid CommandResult JSON. It is
+    # not a "finding", so none of the vocabulary below matches it -- and it is
+    # the one thing a glue repairer cannot work without, since it has no tool
+    # that can read the wrapper or the children. Kept verbatim, ahead of
+    # everything else.
     interesting: list[str] = []
+    ctx_start = stdout.find("=== COMPOSITION CONTEXT")
+    if ctx_start != -1:
+        ctx_end = stdout.find("=== END COMPOSITION CONTEXT", ctx_start)
+        if ctx_end != -1:
+            end = stdout.find("\n", ctx_end)
+            interesting.extend(stdout[ctx_start:(end if end != -1 else len(stdout))].splitlines())
     for line in stdout.splitlines():
         low = line.lower()
         if (
