@@ -69,6 +69,21 @@ SystemVerilog declaration rule (this silently destroys testbenches):
   against a constant 0, so correct designs failed and the defect was invisible
   in the log.
 
+Verilator STRING rule (this compiles the SV and then fails the C++ build):
+- Do NOT compare or wait on `string` variables. `wait (name == "foo")`,
+  `if (scenario == "bar")` and similar lower to C++ that does not compile:
+      error: unable to find string literal operator 'operator""foo'
+      make: *** [Vtb___024root__1.o] Error 1
+  Verilator elaborates the SystemVerilog happily, so this surfaces only as a
+  make failure with no line of yours named.
+- Use an enum or an integer code for scenario/state identity, and keep strings
+  for `$display` text only:
+      WRONG:  string scenario; ... wait (scenario == "randomized");
+      RIGHT:  typedef enum {S_RESET, S_BASIC, S_RANDOMIZED} scen_e;
+              scen_e scenario; ... wait (scenario == S_RANDOMIZED);
+- Passing a string literal directly to `$display`/`$sformatf` is fine; it is
+  string COMPARISON and string VARIABLES that break the build.
+
 SystemVerilog declaration PLACEMENT rule (this fails to compile at all):
 - Every declaration in a `begin ... end` must come BEFORE the first statement of
   that block. A declaration after a statement is a SYNTAX ERROR, not a style
