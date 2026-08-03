@@ -36,6 +36,23 @@ _LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
         "declarations at the TOP of the task/block body, before any statement. Move "
         "every declaration in the flagged tasks to the top of that task.",
     ),
+    (
+        re.compile(
+            r"isn't a constant|two-state constant|"
+            r"Width of :\+ or :- bit slice range isn't a constant"
+        ),
+        "HINT: a part-select WIDTH and a replication COUNT must be compile-time "
+        "constants in SystemVerilog. `x[hi:lo]` with a variable bound, "
+        "`x[i +: n]` with a variable `n`, and `{n{1'b0}}` with a variable `n` are "
+        "all illegal, however reasonable they look.\n"
+        "  A VARIABLE amount is expressed as a SHIFT, not as a slice:\n"
+        "    WRONG:  sig[shift_amt:0]        RIGHT:  sig >> shift_amt\n"
+        "    WRONG:  {shift_amt{1'b0}}       RIGHT:  ('0 << shift_amt) / a mask\n"
+        "    WRONG:  x[i +: n]  (n varies)   RIGHT:  (x >> i) & ((1<<n)-1) with n constant\n"
+        "  A variable INDEX is fine when the WIDTH is fixed: `x[i +: 8]` is legal, "
+        "`x[i +: n]` is not. Alignment and normalisation stages hit this constantly "
+        "— they want a variable shift, so write a shift.",
+    ),
 ]
 
 
