@@ -81,8 +81,15 @@ Verilator STRING rule (this compiles the SV and then fails the C++ build):
       WRONG:  string scenario; ... wait (scenario == "randomized");
       RIGHT:  typedef enum {S_RESET, S_BASIC, S_RANDOMIZED} scen_e;
               scen_e scenario; ... wait (scenario == S_RANDOMIZED);
-- Passing a string literal directly to `$display`/`$sformatf` is fine; it is
-  string COMPARISON and string VARIABLES that break the build.
+- Only COMPARISON breaks the build. `string` variables are fine when they are
+  assigned and printed, and a label array is worth keeping:
+      FINE:   string output_names [0:8];
+              output_names[0] = "special_valid"; ...
+              $display("%s: %0d mismatches", output_names[i], counts[i]);
+      FINE:   string current_scenario; current_scenario = name;   // assignment
+      BREAKS: wait (current_scenario == "randomized");            // comparison
+  Naming each output in the mismatch report is exactly what makes a failure
+  diagnosable, so do not drop it to avoid strings.
 
 SystemVerilog declaration PLACEMENT rule (this fails to compile at all):
 - Every declaration in a `begin ... end` must come BEFORE the first statement of
