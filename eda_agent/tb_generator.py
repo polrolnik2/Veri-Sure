@@ -81,6 +81,17 @@ Verilator STRING rule (this compiles the SV and then fails the C++ build):
       WRONG:  string scenario; ... wait (scenario == "randomized");
       RIGHT:  typedef enum {S_RESET, S_BASIC, S_RANDOMIZED} scen_e;
               scen_e scenario; ... wait (scenario == S_RANDOMIZED);
+- Give that enum NO base type, exactly as shown above. It then defaults to
+  `int`, which is always wide enough. Writing one narrows it to a fixed size
+  and Verilator rejects the enum as soon as you have more scenarios than it
+  holds:
+      WRONG:  typedef enum logic [3:0] { ... 19 scenario names ... } scen_e;
+      %Error: Enum value illegally wrapped around (IEEE 1800-2023 6.19)
+      %Error: Overlapping enumeration value: 'SC_ZERO_RESULT'
+  (Measured: 19 enumerators in a 4-bit type; values 16-18 wrapped to 0-2 and
+  collided with the first three.)
+- If you do hit that error, WIDEN the type or drop it — never delete scenarios
+  to make them fit. That silently removes test coverage and still lints clean.
 - Only COMPARISON breaks the build. `string` variables are fine when they are
   assigned and printed, and a label array is worth keeping:
       FINE:   string output_names [0:8];
