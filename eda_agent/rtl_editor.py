@@ -336,6 +336,47 @@ When simulation passes, end with generate_response using this format:
 """
 
 
+def _reads_of(rtl: str, name: str) -> int:
+    """Whole-word occurrences of `name` outside comments.
+
+    A declaration is one occurrence, so >1 means the port is consumed
+    somewhere. Same counting rule the orchestrator's vestigial detector uses,
+    deliberately -- two guards for one invariant must not disagree about what
+    "read" means.
+    """
+    body = re.sub(r"/\*.*?\*/", " ", rtl, flags=re.S)
+    body = re.sub(r"//[^\n]*", "", body)
+    return len(re.findall(rf"\b{re.escape(name)}\b", body))
+
+
+def _child_outputs_gone_dark(
+    old_rtl: str, new_rtl: str, child_names: Tuple[str, ...],
+) -> list[str]:
+    """Child-facing inputs the edit turned from READ into unread.
+
+    A child-facing input is an `input` port whose name begins with a child
+    module name -- it carries that child's RESULT into the glue. If the glue
+    stops reading one, it has recomputed that child's function inline and is no
+    longer composing with it.
+
+    Compares BEFORE against AFTER rather than judging the new text alone: a port
+    that was already unread is a pre-existing defect this edit did not cause,
+    and rolling back for it would trap the debugger with no legal move.
+    """
+    if not child_names:
+        return []
+    header = new_rtl.split(");", 1)[0]
+    ports = [
+        m.group(1)
+        for m in re.finditer(r"\binput\s+(?:logic|wire|reg|bit)?\s*(?:\[[^\]]*\]\s*)?(\w+)", header)
+        if m.group(1).startswith(tuple(f"{c}_" for c in child_names))
+    ]
+    return [
+        p for p in ports
+        if _reads_of(old_rtl, p) > 1 and _reads_of(new_rtl, p) <= 1
+    ]
+
+
 @dataclass
 class _EditSession:
     tb_path: str
@@ -344,6 +385,13 @@ class _EditSession:
     last_mismatch_cnt: int
     sim_reviewer: SimReviewer
     max_trials: int
+
+    # Child module names from the contract's `child_assumes`, empty for a leaf.
+    # Present so `_judge_replace_action_execution` can enforce the vestigial-glue
+    # rule the debugger's own prompt already promises is "checked MECHANICALLY
+    # BEFORE any simulation runs" -- a promise that was not true inside this
+    # loop. See `_child_outputs_gone_dark`.
+    child_names: Tuple[str, ...] = ()
 
     is_done: bool = False
     action_calls: int = 0
@@ -615,6 +663,51 @@ class _EditSession:
                 "not repeat assignments that live elsewhere in the module."
             )
             return result
+
+        # VESTIGIAL GLUE, enforced where the prompt already says it is enforced.
+        #
+        # The debugger's own instructions state this rule is "checked
+        # MECHANICALLY BEFORE any simulation runs". That was true of the
+        # orchestrator's composition gate and NOT true here, inside the debug
+        # loop -- so the model was told a guard existed at a point where nothing
+        # checked, and acted accordingly.
+        #
+        # Measured on fp_align_add parent_16 (2026-08-04): given
+        # "Contract violation: exp_large_correct", the debugger replaced
+        #     assign exp_large = fp_compare_exp_sig_exp_large;
+        # with
+        #     assign exp_large = ((exp_a > exp_b) || ...) ? exp_a : exp_b;
+        # -- recomputing the child's function inline. That satisfies the
+        # assertion and destroys the composition: the child's output is then
+        # read by nothing. Six iterations and four accepted edits produced a
+        # byte-identical failure each time, and the glue was headed for a
+        # vestigial rejection at the gate with its whole budget already spent.
+        #
+        # Narrow by construction: fires only when a child-facing input that WAS
+        # read becomes unread. An edit leaving the wiring intact cannot trip it,
+        # and a leaf (no `child_assumes`, so `child_names` empty) is untouched.
+        if self.child_names:
+            went_dark = _child_outputs_gone_dark(
+                old_file_content, self.read_rtl(), self.child_names,
+            )
+            if went_dark:
+                self.write_rtl(old_file_content)
+                result = self._base_result()
+                result["is_syntax_correct"] = True
+                result["error_msg"] = (
+                    "Edit rolled back: it left "
+                    + ", ".join(sorted(went_dark))
+                    + " READ BY NOTHING. That port carries a CHILD'S RESULT into this "
+                    "glue, and your replacement recomputed that child's function inline "
+                    "instead of routing its output. This is the VESTIGIAL GLUE rejection "
+                    "described in your instructions: it is checked before simulation, and "
+                    "no simulation result can excuse it, because a glue that recomputes a "
+                    "child has stopped composing with that child. Restore the assignment "
+                    "that consumes the port. If its value looks wrong, the defect is in "
+                    "the child or in how this glue drives that child's INPUTS -- say so "
+                    "rather than replacing the port with your own arithmetic."
+                )
+                return result
 
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
         result["is_sim_pass"] = is_sim_pass
@@ -892,6 +985,17 @@ class RTLEditor:
         if session_max_trials < 0:
             session_max_trials = 0
 
+        # Child module names, when this is a composition node. Empty for a leaf,
+        # which is what gates the vestigial-glue rollback in
+        # `_judge_replace_action_execution` off for ordinary RTL debugging.
+        child_names: Tuple[str, ...] = ()
+        try:
+            _c = json.loads(contract_json) if contract_json else {}
+            _ca = (_c.get("spec") or _c).get("child_assumes") or _c.get("child_assumes") or {}
+            child_names = tuple(k for k in _ca if isinstance(k, str))
+        except Exception:  # noqa: BLE001
+            pass  # a contract we cannot parse simply disables the extra guard
+
         self._session = _EditSession(
             tb_path=tb_path,
             rtl_path=rtl_path,
@@ -899,6 +1003,7 @@ class RTLEditor:
             last_mismatch_cnt=sim_mismatch_cnt,
             sim_reviewer=self.sim_reviewer,
             max_trials=session_max_trials,
+            child_names=child_names,
         )
 
         with open(tb_path, "r", encoding="utf-8") as f:
