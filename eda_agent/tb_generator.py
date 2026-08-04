@@ -91,6 +91,25 @@ Verilator STRING rule (this compiles the SV and then fails the C++ build):
   Naming each output in the mismatch report is exactly what makes a failure
   diagnosable, so do not drop it to avoid strings.
 
+RESERVED KEYWORD rule (one collision produces ~40 errors, none of them the cause):
+- Never use a SystemVerilog KEYWORD as an identifier — not as a variable, port,
+  task/function argument, or module name. The parser fails at the declaration
+  and then reports a cascade of unrelated-looking errors after it.
+- Measured: a testbench declared `input string context` (a scenario label).
+  `context` is reserved — it appears in `import "DPI-C" context function`. That
+  one word produced:
+      tb.sv:108:24: syntax error, unexpected context, expecting IDENTIFIER
+      tb.sv:112:14: syntax error, unexpected '=', expecting '('
+      ... ~40 more, none of which is the real defect
+  Renaming it to `ctx` and changing nothing else made the file lint clean.
+- Words that look like ordinary names and are NOT: `context`, `type`, `time`,
+  `event`, `table`, `cell`, `config`, `disable`, `edge`, `expect`, `final`,
+  `force`, `join`, `matches`, `null`, `program`, `property`, `randomize`,
+  `ref`, `return`, `sequence`, `signed`, `small`, `space`, `strong`, `tagged`,
+  `this`, `throughout`, `unique`, `wait`, `weak`, `wildcard`, `within`.
+- If you want a label, prefer an unambiguous name: `ctx`, `scenario_name`,
+  `test_label`, `phase_name`.
+
 SystemVerilog declaration PLACEMENT rule (this fails to compile at all):
 - Every declaration in a `begin ... end` must come BEFORE the first statement of
   that block. A declaration after a statement is a SYNTAX ERROR, not a style
