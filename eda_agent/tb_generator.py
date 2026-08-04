@@ -207,6 +207,16 @@ Hard rules:
 - Follow the contract. Do NOT invent behavior/timing not stated in the contract.
 - The module interface MUST match the contract/spec exactly (module name, port names, widths).
 - Name the DUT instance `dut` (non-golden mode).
+- Emit EXACTLY ONE top-level testbench module (plus the DUT interface header).
+  Verilator elaborates every module nothing instantiates as a top and runs them
+  all in ONE simulation, and `$finish` is global -- so a second top-level module
+  that calls `$finish` ends the run for the real testbench too. Measured: a
+  helper `..._test_runner` module emitted beside a correct testbench ended five
+  consecutive simulations at time 0, before a single output had been checked.
+  If the contract is parameterized and you want to cover several widths,
+  instantiate the DUT several times INSIDE the one testbench module, and call
+  `$finish` once, after every instance has reported. Never emit a module whose
+  body only $displays that some test "would run in separate compilation".
 - Do not use the SystemVerilog `continue` keyword.
 - Verilator target: keep the TB compatible (avoid `sequence ... endsequence` and SVA `[*]` repetition; prefer simple assertions).
 
