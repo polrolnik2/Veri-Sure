@@ -144,6 +144,55 @@ class Llama4ChatFormatter(TruncatedFormatterBase):
         return messages
 
 
+class FinishReasonPreservingModel(OpenAIChatModel):
+    """Keep `finish_reason` instead of discarding it at the parse boundary.
+
+    A response that stopped because it hit the token cap is a SUCCESSFUL HTTP
+    200 carrying a PARTIAL artifact. The OpenAI SDK does not retry it -- rightly,
+    since what to do about it is the caller's policy -- and agentscope's parser
+    reads `choices[0].message.content` and drops every other field, so
+    `finish_reason` never reaches any wrapper above it. `UsageTrackingModel`
+    wraps agentscope, not the client, which is why no amount of wrapping there
+    could ever have seen it.
+
+    The result is a truncated testbench or RTL that is indistinguishable from a
+    complete one: it simply fails to lint, or worse, lints and is subtly wrong.
+    That is the same "couldn't check" vs "checked and failed" confusion as B49
+    and B65, one layer lower -- at the model boundary, where it is invisible to
+    every guard downstream.
+
+    Verified against the live provider (2026-08-04): a call capped at 16 tokens
+    returns `finish_reason='length'` and `native_finish_reason='length'`, so the
+    signal is present and was simply being thrown away.
+
+    `ChatResponse.metadata` already exists for exactly this kind of out-of-band
+    fact, so nothing is forked -- `super()` still does all the parsing and this
+    only annotates what it returns.
+    """
+
+    def _parse_openai_completion_response(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        resp = super()._parse_openai_completion_response(*args, **kwargs)
+        # `response` is positional in agentscope's signature but be tolerant:
+        # a future signature change must not take the model layer down.
+        raw = kwargs.get("response") or next(
+            (a for a in args if hasattr(a, "choices")), None
+        )
+        try:
+            choice = (getattr(raw, "choices", None) or [None])[0]
+            reason = getattr(choice, "finish_reason", None)
+            if reason:
+                meta = dict(resp.metadata or {})
+                meta["finish_reason"] = reason
+                native = getattr(choice, "native_finish_reason", None)
+                if native:
+                    meta["native_finish_reason"] = native
+                resp.metadata = meta
+        except Exception:  # noqa: BLE001
+            # Annotation is a diagnostic. Never let it cost a usable response.
+            pass
+        return resp
+
+
 class UsageTrackingModel(ChatModelBase):
     def __init__(self, base_model: ChatModelBase) -> None:
         self._base_model = base_model
@@ -246,7 +295,33 @@ class UsageTrackingModel(ChatModelBase):
                     yield chunk
             return _gen()
         self._accumulate_usage(getattr(res, "usage", None))
+        self._warn_if_truncated(res)
         return res
+
+    @staticmethod
+    def _warn_if_truncated(res: Any) -> None:
+        """Say so when the model stopped because it ran out of tokens.
+
+        Without this the caller receives a partial artifact with no indication
+        that it is partial, and every downstream guard then reasons about a
+        testbench or module that the model never finished writing. Naming it is
+        the whole point: "the model did not finish" is a different fact from
+        "the model produced something wrong", and only the first is fixed by
+        asking again.
+        """
+        try:
+            reason = (getattr(res, "metadata", None) or {}).get("finish_reason")
+        except Exception:  # noqa: BLE001
+            return
+        if reason == "length":
+            usage = getattr(res, "usage", None)
+            logger.warning(
+                "MODEL RESPONSE TRUNCATED (finish_reason=length%s): the artifact "
+                "is incomplete, not wrong — it stopped at the token cap. Raise "
+                "max_completion_tokens or continue the response; do not score "
+                "what came back as a failed generation.",
+                f", output_tokens={getattr(usage, 'output_tokens', '?')}" if usage else "",
+            )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._base_model, name)
@@ -334,7 +409,7 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
-    base_model = OpenAIChatModel(
+    base_model = FinishReasonPreservingModel(
         model_name=cfg.model,
         api_key=cfg.api_key,
         stream=cfg.stream,
