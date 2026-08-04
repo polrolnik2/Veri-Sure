@@ -232,10 +232,28 @@ Hard rules:
   that calls `$finish` ends the run for the real testbench too. Measured: a
   helper `..._test_runner` module emitted beside a correct testbench ended five
   consecutive simulations at time 0, before a single output had been checked.
-  If the contract is parameterized and you want to cover several widths,
-  instantiate the DUT several times INSIDE the one testbench module, and call
-  `$finish` once, after every instance has reported. Never emit a module whose
-  body only $displays that some test "would run in separate compilation".
+  Never emit a module whose body only $displays that some test "would run in
+  separate compilation".
+- WIDTHS: test at the contract's DEFAULT parameter values. One width is
+  sufficient and is what is expected — do NOT contort the testbench to sweep
+  several widths. A correct single-width testbench is worth far more than a
+  broken sweep. Declare the contract's parameters on the testbench module
+  header and use them directly:
+      RIGHT:  module fp_align_add_tb #(parameter int EXP_WIDTH  = 8,
+                                       parameter int MANT_WIDTH = 23);
+                logic [EXP_WIDTH-1:0] exp_a;
+  A packed dimension must be elaboration-time constant, so a width may only
+  come from a `parameter` or `localparam`. NEVER pass a width in as a function
+  or task argument and then size a declaration with it — an argument is a
+  VARIABLE:
+      WRONG:  function automatic void ref_model(
+                input logic [EXP_WIDTH-1:0] exp_a,    // uses it...
+                input int                   EXP_WIDTH // ...and declares it
+              );
+      %Error: Expecting expression to be constant, but variable isn't const: 'EXP_WIDTH'
+      %Error: left side of bit range isn't a two-state constant
+  Measured: 26 errors in one generated oracle from exactly this. A function
+  declared inside the module already SEES the module parameters — just use them.
 - Do not use the SystemVerilog `continue` keyword.
 - Verilator target: keep the TB compatible (avoid `sequence ... endsequence` and SVA `[*]` repetition; prefer simple assertions).
 
