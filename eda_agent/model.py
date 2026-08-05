@@ -266,6 +266,55 @@ class UsageTrackingModel(ChatModelBase):
     # silent retry loop.
     _DECODE_RETRIES = 3
 
+    @staticmethod
+    def _describe_undecodable_body(e: json.JSONDecodeError) -> str:
+        """Name WHICH undecodable-body failure this is, from the body itself.
+
+        The old message said "truncated or non-JSON body" for every case. For
+        the one that actually happens that is wrong, and wrong in this project's
+        recurring direction: it describes a partial answer when in fact NO
+        answer arrived.
+
+        `JSONDecodeError.doc` carries the raw body, so the distinction is free.
+
+        Measured against a live OpenRouter call: the response is prefixed with
+        keep-alive padding that holds the connection open while the request
+        queues and generates --
+
+            0000000  \\n                     \\n  \\n
+            0000020                         \\n   {   "   i   d   " ...
+
+        The repeating unit is '\\n' + 9 spaces + '\\n' = 11 chars over 2 lines,
+        i.e. EXACTLY 5.500 chars per line. All nine failures recorded across
+        2026-08-03/05 sit at 5.486-5.498 -- just under 5.5, which is what a body
+        of padding and nothing else gives (the deficit is the final partial unit
+        plus the 0-based char offset). Any real JSON would add one very long
+        line and pull the ratio far above 5.5; none of the nine does.
+
+        So the provider accepted the request, committed a 200, flushed headers,
+        streamed padding while waiting on the upstream, then lost the generation
+        and could only close the connection. Retrying is right -- there is
+        nothing to continue, only to re-ask -- but the operator should read
+        "provider capacity", not "our payload was malformed".
+        """
+        doc = getattr(e, "doc", None) or ""
+        if doc and not doc.strip():
+            lines = doc.count("\n") or 1
+            return (
+                f"the provider ACCEPTED the request and then dropped it: the body "
+                f"is {len(doc)} chars of keep-alive padding "
+                f"({len(doc) / lines:.2f} chars/line) and contains no JSON at "
+                f"all. Nothing was generated, so there is nothing to resume — "
+                f"only to re-ask. Padding volume tracks how long the request "
+                f"hung before being lost"
+            )
+        head = doc[:80].replace("\n", "\\n")
+        return (
+            f"the body is {len(doc)} chars and is not JSON ({e}); "
+            f"starts {head!r} — an error page or a genuinely truncated document, "
+            f"which is NOT the keep-alive-padding case"
+        )
+
     async def __call__(self, *args: Any, **kwargs: Any):  # type: ignore[override]
         for attempt in range(self._DECODE_RETRIES):
             try:
@@ -274,15 +323,15 @@ class UsageTrackingModel(ChatModelBase):
             except json.JSONDecodeError as e:
                 if attempt == self._DECODE_RETRIES - 1:
                     logger.error(
-                        "Model response was not decodable JSON after %d attempts "
-                        "(%s); giving up and letting the caller see it",
-                        self._DECODE_RETRIES, e,
+                        "Undecodable body after %d attempts — %s; giving up and "
+                        "letting the caller see it",
+                        self._DECODE_RETRIES, self._describe_undecodable_body(e),
                     )
                     raise
                 logger.warning(
-                    "Model response was not decodable JSON (%s) — provider sent a "
-                    "truncated or non-JSON body over a 200; retrying (%d/%d)",
-                    e, attempt + 1, self._DECODE_RETRIES - 1,
+                    "Undecodable body over a 200 — %s; retrying (%d/%d)",
+                    self._describe_undecodable_body(e),
+                    attempt + 1, self._DECODE_RETRIES - 1,
                 )
                 await asyncio.sleep(min(2.0 ** attempt, 8.0))
         if self._base_model.stream:
