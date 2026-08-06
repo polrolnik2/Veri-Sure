@@ -29,6 +29,7 @@ from .utils import (
     latency_carrier_mismatch_note,
     latency_confirmed_note,
     mismatch_input_skew_note,
+    oracle_contradiction_note,
 )
 
 logger = logging.getLogger(__name__)
@@ -1065,6 +1066,17 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             pass
         sim_failed_log_excerpt = _summarize_sim_log_json(sim_failed_log)
+        # The contradiction check runs on the FULL stdout, never the excerpt.
+        # It is a statement about the whole population -- "these inputs appear
+        # twice with different answers" -- and the excerpt keeps only the first
+        # 40 value rows. Measured on the fp_adder root: the contradicting tuple
+        # sits at times 1790000-1820000, i.e. in the tail the excerpt drops, so
+        # reading the excerpt would have reported a clean oracle for a log that
+        # provably contains a self-contradicting one.
+        try:
+            _full_sim_stdout = str(json.loads(sim_failed_log).get("stdout") or "")
+        except Exception:  # noqa: BLE001
+            _full_sim_stdout = sim_failed_log or ""
 
         needs_kmap_hint = any(
             k in f"{spec}\n{contract_json}".lower()
@@ -1178,6 +1190,14 @@ class RTLEditor:
         # found nothing" rather than "there was nothing to check".
         evidence_note = missing_output_evidence_note(sim_failed_log_excerpt)
         evidence_block = f"{evidence_note}\n" if evidence_note else ""
+        # Ahead of EVERYTHING, including the evidence note (B89). The evidence
+        # note says how much the values are worth; this says whether the
+        # expected column is worth anything AT ALL. An oracle that demands two
+        # different outputs for one input tuple cannot be satisfied by any
+        # design, so every note below it -- and every edit the debugger might
+        # make -- is chasing a target that does not exist.
+        contradiction_note = oracle_contradiction_note(_full_sim_stdout)
+        contradiction_block = f"{contradiction_note}\n" if contradiction_note else ""
         # Same placement rationale as the latency note: the mismatch lines are
         # read before the trace report, so the correction has to arrive before
         # the thing it corrects, not after.
@@ -1197,7 +1217,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
+            f"{init}\n\n{contradiction_block}{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "

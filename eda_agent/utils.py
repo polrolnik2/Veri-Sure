@@ -658,6 +658,80 @@ def operand_passthrough_note(
     )
 
 
+def find_oracle_contradictions(sim_log: str) -> list[tuple[str, list[str]]]:
+    """Input tuples for which the ORACLE demanded more than one expected value.
+
+    Returns ``[(inputs, sorted_distinct_expected), ...]``; empty when the
+    expected column is self-consistent.
+    """
+    rows: list[tuple[str, str]] = []
+    for rx in _ROW_WITH_INPUTS_RES:
+        found = [(m.group("ins"), m.group("exp")) for m in rx.finditer(sim_log or "")]
+        if len(found) > len(rows):
+            rows = found
+    seen: dict[str, set[str]] = {}
+    order: list[str] = []
+    for ins, exp in rows:
+        key = " ".join(ins.split())
+        if key not in seen:
+            seen[key] = set()
+            order.append(key)
+        seen[key].add(exp.lower().lstrip("0") or "0")
+    return [(k, sorted(seen[k])) for k in order if len(seen[k]) > 1]
+
+
+def oracle_contradiction_note(sim_log: str) -> str:
+    """Say when the ORACLE contradicts itself — the same inputs, different answers.
+
+    This is the one defect in a failing log that is provable WITHOUT any
+    reference model: if a testbench demands two different outputs for the same
+    input tuple, at most one of them can be right, and no design can satisfy
+    both. It is an ORACLE fault, and every attempt scored against it is spent
+    on a verdict the design cannot change.
+
+    Measured on the `floating_point_adder` ROOT (run ``fp_adder_e2e``,
+    parent_1, 2026-08-06):
+
+        a=e3e99de8 b=a9968921 rnd_mode=3
+          -> exp in {bc34dff3, e33a677a, f3159d12}
+
+    Three different expected sums for one input pair. That log also carries 168
+    mismatches over 181 samples, and comparing the DUT against a real IEEE-754
+    reference at the design's own latency showed it correct on 61 of 68
+    round-to-nearest samples -- so the design was ~90% right and being told it
+    was ~93% wrong. The whole glue budget was being spent against an oracle
+    that disagreed with arithmetic.
+
+    Deliberately reported as evidence, not as a verdict. An output that
+    legitimately depends on internal STATE (an accumulator, an FSM) can show
+    the same shape without the oracle being wrong -- in which case the
+    testbench is still at fault, for printing an input tuple that does not
+    determine the expected value and therefore cannot be diagnosed from. Both
+    readings point at the testbench, so the note names both rather than
+    guessing which applies.
+    """
+    hits = find_oracle_contradictions(sim_log)
+    if not hits:
+        return ""
+    lines = [
+        "THE ORACLE CONTRADICTS ITSELF — it demands different outputs for the "
+        "SAME inputs.",
+        f"  {len(hits)} input tuple(s) appear with more than one expected value. "
+        "At most one can be correct, so NO design can satisfy them all:",
+    ]
+    for ins, exps in hits[:3]:
+        lines.append(f"    {ins.strip()[:96]}")
+        lines.append(f"      -> expected {', '.join(exps[:4])}")
+    lines.append(
+        "  Do NOT change the design to chase these rows. Either the reference "
+        "model is wrong, or the output depends on state the testbench never "
+        "prints — and in that second case the mismatch rows cannot be "
+        "diagnosed from either. Both are testbench faults; the oracle needs "
+        "regenerating before any further design edit is worth making."
+    )
+    return "\n".join(lines) + "\n"
+
+
 _REPORTED_TOTAL_RES = (
     re.compile(r"SIMULATION FAILED\s*-\s*(\d+)\s+MISMATCHES DETECTED", re.I),
     re.compile(r"^Mismatches:\s*(\d+)\s+in\s+\d+\s+samples", re.I | re.M),
