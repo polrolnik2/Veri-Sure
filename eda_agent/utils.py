@@ -504,6 +504,16 @@ _ROW_WITH_INPUTS_RES = (
         r"MISMATCH[^:\n]*:\s*(?P<ins>[^|\n]*)\|\s*got=(?P<got>[0-9a-fA-F]+)\s+"
         r"exp=(?P<exp>[0-9a-fA-F]+)",
     ),
+    # The COMPOSED testbench shape (B87). It names each output before `got=`
+    # and prints SEVERAL outputs on one row:
+    #   MISMATCH at time 80000: a=.. b=.. rnd_mode=0 | sum got=X exp=Y flags got=Z exp=W
+    # The bare-`got=` pattern above cannot match it, so on a composed log the
+    # detector parsed ZERO rows and returned "" -- indistinguishable from
+    # "checked and found no passthrough".
+    re.compile(
+        r"MISMATCH[^:\n]*:\s*(?P<ins>[^|\n]*)\|\s*(?:\w+\s+)?got=(?P<got>[0-9a-fA-F]+)\s+"
+        r"exp=(?P<exp>[0-9a-fA-F]+)",
+    ),
     re.compile(
         r"Cycle\s+\d+:\s*(?P<ins>[^|\n]*)\|\s*\w+=(?P<got>[0-9a-fA-F]+)\s*"
         r"\(?exp=(?P<exp>[0-9a-fA-F]+)\)?",
@@ -517,7 +527,9 @@ _ROW_WITH_INPUTS_RES = (
 _FIELD_RE = re.compile(r"\b\w+=([0-9a-fA-F]+)\b")
 
 
-def operand_passthrough_note(sim_log: str, *, min_rows: int = 8, min_rate: float = 0.30) -> str:
+def operand_passthrough_note(
+    sim_log: str, *, min_rows: int = 8, min_rate: float = 0.30, max_skew: int = 4
+) -> str:
     """Say when the output is a COPY OF AN INPUT rather than a function of them.
 
     A datapath that selects an operand instead of combining them fails with
@@ -557,24 +569,57 @@ def operand_passthrough_note(sim_log: str, *, min_rows: int = 8, min_rate: float
     if len(rows) < min_rows:
         return ""
 
-    exact = signflip = evaluable = 0
-    for ins, got, _exp in rows:
-        width = len(got)
-        operands = [v for v in _FIELD_RE.findall(ins) if len(v) == width]
-        if not operands:
-            # No operand of this output's width -- a narrow flag field against
-            # wide data, typically. The row cannot be judged either way, so it
-            # is not counted as evidence AGAINST passthrough; folding it into
-            # the denominator would report "could not check" as "checked and
-            # found none" and silently dilute the rate below the threshold.
-            continue
-        evaluable += 1
-        g = int(got, 16)
-        msb = 1 << (4 * width - 1)
-        if any(g == int(v, 16) for v in operands):
-            exact += 1
-        elif any((g ^ int(v, 16)) == msb for v in operands):
-            signflip += 1
+    def _score(skew: int) -> tuple[int, int, int]:
+        """(exact, signflip, evaluable) comparing row i's output to row i-skew's inputs."""
+        exact = signflip = evaluable = 0
+        for i, (_ins, got, _exp) in enumerate(rows):
+            j = i - skew
+            if j < 0:
+                continue
+            src = rows[j][0]
+            width = len(got)
+            operands = [v for v in _FIELD_RE.findall(src) if len(v) == width]
+            if not operands:
+                # No operand of this output's width -- a narrow flag field against
+                # wide data, typically. The row cannot be judged either way, so it
+                # is not counted as evidence AGAINST passthrough; folding it into
+                # the denominator would report "could not check" as "checked and
+                # found none" and silently dilute the rate below the threshold.
+                continue
+            evaluable += 1
+            g = int(got, 16)
+            msb = 1 << (4 * width - 1)
+            if any(g == int(v, 16) for v in operands):
+                exact += 1
+            elif any((g ^ int(v, 16)) == msb for v in operands):
+                signflip += 1
+        return exact, signflip, evaluable
+
+    # Skew 0 first, and if it already fires nothing else is consulted -- so the
+    # combinational case behaves EXACTLY as before and this can only add
+    # detections, never change existing ones.
+    #
+    # A pipelined composition reports sample i's inputs beside sample i-N's
+    # output, so a verbatim operand copy is invisible on its own row (B87).
+    # Measured on the fp_adder ROOT (run fp_adder_e2e, parent_1, 2026-08-06):
+    #
+    #     skew 0: 1 of 167 (1%)      <- below every threshold
+    #     skew 1: 0 of 166 (0%)
+    #     skew 2: 99 of 165 (60%)    <- the design copies the larger operand
+    #     skew 3: 0 of 164 (0%)
+    #
+    # The 2-sample offset is not noise to be normalised away, it is part of the
+    # diagnosis: the operand reaches the output THROUGH the pipeline, so the
+    # wrong wire is upstream of the registers, not a final output mux.
+    skew = 0
+    exact, signflip, evaluable = _score(0)
+    if evaluable < min_rows or (exact + signflip) / evaluable < min_rate:
+        for cand in range(1, max_skew + 1):
+            e, s, ev = _score(cand)
+            if ev >= min_rows and (e + s) / ev >= min_rate and (e + s) / ev > (
+                (exact + signflip) / evaluable if evaluable else 0.0
+            ):
+                skew, exact, signflip, evaluable = cand, e, s, ev
 
     if evaluable < min_rows:
         return ""
@@ -586,11 +631,23 @@ def operand_passthrough_note(sim_log: str, *, min_rows: int = 8, min_rate: float
     detail = f"{exact} of them identical to an operand"
     if signflip:
         detail += f", {signflip} identical except the most significant bit"
+    when = (
+        "that sample's own inputs"
+        if skew == 0
+        else f"the inputs of the sample {skew} ROWS EARLIER"
+    )
+    lag_note = "" if skew == 0 else (
+        f"  The copy is DELAYED by {skew} samples, so it is invisible on its own row — "
+        f"the operand travels to the output THROUGH the pipeline. That places the wrong "
+        f"connection UPSTREAM of the registers (a child input fed from the wrong source, "
+        f"or a child output never consumed), not in a final output mux.\n"
+    )
     return (
         "YOUR OUTPUT IS A COPY OF AN INPUT — the operands are being SELECTED, not "
         "combined.\n"
         f"  In {hits} of {evaluable} mismatching samples ({rate:.0%}) the value produced "
-        f"equals one of that sample's own inputs ({detail}).\n"
+        f"equals one of {when} ({detail}).\n"
+        + lag_note +
         "  A rounding, normalisation or guard-bit error cannot do that: those perturb a "
         "computed sum, they do not reproduce an input exactly. Something is routing an "
         "operand to the output instead of the computed result — a mux default or select "

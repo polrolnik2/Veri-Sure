@@ -77,8 +77,20 @@ def _clip_text(s: str, *, max_chars: int) -> str:
     return s[:half] + "\n...<snip>...\n" + s[-half:]
 
 
-def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
-    """Return a compact excerpt from a CommandResult JSON string."""
+def _summarize_sim_log_json(
+    sim_log_json: str, *, max_chars: int = 12000, max_value_rows: int = 40
+) -> str:
+    """Return a compact excerpt from a CommandResult JSON string.
+
+    ``max_chars`` was 4000, which predates this function keeping any per-sample
+    mismatch rows (B88). The measured shape on the fp_adder root is ~2.9k of
+    scenario verdicts, hints and banner, plus ~110 chars per value row; 40 rows
+    therefore needs ~7.3k total. The budget is set so the head+tail clip in
+    :func:`_clip_text` does not engage at all for that shape -- a mid-excerpt
+    snip would cut a hole in the middle of the value rows, and the skew
+    detectors compare row *i* against row *i-N*, so a hole is precisely the
+    damage they cannot absorb.
+    """
     stdout = ""
     stderr = ""
     try:
@@ -118,6 +130,26 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
         if ctx_end != -1:
             end = stdout.find("\n", ctx_end)
             interesting.extend(stdout[ctx_start:(end if end != -1 else len(stdout))].splitlines())
+    # The per-sample VALUE rows (B88). Every value-based note in the debug
+    # prompt -- operand_passthrough_note, constant_output_lag_note,
+    # mismatch_input_skew_note, the latency chain -- reads THIS excerpt, and
+    # none of the patterns below matched a row like
+    #
+    #     MISMATCH at time 80000: a=.. b=.. rnd_mode=0 | sum got=X exp=Y
+    #     MISMATCH SUM: a=.. b=.. rnd=2 | got=X exp=Y
+    #
+    # The nearest one, `"mismatch" in low and "detected" in low`, wants the
+    # BANNER ("MISMATCHES DETECTED"), and a value row does not say "detected".
+    # So the rows were dropped and every value-based detector read an excerpt
+    # with nothing to detect. Swept all 17 debugger prompts in run
+    # `fp_adder_e2e`: ZERO carried a single `got=` row, and zero carried a
+    # passthrough note -- including the leaf F14 was measured on, so that
+    # detector had never once fired in production.
+    #
+    # This is also why the missing-output-evidence note reads "records the
+    # VALUES for only 0 of 168": true of the excerpt, false of the testbench,
+    # which recorded all 168. It was accusing the TB of the excerpt's defect.
+    value_rows: list[str] = []
     for line in stdout.splitlines():
         low = line.lower()
         if (
@@ -136,6 +168,24 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
             or ("mismatch" in low and "detected" in low)
         ):
             interesting.append(line)
+        elif "mismatch" in low and "got=" in low and "exp" in low:
+            value_rows.append(line)
+
+    # Kept CONSECUTIVE from the first, never sampled across the log: the skew
+    # detectors compare row i against row i-N, so a scattered sample destroys
+    # exactly the structure they exist to find.
+    if value_rows:
+        kept = value_rows[:max_value_rows]
+        dropped = len(value_rows) - len(kept)
+        interesting.extend(kept)
+        if dropped:
+            # No silent caps -- a truncated list that does not say it was
+            # truncated reads as the whole population, which is how a 60%
+            # passthrough rate would get reported as if measured on 40 rows.
+            interesting.append(
+                f"[... {dropped} further mismatch rows omitted from this excerpt; "
+                f"{len(value_rows)} were recorded in full in the saved log]"
+            )
     out = "\n".join(interesting).strip()
     if not out:
         # Still nothing recognised: hand back the TAIL of the meaningful lines
