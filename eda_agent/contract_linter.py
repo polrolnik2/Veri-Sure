@@ -71,6 +71,141 @@ def _has_completion_signal(outputs) -> bool:
     return False
 
 
+# Prose that RELAXES a latency the same contract states as a number. Each of
+# these tells the designer the declared figure is a floor rather than a budget.
+_LATENCY_RELAXING_RES = (
+    re.compile(r"deeper\s+pipelin", re.I),
+    re.compile(r"(?:more|additional|extra|further)\s+pipelin", re.I),
+    re.compile(r"pipelin\w*\s+(?:is|are)\s+(?:permitted|allowed|acceptable|optional)", re.I),
+    re.compile(r"latency\s+(?:may|can)\s+(?:vary|differ|be\s+(?:higher|greater|longer))", re.I),
+    re.compile(r"any\s+latency", re.I),
+)
+
+# Prose that DENIES the permission, so the same words carry the opposite sense.
+# Deliberately narrow: it matches a negated PERMISSION, not any negation. The
+# real conflict reads "Deeper pipelining is permitted but not required", which
+# contains "not" and must still fire; the fix this linter recommends reads
+# "additional pipeline stages are NOT permitted", which must not. A general
+# negation check cannot separate those, and getting it wrong in the permissive
+# direction means the linter flags the exact wording it just asked for.
+_NEGATED_PERMISSION_RE = re.compile(
+    r"(?:\bnot\b|\bn't\b)\s+(?:be\s+)?(?:permitted|allowed|acceptable|used)"
+    r"|\bno\s+(?:additional|extra|more|further)\s+pipelin"
+    r"|\b(?:forbidden|prohibited|disallowed)\b",
+    re.I,
+)
+
+# Sampling guidance that offers the OPPOSITE clock edge as an equivalent.
+_OPPOSITE_EDGE = {"posedge": "negedge", "negedge": "posedge"}
+
+_SENTENCE_SPLIT_RE = re.compile(r"[.;\n]")
+
+
+def _clause_around(text: str, start: int, end: int) -> str:
+    """The clause containing [start, end) — negation does not cross a `;` or `.`."""
+    left = max((m.end() for m in _SENTENCE_SPLIT_RE.finditer(text, 0, start)), default=0)
+    m = _SENTENCE_SPLIT_RE.search(text, end)
+    return text[left:m.start() if m else len(text)]
+
+
+def _prose_strings(node: Any, path: str = "$", _depth: int = 0):
+    """Every string value in the contract, with a JSON-ish path, prose only.
+
+    Walks the whole object rather than a fixed key list because the statements
+    that caused B93 lived in three different places -- `timing.sum.notes`,
+    an `io[].notes`, and a free-form `guidance` bullet -- and a checker that
+    inspects only the field it expects the conflict in is a checker that reports
+    "no conflict" for "did not look".
+    """
+    if _depth > 12:
+        return
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            yield from _prose_strings(v, f"{path}.{k}", _depth + 1)
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            yield from _prose_strings(v, f"{path}[{i}]", _depth + 1)
+
+
+def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIssue]:
+    """Flag prose that overrides the contract's own `latency_cycles`.
+
+    A latency figure is only a budget if nothing else in the contract says it is
+    optional. When the prose disagrees with the number, the designer follows the
+    prose -- it is the part written in the language the requirement is reasoned
+    about in -- and the number becomes decoration.
+
+    Measured on the fp_adder root (run `fp_adder_e2e`). The contract declared
+    `latency_cycles: 1` on both outputs, then said:
+
+        "Deeper pipelining is permitted but not required by the interface."
+        "Drive inputs on posedge clk; sample outputs on the following posedge
+         (or negedge to avoid race)."
+
+    The golden testbench drives, waits ONE posedge and samples -- so deeper
+    pipelining is not in fact permitted, and an output registered on negedge
+    lands half a cycle after the sample point. Four independent glue redraws
+    each built `always_ff @(posedge clk)` inputs into `always_ff @(negedge clk)`
+    outputs, scoring 168/173/168/168 of 181, and each was FOLLOWING ITS
+    CONTRACT. Nothing downstream could catch it: the self-TB is generated from
+    the same contract, so it samples on the same wrong edge and agrees.
+
+    Only fires when a latency is actually declared -- with no number there is
+    nothing for the prose to contradict, and "pipelining is permitted" is then a
+    legitimate degree of freedom rather than a conflict.
+    """
+    issues: list[ContractIssue] = []
+    if not isinstance(timing, dict):
+        return issues
+    declared = {}
+    for out in sorted(outputs or ()):
+        tinfo = timing.get(out)
+        if isinstance(tinfo, dict):
+            lat = _as_int(tinfo.get("latency_cycles"))
+            if lat is not None and lat >= 0:
+                declared[out] = lat
+    if not declared:
+        return issues
+
+    budget = max(declared.values())
+    edge = ""
+    clocking = obj.get("clocking")
+    if isinstance(clocking, dict) and isinstance(clocking.get("clock"), dict):
+        edge = str(clocking["clock"].get("edge") or "").lower()
+    other = _OPPOSITE_EDGE.get(edge, "")
+
+    for path, text in _prose_strings(obj):
+        if path.startswith("$.contract_sva"):
+            continue  # harness-injected, not the Architect's prose
+        for rx in _LATENCY_RELAXING_RES:
+            m = rx.search(text)
+            if m:
+                if _NEGATED_PERMISSION_RE.search(_clause_around(text, m.start(), m.end())):
+                    continue  # "additional pipeline stages are NOT permitted" — compliant
+                issues.append(ContractIssue(
+                    "error", path.lstrip("$."),
+                    f"This states extra pipelining is permitted, but timing declares "
+                    f"latency_cycles={budget}. A consumer with no completion signal "
+                    f"samples at the DECLARED latency, so any extra stage is read as a "
+                    f"wrong value, not as a slower correct one. Either raise "
+                    f"latency_cycles and add a completion signal, or say the declared "
+                    f"latency is a HARD budget: \"exactly {budget} cycle(s); additional "
+                    f"pipeline stages are NOT permitted\".",
+                ))
+                break
+        if other and re.search(rf"\b{other}\b", text, re.I):
+            issues.append(ContractIssue(
+                "error", path.lstrip("$."),
+                f"This mentions {other} while clocking.clock.edge is {edge}. Registering "
+                f"or sampling an output on {other} shifts it half a cycle from the "
+                f"{edge} the consumer samples on, which reads as a FULL transaction of "
+                f"extra latency and fails every vector. Drive and observe on {edge} only.",
+            ))
+    return issues
+
+
 def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
@@ -203,6 +338,8 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                         f"count, state the MINIMUM latency the function needs (0 for "
                         f"combinational, 1 for a registered output).",
                     ))
+
+    issues.extend(_latency_prose_conflicts(obj, timing, outputs))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")
