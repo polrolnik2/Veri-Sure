@@ -60,7 +60,14 @@ What to include (keep it compact):
   name MUST appear here. Use [] only if the module genuinely has no parameters.
 - io: concise list of ports with direction and bit width when known
 - clocking: whether sequential; clock/reset names and edge semantics if applicable
-- timing: per-output latency expectations (0 = combinational / same-cycle, 1 = next-cycle, etc.) when inferable
+- timing: per-output latency expectations (0 = combinational / same-cycle, 1 = next-cycle, etc.) when inferable.
+  State the MINIMUM latency the function inherently needs — do not add pipeline
+  stages the behaviour does not require. If the interface carries NO completion
+  signal (no valid/ready/done output) and the spec names no specific cycle count,
+  then nothing tells a consumer when an output is ready, and a multi-cycle latency
+  is unobservable from outside the module: choose 0 or 1. Prose suggesting a
+  pipeline is a permission, not a requirement — it never overrides an interface
+  that cannot signal completion.
 - functional_summary: 3-8 bullets describing behavior precisely
 - corner_cases: 3-8 bullets (overflows, resets, illegal inputs, boundary indices, etc.)
 - test_plan: 5-10 bullets of directed tests the Verifier should include

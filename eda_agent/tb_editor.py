@@ -1190,7 +1190,7 @@ The `response` argument MUST be a plain string (not JSON, not a dict).
 
 _INIT_PROMPT = r"""The information below is given to help your repair:
 1. The child assume properties (already renamed to the prefixed signal names
-   used in this testbench, e.g. `booth_controller_ready`) — SOURCE OF TRUTH
+   used in this testbench: child `foo`'s `ready` is `foo_ready`) — SOURCE OF TRUTH
    for what your inline child model must satisfy;
 2. The current violation log from running the testbench against the mock DUT.
 

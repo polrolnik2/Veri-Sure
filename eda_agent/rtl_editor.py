@@ -17,10 +17,20 @@ from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .sim_reviewer import SimReviewer, check_syntax
+from .sim_reviewer import SimReviewer, check_syntax, multidriven_signals
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
-from .utils import failing_test_scenarios, format_failing_scenarios
+from .utils import (
+    constant_output_lag_note,
+    operand_passthrough_note,
+    missing_output_evidence_note,
+    failing_test_scenarios,
+    format_failing_scenarios,
+    latency_carrier_mismatch_note,
+    latency_confirmed_note,
+    mismatch_input_skew_note,
+    oracle_contradiction_note,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +78,20 @@ def _clip_text(s: str, *, max_chars: int) -> str:
     return s[:half] + "\n...<snip>...\n" + s[-half:]
 
 
-def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
-    """Return a compact excerpt from a CommandResult JSON string."""
+def _summarize_sim_log_json(
+    sim_log_json: str, *, max_chars: int = 12000, max_value_rows: int = 40
+) -> str:
+    """Return a compact excerpt from a CommandResult JSON string.
+
+    ``max_chars`` was 4000, which predates this function keeping any per-sample
+    mismatch rows (B88). The measured shape on the fp_adder root is ~2.9k of
+    scenario verdicts, hints and banner, plus ~110 chars per value row; 40 rows
+    therefore needs ~7.3k total. The budget is set so the head+tail clip in
+    :func:`_clip_text` does not engage at all for that shape -- a mid-excerpt
+    snip would cut a hole in the middle of the value rows, and the skew
+    detectors compare row *i* against row *i-N*, so a hole is precisely the
+    damage they cannot absorb.
+    """
     stdout = ""
     stderr = ""
     try:
@@ -80,8 +102,57 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
         return _clip_text(sim_log_json, max_chars=max_chars)
 
     # Keep the most informative bits: mismatch banner + hints + summary.
+    #
+    # The original vocabulary here was written for LEAF testbenches
+    # ("[TEST ...]", "=== MISMATCH DETECTED", "Mismatches: N in M"). COMPOSED
+    # testbenches report through SVA assertions instead:
+    #
+    #   === Scenario 2: Multiply by zero (0*7) ===
+    #   [145] %Error: tb.sv:156: Assertion failed in tb.a_product_valid:
+    #         FAIL [cycle 14]: product_valid_when_ready
+    #
+    # None of that matched, so `interesting` came back EMPTY and the function
+    # fell through to a head+tail clip of raw stdout -- whose head is
+    # "make: Entering directory ...". Observed live on booth: the debugger's
+    # very first run_simulation returned an excerpt beginning with compile
+    # chatter, so it never saw the assertion, the cycle, or the scenario it was
+    # supposed to fix. A glue-only blind spot: leaf TBs speak the matched
+    # vocabulary, composed TBs do not.
+    # The composition context (the assembler's port maps) is prepended to
+    # stdout by the caller so the payload stays valid CommandResult JSON. It is
+    # not a "finding", so none of the vocabulary below matches it -- and it is
+    # the one thing a glue repairer cannot work without, since it has no tool
+    # that can read the wrapper or the children. Kept verbatim, ahead of
+    # everything else.
     interesting: list[str] = []
+    ctx_start = stdout.find("=== COMPOSITION CONTEXT")
+    if ctx_start != -1:
+        ctx_end = stdout.find("=== END COMPOSITION CONTEXT", ctx_start)
+        if ctx_end != -1:
+            end = stdout.find("\n", ctx_end)
+            interesting.extend(stdout[ctx_start:(end if end != -1 else len(stdout))].splitlines())
+    # The per-sample VALUE rows (B88). Every value-based note in the debug
+    # prompt -- operand_passthrough_note, constant_output_lag_note,
+    # mismatch_input_skew_note, the latency chain -- reads THIS excerpt, and
+    # none of the patterns below matched a row like
+    #
+    #     MISMATCH at time 80000: a=.. b=.. rnd_mode=0 | sum got=X exp=Y
+    #     MISMATCH SUM: a=.. b=.. rnd=2 | got=X exp=Y
+    #
+    # The nearest one, `"mismatch" in low and "detected" in low`, wants the
+    # BANNER ("MISMATCHES DETECTED"), and a value row does not say "detected".
+    # So the rows were dropped and every value-based detector read an excerpt
+    # with nothing to detect. Swept all 17 debugger prompts in run
+    # `fp_adder_e2e`: ZERO carried a single `got=` row, and zero carried a
+    # passthrough note -- including the leaf F14 was measured on, so that
+    # detector had never once fired in production.
+    #
+    # This is also why the missing-output-evidence note reads "records the
+    # VALUES for only 0 of 168": true of the excerpt, false of the testbench,
+    # which recorded all 168. It was accusing the TB of the excerpt's defect.
+    value_rows: list[str] = []
     for line in stdout.splitlines():
+        low = line.lower()
         if (
             "[TEST " in line
             or "=== MISMATCH DETECTED" in line
@@ -90,11 +161,46 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
             or "SIMULATION FAILED" in line
             or "SIMULATION PASSED" in line
             or line.strip() == "TIMEOUT"
+            # --- composed/SVA vocabulary ---
+            or "assertion failed" in low
+            or "%error" in low
+            or "fail [cycle" in low
+            or line.strip().startswith("=== Scenario")
+            or ("mismatch" in low and "detected" in low)
         ):
             interesting.append(line)
+        elif "mismatch" in low and "got=" in low and "exp" in low:
+            value_rows.append(line)
+
+    # Kept CONSECUTIVE from the first, never sampled across the log: the skew
+    # detectors compare row i against row i-N, so a scattered sample destroys
+    # exactly the structure they exist to find.
+    if value_rows:
+        kept = value_rows[:max_value_rows]
+        dropped = len(value_rows) - len(kept)
+        interesting.extend(kept)
+        if dropped:
+            # No silent caps -- a truncated list that does not say it was
+            # truncated reads as the whole population, which is how a 60%
+            # passthrough rate would get reported as if measured on 40 rows.
+            interesting.append(
+                f"[... {dropped} further mismatch rows omitted from this excerpt; "
+                f"{len(value_rows)} were recorded in full in the saved log]"
+            )
     out = "\n".join(interesting).strip()
     if not out:
-        out = _clip_text(stdout, max_chars=max_chars)
+        # Still nothing recognised: hand back the TAIL of the meaningful lines
+        # rather than a head-clip dominated by the build transcript. A single
+        # g++ command line is ~700 chars and would consume the whole budget.
+        meaningful = [
+            l for l in stdout.splitlines()
+            if l.strip() and not l.startswith((
+                "g++", "make:", "make[", "python3 ", "rm ", "verilator ",
+                "- Verilator:", "- V e r i l a t i o n", "- S i m u l a t i o n",
+                "ar ", "ranlib",
+            ))
+        ]
+        out = "\n".join(meaningful[-40:]) if meaningful else _clip_text(stdout, max_chars=max_chars)
 
     if stderr.strip():
         out = out + "\n\n[stderr excerpt]\n" + _clip_text(stderr, max_chars=max(800, max_chars // 3))
@@ -181,7 +287,7 @@ Rules:
    specification constraints your RTL MUST satisfy. Ensure fixes do not violate them.
 8. Child assumes mode: if the contract JSON contains a `child_assumes` field, this RTL is a
    COMPOSITION/GLUE module with child-facing ports (prefixed with each child module name,
-   e.g. `booth_controller_ready`, `booth_datapath_product`) ALREADY on its port list.
+   so a child `foo` with port `ready` appears as `foo_ready`) ALREADY on its port list.
    - DO NOT instantiate any child module as a fix. There are no child module definitions
      available to this RTL — child-facing ports connect externally, outside this file.
    - If a child-facing port appears unconnected, undriven, or X-valued, the fix is to wire
@@ -192,6 +298,18 @@ Rules:
      `io_behavior` is a BLACK-BOX description (no internal architecture terms); do NOT use
      a child's `functional_summary` (if present) to reason about its behavior — that field
      describes the child's own internal RTL implementation, not its observable interface.
+   - VESTIGIAL GLUE is a rejection criterion unique to composition modules, and it is
+     checked MECHANICALLY BEFORE any simulation runs: every child-facing INPUT port (a
+     port carrying a child's RESULT into this module) must be READ somewhere in the body.
+     A glue module that declares such a port and never references it has recomputed that
+     child's function inline instead of composing through it, and is rejected however
+     well it simulates.
+   - So if you are told the composition failed and you cannot find a functional bug, check
+     this FIRST: for each child-facing input port, find where its value is consumed. If a
+     port has no consumer, the fix is to route it into the external output (or sibling
+     child input) it belongs to and DELETE the inline logic that was recomputing it —
+     not to add more logic. Deleting a redundant computation is a valid, often correct fix
+     here, which is not true when debugging a leaf module.
 
 When you are done (simulation passes), finish by calling generate_response with a
 structured plain-string response in EXACTLY this format (use literal newlines between fields):
@@ -235,9 +353,11 @@ Workflow (repeat until pass):
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
-3) Call list_suspect_blocks(), then read_block(block_id) for the most relevant one.
-4) Make ONE small change in ONE block via replace_block(block_id, new_code).
-5) Immediately call run_simulation() and iterate based on the new trace summary.
+3) Call _tool_list_suspect_blocks(), then _tool_read_block(block_id) for the most
+   relevant one. Never guess a block_id -- list them first; an invented id costs
+   a whole iteration and returns nothing.
+4) Make ONE small change in ONE block via _tool_replace_block(block_id, new_code).
+5) Immediately call _tool_run_simulation() and iterate on the new trace summary.
 
 Rules:
 - Do not modify the testbench. Only modify the RTL code.
@@ -251,14 +371,61 @@ You will also receive a structured trace-grounded bug report (JSON) that include
 
 You MUST only modify code inside suspect blocks.
 Use tools:
-- list_suspect_blocks()
-- read_block(block_id)
-- replace_block(block_id, new_code)
-- run_simulation()
+- _tool_list_suspect_blocks()
+- _tool_read_block(block_id)
+- _tool_replace_block(block_id, new_code)
+- _tool_run_simulation()
+
+These are the exact names the tool schema exposes. Earlier revisions of this
+prompt named them without the `_tool_` prefix, which is not what is registered:
+across a full live run the model made 0 calls to any bare name, and its attempts
+to guess block ids (`Unknown block_id 'A1'`) came from skipping the listing step
+rather than calling it under a name the prompt had got wrong.
 
 When simulation passes, end with generate_response using this format:
   generate_response(response="RTL_FIXED: <one-line summary>\nCONTRACT_CLAUSE: <specific contract requirement violated>\nFIX_RATIONALE: <how this change satisfies that requirement>")
 """
+
+
+def _reads_of(rtl: str, name: str) -> int:
+    """Whole-word occurrences of `name` outside comments.
+
+    A declaration is one occurrence, so >1 means the port is consumed
+    somewhere. Same counting rule the orchestrator's vestigial detector uses,
+    deliberately -- two guards for one invariant must not disagree about what
+    "read" means.
+    """
+    body = re.sub(r"/\*.*?\*/", " ", rtl, flags=re.S)
+    body = re.sub(r"//[^\n]*", "", body)
+    return len(re.findall(rf"\b{re.escape(name)}\b", body))
+
+
+def _child_outputs_gone_dark(
+    old_rtl: str, new_rtl: str, child_names: Tuple[str, ...],
+) -> list[str]:
+    """Child-facing inputs the edit turned from READ into unread.
+
+    A child-facing input is an `input` port whose name begins with a child
+    module name -- it carries that child's RESULT into the glue. If the glue
+    stops reading one, it has recomputed that child's function inline and is no
+    longer composing with it.
+
+    Compares BEFORE against AFTER rather than judging the new text alone: a port
+    that was already unread is a pre-existing defect this edit did not cause,
+    and rolling back for it would trap the debugger with no legal move.
+    """
+    if not child_names:
+        return []
+    header = new_rtl.split(");", 1)[0]
+    ports = [
+        m.group(1)
+        for m in re.finditer(r"\binput\s+(?:logic|wire|reg|bit)?\s*(?:\[[^\]]*\]\s*)?(\w+)", header)
+        if m.group(1).startswith(tuple(f"{c}_" for c in child_names))
+    ]
+    return [
+        p for p in ports
+        if _reads_of(old_rtl, p) > 1 and _reads_of(new_rtl, p) <= 1
+    ]
 
 
 @dataclass
@@ -270,11 +437,36 @@ class _EditSession:
     sim_reviewer: SimReviewer
     max_trials: int
 
+    # Child module names from the contract's `child_assumes`, empty for a leaf.
+    # Present so `_judge_replace_action_execution` can enforce the vestigial-glue
+    # rule the debugger's own prompt already promises is "checked MECHANICALLY
+    # BEFORE any simulation runs" -- a promise that was not true inside this
+    # loop. See `_child_outputs_gone_dark`.
+    child_names: Tuple[str, ...] = ()
+
     is_done: bool = False
     action_calls: int = 0
     trace_report: Dict[str, Any] | None = None
     blocks_by_id: Dict[str, RtlBlock] | None = None
     last_fail_time: int | None = None
+    # The full result dict of the MOST RECENT replace_block()/run_simulation()
+    # call, regardless of whether it was accepted or rolled back. Set by the
+    # tool wrappers (_tool_replace_block/_tool_run_simulation), read by
+    # chat()'s "continue debugging" re-prompt so the model is handed the
+    # concrete outcome of what it just tried instead of a bare "keep going" —
+    # relying solely on the model re-deriving/recalling this from its own
+    # conversation history is not good feedback, especially after several
+    # rounds of exploration in between.
+    last_action_result: Dict[str, Any] | None = None
+    # Monotonic index for the append-only trajectory record. The debug loop used
+    # to leave NO evidence of what it did: `debug_sim_output.json` and
+    # `trace_report.json` are written to the same path every round, so each
+    # iteration destroyed the previous one's, and no model response, tool call,
+    # edit diff or per-iteration mismatch count was persisted at all. 79 minutes
+    # of debugging on stage_roundpack left one prompt and one final RTL, which
+    # made "why did it not converge" unanswerable -- every hypothesis about it
+    # was a guess because the falsifying data did not exist.
+    traj_iter: int = 0
 
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
@@ -293,6 +485,15 @@ class _EditSession:
         # Persist full sim output for human inspection; provide excerpt to the agent.
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
+            # ALSO keep this iteration's copy. The unsuffixed file is overwritten
+            # every round, so a post-mortem could only ever see the last one --
+            # which is how 79 minutes of stage_roundpack debugging left no record
+            # of the iteration where it went wrong.
+            try:
+                Path(self.output_dir, f"debug_sim_output_i{self.traj_iter + 1}.json").write_text(
+                    sim_output, encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001
             pass
         return {
@@ -380,6 +581,95 @@ class _EditSession:
             "vcd_available": ((tr.get("notes") or {}).get("vcd_available")),
         }
 
+    def _record_trajectory(
+        self,
+        action: str,
+        *,
+        result: Dict[str, Any] | None = None,
+        block_id: str | None = None,
+        diff: str | None = None,
+        model_text: str | None = None,
+    ) -> None:
+        """Append one line to `debug_trajectory.jsonl`. Never raises.
+
+        Most of this already exists in the result dict `_judge_replace_action_execution`
+        builds -- prev_mismatch_cnt, new_fail_time, error_msg, accept_reason,
+        is_action_executed -- and was handed to the model and then dropped on the
+        floor. Recording it costs a diff and a few integers per iteration.
+        """
+        try:
+            self.traj_iter += 1
+            r = result or {}
+            row = {
+                "iter": self.traj_iter,
+                "action": action,
+                "block_id": block_id,
+                "accepted": bool(r.get("is_action_executed")),
+                "syntax_ok": r.get("is_syntax_correct"),
+                "sim_pass": r.get("is_sim_pass"),
+                "mismatch_before": r.get("prev_mismatch_cnt"),
+                "mismatch_after": r.get("sim_mismatch_cnt"),
+                "fail_time_before": r.get("prev_fail_time"),
+                "fail_time_after": r.get("new_fail_time"),
+                "rollback_reason": (r.get("error_msg") or None),
+                "accept_reason": (r.get("accept_reason") or None),
+                "action_calls": self.action_calls,
+                "diff": (diff or "")[:4000] or None,
+                "model_text": (model_text or "")[:1500] or None,
+            }
+            path = Path(self.output_dir, "debug_trajectory.jsonl")
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except Exception:  # noqa: BLE001
+            # Observability must never break the loop it observes.
+            pass
+
+    def backfill_model_text(self, first_iter: int, text: str | None) -> None:
+        """Attach a completed turn's reasoning to the edits it produced.
+
+        Reading the agent's memory at TOOL time does not work: in agentscope's
+        ReAct loop the tool executes before the assistant message is committed,
+        so `replace_block` is logged while the reasoning for that very turn does
+        not exist yet. Measured live on stage_roundpack 2026-08-02 — four
+        trajectory entries, `model_text` None on every one, and no `model_turn`
+        entry at all because the turn had not returned. An earlier attempt to
+        read `self._agent.memory` from inside the tool passed its unit tests
+        against a hand-built memory and produced nothing whatsoever in
+        production, which is the same shape of mistake as B23: a probe verified
+        only against the caller it was written for.
+
+        So do it from the other side. `chat()` knows the reasoning once the turn
+        returns, and knows which trajectory rows that turn wrote; this rewrites
+        exactly those rows. Never raises: observability must not break the loop
+        it observes.
+        """
+        if not text:
+            return
+        try:
+            path = Path(self.output_dir, "debug_trajectory.jsonl")
+            if not path.exists():
+                return
+            rows = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    rows.append(line)
+                    continue
+                if (
+                    isinstance(row, dict)
+                    and row.get("iter", 0) >= first_iter
+                    and row.get("action") == "replace_block"
+                    and not row.get("model_text")
+                ):
+                    row["model_text"] = text[:1500]
+                rows.append(json.dumps(row, ensure_ascii=False) if isinstance(row, dict) else row)
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+
     def _base_result(self) -> Dict[str, Any]:
         return {
             "is_action_executed": False,
@@ -391,7 +681,9 @@ class _EditSession:
             "error_msg": "",
         }
 
-    def _judge_replace_action_execution(self, *, old_file_content: str) -> Dict[str, Any]:
+    def _judge_replace_action_execution(
+        self, *, old_file_content: str, pre_multidriven: set[str] | None = None,
+    ) -> Dict[str, Any]:
         result = self._base_result()
         prev_mismatch_cnt = int(self.last_mismatch_cnt)
         prev_fail_time = self.last_fail_time
@@ -403,11 +695,85 @@ class _EditSession:
             result["error_msg"] = "Syntax error. Action rolled back."
             return result
 
+        # A duplicated continuous assignment is a design error, not a style
+        # nit, and check_syntax is deliberately permissive about warnings so it
+        # sails through. Reject BEFORE simulating: the sim would either mask it
+        # (last-writer-wins) or blame the datapath for an X.
+        new_multi = multidriven_signals(self.rtl_path)
+        introduced = new_multi - (pre_multidriven or set())
+        if introduced:
+            self.write_rtl(old_file_content)
+            result = self._base_result()
+            result["is_syntax_correct"] = True
+            result["error_msg"] = (
+                "Edit rolled back: it gave "
+                + ", ".join(sorted(introduced))
+                + " MORE THAN ONE continuous driver. Your replacement text re-declares "
+                "assignments that already exist OUTSIDE the block you replaced, so the "
+                "splice duplicated them. Replace ONLY the lines inside the block, and do "
+                "not repeat assignments that live elsewhere in the module."
+            )
+            return result
+
+        # VESTIGIAL GLUE, enforced where the prompt already says it is enforced.
+        #
+        # The debugger's own instructions state this rule is "checked
+        # MECHANICALLY BEFORE any simulation runs". That was true of the
+        # orchestrator's composition gate and NOT true here, inside the debug
+        # loop -- so the model was told a guard existed at a point where nothing
+        # checked, and acted accordingly.
+        #
+        # Measured on fp_align_add parent_16 (2026-08-04): given
+        # "Contract violation: exp_large_correct", the debugger replaced
+        #     assign exp_large = fp_compare_exp_sig_exp_large;
+        # with
+        #     assign exp_large = ((exp_a > exp_b) || ...) ? exp_a : exp_b;
+        # -- recomputing the child's function inline. That satisfies the
+        # assertion and destroys the composition: the child's output is then
+        # read by nothing. Six iterations and four accepted edits produced a
+        # byte-identical failure each time, and the glue was headed for a
+        # vestigial rejection at the gate with its whole budget already spent.
+        #
+        # Narrow by construction: fires only when a child-facing input that WAS
+        # read becomes unread. An edit leaving the wiring intact cannot trip it,
+        # and a leaf (no `child_assumes`, so `child_names` empty) is untouched.
+        if self.child_names:
+            went_dark = _child_outputs_gone_dark(
+                old_file_content, self.read_rtl(), self.child_names,
+            )
+            if went_dark:
+                self.write_rtl(old_file_content)
+                result = self._base_result()
+                result["is_syntax_correct"] = True
+                result["error_msg"] = (
+                    "Edit rolled back: it left "
+                    + ", ".join(sorted(went_dark))
+                    + " READ BY NOTHING. That port carries a CHILD'S RESULT into this "
+                    "glue, and your replacement recomputed that child's function inline "
+                    "instead of routing its output. This is the VESTIGIAL GLUE rejection "
+                    "described in your instructions: it is checked before simulation, and "
+                    "no simulation result can excuse it, because a glue that recomputes a "
+                    "child has stopped composing with that child. Restore the assignment "
+                    "that consumes the port. If its value looks wrong, the defect is in "
+                    "the child or in how this glue drives that child's INPUTS -- say so "
+                    "rather than replacing the port with your own arithmetic."
+                )
+                return result
+
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
         result["is_sim_pass"] = is_sim_pass
         result["sim_mismatch_cnt"] = sim_mismatch_cnt
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
+            # ALSO keep this iteration's copy. The unsuffixed file is overwritten
+            # every round, so a post-mortem could only ever see the last one --
+            # which is how 79 minutes of stage_roundpack debugging left no record
+            # of the iteration where it went wrong.
+            try:
+                Path(self.output_dir, f"debug_sim_output_i{self.traj_iter + 1}.json").write_text(
+                    sim_output, encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001
             pass
         result["sim_output_excerpt"] = _summarize_sim_log_json(sim_output)
@@ -466,6 +832,9 @@ class _EditSession:
 
         old_file_content = self.read_rtl()
         old_lines = old_file_content.splitlines()
+        # Snapshot BEFORE the splice so the guard can reject only what this edit
+        # introduces, rather than refusing to work on RTL that arrived broken.
+        pre_multidriven = multidriven_signals(self.rtl_path)
         block = self.blocks_by_id[block_id]
         start = block.start_line - 1
         end = block.end_line - 1
@@ -486,7 +855,47 @@ class _EditSession:
         new_lines = old_lines[:start] + new_block_lines + old_lines[end + 1 :]
         self.write_rtl("\n".join(new_lines) + ("\n" if old_file_content.endswith("\n") else ""))
 
-        return self._judge_replace_action_execution(old_file_content=old_file_content)
+        return self._judge_replace_action_execution(
+            old_file_content=old_file_content, pre_multidriven=pre_multidriven,
+        )
+
+
+def _render_continue_debug_prompt(session: "_EditSession") -> str:
+    """Build the re-prompt sent after each debug round.
+
+    Explicitly restates the outcome of the LAST action (accepted / rolled
+    back, and why) and the current accepted baseline (mismatch count, first
+    failure time), instead of a bare "keep going" that relies on the model
+    correctly recalling/re-deriving this from its own conversation history —
+    not reliable across a long debug session with many intervening
+    read_block/list_suspect_blocks calls, and especially not if the model
+    just tried (incorrectly) to finish via generate_response, which on its
+    own changes nothing about the actual simulation state.
+    """
+    last = session.last_action_result or {}
+    last_action_block = ""
+    if last:
+        outcome = "ACCEPTED" if last.get("is_action_executed") else "ROLLED BACK / REJECTED"
+        detail = last.get("error_msg") or last.get("accept_reason") or ""
+        last_action_block = (
+            f"Your last action's outcome: {outcome}"
+            + (f" — {detail}" if detail else "")
+            + f"\n(is_sim_pass={last.get('is_sim_pass')}, sim_mismatch_cnt={last.get('sim_mismatch_cnt')})\n\n"
+        )
+
+    fail_time_note = (
+        f", first failure at time {session.last_fail_time}"
+        if session.last_fail_time is not None else ""
+    )
+
+    return (
+        f"{last_action_block}"
+        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n\n"
+        "Continue debugging. Preserve the contract and module interface. If mismatches remain, "
+        "pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) "
+        "once, then run_simulation(). Do NOT call generate_response until run_simulation() reports "
+        "is_sim_pass=true with 0 mismatches — an unverified claim of success is not accepted as done."
+    )
 
 
 class RTLEditor:
@@ -574,17 +983,40 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             # Tooling should never crash due to trace refresh; keep sim result.
             pass
+        self._session.last_action_result = result
+        self._session._record_trajectory("run_simulation", result=result)
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
         """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        blk = (self._session.blocks_by_id or {}).get(block_id)
+        before = getattr(blk, "code", "") if blk is not None else ""
         result = await asyncio.to_thread(self._session.replace_block, block_id, new_code)
+        # The DIFF, not the whole file: what the model actually tried is the
+        # thing that was never recorded, and it is what a post-mortem needs.
+        try:
+            import difflib
+            diff = "".join(difflib.unified_diff(
+                (before or "").splitlines(keepends=True),
+                (new_code or "").splitlines(keepends=True),
+                fromfile=f"{block_id}.before", tofile=f"{block_id}.after", n=2,
+            ))
+        except Exception:  # noqa: BLE001
+            diff = None
+        # model_text is filled in by chat()'s backfill once the turn returns --
+        # at THIS point in agentscope's ReAct loop the assistant message for the
+        # current turn has not been committed to memory yet, so there is nothing
+        # here to read. See _EditSession.backfill_model_text.
+        self._session._record_trajectory(
+            "replace_block", result=result, block_id=block_id, diff=diff,
+        )
         # Even if the action was rolled back, return the latest available trace pointer/summary
         # so the agent can re-ground itself quickly.
         if self._session.trace_report:
             result.setdefault("trace_summary", self._session.trace_summary())
+        self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def chat(
@@ -604,6 +1036,17 @@ class RTLEditor:
         if session_max_trials < 0:
             session_max_trials = 0
 
+        # Child module names, when this is a composition node. Empty for a leaf,
+        # which is what gates the vestigial-glue rollback in
+        # `_judge_replace_action_execution` off for ordinary RTL debugging.
+        child_names: Tuple[str, ...] = ()
+        try:
+            _c = json.loads(contract_json) if contract_json else {}
+            _ca = (_c.get("spec") or _c).get("child_assumes") or _c.get("child_assumes") or {}
+            child_names = tuple(k for k in _ca if isinstance(k, str))
+        except Exception:  # noqa: BLE001
+            pass  # a contract we cannot parse simply disables the extra guard
+
         self._session = _EditSession(
             tb_path=tb_path,
             rtl_path=rtl_path,
@@ -611,6 +1054,7 @@ class RTLEditor:
             last_mismatch_cnt=sim_mismatch_cnt,
             sim_reviewer=self.sim_reviewer,
             max_trials=session_max_trials,
+            child_names=child_names,
         )
 
         with open(tb_path, "r", encoding="utf-8") as f:
@@ -622,6 +1066,17 @@ class RTLEditor:
         except Exception:  # noqa: BLE001
             pass
         sim_failed_log_excerpt = _summarize_sim_log_json(sim_failed_log)
+        # The contradiction check runs on the FULL stdout, never the excerpt.
+        # It is a statement about the whole population -- "these inputs appear
+        # twice with different answers" -- and the excerpt keeps only the first
+        # 40 value rows. Measured on the fp_adder root: the contradicting tuple
+        # sits at times 1790000-1820000, i.e. in the tail the excerpt drops, so
+        # reading the excerpt would have reported a clean oracle for a log that
+        # provably contains a self-contradicting one.
+        try:
+            _full_sim_stdout = str(json.loads(sim_failed_log).get("stdout") or "")
+        except Exception:  # noqa: BLE001
+            _full_sim_stdout = sim_failed_log or ""
 
         needs_kmap_hint = any(
             k in f"{spec}\n{contract_json}".lower()
@@ -702,6 +1157,59 @@ class RTLEditor:
         # All failing scenarios (with timing pointers into wave.vcd) as a set to fix
         # together, not a single first-fail.
         scenarios = failing_test_scenarios(sim_failed_log_excerpt)
+        # Placed BEFORE the scenario list on purpose: that list is where the
+        # timing hypothesis forms, and this is its refutation. Empty unless the
+        # oracle actually proves the latency correct.
+        # Exactly one of these can be non-empty: the carrier either matches on
+        # every sample or it does not. Clean -> "latency is proven right, stop
+        # editing it"; dirty -> "fix the latency FIRST, the data mismatches are
+        # ambiguous until you do".
+        # Order matters. The lag check goes FIRST: when the outputs are merely
+        # late, every other note would be describing values that are not
+        # evidence about the logic at all. It also covers the case the carrier
+        # notes cannot see -- a module with no valid/ready handshake.
+        latency_note = (
+            constant_output_lag_note(sim_failed_log_excerpt)
+            or latency_confirmed_note(sim_failed_log_excerpt)
+            or latency_carrier_mismatch_note(sim_failed_log_excerpt)
+        )
+        latency_block = f"{latency_note}\n" if latency_note else ""
+        # Ahead of the latency note, and of everything else: if the output is a
+        # verbatim copy of an input then the computed result is not reaching the
+        # output at all, and no question about WHEN it arrives -- or about the
+        # arithmetic that produced it -- is worth asking yet. Kept separate from
+        # the latency chain rather than folded into it because the two are not
+        # alternatives: a design can be both mis-routed and mis-timed, and the
+        # `or` chain would report only whichever ran first.
+        passthrough_note = operand_passthrough_note(sim_failed_log_excerpt)
+        passthrough_block = f"{passthrough_note}\n" if passthrough_note else ""
+        # Ahead of every value-based note, because it says how much they are
+        # worth. A testbench that counts mismatches without recording them
+        # produces a log that looks dense with evidence and carries almost
+        # none; the notes below then go quiet, and quiet reads as "checked and
+        # found nothing" rather than "there was nothing to check".
+        evidence_note = missing_output_evidence_note(sim_failed_log_excerpt)
+        evidence_block = f"{evidence_note}\n" if evidence_note else ""
+        # Ahead of EVERYTHING, including the evidence note (B89). The evidence
+        # note says how much the values are worth; this says whether the
+        # expected column is worth anything AT ALL. An oracle that demands two
+        # different outputs for one input tuple cannot be satisfied by any
+        # design, so every note below it -- and every edit the debugger might
+        # make -- is chasing a target that does not exist.
+        contradiction_note = oracle_contradiction_note(_full_sim_stdout)
+        contradiction_block = f"{contradiction_note}\n" if contradiction_note else ""
+        # Same placement rationale as the latency note: the mismatch lines are
+        # read before the trace report, so the correction has to arrive before
+        # the thing it corrects, not after.
+        # The RTL is passed so the warning can still be issued when the cycle
+        # dump is too short to measure the exact skew: a clocked block is
+        # sufficient to know the pairing is wrong, even when the depth is not.
+        try:
+            _rtl_for_skew = Path(rtl_path).read_text(encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            _rtl_for_skew = None
+        skew_note = mismatch_input_skew_note(sim_failed_log_excerpt, _rtl_for_skew)
+        skew_block = f"{skew_note}\n" if skew_note else ""
         scenarios_block = (
             "<failing_scenarios>\nThese named TB scenarios are ALL failing — look for "
             "the common root cause that resolves them together. Times index wave.vcd:\n"
@@ -709,7 +1217,7 @@ class RTLEditor:
             if scenarios else ""
         )
         first_prompt = (
-            f"{init}\n\n{scenarios_block}"
+            f"{init}\n\n{contradiction_block}{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
@@ -737,8 +1245,10 @@ class RTLEditor:
                 stall_count += 1
             prev_mismatch_for_stall = self._session.last_mismatch_cnt
 
+        _turn_start_iter = self._session.traj_iter + 1
         response = await self._agent(Msg("user", first_prompt, role="user"))
         _last_content = str(getattr(response, "content", "") or "")
+        self._session.backfill_model_text(_turn_start_iter, _last_content)
         if self._session.is_done:
             _justification = _last_content
         else:
@@ -768,14 +1278,21 @@ class RTLEditor:
             window = self._memory_window
             if window > 0 and len(mem.content) > window + 2:
                 mem.content = [mem.content[0]] + mem.content[-(window):]
+            _turn_start_iter = self._session.traj_iter + 1
             response = await self._agent(
                 Msg(
                     "user",
-                    "Continue debugging. Preserve the contract and module interface. If mismatches remain, pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) once, then run_simulation().",
+                    _render_continue_debug_prompt(self._session),
                     role="user",
                 )
             )
             _last_content = str(getattr(response, "content", "") or "")
+            self._session.backfill_model_text(_turn_start_iter, _last_content)
+            # The reasoning, recorded against the iteration it belongs to. Without
+            # it the record shows WHAT changed but never why the model thought so
+            # -- and on stage_roundpack the reasoning is the whole story: it wrote
+            # its (mistaken) negedge theory into a comment in the RTL.
+            self._session._record_trajectory("model_turn", model_text=_last_content)
             if self._session.is_done and not _justification:
                 _justification = _last_content
             elif not self._session.is_done:

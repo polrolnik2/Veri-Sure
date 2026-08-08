@@ -13,17 +13,84 @@ def _require_executable(name: str) -> None:
         raise FileNotFoundError(f"Required executable '{name}' not found in PATH.")
 
 
+# A compiler/simulator diagnostic, which always carries a source location:
+#   tb.sv:412:9: error: ...        gcc/clang/verilator style
+#   %Error-MODMISSING: ...         verilator's own tagged form
+# Deliberately NOT a bare "error:" substring. The design under test prints to
+# the same stream, so a testbench emitting a diagnostic of its own -- e.g.
+# `$display("INTERNAL ERROR: walking-ones expected_pp has %0d ones", n)`, which
+# a real persisted booth oracle does -- was being read as a BUILD failure and
+# forced an unconditional fail. That made the testbench's own instrumentation
+# capable of vetoing its design, which is backwards.
+_TOOLCHAIN_ERROR_RE = re.compile(
+    r"^[^\n]*?:\d+:(?:\d+:)?\s*error\b|^%Error", re.IGNORECASE | re.MULTILINE
+)
+
+
 def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
     # Verilator typically reports as "%Error:" / "%Error-<TAG>:".
     fatal_re = re.compile(r"^%Error", re.MULTILINE)
     if fatal_re.search(stderr) or fatal_re.search(stdout):
         return True
-    # Some toolchains may prefix with "Error:" without the % marker.
-    text = f"{stdout}\n{stderr}".lower()
-    return ("syntax error" in text) or ("error:" in text)
+    text = f"{stdout}\n{stderr}"
+    if "syntax error" in text.lower():
+        return True
+    return bool(_TOOLCHAIN_ERROR_RE.search(text))
 
 
 _MULTIDRIVEN_RE = re.compile(r"^%Warning-MULTIDRIVEN", re.MULTILINE)
+
+# An explicit, self-declared overall PASS verdict in a form other than the two
+# canonical markers ("SIMULATION PASSED", "Mismatches: N in M samples").
+#
+# Self-generated testbenches do not reliably emit either. The golden booth
+# composition -- proven correct by
+# tests/fixtures/golden_children/booth/verify.sh and printing
+#
+#     PASS: All 11 scenarios passed
+#
+# after eleven individual PASS lines -- was scored as a DESIGN FAILURE by this
+# function purely because that phrasing was unrecognised. In a real run that
+# spends the whole glue-retry budget redrawing a composition which already
+# works, and the recorded failure_summary is whatever line the summariser
+# happened to grab (observed: a bare "====" separator), so nothing in the log
+# says the verdict was a scoring artefact.
+#
+# Deliberately narrow. A false POSITIVE certifies broken hardware, which is far
+# worse than a false negative, so this requires an unambiguous whole-run
+# claim -- "all ... passed", not a bare per-case "PASS" line -- and the caller
+# additionally requires zero mismatches and no failure markers.
+#
+# The leading class is `[\s*=#~+-]*`, not `[^\S\n]*`, because testbenches
+# routinely decorate their summary line and the whitespace-only anchor silently
+# rejected every decorated form. Measured over the 30 persisted composed
+# oracles, five could never print a marker this function accepts, and two of
+# those printed exactly
+#
+#     *** ALL TESTS PASSED ***
+#
+# so composed_sim was MATHEMATICALLY unable to return pass for those nodes
+# regardless of the RTL. Only banner punctuation is allowed in -- letters and
+# digits still cannot precede the claim, so "NOT ALL TESTS PASSED" and
+# "0 ALL TESTS PASSED" remain rejected.
+_EXPLICIT_PASS_RE = re.compile(
+    r"^[\s*=#~+-]*(?:PASS|SUCCESS)\b[^\n]*?\ball\b[^\n]*?\bpass(?:ed)?\b"
+    r"|^[\s*=#~+-]*ALL\s+(?:\d+\s+)?(?:TESTS?|SCENARIOS?|CASES?)\s+PASSED\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_ANY_FAILURE_MARKER_RE = re.compile(
+    r"\bSIMULATION\s+FAILED\b|^[^\S\n]*FAIL\b|\bassertion\s+failed\b|\bMISMATCH",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def has_explicit_pass_verdict(stdout: str) -> bool:
+    """True iff `stdout` declares an unambiguous whole-run PASS and nothing
+    anywhere in it reports a failure."""
+    if not stdout:
+        return False
+    return bool(_EXPLICIT_PASS_RE.search(stdout)) and not _ANY_FAILURE_MARKER_RE.search(stdout)
 
 
 def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
@@ -56,6 +123,45 @@ def check_syntax(rtl_path: str) -> Tuple[bool, str]:
     # Be permissive about warnings: syntax check should fail only on actual errors.
     is_pass = bool(is_pass) and not _verilator_has_fatal(stdout, stderr)
     return is_pass, sim_output
+
+
+# NB: distinct from _MULTIDRIVEN_RE above, which is a presence test for lint_tb.
+# Defining a second _MULTIDRIVEN_RE shadowed that one and silently disarmed the
+# testbench multidriven lint -- caught only by running the full unit tier.
+_MULTIDRIVEN_SIGNAL_RE = re.compile(r"%Warning-MULTIDRIVEN:.*?signal '([^']+)'", re.S)
+
+
+def multidriven_signals(rtl_path: str) -> set[str]:
+    """Signals with more than one continuous driver, per Verilator.
+
+    `check_syntax` is deliberately permissive about warnings, which is right for
+    WIDTHTRUNC and friends but wrong for this one: two continuous drivers on the
+    same signal is not a style preference, it is a design error that synthesis
+    rejects and that simulates as X or as a silent last-writer-wins.
+
+    Measured on the recorded fp_adder tree, output_registers glue:
+
+        parent_1  assign valid_out ... x1   (a fresh draw -- correct)
+        parent_0  assign valid_out ... x2
+        parent_2  assign valid_out ... x3
+
+    The count GROWS across debug attempts. The model's replacement text
+    re-declares statements that also live outside the block being replaced, the
+    splice duplicates them, and nothing rejects the result -- so each edit
+    corrupts the file a little more while the harness reports the attempt as
+    syntactically fine.
+
+    Returns a SET so callers can compare before and after an edit and reject
+    only what that edit introduced, rather than refusing to work on RTL that
+    arrived already broken.
+    """
+    try:
+        ok, out = check_syntax(rtl_path)
+        obj = CommandResult.model_validate_json(out)
+        text = (obj.stdout or "") + "\n" + (obj.stderr or "")
+    except Exception:  # noqa: BLE001
+        return set()
+    return set(_MULTIDRIVEN_SIGNAL_RE.findall(text))
 
 
 def sim_review_mismatch_cnt(stdout: str) -> int:
@@ -110,7 +216,11 @@ def sim_review(
     # Determine pass/fail primarily from the testbench's explicit result markers,
     # instead of the process return code. Some testbenches may exit non-zero
     # despite printing "SIMULATION PASSED" (or "Mismatches: 0 ...").
-    has_pass_marker = "SIMULATION PASSED" in stdout
+    # The canonical marker, or an unambiguous whole-run PASS verdict in another
+    # phrasing (see _EXPLICIT_PASS_RE) with zero mismatches.
+    has_pass_marker = "SIMULATION PASSED" in stdout or (
+        mismatch_cnt == 0 and has_explicit_pass_verdict(stdout)
+    )
     has_mismatch_summary = bool(
         re.search(r"^Mismatches:\s*\d+\s*in\s*\d+\s*samples$", stdout, re.MULTILINE)
     )

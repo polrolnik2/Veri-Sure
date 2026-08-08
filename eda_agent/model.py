@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +19,8 @@ from agentscope.message import (
 from agentscope.model import ChatModelBase, OpenAIChatModel
 
 from eda_agent.config import OpenAIConfig
+
+logger = logging.getLogger(__name__)
 
 
 class Llama4ChatFormatter(TruncatedFormatterBase):
@@ -140,6 +144,55 @@ class Llama4ChatFormatter(TruncatedFormatterBase):
         return messages
 
 
+class FinishReasonPreservingModel(OpenAIChatModel):
+    """Keep `finish_reason` instead of discarding it at the parse boundary.
+
+    A response that stopped because it hit the token cap is a SUCCESSFUL HTTP
+    200 carrying a PARTIAL artifact. The OpenAI SDK does not retry it -- rightly,
+    since what to do about it is the caller's policy -- and agentscope's parser
+    reads `choices[0].message.content` and drops every other field, so
+    `finish_reason` never reaches any wrapper above it. `UsageTrackingModel`
+    wraps agentscope, not the client, which is why no amount of wrapping there
+    could ever have seen it.
+
+    The result is a truncated testbench or RTL that is indistinguishable from a
+    complete one: it simply fails to lint, or worse, lints and is subtly wrong.
+    That is the same "couldn't check" vs "checked and failed" confusion as B49
+    and B65, one layer lower -- at the model boundary, where it is invisible to
+    every guard downstream.
+
+    Verified against the live provider (2026-08-04): a call capped at 16 tokens
+    returns `finish_reason='length'` and `native_finish_reason='length'`, so the
+    signal is present and was simply being thrown away.
+
+    `ChatResponse.metadata` already exists for exactly this kind of out-of-band
+    fact, so nothing is forked -- `super()` still does all the parsing and this
+    only annotates what it returns.
+    """
+
+    def _parse_openai_completion_response(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        resp = super()._parse_openai_completion_response(*args, **kwargs)
+        # `response` is positional in agentscope's signature but be tolerant:
+        # a future signature change must not take the model layer down.
+        raw = kwargs.get("response") or next(
+            (a for a in args if hasattr(a, "choices")), None
+        )
+        try:
+            choice = (getattr(raw, "choices", None) or [None])[0]
+            reason = getattr(choice, "finish_reason", None)
+            if reason:
+                meta = dict(resp.metadata or {})
+                meta["finish_reason"] = reason
+                native = getattr(choice, "native_finish_reason", None)
+                if native:
+                    meta["native_finish_reason"] = native
+                resp.metadata = meta
+        except Exception:  # noqa: BLE001
+            # Annotation is a diagnostic. Never let it cost a usable response.
+            pass
+        return resp
+
+
 class UsageTrackingModel(ChatModelBase):
     def __init__(self, base_model: ChatModelBase) -> None:
         self._base_model = base_model
@@ -188,8 +241,99 @@ class UsageTrackingModel(ChatModelBase):
         self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
 
+    # A provider can answer HTTP 200 with a body that is not valid JSON — a
+    # truncated stream, or an error page — and the OpenAI client raises
+    # `json.JSONDecodeError` out of `response.json()` with no retry of its own
+    # (its retry logic covers status codes and connection errors, not a body it
+    # could not parse). That exception unwinds through the whole agent stack and
+    # kills the leaf.
+    #
+    # Measured on fp_align_add (run fp_adder_e2e, 2026-08-03 12:39):
+    #
+    #     json.decoder.JSONDecodeError: Expecting value: line 1547 column 1 (char 8503)
+    #
+    # The attempt had already written rtl.sv, run six debug iterations and
+    # regenerated after a mismatch — roughly an hour — and was recorded as
+    # "produced no RTL". Every one of the run's 92 HTTP responses was 200 OK,
+    # which is exactly why this was invisible until the exception was surfaced
+    # (B45/F28).
+    #
+    # Deliberately narrow. Only a response the client could not decode is
+    # retried: that is unambiguously a transport-layer defect and the request is
+    # idempotent, so re-asking is safe. Anything else — a refusal, a tool error,
+    # a malformed-but-parseable answer — is a real answer and must reach the
+    # caller unchanged, because swallowing those is how a defect becomes a
+    # silent retry loop.
+    _DECODE_RETRIES = 3
+
+    @staticmethod
+    def _describe_undecodable_body(e: json.JSONDecodeError) -> str:
+        """Name WHICH undecodable-body failure this is, from the body itself.
+
+        The old message said "truncated or non-JSON body" for every case. For
+        the one that actually happens that is wrong, and wrong in this project's
+        recurring direction: it describes a partial answer when in fact NO
+        answer arrived.
+
+        `JSONDecodeError.doc` carries the raw body, so the distinction is free.
+
+        Measured against a live OpenRouter call: the response is prefixed with
+        keep-alive padding that holds the connection open while the request
+        queues and generates --
+
+            0000000  \\n                     \\n  \\n
+            0000020                         \\n   {   "   i   d   " ...
+
+        The repeating unit is '\\n' + 9 spaces + '\\n' = 11 chars over 2 lines,
+        i.e. EXACTLY 5.500 chars per line. All nine failures recorded across
+        2026-08-03/05 sit at 5.486-5.498 -- just under 5.5, which is what a body
+        of padding and nothing else gives (the deficit is the final partial unit
+        plus the 0-based char offset). Any real JSON would add one very long
+        line and pull the ratio far above 5.5; none of the nine does.
+
+        So the provider accepted the request, committed a 200, flushed headers,
+        streamed padding while waiting on the upstream, then lost the generation
+        and could only close the connection. Retrying is right -- there is
+        nothing to continue, only to re-ask -- but the operator should read
+        "provider capacity", not "our payload was malformed".
+        """
+        doc = getattr(e, "doc", None) or ""
+        if doc and not doc.strip():
+            lines = doc.count("\n") or 1
+            return (
+                f"the provider ACCEPTED the request and then dropped it: the body "
+                f"is {len(doc)} chars of keep-alive padding "
+                f"({len(doc) / lines:.2f} chars/line) and contains no JSON at "
+                f"all. Nothing was generated, so there is nothing to resume — "
+                f"only to re-ask. Padding volume tracks how long the request "
+                f"hung before being lost"
+            )
+        head = doc[:80].replace("\n", "\\n")
+        return (
+            f"the body is {len(doc)} chars and is not JSON ({e}); "
+            f"starts {head!r} — an error page or a genuinely truncated document, "
+            f"which is NOT the keep-alive-padding case"
+        )
+
     async def __call__(self, *args: Any, **kwargs: Any):  # type: ignore[override]
-        res = await self._base_model(*args, **kwargs)
+        for attempt in range(self._DECODE_RETRIES):
+            try:
+                res = await self._base_model(*args, **kwargs)
+                break
+            except json.JSONDecodeError as e:
+                if attempt == self._DECODE_RETRIES - 1:
+                    logger.error(
+                        "Undecodable body after %d attempts — %s; giving up and "
+                        "letting the caller see it",
+                        self._DECODE_RETRIES, self._describe_undecodable_body(e),
+                    )
+                    raise
+                logger.warning(
+                    "Undecodable body over a 200 — %s; retrying (%d/%d)",
+                    self._describe_undecodable_body(e),
+                    attempt + 1, self._DECODE_RETRIES - 1,
+                )
+                await asyncio.sleep(min(2.0 ** attempt, 8.0))
         if self._base_model.stream:
             async def _gen():
                 seen_usage = False
@@ -200,7 +344,33 @@ class UsageTrackingModel(ChatModelBase):
                     yield chunk
             return _gen()
         self._accumulate_usage(getattr(res, "usage", None))
+        self._warn_if_truncated(res)
         return res
+
+    @staticmethod
+    def _warn_if_truncated(res: Any) -> None:
+        """Say so when the model stopped because it ran out of tokens.
+
+        Without this the caller receives a partial artifact with no indication
+        that it is partial, and every downstream guard then reasons about a
+        testbench or module that the model never finished writing. Naming it is
+        the whole point: "the model did not finish" is a different fact from
+        "the model produced something wrong", and only the first is fixed by
+        asking again.
+        """
+        try:
+            reason = (getattr(res, "metadata", None) or {}).get("finish_reason")
+        except Exception:  # noqa: BLE001
+            return
+        if reason == "length":
+            usage = getattr(res, "usage", None)
+            logger.warning(
+                "MODEL RESPONSE TRUNCATED (finish_reason=length%s): the artifact "
+                "is incomplete, not wrong — it stopped at the token cap. Raise "
+                "max_completion_tokens or continue the response; do not score "
+                "what came back as a failed generation.",
+                f", output_tokens={getattr(usage, 'output_tokens', '?')}" if usage else "",
+            )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._base_model, name)
@@ -267,11 +437,28 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
         _max_retries = int(_os.environ.get("OPENAI_MAX_RETRIES", "8"))
     except ValueError:
         _max_retries = 8
-    client_args: dict[str, Any] = {"max_retries": _max_retries}
+    # A per-request TIMEOUT. Without one the SDK waits indefinitely, so a single
+    # stalled request silently consumes a run's entire wall clock with no log
+    # output at all. Observed live (booth 7803027, 2026-07-26): 8+ minutes with
+    # one in-flight request and zero output, which read as a hang -- the job was
+    # cancelled on that assumption while it was in fact still progressing.
+    #
+    # This is a per-ATTEMPT bound, and max_retries above still applies, so a
+    # genuinely slow-but-alive call is retried rather than lost. Generous by
+    # default because reasoning models on ~20K-token composition prompts
+    # legitimately take minutes. Overridable via OPENAI_TIMEOUT_S.
+    try:
+        _timeout_s = float(_os.environ.get("OPENAI_TIMEOUT_S", "600"))
+    except ValueError:
+        _timeout_s = 600.0
+    client_args: dict[str, Any] = {
+        "max_retries": _max_retries,
+        "timeout": _timeout_s,
+    }
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
-    base_model = OpenAIChatModel(
+    base_model = FinishReasonPreservingModel(
         model_name=cfg.model,
         api_key=cfg.api_key,
         stream=cfg.stream,

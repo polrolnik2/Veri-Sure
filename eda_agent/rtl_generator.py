@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Tuple
+import json
+import re
+from typing import List, Optional, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
@@ -10,7 +12,13 @@ from pydantic import BaseModel
 from .agents import SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .prompts import FAILED_TRIAL_PROMPT, RTL_4_SHOT_EXAMPLES, TAG_ORDER_PROMPT
+from .prompts import (
+    FAILED_TRIAL_PROMPT,
+    GLUE_4_SHOT_EXAMPLES,
+    GLUE_PORT_CHECKLIST_PROMPT,
+    RTL_4_SHOT_EXAMPLES,
+    TAG_ORDER_PROMPT,
+)
 from .sim_reviewer import check_syntax
 from .utils import add_lineno, clip_text, extract_xml_tag, strip_markdown_code_fences
 
@@ -36,7 +44,7 @@ Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing PORTS.
 - The child-facing ports are ALREADY listed in the contract's `io` section (prefixed
-  with the child module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+  with the child module name: child `foo`'s port `ready` is the port `foo_ready`).
 - DO NOT instantiate child modules. The children connect externally via ports.
 - Your RTL implements the GLUE LOGIC that wires the external ports to the
   child-facing ports, adding any FSM/mux/pipeline logic needed so that the
@@ -67,11 +75,102 @@ Child assumes mode (hierarchical decomposition):
   FSM/mux/register logic, not assumed to fall out of wiring.
 """
 
+
+# A composition node and a leaf have OPPOSITE success criteria: a leaf is
+# rewarded for implementing behaviour, a glue module is REJECTED for it.
+# Multiplexing both through one system prompt with an `if child_assumes`
+# paragraph is what produced an 85K-char glue prompt carrying four monolithic
+# exemplars and ~11 mentions of glue guidance. This is the composition-node
+# system prompt; it states the inverted objective first, not as a caveat.
+GLUE_SYSTEM_PROMPT = r"""
+You are Coder, writing the GLUE module of a hierarchical composition.
+
+Your module does NOT implement the design's function. Its children already do.
+Your only job is to WIRE them: route external inputs to child-facing inputs,
+route child-facing outputs to external outputs and to sibling children, and add
+the minimum reconciliation logic (registers, muxes, qualifiers, small FSMs)
+needed for the parent's contract_sva to hold.
+
+The single most common failure in this role is writing a correct-looking module
+that recomputes what a child already produces, leaving the child's output ports
+unread. That is called VESTIGIAL GLUE. It is detected mechanically and rejected
+before simulation, no matter how good the RTL is. Every child-facing INPUT port
+must be read.
+
+Toolchain note:
+- The harness uses Verilator. Keep RTL compatible with Verilator (standard
+  synthesizable SystemVerilog).
+
+Contract-only mode:
+- Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
+- <input_spec> and any testbench text are non-authoritative background and must
+  NOT override the contract.
+
+Contract SVA mode:
+- `contract_sva` properties are orchestrator-supplied assertions your glue MUST
+  satisfy, given the children behave as their `child_assumes` entries describe.
+
+Reading the children:
+- `child_assumes` is a dict keyed by child module name. Child-facing ports are
+  ALREADY in the contract `io`, prefixed with the child module name
+  (child `foo`'s output `y` is the port `foo_y`).
+- DO NOT instantiate child modules. They are connected externally via ports.
+- Use each child's `io_behavior`, `timing` and `corner_cases` to determine WHEN
+  its outputs are valid and HOW to sequence its control inputs. The formal
+  `properties` alone are a sparse, partial view and are not sufficient to design
+  correct glue.
+- Do NOT use a child's `functional_summary` — it describes that child's INTERNAL
+  implementation for its own RTL writer, not its observable interface.
+"""
+
+
+def _is_composition_contract(contract_json: str) -> bool:
+    """True when this coder call is for a GLUE node rather than a leaf.
+
+    Keyed on `child_assumes`, the same field the orchestrator injects and the
+    vestigial-glue checker keys on, so prompt selection and rejection criteria
+    cannot drift apart.
+    """
+    if not contract_json:
+        return False
+    try:
+        obj = json.loads(contract_json)
+    except (ValueError, TypeError):
+        return "child_assumes" in contract_json
+    return bool(isinstance(obj, dict) and obj.get("child_assumes"))
+
+
 PARSE_REPAIR_PROMPT = r"""
 Your previous response could not be parsed by the program.
 
 Parser error:
 {parse_error}
+
+Previous response (truncated):
+<bad_output>
+{bad_output}
+</bad_output>
+
+Please output again, strictly following the required tags in <output_format>, and output NOTHING else.
+Do NOT output JSON. Do NOT wrap code in Markdown code fences (```).
+
+The <bad_output> above is shown ONLY so you can see what failed to parse. It is
+not a draft to tidy up. If it describes a different module than the contract
+above -- different module name, different ports -- discard it completely and
+write the contract's module from scratch. Re-read the contract and confirm the
+module name and every port name match it before you answer.
+"""
+
+PLACEHOLDER_REPAIR_PROMPT = r"""
+Your previous response does not look like a real implementation attempt: {reason}
+
+The contract JSON was already provided to you at the start of this conversation and is repeated below for reference -- it is NOT missing.
+
+<contract_json>
+{contract_json}
+</contract_json>
+
+Write the ACTUAL RTL module implementing this contract now. Do NOT output a placeholder, a stub, or a request for more information -- implement the real module per the contract above.
 
 Previous response (truncated):
 <bad_output>
@@ -130,6 +229,28 @@ Other requirements:
 5. NEVER USE 'inside' operator in RTL code. Code like 'state inside {STATE_B, STATE_C, STATE_D}' should NOT be used.
 6. Never USE 'unique' or 'unique0' keywords in RTL code. Code like 'unique case' should NOT be used.
 7. Respect any explicit latency/timing described in the contract (e.g., next-cycle outputs).
+8. LATENCY IS A HARD CONSTRAINT, NOT A PREFERENCE. `timing.<output>.latency_cycles`
+   is the EXACT number of clocked stages between an input being presented and that
+   output being observable. Count the registers on the path before you finish:
+
+     latency_cycles = 0  -> purely combinational. The output must NOT be assigned
+                            with `<=` in any clocked block.
+     latency_cycles = 1  -> EXACTLY ONE register. The combinational datapath reads
+                            the INPUT PORTS directly and only the result is
+                            registered.
+     latency_cycles = N  -> exactly N registers in series on that path.
+
+   Registering the inputs into `*_reg`/`*_s1` AND registering the result is TWO
+   stages, not one — that is the single most common way this goes wrong. If the
+   contract says 1, there must be no `a_reg <= a` stage feeding the datapath.
+   Splitting a long computation into `_s1`/`_s2`/`_s3` pipeline stages is a
+   sensible instinct and is WRONG here unless the contract asked for that depth:
+   a deeper pipeline is not a better design, it is a different contract.
+
+   Nothing downstream will catch a mistake here. The testbench compares against a
+   queue that realigns to whatever latency your design happens to have, so a
+   design of the wrong depth passes its own checks and fails every consumer that
+   holds it to the contract. Getting this right is your responsibility alone.
 """
 # Some prompts above comes from:
 # @misc{ho2024verilogcoderautonomousverilogcoding,
@@ -176,6 +297,63 @@ Complete synthesizable SystemVerilog RTL module
 """
 
 
+def looks_like_placeholder(rtl_code: str, contract_json: str) -> Optional[str]:
+    """Cheap structural sanity check: does `rtl_code` look like a genuine
+    implementation attempt against `contract_json`, or a stub/refusal (e.g.
+    "Placeholder module - contract JSON not yet provided")?
+
+    This is NOT a correctness check -- the simulation/debug loop downstream
+    still verifies actual behavior. It exists because `chat()`'s retry loop
+    previously accepted ANY response that (a) had a non-empty <module> block
+    and (b) passed a bare `verilator --lint-only` syntax check -- neither of
+    which distinguishes a real (if buggy) attempt from a generic stub module
+    the model emits when it (incorrectly) believes the contract is missing.
+    Confirmed live on booth_multiplier (2026-07-25 sweep, job 7799101): 5 of
+    13 glue attempts (4, 6, 7, 8, 12) produced exactly this stub -- the
+    Coder's own conversation history DOES contain <contract_json> from the
+    very first turn, so this is the model losing track under a long
+    conversation / cheap-model context confusion, not a plumbing gap -- but
+    downstream nothing caught it, so the debug loop then burned its full
+    trial budget trying to fix a module that was never attempting the real
+    function, discarding a legitimately-reasonable earlier draft along the
+    way (see rtl_regen_after_mismatch.sv overwriting a good rtl_code2 in
+    top_agent.py).
+
+    Returns a human-readable reason string if `rtl_code` looks like a stub,
+    else ``None``. Deliberately lenient (a real module name match with SOME
+    expected ports present is accepted) -- the goal is only to catch "the
+    model didn't even try," never to reject a genuine but imperfect attempt
+    (which the normal syntax/simulation/debug loop already handles).
+    """
+    try:
+        contract = json.loads(contract_json)
+    except Exception:  # noqa: BLE001
+        return None  # can't validate without a parseable contract; don't block
+
+    expected_name = contract.get("module_name")
+    name_match = re.search(r"\bmodule\s+(\w+)", rtl_code)
+    actual_name = name_match.group(1) if name_match else None
+    if expected_name and actual_name and actual_name != expected_name:
+        return f"module name mismatch: expected '{expected_name}', got '{actual_name}'"
+
+    expected_ports = [
+        p.get("name") for p in contract.get("io", [])
+        if isinstance(p, dict) and p.get("name")
+    ]
+    if expected_ports:
+        present = sum(
+            1 for name in expected_ports
+            if re.search(r"\b" + re.escape(name) + r"\b", rtl_code)
+        )
+        if present < max(1, len(expected_ports) // 2):
+            return (
+                f"only {present}/{len(expected_ports)} expected contract ports "
+                "appear anywhere in the generated module -- looks like a stub, "
+                "not a real implementation attempt"
+            )
+    return None
+
+
 class RTLOutputFormat(BaseModel):
     reasoning: str
     module: str
@@ -198,10 +376,10 @@ class RTLGenerator:
     def reset(self):
         clear_memory_safely(self._agent)
 
-    def _new_agent(self, *, name: str) -> SafeReActAgent:
+    def _new_agent(self, *, name: str, composition: bool = False) -> SafeReActAgent:
         return SafeReActAgent(
             name=name,
-            sys_prompt=SYSTEM_PROMPT,
+            sys_prompt=GLUE_SYSTEM_PROMPT if composition else SYSTEM_PROMPT,
             model=make_openai_model(self._cfg),
             formatter=make_formatter(self._cfg.model),
             memory=InMemoryMemory(),
@@ -230,10 +408,16 @@ class RTLGenerator:
             text = f"{input_spec}\n{contract_json}".lower()
             return any(k in text for k in ["kmap", "k-map", "karnaugh"])
 
+        composition = _is_composition_contract(contract_json)
         parts: list[str] = [
             GENERATION_PROMPT.format(
                 input_spec=input_spec,
-                examples_prompt=RTL_4_SHOT_EXAMPLES,
+                # A glue node gets GLUE exemplars. Handing it the monolithic
+                # TopModule leaves demonstrates precisely the behaviour the
+                # vestigial-glue check rejects.
+                examples_prompt=(
+                    GLUE_4_SHOT_EXAMPLES if composition else RTL_4_SHOT_EXAMPLES
+                ),
                 contract_json=contract_json,
             )
         ]
@@ -244,6 +428,10 @@ class RTLGenerator:
         parts.extend(self.failed_trial)
         if self.generated_if:
             parts.append(IF_PROMPT.format(module_interface=self.generated_if))
+        if composition:
+            # LAST, deliberately: the composition obligation is otherwise buried
+            # ~21K tokens up, behind a port list that is 35% of the prompt.
+            parts.append(GLUE_PORT_CHECKLIST_PROMPT)
         return [Msg("user", "\n\n".join(parts), role="user")]
 
     def get_order_prompt_messages(self) -> List[Msg]:
@@ -292,6 +480,13 @@ class RTLGenerator:
         self.generated_tb = testbench
         self.generated_if = interface
 
+        # The agent is constructed in __init__, before any contract is known, so
+        # it starts on the LEAF system prompt. A composition node needs the
+        # inverted objective ("do not implement, wire") in its SYSTEM role, not
+        # merely mentioned in the user turn -- rebuild it here.
+        if _is_composition_contract(contract_json):
+            self._agent = self._new_agent(name="Coder", composition=True)
+
         init = self.get_init_prompt_messages(input_spec, contract_json=contract_json)[0].content
         order = self.get_order_prompt_messages()[0].content
         prompt = f"{init}\n\n{order}"
@@ -303,6 +498,15 @@ class RTLGenerator:
             if resp_obj.reasoning.startswith("Parse Error"):
                 repair = PARSE_REPAIR_PROMPT.format(
                     parse_error=resp_obj.reasoning,
+                    bad_output=clip_text(response_text, max_chars=6000),
+                )
+                prompt = f"{init}\n\n{repair}\n\n{order}"
+                continue
+            placeholder_reason = looks_like_placeholder(resp_obj.module, contract_json)
+            if placeholder_reason:
+                repair = PLACEHOLDER_REPAIR_PROMPT.format(
+                    reason=placeholder_reason,
+                    contract_json=contract_json,
                     bad_output=clip_text(response_text, max_chars=6000),
                 )
                 prompt = f"{repair}\n\n{order}"
@@ -337,7 +541,7 @@ class RTLGenerator:
                     parse_error=resp_obj.reasoning,
                     bad_output=clip_text(response_text, max_chars=6000),
                 )
-                prompt = f"{repair}\n\n{order}"
+                prompt = f"{init}\n\n{repair}\n\n{order}"
                 continue
             rtl_code = resp_obj.module
             with open(rtl_path, "w") as f:

@@ -20,6 +20,175 @@ _HINT_RE = re.compile(
 _FAILED_RE = re.compile(r"SIMULATION FAILED - (?P<cnt>\d+)\s+MISMATCHES DETECTED.*FIRST AT TIME\s+(?P<t>\d+)", re.IGNORECASE)
 _MISMATCHES_RE = re.compile(r"^Mismatches:\s*(?P<cnt>\d+)\s*in\s*(?P<samples>\d+)\s*samples$", re.MULTILINE)
 
+# The VALUES, which `Hint:` lines never carry. Testbenches print them right next
+# to the signal name and the extractor used to drop them, so `fail_outputs`
+# reached the debugger as `{"sig": "result_out", "expected": null, "actual": null}`
+# -- a list of names with no data.
+#
+# That is why the debugger invented a timing theory on stage_roundpack: with no
+# expected-vs-actual it cannot see "right value, one cycle late", only "wrong at
+# t=30000", and a sampling guess is a reasonable inference from a name alone. It
+# then rewrote `always_ff` to `always_comb` to fit the guess and broke the
+# contract's 1-cycle latency (B21).
+#
+# Two emitted shapes are covered, both observed in this project:
+#   Mismatch at time 30000: result_out
+#     Expected: 3f800000, Actual: 00000000
+#   MISMATCH [SMALL_EXP_DIFF] at time 60000: sig_b_out=0100000 exp=0800000
+# `Expected:` does not always follow the header directly -- testbenches commonly
+# print an `Inputs: ...` line between them, and requiring adjacency silently lost
+# result_out (the signal that mattered) while recovering valid_out. Allow a few
+# intervening lines, but never cross into the NEXT mismatch header, or one
+# signal's values get attributed to another.
+_PAIRED_RE = re.compile(
+    r"[Mm]ismatch(?:\s*\[[^\]]*\])?\s+at\s+time\s+(?P<t>\d+)\s*:\s*(?P<sig>\w+)\s*\n"
+    r"(?P<between>(?:(?![Mm]ismatch\b).*\n){0,4}?)"
+    r"\s*Expected:\s*(?P<exp>\S+?),?\s+Actual:\s*(?P<act>\S+)",
+)
+_INLINE_RE = re.compile(
+    r"[Mm]ismatch(?:\s*\[[^\]]*\])?\s+at\s+time\s+(?P<t>\d+)\s*:\s*"
+    r"(?P<sig>\w+)\s*=\s*(?P<act>\S+)\s+exp(?:ected)?\s*=\s*(?P<exp>\S+)",
+)
+
+
+def _extract_values(stdout: str) -> dict[str, dict[str, str]]:
+    """First observed expected/actual pair per signal.
+
+    FIRST, not last: the earliest divergence is the one that explains the
+    others, and a later sample is usually downstream corruption.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for rx in (_PAIRED_RE, _INLINE_RE):
+        for m in rx.finditer(stdout):
+            sig = m.group("sig")
+            if sig in out:
+                continue
+            out[sig] = {
+                "expected": m.group("exp").rstrip(","),
+                "actual": m.group("act").rstrip(","),
+                "at_time": m.group("t"),
+            }
+    return out
+
+
+# `Cycle N: ... | got_res=<v> exp_res=<v> got_val=<v> exp_val=<v>` — the
+# per-cycle history testbenches dump on first mismatch.
+# A shift claim needs enough samples to be a measurement rather than an accident,
+# and enough VARIETY that a shifted window is not just re-comparing constants.
+_ALIGN_MIN_SAMPLES = 6
+_ALIGN_MIN_DISTINCT = 2
+
+_CYCLE_DUMP_RE = re.compile(r"^Cycle\s+(?P<n>\d+)\s*:(?P<body>.*)$", re.MULTILINE)
+_GOT_EXP_RE = re.compile(r"\bgot_(?P<name>\w+)\s*=\s*(?P<got>\S+)")
+
+
+def _alignment_row_is_hollow(row: dict[str, Any]) -> bool:
+    """Did this alignment row consider samples and conclude nothing?
+
+    On the VCD path, expected and actual are sampled independently, so a signal
+    can produce N samples with no single sample carrying BOTH -- every match
+    rate then comes back None while `samples_considered` still reads N.
+
+    Emitting such a row is actively harmful, not merely verbose. Measured on
+    stage_roundpack (job 7846415), all 12 failing signals landed here: 60
+    null-valued `match_rate` lines inside the trace report, which is already 40%
+    of a 1,755-line debugger prompt. And a row that cannot claim a shift cannot
+    RULE ONE OUT either, so the timing hypothesis survives contact with it --
+    precisely the hypothesis that cost that session 6 of its 7 edits, every one
+    removing a pipeline register the contract required.
+
+    "Couldn't check" must not be rendered as "checked, found nothing". Omit the
+    row; absence is honestly silent.
+    """
+    rates = [v for k, v in row.items() if k.startswith("match_rate")]
+    return bool(rates) and all(v is None for v in rates)
+
+
+def _alignment_from_cycle_dump(stdout: str) -> dict[str, Any]:
+    """Alignment diagnosis WITHOUT a VCD, from the testbench's cycle dump.
+
+    The VCD-based path below is the better one, but it needs a waveform and
+    `trace_vcd_path` is frequently null — in which case `alignment_diagnosis`
+    came back EMPTY while the debugger prompt's step 2 says, first thing:
+
+        2) Check `trace_summary.alignment_diagnosis` first
+
+    So the debugger's opening diagnostic move landed on a missing field, found
+    nothing, and fell back to guessing. On stage_roundpack (job 7829273) it
+    guessed a sampling theory and rewrote `always_ff` to `always_comb`, breaking
+    the contract's 1-cycle latency (B21) — when the true answer, "the DUT leads
+    expected by one cycle", is computable from data the testbench had already
+    printed.
+
+    Same match-rate comparison as the VCD path so the two agree: current vs
+    dut_lag1 vs dut_lead1, best wins.
+    """
+    rows: list[dict[str, tuple[str, str]]] = []
+    for m in _CYCLE_DUMP_RE.finditer(stdout):
+        body = m.group("body")
+        pairs: dict[str, tuple[str, str]] = {}
+        for g in _GOT_EXP_RE.finditer(body):
+            name = g.group("name")
+            exp_m = re.search(rf"\bexp_{re.escape(name)}\s*=\s*(\S+)", body)
+            if exp_m:
+                pairs[name] = (exp_m.group(1), g.group("got"))
+        if pairs:
+            rows.append(pairs)
+    if len(rows) < _ALIGN_MIN_SAMPLES:
+        # Too few samples to distinguish a real shift from an accident of the
+        # window. Reporting one would be worse than reporting nothing.
+        return {}
+
+    out: dict[str, Any] = {}
+    names = set().union(*(set(r) for r in rows))
+    for name in sorted(names):
+        seq = [r.get(name) for r in rows]
+        exp_seq = [s[0] if s else None for s in seq]
+        act_seq = [s[1] if s else None for s in seq]
+
+        def rate(pairs) -> float | None:
+            tot = ok = 0
+            for e, a in pairs:
+                if e is None or a is None:
+                    continue
+                tot += 1
+                ok += _wildcard_match(e, a)
+            return (ok / tot) if tot else None
+
+        # A window dominated by one repeated value (reset cycles are all zeros)
+        # makes ANY shift score perfectly, because shifting simply drops the one
+        # interesting sample out of the comparison. Measured live on
+        # stage_roundpack parent_4: 3 rows, two of them all-zero reset cycles,
+        # produced lag1=1.00 on both signals -- a phantom one-cycle shift, when
+        # the real defect was a special-case PRIORITY disagreement
+        # (result_out expected 00000000, actual 7fc00000 = quiet NaN, on an
+        # input with nan/inf/zero/denorm all asserted at once). Handing that to
+        # the debugger would send it chasing a timing bug that does not exist --
+        # exactly the mistake B21's debugger made unaided.
+        distinct_exp = {e for e in exp_seq if e is not None}
+        if len(distinct_exp) < _ALIGN_MIN_DISTINCT:
+            continue
+
+        cur = rate(list(zip(exp_seq, act_seq)))
+        lag = rate(list(zip(exp_seq[1:], act_seq[:-1])))
+        lead = rate(list(zip(exp_seq[:-1], act_seq[1:])))
+        # No hollow-row guard here, deliberately: this path only pairs a signal
+        # when the SAME cycle line carried both got_<sig> and exp_<sig>, so any
+        # signal that reaches this loop has at least one complete sample and
+        # `cur` cannot be None. The guard belongs on the VCD path, where exp and
+        # act are sampled independently and can both be missing.
+        choices = {"current": cur, "dut_lag1": lag, "dut_lead1": lead}
+        best = max(choices.items(), key=lambda kv: (-1.0 if kv[1] is None else kv[1]))
+        out[name] = {
+            "samples_considered": len(rows),
+            "source": "cycle_dump",
+            "match_rate_current": cur,
+            "match_rate_dut_lag1": lag,
+            "match_rate_dut_lead1": lead,
+            "best_alignment": best[0] if best[1] is not None else None,
+        }
+    return out
+
 
 def _extract_fail_signals_and_time(stdout: str) -> tuple[int | None, list[dict[str, Any]]]:
     fail_outputs: list[dict[str, Any]] = []
@@ -160,10 +329,66 @@ def _extract_dut_instance_name(tb_text: str, *, module_name: str) -> str | None:
     return None
 
 
+def _vcd_signal_names(vcd: Any) -> list[str]:
+    """Every signal path in the dump, across vcdvcd API versions.
+
+    This existed as a bare `getattr(vcd, "signals", [])`, and the installed
+    vcdvcd exposes NO `signals` attribute -- only `get_signals()` and a private
+    `_signals`. So the getattr returned `[]` on every call and
+    `_vcd_find_signal` answered None for every signal in every session, which
+    silently disabled ALL waveform analysis: fail_details values, the input
+    window, and alignment_diagnosis alike.
+
+    That is why 0 of 471 failing signals across 107 recorded reports carried a
+    value, and why the debugger prompt's "check alignment_diagnosis first"
+    always landed on an empty field -- for leaves exactly as much as for glue.
+    A silent default hid a total failure behind a plausible-looking empty result.
+    """
+    got = getattr(vcd, "signals", None)
+    if got:
+        return list(got)
+    getter = getattr(vcd, "get_signals", None)
+    if callable(getter):
+        try:
+            return list(getter())
+        except Exception:  # noqa: BLE001
+            pass
+    return list(getattr(vcd, "_signals", None) or [])
+
+
+def _vcd_tv(vcd: Any, name: str) -> list[tuple[int, str]]:
+    """Time/value series for a signal path, across vcdvcd API versions.
+
+    The call sites used `vcd[name].tv`, and the installed vcdvcd is NOT
+    subscriptable -- it exposes `get_data()` keyed by short id, each entry
+    holding `references` (the full paths) and `tv`. That TypeError was never
+    observed because `_vcd_find_signal` returned None first (see
+    `_vcd_signal_names`), so execution never reached the subscript. Two
+    independent API mismatches, the first masking the second, which is why the
+    whole waveform path looked merely empty rather than broken.
+    """
+    try:
+        return list(vcd[name].tv)  # newer vcdvcd
+    except TypeError:
+        pass
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        data = vcd.get_data()
+    except Exception:  # noqa: BLE001
+        return []
+    for entry in (data or {}).values():
+        if not hasattr(entry, "get"):
+            continue
+        if name in (entry.get("references") or []):
+            return list(entry.get("tv") or [])
+    return []
+
+
 def _vcd_find_signal(vcd: Any, leaf: str, *, prefer_substrings: list[str] | None = None) -> str | None:
     leaf = leaf.strip()
     candidates: list[str] = []
-    for s in getattr(vcd, "signals", []):
+    for s in _vcd_signal_names(vcd):
         last = s.split(".")[-1]
         if last == leaf or last.startswith(f"{leaf}["):
             candidates.append(s)
@@ -224,7 +449,7 @@ def _wildcard_match(expected: str | None, actual: str | None) -> bool:
 def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int]:
     clk_sig = _vcd_find_signal(vcd, "clk")
     if clk_sig:
-        tv = vcd[clk_sig].tv  # type: ignore[index]
+        tv = _vcd_tv(vcd, clk_sig)
         edges: list[int] = []
         prev = None
         for tt, vv in tv:
@@ -242,12 +467,102 @@ def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int
     times = {t_star}
     for s in getattr(vcd, "signals", [])[:200]:
         try:
-            for tt, _vv in vcd[s].tv:  # type: ignore[index]
+            for tt, _vv in _vcd_tv(vcd, s):
                 if tt <= t_star:
                     times.add(tt)
         except Exception:  # noqa: BLE001
             continue
     return sorted(times)[-min(len(times), k_edges + 2) :]
+
+
+_GLUEPROBE_RE = re.compile(r"^GLUEPROBE\s+t=(\d+)\s+(.*)$", re.M)
+
+
+def _glueprobe_values(stdout: str, fail_time: int | None) -> dict[str, str]:
+    """Observed values of the glue's CHILD-FACING ports at the failing time.
+
+    The testbench drives the WRAPPER, so it only ever prints expected-vs-actual
+    for the wrapper's external outputs. Every port the glue drives into a child
+    is an internal node, and on stage_roundpack that was 11 of the 13 failing
+    signals -- reported to the debugger as `expected: null, actual: null`, a
+    name with no evidence attached.
+
+    There is no `expected` to report for these: the oracle models the
+    composition's outputs, not its internal wiring. What the debugger gets is
+    the value it is actually driving at the moment the composition fails, which
+    is the difference between reasoning about a routing bug and guessing at one.
+    """
+    if fail_time is None:
+        return {}
+    best: dict[str, str] = {}
+    best_t = None
+    for m in _GLUEPROBE_RE.finditer(stdout):
+        t = int(m.group(1))
+        if t > fail_time:
+            continue
+        if best_t is None or t >= best_t:
+            best_t = t
+            best = dict(re.findall(r"(\w+)=([0-9a-fA-FxXzZ?]+)", m.group(2)))
+    return best
+
+
+def _fill_from_stdout(
+    fail_outputs: list[dict[str, Any]], values: dict[str, dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Restore the values the testbench PRINTED onto the list that ships.
+
+    `fail_details` (VCD-derived) replaces `fail_outputs` wholesale, and it looks
+    up `<sig>_ref` / `<sig>_dut` -- a self-checking scaffold convention that NO
+    generated testbench actually uses. Measured: zero `_ref`/`_dut` wires in the
+    glue TB and zero in the leaf TB, so that lookup returns None for every
+    signal and `fail_details` is all-null by construction.
+
+    The effect was that the weakest evidence silently displaced the strongest:
+    stdout carried `result_out expected=00000000 actual=7fc00000` -- a full
+    expected/actual PAIR -- and the recorded report still showed
+    `expected: null, actual: null` for it, because 13 null VCD rows won the
+    `or`. Merge instead of replace; a printed value is never overwritten.
+    """
+    for fo in fail_outputs:
+        v = values.get(fo.get("sig") or "")
+        if not v:
+            continue
+        # The testbench's own pair WINS over the waveform's actual, even though
+        # the waveform is more precise. Both sides then share one radix.
+        #
+        # The VCD reports raw bits, the testbench reports whatever it formatted:
+        # on stage_roundpack that yielded `expected=00000000` against
+        # `actual=01111111110000000000000000000000`. Both name the same quiet
+        # NaN (0x7FC00000) and no reader -- model or human -- can see that at a
+        # glance. A debugger comparing those two strings concludes the output is
+        # wrong in some spectacular way and starts rewriting arithmetic.
+        #
+        # The waveform keeps its monopoly where it is the only witness: internal
+        # nodes the testbench never printed, which is most of what a glue drives.
+        fo["expected"] = v["expected"] if v.get("expected") is not None else fo.get("expected")
+        fo["actual"] = v["actual"] if v.get("actual") is not None else fo.get("actual")
+    return fail_outputs
+
+
+def _fill_from_probe(
+    fail_outputs: list[dict[str, Any]], stdout: str, fail_time: int | None
+) -> list[dict[str, Any]]:
+    """Attach probe-observed values to signals the testbench could not print.
+
+    Applied to the list that actually ships. The VCD-derived `fail_details`
+    REPLACES `fail_outputs` wholesale, and it is precisely the branch carrying
+    the child-facing ports -- so filling the other list would have looked
+    correct on a log with no VCD and done nothing in the case this exists for.
+    """
+    probe = _glueprobe_values(stdout, fail_time)
+    if not probe:
+        return fail_outputs
+    for fo in fail_outputs:
+        sig = fo.get("sig") or ""
+        if fo.get("actual") is None and sig in probe:
+            fo["actual"] = probe[sig]
+            fo["observed_via"] = "hierarchical_probe"
+    return fail_outputs
 
 
 def build_trace_report(
@@ -269,6 +584,24 @@ def build_trace_report(
 
     fail_time, fail_outputs = _extract_fail_signals_and_time(stdout)
     total_mismatches = _extract_total_mismatches(stdout)
+
+    # Attach the values the testbench printed. Without these the debugger gets
+    # signal NAMES and nothing else, which is what produced B21.
+    values = _extract_values(stdout)
+    for fo in fail_outputs:
+        v = values.get(fo.get("sig") or "")
+        if v:
+            fo["expected"] = v["expected"]
+            fo["actual"] = v["actual"]
+    # Signals the TB reported values for but that produced no Hint line still
+    # carry evidence; losing them would repeat the same mistake one level down.
+    known = {fo.get("sig") for fo in fail_outputs}
+    for sig, v in values.items():
+        if sig not in known:
+            fail_outputs.append({
+                "sig": sig, "mismatches": None, "time": int(v["at_time"]),
+                "expected": v["expected"], "actual": v["actual"],
+            })
 
     blocks = parse_rtl_blocks(rtl_text)
     if not blocks:
@@ -340,7 +673,7 @@ def build_trace_report(
         clk_full = _vcd_find_signal(vcd, "clk")
         if clk_full:
             prev = None
-            for tt, vv in vcd[clk_full].tv:  # type: ignore[index]
+            for tt, vv in _vcd_tv(vcd, clk_full):
                 if prev is not None and vv != prev:
                     if prev != "1" and vv == "1":
                         edge_at_time[tt] = "posedge"
@@ -375,23 +708,40 @@ def build_trace_report(
 
         key_signals = sorted({s for s in key_signals if s})
 
-        def sample_signal(*, leaf: str, t: int) -> str | None:
+        def sample_signal(*, leaf: str, t: int, in_dut: bool = False) -> str | None:
             prefer_substrings = None
-            if dut_instance and leaf in internal_candidate_set:
+            if dut_instance and (in_dut or leaf in internal_candidate_set):
                 prefer_substrings = [f".{dut_instance}."]
             full = _vcd_find_signal(vcd, leaf, prefer_substrings=prefer_substrings)
             if not full:
                 return None
             inclusive = (leaf == "clk") or (t == 0)
             try:
-                return _vcd_value_at(vcd[full].tv, t, inclusive=inclusive)  # type: ignore[index]
+                return _vcd_value_at(_vcd_tv(vcd, full), t, inclusive=inclusive)
             except Exception:  # noqa: BLE001
                 return None
 
         # fail output expected/actual at t*
+        #
+        # `<sig>_ref` / `<sig>_dut` is a self-checking-harness convention that NO
+        # generated testbench actually uses: measured across every recorded run,
+        # zero such wires exist in 134 leaf TBs and zero in 26 glue TBs. The
+        # generators emit a local reference model plus
+        # `$display("Mismatch at time %0t: <sig>")` instead. So this lookup
+        # returned None for every signal in every session, and `fail_details`
+        # was all-null by construction -- 0 of 471 failing signals across 107
+        # reports carried a value, for LEAVES as much as for glue.
+        #
+        # Fall back to the signal's own name, preferring the copy inside the DUT
+        # hierarchy. That is what a waveform can actually answer: the VCD holds
+        # what the design DID, at any depth, including internal nodes no
+        # testbench prints. It cannot supply `expected` -- there is no reference
+        # in the dump -- so that side stays with the stdout path.
         for sig in fail_signal_names:
             exp = sample_signal(leaf=f"{sig}_ref", t=fail_time_star)
             act = sample_signal(leaf=f"{sig}_dut", t=fail_time_star)
+            if act is None:
+                act = sample_signal(leaf=sig, t=fail_time_star, in_dut=True)
             fail_details.append({"sig": sig, "expected": exp, "actual": act})
 
         # input window values
@@ -486,7 +836,7 @@ def build_trace_report(
                     "dut_lead1": lead_rate,
                 }
                 best = max(choices.items(), key=lambda kv: (-1.0 if kv[1] is None else kv[1]))
-                alignment_diagnosis[sig] = {
+                row = {
                     "samples_considered": len(seq),
                     "match_rate_current": cur_rate,
                     "match_rate_dut_lag1": lag_rate,
@@ -495,13 +845,20 @@ def build_trace_report(
                     "match_rate_negedge": neg_rate,
                     "best_alignment": best[0] if best[1] is not None else None,
                 }
+                if _alignment_row_is_hollow(row):
+                    continue
+                alignment_diagnosis[sig] = row
 
     report: dict[str, Any] = {
         "fail_time": fail_time_star,
         "total_mismatches": total_mismatches,
-        "fail_outputs": fail_details or fail_outputs,
+        "fail_outputs": _fill_from_probe(
+            _fill_from_stdout(fail_details or fail_outputs, values), stdout, fail_time
+        ),
         "input_window": input_window,
-        "alignment_diagnosis": alignment_diagnosis,
+        # Fall back to the cycle dump when the VCD path produced nothing, so the
+        # debugger's first diagnostic step is never handed an empty field.
+        "alignment_diagnosis": alignment_diagnosis or _alignment_from_cycle_dump(stdout),
         "suspect_blocks": [
             {
                 "id": b.id,

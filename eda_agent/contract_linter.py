@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
@@ -12,11 +13,197 @@ class ContractIssue:
     message: str
 
 
+def tb_instantiates_module(tb_code: str, module_name: str) -> bool:
+    """Does this testbench actually drive `module_name`?
+
+    A testbench that instantiates some OTHER module is not an oracle for this
+    node -- it is a broken oracle, and every verdict it produces is about a
+    design that was never simulated. Measured over the persisted corpus, 8 of
+    34 cached oracles were in exactly that state: nodes named `fp_*` judged by
+    testbenches driving `booth_composition`, `booth_multiplier`, or a generic
+    `dut_top` stub. Two of them gated real glue attempts.
+
+    Deliberately permissive: this decides whether to RETIRE an oracle, so a
+    false positive throws away a good testbench. Anything ambiguous reads as
+    "fine". Comments are stripped first so a commented-out instantiation does
+    not count.
+    """
+    if not tb_code or not module_name:
+        return False
+    body = re.sub(r"//[^\n]*", "", tb_code)
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+    return bool(
+        re.search(
+            rf"\b{re.escape(module_name)}\b\s*(?:#\s*\([^;]*?\))?\s*\w+\s*\(",
+            body,
+            re.S,
+        )
+    )
+
+
 def _as_int(val: Any) -> int | None:
     try:
         return int(val)
     except Exception:  # noqa: BLE001
         return None
+
+
+_COMPLETION_WORDS = frozenset({"valid", "ready", "ack", "done", "busy", "complete"})
+_NAME_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _has_completion_signal(outputs) -> bool:
+    """Does any OUTPUT tell a consumer when the data outputs are usable?
+
+    Names only -- the contract has no other handle on intent.
+
+    Matching is per WORD, not by substring, and the split has to happen on
+    underscores and camelCase rather than regex word boundaries: `_` is a word
+    character, so `\\bvalid\\b` matches neither `valid_out` nor `data_valid` --
+    i.e. exactly the two spellings the check exists to catch. Splitting first
+    keeps `invalid_flag` out, which a substring search would wrongly accept as
+    a handshake.
+    """
+    for name in outputs or []:
+        parts = {p.lower() for p in _NAME_SPLIT_RE.split(str(name) or "") if p}
+        if parts & _COMPLETION_WORDS:
+            return True
+    return False
+
+
+# Prose that RELAXES a latency the same contract states as a number. Each of
+# these tells the designer the declared figure is a floor rather than a budget.
+_LATENCY_RELAXING_RES = (
+    re.compile(r"deeper\s+pipelin", re.I),
+    re.compile(r"(?:more|additional|extra|further)\s+pipelin", re.I),
+    re.compile(r"pipelin\w*\s+(?:is|are)\s+(?:permitted|allowed|acceptable|optional)", re.I),
+    re.compile(r"latency\s+(?:may|can)\s+(?:vary|differ|be\s+(?:higher|greater|longer))", re.I),
+    re.compile(r"any\s+latency", re.I),
+)
+
+# Prose that DENIES the permission, so the same words carry the opposite sense.
+# Deliberately narrow: it matches a negated PERMISSION, not any negation. The
+# real conflict reads "Deeper pipelining is permitted but not required", which
+# contains "not" and must still fire; the fix this linter recommends reads
+# "additional pipeline stages are NOT permitted", which must not. A general
+# negation check cannot separate those, and getting it wrong in the permissive
+# direction means the linter flags the exact wording it just asked for.
+_NEGATED_PERMISSION_RE = re.compile(
+    r"(?:\bnot\b|\bn't\b)\s+(?:be\s+)?(?:permitted|allowed|acceptable|used)"
+    r"|\bno\s+(?:additional|extra|more|further)\s+pipelin"
+    r"|\b(?:forbidden|prohibited|disallowed)\b",
+    re.I,
+)
+
+# Sampling guidance that offers the OPPOSITE clock edge as an equivalent.
+_OPPOSITE_EDGE = {"posedge": "negedge", "negedge": "posedge"}
+
+_SENTENCE_SPLIT_RE = re.compile(r"[.;\n]")
+
+
+def _clause_around(text: str, start: int, end: int) -> str:
+    """The clause containing [start, end) — negation does not cross a `;` or `.`."""
+    left = max((m.end() for m in _SENTENCE_SPLIT_RE.finditer(text, 0, start)), default=0)
+    m = _SENTENCE_SPLIT_RE.search(text, end)
+    return text[left:m.start() if m else len(text)]
+
+
+def _prose_strings(node: Any, path: str = "$", _depth: int = 0):
+    """Every string value in the contract, with a JSON-ish path, prose only.
+
+    Walks the whole object rather than a fixed key list because the statements
+    that caused B93 lived in three different places -- `timing.sum.notes`,
+    an `io[].notes`, and a free-form `guidance` bullet -- and a checker that
+    inspects only the field it expects the conflict in is a checker that reports
+    "no conflict" for "did not look".
+    """
+    if _depth > 12:
+        return
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            yield from _prose_strings(v, f"{path}.{k}", _depth + 1)
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            yield from _prose_strings(v, f"{path}[{i}]", _depth + 1)
+
+
+def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIssue]:
+    """Flag prose that overrides the contract's own `latency_cycles`.
+
+    A latency figure is only a budget if nothing else in the contract says it is
+    optional. When the prose disagrees with the number, the designer follows the
+    prose -- it is the part written in the language the requirement is reasoned
+    about in -- and the number becomes decoration.
+
+    Measured on the fp_adder root (run `fp_adder_e2e`). The contract declared
+    `latency_cycles: 1` on both outputs, then said:
+
+        "Deeper pipelining is permitted but not required by the interface."
+        "Drive inputs on posedge clk; sample outputs on the following posedge
+         (or negedge to avoid race)."
+
+    The golden testbench drives, waits ONE posedge and samples -- so deeper
+    pipelining is not in fact permitted, and an output registered on negedge
+    lands half a cycle after the sample point. Four independent glue redraws
+    each built `always_ff @(posedge clk)` inputs into `always_ff @(negedge clk)`
+    outputs, scoring 168/173/168/168 of 181, and each was FOLLOWING ITS
+    CONTRACT. Nothing downstream could catch it: the self-TB is generated from
+    the same contract, so it samples on the same wrong edge and agrees.
+
+    Only fires when a latency is actually declared -- with no number there is
+    nothing for the prose to contradict, and "pipelining is permitted" is then a
+    legitimate degree of freedom rather than a conflict.
+    """
+    issues: list[ContractIssue] = []
+    if not isinstance(timing, dict):
+        return issues
+    declared = {}
+    for out in sorted(outputs or ()):
+        tinfo = timing.get(out)
+        if isinstance(tinfo, dict):
+            lat = _as_int(tinfo.get("latency_cycles"))
+            if lat is not None and lat >= 0:
+                declared[out] = lat
+    if not declared:
+        return issues
+
+    budget = max(declared.values())
+    edge = ""
+    clocking = obj.get("clocking")
+    if isinstance(clocking, dict) and isinstance(clocking.get("clock"), dict):
+        edge = str(clocking["clock"].get("edge") or "").lower()
+    other = _OPPOSITE_EDGE.get(edge, "")
+
+    for path, text in _prose_strings(obj):
+        if path.startswith("$.contract_sva"):
+            continue  # harness-injected, not the Architect's prose
+        for rx in _LATENCY_RELAXING_RES:
+            m = rx.search(text)
+            if m:
+                if _NEGATED_PERMISSION_RE.search(_clause_around(text, m.start(), m.end())):
+                    continue  # "additional pipeline stages are NOT permitted" — compliant
+                issues.append(ContractIssue(
+                    "error", path.lstrip("$."),
+                    f"This states extra pipelining is permitted, but timing declares "
+                    f"latency_cycles={budget}. A consumer with no completion signal "
+                    f"samples at the DECLARED latency, so any extra stage is read as a "
+                    f"wrong value, not as a slower correct one. Either raise "
+                    f"latency_cycles and add a completion signal, or say the declared "
+                    f"latency is a HARD budget: \"exactly {budget} cycle(s); additional "
+                    f"pipeline stages are NOT permitted\".",
+                ))
+                break
+        if other and re.search(rf"\b{other}\b", text, re.I):
+            issues.append(ContractIssue(
+                "error", path.lstrip("$."),
+                f"This mentions {other} while clocking.clock.edge is {edge}. Registering "
+                f"or sampling an output on {other} shifts it half a cycle from the "
+                f"{edge} the consumer samples on, which reads as a FULL transaction of "
+                f"extra latency and fails every vector. Drive and observe on {edge} only.",
+            ))
+    return issues
 
 
 def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
@@ -128,6 +315,31 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                 l = _as_int(lat)
                 if l is None or l < 0:
                     issues.append(ContractIssue("error", f"timing.{out}.latency_cycles", f"Invalid latency_cycles: {lat!r}"))
+                elif l > 1 and not _has_completion_signal(outputs):
+                    # A latency beyond a registered output is only integrable if a
+                    # consumer can learn when the value is ready -- either from a
+                    # completion signal, or from a latency the spec states outright.
+                    # With neither, every consumer must guess, and the guess that
+                    # a registered interface implies one cycle is the obvious one.
+                    #
+                    # Measured on fp_adder (level-3): the spec offers `clk`, `rst`,
+                    # `a`, `b`, `rnd_mode` -> `sum`, `exception_flags`, declares the
+                    # outputs `output reg`, states no cycle count, and carries no
+                    # valid/ready/done anywhere -- while its prose says "Consider a
+                    # pipelined structure". The contract came back with a 3-cycle
+                    # latency, which is self-consistent with the testbench generated
+                    # FROM that contract and unusable to anything else.
+                    issues.append(ContractIssue(
+                        "warning", f"timing.{out}.latency_cycles",
+                        f"latency_cycles={l} but the interface has no completion signal "
+                        f"(no valid/ready/done/valid_out output). Nothing tells a consumer "
+                        f"when {out} is ready, so a multi-cycle latency is unobservable "
+                        f"from outside this module. Unless the spec names a specific cycle "
+                        f"count, state the MINIMUM latency the function needs (0 for "
+                        f"combinational, 1 for a registered output).",
+                    ))
+
+    issues.extend(_latency_prose_conflicts(obj, timing, outputs))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")

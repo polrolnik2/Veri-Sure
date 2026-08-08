@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 import shutil
+import traceback
 from typing import List, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
@@ -36,6 +37,23 @@ _LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
         "declarations at the TOP of the task/block body, before any statement. Move "
         "every declaration in the flagged tasks to the top of that task.",
     ),
+    (
+        re.compile(
+            r"isn't a constant|two-state constant|"
+            r"Width of :\+ or :- bit slice range isn't a constant"
+        ),
+        "HINT: a part-select WIDTH and a replication COUNT must be compile-time "
+        "constants in SystemVerilog. `x[hi:lo]` with a variable bound, "
+        "`x[i +: n]` with a variable `n`, and `{n{1'b0}}` with a variable `n` are "
+        "all illegal, however reasonable they look.\n"
+        "  A VARIABLE amount is expressed as a SHIFT, not as a slice:\n"
+        "    WRONG:  sig[shift_amt:0]        RIGHT:  sig >> shift_amt\n"
+        "    WRONG:  {shift_amt{1'b0}}       RIGHT:  ('0 << shift_amt) / a mask\n"
+        "    WRONG:  x[i +: n]  (n varies)   RIGHT:  (x >> i) & ((1<<n)-1) with n constant\n"
+        "  A variable INDEX is fine when the WIDTH is fixed: `x[i +: 8]` is legal, "
+        "`x[i +: n]` is not. Alignment and normalisation stages hit this constantly "
+        "— they want a variable shift, so write a shift.",
+    ),
 ]
 
 
@@ -50,6 +68,63 @@ def _augment_lint_excerpt(excerpt: str) -> str:
     return excerpt.rstrip("\n") + "\n\n" + "\n\n".join(hints) + "\n"
 
 
+def _tb_is_acceptable(
+    tb_text: str, module_name: str, contract_json: str
+) -> tuple[bool, str]:
+    """Is this testbench a plausible ORACLE, beyond merely linting clean?
+
+    Lint-clean is necessary, not sufficient, and the gap is not theoretical.
+    The repair loop below exits the moment Verilator is happy, and a generic
+    stub is trivially happy:
+
+        module tb_dut_top;
+          ...
+          $display("ERROR: No contract provided - testbench cannot verify DUT");
+          $finish(1);
+        endmodule
+
+    Two nodes in the persisted corpus collapsed to exactly that after their
+    real testbenches failed lint several times, and the stub then became the
+    node's cached oracle and gated real glue attempts. So the loop needs a
+    CONTENT invariant as well as a syntactic one.
+
+    Pure, so the predicate is testable against the real persisted stubs without
+    a model call. Returns (ok, reason) — `reason` is fed back to the generator.
+    """
+    if not tb_text or not tb_text.strip():
+        return False, "the testbench is empty"
+
+    from .contract_linter import tb_instantiates_module
+
+    if not tb_instantiates_module(tb_text, module_name):
+        return False, (
+            f"the testbench never instantiates `{module_name}`. A testbench that "
+            f"drives some other module is not an oracle for this one. Instantiate "
+            f"`{module_name}` as the DUT and drive its real ports."
+        )
+
+    # A TB may legitimately leave some ports unread, but one that mentions
+    # almost none of them is not exercising the interface it claims to check.
+    try:
+        ports = [
+            p.get("name")
+            for p in (json.loads(contract_json) or {}).get("io", [])
+            if isinstance(p, dict) and p.get("name")
+        ]
+    except (ValueError, TypeError):
+        ports = []
+    if ports:
+        seen = [p for p in ports if re.search(rf"\b{re.escape(p)}\b", tb_text)]
+        if len(seen) * 2 < len(ports):
+            missing = [p for p in ports if p not in seen][:6]
+            return False, (
+                f"the testbench references only {len(seen)} of {len(ports)} contract "
+                f"ports (missing e.g. {', '.join(missing)}). Drive and check the "
+                f"module's real interface."
+            )
+    return True, ""
+
+
 def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
     """Append real child module source(s) into the testbench text.
 
@@ -62,6 +137,71 @@ def _append_child_rtl(testbench: str, child_rtl: dict[str, str] | None) -> str:
     if not child_rtl:
         return testbench
     return testbench.rstrip("\n") + "\n\n" + "\n\n".join(child_rtl.values()) + "\n"
+
+
+def _is_absent_dut_artifact(line: str) -> bool:
+    """True if this verilator error exists ONLY because the DUT was left out.
+
+    A TB is linted alone on purpose, so `-MODMISSING` is expected. The two
+    dotted-reference errors are the same artifact one step further in: once a
+    testbench reaches INTO the DUT (`dut.some_port`), verilator cannot resolve
+    the path without the module, and reports it as a hard error rather than as
+    MODMISSING. Treating those as real syntax errors would fail every glue
+    testbench carrying a hierarchical probe, and `_tb_has_syntax_error` would
+    then silently swap the glue oracle for the golden TB -- turning added
+    visibility into a lost verdict.
+    """
+    return (
+        "-MODMISSING:" in line
+        or line.startswith("%Error: Exiting due to")
+        or "Dotted reference to instance that refers to missing module" in line
+        or "in dotted variable/method:" in line
+    )
+
+
+def tb_lint_report(*, tb_path: Path) -> tuple[bool, str, str]:
+    """Return (is_ok, excerpt, raw_json) from `verilator --lint-only` on the testbench.
+
+    This lints the TB in isolation; missing DUT module definitions are expected and ignored.
+
+Module-level so callers OUTSIDE this class get the SAME verdict. The
+filtering is not incidental: warnings are ignored, `-MODMISSING` is ignored
+(the DUT is deliberately absent when a TB is linted alone), and "Exiting due
+to" is ignored. A caller that substitutes a generic syntax check gets a
+different answer -- `check_syntax` on a lone oracle fails on a missing
+trailing newline AND on the absent DUT, so every oracle looks broken, which
+would disable the unified glue loop everywhere it gates.
+    """
+    if shutil.which("verilator") is None:
+        return True, "", ""
+
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {tb_path}"
+    _ok, out = run_bash_command(cmd, timeout=60, cwd=str(tb_path.parent))
+    try:
+        obj = CommandResult.model_validate_json(out)
+    except Exception:  # noqa: BLE001
+        return False, out, out
+
+    stdout = obj.stdout or ""
+    stderr = obj.stderr or ""
+    text = f"{stdout}\n{stderr}"
+
+    error_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.lstrip().startswith("%Error")
+    ]
+    real_error_lines = [
+        line
+        for line in error_lines
+        if not _is_absent_dut_artifact(line)
+    ]
+
+    is_ok = not real_error_lines and ("syntax error" not in text.lower()) and ("malformed statement" not in text.lower())
+    excerpt = "\n".join(real_error_lines).strip() or text.strip()
+    if len(excerpt) > 6000:
+        excerpt = excerpt[:6000] + "\n...<snip>...\n"
+    return is_ok, excerpt + ("\n" if excerpt and not excerpt.endswith("\n") else ""), out
 
 
 @dataclass(frozen=True)
@@ -142,6 +282,102 @@ class TopAgent:
         lines.insert(insert_after + 1, f"{indent}$dumpvars(0, {inst});")
         return "\n".join(lines) + ("\n" if testbench.endswith("\n") else "")
 
+    def _augment_glue_port_probes(
+        self,
+        testbench: str,
+        *,
+        module_name: str,
+        assembled_rtl_path: str | None,
+    ) -> str:
+        """Print the glue's CHILD-FACING ports every cycle, via hierarchical reference.
+
+        A leaf debugger sees expected-vs-actual for every signal it can change,
+        because `rtl.sv` IS the DUT and the testbench drives and prints its ports.
+        A glue debugger does not: the testbench drives the WRAPPER, so it prints
+        only the wrapper's external outputs, while the glue's child-facing ports
+        are internal nodes one level down.
+
+        Measured on stage_roundpack: 13 failing signals, of which 11 were
+        child-facing and the testbench printed values for NONE. The glue drives
+        13 of its 14 editable blocks into those ports, so it was editing almost
+        entirely blind -- which is a far better explanation of "leaves converge,
+        glue does not" than anything about tools or prompts.
+
+        The wrapper connects each child-facing port to a same-named wire
+        (`.special_case_unit_sign_in(special_case_unit_sign_in)`), so
+        `<dut_inst>.<port>` reaches it. Emitted as one GLUEPROBE line per cycle
+        so the values can be correlated with the mismatch times the testbench
+        already reports.
+        """
+        if not assembled_rtl_path:
+            return testbench
+        try:
+            asm = Path(assembled_rtl_path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return testbench
+
+        # In the UNIFIED glue solve, `module_name` is already the glue's own name
+        # (`glue_spec_for_solve["module_name"] = f"{parent}_glue"`), so appending
+        # `_glue` looks for `<parent>_glue_glue` and matches nothing -- the probe
+        # then returns the testbench unchanged and the whole visibility fix is a
+        # silent no-op. That is exactly how it shipped: the run produced a tb.sv
+        # byte-identical to the oracle, with zero GLUEPROBE lines and no error.
+        #
+        # Derive both names instead of assuming which one was handed in:
+        #   glue    -- the module instantiated inside the assembled composition
+        #   wrapper -- what the TESTBENCH drives, and the scope the hierarchical
+        #              reference must be rooted at
+        if module_name.endswith("_glue"):
+            glue_name, wrapper_name = module_name, module_name[: -len("_glue")]
+        else:
+            glue_name, wrapper_name = f"{module_name}_glue", module_name
+
+        m = re.search(rf"\b{re.escape(glue_name)}\b\s+(\w+)\s*\((.*?)\);", asm, re.S)
+        if not m:
+            return testbench
+        conn = m.group(2)
+        # `.child_port(wire)` where the port is child-facing: `<child>_<signal>`
+        ports = [
+            g for g in re.findall(r"\.\s*(\w+)\s*\(", conn)
+            if re.search(r"_(in|out)$", g) and g.count("_") >= 2
+        ]
+        # external ports of the parent are connected too; keep only those that are
+        # NOT declared as ports of the testbench's own DUT interface, i.e. the ones
+        # carrying a child module's name prefix.
+        ports = [p for p in ports if not re.match(r"^(clk|rst|valid|sign|exp|sig|is|result)_", p)]
+        if not ports:
+            return testbench
+
+        # Root the hierarchical reference at the module the TESTBENCH drives --
+        # the wrapper -- not at the glue, which the testbench never names.
+        inst = None
+        mi = re.search(rf"\b{re.escape(wrapper_name)}\b\s+([a-zA-Z_]\w*)\s*\(", testbench)
+        if mi:
+            inst = mi.group(1)
+        if not inst:
+            return testbench
+        if "GLUEPROBE" in testbench:
+            return testbench
+
+        clk = "clk" if re.search(r"\bclk\b", testbench) else None
+        if not clk:
+            return testbench
+
+        fmt = " ".join(f"{p}=%h" for p in ports)
+        args = ", ".join(f"{inst}.{p}" for p in ports)
+        probe = (
+            "\n// --- injected: child-facing port visibility for the glue debugger ---\n"
+            "// The testbench drives the WRAPPER, so these ports are internal nodes it\n"
+            "// would otherwise never print. Without them the glue agent edits blind.\n"
+            f"always @(negedge {clk}) begin\n"
+            f'    $display("GLUEPROBE t=%0t {fmt}", $time, {args});\n'
+            "end\n"
+        )
+        idx = testbench.rfind("endmodule")
+        if idx == -1:
+            return testbench
+        return testbench[:idx] + probe + testbench[idx:]
+
     def _tb_has_syntax_error(self, *, tb_path: Path) -> bool:
         """Return True if `tb_path` contains a real syntax error (not just missing module defs)."""
         if shutil.which("verilator") is None:
@@ -169,8 +405,7 @@ class TopAgent:
         real_error_lines = [
             line
             for line in error_lines
-            if ("-MODMISSING:" not in line)
-            and (not line.startswith("%Error: Exiting due to"))
+            if not _is_absent_dut_artifact(line)
         ]
         if real_error_lines:
             return True
@@ -179,41 +414,8 @@ class TopAgent:
         return ("syntax error" in text) or ("malformed statement" in text)
 
     def _tb_lint_report(self, *, tb_path: Path) -> tuple[bool, str, str]:
-        """Return (is_ok, excerpt, raw_json) from `verilator --lint-only` on the testbench.
-
-        This lints the TB in isolation; missing DUT module definitions are expected and ignored.
-        """
-        if shutil.which("verilator") is None:
-            return True, "", ""
-
-        cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {tb_path}"
-        _ok, out = run_bash_command(cmd, timeout=60, cwd=str(tb_path.parent))
-        try:
-            obj = CommandResult.model_validate_json(out)
-        except Exception:  # noqa: BLE001
-            return False, out, out
-
-        stdout = obj.stdout or ""
-        stderr = obj.stderr or ""
-        text = f"{stdout}\n{stderr}"
-
-        error_lines = [
-            line.strip()
-            for line in text.splitlines()
-            if line.lstrip().startswith("%Error")
-        ]
-        real_error_lines = [
-            line
-            for line in error_lines
-            if ("-MODMISSING:" not in line)
-            and (not line.startswith("%Error: Exiting due to"))
-        ]
-
-        is_ok = not real_error_lines and ("syntax error" not in text.lower()) and ("malformed statement" not in text.lower())
-        excerpt = "\n".join(real_error_lines).strip() or text.strip()
-        if len(excerpt) > 6000:
-            excerpt = excerpt[:6000] + "\n...<snip>...\n"
-        return is_ok, excerpt + ("\n" if excerpt and not excerpt.endswith("\n") else ""), out
+        """Instance-side alias for :func:`tb_lint_report`."""
+        return tb_lint_report(tb_path=tb_path)
 
     async def _build_contract_json(
         self,
@@ -281,6 +483,7 @@ class TopAgent:
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
+        external_tb: str | None = None,
     ) -> Tuple[bool, str, int, int, dict | None]:
         """Run one instance of the full agent procedure.
 
@@ -365,15 +568,55 @@ class TopAgent:
         tb_gen.reset()
         tb_gen.set_golden_tb_path(golden_tb_path)
         tb_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
-        testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
-        testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
-        testbench = _append_child_rtl(testbench, child_rtl)
-        self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-        self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
+
+        if external_tb is not None:
+            # An oracle was supplied, so generate nothing: this TB IS the gate.
+            # Used for composition (glue) nodes, which are handed the parent's
+            # own original-interface TB. Together with `child_rtl` (the real,
+            # already-certified children appended below) the sim/debug loop
+            # downstream is exactly the composed-simulation check — the glue is
+            # written and repaired against the same assembly and the same
+            # oracle that decides whether it certifies.
+            #
+            # This is NOT `golden_tb_path`, which still regenerates a TB and
+            # only falls back to the golden text on a syntax error. Here the
+            # supplied text is authoritative and never redrawn, so there is no
+            # second, invented oracle anywhere in a composition's pipeline.
+            testbench = self._augment_dumpvars_with_dut_scope(external_tb, module_name=module_name)
+            # Give the glue debugger the same visibility a leaf debugger has by
+            # construction: values for every port it can drive, not just the
+            # wrapper's two external outputs.
+            testbench = self._augment_glue_port_probes(
+                testbench, module_name=module_name,
+                assembled_rtl_path=golden_rtl_blackbox_path,
+            )
+            testbench = _append_child_rtl(testbench, child_rtl)
+            interface = ""
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=output_dir_per_run / "tb.sv")
+            if not tb_ok:
+                # A supplied oracle that will not elaborate is a broken ORACLE,
+                # not a broken design. There is no repair path here (we must not
+                # rewrite the caller's gate), so surface it instead of letting
+                # the Coder burn its budget against an unusable testbench.
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log.json", content=tb_lint_json)
+                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt.txt", content=tb_lint_excerpt)
+                logger.error("Supplied external TB does not lint; aborting this attempt:\n%s", tb_lint_excerpt)
+                return finish(False, "")
+        else:
+            testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
+            testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
+            testbench = _append_child_rtl(testbench, child_rtl)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
+            self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
         # If we were given a golden TB and the LLM accidentally broke its syntax,
         # fall back to the original golden TB (plus our safe dumpvars augmentation).
         tb_path = output_dir_per_run / "tb.sv"
-        if golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
+        if external_tb is not None:
+            # Already linted above and authoritative by construction — neither
+            # the golden fallback nor the Verifier repair loop may touch it.
+            pass
+        elif golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
             golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
             golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
             golden_text = _append_child_rtl(golden_text, child_rtl)
@@ -385,15 +628,24 @@ class TopAgent:
             # Each retry feeds back the accumulated lint errors (set_tb_lint_error
             # appends), so the model sees the full history rather than one blind shot.
             tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+            inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
             attempt = 0
-            while not tb_ok and attempt < self.config.tb_lint_max_retry:
+            while (not tb_ok or not inv_ok) and attempt < self.config.tb_lint_max_retry:
                 suffix = "" if attempt == 0 else f"_attempt{attempt}"
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
 
-                tb_gen.set_tb_lint_error(
-                    lint_log=_augment_lint_excerpt(tb_lint_excerpt), previous_tb=testbench
-                )
+                # A TB that lints clean but fails the ORACLE invariant gets the
+                # invariant as its feedback, not a stale lint log — otherwise
+                # the model is told to fix errors it has already fixed and
+                # collapsing further to a stub looks like progress.
+                feedback = _augment_lint_excerpt(tb_lint_excerpt) if not tb_ok else ""
+                if not inv_ok:
+                    logger.warning("Generated TB rejected by the oracle invariant: %s", inv_reason)
+                    feedback = (feedback + "\n\n" if feedback else "") + (
+                        "The testbench is not a usable ORACLE: " + inv_reason
+                    )
+                tb_gen.set_tb_lint_error(lint_log=feedback, previous_tb=testbench)
                 testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
                 testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
                 testbench = _append_child_rtl(testbench, child_rtl)
@@ -402,9 +654,13 @@ class TopAgent:
 
                 attempt += 1
                 tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
+                inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
 
-            if not tb_ok:
-                # Exhausted the repair budget; the TB still does not lint clean.
+            if not tb_ok or not inv_ok:
+                # Exhausted the repair budget: the TB still does not lint clean,
+                # or it lints but is not an oracle. Both are unusable, and the
+                # invariant failure is the more dangerous of the two because it
+                # would otherwise be CACHED and gate every later attempt.
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_final.json", content=tb_lint_json)
                 self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_final.txt", content=tb_lint_excerpt)
                 try:
@@ -458,7 +714,28 @@ class TopAgent:
         # an inline behavioral stand-in, so there is no invented model to
         # align — child_assumes is only used above for prompt guidance (drive
         # instantiation, not a stand-in) and for contract_sva's assert side.
-        if child_assumes and not child_rtl:
+        # ...and equally when `external_tb` is set. That is the UNIFIED glue
+        # loop, where the children are just as real -- they are compiled into
+        # the assembled composition (`fixed.sv`) alongside the wrapper instead
+        # of being spliced into the testbench text. The guard tested HOW the
+        # children arrived rather than WHETHER they exist, so under `unified`
+        # (which passes child_rtl=None by design) it ran anyway.
+        #
+        # There is nothing to align in that path: the composed testbench drives
+        # the WRAPPER, so it contains no inline child model. The pass fabricated
+        # a stub for a glue about to be generated, injected assumption asserts
+        # built from model-authored expressions, and on stage_roundpack one of
+        # them was `(...)[24]` -- a bit-select on a parenthesised expression,
+        # illegal SystemVerilog -- so mock_dut.sv failed to compile, all 24
+        # assertions were lost, and the agent spent a trial diagnosing a
+        # testbench that was never at fault while being forbidden to touch the
+        # file that was. Same warning on stage_addsub and stage_normalize with a
+        # different illegal expression each time.
+        #
+        # Bottom-up composition is what makes this unnecessary: the children are
+        # already CERTIFIED, so a check that the testbench's imagined children
+        # match their contracts has nothing left to verify.
+        if child_assumes and not child_rtl and external_tb is None:
             # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
             # so a post-mortem can attribute a defect to TBGenerator's own
             # draft vs. something TBEditor introduced/failed to resolve while
@@ -693,6 +970,7 @@ class TopAgent:
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
+        external_tb: str | None = None,
     ) -> TopAgentResult:
         output_dir_per_run = output_dir_per_run.expanduser().resolve()
         output_dir_per_run.mkdir(parents=True, exist_ok=True)
@@ -732,10 +1010,32 @@ class TopAgent:
                     contract_sva=contract_sva,
                     child_assumes=child_assumes,
                     child_rtl=child_rtl,
+                    external_tb=external_tb,
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             error = f"{type(e).__name__}: {e}"
+            # Recording the message on the result is not the same as reporting
+            # it. Before this, a leaf whose TB stage raised returned normally
+            # with `error` set, wrote no artifact and logged nothing, so the
+            # re-decomposition that read its failure report got
+            # "(no structured failure artifacts captured)" -- accurate, and
+            # useless. Measured on fp_pack_invalid (run fp_adder_e2e,
+            # 2026-08-03): two independent attempts, ~45 minutes each, both
+            # leaving only the Architect's four files and no cause anywhere.
+            #
+            # Both halves are needed. The log line makes it diagnosable while
+            # the run is alive; the artifact makes it diagnosable afterwards,
+            # and is what `_harvest_failure` reads back into the digest.
+            logger.exception("Leaf run failed for %s", output_dir_per_run.name)
+            try:
+                self._write_output(
+                    output_dir_per_run=output_dir_per_run,
+                    file_name="leaf_exception.txt",
+                    content=f"{error}\n\n{traceback.format_exc()}",
+                )
+            except Exception:  # noqa: BLE001 — reporting a failure must not raise
+                logger.debug("could not write leaf_exception.txt", exc_info=True)
 
         return TopAgentResult(
             output_dir_per_run=str(output_dir_per_run),

@@ -9,7 +9,14 @@ from pydantic import BaseModel
 from .agents import SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .prompts import FAILED_TRIAL_PROMPT, TAG_ORDER_PROMPT, TB_4_SHOT_EXAMPLES
+import json
+
+from .prompts import (
+    FAILED_TRIAL_PROMPT,
+    GLUE_TB_EXAMPLE,
+    TAG_ORDER_PROMPT,
+    TB_4_SHOT_EXAMPLES,
+)
 from .utils import add_lineno, clip_text, extract_xml_tag, strip_markdown_code_fences
 
 SYSTEM_PROMPT = r"""
@@ -50,20 +57,97 @@ Contract SVA mode:
 - Treat them as hard specification constraints alongside the functional_summary.
 - Design your testbench checks to be consistent with these SVA properties.
 
+SystemVerilog declaration rule (this silently destroys testbenches):
+- NEVER declare a variable WITH an initialiser inside an always/initial block
+  unless you mark it `automatic`. A procedural declaration with an initialiser
+  is STATIC: the initialiser runs ONCE at time 0, not on each execution.
+- WRONG:   always @(posedge clk) begin ... my_t x = queue.pop_front(); ... end
+           (pop_front() runs once, against an empty queue; every later
+            comparison then uses that one stale value and the check is dead)
+- RIGHT:   always @(posedge clk) begin ... automatic my_t x = queue.pop_front(); ... end
+- This has already nullified a real testbench: every product was compared
+  against a constant 0, so correct designs failed and the defect was invisible
+  in the log.
+
+Verilator STRING rule (this compiles the SV and then fails the C++ build):
+- Do NOT compare or wait on `string` variables. `wait (name == "foo")`,
+  `if (scenario == "bar")` and similar lower to C++ that does not compile:
+      error: unable to find string literal operator 'operator""foo'
+      make: *** [Vtb___024root__1.o] Error 1
+  Verilator elaborates the SystemVerilog happily, so this surfaces only as a
+  make failure with no line of yours named.
+- Use an enum or an integer code for scenario/state identity, and keep strings
+  for `$display` text only:
+      WRONG:  string scenario; ... wait (scenario == "randomized");
+      RIGHT:  typedef enum {S_RESET, S_BASIC, S_RANDOMIZED} scen_e;
+              scen_e scenario; ... wait (scenario == S_RANDOMIZED);
+- Give that enum NO base type, exactly as shown above. It then defaults to
+  `int`, which is always wide enough. Writing one narrows it to a fixed size
+  and Verilator rejects the enum as soon as you have more scenarios than it
+  holds:
+      WRONG:  typedef enum logic [3:0] { ... 19 scenario names ... } scen_e;
+      %Error: Enum value illegally wrapped around (IEEE 1800-2023 6.19)
+      %Error: Overlapping enumeration value: 'SC_ZERO_RESULT'
+  (Measured: 19 enumerators in a 4-bit type; values 16-18 wrapped to 0-2 and
+  collided with the first three.)
+- If you do hit that error, WIDEN the type or drop it — never delete scenarios
+  to make them fit. That silently removes test coverage and still lints clean.
+- Only COMPARISON breaks the build. `string` variables are fine when they are
+  assigned and printed, and a label array is worth keeping:
+      FINE:   string output_names [0:8];
+              output_names[0] = "special_valid"; ...
+              $display("%s: %0d mismatches", output_names[i], counts[i]);
+      FINE:   string current_scenario; current_scenario = name;   // assignment
+      BREAKS: wait (current_scenario == "randomized");            // comparison
+  Naming each output in the mismatch report is exactly what makes a failure
+  diagnosable, so do not drop it to avoid strings.
+
+RESERVED KEYWORD rule (one collision produces ~40 errors, none of them the cause):
+- Never use a SystemVerilog KEYWORD as an identifier — not as a variable, port,
+  task/function argument, or module name. The parser fails at the declaration
+  and then reports a cascade of unrelated-looking errors after it.
+- Measured: a testbench declared `input string context` (a scenario label).
+  `context` is reserved — it appears in `import "DPI-C" context function`. That
+  one word produced:
+      tb.sv:108:24: syntax error, unexpected context, expecting IDENTIFIER
+      tb.sv:112:14: syntax error, unexpected '=', expecting '('
+      ... ~40 more, none of which is the real defect
+  Renaming it to `ctx` and changing nothing else made the file lint clean.
+- Words that look like ordinary names and are NOT: `context`, `type`, `time`,
+  `event`, `table`, `cell`, `config`, `disable`, `edge`, `expect`, `final`,
+  `force`, `join`, `matches`, `null`, `program`, `property`, `randomize`,
+  `ref`, `return`, `sequence`, `signed`, `small`, `space`, `strong`, `tagged`,
+  `this`, `throughout`, `unique`, `wait`, `weak`, `wildcard`, `within`.
+- If you want a label, prefer an unambiguous name: `ctx`, `scenario_name`,
+  `test_label`, `phase_name`.
+
+SystemVerilog declaration PLACEMENT rule (this fails to compile at all):
+- Every declaration in a `begin ... end` must come BEFORE the first statement of
+  that block. A declaration after a statement is a SYNTAX ERROR, not a style
+  issue, and Verilator reports it far from the real cause as
+  `syntax error, unexpected IDENTIFIER, expecting "'{"`.
+- WRONG:   begin  int a; a = 1;  int b;  b = 2;  end
+- RIGHT:   begin  int a, b;  a = 1;  b = 2;  end
+- RIGHT:   begin  int a; a = 1;  begin int b; b = 2; end  end
+           (a nested block starts a new declaration region)
+- If you realise mid-block that you need another temporary, hoist it to the top
+  of the block or open a nested `begin ... end` — never declare it in place.
+
 Child assumes mode (hierarchical decomposition):
 - If the contract JSON contains a `child_assumes` field (a dict keyed by child module name),
   this node is a COMPOSITION NODE with child-facing ports.
 - The child-facing ports are ALREADY on the DUT's port list (prefixed with the child
-  module name, e.g. `booth_controller_ready`, `booth_datapath_product`).
+  module name, e.g. for a child `foo` with port `ready`, the DUT port is `foo_ready`).
 
 REAL child instantiation (only for entries with `"rtl_available": true`):
 - These children are ALREADY implemented and verified — their real RTL will be
   compiled alongside this testbench (you do not write or see their source).
 - For these children ONLY: declare an instance of the module (module name =
-  the child's key in `child_assumes`, e.g. `booth_datapath`), and connect each
+  the child's key in `child_assumes` — use THAT name, not an example name),
+  and connect each
   of its OWN ports (named in that child's `interface` list, UNPREFIXED — e.g.
-  `A`, `B`, `ready`) to the corresponding PREFIXED DUT port (prefix = child
-  name + `_`, e.g. `booth_datapath_A`, `booth_datapath_ready`).
+  a child port `x`) to the corresponding PREFIXED DUT port (prefix = child
+  name + `_`, so child `foo`'s port `x` connects to DUT port `foo_x`).
 - Do NOT write an inline behavioral stand-in for these children — no always
   blocks/tasks driving their prefixed ports. The real instance drives/reads
   them directly. `io_behavior`/`properties` for these entries are supporting
@@ -115,6 +199,12 @@ Previous response (truncated):
 
 Please output again, strictly following the required tags in <output_format>, and output NOTHING else.
 Do NOT output JSON. Do NOT wrap code in Markdown code fences (```).
+
+The <bad_output> above is shown ONLY so you can see what failed to parse. It is
+not a draft to tidy up. If it describes a different module than the contract
+above -- different module name, different ports -- discard it completely and
+write the contract's module from scratch. Re-read the contract and confirm the
+module name and every port name match it before you answer.
 """
 
 TB_LINT_FAILED_PROMPT = r"""
@@ -147,6 +237,34 @@ Hard rules:
 - Follow the contract. Do NOT invent behavior/timing not stated in the contract.
 - The module interface MUST match the contract/spec exactly (module name, port names, widths).
 - Name the DUT instance `dut` (non-golden mode).
+- Emit EXACTLY ONE top-level testbench module (plus the DUT interface header).
+  Verilator elaborates every module nothing instantiates as a top and runs them
+  all in ONE simulation, and `$finish` is global -- so a second top-level module
+  that calls `$finish` ends the run for the real testbench too. Measured: a
+  helper `..._test_runner` module emitted beside a correct testbench ended five
+  consecutive simulations at time 0, before a single output had been checked.
+  Never emit a module whose body only $displays that some test "would run in
+  separate compilation".
+- WIDTHS: test at the contract's DEFAULT parameter values. One width is
+  sufficient and is what is expected — do NOT contort the testbench to sweep
+  several widths. A correct single-width testbench is worth far more than a
+  broken sweep. Declare the contract's parameters on the testbench module
+  header and use them directly:
+      RIGHT:  module fp_align_add_tb #(parameter int EXP_WIDTH  = 8,
+                                       parameter int MANT_WIDTH = 23);
+                logic [EXP_WIDTH-1:0] exp_a;
+  A packed dimension must be elaboration-time constant, so a width may only
+  come from a `parameter` or `localparam`. NEVER pass a width in as a function
+  or task argument and then size a declaration with it — an argument is a
+  VARIABLE:
+      WRONG:  function automatic void ref_model(
+                input logic [EXP_WIDTH-1:0] exp_a,    // uses it...
+                input int                   EXP_WIDTH // ...and declares it
+              );
+      %Error: Expecting expression to be constant, but variable isn't const: 'EXP_WIDTH'
+      %Error: left side of bit range isn't a two-state constant
+  Measured: 26 errors in one generated oracle from exactly this. A function
+  declared inside the module already SEES the module parameters — just use them.
 - Do not use the SystemVerilog `continue` keyword.
 - Verilator target: keep the TB compatible (avoid `sequence ... endsequence` and SVA `[*]` repetition; prefer simple assertions).
 
@@ -172,8 +290,8 @@ Testbench requirements:
      fixed-latency oracle then fails a CORRECT design (or passes a wrongly-timed one); a
      ready-qualified check is immune to that — it only asserts "whenever you say you're ready, the
      answer is right," which is the true contract. This is the correct oracle for a composition/glue
-     node whose external output is ready-qualified (e.g. booth_multiplier's `product` valid when
-     `ready`). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
+     node whose external output is ready-qualified (i.e. a result port that is only meaningful on
+     the cycle its companion `ready`/`valid` is asserted). Reserve the fixed-latency countdown model below ONLY for outputs that have NO such
      handshake qualifier.
    - LATENT / REGISTERED OUTPUTS WITHOUT A HANDSHAKE (any output whose contract timing has
      latency_cycles > 0 and which is NOT ready/valid-qualified per the bullet above,
@@ -199,10 +317,26 @@ Testbench requirements:
    pass/fail verdict unaffected.
 4) Logging (keep logs small):
    - Do NOT print on every match.
-   - On mismatch, display inputs, DUT outputs, and expected outputs.
+   - On EVERY mismatch — not just the first — the display line MUST carry the DUT's
+     actual output value AND the expected value, for the signal that mismatched:
+
+         MISMATCH <sig> at time <t>: <inputs> | got=<actual> exp=<expected>
+
+     Inputs alone are NOT enough and a bare count is worthless. The debugger cannot
+     diagnose a value it was never shown, and every timing/aliasing check downstream
+     works by comparing the ORDERED SEQUENCE of (actual, expected) pairs — one pair
+     is not a sequence. A run that prints 210 mismatch lines carrying only inputs
+     supplies exactly as much value evidence as a run that prints none, while
+     looking like it supplies 210 times as much. (Measured: an fp_adder leaf did
+     precisely this — 210 mismatch lines, 2 recorded values.)
+     If you must cap the volume, cap it at no fewer than 30 fully-recorded
+     mismatches per scenario and say how many were suppressed; never degrade the
+     line to inputs-only.
    - For the first mismatch only, ADDITIONALLY print extra debug context per the display
      prompt below (moment or queue window). This is a one-time detail dump for context —
      it does NOT stop the run; continue executing all remaining checks and scenarios.
+     This context block is IN ADDITION TO the per-mismatch lines above, never a
+     substitute for them.
 5) Generate a VCD named `wave.vcd`:
    initial begin
      $dumpfile("wave.vcd");
@@ -226,6 +360,23 @@ Testbench requirements:
    - Group stimulus into NAMED, INDEPENDENT test scenarios, one per functional case
      (e.g. zero, overflow, carry_in, max, random_k). Reset/re-initialize between
      scenarios where the design is stateful.
+   - BOUNDARIES ARE MANDATORY, not one scenario among many. Typical values do not
+     distinguish a correct design from an off-by-one, and an oracle that only
+     exercises typical values passes a design that is wrong at exactly one point.
+     For EVERY numeric input and EVERY internal count or index the spec implies,
+     drive at least:
+       * the minimum, and one below it where the type allows (0, and wraparound);
+       * the maximum, and one above it (overflow / saturation / wraparound);
+       * for anything ITERATED or COUNTED N times: the LAST iteration (N-1), the
+         boundary itself (N), and one past it (N+1). A loop that runs N-1 times
+         instead of N produces correct-looking output on every earlier cycle.
+       * for every COMPARISON the spec states (`<`, `<=`, `>=`, threshold,
+         "when counter reaches K"): the value just below the threshold, the
+         threshold EXACTLY, and just above. `<` and `<=` differ only at that one
+         value, so a testbench that never drives it cannot tell them apart.
+     This is not a style preference. Measured over 24 certified modules, five of
+     the six faults their own testbenches FAILED to catch were exactly these two
+     shapes — a `<` silently widened to `<=`, and a `+ 1` silently become `+ 2`.
    - Run ALL scenarios to completion — do NOT `$finish` on the first mismatch.
    - Record, per scenario: its start time, its end time, the count of mismatches, and
      the simulation time (`$time`) of the FIRST mismatch within that scenario.
@@ -464,9 +615,26 @@ class TBGenerator:
                 contract_json=contract_json,
             )
         else:
+            # A composition TB must instantiate the REAL children and bridge
+            # their UNPREFIXED ports to the DUT's PREFIXED child-facing ports.
+            # TB_4_SHOT_EXAMPLES is 16,280 chars of LEAF testbenches with zero
+            # coverage of that pattern, so the hardest part of the task had no
+            # worked example at all. Live consequence: a generated self-TB
+            # instantiated a helper module that does not exist and the oracle
+            # could not elaborate (%Error-MODMISSING), making the composition
+            # gate unpassable regardless of the glue.
+            _is_composition = False
+            if contract_json:
+                try:
+                    _is_composition = bool(json.loads(contract_json).get("child_assumes"))
+                except (ValueError, TypeError, AttributeError):
+                    _is_composition = "child_assumes" in contract_json
             generation_content = NON_GOLDEN_TB_PROMPT.format(
                 input_spec=input_spec,
-                examples_prompt=TB_4_SHOT_EXAMPLES,
+                examples_prompt=(
+                    TB_4_SHOT_EXAMPLES + "\n\n" + GLUE_TB_EXAMPLE
+                    if _is_composition else TB_4_SHOT_EXAMPLES
+                ),
                 display_prompt=display_prompt,
                 contract_json=contract_json,
             )
@@ -528,7 +696,7 @@ class TBGenerator:
                 parse_error=resp_obj.reasoning,
                 bad_output=clip_text(response_text, max_chars=6000),
             )
-            prompt = f"{repair}\n\n{order}"
+            prompt = f"{init}\n\n{repair}\n\n{order}"
         if resp_obj.reasoning.startswith("Parse Error"):
             raise ValueError(
                 f"Parse error when decoding model output: {response_text}"
