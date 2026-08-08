@@ -100,6 +100,27 @@ _OPPOSITE_EDGE = {"posedge": "negedge", "negedge": "posedge"}
 
 _SENTENCE_SPLIT_RE = re.compile(r"[.;\n]")
 
+# "two cycles later", "a two-cycle FIFO", "after exactly 2 cycles". Requires the
+# count to be ADJACENT to "cycle(s)" so ordinary prose mentioning a number and a
+# cycle in the same sentence does not trip it.
+_PROSE_CYCLE_COUNT_RE = re.compile(
+    r"\b(?P<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})[\s-]+cycles?\b",
+    re.I,
+)
+_NUMBER_WORDS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+}
+# A cycle count is only a LATENCY claim in the right company. Without this the
+# check fires on "assert rst for one cycle", "hold start high for one cycle" and
+# "stall for three cycles" — none of which say anything about latency, and all of
+# which would then drive pointless `error`-severity revision rounds.
+_LATENCY_CONTEXT_RE = re.compile(
+    r"\blater\b|\blatency\b|\bdelay\b|\bpipelin|\bfifo\b|\bsampl|\boutput|\bresult"
+    r"|\bappear|\bvalid\b|\bdeep\b|\bafter\b",
+    re.I,
+)
+
 
 def _clause_around(text: str, start: int, end: int) -> str:
     """The clause containing [start, end) — negation does not cross a `;` or `.`."""
@@ -195,6 +216,38 @@ def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIs
                     f"pipeline stages are NOT permitted\".",
                 ))
                 break
+        # Prose that RESTATES the latency with a different number. F67's original
+        # patterns catch prose that RELAXES a declared latency ("deeper pipelining
+        # is permitted"); this catches prose that contradicts it outright.
+        #
+        # Found by re-minting the fp_adder root: `timing.latency_cycles` stayed 1
+        # (pinned) while the freshly drawn guidance said "sample ... two cycles
+        # later", "push into a two-cycle FIFO" and "zero after exactly two
+        # cycles". A verifier following that builds a TB two cycles deep against
+        # a 1-cycle contract — the same defect as B93, arrived at from the other
+        # direction, and invisible to every check that existed.
+        for m in _PROSE_CYCLE_COUNT_RE.finditer(text):
+            if not _LATENCY_CONTEXT_RE.search(_clause_around(text, m.start(), m.end())):
+                continue  # a cycle count, but not a latency claim
+            word = (m.group("n") or "").lower()
+            n = _NUMBER_WORDS.get(word, word)
+            try:
+                stated = int(n)
+            except (TypeError, ValueError):
+                continue
+            if stated == budget:
+                continue
+            issues.append(ContractIssue(
+                "error", path.lstrip("$."),
+                f"This states a latency of {stated} cycle(s) while timing declares "
+                f"latency_cycles={budget}. Downstream agents follow the prose, so a "
+                f"testbench or design built from this samples at {stated} and is "
+                f"scored at {budget} — every vector fails for a reason neither "
+                f"artifact contains. Make the prose agree with the declared latency, "
+                f"or change the declared latency.",
+            ))
+            break
+
         if other and re.search(rf"\b{other}\b", text, re.I):
             issues.append(ContractIssue(
                 "error", path.lstrip("$."),

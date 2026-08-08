@@ -36,7 +36,16 @@ Toolchain note:
   Verilator. It cannot call out to a host language or an external library. So do NOT direct the Verifier to build a
   reference model in Python, numpy, softfloat, MATLAB or a C/C++ model: nothing downstream can execute that, and the
   Verifier is left to improvise the one thing the guidance was supposed to pin down.
-  If you describe how expected values should be computed, describe it in terms the testbench can actually evaluate.
+- Executable is necessary but NOT sufficient. Verifier guidance must also never tell the Verifier to REBUILD THE
+  DESIGN'S OWN PIPELINE as its reference model. Listing `functional_summary`'s stages back as the way to compute
+  expected values ("decompose, align, add, normalize, round, pack") is the worst possible instruction even though it
+  is perfectly executable: a reference that mirrors the DUT's algorithm agrees with a DUT that has a bug in that
+  algorithm, by construction, so the testbench passes a broken design. The Verifier is told this directly and your
+  guidance must not contradict it.
+  Describe the RESULT the design must produce, not the procedure it uses to get there. If you cannot state the result
+  without restating the pipeline, say nothing about the reference model and leave that to the Verifier.
+- This matters most at the TOP level, where `functional_summary` describes a whole multi-stage algorithm; for a narrow
+  leaf whose function IS one step, naming that step is fine.
 """
 
 
