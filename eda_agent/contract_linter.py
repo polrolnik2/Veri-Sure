@@ -206,6 +206,71 @@ def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIs
     return issues
 
 
+# Host-language tooling a SystemVerilog testbench cannot invoke. Deliberately a
+# closed list of things that are unambiguously NOT SystemVerilog: a heuristic
+# like "mentions a language name" would fire on legitimate prose such as
+# "SystemVerilog functions".
+_HOST_TOOLING_RE = re.compile(
+    r"\bpython\b|\bnumpy\b|\bscipy\b|\bmatlab\b|\boctave\b|\bsoftfloat\b"
+    r"|\bstruct\.(?:un)?pack\b|\bC\+\+\s*model\b|\bC\s+model\b|\.py\b",
+    re.I,
+)
+
+
+def _infeasible_guidance(obj: dict) -> list[ContractIssue]:
+    """Flag guidance the testbench cannot execute.
+
+    `guidance` is consumed by agents that emit SystemVerilog compiled by
+    Verilator. An instruction naming a host language or an external library
+    cannot be followed by any of them, so it is not merely unhelpful — it
+    occupies the slot where a followable instruction should have been, and the
+    agent improvises exactly the thing the guidance existed to pin down.
+
+    Measured across the runs in this repo: EIGHT contracts, spanning six
+    different modules and several runs, carry host-language reference-model
+    advice, and every one of them is under `guidance.verifier`:
+
+        floating_point_adder   "Model expected results with a high-precision
+                                IEEE-754 software reference (e.g., Python
+                                struct.unpack/pack or softfloat)."
+        stage_roundpack        "Build a reference model in Python using
+                                struct.pack/unpack or numpy ..."
+        fp_adder_pipeline      "Use a reference model (e.g., softfloat,
+                                Verilator C++ model) ..."
+
+    On the fp_adder root that line was the ONLY guidance about computing
+    expected values, and five independently drawn oracles all hand-rolled the
+    datapath instead — the failure this check exists to make visible.
+
+    It says nothing about WHAT to use, only that what is named must be
+    executable in the flow, so it stays clear of encoding problem-specific
+    knowledge into the contract.
+    """
+    issues: list[ContractIssue] = []
+    guidance = obj.get("guidance")
+    if not isinstance(guidance, dict):
+        return issues
+    for section, val in guidance.items():
+        entries = val if isinstance(val, list) else [val]
+        for i, line in enumerate(entries):
+            if not isinstance(line, str):
+                continue
+            m = _HOST_TOOLING_RE.search(line)
+            if not m:
+                continue
+            issues.append(ContractIssue(
+                "error", f"guidance.{section}[{i}]",
+                f"This directs a downstream agent to use {m.group(0)!r}, which the "
+                f"flow cannot execute: guidance is consumed by agents that emit "
+                f"SystemVerilog compiled by Verilator, with no host-language "
+                f"interpreter or external library available. An instruction nothing "
+                f"can follow is worse than no instruction, because it takes the place "
+                f"of one that could be followed. Restate it in terms the testbench "
+                f"can evaluate directly, or drop it.",
+            ))
+    return issues
+
+
 def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
@@ -340,6 +405,7 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                     ))
 
     issues.extend(_latency_prose_conflicts(obj, timing, outputs))
+    issues.extend(_infeasible_guidance(obj))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")

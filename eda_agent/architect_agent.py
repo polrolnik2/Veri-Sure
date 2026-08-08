@@ -32,6 +32,11 @@ Principles:
 Toolchain note:
 - The simulation harness uses Verilator. When adding verifier guidance, prefer procedural checks or simple assertions
   (avoid requiring advanced SVA features that may not be supported).
+- Every instruction in `guidance` must be REALIZABLE IN THE TESTBENCH ITSELF, which is SystemVerilog compiled by
+  Verilator. It cannot call out to a host language or an external library. So do NOT direct the Verifier to build a
+  reference model in Python, numpy, softfloat, MATLAB or a C/C++ model: nothing downstream can execute that, and the
+  Verifier is left to improvise the one thing the guidance was supposed to pin down.
+  If you describe how expected values should be computed, describe it in terms the testbench can actually evaluate.
 """
 
 
@@ -72,7 +77,8 @@ What to include (keep it compact):
 - corner_cases: 3-8 bullets (overflows, resets, illegal inputs, boundary indices, etc.)
 - test_plan: 5-10 bullets of directed tests the Verifier should include
 - guidance:
-  - verifier: TB guidance (sampling edge, latency handling, reset sequencing)
+  - verifier: TB guidance (sampling edge, latency handling, reset sequencing, and — if you say anything about how
+    expected values are computed — how to compute them IN SystemVerilog)
   - coder: RTL guidance (structure, state, arithmetic width, initialization)
   - debugger: common failure patterns to check first
 
