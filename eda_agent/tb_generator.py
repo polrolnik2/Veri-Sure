@@ -57,6 +57,26 @@ Contract SVA mode:
 - Treat them as hard specification constraints alongside the functional_summary.
 - Design your testbench checks to be consistent with these SVA properties.
 
+DECLARATION PLACEMENT rule (this does not compile, and the error does not say why):
+- Every declaration inside a `begin ... end` block must come BEFORE the first
+  statement of that block. A declaration after a statement is illegal.
+- WRONG:   if (q.size() > 0) begin
+               total_samples++;                          // a statement
+               logic [31:0] exp = q.pop_front();         // declaration AFTER it
+- RIGHT:   if (q.size() > 0) begin
+               automatic logic [31:0] exp = q.pop_front();   // declarations first
+               total_samples++;
+- Verilator reports this as `syntax error, unexpected IDENTIFIER, expecting "'{"`
+  pointed at the declaration line. That message names neither the rule nor the
+  cause, so it is easy to "fix" the wrong thing and hit it again.
+- `automatic` does NOT fix this. It changes the variable's LIFETIME, not where
+  the declaration may appear. You usually need both: `automatic` for correct
+  per-execution semantics (see the next rule) AND placement before any statement.
+- Measured: four consecutive oracle regenerations for one node failed on exactly
+  this, 8 offending placements each. The node then kept an older oracle that
+  contradicted itself, so no design could satisfy it and every attempt scored
+  against it was wasted.
+
 SystemVerilog declaration rule (this silently destroys testbenches):
 - NEVER declare a variable WITH an initialiser inside an always/initial block
   unless you mark it `automatic`. A procedural declaration with an initialiser
