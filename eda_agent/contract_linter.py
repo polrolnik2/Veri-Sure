@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 from dataclasses import dataclass
@@ -46,6 +47,76 @@ def _as_int(val: Any) -> int | None:
         return int(val)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _parameter_defaults(obj: Any) -> dict[str, int]:
+    """`{name: default}` for every declared parameter with an integer default."""
+    out: dict[str, int] = {}
+    for p in (obj or {}).get("parameters") or []:
+        if not isinstance(p, dict):
+            continue
+        name, default = p.get("name"), _as_int(p.get("default"))
+        if isinstance(name, str) and name.strip() and default is not None:
+            out[name] = default
+    return out
+
+
+def _width_value(width: Any, params: dict[str, int]) -> int | None:
+    """A port width, resolving parameter expressions like `WIDTH` or `MANT_WIDTH+1`.
+
+    A DECOMPOSED contract's child-facing ports carry parameter expressions, not
+    literals, because that is how the child declared them. `int(width)` returns
+    None for every one of those, and the caller then reports an `error`-severity
+    "Invalid width".
+
+    Measured on the committed checkpoint at `c6d9485`: 24 to 65 such findings on
+    EVERY composition contract in the corpus -- including all 28 glue draws from
+    the three nodes that passed their gate. Linting a glue contract was therefore
+    impossible; it would have rejected working composition wholesale. The
+    contract already declares the parameters and their defaults, so nothing here
+    is guessed -- the rule simply never read them.
+
+    Evaluated over a whitelisted arithmetic subset (identifiers, integers,
+    `+ - * // /`, parentheses, unary minus) via the AST, never `eval` on model
+    output. An expression naming an undeclared parameter, or using anything
+    outside that subset, returns None and is reported exactly as before.
+    """
+    direct = _as_int(width)
+    if direct is not None:
+        return direct
+    if not isinstance(width, str) or not width.strip() or not params:
+        return None
+    try:
+        tree = ast.parse(width.strip(), mode="eval")
+    except SyntaxError:
+        return None
+
+    def ev(n: ast.AST) -> int | None:
+        if isinstance(n, ast.Expression):
+            return ev(n.body)
+        if isinstance(n, ast.Constant):
+            return n.value if isinstance(n.value, int) else None
+        if isinstance(n, ast.Name):
+            return params.get(n.id)
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)):
+            v = ev(n.operand)
+            return None if v is None else (v if isinstance(n.op, ast.UAdd) else -v)
+        if isinstance(n, ast.BinOp) and isinstance(
+            n.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Div)
+        ):
+            a, b = ev(n.left), ev(n.right)
+            if a is None or b is None:
+                return None
+            if isinstance(n.op, ast.Add):
+                return a + b
+            if isinstance(n.op, ast.Sub):
+                return a - b
+            if isinstance(n.op, ast.Mult):
+                return a * b
+            return None if b == 0 else a // b
+        return None
+
+    return ev(tree)
 
 
 _COMPLETION_WORDS = frozenset({"valid", "ready", "ack", "done", "busy", "complete"})
@@ -351,6 +422,10 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
     seen_names: set[str] = set()
     inputs: set[str] = set()
     outputs: set[str] = set()
+    # Read ONCE, outside the port walk: a decomposed contract can carry 60+
+    # child-facing ports and every one of them would otherwise re-parse the
+    # parameter list.
+    params = _parameter_defaults(obj)
 
     for idx, p in enumerate(io):
         ppath = f"io[{idx}]"
@@ -368,9 +443,14 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
         seen_names.add(name)
         if direction not in {"input", "output", "inout"}:
             issues.append(ContractIssue("error", f"{ppath}.dir", f"Invalid dir for {name}: {direction!r}"))
-        w = _as_int(width)
+        w = _width_value(width, params)
         if w is None or w <= 0:
-            issues.append(ContractIssue("error", f"{ppath}.width", f"Invalid width for {name}: {width!r}"))
+            hint = ""
+            if isinstance(width, str) and width.strip() and not params:
+                hint = (" — a parameter expression is only resolvable when the "
+                        "contract declares `parameters` with integer defaults")
+            issues.append(ContractIssue(
+                "error", f"{ppath}.width", f"Invalid width for {name}: {width!r}{hint}"))
         if direction == "input":
             inputs.add(name)
         elif direction == "output":
