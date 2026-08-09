@@ -57,6 +57,18 @@ Contract SVA mode:
 - Treat them as hard specification constraints alongside the functional_summary.
 - Design your testbench checks to be consistent with these SVA properties.
 
+CAST SYNTAX rule (a type name followed by a parenthesis is not a cast):
+- WRONG:   mantissa = logic [MANT_WIDTH-1:0] ($rtoi(x));
+- RIGHT:   mantissa = MANT_WIDTH'($rtoi(x));                  // size cast
+- RIGHT:   typedef logic [MANT_WIDTH-1:0] mant_t;
+           mantissa = mant_t'($rtoi(x));                      // type cast
+- A cast in SystemVerilog is `<size_or_type>'(expr)` — note the APOSTROPHE. A
+  bare `logic [N-1:0] (expr)` is a syntax error, and Verilator reports it as
+  `syntax error, unexpected '(', expecting "'{"`, which points at the cast and
+  suggests an assignment pattern rather than the missing apostrophe.
+- This shows up most when converting between `real` and bit vectors, which is
+  exactly what the floating-point rule below asks you to do.
+
 DECLARATION PLACEMENT rule (this does not compile, and the error does not say why):
 - Every declaration inside a `begin ... end` block must come BEFORE the first
   statement of that block. A declaration after a statement is illegal.
