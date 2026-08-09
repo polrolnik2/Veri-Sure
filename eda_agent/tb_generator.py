@@ -128,6 +128,15 @@ integer designs.):
   the round-back is re-implementing the hardest part of the DUT, which the
   oracle-independence rule above already tells you not to do.
 
+- `$ldexp` DOES NOT EXIST in Verilator (`Unsupported or unknown PLI call`), and it
+  is the one you will reach for, because scaling by a power of two is the natural
+  way to assemble a float from an exponent and a mantissa. Use `$pow(2.0, e)` or
+  build the double's bit pattern and `$bitstoreal` it. Measured on Verilator
+  5.051, these ARE supported and need no workaround:
+      $pow  $exp  $ln  $sqrt  $floor  $ceil  $rtoi  $itor
+      $bitstoreal  $realtobits  $clog2
+  Of the twelve tested, `$ldexp` was the only one missing.
+
 - If the contract declares a `rnd_mode` port, note that `+` on `real` implements
   round-to-nearest-even only. Check the other modes through the tolerance
   relation (which result is representable and adjacent to the exact sum) rather

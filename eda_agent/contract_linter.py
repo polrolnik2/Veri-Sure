@@ -404,8 +404,16 @@ def _infeasible_guidance(obj: dict) -> list[ContractIssue]:
 #   $shortrealtobits($bitstoshortreal(32'h3f800000) + $bitstoshortreal(32'h3f000000))
 #     = 7e800000, where 1.0 + 0.5 is 3fc00000
 #   agreement with true binary32 over 406 random operand pairs: 0.49%
+#
+# `$ldexp` joins them for the same reason and from the same measurement run: it
+# is the natural way to scale by a power of two when assembling a float from an
+# exponent and a mantissa, and Verilator rejects it as `Unsupported or unknown
+# PLI call`. Of twelve real-math system functions tested on Verilator 5.051 it
+# was the ONLY one missing -- $pow, $exp, $ln, $sqrt, $floor, $ceil, $rtoi,
+# $itor, $bitstoreal, $realtobits and $clog2 all work -- so naming just this one
+# costs nothing and unblocks the rest.
 _UNSUPPORTED_FLOAT_RE = re.compile(
-    r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b", re.I
+    r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b|\$ldexp\b", re.I
 )
 
 
