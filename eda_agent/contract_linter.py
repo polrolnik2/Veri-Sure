@@ -412,8 +412,21 @@ def _infeasible_guidance(obj: dict) -> list[ContractIssue]:
 # was the ONLY one missing -- $pow, $exp, $ln, $sqrt, $floor, $ceil, $rtoi,
 # $itor, $bitstoreal, $realtobits and $clog2 all work -- so naming just this one
 # costs nothing and unblocks the rest.
+#
+# The IEEE-754 CLASSIFICATION predicates join them as a family. Verilator
+# implements `real` arithmetic but not these, and they are exactly what a float
+# oracle reaches for when handling special cases. Measured on Verilator 5.051:
+# $isnan, $isinf, $isfinite, $isnormal, $signbit and $fmod are all "Unsupported
+# or unknown PLI call", while $pow, $exp, $ln, $sqrt, $floor, $ceil, $rtoi,
+# $itor, $bitstoreal, $realtobits, $clog2, $hypot and $atan2 all work.
+#
+# The substitute is a bit-pattern test, which is better than a predicate on the
+# `real` value regardless: it is what the design must produce, it separates
+# quiet from signalling NaN and +0 from -0, and it needs no lossy conversion.
 _UNSUPPORTED_FLOAT_RE = re.compile(
-    r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b|\$ldexp\b", re.I
+    r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b|\$ldexp\b"
+    r"|\$isnan\b|\$isinf\b|\$isfinite\b|\$isnormal\b|\$signbit\b|\$fmod\b",
+    re.I,
 )
 
 

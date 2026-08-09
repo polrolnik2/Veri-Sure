@@ -140,14 +140,30 @@ integer designs.):
   the round-back is re-implementing the hardest part of the DUT, which the
   oracle-independence rule above already tells you not to do.
 
-- `$ldexp` DOES NOT EXIST in Verilator (`Unsupported or unknown PLI call`), and it
-  is the one you will reach for, because scaling by a power of two is the natural
-  way to assemble a float from an exponent and a mantissa. Use `$pow(2.0, e)` or
-  build the double's bit pattern and `$bitstoreal` it. Measured on Verilator
-  5.051, these ARE supported and need no workaround:
-      $pow  $exp  $ln  $sqrt  $floor  $ceil  $rtoi  $itor
-      $bitstoreal  $realtobits  $clog2
-  Of the twelve tested, `$ldexp` was the only one missing.
+- Verilator implements `real` ARITHMETIC but NOT the IEEE-754 CLASSIFICATION
+  predicates, and not `$ldexp`. Measured on Verilator 5.051:
+
+      SUPPORTED      $pow $exp $ln $sqrt $floor $ceil $rtoi $itor
+                     $bitstoreal $realtobits $clog2 $hypot $atan2
+      NOT SUPPORTED  $ldexp $isnan $isinf $isfinite $isnormal $signbit $fmod
+                     ("Unsupported or unknown PLI call")
+
+- `$ldexp` is the one you reach for when assembling a float from an exponent and
+  a mantissa. Use `$pow(2.0, e)`, or build the bit pattern and `$bitstoreal` it.
+
+- For the predicates, DO NOT look for a `real` function — test the BIT PATTERN,
+  which you already have because the DUT's port is bits. For binary32 with
+  `{sign, exp[7:0], mant[22:0]}`:
+
+      is NaN       exp == 8'hFF && mant != 0
+      is Inf       exp == 8'hFF && mant == 0
+      is zero      exp == 0     && mant == 0
+      is subnormal exp == 0     && mant != 0
+      sign bit     x[31]
+
+  This is better than a predicate on the `real` value anyway: it is exactly what
+  the design must produce, it distinguishes quiet from signalling NaN and +0 from
+  -0, and it needs no conversion that could round.
 
 - If the contract declares a `rnd_mode` port, note that `+` on `real` implements
   round-to-nearest-even only. Check the other modes through the tolerance
