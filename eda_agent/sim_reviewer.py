@@ -182,6 +182,7 @@ def sim_review_mismatch_cnt(stdout: str) -> int:
 def sim_review(
     output_path_per_run: str,
     golden_rtl_path: str | None = None,
+    timeout_s: int = 600,
 ) -> Tuple[bool, int, str]:
     _require_executable("verilator")
     rtl_path = f"{output_path_per_run}/rtl.sv"
@@ -203,7 +204,18 @@ def sim_review(
         f"--Mdir obj_dir -o {sim_bin} {srcs}; "
         f"{sim_bin}"
     )
-    cmd_ok, sim_output = run_bash_command(cmd, timeout=120, cwd=output_path_per_run)
+    # ONE budget for build AND run: the two are a single shell command, so a
+    # large design spends most of it in Verilator before a cycle is simulated.
+    #
+    # Was hardcoded at 120. That number is a verdict, not a delay: a kill here
+    # returns is_pass=False with a truncated log, which the composition gate
+    # records as `unavailable` -- an attempt spent, no verdict, and the glue
+    # budget charged to the harness. Measured on the fp_adder root, three of nine
+    # preserved assemblies exceeded it; re-run with room they finish in 181-250 s
+    # and score 29/36, 29/36 and 30/36 against the golden testbench, two of the
+    # three best drafts that node ever produced. The correlation ran the wrong
+    # way for a low cap -- the slower assemblies were the better ones.
+    cmd_ok, sim_output = run_bash_command(cmd, timeout=timeout_s, cwd=output_path_per_run)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""
     stderr = sim_output_obj.stderr or ""
