@@ -57,6 +57,19 @@ Contract SVA mode:
 - Treat them as hard specification constraints alongside the functional_summary.
 - Design your testbench checks to be consistent with these SVA properties.
 
+LITERAL PART-SELECT rule (you cannot index into a constant):
+- WRONG:   if (sum[30:0] == 32'h7FC00000[30:0]) ...
+- RIGHT:   localparam logic [31:0] QNAN = 32'h7FC00000;
+           if (sum[30:0] == QNAN[30:0]) ...
+- A part-select needs a named object. Applying `[a:b]` to a sized literal is a
+  syntax error, and Verilator says only `syntax error, unexpected '['` — which
+  does not name the rule, so it is easy to regenerate the same line unchanged.
+- Measured: one oracle repair loop emitted this identical construct on three
+  consecutive attempts and burned its whole budget without changing it.
+- It shows up when comparing against canonical NaN/Inf patterns, which is
+  exactly what the floating-point rule below asks you to do. Name the constant
+  once and reuse it.
+
 CAST SYNTAX rule (a type name followed by a parenthesis is not a cast):
 - WRONG:   mantissa = logic [MANT_WIDTH-1:0] ($rtoi(x));
 - RIGHT:   mantissa = MANT_WIDTH'($rtoi(x));                  // size cast
@@ -145,7 +158,7 @@ integer designs.):
 
       SUPPORTED      $pow $exp $ln $sqrt $floor $ceil $rtoi $itor
                      $bitstoreal $realtobits $clog2 $hypot $atan2
-      NOT SUPPORTED  $ldexp $isnan $isinf $isfinite $isnormal $signbit $fmod
+      NOT SUPPORTED  $ldexp $inf $isnan $isinf $isfinite $isnormal $signbit $fmod
                      ("Unsupported or unknown PLI call")
 
 - `$ldexp` is the one you reach for when assembling a float from an exponent and

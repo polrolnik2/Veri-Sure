@@ -425,7 +425,7 @@ def _infeasible_guidance(obj: dict) -> list[ContractIssue]:
 # quiet from signalling NaN and +0 from -0, and it needs no lossy conversion.
 _UNSUPPORTED_FLOAT_RE = re.compile(
     r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b|\$ldexp\b"
-    r"|\$isnan\b|\$isinf\b|\$isfinite\b|\$isnormal\b|\$signbit\b|\$fmod\b",
+    r"|\$inf\b|\$isnan\b|\$isinf\b|\$isfinite\b|\$isnormal\b|\$signbit\b|\$fmod\b",
     re.I,
 )
 
