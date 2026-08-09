@@ -395,6 +395,64 @@ def _infeasible_guidance(obj: dict) -> list[ContractIssue]:
     return issues
 
 
+# `shortreal` and its two conversion functions. Verilator PROMOTES `shortreal`
+# to 64-bit `real` and emits only a warning, so guidance naming it produces a
+# testbench that lints clean, simulates, and is wrong on every row -- strictly
+# worse than the host-language case above, which at least fails loudly.
+#
+# Measured on Verilator 5.051:
+#   $shortrealtobits($bitstoshortreal(32'h3f800000) + $bitstoshortreal(32'h3f000000))
+#     = 7e800000, where 1.0 + 0.5 is 3fc00000
+#   agreement with true binary32 over 406 random operand pairs: 0.49%
+_UNSUPPORTED_FLOAT_RE = re.compile(
+    r"\$bitstoshortreal\b|\$shortrealtobits\b|\bshortreal\b", re.I
+)
+
+
+def _unsupported_float_guidance(obj: dict) -> list[ContractIssue]:
+    """Flag guidance naming a float primitive Verilator does not implement.
+
+    Separate from `_infeasible_guidance` because the failure mode is the
+    opposite: host-language guidance cannot be followed at all, so a downstream
+    agent has to improvise and the damage is visible. `shortreal` CAN be
+    followed, compiles, runs, and yields garbage — the resulting oracle passes
+    every acceptance check this flow has (`drives && lints`) while matching the
+    true sum on 0.49% of rows.
+
+    Walks every string in the contract, not just `guidance`: the trap is equally
+    harmful in `test_plan` or a `timing` note, and unlike a latency claim it has
+    no legitimate use anywhere.
+    """
+    issues: list[ContractIssue] = []
+
+    def walk(node, path: str) -> None:
+        if isinstance(node, str):
+            m = _UNSUPPORTED_FLOAT_RE.search(node)
+            if m:
+                issues.append(ContractIssue(
+                    "error", path,
+                    f"This names {m.group(0)!r}, which Verilator does not implement: it "
+                    f"promotes `shortreal` to 64-bit `real` and emits only a warning, so "
+                    f"a testbench following this lints clean, simulates, and is wrong on "
+                    f"every row (measured: 0.49% agreement with true binary32 over 406 "
+                    f"operand pairs; 1.0 + 0.5 returns 7e800000 instead of 3fc00000). "
+                    f"Use `real` with `$bitstoreal`/`$realtobits` instead — binary64 "
+                    f"represents every binary32 value, and the exact sum of two of them, "
+                    f"exactly.",
+                ))
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                if k == "contract_sva":
+                    continue
+                walk(v, f"{path}.{k}" if path else str(k))
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(obj, "")
+    return issues
+
+
 def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
@@ -539,6 +597,7 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
 
     issues.extend(_latency_prose_conflicts(obj, timing, outputs))
     issues.extend(_infeasible_guidance(obj))
+    issues.extend(_unsupported_float_guidance(obj))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")

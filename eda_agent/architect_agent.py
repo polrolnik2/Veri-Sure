@@ -46,6 +46,25 @@ Toolchain note:
   without restating the pipeline, say nothing about the reference model and leave that to the Verifier.
 - This matters most at the TOP level, where `functional_summary` describes a whole multi-stage algorithm; for a narrow
   leaf whose function IS one step, naming that step is fine.
+
+Floating-point designs specifically (ignore for integer designs — this applies when the ports carry IEEE-754 data:
+a 32/64-bit operand pair, exponent/mantissa/significand fields, a `rnd_mode` port, or corner cases about NaN, Inf or
+subnormals):
+- The rule above says not to restate the pipeline. That leaves the Verifier with no stated mechanism for computing an
+  expected float result, and what it does instead is hand-roll a full soft-float adder — measured across six
+  independent oracle draws for one problem, every one of them unsound, with 21-35 hand-rolled datapath markers and
+  ZERO uses of the language's own float arithmetic. Telling it what it MAY use is therefore part of describing the
+  result, not a description of the procedure.
+- So DO name the mechanism, in these terms: the testbench may use `real` (binary64) with `$bitstoreal` and
+  `$realtobits`, which Verilator supports. Binary64 represents every binary32 value exactly, and the exact sum of two
+  of them exactly, so a reference built this way is not an approximation and is not a copy of the DUT's pipeline.
+- And name the trap: `shortreal`, `$bitstoshortreal` and `$shortrealtobits` MUST NOT be used. Verilator promotes
+  `shortreal` to 64-bit `real` and only warns, so a testbench using them lints clean, runs, and is wrong on every
+  row — measured at 0.49% agreement with true binary32 over 406 operand pairs.
+- Prefer guidance that asks for a TOLERANCE check in the `real` domain (the DUT's output, converted up to `real`
+  exactly, within half an ULP of the exact sum) over guidance that asks for a bit-exact expected value. Bit-exactness
+  requires rounding binary64 back down to binary32, which is the hardest part of the design and the part hand-written
+  reference models actually get wrong.
 """
 
 

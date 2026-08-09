@@ -69,6 +69,50 @@ SystemVerilog declaration rule (this silently destroys testbenches):
   against a constant 0, so correct designs failed and the defect was invisible
   in the log.
 
+FLOATING-POINT rule (only when the DUT's ports carry IEEE-754 float data — a
+32-bit `a`/`b`/`sum`, an `exponent`/`mantissa`/`significand` field, a `rnd_mode`
+port, or a contract that talks about NaN/Inf/subnormal. Ignore all of this for
+integer designs.):
+
+- NEVER use `shortreal`, `$bitstoshortreal` or `$shortrealtobits`. Verilator
+  does not implement them: it PROMOTES `shortreal` to 64-bit `real` (so
+  `$bits()` returns 64) and emits only a warning, which means your testbench
+  lints clean, simulates, and is wrong on every row. Measured on Verilator
+  5.051: `$shortrealtobits($bitstoshortreal(32'h3f800000) +
+  $bitstoshortreal(32'h3f000000))` returns `7e800000`; the correct answer for
+  1.0 + 0.5 is `3fc00000`. Agreement with true binary32 over 406 random operand
+  pairs was 0.49%, and the two matches were coincidence.
+
+- DO use `real` (binary64) with `$bitstoreal` / `$realtobits`, which Verilator
+  supports fully. Binary64 represents every binary32 value exactly, and it
+  represents the exact SUM of two binary32 values exactly, so an expected value
+  computed this way is not an approximation.
+
+- Convert a binary32 word UP to a `real` by rebuilding the double's fields.
+  This is exact — 24 bits of significand moving into 53 — and involves no
+  rounding:
+      sign stays;  exp64 = exp32 + (1023 - 127);  mant64 = {mant32, 29'b0}
+  Handle exp32 == 0 (zero/subnormal) and exp32 == 8'hFF (Inf/NaN) separately.
+
+- Then PREFER A TOLERANCE CHECK IN THE `real` DOMAIN over reproducing the
+  design's rounding. Convert the DUT's output up to `real` the same exact way
+  and compare it against the exact sum, allowing half an ULP of the expected
+  magnitude. That accepts any correctly-rounded result and rejects everything
+  else, and it means you never write rounding logic at all.
+
+- The reason this matters more than it looks: rounding binary64 back down to
+  binary32 is where hand-written reference models actually break. Two attempts
+  at it during this rule's own investigation were both wrong in the subnormal
+  path — the first silently dropped subnormal results (1 miss in 406 random
+  pairs), the second was wrong on 406 of 406 on a subnormal-heavy set. Writing
+  the round-back is re-implementing the hardest part of the DUT, which the
+  oracle-independence rule above already tells you not to do.
+
+- If the contract declares a `rnd_mode` port, note that `+` on `real` implements
+  round-to-nearest-even only. Check the other modes through the tolerance
+  relation (which result is representable and adjacent to the exact sum) rather
+  than by writing a rounding unit per mode.
+
 Verilator STRING rule (this compiles the SV and then fails the C++ build):
 - Do NOT compare or wait on `string` variables. `wait (name == "foo")`,
   `if (scenario == "bar")` and similar lower to C++ that does not compile:
