@@ -211,6 +211,56 @@ integer designs.):
   wrong on 1,740 of 9,000 — it cannot tell the directed modes apart, because
   both neighbours sit within half an ULP.
 
+- A `real` CANNOT LIVE IN A PACKED TYPE OR A CONCATENATION. Both are integral
+  contexts; a `real` is not integral. Measured on Verilator 5.051:
+
+      typedef struct packed { logic [31:0] a; real s; }
+        %Error: Unpacked data type 'real' in packed struct/union (IEEE 1800 7.2.1)
+      w = {r};            // r is a real
+        %Error: Expected integral input to CONCAT / REPLICATE
+
+  A scoreboard entry carrying the exact-sum pair beside the operand words is the
+  natural thing to write here, so write it UNPACKED — drop the `packed` keyword.
+  That works in a queue and the `real` fields survive the round trip:
+
+      typedef struct { logic [31:0] a, b; logic [2:0] rnd; real s, e; } entry_t;
+      entry_t q [$];
+
+- THE EXACT-SUM PAIR NEEDS FOUR LOCALS, AND THAT IS WHERE DRAFTS BREAK THE
+  DECLARATION-PLACEMENT RULE ABOVE. `two_sum` gives you two outputs and wants two
+  inputs, so the temptation is to declare them at the point of use, in the middle
+  of a loop body that has already driven the DUT. That is exactly the error the
+  rule above forbids, and it is the single most common way this guidance fails to
+  compile. Declare `ra, rb, rs, re` at the TOP of the block — or, better, hide
+  them inside a function so the block never sees them at all.
+
+- THIS IS A PASS/FAIL PREDICATE, NOT AN EXPECTED VALUE. USE IT AS THE CHECK.
+  Everything above answers "is THIS word the correctly-rounded answer?". It does
+  not hand you an `exp` to compare against, and you must NOT manufacture one out
+  of the DUT's output:
+
+      WRONG   exp_sum = expected_from_dut(s, e, sum, rnd);   // `sum` is the DUT
+              sum_ok  = (sum === exp_sum);
+
+  That is what a real draft did. Its helper tried the DUT's own word and the two
+  neighbours and, when NONE satisfied the criterion, ended `return v_dut` — so a
+  result one ULP out was caught and a completely wrong result PASSED. The
+  checker failed open, and the worse the design got the safer it was.
+
+  Write the check directly instead, with no fallback anywhere:
+
+      sum_ok = accepts(a_vec, b_vec, sum, rnd);   // predicate IS the verdict
+      if (!sum_ok) $display("MISMATCH sum at time %0t: a=%h b=%h rnd=%0d | "
+                            "got=%h exact=%.17g", $time, a_vec, b_vec, rnd,
+                            sum, s + e);
+
+  If the log wants an "expected" column, print the EXACT REAL-VALUED result
+  (`s + e` with `%g`). It comes only from the stimulus, it is what the design
+  should have produced, and it cannot be contaminated by what the design did
+  produce. THE EXPECTED SIDE OF ANY COMPARISON MUST DEPEND ONLY ON THE STIMULUS
+  AND THE SPECIFICATION — never on an output port, not even as a starting point
+  or a tie-breaker.
+
 - THE SIGN OF AN EXACT ZERO IS A BIT-DOMAIN QUESTION and the one thing the
   above cannot decide, since +0 and −0 are the same real number. The exact sum
   is zero exactly when `s == 0.0 && e == 0.0`, and then IEEE-754 §6.3 says:
