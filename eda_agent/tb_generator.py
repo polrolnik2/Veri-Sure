@@ -139,19 +139,76 @@ integer designs.):
       sign stays;  exp64 = exp32 + (1023 - 127);  mant64 = {mant32, 29'b0}
   Handle exp32 == 0 (zero/subnormal) and exp32 == 8'hFF (Inf/NaN) separately.
 
-- Then PREFER A TOLERANCE CHECK IN THE `real` DOMAIN over reproducing the
-  design's rounding. Convert the DUT's output up to `real` the same exact way
-  and compare it against the exact sum, allowing half an ULP of the expected
-  magnitude. That accepts any correctly-rounded result and rejects everything
-  else, and it means you never write rounding logic at all.
+- NEVER WRITE A FUNCTION THAT PACKS A `real` BACK INTO A 32-BIT IEEE-754 WORD.
+  Not as a helper, not "just for the normal case". If you find yourself writing
+  a guard bit, a round bit, a sticky bit, a normalisation shift, a mantissa
+  increment on rounding, or a subnormal special case ON THE OUTPUT SIDE, stop:
+  you are re-implementing the hardest part of the DUT inside its own checker,
+  and the oracle-independence rule above already forbids that.
 
-- The reason this matters more than it looks: rounding binary64 back down to
-  binary32 is where hand-written reference models actually break. Two attempts
-  at it during this rule's own investigation were both wrong in the subnormal
-  path — the first silently dropped subnormal results (1 miss in 406 random
-  pairs), the second was wrong on 406 of 406 on a subnormal-heavy set. Writing
-  the round-back is re-implementing the hardest part of the DUT, which the
-  oracle-independence rule above already tells you not to do.
+  This is not a style preference, it is the measured failure. Three separate
+  attempts at the round-back were written during this rule's investigation and
+  all three were wrong: the first silently dropped subnormal results (1 miss in
+  406 random pairs), the second was wrong on 406 of 406 on a subnormal-heavy
+  set, and the third — inside a testbench that linted clean, used `real`
+  throughout and never contradicted itself — returned ±0 for 142 of 142
+  normal+normal rows, scoring the design at 10.3% when it was in fact 89.2%
+  correct. A checker that packs is a checker that fails silently.
+
+- YOU DO NOT NEED TO ROUND, because the two neighbouring binary32 values of any
+  candidate are ONE INTEGER INCREMENT away in the bit domain. Under the key
+
+      key(w)   = w[31] ? ~w : (w | 32'h8000_0000)
+      unkey(k) = k[31] ? (k & 32'h7fff_ffff) : ~k
+
+  `key` is strictly increasing in the value, so `unkey(key(w) - 1)` and
+  `unkey(key(w) + 1)` are the adjacent representable values, across binade
+  boundaries, through zero, and into the subnormals. No exponent arithmetic, no
+  `$pow`, no packing.
+
+- THE EXACT SUM IS A PAIR, NOT A NUMBER. `a + b` in `real` is NOT exact for
+  binary32 operands: two of them can span 277 bits and a `real` holds 53. Use
+  2Sum, which is exact for any two `real` values:
+
+      function automatic void two_sum(input real a, input real b,
+                                      output real s, output real e);
+        real bb;
+        s = a + b;  bb = s - a;  e = (a - (s - bb)) + (b - bb);
+      endfunction
+
+  so `s + e` is the exact sum. Declare it `function void`, NOT `task` — a
+  function cannot invoke a task (IEEE 1800 13.4) and the simulator makes that
+  an error, not a warning.
+
+- THEN COMPARE ERRORS, NOT VALUES. For a candidate `v`, `err(v) = (s - v) + e`.
+  Its MAGNITUDE is approximate but its SIGN IS EXACT, which is all the four
+  rounding modes need. With `d`, `d_lo`, `d_hi` the errors of the DUT output
+  and of its two neighbours:
+
+      RNE   |d| is strictly smaller than both |d_lo| and |d_hi|;
+            on a tie, the DUT mantissa LSB must be 0
+      RTZ   as RTN when the exact sum is positive, as RTP when negative
+      RTP   d <= 0 and d_lo > 0     (the candidate is at or above the sum,
+                                     and one step down would fall below it)
+      RTN   d >= 0 and d_hi < 0     (mirror image)
+
+  This is EXACT for every mode, not a tolerance. Validated over 60,000
+  vector×mode cases against an independent exact-rational reference: it accepts
+  the correctly-rounded answer every time and rejects BOTH adjacent wrong
+  answers every time. A two-sided half-ULP tolerance, by contrast, was measured
+  wrong on 1,740 of 9,000 — it cannot tell the directed modes apart, because
+  both neighbours sit within half an ULP.
+
+- THE SIGN OF AN EXACT ZERO IS A BIT-DOMAIN QUESTION and the one thing the
+  above cannot decide, since +0 and −0 are the same real number. The exact sum
+  is zero exactly when `s == 0.0 && e == 0.0`, and then IEEE-754 §6.3 says:
+
+      RTN    −0, unless BOTH operands are +0
+      other  +0, unless BOTH operands are −0
+
+  so `3.0 + (−3.0)` is +0 under RNE/RTZ/RTP and −0 under RTN. Compare the whole
+  32-bit word in that case. Getting this backwards is a live failure in this
+  project, not a hypothetical.
 
 - Verilator implements `real` ARITHMETIC but NOT the IEEE-754 CLASSIFICATION
   predicates, and not `$ldexp`. Measured on Verilator 5.051:
