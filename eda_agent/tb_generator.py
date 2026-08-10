@@ -180,6 +180,18 @@ integer designs.):
   function cannot invoke a task (IEEE 1800 13.4) and the simulator makes that
   an error, not a warning.
 
+  This pair is needed FOR ADDITION AND SUBTRACTION ONLY. Know which case you
+  are in before reaching for it:
+
+      a * b        EXACT in one `real` multiply — 24 significand bits times 24
+                   is 48, and a `real` holds 53. No 2Sum, no pair.
+      a + b        NOT exact; use 2Sum as above.
+      a / b, sqrt  NOT exactly representable in binary64 AT ALL, so the sign of
+                   the error term below is exact only away from a rounding
+                   boundary (the binary64 rounding is ~2^-29 of a binary32 ULP,
+                   so this is a very tight check but NOT a proof). Say so in a
+                   comment rather than claiming exactness you do not have.
+
 - THEN COMPARE ERRORS, NOT VALUES. For a candidate `v`, `err(v) = (s - v) + e`.
   Its MAGNITUDE is approximate but its SIGN IS EXACT, which is all the four
   rounding modes need. With `d`, `d_lo`, `d_hi` the errors of the DUT output
