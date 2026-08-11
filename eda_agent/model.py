@@ -359,6 +359,19 @@ class UsageTrackingModel(ChatModelBase):
         "fence you already opened, and do not apologise or explain. Emit only "
         "the remaining text."
     )
+    # The reasoning-only case. A reasoning model can spend the ENTIRE output
+    # budget thinking and emit no answer at all: measured on gpt-5.6-luna,
+    # finish_reason=length with content='' and reasoning_tokens == completion
+    # _tokens. There is no text to continue from, but the thinking is real work
+    # that was paid for, so it goes back and the model is asked to spend its
+    # next budget writing rather than re-deriving.
+    _WRITE_UP_INSTRUCTION = (
+        "Your previous message spent its whole output budget on reasoning and "
+        "emitted no answer. The reasoning is above and is CORRECT WORK — do not "
+        "redo it and do not think it through again. Write the final answer now, "
+        "directly, using that reasoning. Start with the first character of the "
+        "answer itself."
+    )
 
     @staticmethod
     def _text_of(res: Any) -> str:
@@ -371,11 +384,63 @@ class UsageTrackingModel(ChatModelBase):
         return "".join(out)
 
     @staticmethod
+    def _thinking_of(res: Any) -> str:
+        """The ThinkingBlock text, which `_text_of` deliberately excludes.
+
+        agentscope maps `message.reasoning_content` to a ThinkingBlock and only
+        appends a TextBlock `if choice.message.content`. So a response that hit
+        the cap mid-reasoning carries a ThinkingBlock and NOTHING else, and any
+        extractor looking only for text sees an empty response -- which is what
+        "keeping 0 chars" meant on the first live truncation.
+        """
+        out = []
+        for block in getattr(res, "content", None) or []:
+            if isinstance(block, dict) and block.get("type") == "thinking":
+                out.append(block.get("thinking") or "")
+            elif getattr(block, "type", None) == "thinking":
+                out.append(getattr(block, "thinking", "") or "")
+        return "".join(out)
+
+    @staticmethod
     def _truncated(res: Any) -> bool:
         try:
             return (getattr(res, "metadata", None) or {}).get("finish_reason") == "length"
         except Exception:  # noqa: BLE001
             return False
+
+    def _resume_turns(self, text: str, thinking: str) -> list[dict]:
+        """The assistant turn to resume from, and the instruction that fits it.
+
+        Reasoning tokens are BILLED OUTPUT. Sending back only the answer text
+        throws them away and the model re-derives everything from scratch on the
+        next round -- paying twice for identical work, on the same budget that
+        was too small the first time. So the thinking goes back explicitly.
+
+        Two shapes, and they need different instructions:
+
+          text present    -> a genuine mid-artifact cut; continue from the cut.
+          text empty      -> the whole budget went to reasoning (measured on
+                             gpt-5.6-luna: content='' with reasoning_tokens ==
+                             completion_tokens). Nothing to continue FROM, so
+                             ask for the write-up instead of a continuation --
+                             "continue exactly where you stopped" is incoherent
+                             when nothing was written.
+        """
+        parts = []
+        if thinking:
+            parts.append(
+                "[Reasoning you have already completed. It is correct and "
+                "already paid for — do not repeat or re-derive it.]\n" + thinking
+            )
+        if text:
+            parts.append(text)
+        assistant = "\n\n".join(parts) or "(no output was produced)"
+        return [
+            {"role": "assistant", "content": assistant},
+            {"role": "user", "content": (
+                self._CONTINUE_INSTRUCTION if text else self._WRITE_UP_INSTRUCTION
+            )},
+        ]
 
     async def _complete_if_truncated(self, res: Any, *args: Any, **kwargs: Any):
         """Resume a length-capped response instead of discarding it.
@@ -410,11 +475,9 @@ class UsageTrackingModel(ChatModelBase):
             return res
 
         combined = self._text_of(res)
+        thinking = self._thinking_of(res)
         for rnd in range(1, self._CONTINUE_ROUNDS + 1):
-            convo = list(messages) + [
-                {"role": "assistant", "content": combined},
-                {"role": "user", "content": self._CONTINUE_INSTRUCTION},
-            ]
+            convo = list(messages) + self._resume_turns(combined, thinking)
             try:
                 nxt = await self._base_model(convo, **{
                     k: v for k, v in kwargs.items() if k != "messages"
@@ -429,9 +492,22 @@ class UsageTrackingModel(ChatModelBase):
             self._accumulate_usage(getattr(nxt, "usage", None))
             piece = self._text_of(nxt)
             if not piece:
+                # Still nothing but thinking. Carry the NEW reasoning forward
+                # too -- it is another budget's worth of work, and dropping it
+                # makes the next round start from nothing again.
+                more = self._thinking_of(nxt)
+                if more and self._truncated(nxt) and rnd < self._CONTINUE_ROUNDS:
+                    thinking = f"{thinking}\n{more}" if thinking else more
+                    logger.info(
+                        "Continuation round %d was reasoning-only (+%d chars of "
+                        "thinking, %d total); carrying it forward.",
+                        rnd, len(more), len(thinking),
+                    )
+                    continue
                 logger.warning(
-                    "Continuation round %d came back empty; keeping %d chars.",
-                    rnd, len(combined),
+                    "Continuation round %d came back with no answer text "
+                    "(thinking=%d chars); keeping %d chars.",
+                    rnd, len(more), len(combined),
                 )
                 break
             combined += piece
