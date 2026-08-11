@@ -345,6 +345,118 @@ class UsageTrackingModel(ChatModelBase):
             return _gen()
         self._accumulate_usage(getattr(res, "usage", None))
         self._warn_if_truncated(res)
+        return await self._complete_if_truncated(res, *args, **kwargs)
+
+    # A response that stopped at the token cap is PARTIAL, not wrong. Throwing
+    # it away and asking again pays twice and gets the same length back; the
+    # artifact is long because the task is, so a fresh draw truncates too.
+    _CONTINUE_ROUNDS = 3
+    _CONTINUE_INSTRUCTION = (
+        "Your previous message stopped because it hit the output token limit. "
+        "It is incomplete, not wrong. Continue it EXACTLY where it stopped — "
+        "your next character is the one that would have followed. Do not repeat "
+        "any part of it, do not restate the preamble, do not re-open a code "
+        "fence you already opened, and do not apologise or explain. Emit only "
+        "the remaining text."
+    )
+
+    @staticmethod
+    def _text_of(res: Any) -> str:
+        out = []
+        for block in getattr(res, "content", None) or []:
+            if isinstance(block, dict) and block.get("type") == "text":
+                out.append(block.get("text") or "")
+            elif getattr(block, "type", None) == "text":
+                out.append(getattr(block, "text", "") or "")
+        return "".join(out)
+
+    @staticmethod
+    def _truncated(res: Any) -> bool:
+        try:
+            return (getattr(res, "metadata", None) or {}).get("finish_reason") == "length"
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def _complete_if_truncated(self, res: Any, *args: Any, **kwargs: Any):
+        """Resume a length-capped response instead of discarding it.
+
+        The partial text goes back as an assistant turn and the model is asked
+        to carry on from the cut, so the tokens already paid for are kept and
+        the caller sees ONE complete artifact. Without this the partial is
+        handed downstream, fails to parse or lint, and is scored as a failed
+        generation -- the exact confusion `_warn_if_truncated` names and then
+        does nothing about. It also costs an attempt, and attempts are the
+        budget that deadlocked three runs at 32/32.
+
+        Bounded at `_CONTINUE_ROUNDS`: a model that truncates four times running
+        is not going to finish, and an unbounded loop on a paid endpoint is how
+        a budget disappears.
+
+        Best-effort by construction. If the messages cannot be located or a
+        continuation call fails, the ORIGINAL partial is returned unchanged --
+        the caller is no worse off than before this existed.
+        """
+        if not self._truncated(res):
+            return res
+
+        messages = next((a for a in args if isinstance(a, list)), None)
+        if messages is None:
+            messages = kwargs.get("messages")
+        if not isinstance(messages, list) or not messages:
+            logger.warning(
+                "Truncated response but the request messages were not found in "
+                "the call signature; returning the partial unchanged."
+            )
+            return res
+
+        combined = self._text_of(res)
+        for rnd in range(1, self._CONTINUE_ROUNDS + 1):
+            convo = list(messages) + [
+                {"role": "assistant", "content": combined},
+                {"role": "user", "content": self._CONTINUE_INSTRUCTION},
+            ]
+            try:
+                nxt = await self._base_model(convo, **{
+                    k: v for k, v in kwargs.items() if k != "messages"
+                })
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "Continuation round %d failed (%s); returning the %d chars "
+                    "already generated rather than losing them.",
+                    rnd, type(e).__name__, len(combined),
+                )
+                break
+            self._accumulate_usage(getattr(nxt, "usage", None))
+            piece = self._text_of(nxt)
+            if not piece:
+                logger.warning(
+                    "Continuation round %d came back empty; keeping %d chars.",
+                    rnd, len(combined),
+                )
+                break
+            combined += piece
+            logger.info(
+                "Continued a truncated response (round %d): +%d chars, %d total.",
+                rnd, len(piece), len(combined),
+            )
+            if not self._truncated(nxt):
+                res.content = [TextBlock(type="text", text=combined)]
+                meta = dict(getattr(res, "metadata", None) or {})
+                meta["finish_reason"] = "stop"
+                meta["continued_rounds"] = rnd
+                res.metadata = meta
+                return res
+        else:
+            logger.warning(
+                "Still truncated after %d continuation rounds; returning %d "
+                "chars and letting the caller judge it.",
+                self._CONTINUE_ROUNDS, len(combined),
+            )
+
+        # Ran out of rounds, or a round failed: hand back everything gathered so
+        # far, still flagged truncated so downstream keeps treating it as partial.
+        if combined:
+            res.content = [TextBlock(type="text", text=combined)]
         return res
 
     @staticmethod
