@@ -240,6 +240,17 @@ class UsageTrackingModel(ChatModelBase):
             return
         self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        # Also mirror into the run-wide ledger. These counters reach the
+        # certificate, but the certificate only carries the LEAF path -- the
+        # ledger is what makes a whole-run total possible, so both halves have to
+        # write to it or the total is a leaf total wearing a run's name.
+        try:
+            from harness.token_ledger import record
+            record("leaf", getattr(self, "model_name", "?"),
+                   {"prompt_tokens": int(getattr(usage, "input_tokens", 0) or 0),
+                    "completion_tokens": int(getattr(usage, "output_tokens", 0) or 0)})
+        except Exception:  # noqa: BLE001 — measurement never breaks the run
+            pass
 
     # A provider can answer HTTP 200 with a body that is not valid JSON — a
     # truncated stream, or an error page — and the OpenAI client raises
