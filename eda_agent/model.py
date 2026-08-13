@@ -236,17 +236,36 @@ class UsageTrackingModel(ChatModelBase):
         self._output_tokens = 0
 
     def _accumulate_usage(self, usage: Any) -> None:
-        if usage is None:
-            return
-        self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
-        self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
-        # Also mirror into the run-wide ledger. These counters reach the
-        # certificate, but the certificate only carries the LEAF path -- the
-        # ledger is what makes a whole-run total possible, so both halves have to
-        # write to it or the total is a leaf total wearing a run's name.
+        """Add one RESPONSE's usage to the counters and mirror it to the ledger.
+
+        A `None` usage is RECORDED, not dropped. The provider can answer 200
+        with no usage block at all, and such a call is UNMEASURED, not free --
+        `token_ledger.summarise` counts it under `calls_with_no_usage` precisely
+        so it cannot be silently read as zero. Returning early here defeated
+        that: measured on the live fp_adder run 2026-08-13, four leaf calls
+        reached the provider and ONE reached the ledger, so the run's own token
+        report understated its calls fourfold, in the direction that flatters.
+
+        The counters still only move for a real usage block -- adding zero is
+        the same as not adding -- so the certificate's leaf totals are unchanged
+        and this is a measurement fix with no effect on any verdict.
+
+        Only per-RESPONSE call sites may reach here with `None`. The streaming
+        path guards its call on a truthy `chunk.usage`, so it cannot log one
+        phantom call per chunk; a stream that never carries usage is recorded
+        once, at exhaustion, by `_gen`.
+        """
+        if usage is not None:
+            self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
+            self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        # Mirror into the run-wide ledger. These counters reach the certificate,
+        # but the certificate only carries the LEAF path -- the ledger is what
+        # makes a whole-run total possible, so both halves have to write to it
+        # or the total is a leaf total wearing a run's name.
         try:
             from harness.token_ledger import record
             record("leaf", getattr(self, "model_name", "?"),
+                   None if usage is None else
                    {"prompt_tokens": int(getattr(usage, "input_tokens", 0) or 0),
                     "completion_tokens": int(getattr(usage, "output_tokens", 0) or 0)})
         except Exception:  # noqa: BLE001 — measurement never breaks the run
@@ -353,6 +372,12 @@ class UsageTrackingModel(ChatModelBase):
                         self._accumulate_usage(chunk.usage)
                         seen_usage = True
                     yield chunk
+                if not seen_usage:
+                    # A stream that carried no usage block anywhere is still a
+                    # call that happened. Recorded once, at exhaustion, so it
+                    # lands in `calls_with_no_usage` rather than vanishing --
+                    # the same reason `_accumulate_usage` no longer drops None.
+                    self._accumulate_usage(None)
             return _gen()
         self._accumulate_usage(getattr(res, "usage", None))
         self._warn_if_truncated(res)
