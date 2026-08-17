@@ -96,7 +96,7 @@ import sys
 # catches that.
 failed = []
 for m in ("agentscope", "pydantic", "tqdm", "tree_sitter",
-          "tree_sitter_verilog", "vcdvcd", "pytest"):
+          "tree_sitter_verilog", "vcdvcd", "pytest", "cocotb"):
     try:
         __import__(m)
     except Exception as exc:  # noqa: BLE001

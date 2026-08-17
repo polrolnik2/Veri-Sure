@@ -10,3 +10,8 @@ tree-sitter>=0.25,<0.26
 tree-sitter-verilog>=1,<2
 vcdvcd>=1,<2
 pytest==9.0.2
+# Python testbench flow (GoGoTB-style spec-grounded coverage work). Note cocotb 2.x
+# refuses Verilator < 5.036; apt ships 5.020, so the verilator backend is unavailable
+# and the icarus backend (iverilog 12.0) is the working one until Verilator is built
+# from source. Veri-Sure's own sim_reviewer.py calls verilator directly and is unaffected.
+cocotb==2.0.1
