@@ -184,9 +184,54 @@ def test_build_error_is_reported_as_such(tmp_path):
     assert verdict.failing == ()
 
 
-def test_top_agent_config_exposes_the_backend_switch():
-    """The flip to specflow must be a config change, not a code change."""
+def test_specflow_is_the_default_backend():
+    """The SystemVerilog testbench path is retired: specflow is what runs."""
     from eda_agent.top_agent import TopAgentConfig
 
-    assert TopAgentConfig().tb_backend == "sv"
-    assert TopAgentConfig(tb_backend="specflow").tb_backend == "specflow"
+    assert TopAgentConfig().tb_backend == "specflow"
+    assert TopAgentConfig().specflow_model_port == "file"
+
+
+def test_top_agent_no_longer_depends_on_tb_generator():
+    """The retired module must not be reachable from an import of top_agent.
+
+    Its import is local to `_run_instance`, so `tb_generator.py` is dead code and
+    deleting the file cannot break this module.
+    """
+    import ast
+    from pathlib import Path
+
+    src = Path("eda_agent/top_agent.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.iter_child_nodes(tree):  # module scope only
+        if isinstance(node, ast.ImportFrom):
+            assert "tb_generator" not in (node.module or "")
+        elif isinstance(node, ast.Import):
+            assert all("tb_generator" not in a.name for a in node.names)
+
+
+def test_the_testbench_prompt_corpus_is_gone():
+    """TB_4_SHOT_EXAMPLES taught the defects the harness then compensated for --
+    no [TEST] markers and one global first_mismatch_time across all four
+    examples. It has no place on a backend that emits checks from a model."""
+    import eda_agent.prompts as prompts
+
+    assert not hasattr(prompts, "TB_4_SHOT_EXAMPLES")
+    assert not hasattr(prompts, "GLUE_TB_EXAMPLE")
+    # Still shared with rtl_generator, so it stays.
+    assert hasattr(prompts, "FAILED_TRIAL_PROMPT")
+
+
+def test_specflow_node_reviewer_matches_the_simreviewer_shape():
+    """RTLEditor is parameterised on a reviewer, so the adapter is the seam that
+    lets the editor keep working with a different oracle underneath it."""
+    import inspect
+
+    from eda_agent.sim_reviewer import SimReviewer
+    from eda_agent.specflow_node import SpecflowReviewer
+
+    assert hasattr(SpecflowReviewer, "review")
+    assert (
+        inspect.signature(SpecflowReviewer.review).return_annotation
+        == inspect.signature(SimReviewer.review).return_annotation
+    )

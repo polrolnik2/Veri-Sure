@@ -19,7 +19,12 @@ from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import SimReviewer
 from .tb_editor import TBEditor
-from .tb_generator import TBGenerator
+# NOTE: `TBGenerator` is imported lazily inside `_run_instance` rather than at
+# module scope. `_run_instance` is the retired SystemVerilog testbench path: it
+# is unreachable under the default `tb_backend="specflow"`, and keeping its
+# import local means `eda_agent.top_agent` no longer depends on
+# `tb_generator.py` at all, so the module can be deleted without touching this
+# file. See docs/specflow-migration.md.
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +221,11 @@ class TopAgentConfig:
     # specflow's verdict is three-valued per testpoint and is written as data by
     # the runtime, rather than parsed from log markers -- see sim_reviewer's
     # _EXPLICIT_PASS_RE for why that distinction exists.
-    tb_backend: str = "sv"
+    tb_backend: str = "specflow"
+    # How specflow's five agent calls reach a model. "file" emits each prompt and
+    # stops so it can be answered by hand; "replay" reads recorded fixtures and
+    # needs no model at all; "api" is the eventual HTTP path.
+    specflow_model_port: str = "file"
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -510,6 +519,8 @@ class TopAgent:
         there); a name in ``child_rtl`` but not ``child_assumes`` is ignored.
         """
         architect = ArchitectAgent(self.cfg)
+        from .tb_generator import TBGenerator  # retired path; see module header
+
         tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
         sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
@@ -955,6 +966,77 @@ class TopAgent:
         is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
         return finish(is_sim_pass, rtl_code)
 
+    async def _run_instance_specflow(
+        self,
+        *,
+        spec: str,
+        output_dir_per_run: Path,
+        contract_sva: list[dict] | None = None,
+        child_assumes: dict | None = None,
+        child_rtl: dict[str, str] | None = None,
+    ) -> Tuple[bool, str, int, int, dict | None]:
+        """The default path: contract, then specflow's oracle, then RTL repair.
+
+        Deliberately short. The SystemVerilog path's length came almost entirely
+        from the testbench being one opaque artifact -- three generation
+        branches, a lint-repair loop, a mock-DUT alignment pass, and a verdict
+        recovered from log prose. Here the oracle is built and certified by
+        gates before any RTL exists, and the verdict arrives as data.
+        """
+        from .specflow_node import run_specflow_node
+
+        architect = ArchitectAgent(self.cfg)
+        rtl_gen = RTLGenerator(self.cfg)
+
+        architect.reset()
+        contract_json = await self._build_contract_json(
+            architect=architect,
+            spec=spec,
+            output_dir_per_run=output_dir_per_run,
+        )
+
+        # Orchestrator-supplied fields, merged exactly as the original path did.
+        if contract_sva or child_assumes or child_rtl:
+            try:
+                obj = json.loads(contract_json)
+                if contract_sva:
+                    obj["contract_sva"] = contract_sva
+                if child_assumes:
+                    obj["child_assumes"] = child_assumes
+                if child_rtl:
+                    for name in child_rtl:
+                        obj.setdefault("child_assumes", {}).setdefault(name, {})[
+                            "rtl_available"
+                        ] = True
+                contract_json = json.dumps(obj, indent=2)
+                (output_dir_per_run / "contract.json").write_text(
+                    contract_json, encoding="utf-8"
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to merge orchestrator fields into contract")
+
+        accepted, rtl_code, detail = await run_specflow_node(
+            cfg=self.cfg,
+            spec=spec,
+            contract_json=contract_json,
+            output_dir_per_run=output_dir_per_run,
+            rtl_gen=rtl_gen,
+            sim_max_retry=self.config.sim_max_retry,
+            debug_max_trials=self.config.debug_max_trials,
+            model_port=self.config.specflow_model_port,
+        )
+
+        (output_dir_per_run / "specflow_node.json").write_text(
+            json.dumps(detail, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
+        breakdown = UsageBreakdown(
+            architect=get_model_usage(architect._agent.model),
+            rtl_gen=get_model_usage(rtl_gen._agent.model),
+        )
+        total_in, total_out = breakdown.total
+        return accepted, rtl_code, total_in, total_out, breakdown.to_dict()
+
     async def _run_instance_ablation(
         self,
         *,
@@ -1012,6 +1094,20 @@ class TopAgent:
             if self.config.is_ablation:
                 is_sim_pass, rtl_code, input_tokens, output_tokens = await self._run_instance_ablation(
                     spec=spec, output_dir_per_run=output_dir_per_run
+                )
+            elif self.config.tb_backend == "specflow":
+                (
+                    is_sim_pass,
+                    rtl_code,
+                    input_tokens,
+                    output_tokens,
+                    usage_breakdown,
+                ) = await self._run_instance_specflow(
+                    spec=spec,
+                    output_dir_per_run=output_dir_per_run,
+                    contract_sva=contract_sva,
+                    child_assumes=child_assumes,
+                    child_rtl=child_rtl,
                 )
             else:
                 (

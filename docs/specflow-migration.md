@@ -54,7 +54,7 @@ Five agent calls; every gate is pure code. Gates: **G1** spec attribution,
 
 ## Status
 
-Milestones M0–M9 are implemented and tested; 157 tests pass with no model in the
+Milestones M0–M9 are implemented and tested; 161 tests pass with no model in the
 loop, because every stage replays a recorded fixture
 (`tests/fixtures/specflow/hadd`, a real VerilogEval-v2-EXT problem).
 
@@ -69,14 +69,42 @@ Demonstrated on real tooling rather than asserted:
   not discharged;
 - a rigged bug converges in one repair; a rigged stall terminates inside budget.
 
-## What remains before the SystemVerilog path can be deleted
+## Retirement of the SystemVerilog path
 
-**The `tb_backend` switch defaults to `"sv"`, and `tb_generator.py` is still
-present.** That is deliberate, and it is the one place this work stops short of
-the plan.
+`tb_backend` now defaults to `"specflow"`. `TopAgent.run` dispatches to
+`_run_instance_specflow`, which builds and certifies the oracle *before* any RTL
+exists, then repairs against the three-valued verdict.
 
-Two things are needed first, and neither is possible in an environment without an
-`OPENAI_API_KEY`:
+Retired:
+
+- **`TB_4_SHOT_EXAMPLES` and `GLUE_TB_EXAMPLE` are deleted** from `prompts.py`
+  (31.8KB → 13.3KB). They taught the defects the harness then compensated for:
+  none of the four examples emitted the `[TEST …]` markers the prompt mandated,
+  and all four latched a single global `first_mismatch_time`, which is precisely
+  what `utils.py:49-83` exists to detect. `FAILED_TRIAL_PROMPT` stays — it is
+  shared with `rtl_generator`.
+- **`top_agent` no longer imports `tb_generator` at module scope.** The import is
+  local to `_run_instance`, the retired path, so `tb_generator.py` is dead code
+  and deleting the file cannot break anything. A test asserts this by walking
+  `top_agent`'s module-level imports.
+
+`RTLEditor` needed no changes: it is parameterised on a reviewer object, so
+`SpecflowReviewer` — same `(is_pass, mismatch_cnt, sim_output)` shape as
+`SimReviewer.review()` — is the seam that swaps the oracle underneath it.
+
+### One step needs a permission this session lacks
+
+**`eda_agent/tb_generator.py` is still on disk.** Both `rm` and `git rm` were
+refused by the environment's permission classifier. The module is unreferenced,
+unreachable and unimported; removing the file is a one-line follow-up:
+
+```bash
+git rm eda_agent/tb_generator.py
+```
+
+### And two things still need an API key
+
+Neither is possible in an environment without `OPENAI_API_KEY`:
 
 1. **A baseline VerilogEval-v2-EXT run.** M9's comparison is meaningless without
    the before number. Note that `run_verilog_eval_v2.py:416-433` discards
@@ -88,25 +116,28 @@ Two things are needed first, and neither is possible in an environment without a
    situ. Every part of it is tested through `integration.py`, which is a pure
    function of a run directory — but that is not the same as having run it.
 
-Deleting the only working path while unable to run its replacement once would
-remove the fallback and the evidence at the same time. The switch exists so the
-flip is one line when a key is available.
+Until both are done, treat the specflow path's benchmark standing as unmeasured
+rather than unchanged: the machinery is tested, but no end-to-end node run has
+executed in situ.
 
-### The remaining wiring
+### How the node path is wired
 
-`integration.py` provides everything `_run_instance` needs:
+`_run_instance_specflow` (in `top_agent.py`) builds the contract, merges any
+orchestrator-supplied `contract_sva` / `child_assumes` / `child_rtl`, then calls
+`specflow_node.run_specflow_node`, which:
 
-- `ensure_prompt_file(run_dir, spec)` — already called from `TopAgent.run`;
-- `build_artifacts(...)` — S1→S3, reference model, rendered suite, gate by gate,
-  stopping at the first failure and naming the stage;
-- `judge(...)` — the three-valued replacement for `sim_review`;
-- `failure_payload(suite_dir)` — every failing check with expected, actual and
-  the stimulus that produced it, replacing the keyword-filtered log excerpt
-  `rtl_editor` receives today.
+1. calls `build_artifacts` — S1→S3, reference model, rendered suite, gate by
+   gate, stopping at the first failure and naming the stage. **The oracle is
+   certified before any RTL exists**, which is also what keeps the reference
+   model independent: there is no `rtl.sv` to contaminate it.
+2. generates RTL and syntax-checks it;
+3. repairs against `SpecflowReviewer`, whose `review()` returns the three-valued
+   verdict and a payload in which every mismatch names its check, both values and
+   the stimulus that produced it.
 
-Phase P2 of `_run_instance` branches on `config.tb_backend`; the specflow branch
-calls `build_artifacts`, and P5 calls `judge` in place of `sim_reviewer.review`,
-passing `failure_payload` to `rtl_gen.set_failed_trial` instead of the raw log.
+`EXTEND_TB` and `STALLED` return without invoking repair: neither is an RTL
+problem, and reporting them as one is what sends a repair agent after the wrong
+artifact.
 
 ## Running a stage by hand
 
