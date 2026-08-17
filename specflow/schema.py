@@ -54,6 +54,11 @@ class Requirement(BaseModel):
     text: str
     spec_spans: list[SpecSpan] = Field(default_factory=list)
     kind: str = "behaviour"
+    #: Ports this requirement constrains, declared explicitly rather than mined
+    #: out of `text`. Declaring them makes the contract cross-check exact: every
+    #: name here must appear in `contract.io`. Inferring them from prose instead
+    #: would make G1 fuzzy, and G1 blocks the pipeline.
+    ports: list[str] = Field(default_factory=list)
     needs: list[NeedKind] = Field(default_factory=lambda: ["testplan", "refmodel"])
 
 
