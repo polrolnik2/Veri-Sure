@@ -66,9 +66,6 @@ def evaluate(
         return GateVerdict("REPAIR_RTL", reason=f"build failed: {build_log[:400]}")
 
     failing = tuple(sorted(u for u, r in results.items() if r.status == "FAIL"))
-    if failing:
-        return GateVerdict("REPAIR_RTL", failing=failing,
-                           reason=f"{len(failing)} testpoint(s) failing")
 
     # G6b: a testpoint that crashed before Env.finish() left no record. Counting
     # it as covered would make the run look cleaner than it was.
@@ -76,14 +73,28 @@ def evaluate(
     unexercised = tuple(
         sorted({u for u, r in results.items() if r.status == "NOT_EXERCISED"} | set(missing))
     )
-
     undisposed = tuple(report.undisposed)
+
+    # Stall is checked BEFORE dispatching work, and covers the failing case as
+    # well as the uncovered one. Checking it only on the EXTEND_TB path left the
+    # detector inert in the scenario it exists for: a repair that reports
+    # progress every round and changes nothing keeps the verdict at REPAIR_RTL
+    # forever, so the loop ran its whole budget instead of giving up. Repeatedly
+    # asking for work and getting none *is* the stall, whichever work it was.
+    if stalled and (failing or undisposed or unexercised):
+        return GateVerdict(
+            "STALLED", failing=failing, not_exercised=unexercised or undisposed,
+            reason=(
+                f"no progress; {len(failing)} failing, "
+                f"{len(undisposed)} bin(s) still uncovered"
+            ),
+        )
+
+    if failing:
+        return GateVerdict("REPAIR_RTL", failing=failing,
+                           reason=f"{len(failing)} testpoint(s) failing")
+
     if undisposed or unexercised:
-        if stalled:
-            return GateVerdict(
-                "STALLED", not_exercised=unexercised or undisposed,
-                reason=f"no progress; {len(undisposed)} bin(s) still uncovered",
-            )
         return GateVerdict(
             "EXTEND_TB", not_exercised=unexercised or undisposed,
             reason=f"{len(undisposed)} uncovered bin(s) without a disposition",

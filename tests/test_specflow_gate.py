@@ -194,3 +194,26 @@ def test_coverage_report_serialises(tmp_path):
     assert data["denominator"] == DENOM
     assert data["bins"]["BIN-0000"]["hit"] is True
     assert data["bins"]["BIN-0001"]["hit"] is False
+
+
+def test_stall_fires_even_while_checks_are_failing():
+    """Regression: the stall detector must not be inert on the failing path.
+
+    It was checked only when the verdict would otherwise be EXTEND_TB, so a
+    repair that claimed progress and changed nothing held the verdict at
+    REPAIR_RTL forever and the loop ran its entire budget. Repeatedly asking for
+    work and getting none is the stall, whichever work it was.
+    """
+    results = {"TP-0000": res("TP-0000", "FAIL", ["BIN-0000"], ["CHK-0"])}
+    v = evaluate(results=results, report=report(results), stalled=True)
+    assert v.outcome == "STALLED"
+    assert v.failing == ("TP-0000",)
+
+
+def test_stall_does_not_override_a_clean_accept():
+    results = {
+        "TP-0000": res("TP-0000", "PASS", ["BIN-0000"]),
+        "TP-0001": res("TP-0001", "PASS", ["BIN-0001"]),
+    }
+    # Nothing outstanding: an idle loop that has finished is ACCEPT, not STALLED.
+    assert evaluate(results=results, report=report(results), stalled=True).outcome == "ACCEPT"
