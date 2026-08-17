@@ -141,10 +141,35 @@ change; repairing first lets the run declare victory on unexercised spec.
 | 1 | OpenFastTrace, or StrictDoc `RELATIONS` | OFT: GPL-3.0, Java 17, CI tool in its own process. Tags Python natively, **not SystemVerilog** — an argument for cocotb testbenches |
 | 2 | pyvsc / cocotb-coverage | covergroups in Python |
 | 2–3 | pyucis | Accellera UCIS model, merge, HTML report |
-| 3 | `verilator --coverage-line --coverage-toggle --coverage-fsm` | merge with `verilator_coverage --write`, render `--annotate` |
+| 3 | `verilator --coverage-line --coverage-toggle --coverage-user` | merge `verilator_coverage --write merged.dat cov_*.dat`; lcov via `--write-info merged.info` |
 | 3 | SymbiYosys `mode prove` | unreachability discharge |
 
 Everything is text in Git, so retractions and exclusions arrive as reviewable diffs.
+
+## Verified mechanics (Verilator 5.038 + cocotb 2.0.1)
+
+Measured rather than assumed, because two details here were wrong on first
+writing:
+
+- **There is no `--coverage-fsm` flag.** The real set is `--coverage-line`,
+  `--coverage-toggle`, `--coverage-user`.
+- **`verilator_coverage` takes input files positionally.** `-read` appears in
+  5.020's perl documentation but is rejected by 5.038:
+  `verilator_coverage --write merged.dat cov_0.dat` and
+  `verilator_coverage --write-info merged.info cov_0.dat` both work.
+- **cocotb emits coverage with no extra wiring.** Its Verilator harness
+  (`cocotb/share/lib/verilator/verilator.cpp:66-70`) calls `VerilatedCov::write()`
+  under `#if VM_COVERAGE`, a macro Verilator defines when compiled with
+  `--coverage`. So the flags belong in `build_args` (compile time); passing them
+  at test time silently yields nothing.
+- **Set the output filename per run.** The harness defaults every run to
+  `coverage.dat`, so iterations clobber one another;
+  `plusargs=["+verilator+coverage+file+cov_<n>.dat"]` fixes it.
+- **lcov `.info` carries line (`DA:`) and branch (`BRDA:`) records, not toggle.**
+  Toggle lives only in the raw `.dat`, but in a more tractable form than
+  expected — one record per point, e.g.
+  `C 'f<file>l<line>n<name>ttogglepagev_toggle/<module>o<signal>h<hier>' <count>`.
+  Parseable when toggle-driven gap categorisation is wanted.
 
 ## Known gaps
 

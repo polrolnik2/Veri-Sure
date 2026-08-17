@@ -42,6 +42,54 @@ else
   log "EDA toolchain already present"
 fi
 
+# ------------------------------------------------- Verilator >= 5.036 (source)
+# cocotb 2.x hard-gates on 5.036 (VLT_MIN in its Makefile.verilator) and apt
+# ships 5.020, so specflow's cocotb suites cannot run on the packaged build.
+# Installed to /usr/local/bin so it shadows apt's copy on PATH.
+#
+# This build takes ~15 min. It runs at most once per container image, because
+# the image is cached after the hook completes -- but the version guard below is
+# what keeps it from re-running every session.
+VERILATOR_TAG="v5.038"
+vl_version() { "$1" --version 2>/dev/null | sed -n 's/^Verilator \([0-9.]*\).*/\1/p'; }
+vl_ok() {
+  local v; v="$(vl_version "$1")"
+  [ -n "$v" ] && [ "$(printf '%s\n5.036\n' "$v" | sort -V | head -1)" = "5.036" ]
+}
+
+if vl_ok /usr/local/bin/verilator; then
+  log "verilator $(vl_version /usr/local/bin/verilator) already present"
+else
+  log "building Verilator $VERILATOR_TAG (cocotb needs >= 5.036, apt has $(vl_version "$(command -v verilator)"))"
+  apt-get install -y -qq git perl make autoconf g++ flex bison libfl2 libfl-dev \
+    zlib1g-dev ccache help2man
+  VL_SRC="$(mktemp -d)"
+  git clone --quiet --depth 1 --branch "$VERILATOR_TAG" \
+    https://github.com/verilator/verilator.git "$VL_SRC/verilator"
+  ( cd "$VL_SRC/verilator" && autoconf && ./configure && make -j"$(nproc)" && make install ) >/dev/null
+  rm -rf "$VL_SRC"
+fi
+
+# -------------------------------------------------------- mutation qualification
+# mcy drives Gate G8. Its `make install` builds a Qt5 GUI we do not need, so the
+# CLI parts are installed by hand. gawk is required by mcy's test_eq.sh (mawk
+# will not do), and a modern z3 is not optional: on a 64-bit popcount
+# equivalence, Debian's boolector (2012) failed instantly and apt's z3 4.8.12
+# broke its pipe after 107 s, while z3-solver 5.1.0 solved it in 2 s.
+if command -v mcy >/dev/null 2>&1; then
+  log "mcy already present"
+else
+  log "installing mcy (CLI only, no Qt GUI)"
+  apt-get install -y -qq gawk
+  MCY_SRC="$(mktemp -d)"
+  git clone --quiet --depth 1 https://github.com/YosysHQ/mcy.git "$MCY_SRC/mcy"
+  install "$MCY_SRC/mcy/mcy.py" /usr/local/bin/mcy
+  install "$MCY_SRC/mcy/mcy-dash.py" /usr/local/bin/mcy-dash
+  mkdir -p /usr/local/share/mcy
+  cp -r "$MCY_SRC/mcy/scripts" "$MCY_SRC/mcy/dash" /usr/local/share/mcy/
+  rm -rf "$MCY_SRC"
+fi
+
 # ------------------------------------------------------------------ SymbiYosys
 # Not packaged in apt and not on PyPI, so it is built from source.
 if command -v sby >/dev/null 2>&1; then
@@ -70,6 +118,17 @@ fi
 log "installing Python dependencies"
 "$VENV/bin/pip" install --quiet --disable-pip-version-check -r requirements.txt
 
+# A modern z3 for sby/mcy. apt's 4.8.12 is from 2021 and times out on
+# equivalence queries mcy issues routinely. Symlinked into /usr/local/bin so it
+# shadows the apt copy for every consumer, not just this venv.
+if [ ! -e /usr/local/bin/z3 ] || ! /usr/local/bin/z3 --version 2>/dev/null | grep -qE 'version (5|[6-9])'; then
+  log "installing modern z3"
+  "$VENV/bin/pip" install --quiet --disable-pip-version-check z3-solver
+  if [ -x "$VENV/bin/z3" ]; then
+    ln -sf "$VENV/bin/z3" /usr/local/bin/z3
+  fi
+fi
+
 # Put the venv ahead of the system interpreter for the rest of the session, so
 # `python`/`pytest` resolve to it without an explicit activate.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
@@ -79,7 +138,7 @@ fi
 
 # ------------------------------------------------------------------- verify
 FAILED=0
-for cmd in iverilog vvp yosys verilator sby z3; do
+for cmd in iverilog vvp yosys verilator verilator_coverage sby z3 mcy gawk; do
   if command -v "$cmd" >/dev/null 2>&1; then
     log "  ok   $cmd"
   else
@@ -87,6 +146,15 @@ for cmd in iverilog vvp yosys verilator sby z3; do
     FAILED=1
   fi
 done
+
+# Version guard, not just presence: cocotb refuses Verilator < 5.036 outright,
+# so a stale apt build passes the check above and then fails at build time.
+if vl_ok "$(command -v verilator)"; then
+  log "  ok   verilator $(vl_version "$(command -v verilator)") >= 5.036"
+else
+  log "  FAIL verilator on PATH is $(vl_version "$(command -v verilator)"); cocotb needs >= 5.036"
+  FAILED=1
+fi
 
 "$VENV/bin/python" - <<'PY' || FAILED=1
 import sys
