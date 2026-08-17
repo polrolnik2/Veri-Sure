@@ -1,0 +1,4 @@
+model,pass,fail,total
+claude,242,68,310
+codex,256,54,310
+deepseek,147,173,320

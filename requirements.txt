@@ -1,4 +1,9 @@
 agentscope==1.0.7
+# agentscope 1.0.7 imports mcp.client.streamable_http.streamablehttp_client, which
+# mcp 2.0.0 removed. agentscope declares `mcp` unpinned, so a fresh resolve picks
+# 2.0.0 and `import agentscope` dies with an ImportError before any Veri-Sure code
+# runs. Pin below 2 until agentscope supports the 2.x client API.
+mcp>=1.29,<2
 pydantic>=2,<3
 tqdm>=4,<5
 tree-sitter>=0.25,<0.26

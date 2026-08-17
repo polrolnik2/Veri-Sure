@@ -10,3 +10,5 @@ __pycache__/
 runs/
 sim_build/
 *.xml
+
+.venv/
