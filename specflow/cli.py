@@ -127,6 +127,37 @@ def cmd_s3(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_refmodel(args: argparse.Namespace) -> int:
+    from .refmodel import compose
+
+    run_dir = Path(args.run_dir)
+    reqs = _artifact(run_dir, "requirements")["requirements"]
+    port = make_port(args.model_port, run_dir / "agent_io")
+    try:
+        result, source = compose.run_refmodel(
+            requirements=reqs,
+            contract_json=_contract(run_dir),
+            port=port,
+            workdir=run_dir / "specflow" / "_refmodel_check",
+            max_repairs=args.max_repairs,
+        )
+    except PendingResponse as pending:
+        print(pending, file=sys.stderr)
+        return 3
+
+    path = compose.write_artifacts(run_dir, result, source)
+    n = len(result.output.fragments)
+    if result.ok:
+        print(f"refmodel ok: {n} fragments in {result.rounds} round(s) -> {path}")
+        for u in result.output.underdetermined:
+            print(f"  underdetermined: {u}")
+        return 0
+    print(f"refmodel FAILED after {result.rounds} round(s); {n} fragments",
+          file=sys.stderr)
+    print(render_issues(result.issues), file=sys.stderr, end="")
+    return 1
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     path = Path(args.run_dir) / "specflow" / f"{args.artifact}.json"
     if not path.exists():
@@ -156,6 +187,12 @@ def main(argv: list[str] | None = None) -> int:
     s3.add_argument("--model-port", default="file", choices=["file", "replay", "api"])
     s3.add_argument("--max-repairs", type=int, default=3)
     s3.set_defaults(func=cmd_s3)
+
+    rm = sub.add_parser("refmodel", help="requirements -> Python reference model (G4)")
+    rm.add_argument("--run-dir", required=True)
+    rm.add_argument("--model-port", default="file", choices=["file", "replay", "api"])
+    rm.add_argument("--max-repairs", type=int, default=3)
+    rm.set_defaults(func=cmd_refmodel)
 
     show = sub.add_parser("show", help="pretty-print a specflow artifact")
     show.add_argument("--run-dir", required=True)
