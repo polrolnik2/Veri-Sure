@@ -208,6 +208,15 @@ would disable the unified glue loop everywhere it gates.
 class TopAgentConfig:
     sim_max_retry: int = 4
     is_ablation: bool = False
+    # Which testbench path builds the oracle.
+    #   "sv"       -- TBGenerator writes one monolithic tb.sv (the original path)
+    #   "specflow" -- spec -> requirements -> testplan -> coverage -> cocotb suite
+    #                 with a Python reference model (see specflow/ and
+    #                 docs/specflow-migration.md)
+    # specflow's verdict is three-valued per testpoint and is written as data by
+    # the runtime, rather than parsed from log markers -- see sim_reviewer's
+    # _EXPLICIT_PASS_RE for why that distinction exists.
+    tb_backend: str = "sv"
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -978,6 +987,15 @@ class TopAgent:
         tb_path = str(output_dir_per_run / "tb.sv")
         if_path = str(output_dir_per_run / "if.sv")
         rtl_path = str(output_dir_per_run / "rtl.sv")
+
+        # Persist the spec at the node. `cli.py:74` writes prompt.txt for the
+        # `run` subcommand, but `benchmarks/run_verilog_eval_v2.py` builds its
+        # prompt separately and never wrote it -- so a benchmark node had no spec
+        # on disk at all. specflow's S1 reads it, and it is what makes an offline
+        # replay of a node possible.
+        prompt_path = output_dir_per_run / "prompt.txt"
+        if not prompt_path.exists():
+            prompt_path.write_text(spec.rstrip() + "\n", encoding="utf-8")
 
         tag = output_dir_per_run / "properly_finished.tag"
         if tag.exists():
