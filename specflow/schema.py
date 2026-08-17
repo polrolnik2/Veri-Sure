@@ -156,6 +156,10 @@ TestpointStatus = Literal["PASS", "FAIL", "NOT_EXERCISED"]
 
 @dataclass(frozen=True)
 class TestpointResult:
+    # Not a pytest test class despite the name; without this pytest tries to
+    # collect it and warns on the constructor.
+    __test__ = False
+
     tp_uid: str
     status: TestpointStatus
     checks_invoked: tuple[str, ...] = ()
