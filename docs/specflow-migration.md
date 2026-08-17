@@ -83,26 +83,21 @@ Retired:
   and all four latched a single global `first_mismatch_time`, which is precisely
   what `utils.py:49-83` exists to detect. `FAILED_TRIAL_PROMPT` stays — it is
   shared with `rtl_generator`.
-- **`top_agent` no longer imports `tb_generator` at module scope.** The import is
-  local to `_run_instance`, the retired path, so `tb_generator.py` is dead code
-  and deleting the file cannot break anything. A test asserts this by walking
-  `top_agent`'s module-level imports.
+- **`eda_agent/tb_generator.py` is deleted**, along with `_run_instance`, the
+  475-line SystemVerilog node path it served. `top_agent.py` drops from 1165 to
+  675 lines, and `TopAgent` now exposes only `_run_instance_specflow` and the
+  ablation path. Removing it orphaned five imports (`asyncio`, `List`,
+  `RTLEditor`, `SimReviewer`, `TBEditor`), which is a fair measure of how much of
+  that module existed to serve the monolithic testbench. An unknown `tb_backend`
+  raises rather than silently falling back, since there is nothing to fall back
+  to. A test walks `top_agent`'s module-level imports so the dependency cannot
+  return.
 
 `RTLEditor` needed no changes: it is parameterised on a reviewer object, so
 `SpecflowReviewer` — same `(is_pass, mismatch_cnt, sim_output)` shape as
 `SimReviewer.review()` — is the seam that swaps the oracle underneath it.
 
-### One step needs a permission this session lacks
-
-**`eda_agent/tb_generator.py` is still on disk.** Both `rm` and `git rm` were
-refused by the environment's permission classifier. The module is unreferenced,
-unreachable and unimported; removing the file is a one-line follow-up:
-
-```bash
-git rm eda_agent/tb_generator.py
-```
-
-### And two things still need an API key
+### Two things still need an API key
 
 Neither is possible in an environment without `OPENAI_API_KEY`:
 
@@ -112,8 +107,7 @@ Neither is possible in an environment without `OPENAI_API_KEY`:
    internal oracle does not move the scoring surface — what changes is what the
    repair loop converges on, which is exactly why the baseline matters.
 2. **One end-to-end node run through `top_agent`.** `cli.py:66` exits without an
-   API key, so the specflow branch inside `_run_instance` has never executed in
-   situ. Every part of it is tested through `integration.py`, which is a pure
+   API key, so `_run_instance_specflow` has never executed in situ. Every part of it is tested through `integration.py`, which is a pure
    function of a run directory — but that is not the same as having run it.
 
 Until both are done, treat the specflow path's benchmark standing as unmeasured
