@@ -74,3 +74,64 @@ def test_replay_is_deterministic(tmp_path):
     a = _run(tmp_path / "a")
     b = _run(tmp_path / "b")
     assert a.output.model_dump() == b.output.model_dump()
+
+
+# --- the whole chain, S1 -> S2 -> S3 ---------------------------------------
+
+
+def _chain(tmp_path: Path):
+    from specflow.s2_testplan import run_s2
+    from specflow.s3_coverage import run_s3
+
+    run_dir = tmp_path / "run"
+    shutil.copytree(FIXTURE, run_dir)
+    spec = (run_dir / "prompt.txt").read_text(encoding="utf-8")
+    contract = (run_dir / "contract.json").read_text(encoding="utf-8")
+    port = ReplayPort(root=run_dir / "agent_io")
+
+    s1 = run_s1(spec=spec, contract_json=contract, port=port)
+    reqs = [r.model_dump() for r in s1.output.requirements]
+    s2 = run_s2(requirements=reqs, contract_json=contract, port=port)
+    tps = [e.model_dump() for e in s2.output.elements]
+    s3 = run_s3(testplan=tps, contract_json=contract, port=port)
+    return s1, s2, s3
+
+
+def test_all_three_gates_pass_on_the_recorded_chain(tmp_path):
+    s1, s2, s3 = _chain(tmp_path)
+    assert s1.ok, [i.message for i in s1.issues]
+    assert s2.ok, [i.message for i in s2.issues]
+    assert s3.ok, [i.message for i in s3.issues]
+
+
+def test_every_requirement_reaches_a_check_transitively(tmp_path):
+    """The property the whole chain exists to guarantee.
+
+    Not "every bin names a requirement" -- that is the direction every surveyed
+    system already has. This is the other one: every requirement derived from
+    the spec ends up with something that can fail on its behalf.
+    """
+    s1, s2, s3 = _chain(tmp_path)
+
+    reqs = {r.uid for r in s1.output.requirements}
+    tp_by_req: dict[str, set[str]] = {}
+    for e in s2.output.elements:
+        for ref in e.covers:
+            tp_by_req.setdefault(ref.split("@")[0], set()).add(e.uid)
+
+    checked_tps = {ref.split("@")[0] for c in s3.output.checks for ref in c.covers}
+    binned_tps = {ref.split("@")[0] for b in s3.output.bins for ref in b.covers}
+
+    for req in reqs:
+        tps = tp_by_req.get(req, set())
+        assert tps, f"{req} reaches no testplan element"
+        assert tps & checked_tps, f"{req} reaches no check"
+        assert tps & binned_tps, f"{req} reaches no cover bin"
+
+
+def test_no_check_compares_an_input(tmp_path):
+    """A check on an input compares the stimulus against itself."""
+    _, _, s3 = _chain(tmp_path)
+    inputs = {"a", "b"}
+    for c in s3.output.checks:
+        assert not (set(c.signals) & inputs), f"{c.uid} checks an input"
