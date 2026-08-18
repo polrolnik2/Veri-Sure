@@ -329,3 +329,73 @@ def test_the_specflow_node_path_calls_its_own_helpers_correctly():
     assert "golden_tb_path=golden_tb_path" in src, (
         "run() does not forward golden_tb_path to the specflow node path"
     )
+
+
+@needs_verilator
+def test_a_hierarchical_dut_elaborates_when_children_are_supplied(tmp_path):
+    """A candidate may instantiate pre-made modules it does not define.
+
+    ChipVerilog hands those children to the candidate itself -- both its compile
+    gate and its Yosys miter read the candidate alongside them -- so 16 of its 64
+    tasks expect instantiation rather than reimplementation. Without the same
+    files at build time the DUT cannot elaborate, and the run reports a build
+    error that reads as a defect in the generated RTL rather than a missing
+    library, which is the wrong thing to hand a repair agent.
+
+    The children are libraries, never oracle inputs: the reference model here is
+    unchanged and still derives the expected values from the specification.
+    """
+    run_dir, built = _build(tmp_path)
+    assert built.ok, built.reason
+
+    # A hierarchical half adder: the sum comes from a child this file does not
+    # define, so it cannot elaborate alone.
+    child = tmp_path / "sum_cell.v"
+    child.write_text(
+        "module sum_cell(input a, input b, output s);\n"
+        "  assign s = a ^ b;\nendmodule\n", encoding="utf-8")
+    parent = tmp_path / "hier.sv"
+    parent.write_text(
+        "module RefModule(input a, input b, output sum, output cout);\n"
+        "  sum_cell u_sum(.a(a), .b(b), .s(sum));\n"
+        "  assign cout = a & b;\nendmodule\n", encoding="utf-8")
+
+    # Without the child: a build error, and crucially not a testpoint failure.
+    alone, detail = judge(
+        rtl_path=parent, hdl_toplevel="RefModule", suite_dir=built.suite_dir,
+        refmodel_path=built.refmodel_path, bins=built.bins)
+    assert not detail["build_ok"], "a missing child should not elaborate"
+    assert alone.failing == (), "a build error must not be blamed on a testpoint"
+
+    # With the child supplied: elaborates, runs, and is judged on behaviour.
+    verdict, detail = judge(
+        rtl_path=parent, hdl_toplevel="RefModule", suite_dir=built.suite_dir,
+        refmodel_path=built.refmodel_path, bins=built.bins,
+        extra_sources=[child], iteration=1)
+    assert detail["build_ok"], "child supplied, yet it still did not elaborate"
+    assert verdict.outcome == "ACCEPT", verdict.reason
+    assert all(s == "PASS" for s in detail["results"].values())
+
+
+@needs_verilator
+def test_a_supplied_child_does_not_make_a_wrong_design_pass(tmp_path):
+    """Supplying children makes a hierarchical design *simulable*; it must not
+    make it *correct*. The oracle is still the reference model."""
+    run_dir, built = _build(tmp_path)
+    child = tmp_path / "bad_cell.v"
+    child.write_text(
+        "module sum_cell(input a, input b, output s);\n"
+        "  assign s = a | b;\nendmodule\n", encoding="utf-8")   # OR, not XOR
+    parent = tmp_path / "hier_bad.sv"
+    parent.write_text(
+        "module RefModule(input a, input b, output sum, output cout);\n"
+        "  sum_cell u_sum(.a(a), .b(b), .s(sum));\n"
+        "  assign cout = a & b;\nendmodule\n", encoding="utf-8")
+
+    verdict, detail = judge(
+        rtl_path=parent, hdl_toplevel="RefModule", suite_dir=built.suite_dir,
+        refmodel_path=built.refmodel_path, bins=built.bins,
+        extra_sources=[child])
+    assert detail["build_ok"]
+    assert verdict.outcome == "REPAIR_RTL", "a wrong child must still fail"
+    assert verdict.failing, "the mismatch must be attributed to testpoints"

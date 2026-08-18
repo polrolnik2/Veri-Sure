@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Sequence, Tuple
 
 from .config import OpenAIConfig
 from .rtl_editor import RTLEditor
@@ -71,10 +71,17 @@ class SpecflowReviewer:
     repairs land, exactly as the mismatch count did.
     """
 
-    def __init__(self, *, built, hdl_toplevel: str, output_dir: Path):
+    def __init__(self, *, built, hdl_toplevel: str, output_dir: Path,
+                 extra_sources: Sequence[Path | str] = (),
+                 include_dirs: Sequence[Path | str] = ()):
         self._built = built
         self._top = hdl_toplevel
         self._dir = Path(output_dir)
+        # Pre-made children the candidate instantiates. Held on the reviewer
+        # because every repair iteration re-elaborates, so supplying them once
+        # at generation time would not be enough.
+        self._extra = list(extra_sources)
+        self._incs = list(include_dirs)
         self._iteration = 0
         self.golden_rtl_path = None  # rtl_editor getattrs this
 
@@ -88,6 +95,8 @@ class SpecflowReviewer:
             refmodel_path=self._built.refmodel_path,
             bins=self._built.bins,
             iteration=self._iteration,
+            extra_sources=self._extra,
+            include_dirs=self._incs,
         )
         self._iteration += 1
 
@@ -120,6 +129,8 @@ async def run_specflow_node(
     debug_max_trials: int = 30,
     model_port: str = "replay",
     max_repairs: int = 3,
+    extra_sources: Sequence[Path | str] = (),
+    include_dirs: Sequence[Path | str] = (),
 ) -> Tuple[bool, str, dict[str, Any]]:
     """Build the oracle, generate RTL, repair until the gate accepts.
 
@@ -162,14 +173,17 @@ async def run_specflow_node(
         return False, rtl_code, detail
 
     rtl_path.write_text(rtl_code, encoding="utf-8")
-    syntax_ok, syntax_log = check_syntax(str(rtl_path))
+    syntax_ok, syntax_log = check_syntax(
+        str(rtl_path), [str(p) for p in extra_sources], [str(p) for p in include_dirs]
+    )
     if not syntax_ok:
         detail["syntax"] = syntax_log
         detail["history"].append("RTL failed syntax check")
         return False, rtl_code, detail
 
     reviewer = SpecflowReviewer(
-        built=built, hdl_toplevel=top, output_dir=output_dir_per_run
+        built=built, hdl_toplevel=top, output_dir=output_dir_per_run,
+        extra_sources=extra_sources, include_dirs=include_dirs,
     )
     remaining = int(debug_max_trials)
 

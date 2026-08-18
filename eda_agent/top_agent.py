@@ -220,6 +220,14 @@ class TopAgentConfig:
     # stops so it can be answered by hand; "replay" reads recorded fixtures and
     # needs no model at all; "api" is the eventual HTTP path.
     specflow_model_port: str = "file"
+    # Pre-made modules the generated RTL may instantiate but does not define,
+    # and the include directories their headers live in. A hierarchical DUT
+    # cannot elaborate without them, and the resulting build error reads as a
+    # defect in the generated RTL rather than a missing library. They are
+    # libraries, never oracle inputs: the reference model still derives the
+    # composed behaviour from the specification alone.
+    specflow_extra_sources: tuple[str, ...] = ()
+    specflow_include_dirs: tuple[str, ...] = ()
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -556,6 +564,8 @@ class TopAgent:
             sim_max_retry=self.config.sim_max_retry,
             debug_max_trials=self.config.debug_max_trials,
             model_port=self.config.specflow_model_port,
+            extra_sources=self.config.specflow_extra_sources,
+            include_dirs=self.config.specflow_include_dirs,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

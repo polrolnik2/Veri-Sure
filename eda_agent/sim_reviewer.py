@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from typing import Tuple
+from typing import Sequence, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 
@@ -112,9 +112,25 @@ def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
     return bool(_MULTIDRIVEN_RE.search(stdout) or _MULTIDRIVEN_RE.search(stderr))
 
 
-def check_syntax(rtl_path: str) -> Tuple[bool, str]:
+def check_syntax(
+    rtl_path: str,
+    extra_sources: "Sequence[str]" = (),
+    include_dirs: "Sequence[str]" = (),
+) -> Tuple[bool, str]:
+    """Lint `rtl_path`, optionally alongside pre-made modules it instantiates.
+
+    A hierarchical DUT linted on its own reports `Cannot find file containing
+    module` for every child, which is fatal -- so without `extra_sources` a
+    correct hierarchical design is rejected before it is ever simulated, for a
+    reason that is about the lint invocation rather than the design.
+    """
     _require_executable("verilator")
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {rtl_path}"
+    incs = " ".join(f"-I{d}" for d in include_dirs)
+    extras = " ".join(str(s) for s in extra_sources)
+    cmd = (
+        f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert "
+        f"{incs} {rtl_path} {extras}".replace("  ", " ")
+    )
     is_pass, sim_output = run_bash_command(cmd, timeout=60)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""

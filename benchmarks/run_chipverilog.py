@@ -47,14 +47,28 @@ def find_task(name: str) -> Path:
     return hits[0]
 
 
+def child_sources(kids: list[str]) -> list[Path]:
+    """Locate each child's reference .v in the Des tree.
+
+    ChipVerilog supplies these to the candidate itself -- both the compile gate
+    and the Yosys miter read `<candidate>.v` alongside the children -- so a
+    candidate is expected to instantiate them rather than reimplement them.
+    Supplying the same files to the simulator is what lets a hierarchical DUT
+    elaborate here too.
+    """
+    out = []
+    for k in kids:
+        hits = [p for p in DES.rglob(f"{k}.v") if p.parent.name == k]
+        out.extend(hits[:1])
+    return out
+
+
 def submodules(task_dir: Path, top: str) -> list[str]:
     """Modules this task's reference instantiates but does not define.
 
-    A task with any is *hierarchical*, which matters here because specflow is
-    scoped to leaf nodes: its reference model is a single Python class derived
-    from one module's requirements, with no notion of a child instance. Whether
-    that limit is what stops a given task is exactly the thing a baseline should
-    record rather than assume.
+    A task with any is *hierarchical*. The children are supplied to the
+    simulator as libraries, never to the oracle: the reference model still has
+    to derive the composed behaviour from the specification.
     """
     import re
 
@@ -120,6 +134,12 @@ async def run(args: argparse.Namespace) -> dict:
         "tb_backend": "specflow",
     }
 
+    kid_files = child_sources(kids)
+    # or1200 children need or1200_defines.v / timescale.v from the family root.
+    inc_dirs = sorted({str(p.parent) for p in kid_files} | {str(task_dir.parent), str(task_dir)})
+    record["child_sources"] = [p.name for p in kid_files]
+    record["include_dirs"] = inc_dirs
+
     agent = TopAgent(
         cfg,
         config=TopAgentConfig(
@@ -127,6 +147,8 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_model_port="api",
             sim_max_retry=args.sim_max_retry,
             debug_max_trials=args.debug_max_trials,
+            specflow_extra_sources=tuple(str(p) for p in kid_files),
+            specflow_include_dirs=tuple(inc_dirs),
         ),
     )
     try:
@@ -150,9 +172,8 @@ async def run(args: argparse.Namespace) -> dict:
     }
     record["artifacts_present"] = sorted(p.name for p in sf.glob("*")) if sf.exists() else []
 
-    extra = [task_dir / f"{k}.v" for k in kids if (task_dir / f"{k}.v").exists()]
-    record["compile_gate"] = compile_gate(out / "rtl.sv", top, extra)
-    record["submodule_sources_supplied"] = [p.name for p in extra]
+    record["compile_gate"] = compile_gate(out / "rtl.sv", top, kid_files)
+    record["submodule_sources_supplied"] = [p.name for p in kid_files]
 
     (out / "baseline.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return record

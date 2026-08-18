@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
@@ -142,6 +143,8 @@ def judge(
     refmodel_path: Path,
     bins: list[dict],
     iteration: int = 0,
+    extra_sources: Sequence[Path | str] = (),
+    include_dirs: Sequence[Path | str] = (),
 ) -> tuple[GateVerdict, dict]:
     """One evaluation: run the suite and return the three-valued verdict.
 
@@ -157,6 +160,7 @@ def judge(
     outcome = run_suite(
         rtl_path=rtl_path, hdl_toplevel=hdl_toplevel, suite_dir=suite_dir,
         refmodel_path=refmodel_path, iteration=iteration,
+        extra_sources=extra_sources, include_dirs=include_dirs,
     )
     denominator = freeze_denominator(bins, suite_dir / "denominator.json")
     report = build_report(denominator=denominator, results=outcome.results)

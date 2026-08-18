@@ -20,6 +20,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from .schema import TestpointResult
 
@@ -88,7 +89,22 @@ def run_suite(
     refmodel_path: Path,
     iteration: int = 0,
     coverage: bool = True,
+    extra_sources: Sequence[Path | str] = (),
+    include_dirs: Sequence[Path | str] = (),
 ) -> RunOutcome:
+    """Elaborate and run the suite against `rtl_path`.
+
+    `extra_sources` carries pre-made child modules the candidate instantiates
+    but does not define, and `include_dirs` the headers they need. Without them
+    a hierarchical DUT cannot elaborate at all, and the run reports a build
+    error that looks like a defect in the generated RTL rather than a missing
+    library -- which is the wrong thing to hand a repair agent.
+
+    They are *libraries*, not part of the oracle: the reference model still has
+    to derive the composed behaviour from the specification. Supplying a child
+    makes a hierarchical design simulable; it does not tell the model what the
+    design should do.
+    """
     from cocotb_tools.runner import get_runner
 
     suite_dir = Path(suite_dir)
@@ -112,7 +128,8 @@ def run_suite(
     build_args = ["--coverage-line", "--coverage-toggle"] if coverage else []
     try:
         runner.build(
-            sources=[str(rtl_path)],
+            sources=[str(rtl_path), *(str(p) for p in extra_sources)],
+            includes=[str(p) for p in include_dirs],
             hdl_toplevel=hdl_toplevel,
             build_args=build_args,
             build_dir=str(build_dir),
