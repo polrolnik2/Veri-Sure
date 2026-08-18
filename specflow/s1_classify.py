@@ -37,19 +37,16 @@ from pydantic import BaseModel, Field
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from .divide import Unit, divide
+from .fanout import PREFIX_SENTINEL, compose, shared_block
+
+__all__ = ["PREFIX_SENTINEL"]  # re-exported: tests assert the stage's prefix
 from .ids import PREFIX_REQUIREMENT, mint
 from .model_io import ModelPort
 from .s1_requirements import normalize_spec
 from .schema import Issue
-from .stage import StageResult, gate_failures_block, previous_answer_block, run_stage
+from .stage import StageResult, run_stage
 
 STAGE = "classify"
-
-#: Ends the shared, cached block. Everything before it is byte-identical across
-#: every call of this stage; everything after it is this unit. The marker exists
-#: so a test can assert *where* prompts diverge rather than merely that they do
-#: -- see `tests/test_specflow_cache.py::test_c1_*`.
-PREFIX_SENTINEL = "\n</shared_context>\n"
 
 #: A restatement opening with one of these has inherited a dependency the split
 #: was supposed to resolve. Measured on the raw specs, 28% and 15% of
@@ -170,14 +167,10 @@ def shared_prefix(spec: str, contract_json: str) -> str:
     except json.JSONDecodeError:
         contract = {}
     io = contract.get("io") or []
-    return (
-        SYSTEM
-        + "\n<specification>\n" + text + "\n</specification>\n"
-        # sort_keys: an unsorted dump can reorder between calls and break the
-        # prefix without changing a single character of meaning.
-        + "\n<contract_io>\n" + json.dumps(io, indent=1, sort_keys=True)
-        + "\n</contract_io>"
-        + PREFIX_SENTINEL
+    return shared_block(
+        ("system", SYSTEM),
+        ("specification", text),
+        ("contract_io", json.dumps(io, indent=2, sort_keys=True)),
     )
 
 
@@ -200,21 +193,20 @@ def build_prompt(
     before = units[index - 1] if index > 0 else None
     after = units[index + 1] if index + 1 < len(units) else None
 
-    parts = [shared_prefix(spec, contract_json)]
+    item = []
     if before is not None:
-        parts.append(f"<previous_unit>\n{text[before.start:before.end]}\n</previous_unit>")
-    parts.append(
+        item.append(f"<previous_unit>\n{text[before.start:before.end]}\n</previous_unit>")
+    item.append(
         f'<unit kind="{unit.kind}" length="{unit.length}">\n'
         + text[unit.start:unit.end]
         + "\n</unit>"
     )
     if after is not None:
-        parts.append(f"<next_unit>\n{text[after.start:after.end]}\n</next_unit>")
-    if previous:
-        parts.append(previous_answer_block(previous))
-    if issues:
-        parts.append(gate_failures_block(issues))
-    return "\n\n".join(parts)
+        item.append(f"<next_unit>\n{text[after.start:after.end]}\n</next_unit>")
+    return compose(
+        shared_prefix(spec, contract_json), "\n\n".join(item),
+        issues=issues, previous=previous,
+    )
 
 
 def parse_response(text: str) -> UnitClassification:

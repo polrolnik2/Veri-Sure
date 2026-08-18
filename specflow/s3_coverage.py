@@ -21,12 +21,14 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from .assure import assure_testplan_to_bins, assure_testplan_to_checks
 from .ids import PREFIX_BIN, PREFIX_CHECK, mint
+from .fanout import compose, json_block, shared_block
 from .model_io import ModelPort
 from .schema import CoverageOutput, Issue
 from .stage import (
     StageResult,
     gate_failures_block,
     previous_answer_block,
+    run_fanout,
     run_stage,
 )
 
@@ -248,3 +250,63 @@ def write_artifacts(run_dir: Path, result: StageResult[CoverageOutput]) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+# ------------------------------------------------------------------- fan-out
+
+
+def shared_prefix(contract_json: str) -> str:
+    return shared_block(("system", SYSTEM), ("contract_json", contract_json))
+
+
+def build_prompt_one(
+    element: dict,
+    contract_json: str,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    return compose(
+        shared_prefix(contract_json),
+        json_block("testplan_element", element),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def run_s3_fanout(
+    *,
+    testplan: list[dict],
+    contract_json: str,
+    port: ModelPort,
+    max_repairs: int = 3,
+    fanout: bool = True,
+) -> tuple[CoverageOutput, list[StageResult[CoverageOutput]]]:
+    """One small call per testplan element, merged into one coverage model.
+
+    Renumbered once at the end. A uid minted inside the fan-out would depend on
+    completion order, and a rerun of identical inputs producing different uids is
+    exactly what `--reuse` and the recorded fixtures rely on not happening.
+    """
+    try:
+        contract = json.loads(contract_json) if contract_json.strip() else {}
+    except json.JSONDecodeError:
+        contract = {}
+
+    def one(element: dict) -> StageResult[CoverageOutput]:
+        return run_stage(
+            stage=f"{STAGE}_{element.get('uid', 'unknown')}",
+            port=port,
+            build_prompt=lambda issues, previous: build_prompt_one(
+                element, contract_json, issues, previous),
+            parse=parse_response,
+            gate=lambda out: gate([element], out, contract),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(testplan, one) if fanout else [one(e) for e in testplan]
+    merged = CoverageOutput(
+        reasoning="; ".join(r.output.reasoning for r in results if r.output.reasoning)[:2000],
+        bins=[b for r in results for b in r.output.bins],
+        checks=[c for r in results for c in r.output.checks],
+    )
+    return renumber(merged), results

@@ -17,12 +17,14 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from .assure import assure_requirements_to_testplan
 from .ids import PREFIX_TESTPLAN, mint
+from .fanout import compose, json_block, shared_block
 from .model_io import ModelPort
 from .schema import Issue, TestplanOutput
 from .stage import (
     StageResult,
     gate_failures_block,
     previous_answer_block,
+    run_fanout,
     run_stage,
 )
 
@@ -195,3 +197,82 @@ def write_artifacts(run_dir: Path, result: StageResult[TestplanOutput]) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+# ------------------------------------------------------------------- fan-out
+
+#: Ends the shared block for the per-requirement path. Everything before it is
+#: byte-identical across every requirement of one node; see `specflow/fanout.py`.
+_SHARED_SECTIONS = "system", "contract_json"
+
+
+def shared_prefix(contract_json: str) -> str:
+    return shared_block(("system", SYSTEM), ("contract_json", contract_json))
+
+
+def build_prompt_one(
+    requirement: dict,
+    contract_json: str,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    return compose(
+        shared_prefix(contract_json),
+        json_block("requirement", requirement),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def gate_one(requirement: dict, out: TestplanOutput) -> list[Issue]:
+    """G2 for one requirement.
+
+    **The uncovered-requirement check is vacuous on this path and says so.**
+    Fanning out one call per requirement guarantees structurally that every
+    requirement has an element, so `assure_requirements_to_testplan` can no
+    longer catch the thing it exists to catch. The completeness argument moves
+    upstream to G1', where it belongs: completeness is a property of how the spec
+    was divided, not of how many testplan rows exist.
+
+    What survives here still bites: an element with no dimension, no stimulus, no
+    expected response or no check method is not a testpoint, and over-splitting
+    upstream shows up as exactly that -- a requirement too small to have an
+    expected response cannot be given one. That is half of the opposing pressure
+    that replaces a span-length threshold; the other half is G4's
+    writes-no-output-port check.
+    """
+    return gate([requirement], out)
+
+
+def run_s2_fanout(
+    *,
+    requirements: list[dict],
+    contract_json: str,
+    port: ModelPort,
+    max_repairs: int = 3,
+    fanout: bool = True,
+) -> tuple[TestplanOutput, list[StageResult[TestplanOutput]]]:
+    """One small call per requirement, merged into one testplan.
+
+    Elements are renumbered once at the end rather than per call: a uid minted
+    inside a fan-out would depend on completion order, and results that look
+    different on a rerun of identical inputs are the thing `--reuse` and the
+    fixtures both depend on not happening.
+    """
+    def one(req: dict) -> StageResult[TestplanOutput]:
+        return run_stage(
+            stage=f"{STAGE}_{req.get('uid', 'unknown')}",
+            port=port,
+            build_prompt=lambda issues, previous: build_prompt_one(
+                req, contract_json, issues, previous),
+            parse=parse_response,
+            gate=lambda out: gate_one(req, out),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(requirements, one) if fanout else [one(r) for r in requirements]
+    merged = TestplanOutput(
+        reasoning="; ".join(r.output.reasoning for r in results if r.output.reasoning)[:2000],
+        elements=[e for r in results for e in r.output.elements],
+    )
+    return renumber(merged), results

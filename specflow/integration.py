@@ -20,7 +20,7 @@ from typing import Sequence
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import make_port
-from .refmodel.compose import choose_base, run_refmodel
+from .refmodel.compose import choose_base, run_refmodel, run_refmodel_fanout
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
 from .run import reconcile, run_suite
@@ -32,12 +32,12 @@ from .s1_requirements import write_artifacts as write_s1
 from .s2_testplan import TestplanOutput
 from .s2_testplan import gate as gate_s2
 from .s2_testplan import renumber as renumber_tps
-from .s2_testplan import run_s2
+from .s2_testplan import run_s2, run_s2_fanout
 from .s2_testplan import write_artifacts as write_s2
 from .s3_coverage import CoverageOutput
 from .s3_coverage import gate as gate_s3
 from .s3_coverage import renumber as renumber_cov
-from .s3_coverage import run_s3
+from .s3_coverage import run_s3, run_s3_fanout
 from .s3_coverage import write_artifacts as write_s3
 from .schema import GateVerdict, Issue, has_errors
 from .stage import StageResult
@@ -114,6 +114,72 @@ def _reuse(
     return out, issues
 
 
+def _run_divided_s1(
+    *, run_dir: Path, spec: str, contract_json: str, port, max_repairs: int,
+    reuse: bool,
+) -> tuple[list[dict], list[Issue]]:
+    """S1 by division, and the artifact it leaves behind.
+
+    Writes the same `requirements.json` the generative arm writes, so every
+    downstream stage, the `reuse` path and the committed baselines all read one
+    shape regardless of which arm produced it. What differs is `s1_gate.json`,
+    which records G1' per unit rather than G1 over the whole spec.
+    """
+    from .divide import coverage as unit_coverage
+    from .s1_classify import divide_and_classify
+
+    out_dir = Path(run_dir) / "specflow"
+    reqs_path = out_dir / "requirements.json"
+    if reuse and reqs_path.is_file():
+        try:
+            data = json.loads(reqs_path.read_text(encoding="utf-8"))
+            cached = data.get("requirements") if isinstance(data, dict) else data
+            if cached:
+                return list(cached), []
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    units, results, reqs = divide_and_classify(
+        spec=spec, contract_json=contract_json, port=port, max_repairs=max_repairs,
+    )
+    issues = [i for r in results for i in r.issues]
+
+    covered, total, gaps = unit_coverage(spec, units)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    reqs_path.write_text(
+        json.dumps({"requirements": reqs}, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "s1_gate.json").write_text(
+        json.dumps(
+            {
+                "arm": "divide",
+                "ok": not has_errors(issues),
+                "units": len(units),
+                "requirements": len(reqs),
+                # Reported, never claimed. The residue between units is
+                # whitespace; a gap carrying a word is a divider defect and must
+                # be visible rather than rounded away.
+                "spec_chars": total,
+                "unit_chars": covered,
+                "word_carrying_gaps": len(gaps),
+                "largest_requirement_chars": max(
+                    (s["end"] - s["start"] for r in reqs for s in r["spec_spans"]),
+                    default=0,
+                ),
+                "issues": [
+                    {"severity": i.severity, "path": i.path, "message": i.message,
+                     "kind": i.kind}
+                    for i in issues
+                ],
+            },
+            indent=2, ensure_ascii=False,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    return reqs, issues
+
+
 def build_artifacts(
     *,
     run_dir: Path,
@@ -123,12 +189,20 @@ def build_artifacts(
     max_repairs: int = 3,
     stimulus_agent: bool = True,
     reuse: bool = False,
+    divide_s1: bool = False,
+    fanout: bool = False,
 ) -> BuildResult:
     """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
 
     Stops at the first gate that fails, and says which. Exhaustion is a hard
     failure everywhere: a stage that could not be certified never propagates a
     partial artifact downstream.
+
+    `divide_s1` swaps the generative S1 for division at authorial boundaries plus
+    a per-unit classifier (`divide.py` + `s1_classify.py`); `fanout` does the
+    same for S2, S3 and the reference model. Both default off so the generative
+    arm stays runnable for A/B on the same task, model and effort -- without
+    that, any measured delta could be the decomposition or could be the weather.
 
     With `reuse`, a stage whose artifact is already on disk and still passes its
     gate is not regenerated. Two rules keep that from going stale: the gate is
@@ -145,22 +219,35 @@ def build_artifacts(
     # because a cached artifact is only valid against the upstream that made it.
     stale = not reuse
 
-    cached = None if stale else _reuse(
-        run_dir, "requirements.json", RequirementsOutput,
-        lambda out: gate_s1(spec, out, contract),
-    )
-    if cached is not None:
-        s1 = S1Result(cached[0], list(cached[1]), 0)
-    else:
+    if divide_s1:
+        # Division: the partition is built by code, so granularity stops being
+        # the model's to choose. Its gate is G1' rather than G1, and it has no
+        # `RequirementsOutput` to re-validate, so reuse is by artifact presence
+        # plus the downstream gates that consume it.
+        reqs, s1_issues = _run_divided_s1(
+            run_dir=run_dir, spec=spec, contract_json=contract_json, port=port,
+            max_repairs=max_repairs, reuse=not stale,
+        )
+        if has_errors(s1_issues):
+            return BuildResult(False, "S1", s1_issues)
         stale = True
-        s1 = run_s1(spec=spec, contract_json=contract_json, port=port,
-                    max_repairs=max_repairs)
-        renumber_reqs(s1.output)
-        write_s1(run_dir, s1)
-    if not s1.ok:
-        return BuildResult(False, "S1", s1.issues)
+    else:
+        cached = None if stale else _reuse(
+            run_dir, "requirements.json", RequirementsOutput,
+            lambda out: gate_s1(spec, out, contract),
+        )
+        if cached is not None:
+            s1 = S1Result(cached[0], list(cached[1]), 0)
+        else:
+            stale = True
+            s1 = run_s1(spec=spec, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_reqs(s1.output)
+            write_s1(run_dir, s1)
+        if not s1.ok:
+            return BuildResult(False, "S1", s1.issues)
 
-    reqs = [r.model_dump() for r in s1.output.requirements]
+        reqs = [r.model_dump() for r in s1.output.requirements]
 
     cached = None if stale else _reuse(
         run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
@@ -169,9 +256,16 @@ def build_artifacts(
         s2 = StageResult(cached[0], list(cached[1]), 0)
     else:
         stale = True
-        s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
-                    max_repairs=max_repairs)
-        renumber_tps(s2.output)
+        if fanout:
+            merged, per_item = run_s2_fanout(
+                requirements=reqs, contract_json=contract_json, port=port,
+                max_repairs=max_repairs)
+            s2 = StageResult(merged, [i for r in per_item for i in r.issues],
+                             max((r.rounds for r in per_item), default=0))
+        else:
+            s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_tps(s2.output)
         write_s2(run_dir, s2)
     if not s2.ok:
         return BuildResult(False, "S2", s2.issues)
@@ -186,9 +280,16 @@ def build_artifacts(
         s3 = StageResult(cached[0], list(cached[1]), 0)
     else:
         stale = True
-        s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
-                    max_repairs=max_repairs)
-        renumber_cov(s3.output)
+        if fanout:
+            merged3, per_item3 = run_s3_fanout(
+                testplan=tps, contract_json=contract_json, port=port,
+                max_repairs=max_repairs)
+            s3 = StageResult(merged3, [i for r in per_item3 for i in r.issues],
+                             max((r.rounds for r in per_item3), default=0))
+        else:
+            s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_cov(s3.output)
         write_s3(run_dir, s3)
     if not s3.ok:
         return BuildResult(False, "S3", s3.issues)
@@ -202,7 +303,8 @@ def build_artifacts(
     rm_issues: list[Issue] = []
     if stale or not refmodel_path.is_file():
         stale = True
-        rm, source = run_refmodel(
+        build = run_refmodel_fanout if fanout else run_refmodel
+        rm, source = build(
             requirements=reqs, contract_json=contract_json, port=port,
             workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
         )

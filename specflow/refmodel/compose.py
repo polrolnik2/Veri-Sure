@@ -235,3 +235,107 @@ def write_artifacts(
         encoding="utf-8",
     )
     return path
+
+
+# ------------------------------------------------------------------- fan-out
+
+
+def run_refmodel_fanout(
+    *,
+    requirements: list[dict],
+    contract_json: str,
+    port: ModelPort,
+    workdir: Path,
+    max_repairs: int = 3,
+    fanout: bool = True,
+) -> tuple[StageResult[RefModelOutput], str]:
+    """One small call per requirement, composed into one reference model.
+
+    The batched call this replaces asked for every fragment at once, which put a
+    200-300s reasoning request against a gateway that cuts at ~300s -- and made
+    a single unparseable response cost the whole model. Here a requirement that
+    fails is one requirement's problem.
+
+    **G4 still runs on the composed whole, not per fragment.** Its load-bearing
+    checks -- output determination, determinism, no-RTL-import -- are properties
+    of the assembled model, and a per-fragment gate could pass every fragment
+    while the class they compose into leaves an output free. So the fan-out
+    gates each fragment on what is decidable locally (it parses, it names its
+    requirement, it writes an output port) and the composed model on the rest.
+    """
+    from ..fanout import compose as compose_prompt
+    from ..fanout import json_block, shared_block
+    from ..stage import run_fanout
+    from .validate import validate_source
+
+    try:
+        contract = json.loads(contract_json) if contract_json.strip() else {}
+    except Exception:  # noqa: BLE001
+        contract = {}
+
+    base = choose_base(contract)
+    shared = shared_block(
+        ("system", SYSTEM),
+        ("contract_json", contract_json),
+        ("dispatch", f"The dispatch method for this design is `{base}` (chosen "
+                     f"from the contract, not negotiable). Output ports that "
+                     f"must all be written across the whole model: "
+                     f"{output_ports(contract)}."),
+    )
+
+    def one(req: dict) -> StageResult[RefModelOutput]:
+        uid = req.get("uid", "unknown")
+        return run_stage(
+            stage=f"{STAGE}_{uid}",
+            port=port,
+            build_prompt=lambda issues, previous: compose_prompt(
+                shared, json_block("requirement", req),
+                issues=issues, previous=previous),
+            parse=parse_response,
+            gate=lambda out: _gate_one_fragment(out, req),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(requirements, one) if fanout else [one(r) for r in requirements]
+
+    merged = RefModelOutput(
+        reasoning="; ".join(r.output.reasoning for r in results if r.output.reasoning)[:2000],
+        base=base,
+        helpers="\n".join(r.output.helpers for r in results if r.output.helpers),
+        fragments=[f for r in results for f in r.output.fragments],
+        underdetermined=[u for r in results for u in (r.output.underdetermined or [])],
+    )
+    source = render(merged, contract)
+    issues = [i for r in results for i in r.issues]
+    issues += validate_source(
+        source=source, requirements=requirements, contract=contract,
+        expected_base=base, workdir=workdir,
+    )
+    return StageResult(merged, issues, max(r.rounds for r in results) if results else 0), source
+
+
+def _gate_one_fragment(out: RefModelOutput, req: dict) -> list[Issue]:
+    """What is decidable about one fragment on its own.
+
+    Everything else -- determinism, output determination over the whole port
+    set, the sandbox check -- is a property of the composed class and is left to
+    `validate_source` afterwards. Asserting them per fragment would reject a
+    correct fragment for its neighbours' omissions.
+    """
+    uid = req.get("uid") or ""
+    if out.reasoning.startswith("Parse Error: "):
+        return [Issue("error", f"refmodel.{uid}", out.reasoning)]
+    frags = [f for f in out.fragments if f.req_uid == uid]
+    if not frags:
+        return [
+            Issue("error", f"refmodel.{uid}",
+                  f"returned no fragment for {uid}", "uncovered")
+        ]
+    if len(out.fragments) > len(frags):
+        extra = sorted({f.req_uid for f in out.fragments} - {uid})
+        return [
+            Issue("error", f"refmodel.{uid}",
+                  f"returned fragments for other requirements too: {extra}",
+                  "unwanted")
+        ]
+    return []
