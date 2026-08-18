@@ -188,35 +188,53 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
         for i, sp in enumerate(req_spans):
             path = f"requirement.{uid}.spec_spans[{i}]"
             try:
-                start, end, quote = int(sp["start"]), int(sp["end"]), str(sp["quote"])
+                # `end` is deliberately unread: the quote's own length
+                # defines the span once it is located, so a model that
+                # miscounts its end offset is no longer penalised for it.
+                start, quote = int(sp["start"]), str(sp["quote"])
             except Exception:  # noqa: BLE001
                 issues.append(Issue("error", path, "malformed span"))
                 continue
 
-            if not (0 <= start < end <= len(spec_text)):
+            # The offsets are a HINT, not the check. Requiring the model to
+            # compute exact character positions failed 31 times out of 31 on a
+            # 14.3KB spec while 30 of those quotes were verbatim and locatable
+            # by search -- so the arithmetic rejected good attribution and told
+            # the model nothing about what was actually wrong. Worse, it made
+            # vacuity cheap: quoting one character satisfies "matches at that
+            # range" trivially, and across four repair rounds the model moved
+            # from 130-character clauses to 1-character ones because that
+            # scored better.
+            located = _locate(spec_text, quote, start)
+            if located is None:
                 issues.append(
-                    Issue(
-                        "error",
-                        path,
-                        f"range {start}..{end} outside spec of {len(spec_text)} chars",
-                    )
+                    Issue("error", path, "quote is not verbatim spec text")
                 )
                 continue
 
-            if spec_text[start:end] != quote:
-                issues.append(
-                    Issue(
-                        "error",
-                        path,
-                        "quote is not the verbatim spec text at that range",
-                    )
-                )
-                continue
-
-            spans.append((start, end))
+            spans.append(located)
 
     issues.extend(_unattributed(spec_text, spans))
     return issues
+
+
+def _locate(spec_text: str, quote: str, hint: int) -> tuple[int, int] | None:
+    """Find `quote` in the spec, preferring the occurrence nearest `hint`.
+
+    The hint is the model's own offset. It is used only to disambiguate a quote
+    that appears more than once -- never to reject one that is genuinely there.
+    """
+    if not quote:
+        return None
+    positions = []
+    at = spec_text.find(quote)
+    while at != -1:
+        positions.append(at)
+        at = spec_text.find(quote, at + 1)
+    if not positions:
+        return None
+    best = min(positions, key=lambda p: abs(p - hint))
+    return (best, best + len(quote))
 
 
 def _unattributed(spec_text: str, spans: list[tuple[int, int]]) -> list[Issue]:

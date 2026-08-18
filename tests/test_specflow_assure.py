@@ -192,14 +192,33 @@ def test_requirement_with_no_span_is_rejected():
     assert any("no spec span" in i.message for i in issues)
 
 
-def test_out_of_range_span_is_rejected():
+def test_a_wrong_offset_no_longer_rejects_a_verbatim_quote():
+    """Offsets are a hint for disambiguation, not the check.
+
+    Requiring exact character positions rejected 31 of 31 spans on a 14.3KB
+    spec while 30 of those quotes were verbatim and locatable by search. The
+    arithmetic was rejecting good attribution and saying nothing about what was
+    actually wrong.
+    """
+    quote = SPEC.strip().split("\n")[0][:40]
+    assert len(quote) >= 24, "fixture too short to be a valid span"
     issues = check_spec_attribution(
-        SPEC, [{"uid": "REQ-0000", "spec_spans": [{"start": 0, "end": 99999, "quote": "x"}]}]
+        SPEC,
+        [{"uid": "REQ-0000",
+          "spec_spans": [{"start": 99999, "end": 99999, "quote": quote}]}],
     )
-    assert any("outside spec" in i.message for i in issues)
+    assert not any("verbatim" in i.message for i in issues)
 
 
-# ---------------------------------------------------------------- rendering
+def test_a_quote_that_is_not_in_the_spec_is_still_rejected():
+    """Locating by search must not weaken the verbatim requirement."""
+    issues = check_spec_attribution(
+        SPEC,
+        [{"uid": "REQ-0000",
+          "spec_spans": [{"start": 0, "end": 40,
+                          "quote": "this sentence appears nowhere in the spec"}]}],
+    )
+    assert any("verbatim" in i.message for i in issues)
 
 
 def test_render_matches_contract_linter_format():
@@ -208,3 +227,39 @@ def test_render_matches_contract_linter_format():
     out = render_issues([Issue("error", "requirement.REQ-0001", "no testplan covers it")])
     assert out == "- [error] requirement.REQ-0001: no testplan covers it\n"
     assert render_issues([]) == ""
+
+
+def test_shared_and_short_spans_remain_legal():
+    """Both are legitimate attribution, and an earlier attempt at this gate
+    wrongly rejected them.
+
+    A port declaration is a short quote, and one sentence can genuinely
+    constrain two requirements -- in the half-adder fixture "The module should
+    implement a half adder..." constrains both `sum` and `cout`. Rules banning
+    short or shared spans looked like anti-gaming measures and were really
+    false positives; the unattributed-text check below is what actually catches
+    a decomposition that attributes nothing.
+    """
+    quote = SPEC.strip()
+    issues = check_spec_attribution(
+        SPEC,
+        [
+            {"uid": "REQ-0000", "spec_spans": [{"start": 0, "end": len(quote),
+                                                "quote": quote}]},
+            {"uid": "REQ-0001", "spec_spans": [{"start": 0, "end": len(quote),
+                                                "quote": quote}]},
+        ],
+    )
+    assert not [i for i in issues if i.severity == "error"], issues
+
+
+def test_attributing_nothing_is_still_caught():
+    """The load-bearing check. A decomposition whose spans cover a sliver of the
+    spec must fail, which is what rejected every round of a live run that cited
+    the same opening paragraph from 30 of 31 requirements."""
+    issues = check_spec_attribution(
+        SPEC,
+        [{"uid": "REQ-0000", "spec_spans": [{"start": 0, "end": 8,
+                                             "quote": SPEC.strip()[:8]}]}],
+    )
+    assert any(i.kind == "uncovered" for i in issues)
