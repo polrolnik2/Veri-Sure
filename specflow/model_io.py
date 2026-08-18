@@ -157,6 +157,11 @@ class ApiPort:
     root: Path
     model: object | None = None
     _config: object | None = None
+    #: Where prompt-cache accounting goes. Optional, because the single-call
+    #: stages have nothing to cache across; supplied by every fanned-out stage,
+    #: because there a silent cache loss is a ~30x cost regression that no gate,
+    #: artifact or verdict would notice. See `specflow/cache_stats.py`.
+    stats: object | None = None
 
     # ------------------------------------------------------------------ config
     def config(self):
@@ -291,6 +296,12 @@ class ApiPort:
 
         response_path.write_text(text, encoding="utf-8")
         usage = getattr(response, "usage", None)
+        if self.stats is not None:
+            self.stats.record_usage(
+                stage=stage,
+                model=str(getattr(response, "model", None) or cfg.model),
+                usage=usage,
+            )
         record_fixture(
             Path(self.root),
             stage,
