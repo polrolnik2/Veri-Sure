@@ -201,6 +201,37 @@ feature designed for generations that outlast a connection, and it is one
 routing fix away from working. Raising the ~300s cap or fixing
 `GET /v1/responses/{id}` would restore `xhigh` outright.
 
+**Continuation does not work either, and the reason is specific.** The obvious
+answer is to cap `max_output_tokens` below the ceiling and stitch segments
+together, re-sending each length-terminated partial to be continued. Measured on
+the same S1 prompt, it does not converge, because at `xhigh` a capped call
+spends its *entire* cap on reasoning and returns no content at all:
+
+| probe | cap | result |
+| --- | --- | --- |
+| single capped call | 6000 | 75s, `finish_reason=length`, 6000 reasoning tokens, **0 chars of content** |
+| single capped call | 12000 | 145s, `finish_reason=length`, 12000 reasoning tokens, **0 chars of content** |
+| 4-segment chain carrying the reasoning summary | 8000 | 4 x ~88s, 8000 reasoning tokens each, **0 chars each** |
+
+`max_completion_tokens` caps reasoning and content *together*, so a cap set low
+enough to fit the ceiling is a cap the model never finishes reasoning inside.
+There is nothing to continue from -- the partial answer is empty.
+
+Carrying the reasoning forward does not fix that. The Responses API returns a
+summary even when content is empty, so each segment was re-sent the accumulated
+summary (3816, then 1705, then 2407, then 1034 chars) and asked to finish. The
+reasoning did not shorten: every segment spent its whole 8000-token cap
+re-reasoning and emitted nothing. `previous_response_id` fares no better -- the
+gateway accepts the parameter and drops the context. Four segments cost ~350s
+and produced zero output, which is worse than the single 301s failure it was
+meant to replace.
+
+So the ceiling is not a budgeting problem to be worked around client-side; at
+`xhigh` on this prompt the model needs more than 24,800 tokens of *uninterrupted*
+reasoning, and the ~12.1ms-per-output-token generation rate makes that
+structurally impossible inside 300s. `high` (220s, and it does produce content)
+is the setting that works today.
+
 Two consequences worth stating plainly.
 
 **The failure is silent and expensive.** The OpenAI SDK retries connection
