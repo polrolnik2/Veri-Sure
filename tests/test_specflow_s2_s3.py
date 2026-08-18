@@ -183,3 +183,42 @@ def test_s3_exhaustion_is_a_hard_failure():
     port = ScriptedPort([s3_response([BIN0], [CHK0])])
     res = run_s3(testplan=TPS, contract_json=CONTRACT, port=port, max_repairs=1)
     assert not res.ok and res.rounds == 2
+
+
+def test_every_stage_shows_the_artifact_before_the_defects():
+    """One ordering, checked across all stages rather than assumed.
+
+    The defect list refers to the artifact, so a reader meets what is being
+    repaired before what is wrong with it. This was asserted for S1 only, and
+    `refmodel` was written the other way round -- caught in a live run, not by
+    the suite, which is exactly the gap a cross-stage test closes.
+    """
+    from specflow.s1_requirements import build_prompt as s1_prompt
+    from specflow.s2_testplan import build_prompt as s2_prompt
+    from specflow.s3_coverage import build_prompt as s3_prompt
+    from specflow.schema import Issue
+
+    issues = [Issue("error", "some.path", "a defect")]
+    prior = '{"prior": "artifact"}'
+    prompts = {
+        "s1": s1_prompt("spec", "{}", issues, prior),
+        "s2": s2_prompt([{"uid": "REQ-0000"}], "{}", issues, prior),
+        "s3": s3_prompt([{"uid": "TP-0000"}], "{}", issues, prior),
+    }
+    for name, p in prompts.items():
+        assert "<previous_answer>" in p, name
+        assert "<gate_failures>" in p, name
+        assert p.index("<previous_answer>") < p.index("<gate_failures>"), name
+
+
+def test_the_refmodel_stage_orders_them_the_same_way():
+    """`refmodel` builds its prompt inline rather than through a module-level
+    function, which is how it drifted out of step in the first place."""
+    import inspect
+
+    from specflow.refmodel import compose
+
+    src = inspect.getsource(compose.run_refmodel)
+    prev = src.index("previous_answer_block(previous)")
+    fail = src.index("gate_failures_block(issues)")
+    assert prev < fail, "refmodel appends the defect list before the artifact"

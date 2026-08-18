@@ -173,9 +173,12 @@ def run_refmodel(
             f"Output ports that must all be written: {output_ports(contract)}.",
         ]
         if issues:
+            # The artifact first: the defect list refers to it, so a reader
+            # (or a model) meets what is being repaired before what is wrong
+            # with it. S1-S3 order it the same way.
+            if previous:
+                parts.append(previous_answer_block(previous))
             parts.append(gate_failures_block(issues))
-        if previous:
-            parts.append(previous_answer_block(previous))
         return "\n\n".join(parts)
 
     def gate(out: RefModelOutput) -> list[Issue]:
