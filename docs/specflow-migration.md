@@ -183,6 +183,24 @@ Measured on the `or1200_ctrl` S1 prompt (37.9KB, from a 14.3KB spec):
 | `high` | 24000 | 220s | fits, ~80s margin |
 | `xhigh` | 40000 | 301s | **cut** |
 
+**No client-side bypass exists.** Three were tried:
+
+| approach | result |
+| --- | --- |
+| client timeout raised to 2400s | cut at 301s |
+| `stream=True` | cut at 301s, `first chunk at None` |
+| `background=True` + poll | submission accepted, retrieval unroutable |
+
+Background mode is the near miss and the one worth escalating. The submission
+succeeds -- `status=queued` in 3.3s -- but every retrieval 404s with
+`MODEL_NOT_FOUND: model ''`, on the bare path, with `?model=`, and with `x-model`
+or `model` headers alike. The gateway routes by the model in the request *body*,
+and a `GET` has none, so a queued response can be created and never fetched.
+That is a gateway defect rather than a limit: background mode is precisely the
+feature designed for generations that outlast a connection, and it is one
+routing fix away from working. Raising the ~300s cap or fixing
+`GET /v1/responses/{id}` would restore `xhigh` outright.
+
 Two consequences worth stating plainly.
 
 **The failure is silent and expensive.** The OpenAI SDK retries connection
