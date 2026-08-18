@@ -294,3 +294,58 @@ python -m specflow.cli s1 --run-dir runs/<r> --model-port file   # ingests, gate
 
 Then `s2`, `s3`, `refmodel`. Once answered, `--model-port replay` reproduces the
 whole chain deterministically and for free.
+
+## S1 by division: measured
+
+The generative S1 collapses to the same shape on every real spec — a handful of
+token requirements plus one catch-all blanketing the whole document, which
+satisfies the coverage gate on its own. Division replaces it: `divide.py` cuts
+only where the specification's author cut (blank lines, list items, headings,
+table rows) and a per-unit classifier does everything below that boundary,
+emitting offsets rather than spec text.
+
+**Why the divider stops at authorial boundaries.** Sentence-level splitting
+reaches a similar granularity but severs meaning. Of the sentences that follow
+another sentence inside one paragraph, 28% (`i2c_master_bit_ctrl`) and 15%
+(`or1200_ctrl`) open with a back-reference — `it`, `also`, `otherwise`. Cutting
+where the author cut cannot do that, and it is asserted over all 209 VerilogEval
+prompts and all 64 ChipVerilog specs: **0 mid-sentence boundaries, 0 overlapping
+units, 0 gaps carrying a word.**
+
+**Live, on `i2c_master_bit_ctrl` with `gpt-5-mini` at `low` effort:**
+
+| | generative | divided |
+| --- | --- | --- |
+| requirements | 24 | **69** |
+| span p50 | 221 ch | 111 ch |
+| **largest single requirement** | **15,713 ch — 100% of the spec** | **1,819 ch — 11.6%** |
+| spec coverage | 100%, via the catch-all | 97.6%, honestly |
+| restatements opening with a back-reference | — | **0 of 69** |
+| units clean at G1' on the first pass | — | **65 of 65** |
+| wall clock | 13–18 min | **1 min 54 s** |
+
+The catch-all is gone: no requirement now claims more than 11.6% of the
+specification, against a target of 10%, and the one that reaches 11.6% is a
+single large authorial unit rather than an evasion. The residual 2.4% of
+uncovered text is units the classifier marked non-behavioural — headings and
+cross-references — which is the intended outcome, not a gap.
+
+**Concurrency is a cost decision, not a speed one.** Parallel calls race the
+prompt-cache write, so more workers buys wall clock and pays in tokens. 24 units
+through the classifier:
+
+| workers | warmup | wall | hit rate | billed input |
+| --- | --- | --- | --- | --- |
+| 8 | 2 | 72s | 88.6% | 13,592 |
+| **4** | **2** | **76s** | **96.8%** | **3,864** |
+| 4 | 6 | 67s | 93.1% | 8,216 |
+| 2 | 2 | 85s | 92.9% | 8,472 |
+
+8 workers costs 3.5x the input tokens for 5% less wall clock. The ordering among
+the lower rows is within run-to-run noise — 2 workers is not better than 4 — but
+8's token cost is well outside it. The default is 4.
+
+**This also makes the ~300s ceiling irrelevant rather than worked around.** Every
+call in the divided, fanned-out chain is a small one: 7–26s measured across
+`gpt-5-nano`, `gpt-5-mini` and `gpt-5.6-luna`. Nothing comes within 30x of the
+limit that killed the monolithic S1.

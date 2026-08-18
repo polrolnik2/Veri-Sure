@@ -127,16 +127,31 @@ def gate_failures_block(issues: list[Issue]) -> str:
 
 # ------------------------------------------------------------------- fan-out
 
-#: How many items run at once. Measured against the gateway: 8 parallel calls
-#: completed 8/8, wall 23.4s against 143.3s serial -- 6.1x -- with no rate-limit
-#: errors. Raising it is a gateway question, not a code one.
-FANOUT_WORKERS = 8
+#: How many items run at once. Chosen by measurement, not by "more is faster":
+#: concurrency buys wall clock and costs cache hits, because parallel calls race
+#: the cache write. 24 real units of `i2c_master_bit_ctrl` through the classifier
+#: on `gpt-5-mini`:
+#:
+#:     workers  warmup   wall    hit%   billed input
+#:           8       2    72s   88.6%         13,592
+#:           4       2    76s   96.8%          3,864
+#:           4       6    67s   93.1%          8,216
+#:           2       2    85s   92.9%          8,472
+#:
+#: 8 workers costs **3.5x the input tokens** for 5% less wall clock. The hit-rate
+#: ordering among the lower rows is within run-to-run noise -- 2 workers is not
+#: better than 4 -- but 8's token cost is well outside it. So: 4.
+FANOUT_WORKERS = 4
 
 #: Items run one at a time before the pool opens. A cold prefix is not cached
 #: until a response has been written, and concurrent calls race that write:
 #: measured, 3 of 8 parallel calls on a cold prefix reported `cached=0`, while
 #: the same prefix warmed serially reported 97% from the third call onward. This
 #: is the entire reason the fan-out is not just a thread pool.
+#:
+#: Two, not more. Warm-up calls are serial *and* the first of them is a
+#: guaranteed full-price miss, so a longer warm-up costs more than it recovers:
+#: 6 warm-up items measured worse on both hit rate and billed tokens than 2.
 WARMUP_ITEMS = 2
 
 
