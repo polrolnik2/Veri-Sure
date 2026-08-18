@@ -54,7 +54,7 @@ Five agent calls; every gate is pure code. Gates: **G1** spec attribution,
 
 ## Status
 
-Milestones M0–M9 are implemented and tested; 161 tests pass with no model in the
+Milestones M0–M9 are implemented and tested; 186 tests pass with no model in the
 loop, because every stage replays a recorded fixture
 (`tests/fixtures/specflow/hadd`, a real VerilogEval-v2-EXT problem).
 
@@ -97,22 +97,78 @@ Retired:
 `SpecflowReviewer` — same `(is_pass, mismatch_cnt, sim_output)` shape as
 `SimReviewer.review()` — is the seam that swaps the oracle underneath it.
 
-### Two things still need an API key
+### Live-model results
 
-Neither is possible in an environment without `OPENAI_API_KEY`:
+Both items that previously needed an API key are settled, and the first live run
+found four defects that no amount of local testing had. Model: `gpt-5.6-luna`
+(served `gpt-5.6-luna-2026-07-09`) at `reasoning_effort=xhigh`.
 
-1. **A baseline VerilogEval-v2-EXT run.** M9's comparison is meaningless without
-   the before number. Note that `run_verilog_eval_v2.py:416-433` discards
-   `is_sim_pass` and re-judges against the golden testbench, so replacing the
-   internal oracle does not move the scoring surface — what changes is what the
-   repair loop converges on, which is exactly why the baseline matters.
-2. **One end-to-end node run through `top_agent`.** `cli.py:66` exits without an
-   API key, so `_run_instance_specflow` has never executed in situ. Every part of it is tested through `integration.py`, which is a pure
-   function of a run directory — but that is not the same as having run it.
+**One node end to end through `top_agent`, at xhigh on every call: ACCEPT.**
+S1 1 round, S2 1 round, S3 2 rounds (3 issues repaired), reference model
+1 round, RTL accepted on iteration 0; 10m34s wall clock for a half adder. The
+suite was separately driven outside pytest against golden RTL (ACCEPT, 5/5) and
+a tied-off DUT (REPAIR_RTL, 5/5 FAIL with per-mismatch values and stimulus),
+which is G6's two-sided control on live-generated artifacts rather than
+fixtures.
 
-Until both are done, treat the specflow path's benchmark standing as unmeasured
-rather than unchanged: the machinery is tested, but no end-to-end node run has
-executed in situ.
+What the run exposed, in the order it surfaced:
+
+1. **Reasoning effort was silently dropped.** `load_openai_config` resolved
+   every field from the environment except `reasoning_effort`, so `ApiPort`
+   always sent `None`.
+2. **The reference model had no dispatch.** The prompt asked the agent to emit
+   one while the response schema had nowhere to put it, so a model following
+   the schema literally returned correct fragments and no `evaluate`. G4 caught
+   it only dynamically and its issue text never named the defect, so four
+   repair rounds could not converge. `compose.py` now synthesises the dispatch;
+   the same stage went from 4 rounds and a hard failure to 1 round, with
+   reasoning falling from 11,877 tokens to 465.
+3. **The rendered suite could not import `specflow` outside pytest.** cocotb
+   overwrites `PYTHONPATH` from the parent's `sys.path`, so `run.py`'s
+   `extra_env` value was dead code, and a relative `''` entry means the
+   repository in the parent but the test directory in the child. Every test
+   passed while a production node would have failed on every node.
+4. **`_run_instance_specflow` had never executed**, and crashed on its first
+   real statement with a plain `TypeError`.
+
+Each has a regression test, and (3) was confirmed to fail without its fix
+rather than assumed to be covered.
+
+### Reaching the model
+
+Three settings are not optional on the SDC gateway, and each fails differently:
+
+| | Value | Symptom if wrong |
+| --- | --- | --- |
+| model id | `gpt-5.6-luna`, no vendor prefix | `404 MODEL_NOT_FOUND` |
+| base URL | must end in `/v1` | requests hit the wrong path |
+| effort | flat `reasoning_effort` | `400 unknown_parameter` |
+
+The nested `{"reasoning": {"effort": ...}}` form is the Responses API shape and
+is rejected by chat-completions. Note also that `load_env_file` overrides only
+the keys it names, so a conflicting `OPENAI_EXTRA_BODY` already in the
+environment survives any file that omits it.
+
+**Tools and reasoning effort cannot coexist on chat-completions here.** The
+gateway directs callers to `/v1/responses`, and every `eda_agent` agent is
+tool-using, so without that surface the RTL loop runs at the endpoint's default
+effort while only specflow's five tool-free calls honour the configured one.
+`eda_agent/responses_model.py` is the adapter; select it with
+`OPENAI_API_FLAVOR=responses`. specflow's `ApiPort` stays on chat-completions
+deliberately, since its calls carry no tools.
+
+Reasoning models also reject an explicit `temperature`, which both entry points
+sent by default. `--temperature` now defaults to unset.
+
+### Still open
+
+- **No VerilogEval-v2-EXT baseline.** Not a missing key any more, a runtime
+  one: S1 alone took 5m44s on a half adder at this effort, so 209 problems runs
+  into days. It needs a lower effort or a much longer window.
+- **ChipVerilog is the sharper target** and has its own runner
+  (`benchmarks/run_chipverilog.py`). Note that specflow is scoped to leaf
+  nodes, so the 16 hierarchical tasks of its 64 are out of scope by
+  construction rather than by accident.
 
 ### How the node path is wired
 
