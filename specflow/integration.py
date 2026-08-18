@@ -201,3 +201,63 @@ def failure_payload(suite_dir: Path) -> list[dict]:
             }
         )
     return payload
+
+
+def describe_oracle(
+    *,
+    suite_dir: Path,
+    refmodel_path: Path,
+    testplan: list[dict] | None = None,
+    max_chars: int = 16000,
+) -> str:
+    """What the repair agent is shown in place of a SystemVerilog testbench.
+
+    `rtl_editor.chat` was written for the monolithic SV path and read
+    `<run>/tb.sv` off disk to fill its `generated_tb` prompt slot. specflow never
+    writes that file -- its testbench is the rendered cocotb suite -- so the very
+    first repair iteration died with `FileNotFoundError` and the repair loop had
+    never once run on this backend.
+
+    The substitute is deliberately not the rendered testcases. Those are
+    generated plumbing: a stimulus list, an `env.cov.hit` per bin and an
+    `env.check` per check, identical in shape across every testpoint. What
+    actually determines the expected values is the reference model, so that is
+    what a repair agent needs to read. It is frozen and no tool can edit it, so
+    showing it cannot produce a retrofitted oracle.
+
+    Budgeted in priority order: the model whole first, then as many failing
+    testplan elements as fit. Truncating the model would leave the agent
+    reasoning about half a specification.
+    """
+    header = (
+        "The oracle is NOT a SystemVerilog testbench. Expected values come from a\n"
+        "Python reference model generated from the specification alone -- it has\n"
+        "never seen this RTL -- and are compared by a cocotb suite, one test per\n"
+        "testplan element. Neither is editable: a mismatch means the RTL and the\n"
+        "specification disagree.\n\n"
+        "=== reference model (the expected behaviour) ===\n"
+    )
+    try:
+        model_src = Path(refmodel_path).read_text(encoding="utf-8")
+    except OSError as exc:
+        model_src = f"<reference model unreadable: {exc}>"
+
+    out = header + model_src
+    failing = {e["testpoint"] for e in failure_payload(suite_dir)}
+    if testplan and failing:
+        lines = ["\n\n=== testplan elements for the failing testpoints ===\n"]
+        for tp in testplan:
+            if tp.get("uid") not in failing:
+                continue
+            entry = (
+                f"[{tp['uid']}] {tp.get('dimension', '?')}\n"
+                f"  stimulus: {tp.get('stimulus', '')}\n"
+                f"  expected: {tp.get('expected_response', '')}\n"
+                f"  check:    {tp.get('check_method', '')}\n"
+            )
+            if len(out) + sum(map(len, lines)) + len(entry) > max_chars:
+                lines.append("  ... further failing testpoints omitted\n")
+                break
+            lines.append(entry)
+        out += "".join(lines)
+    return out[:max_chars]

@@ -11,10 +11,18 @@ Kept from the original path: the contract, `RTLGenerator`, and `RTLEditor` for
 repair. Replaced: the oracle, the verdict, and the failure payload the repair
 agent receives.
 
-`RTLEditor` needs no changes at all, because it is already parameterised on a
-reviewer object. `SpecflowReviewer` below has the same three-value shape as
+`RTLEditor` is reused rather than rewritten: it is parameterised on a reviewer
+object, and `SpecflowReviewer` below has the same three-value shape as
 `SimReviewer.review()`, so the editor's `run_simulation` tool keeps working while
 the oracle underneath it becomes the cocotb suite and the Python reference model.
+
+That reuse needed one change to the editor, which an earlier version of this
+docstring claimed it did not. `RTLEditor.chat` also read `<run>/tb.sv` off disk
+to fill its `generated_tb` prompt slot -- a file this backend never writes -- so
+the first repair iteration died with `FileNotFoundError` and the specflow repair
+loop had never run at all. The editor now takes the oracle text as a parameter;
+`describe_oracle` renders it from the reference model and the failing testplan
+elements.
 """
 
 from __future__ import annotations
@@ -30,6 +38,25 @@ from .rtl_generator import RTLGenerator
 from .sim_reviewer import check_syntax
 
 logger = logging.getLogger(__name__)
+
+# The SystemVerilog path clipped the testbench at 8000 characters, a budget
+# sized for a monolithic blob that was mostly boilerplate. What specflow sends
+# instead is the reference model: dense, and every line of it is specification.
+# Truncating it at 8000 would hand the agent half a specification and let it
+# infer the rest from the RTL, which is exactly the wrong direction.
+_TB_TEXT_CHARS = 16000
+
+
+def _load_testplan(run_dir: Path) -> list[dict] | None:
+    """Testplan elements, for naming what each failing testpoint was checking."""
+    path = Path(run_dir) / "specflow" / "testplan.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict):
+        data = data.get("elements") or data.get("testplan") or []
+    return data if isinstance(data, list) else None
 
 
 def format_failures(payload: list[dict], *, limit: int = 40) -> str:
@@ -136,7 +163,7 @@ async def run_specflow_node(
 
     Returns `(accepted, rtl_code, detail)`.
     """
-    from specflow.integration import build_artifacts
+    from specflow.integration import build_artifacts, describe_oracle
 
     output_dir_per_run = Path(output_dir_per_run)
     detail: dict[str, Any] = {"backend": "specflow", "history": []}
@@ -213,6 +240,16 @@ async def run_specflow_node(
             sim_mismatch_cnt=failing,
             contract_json=contract_json,
             max_trials=remaining,
+            # There is no `tb.sv` on this backend. Supplying the oracle
+            # explicitly is what the editor needs; reading that path
+            # unconditionally is what killed this loop before it ever ran.
+            tb_text=describe_oracle(
+                suite_dir=built.suite_dir,
+                refmodel_path=built.refmodel_path,
+                testplan=_load_testplan(output_dir_per_run),
+                max_chars=_TB_TEXT_CHARS,
+            ),
+            tb_clip_chars=_TB_TEXT_CHARS,
         )
         remaining -= max(1, int(used))
         if repaired.strip():

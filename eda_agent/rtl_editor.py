@@ -430,7 +430,10 @@ def _child_outputs_gone_dark(
 
 @dataclass
 class _EditSession:
-    tb_path: str
+    # None when there is no SystemVerilog testbench -- the specflow backend's
+    # oracle is a cocotb suite. Nothing in this session reads it; it is kept so
+    # a post-mortem can tell which backend produced the session.
+    tb_path: str | None
     rtl_path: str
     output_dir: str
     last_mismatch_cnt: int
@@ -1028,9 +1031,21 @@ class RTLEditor:
         sim_mismatch_cnt: int,
         contract_json: str,
         max_trials: int | None = None,
+        tb_text: str | None = None,
+        tb_clip_chars: int = 8000,
     ) -> Tuple[bool, str, int, str]:
+        """Repair `rtl.sv` until the reviewer accepts it.
+
+        `tb_text` is what the agent is shown as the oracle. The SystemVerilog
+        path leaves it None and the text is read from `<run>/tb.sv`; specflow
+        supplies it directly, because its testbench is a rendered cocotb suite
+        plus a Python reference model and no such file exists. Reading that path
+        unconditionally is what made the specflow repair loop die with
+        `FileNotFoundError` on its first iteration, having never run once.
+        """
         self.reset()
         tb_path = f"{output_dir_per_run}/tb.sv"
+        has_tb_file = Path(tb_path).is_file()
         rtl_path = f"{output_dir_per_run}/rtl.sv"
         session_max_trials = int(max_trials) if max_trials is not None else int(self.max_trials)
         if session_max_trials < 0:
@@ -1048,7 +1063,7 @@ class RTLEditor:
             pass  # a contract we cannot parse simply disables the extra guard
 
         self._session = _EditSession(
-            tb_path=tb_path,
+            tb_path=tb_path if has_tb_file else None,
             rtl_path=rtl_path,
             output_dir=output_dir_per_run,
             last_mismatch_cnt=sim_mismatch_cnt,
@@ -1057,8 +1072,11 @@ class RTLEditor:
             child_names=child_names,
         )
 
-        with open(tb_path, "r", encoding="utf-8") as f:
-            generated_tb = f.read()
+        if tb_text is not None:
+            generated_tb = tb_text
+        else:
+            with open(tb_path, "r", encoding="utf-8") as f:
+                generated_tb = f.read()
 
         # Save full failed log for inspection, but only send a short excerpt to the agent.
         try:
@@ -1085,7 +1103,7 @@ class RTLEditor:
         init = INIT_EDITION_PROMPT.format(
             input_spec=spec,
             contract_json=contract_json,
-            generated_tb=_clip_text(generated_tb, max_chars=8000),
+            generated_tb=_clip_text(generated_tb, max_chars=tb_clip_chars),
             sim_failed_log_excerpt=sim_failed_log_excerpt,
             kmap_hint=(KMAP_DEBUG_HINT_PROMPT if needs_kmap_hint else ""),
         )
@@ -1128,6 +1146,11 @@ class RTLEditor:
         # generating its own (potentially wrong) assertions via the LLM.
         asserter_hint = ""
         try:
+            if not has_tb_file:
+                # The asserter copies `tb.sv` into its proof directory and wraps
+                # it. With no SystemVerilog testbench there is nothing to wrap,
+                # and running it would spend an agent call to fail on a read.
+                raise FileNotFoundError(tb_path)
             fail_sigs: list[str] = []
             for fo in (report.get("fail_outputs") or []):
                 if isinstance(fo, dict) and isinstance(fo.get("sig"), str) and fo.get("sig"):
