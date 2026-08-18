@@ -19,7 +19,12 @@ from .assure import assure_requirements_to_testplan
 from .ids import PREFIX_TESTPLAN, mint
 from .model_io import ModelPort
 from .schema import Issue, TestplanOutput
-from .stage import StageResult, gate_failures_block, run_stage
+from .stage import (
+    StageResult,
+    gate_failures_block,
+    previous_answer_block,
+    run_stage,
+)
 
 STAGE = "s2"
 
@@ -82,7 +87,8 @@ _VALID_DIMENSIONS = {
 
 
 def build_prompt(
-    requirements: list[dict], contract_json: str, issues: list[Issue] | None = None
+    requirements: list[dict], contract_json: str, issues: list[Issue] | None = None,
+    previous: str | None = None,
 ) -> str:
     parts = [
         SYSTEM,
@@ -91,6 +97,8 @@ def build_prompt(
         + "\n</requirements>",
         "<contract_json>\n" + contract_json.rstrip() + "\n</contract_json>",
     ]
+    if previous:
+        parts.append(previous_answer_block(previous))
     if issues:
         parts.append(gate_failures_block(issues))
     return "\n\n".join(parts)
@@ -147,7 +155,8 @@ def run_s2(
     return run_stage(
         stage=STAGE,
         port=port,
-        build_prompt=lambda issues: build_prompt(requirements, contract_json, issues),
+        build_prompt=lambda issues, previous: build_prompt(
+            requirements, contract_json, issues, previous),
         parse=parse_response,
         gate=lambda out: gate(requirements, out),
         max_repairs=max_repairs,

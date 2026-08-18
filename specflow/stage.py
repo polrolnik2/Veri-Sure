@@ -46,22 +46,38 @@ def run_stage(
     *,
     stage: str,
     port: ModelPort,
-    build_prompt: Callable[[list[Issue] | None], str],
+    build_prompt: Callable[[list[Issue] | None, str | None], str],
     parse: Callable[[str], T],
     gate: Callable[[T], list[Issue]],
     max_repairs: int = 3,
 ) -> StageResult[T]:
     """Generate, gate, repair; bounded.
 
-    `build_prompt` receives the *current* issue list only. It is deliberately
-    not given the history: see the module docstring.
+    `build_prompt` receives the current issue list and the *immediately
+    previous* raw answer -- one version, replaced each round, never accumulated.
+
+    Passing the previous answer is not history-keeping, and the distinction
+    matters because the two were conflated here before. The lesson from
+    `TBGenerator`/`RTLGenerator` (and LLM4DV's ablation) is that a growing pile
+    of failed attempts makes models repeat mistakes; what got dropped alongside
+    it was the artifact currently under repair, which is the working document.
+
+    Without it the repair instruction is unexecutable. The prompt says "fix
+    exactly these defects" and "do not renumber items the gate did not complain
+    about", while the model cannot see what it wrote -- so it must regenerate
+    everything and hope the UIDs line up. Measured on or1200_ctrl: requirement
+    counts churned 55 -> 61 -> 51 -> 31 across four rounds, which means an issue
+    list keyed by UID was being applied to an artifact that no longer existed.
+    The feedback was not merely noisy, it was misaddressed.
     """
     issues: list[Issue] = []
     output: T | None = None
+    previous: str | None = None
 
     for round_ in range(max_repairs + 1):
-        prompt = build_prompt(issues or None)
+        prompt = build_prompt(issues or None, previous)
         raw = port.complete(stage=stage, round_=round_, prompt=prompt)
+        previous = raw
         output = parse(raw)
         issues = gate(output)
         if not has_errors(issues):
@@ -69,6 +85,23 @@ def run_stage(
 
     assert output is not None  # the loop body always runs at least once
     return StageResult(output, issues, max_repairs + 1)
+
+
+def previous_answer_block(previous: str | None) -> str:
+    """The artifact under repair, verbatim, or nothing on the first round.
+
+    Truncated defensively: a stage whose previous answer is enormous would
+    otherwise push the prompt toward the gateway's request ceiling, and a
+    repair round that cannot complete is worse than one that sees a little
+    less.
+    """
+    if not previous:
+        return ""
+    body = previous.strip()
+    limit = 60000
+    if len(body) > limit:
+        body = body[:limit] + "\n... [truncated]"
+    return "<previous_answer>\n" + body + "\n</previous_answer>"
 
 
 def gate_failures_block(issues: list[Issue]) -> str:

@@ -24,6 +24,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from .assure import check_spec_attribution
 from .ids import PREFIX_REQUIREMENT, mint
 from .model_io import ModelPort
+from .stage import previous_answer_block
 from .schema import Issue, RequirementsOutput, has_errors, render_issues
 
 STAGE = "s1"
@@ -89,7 +90,8 @@ def normalize_spec(spec: str) -> str:
     return spec.replace("\r\n", "\n").strip()
 
 
-def build_prompt(spec: str, contract_json: str, issues: list[Issue] | None = None) -> str:
+def build_prompt(spec: str, contract_json: str, issues: list[Issue] | None = None,
+                 previous: str | None = None) -> str:
     """Compose the S1 prompt.
 
     On a repair round the *current* defect list is appended -- not an
@@ -111,6 +113,8 @@ def build_prompt(spec: str, contract_json: str, issues: list[Issue] | None = Non
         f"{spec[:24]!r} and ends at {spec[-24:]!r}. Offsets are 0-based into "
         "that exact text, including newlines, excluding the tags.",
     ]
+    if previous:
+        parts.append(previous_answer_block(previous))
     if issues:
         parts.append(
             "<gate_failures>\n"
@@ -219,10 +223,13 @@ def run_s1(
 
     issues: list[Issue] = []
     out = RequirementsOutput()
+    # One previous answer, replaced each round -- never an accumulated history.
+    previous: str | None = None
 
     for round_ in range(max_repairs + 1):
-        prompt = build_prompt(spec, contract_json, issues or None)
+        prompt = build_prompt(spec, contract_json, issues or None, previous)
         raw = port.complete(stage=STAGE, round_=round_, prompt=prompt)
+        previous = raw
         out = parse_response(raw)
         issues = gate(spec, out, contract)
         if not has_errors(issues):

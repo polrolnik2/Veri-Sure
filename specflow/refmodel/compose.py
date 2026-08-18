@@ -14,7 +14,12 @@ from pathlib import Path
 from ..ids import method_name
 from ..model_io import ModelPort
 from ..schema import Issue
-from ..stage import StageResult, gate_failures_block, run_stage
+from ..stage import (
+    StageResult,
+    gate_failures_block,
+    previous_answer_block,
+    run_stage,
+)
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .validate import validate
 
@@ -156,7 +161,7 @@ def run_refmodel(
     base = choose_base(contract)
     rendered: dict[str, str] = {"src": ""}
 
-    def build_prompt(issues: list[Issue] | None) -> str:
+    def build_prompt(issues: list[Issue] | None, previous: str | None = None) -> str:
         parts = [
             SYSTEM,
             "<requirements>\n"
@@ -169,6 +174,8 @@ def run_refmodel(
         ]
         if issues:
             parts.append(gate_failures_block(issues))
+        if previous:
+            parts.append(previous_answer_block(previous))
         return "\n\n".join(parts)
 
     def gate(out: RefModelOutput) -> list[Issue]:

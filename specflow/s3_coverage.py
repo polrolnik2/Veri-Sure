@@ -23,7 +23,12 @@ from .assure import assure_testplan_to_bins, assure_testplan_to_checks
 from .ids import PREFIX_BIN, PREFIX_CHECK, mint
 from .model_io import ModelPort
 from .schema import CoverageOutput, Issue
-from .stage import StageResult, gate_failures_block, run_stage
+from .stage import (
+    StageResult,
+    gate_failures_block,
+    previous_answer_block,
+    run_stage,
+)
 
 STAGE = "s3"
 
@@ -86,7 +91,8 @@ _PROSE = {
 
 
 def build_prompt(
-    testplan: list[dict], contract_json: str, issues: list[Issue] | None = None
+    testplan: list[dict], contract_json: str, issues: list[Issue] | None = None,
+    previous: str | None = None,
 ) -> str:
     parts = [
         SYSTEM,
@@ -95,6 +101,8 @@ def build_prompt(
         + "\n</testplan>",
         "<contract_json>\n" + contract_json.rstrip() + "\n</contract_json>",
     ]
+    if previous:
+        parts.append(previous_answer_block(previous))
     if issues:
         parts.append(gate_failures_block(issues))
     return "\n\n".join(parts)
@@ -198,7 +206,8 @@ def run_s3(
     return run_stage(
         stage=STAGE,
         port=port,
-        build_prompt=lambda issues: build_prompt(testplan, contract_json, issues),
+        build_prompt=lambda issues, previous: build_prompt(
+            testplan, contract_json, issues, previous),
         parse=parse_response,
         gate=lambda out: gate(testplan, out, contract),
         max_repairs=max_repairs,

@@ -238,3 +238,48 @@ def test_spans_computed_against_the_prompt_body_verify():
     ]
     out = parse_response(response(reqs))
     assert gate(LEADING_WS_SPEC, out, json.loads(CONTRACT)) == []
+
+
+def test_a_repair_round_shows_the_model_its_own_previous_answer():
+    """The repair instruction is unexecutable without it.
+
+    The prompt says "fix exactly these defects" and "do not renumber items the
+    gate did not complain about", while the model could not see what it wrote --
+    so it had to regenerate everything and hope the UIDs lined up. Measured on
+    or1200_ctrl, requirement counts churned 55 -> 61 -> 51 -> 31 across four
+    rounds, which means an issue list keyed by UID was being applied to an
+    artifact that no longer existed.
+    """
+    from specflow.s1_requirements import build_prompt
+    from specflow.schema import Issue
+
+    prior = '{"requirements": [{"uid": "REQ-0000"}]}'
+    prompt = build_prompt(
+        "spec text", "{}", [Issue("error", "requirement.REQ-0000", "bad span")], prior
+    )
+    assert "<previous_answer>" in prompt
+    assert prior in prompt
+    assert "<gate_failures>" in prompt
+    # The artifact must precede the defect list: the defects reference it.
+    assert prompt.index("<previous_answer>") < prompt.index("<gate_failures>")
+
+
+def test_the_first_round_carries_no_previous_answer():
+    """There is nothing to repair yet, and an empty block would be noise."""
+    from specflow.s1_requirements import build_prompt
+
+    assert "<previous_answer>" not in build_prompt("spec text", "{}")
+
+
+def test_one_version_only_never_an_accumulated_history():
+    """Passing the artifact under repair is not history-keeping.
+
+    LLM4DV's ablation is about a *growing* pile of failed attempts; what had
+    been dropped along with it was the working document. Each round replaces
+    the block rather than appending to it.
+    """
+    from specflow.s1_requirements import build_prompt
+
+    p = build_prompt("spec text", "{}", None, "SECOND")
+    assert p.count("<previous_answer>") == 1
+    assert "FIRST" not in p and "SECOND" in p
