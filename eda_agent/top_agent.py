@@ -228,6 +228,10 @@ class TopAgentConfig:
     # composed behaviour from the specification alone.
     specflow_extra_sources: tuple[str, ...] = ()
     specflow_include_dirs: tuple[str, ...] = ()
+    #: Reuse certified specflow artifacts already in the run directory instead
+    #: of regenerating them. The gates are always re-run on what is reused, so
+    #: this skips the model calls, never the checks.
+    specflow_reuse: bool = False
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -566,6 +570,7 @@ class TopAgent:
             model_port=self.config.specflow_model_port,
             extra_sources=self.config.specflow_extra_sources,
             include_dirs=self.config.specflow_include_dirs,
+            reuse=self.config.specflow_reuse,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

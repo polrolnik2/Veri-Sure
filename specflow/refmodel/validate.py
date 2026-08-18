@@ -230,3 +230,28 @@ def validate(
         return issues
 
     return issues + _behavioural_checks(source, contract, expected_base, workdir)
+
+
+def validate_source(
+    *,
+    source: str,
+    requirements: list[dict],
+    contract: dict,
+    expected_base: str,
+    workdir: Path,
+) -> list[Issue]:
+    """G4 over a `ref_model.py` already on disk, with no generation round.
+
+    The same checks as `validate` minus the two that are statements about the
+    agent's response rather than the artifact -- a parse failure and the
+    agent's declared base. What remains is everything that can go stale:
+    requirement coverage, the sandbox check, output determination, determinism.
+
+    This is what makes reusing a certified model safe. The recorded verdict is
+    never trusted; the model is re-executed, so a requirement set that changed
+    underneath it, or a gate that has since been tightened, regenerates it.
+    """
+    issues = _static_checks(source, requirements)
+    if any(i.severity == "error" for i in issues):
+        return issues
+    return issues + _behavioural_checks(source, contract, expected_base, workdir)

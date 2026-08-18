@@ -75,14 +75,23 @@ def format_failures(payload: list[dict], *, limit: int = 40) -> str:
     shown = 0
     for entry in payload:
         checks = ", ".join(entry.get("failed_checks") or [])
-        lines.append(f"[{entry['testpoint']}] FAIL -- checks {checks}")
+        sigs = ", ".join(entry.get("failed_signals") or [])
+        head = f"[{entry['testpoint']}] FAIL -- checks {checks}"
+        # The diverging signals, named up front. One check covers every signal
+        # the coverage model listed for it, so the check UID alone does not say
+        # which output is wrong -- and that is the whole question a repair agent
+        # is trying to answer.
+        lines.append(head + (f" -- diverging outputs: {sigs}" if sigs else ""))
         for m in entry.get("mismatches") or []:
             if shown >= limit:
                 lines.append("  ... further mismatches omitted")
                 break
             ctx = ", ".join(f"{k}={v}" for k, v in (m.get("ctx") or {}).items())
+            sig = m.get("signal")
             lines.append(
-                f"  {m.get('check')}: expected={m.get('expected')} got={m.get('got')}"
+                f"  {m.get('check')}"
+                + (f" {sig}" if sig else "")
+                + f": expected={m.get('expected')} got={m.get('got')}"
                 + (f" on {ctx}" if ctx else "")
             )
             shown += 1
@@ -158,6 +167,7 @@ async def run_specflow_node(
     max_repairs: int = 3,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
+    reuse: bool = False,
 ) -> Tuple[bool, str, dict[str, Any]]:
     """Build the oracle, generate RTL, repair until the gate accepts.
 
@@ -178,6 +188,7 @@ async def run_specflow_node(
         contract_json=contract_json,
         model_port=model_port,
         max_repairs=max_repairs,
+        reuse=reuse,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if not built.ok:

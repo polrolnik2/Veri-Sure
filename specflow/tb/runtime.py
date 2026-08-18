@@ -40,7 +40,14 @@ class Scoreboard:
     failed: list[str] = field(default_factory=list)
     mismatches: list[dict] = field(default_factory=list)
 
-    def check(self, chk_uid: str, got: Any, expected: Any, ctx: dict | None = None) -> bool:
+    def check(
+        self,
+        chk_uid: str,
+        got: Any,
+        expected: Any,
+        ctx: dict | None = None,
+        signal: str | None = None,
+    ) -> bool:
         self.invoked.append(chk_uid)
         ok = got == expected
         if not ok:
@@ -48,9 +55,19 @@ class Scoreboard:
             # Every mismatch carries its own values and stimulus. The recorded
             # failure of the old flow was 210 MISMATCH lines carrying 2 actual
             # values, which told the repair agent nothing it could act on.
+            #
+            # `signal` is why this is not a cosmetic field. One check covers
+            # every signal the coverage model listed for it -- on
+            # `i2c_master_bit_ctrl` that is six outputs -- and the renderer emits
+            # one `Env.check` call per signal under the same UID. Without the
+            # name, "CHK-0002 expected=0 got=1" does not say whether `scl_oen`,
+            # `sda_oen`, `busy`, `al`, `dout` or `cmd_ack` diverged, and a repair
+            # agent handed 8 failing testpoints of that had nothing to act on.
+            # It stalled at 8 for six consecutive simulation runs.
             self.mismatches.append(
                 {
                     "check": chk_uid,
+                    "signal": signal,
                     "got": _plain(got),
                     "expected": _plain(expected),
                     "ctx": {k: _plain(v) for k, v in (ctx or {}).items()},
@@ -255,7 +272,9 @@ class Env:
     # -- verdict -----------------------------------------------------------
 
     def check(self, chk_uid: str, signal: str, expected_map: dict, ctx: dict) -> bool:
-        return self.sb.check(chk_uid, self.sample(signal), expected_map.get(signal), ctx)
+        return self.sb.check(
+            chk_uid, self.sample(signal), expected_map.get(signal), ctx, signal=signal
+        )
 
     async def finish(self) -> None:
         """Write this testpoint's record, then assert once.
@@ -277,6 +296,9 @@ class Env:
             "status": status,
             "checks_invoked": sorted(set(self.sb.invoked)),
             "checks_failed": sorted(set(self.sb.failed)),
+            "signals_failed": sorted(
+                {m["signal"] for m in self.sb.mismatches if m.get("signal")}
+            ),
             "bins_hit": sorted(self.cov.hits),
             "mismatches": self.sb.mismatches,
         }

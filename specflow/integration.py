@@ -20,19 +20,32 @@ from typing import Sequence
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import make_port
-from .refmodel.compose import run_refmodel
+from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
+from .refmodel.validate import validate_source
 from .run import reconcile, run_suite
+from .s1_requirements import RequirementsOutput, S1Result
+from .s1_requirements import gate as gate_s1
 from .s1_requirements import renumber as renumber_reqs
 from .s1_requirements import run_s1
 from .s1_requirements import write_artifacts as write_s1
+from .s2_testplan import TestplanOutput
+from .s2_testplan import gate as gate_s2
 from .s2_testplan import renumber as renumber_tps
 from .s2_testplan import run_s2
 from .s2_testplan import write_artifacts as write_s2
+from .s3_coverage import CoverageOutput
+from .s3_coverage import gate as gate_s3
 from .s3_coverage import renumber as renumber_cov
 from .s3_coverage import run_s3
 from .s3_coverage import write_artifacts as write_s3
-from .schema import GateVerdict, Issue
+from .schema import GateVerdict, Issue, has_errors
+from .stage import StageResult
+from .testcase_agent import (
+    run_suite_stimulus,
+    stimulus_by_tp,
+    stimulus_diagnostics,
+)
 from .tb.render import gate_g5, render_suite
 
 
@@ -58,6 +71,10 @@ class BuildResult:
     suite_dir: Path | None = None
     refmodel_path: Path | None = None
     bins: list[dict] | None = None
+    #: Non-fatal. A stimulus failure falls back to `default_stimulus` rather
+    #: than aborting: a weaker sweep beats no node at all, and the coverage
+    #: gate is what reports the gap it leaves.
+    stimulus_issues: list[Issue] | None = None
 
     @property
     def reason(self) -> str:
@@ -67,6 +84,36 @@ class BuildResult:
         return f"{self.stage} gate failed with {n} issue(s)"
 
 
+def _reuse(
+    run_dir: Path, artifact: str, model, regate
+) -> tuple[object, list[Issue]] | None:
+    """A certified artifact from a previous run, re-gated rather than trusted.
+
+    The point of reuse is to skip the *model call*, which costs minutes, not the
+    *gate*, which is pure code and costs nothing. Re-running it is what keeps
+    this honest in both directions: a cached artifact that a since-tightened gate
+    would now reject is regenerated, and one that a since-corrected gate would
+    now accept is kept. The G1 whitespace fix is the live example -- the same
+    `requirements.json` scored 2 errors before it and 0 after, so trusting the
+    recorded verdict would have thrown away a usable artifact.
+
+    Returns None when there is nothing usable, and the caller regenerates.
+    """
+    path = Path(run_dir) / "specflow" / artifact
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    try:
+        out = model.model_validate(data)
+    except Exception:  # noqa: BLE001
+        return None
+    issues = regate(out)
+    if has_errors(issues):
+        return None
+    return out, issues
+
+
 def build_artifacts(
     *,
     run_dir: Path,
@@ -74,64 +121,150 @@ def build_artifacts(
     contract_json: str,
     model_port: str = "replay",
     max_repairs: int = 3,
+    stimulus_agent: bool = True,
+    reuse: bool = False,
 ) -> BuildResult:
     """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
 
     Stops at the first gate that fails, and says which. Exhaustion is a hard
     failure everywhere: a stage that could not be certified never propagates a
     partial artifact downstream.
+
+    With `reuse`, a stage whose artifact is already on disk and still passes its
+    gate is not regenerated. Two rules keep that from going stale: the gate is
+    always re-run rather than read from the recorded verdict, and once any stage
+    regenerates, every stage after it regenerates too -- a cached S2 is only
+    valid against the S1 that produced it.
     """
     run_dir = Path(run_dir)
     ensure_prompt_file(run_dir, spec)
     port = make_port(model_port, run_dir / "agent_io")
     contract = json.loads(contract_json) if contract_json.strip() else {}
 
-    s1 = run_s1(spec=spec, contract_json=contract_json, port=port,
-                max_repairs=max_repairs)
-    renumber_reqs(s1.output)
-    write_s1(run_dir, s1)
+    # Set once a stage regenerates: everything downstream must regenerate too,
+    # because a cached artifact is only valid against the upstream that made it.
+    stale = not reuse
+
+    cached = None if stale else _reuse(
+        run_dir, "requirements.json", RequirementsOutput,
+        lambda out: gate_s1(spec, out, contract),
+    )
+    if cached is not None:
+        s1 = S1Result(cached[0], list(cached[1]), 0)
+    else:
+        stale = True
+        s1 = run_s1(spec=spec, contract_json=contract_json, port=port,
+                    max_repairs=max_repairs)
+        renumber_reqs(s1.output)
+        write_s1(run_dir, s1)
     if not s1.ok:
         return BuildResult(False, "S1", s1.issues)
 
     reqs = [r.model_dump() for r in s1.output.requirements]
 
-    s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
-                max_repairs=max_repairs)
-    renumber_tps(s2.output)
-    write_s2(run_dir, s2)
+    cached = None if stale else _reuse(
+        run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
+    )
+    if cached is not None:
+        s2 = StageResult(cached[0], list(cached[1]), 0)
+    else:
+        stale = True
+        s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
+                    max_repairs=max_repairs)
+        renumber_tps(s2.output)
+        write_s2(run_dir, s2)
     if not s2.ok:
         return BuildResult(False, "S2", s2.issues)
 
     tps = [e.model_dump() for e in s2.output.elements]
 
-    s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
-                max_repairs=max_repairs)
-    renumber_cov(s3.output)
-    write_s3(run_dir, s3)
+    cached = None if stale else _reuse(
+        run_dir, "coverage_model.json", CoverageOutput,
+        lambda out: gate_s3(tps, out, contract),
+    )
+    if cached is not None:
+        s3 = StageResult(cached[0], list(cached[1]), 0)
+    else:
+        stale = True
+        s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
+                    max_repairs=max_repairs)
+        renumber_cov(s3.output)
+        write_s3(run_dir, s3)
     if not s3.ok:
         return BuildResult(False, "S3", s3.issues)
 
     bins = [b.model_dump() for b in s3.output.bins]
     checks = [c.model_dump() for c in s3.output.checks]
 
-    rm, source = run_refmodel(
-        requirements=reqs, contract_json=contract_json, port=port,
-        workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
-    )
-    refmodel_path = write_refmodel(run_dir, rm, source)
-    if not rm.ok:
-        return BuildResult(False, "refmodel", rm.issues)
+    # The reference model is validated by executing it, so "re-gate rather than
+    # trust" here means re-running G4 against the rendered source on disk.
+    refmodel_path = run_dir / "specflow" / "ref_model.py"
+    rm_issues: list[Issue] = []
+    if stale or not refmodel_path.is_file():
+        stale = True
+        rm, source = run_refmodel(
+            requirements=reqs, contract_json=contract_json, port=port,
+            workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
+        )
+        refmodel_path = write_refmodel(run_dir, rm, source)
+        rm_issues = list(rm.issues)
+        if not rm.ok:
+            return BuildResult(False, "refmodel", rm.issues)
+    else:
+        rm_issues = validate_source(
+            source=refmodel_path.read_text(encoding="utf-8"),
+            requirements=reqs, contract=contract,
+            expected_base=choose_base(contract),
+            workdir=run_dir / "specflow" / "_refmodel_check",
+        )
+        if has_errors(rm_issues):
+            stale = True
+            rm, source = run_refmodel(
+                requirements=reqs, contract_json=contract_json, port=port,
+                workdir=run_dir / "specflow" / "_refmodel_check",
+                max_repairs=max_repairs,
+            )
+            refmodel_path = write_refmodel(run_dir, rm, source)
+            if not rm.ok:
+                return BuildResult(False, "refmodel", rm.issues)
 
     suite_dir = run_dir / "specflow" / "suite"
+
+    # Stimulus per testpoint, from each element's own prose. Without this every
+    # testpoint renders with `default_stimulus` -- one shared deterministic-random
+    # sweep -- and the suite becomes N copies of one test under N names. Measured
+    # on i2c_master_bit_ctrl: 25 modules, 1 distinct stimulus list, and seven
+    # failing testpoints failing on the identical 19 vectors. The testplan's
+    # `stimulus` field, which S2 is gated on producing, was consumed by nothing.
+    stim_by_tp: dict[str, list[dict]] = {}
+    stim_issues: list[Issue] = []
+    if stimulus_agent:
+        # A stimulus failure is not fatal: `default_stimulus` still renders a
+        # valid suite, and a weaker sweep is worth more than an aborted node.
+        # The gate's EXTEND_TB branch is what reports the resulting gap. This
+        # also lets a ReplayPort with no recorded stimulus stage fall through
+        # to the old behaviour rather than crashing a fixture-driven run.
+        try:
+            st = run_suite_stimulus(
+                testplan=tps, contract=contract, port=port, max_repairs=max_repairs
+            )
+        except Exception as exc:  # noqa: BLE001
+            stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
+        else:
+            stim_issues = list(st.issues) + stimulus_diagnostics(st.output)
+            stim_by_tp = stimulus_by_tp(st.output)
+
     manifest = render_suite(
-        testplan=tps, bins=bins, checks=checks, contract=contract, out_dir=suite_dir
+        testplan=tps, bins=bins, checks=checks, contract=contract, out_dir=suite_dir,
+        stimulus_by_tp=stim_by_tp or None,
     )
     g5 = gate_g5(out_dir=suite_dir, manifest=manifest, bins=bins, checks=checks)
     if any(i.severity == "error" for i in g5):
         return BuildResult(False, "G5", g5)
 
     return BuildResult(
-        True, suite_dir=suite_dir, refmodel_path=refmodel_path, bins=bins
+        True, suite_dir=suite_dir, refmodel_path=refmodel_path, bins=bins,
+        stimulus_issues=stim_issues,
     )
 
 
@@ -197,6 +330,7 @@ def failure_payload(suite_dir: Path) -> list[dict]:
             {
                 "testpoint": data["tp_uid"],
                 "failed_checks": data.get("checks_failed") or [],
+                "failed_signals": data.get("signals_failed") or [],
                 "mismatches": data.get("mismatches") or [],
             }
         )
