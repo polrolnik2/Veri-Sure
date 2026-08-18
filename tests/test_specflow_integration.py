@@ -8,6 +8,7 @@ orchestrator that drives composition nodes is not vendored in this repository.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -234,4 +235,60 @@ def test_specflow_node_reviewer_matches_the_simreviewer_shape():
     assert (
         inspect.signature(SpecflowReviewer.review).return_annotation
         == inspect.signature(SimReviewer.review).return_annotation
+    )
+
+
+@needs_verilator
+def test_the_suite_runs_outside_pytest(tmp_path):
+    """The suite must run when nothing has arranged `sys.path` for it.
+
+    This is the difference between "tested" and "has been run". cocotb sets the
+    simulator subprocess's `PYTHONPATH` from the *parent's* `sys.path`
+    (`cocotb_tools/runner.py:248`), discarding anything passed via `extra_env`.
+
+    The trap is that `sys.path` can carry *relative* entries. A plain
+    `python -c` puts `''` on it, which resolves to the parent's cwd -- the
+    repository -- so `import specflow` succeeds in the parent. cocotb then
+    passes that same `''` down, where it resolves to the *simulator's* cwd,
+    which is the test directory. The generated `ref_model.py` does
+    `from specflow.refmodel.base import RefModel` and dies with
+    `ModuleNotFoundError: No module named 'specflow'`.
+
+    Under pytest this never happens: pytest puts an absolute rootdir on
+    `sys.path`, so every test here passed while a production node would have
+    failed. Hence a subprocess with cwd set and no absolute path entry -- the
+    exact shape that breaks. Verified to fail when `_ensure_importable` is
+    disabled.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    run_dir = _run_dir(tmp_path)
+    script = textwrap.dedent(
+        f"""
+        from pathlib import Path
+        from specflow.integration import build_artifacts, judge
+        run = Path({str(run_dir)!r})
+        built = build_artifacts(
+            run_dir=run, spec=(run / "prompt.txt").read_text(),
+            contract_json=(run / "contract.json").read_text(), model_port="replay")
+        assert built.ok, built.reason
+        verdict, _ = judge(
+            rtl_path=Path({str(GOLDEN)!r}), hdl_toplevel="RefModule",
+            suite_dir=built.suite_dir, refmodel_path=built.refmodel_path,
+            bins=built.bins)
+        print("VERDICT:" + verdict.outcome)
+        """
+    )
+    # cwd=REPO so `import specflow` resolves through the relative '' entry, which
+    # is exactly the entry that means something different in the child.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, "-c", script], cwd=REPO, env=env,
+        capture_output=True, text=True,
+    )
+    assert "VERDICT:ACCEPT" in proc.stdout, (
+        f"suite did not run outside pytest\nstdout:\n{proc.stdout[-2000:]}"
+        f"\nstderr:\n{proc.stderr[-2000:]}"
     )

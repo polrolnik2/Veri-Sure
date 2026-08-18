@@ -7,6 +7,7 @@ agent's own `base` answer is cross-checked against it rather than trusted.
 from __future__ import annotations
 
 import json
+import re
 import textwrap
 from pathlib import Path
 
@@ -66,6 +67,44 @@ def latency_cycles(contract: dict) -> int:
     return best
 
 
+def _defines(source: str, name: str) -> bool:
+    """Does `source` already define a method called `name` at any indentation?"""
+    return re.search(rf"^\s*def\s+{re.escape(name)}\s*\(", source, re.M) is not None
+
+
+def synthesise_dispatch(out: RefModelOutput, base: str) -> str:
+    """Build the `evaluate`/`step` that calls each fragment in order.
+
+    This is a script rather than a prompt because it is fully determined: the
+    call order is the order the fragments were declared, and the entry-point
+    name is `choose_base`'s decision from the contract, which the prompt already
+    describes as "not negotiable". Asking an agent for something already known
+    only adds a way to not get it.
+
+    That is not hypothetical. The prompt asked for the dispatch while the
+    response schema had nowhere to put it -- `helpers` was shown empty in the
+    template -- so a model that followed the schema literally returned fragments
+    and no dispatch, `Model.evaluate` fell through to the base class, and G4
+    failed with `NotImplementedError` for four rounds without the issue text
+    ever naming the real defect. One model happened to infer that the dispatch
+    belonged in `helpers`; that convention was never stated anywhere.
+
+    Outputs are seeded to `None` rather than left absent so that a port no
+    fragment writes survives as `None` for G4 to report as an undetermined
+    output, instead of raising `KeyError` from whichever caller reads it first.
+    """
+    calls = "\n".join(
+        f"        self.{frag.method_name or method_name(frag.req_uid)}(i, o)"
+        for frag in out.fragments
+    )
+    return (
+        f"    def {base}(self, i):\n"
+        "        o = {p: None for p in self.OUTPUT_PORTS}\n"
+        f"{calls}\n"
+        "        return o"
+    )
+
+
 def render(out: RefModelOutput, contract: dict) -> str:
     """Emit `ref_model.py`. Deterministic; the agent supplies only method bodies."""
     body: list[str] = []
@@ -73,6 +112,15 @@ def render(out: RefModelOutput, contract: dict) -> str:
         body.append(textwrap.indent(textwrap.dedent(out.helpers).strip(), "    "))
     for frag in out.fragments:
         body.append(textwrap.indent(textwrap.dedent(frag.code).strip(), "    "))
+
+    # Only when the agent did not supply one itself: a second definition would
+    # shadow the first, and which one wins depends on emission order rather than
+    # on anything the author decided.
+    base = choose_base(contract)
+    if not _defines(out.helpers, base) and not any(
+        _defines(f.code, base) for f in out.fragments
+    ):
+        body.append(synthesise_dispatch(out, base))
 
     return (
         '"""Generated reference model. Do not edit.\n\n'

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from specflow.refmodel.agent import RefModelOutput, parse_response
+from specflow.refmodel.agent import Fragment, RefModelOutput, parse_response
 from specflow.refmodel.base import RefModel
 from specflow.refmodel.compose import choose_base, render, run_refmodel
 
@@ -228,3 +228,85 @@ def test_render_declares_ports_and_latency():
 
 def test_parse_response_never_raises():
     assert parse_response("garbage").reasoning.startswith("Parse Error: ")
+
+
+# ------------------------------------------------- dispatch synthesis (live-run bug)
+
+
+def _hadd_contract() -> dict:
+    return {
+        "module_name": "TopModule",
+        "io": [
+            {"name": "a", "dir": "input", "width": 1},
+            {"name": "b", "dir": "input", "width": 1},
+            {"name": "sum", "dir": "output", "width": 1},
+            {"name": "cout", "dir": "output", "width": 1},
+        ],
+        "clocking": {"is_sequential": False},
+        "timing": {"sum": {"latency_cycles": 0}, "cout": {"latency_cycles": 0}},
+    }
+
+
+def _fragments_without_dispatch() -> RefModelOutput:
+    """The shape a live model actually returned: fragments, `helpers` empty.
+
+    Reproduced from a gpt-5.6-luna run. The prompt asked for a dispatch while the
+    response schema had nowhere to put it, so following the schema literally
+    produced a class with no `evaluate` at all.
+    """
+    return RefModelOutput(
+        base="evaluate",
+        helpers="",
+        fragments=[
+            Fragment(req_uid="REQ-0000", method_name="_req_0000",
+                     code="def _req_0000(self, i, o):\n    pass\n"),
+            Fragment(req_uid="REQ-0005", method_name="_req_0005",
+                     code="def _req_0005(self, i, o):\n    o['sum'] = (i['a'] ^ i['b']) & 1\n"),
+            Fragment(req_uid="REQ-0006", method_name="_req_0006",
+                     code="def _req_0006(self, i, o):\n    o['cout'] = (i['a'] & i['b']) & 1\n"),
+        ],
+    )
+
+
+def test_dispatch_is_synthesised_when_the_agent_omits_it(tmp_path):
+    """Without this the class inherits `RefModel.evaluate`, which raises.
+
+    The live failure burned the full repair budget: G4 caught it only
+    dynamically, as `NotImplementedError` on some input, and that issue text
+    never named the missing dispatch -- so four rounds of repair could not
+    converge on the actual defect.
+    """
+    src = render(_fragments_without_dispatch(), _hadd_contract())
+    ns: dict = {}
+    exec(compile(src, "ref_model.py", "exec"), ns)
+    model = ns["Model"]()
+    assert model.evaluate({"a": 1, "b": 1}) == {"sum": 0, "cout": 1}
+    assert model.evaluate({"a": 1, "b": 0}) == {"sum": 1, "cout": 0}
+
+
+def test_an_agent_supplied_dispatch_is_not_duplicated(tmp_path):
+    """One model puts the dispatch in `helpers`. Emitting a second definition
+    would shadow it, and which one wins would depend on emission order."""
+    out = _fragments_without_dispatch()
+    out.helpers = (
+        "def evaluate(self, i):\n"
+        "    o = {}\n"
+        "    self._req_0005(i, o)\n"
+        "    self._req_0006(i, o)\n"
+        "    return o\n"
+    )
+    src = render(out, _hadd_contract())
+    assert src.count("def evaluate(self, i):") == 1
+    ns: dict = {}
+    exec(compile(src, "ref_model.py", "exec"), ns)
+    assert ns["Model"]().evaluate({"a": 1, "b": 1}) == {"sum": 0, "cout": 1}
+
+
+def test_an_unwritten_output_survives_as_none_for_the_gate(tmp_path):
+    """Seeding beats absence: a port nothing writes has to reach G4 as an
+    undetermined output, not as a KeyError from whichever caller reads first."""
+    out = _fragments_without_dispatch()
+    out.fragments = [f for f in out.fragments if f.req_uid != "REQ-0006"]
+    ns: dict = {}
+    exec(compile(render(out, _hadd_contract()), "ref_model.py", "exec"), ns)
+    assert ns["Model"]().evaluate({"a": 1, "b": 1}) == {"sum": 0, "cout": None}

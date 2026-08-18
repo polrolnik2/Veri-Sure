@@ -57,14 +57,9 @@ has the signature:
 where `i` is a dict of input port values (plain ints) and `o` is the output dict
 you write into. Methods mutate `o`; they return nothing.
 
-Then emit the dispatch, which is `evaluate` for combinational designs or `step`
-for sequential ones:
-
-    def evaluate(self, i):
-        o = {}
-        self._req_0000(i, o)
-        self._req_0001(i, o)
-        return o
+Do NOT write the dispatch (`evaluate` or `step`). It is generated for you: your
+methods are called in the order you list them, and the output dict is seeded
+before the first call. Emit the `_req_NNNN` methods and nothing else.
 
 Rules the gate enforces mechanically:
   * every requirement gets exactly one `_req_NNNN` method
