@@ -34,6 +34,13 @@ def load_openai_config(
     env_key = os.environ.get("OPENAI_API_KEY")
     env_base_url = os.environ.get("OPENAI_BASE_URL")
     env_org = os.environ.get("OPENAI_ORGANIZATION")
+    # Every other field here is env-resolvable; reasoning_effort was the one
+    # that could only be set from Python, so an operator setting an effort in
+    # the environment got it silently dropped. It is a named request parameter
+    # rather than an extra_body key because that is the spelling the OpenAI
+    # chat-completions schema defines -- the nested {"reasoning":{"effort":...}}
+    # form belongs to the Responses API and is rejected as an unknown parameter.
+    env_effort = os.environ.get("OPENAI_REASONING_EFFORT")
     env_extra_body = os.environ.get("OPENAI_EXTRA_BODY")
 
     generate_kwargs: dict[str, Any] = {}
@@ -64,7 +71,7 @@ def load_openai_config(
         api_key=api_key or env_key,
         base_url=base_url or env_base_url,
         organization=organization or env_org,
-        reasoning_effort=reasoning_effort,
+        reasoning_effort=reasoning_effort or env_effort,
         stream=OpenAIConfig.stream if stream is None else stream,
         generate_kwargs=generate_kwargs,
     )

@@ -156,6 +156,18 @@ else
   FAILED=1
 fi
 
+# The linter is verified by path, not just presence. `ruff` was previously
+# resolvable only because the base image shipped one at /root/.local/bin, so a
+# change to the image would have broken linting with nothing in the repo to
+# explain why. requirements.txt now pins it, and this checks that the pinned
+# copy is the one PATH will find.
+if [ -x "$VENV/bin/ruff" ]; then
+  log "  ok   ruff $("$VENV/bin/ruff" --version | awk '{print $2}') (venv)"
+else
+  log "  FAIL ruff missing from $VENV; requirements.txt should install it"
+  FAILED=1
+fi
+
 "$VENV/bin/python" - <<'PY' || FAILED=1
 import sys
 
@@ -183,4 +195,4 @@ if [ "$FAILED" -ne 0 ]; then
   exit 1
 fi
 
-log "ready: pytest tests/ and benchmarks/chipverilog both runnable"
+log "ready: pytest tests/, ruff check, and benchmarks/chipverilog all runnable"

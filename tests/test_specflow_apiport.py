@@ -121,6 +121,40 @@ def test_the_configured_effort_reaches_the_request(tmp_path, monkeypatch):
     assert call["messages"] == [{"role": "user", "content": "a prompt"}]
 
 
+def test_reasoning_effort_is_settable_from_the_environment(tmp_path, monkeypatch):
+    """`reasoning_effort` is a named chat-completions parameter, and it was the
+    one config field with no environment path -- so an operator who set an effort
+    in the environment had it silently dropped.
+
+    The distinction from the test above is not cosmetic. `{"reasoning":
+    {"effort": ...}}` is the Responses-API shape; a chat-completions endpoint
+    rejects it outright with `unknown_parameter`, which is how this was found.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "xhigh")
+    monkeypatch.delenv("OPENAI_EXTRA_BODY", raising=False)
+    monkeypatch.setenv("SPECFLOW_ENV_FILE", str(tmp_path / "absent"))
+
+    port, client = _port(tmp_path, _Response("ok"))
+    port.complete(stage="s1", round_=0, prompt="a prompt")
+
+    (call,) = client.chat.completions.calls
+    assert call["reasoning_effort"] == "xhigh"
+    # Top-level, not smuggled through extra_body.
+    assert "extra_body" not in call
+
+
+def test_an_explicit_argument_still_beats_the_environment(tmp_path, monkeypatch):
+    """Env resolution must fill in behind an explicit caller, not over it --
+    otherwise a per-node effort override becomes unexpressible."""
+    from eda_agent.config import load_openai_config
+
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "xhigh")
+    assert load_openai_config().reasoning_effort == "xhigh"
+    assert load_openai_config(reasoning_effort="low").reasoning_effort == "low"
+
+
 def test_an_api_run_records_a_replayable_fixture(tmp_path, monkeypatch):
     """One paid run has to become a free deterministic one. ApiPort writes into
     the layout ReplayPort reads, so the same round replays without a model."""

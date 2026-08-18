@@ -10,8 +10,15 @@ tree-sitter>=0.25,<0.26
 tree-sitter-verilog>=1,<2
 vcdvcd>=1,<2
 pytest==9.0.2
-# Python testbench flow (GoGoTB-style spec-grounded coverage work). Note cocotb 2.x
-# refuses Verilator < 5.036; apt ships 5.020, so the verilator backend is unavailable
-# and the icarus backend (iverilog 12.0) is the working one until Verilator is built
-# from source. Veri-Sure's own sim_reviewer.py calls verilator directly and is unaffected.
+# The linter. Pinned to a minor series rather than left to the container image:
+# ruff ships new rules in minor bumps, so an unpinned upgrade can turn a clean
+# tree red without a line of code changing. It was previously available only
+# because the base image happened to carry it, which is not a property a repo
+# should depend on.
+ruff>=0.15,<0.16
+# Python testbench flow (specflow: spec-grounded requirements, testplan, coverage).
+# cocotb 2.x refuses Verilator < 5.036. apt ships 5.020, so .claude/hooks/session-start.sh
+# builds 5.038 from source into /usr/local/bin; the verilator backend is the one
+# specflow uses, and coverage instrumentation (VM_COVERAGE) is why icarus will not
+# substitute. Veri-Sure's own sim_reviewer.py calls verilator directly.
 cocotb==2.0.1
