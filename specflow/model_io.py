@@ -198,11 +198,34 @@ class ApiPort:
         if cfg.reasoning_effort:
             kwargs["reasoning_effort"] = cfg.reasoning_effort
 
-        response = self._client().chat.completions.create(
-            model=cfg.model,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        try:
+            response = self._client().chat.completions.create(
+                model=cfg.model,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A generation longer than the network path will tolerate dies as a
+            # bare connection error, which reads like a flaky link and is not.
+            # Measured on this gateway: a 37.9KB S1 prompt at xhigh is cut at
+            # ~301s even with a 2400s client timeout, so the ceiling is upstream
+            # and cannot be raised from here.
+            #
+            # This is silent by default and therefore expensive: the SDK retries
+            # connection errors, so a call that structurally cannot fit burns
+            # `max_retries` x ~300s writing nothing, because those retries are
+            # logged at DEBUG. Naming the ceiling turns 40 wasted minutes into
+            # one actionable message.
+            if type(exc).__name__ in ("APIConnectionError", "APITimeoutError"):
+                raise RuntimeError(
+                    f"{stage} r{round_}: the request did not survive the network "
+                    f"path ({type(exc).__name__}). A {len(prompt)}-byte prompt at "
+                    f"effort={cfg.reasoning_effort!r} generates for longer than "
+                    f"the ~300s ceiling this gateway enforces. Lower the effort, "
+                    f"lower max_completion_tokens, or split the stage -- raising "
+                    f"the client timeout does not help, the cut is upstream."
+                ) from exc
+            raise
         text = (response.choices[0].message.content or "").strip()
 
         # An empty completion is its own failure and must not reach the parser.

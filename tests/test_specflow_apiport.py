@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
 
 from specflow.model_io import ApiPort, load_env_file, make_port
 
@@ -192,3 +193,59 @@ def test_an_empty_completion_is_refused_rather_than_parsed(tmp_path, monkeypatch
 
 def test_make_port_returns_a_usable_api_port(tmp_path):
     assert isinstance(make_port("api", tmp_path), ApiPort)
+
+
+def test_a_connection_death_names_the_ceiling_rather_than_the_symptom(tmp_path, monkeypatch):
+    """A generation longer than the network path tolerates dies as a bare
+    connection error, which reads like a flaky link and is not.
+
+    Measured on this gateway: a 37.9KB S1 prompt at xhigh is cut at ~301s even
+    with a 2400s client timeout, so the ceiling is upstream and cannot be raised
+    from here. Left unlabelled it is also expensive -- the SDK retries
+    connection errors, and those retries are logged at DEBUG, so a call that
+    structurally cannot fit burns max_retries x ~300s writing nothing at all.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "xhigh")
+    monkeypatch.setenv("SPECFLOW_ENV_FILE", str(tmp_path / "absent"))
+
+    class APIConnectionError(Exception):
+        pass
+
+    class _Boom:
+        def create(self, **kwargs):
+            raise APIConnectionError("Connection error.")
+
+    port = ApiPort(root=tmp_path / "agent_io")
+    port._client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Boom())
+    )
+    with pytest.raises(RuntimeError) as exc:
+        port.complete(stage="s1", round_=0, prompt="x" * 1000)
+    msg = str(exc.value)
+    assert "network path" in msg
+    assert "300s" in msg          # names the actual ceiling
+    assert "xhigh" in msg         # and the setting that overran it
+    # Raising the client timeout is the intuitive fix and the wrong one.
+    assert "raising" in msg and "does not help" in msg
+
+
+def test_an_unrelated_error_is_not_relabelled(tmp_path, monkeypatch):
+    """Only connection/timeout deaths get the ceiling explanation; a genuine API
+    error must reach the caller unchanged rather than be misattributed."""
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("SPECFLOW_ENV_FILE", str(tmp_path / "absent"))
+
+    class BadRequestError(Exception):
+        pass
+
+    class _Boom:
+        def create(self, **kwargs):
+            raise BadRequestError("Unknown parameter: 'reasoning'.")
+
+    port = ApiPort(root=tmp_path / "agent_io")
+    port._client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Boom())
+    )
+    with pytest.raises(BadRequestError, match="Unknown parameter"):
+        port.complete(stage="s1", round_=0, prompt="p")
