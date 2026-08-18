@@ -1,0 +1,379 @@
+{
+  "task": "i2c_master_bit_ctrl",
+  "family": "i2c",
+  "hierarchical": false,
+  "instantiates": [],
+  "spec_bytes": 15713,
+  "reference_lines": 576,
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "high",
+  "api_flavor": "responses",
+  "tb_backend": "specflow",
+  "child_sources": [],
+  "include_dirs": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c",
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl"
+  ],
+  "is_sim_pass": false,
+  "rtl_bytes": 10595,
+  "tokens": {
+    "eda_agent_input": 40994,
+    "eda_agent_output": 24109,
+    "breakdown": {
+      "architect": {
+        "input": 31676,
+        "output": 13153
+      },
+      "tb_gen": {
+        "input": 0,
+        "output": 0
+      },
+      "rtl_gen": {
+        "input": 9318,
+        "output": 10956
+      },
+      "rtl_edit": {
+        "input": 0,
+        "output": 0
+      },
+      "consensus_rtl_player": {
+        "input": 0,
+        "output": 0
+      },
+      "consensus_tb_player": {
+        "input": 0,
+        "output": 0
+      },
+      "total": {
+        "input": 40994,
+        "output": 24109
+      }
+    },
+    "specflow": {
+      "calls": 7,
+      "prompt": 95362,
+      "completion": 62598,
+      "reasoning": 27531
+    }
+  },
+  "stages": {
+    "s1": {
+      "ok": true,
+      "rounds": 1,
+      "issues": []
+    },
+    "s2": {
+      "ok": true,
+      "rounds": 1,
+      "issues": []
+    },
+    "s3": {
+      "ok": true,
+      "rounds": 1,
+      "issues": [
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0000.condition",
+          "message": "mentions ['across', 'boundary', 'command', 'driven', 'encodings', 'exercised', 'listed', 'monitored', 'phases', 'released', 'resulting', 'through', 'toggled', 'valid'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0001.condition",
+          "message": "mentions ['READ', 'START', 'STOP', 'WRITE', 'active', 'bus', 'connected', 'drain', 'driven', 'model', 'observed', 'open', 'resolved', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0002.condition",
+          "message": "mentions ['START', 'STOP', 'bus', 'connected', 'drain', 'followed', 'model', 'observed', 'open', 'resolved', 'waveform'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0003.condition",
+          "message": "mentions ['active', 'between', 'change', 'edges', 'inactive', 'rising', 'successive', 'valid'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0004.condition",
+          "message": "mentions ['across', 'active', 'being', 'command', 'edge', 'inactive', 'released', 'rising', 'transitions'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0005.condition",
+          "message": "mentions ['active', 'between', 'command', 'edge', 'edges', 'released', 'rising', 'transitions', 'without'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0006.condition",
+          "message": "mentions ['START', 'disabled', 'edges', 'holds', 'interval', 'later', 'multiple', 'reasserted', 'request', 'rising', 'selects', 'stated', 'timing', 'toggled'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0007.condition",
+          "message": "mentions ['START', 'active', 'attempted', 'completion', 'held', 'holds', 'idle', 'request', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0008.condition",
+          "message": "mentions ['START', 'active', 'executed', 'idle', 'nonzero', 'prescaler', 'remain', 'request', 'runs', 'separate', 'two'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0009.condition",
+          "message": "mentions ['active', 'allowed', 'followed', 'history', 'independent', 'interval', 'pulse', 'receive', 'short', 'sustained', 'synchronized', 'update'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0010.condition",
+          "message": "mentions ['clocks', 'controller', 'enough', 'filtering', 'held', 'idle', 'pass', 'sampled', 'synchronization', 'transitions'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0011.condition",
+          "message": "mentions ['START', 'active', 'bus', 'clocks', 'command', 'enough', 'filtering', 'has', 'held', 'made', 'pass', 'prior', 'sampled', 'synchronization', 'transitions'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0012.condition",
+          "message": "mentions ['READ', 'SCL', 'active', 'bus', 'filter', 'held', 'holds', 'later', 'model', 'multiple', 'opportunities', 'released', 'releases', 'request'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0013.condition",
+          "message": "mentions ['READ', 'active', 'driven', 'falling', 'followed', 'phase', 'released', 'rising', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0014.condition",
+          "message": "mentions ['SDA', 'WRITE', 'arbitration', 'become', 'check', 'driven', 'enough', 'filtered', 'holds', 'long', 'phase', 'releases', 'request', 'returning'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0015.condition",
+          "message": "mentions ['READ', 'STOP', 'active', 'controller', 'create', 'driven', 'enough', 'externally', 'filtered', 'holds', 'long', 'observed', 'request'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0016.condition",
+          "message": "mentions ['READ', 'SDA', 'active', 'driven', 'filtered', 'holds', 'interval', 'level', 'persists', 'released', 'request', 'rising', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0017.condition",
+          "message": "mentions ['READ', 'SDA', 'active', 'filtered', 'holds', 'interval', 'level', 'present', 'released', 'request', 'rising'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0018.condition",
+          "message": "mentions ['START', 'active', 'bus', 'held', 'holds', 'idle', 'observed', 'request', 'until'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0019.condition",
+          "message": "mentions ['SCL', 'START', 'STOP', 'allowed', 'bus', 'has', 'holds', 'initially', 'occurred', 'phase', 'released', 'represents', 'request', 'rise', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0020.condition",
+          "message": "mentions ['WRITE', 'active', 'arbitration', 'check', 'completion', 'externally', 'held', 'holds', 'phase', 'released', 'request', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0021.condition",
+          "message": "mentions ['WRITE', 'active', 'arbitration', 'check', 'completion', 'externally', 'held', 'holds', 'phase', 'released', 'request', 'through'], which are not contract ports",
+          "kind": null
+        },
+        {
+          "severity": "warning",
+          "path": "bin.BIN-0022.condition",
+          "message": "mentions ['NOP', 'active', 'command', 'controller', 'driven', 'encoding', 'idle', 'listed', 'through', 'unsupported'], which are not contract ports",
+          "kind": null
+        }
+      ]
+    },
+    "refmodel": {
+      "ok": true,
+      "rounds": 4,
+      "fragments": [
+        {
+          "req_uid": "REQ-0000",
+          "method_name": "_req_0000"
+        },
+        {
+          "req_uid": "REQ-0001",
+          "method_name": "_req_0001"
+        },
+        {
+          "req_uid": "REQ-0002",
+          "method_name": "_req_0002"
+        },
+        {
+          "req_uid": "REQ-0003",
+          "method_name": "_req_0003"
+        },
+        {
+          "req_uid": "REQ-0004",
+          "method_name": "_req_0004"
+        },
+        {
+          "req_uid": "REQ-0005",
+          "method_name": "_req_0005"
+        },
+        {
+          "req_uid": "REQ-0006",
+          "method_name": "_req_0006"
+        },
+        {
+          "req_uid": "REQ-0007",
+          "method_name": "_req_0007"
+        },
+        {
+          "req_uid": "REQ-0008",
+          "method_name": "_req_0008"
+        },
+        {
+          "req_uid": "REQ-0009",
+          "method_name": "_req_0009"
+        },
+        {
+          "req_uid": "REQ-0010",
+          "method_name": "_req_0010"
+        },
+        {
+          "req_uid": "REQ-0011",
+          "method_name": "_req_0011"
+        },
+        {
+          "req_uid": "REQ-0012",
+          "method_name": "_req_0012"
+        },
+        {
+          "req_uid": "REQ-0013",
+          "method_name": "_req_0013"
+        },
+        {
+          "req_uid": "REQ-0014",
+          "method_name": "_req_0014"
+        },
+        {
+          "req_uid": "REQ-0015",
+          "method_name": "_req_0015"
+        },
+        {
+          "req_uid": "REQ-0016",
+          "method_name": "_req_0016"
+        },
+        {
+          "req_uid": "REQ-0017",
+          "method_name": "_req_0017"
+        },
+        {
+          "req_uid": "REQ-0018",
+          "method_name": "_req_0018"
+        },
+        {
+          "req_uid": "REQ-0019",
+          "method_name": "_req_0019"
+        },
+        {
+          "req_uid": "REQ-0020",
+          "method_name": "_req_0020"
+        },
+        {
+          "req_uid": "REQ-0021",
+          "method_name": "_req_0021"
+        },
+        {
+          "req_uid": "REQ-0022",
+          "method_name": "_req_0022"
+        },
+        {
+          "req_uid": "REQ-0023",
+          "method_name": "_req_0023"
+        },
+        {
+          "req_uid": "REQ-0024",
+          "method_name": "_req_0024"
+        },
+        {
+          "req_uid": "REQ-0025",
+          "method_name": "_req_0025"
+        },
+        {
+          "req_uid": "REQ-0026",
+          "method_name": "_req_0026"
+        },
+        {
+          "req_uid": "REQ-0027",
+          "method_name": "_req_0027"
+        },
+        {
+          "req_uid": "REQ-0028",
+          "method_name": "_req_0028"
+        },
+        {
+          "req_uid": "REQ-0029",
+          "method_name": "_req_0029"
+        },
+        {
+          "req_uid": "REQ-0030",
+          "method_name": "_req_0030"
+        }
+      ],
+      "underdetermined": [
+        {
+          "question": "The specification does not state the numeric encodings of START, STOP, READ, and WRITE; the contract assumes NOP=0, START=1, STOP=2, READ=4, and WRITE=8. Should these encodings be confirmed?"
+        },
+        {
+          "question": "The specification does not fully define whether divider and filter expiration are evaluated using pre-update or post-update counter values; this model treats a zero counter as expiring on the current eligible clock and reloads it on that clock."
+        },
+        {
+          "question": "The specification does not fully define the exact synchronization and filter pipeline cycle alignment for transition detection and read capture; this model uses registered two-stage synchronization, pre-update filtered values for protocol decisions, and majority-history updates on the current clock."
+        },
+        {
+          "question": "The specification describes asynchronous reset behavior, but the step interface provides no separate event mechanism for changes between calls; this model applies asynchronous reset whenever nReset is observed low during a step."
+        }
+      ],
+      "issues": []
+    }
+  },
+  "artifacts_present": [
+    "_refmodel_check",
+    "coverage_model.json",
+    "ref_model.py",
+    "refmodel_gate.json",
+    "requirements.json",
+    "s1_gate.json",
+    "s2_gate.json",
+    "s3_gate.json",
+    "suite",
+    "testplan.json"
+  ],
+  "compile_gate": {
+    "status": "pass",
+    "exit_code": 0,
+    "stderr": "",
+    "command": "iverilog -g2012 -s i2c_master_bit_ctrl -o /dev/null /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/cv-bit/rtl.sv"
+  },
+  "submodule_sources_supplied": []
+}
