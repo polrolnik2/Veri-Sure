@@ -47,6 +47,7 @@ class Scoreboard:
         expected: Any,
         ctx: dict | None = None,
         signal: str | None = None,
+        step: int | None = None,
     ) -> bool:
         self.invoked.append(chk_uid)
         ok = got == expected
@@ -68,6 +69,7 @@ class Scoreboard:
                 {
                     "check": chk_uid,
                     "signal": signal,
+                    "step": step,
                     "got": _plain(got),
                     "expected": _plain(expected),
                     "ctx": {k: _plain(v) for k, v in (ctx or {}).items()},
@@ -128,6 +130,13 @@ class Env:
         # deliberately a strict subset of the first; `expect` closes the gap.
         self.input_ports = list(input_ports or [])
         self.pinned = dict(pinned or {})
+        # Which stimulus step is being driven. The SystemVerilog path gave the
+        # repair agent a `fail_time` to locate a failure in the waveform; this
+        # backend had no temporal pointer at all, so a mismatch on a stateful
+        # design could not be placed in its sequence. On a design whose stimulus
+        # repeats a step, two identical context dicts are two different
+        # situations, and without the index they are indistinguishable.
+        self.step_index = -1
         self._finished = False
 
     # -- construction ------------------------------------------------------
@@ -198,6 +207,7 @@ class Env:
             await RisingEdge(clk)
 
     async def drive(self, stim: dict) -> None:
+        self.step_index += 1
         for name, value in stim.items():
             port = getattr(self.dut, name, None)
             if port is None:
@@ -273,7 +283,8 @@ class Env:
 
     def check(self, chk_uid: str, signal: str, expected_map: dict, ctx: dict) -> bool:
         return self.sb.check(
-            chk_uid, self.sample(signal), expected_map.get(signal), ctx, signal=signal
+            chk_uid, self.sample(signal), expected_map.get(signal), ctx,
+            signal=signal, step=self.step_index,
         )
 
     async def finish(self) -> None:

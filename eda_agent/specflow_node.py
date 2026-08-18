@@ -59,7 +59,38 @@ def _load_testplan(run_dir: Path) -> list[dict] | None:
     return data if isinstance(data, list) else None
 
 
-def format_failures(payload: list[dict], *, limit: int = 40) -> str:
+def _steps(m: dict) -> str:
+    lo, hi = m.get("step_first"), m.get("step_last")
+    if lo is None:
+        return ""
+    return f"@step{lo}" if lo == hi else f"@steps{lo}-{hi} (x{m.get('repeats', 1)})"
+
+
+def _collapse(rows: list[dict]) -> list[dict]:
+    """One entry per distinct (check, signal, values, stimulus), with its span."""
+    out: dict[tuple, dict] = {}
+    for m in rows:
+        key = (
+            m.get("check"), m.get("signal"), m.get("got"), m.get("expected"),
+            json.dumps(m.get("ctx") or {}, sort_keys=True),
+        )
+        step = m.get("step")
+        seen = out.get(key)
+        if seen is None:
+            out[key] = dict(m, step_first=step, step_last=step, repeats=1)
+        else:
+            seen["repeats"] += 1
+            if step is not None:
+                if seen["step_first"] is None or step < seen["step_first"]:
+                    seen["step_first"] = step
+                if seen["step_last"] is None or step > seen["step_last"]:
+                    seen["step_last"] = step
+    return list(out.values())
+
+
+def format_failures(
+    payload: list[dict], *, per_testpoint: int = 6, limit: int = 160
+) -> str:
     """Turn per-testpoint records into the repair agent's prompt payload.
 
     Deliberately not a log excerpt. `rtl_editor` receives a keyword-filtered
@@ -67,6 +98,14 @@ def format_failures(payload: list[dict], *, limit: int = 40) -> str:
     was 210 MISMATCH lines carrying two actual values. Here every line already
     names the check, both values, and the stimulus that produced them -- and
     every failing testpoint is present, not only the first one hit.
+
+    The budget is **per testpoint**, which is the whole point. A single global
+    cap of 40 spent all 40 rows on the first failing testpoint: on
+    i2c_master_bit_ctrl that left 21 of 22 testpoints reduced to a header and
+    "... further mismatches omitted", so the agent knew which outputs diverged
+    and had not one concrete value for any of them. A wide, shallow view of
+    every failure beats a deep view of one, because the repair agent's first job
+    is to find the pattern across them.
     """
     if not payload:
         return ""
@@ -82,19 +121,33 @@ def format_failures(payload: list[dict], *, limit: int = 40) -> str:
         # which output is wrong -- and that is the whole question a repair agent
         # is trying to answer.
         lines.append(head + (f" -- diverging outputs: {sigs}" if sigs else ""))
-        for m in entry.get("mismatches") or []:
-            if shown >= limit:
-                lines.append("  ... further mismatches omitted")
+        # Collapse rows that are identical in every respect but the step: a
+        # stimulus step held for several cycles produces the same mismatch each
+        # cycle, and three identical lines cost three lines of budget to say
+        # what one line and a count say. The step range is kept, because on a
+        # stateful design *when* it diverged is the question.
+        rows = _collapse(entry.get("mismatches") or [])
+        here = 0
+        for m in rows:
+            if here >= per_testpoint or shown >= limit:
+                # No silent caps: say how many were dropped and where the whole
+                # set is, so a truncated list is never read as the population.
+                lines.append(
+                    f"  ... {len(rows) - here} further mismatch(es) for this "
+                    f"testpoint omitted; all are in results/{entry['testpoint']}.json"
+                )
                 break
             ctx = ", ".join(f"{k}={v}" for k, v in (m.get("ctx") or {}).items())
             sig = m.get("signal")
+            head = " ".join(
+                x for x in (str(m.get("check")), sig, _steps(m)) if x
+            )
             lines.append(
-                f"  {m.get('check')}"
-                + (f" {sig}" if sig else "")
-                + f": expected={m.get('expected')} got={m.get('got')}"
+                f"  {head}: expected={m.get('expected')} got={m.get('got')}"
                 + (f" on {ctx}" if ctx else "")
             )
             shown += 1
+            here += 1
     return "\n".join(lines)
 
 
@@ -143,6 +196,12 @@ class SpecflowReviewer:
         # so the editor is not sent after RTL logic for a lowering error.
         sim_output = json.dumps(
             {
+                # `rtl_editor._summarize_sim_log_json` exists to pull signal out
+                # of raw simulator stdout. This payload *is* the signal, already
+                # selected and budgeted, and running the SV filter over it threw
+                # away every value row -- the filter requires the literal word
+                # "mismatch" in a line, and these read "expected=1 got=0".
+                "format": "specflow",
                 "stdout": stdout,
                 "stderr": "" if info.get("build_ok") else verdict.reason,
                 "verdict": verdict.outcome,

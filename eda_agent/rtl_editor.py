@@ -101,6 +101,19 @@ def _summarize_sim_log_json(
     except Exception:  # noqa: BLE001
         return _clip_text(sim_log_json, max_chars=max_chars)
 
+    # An already-structured payload is passed through, not filtered. The
+    # vocabulary below was written for a SystemVerilog testbench's stdout, and
+    # the comment further down records what happens when a backend speaks a
+    # different one: every value row is silently dropped. It happened again.
+    # specflow's rows read "CHK-0000 sda_oen: expected=1 got=0 on ena=1, ...",
+    # which carries `got=` and `exp` but not the literal "mismatch" the filter
+    # requires -- so the debugger received 22 testpoint headers naming the
+    # diverging outputs and zero concrete values, and spent its budget on one
+    # no-op edit and two cosmetic reformats.
+    if str(obj.get("format") or "") == "specflow":
+        body = stdout if not stderr else f"{stdout}\n\n[stderr]\n{stderr}"
+        return _clip_text(body.strip(), max_chars=max_chars)
+
     # Keep the most informative bits: mismatch banner + hints + summary.
     #
     # The original vocabulary here was written for LEAF testbenches
