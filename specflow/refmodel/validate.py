@@ -74,6 +74,11 @@ def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
         for n in ast.walk(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    by_name = {
+        n.name: n
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
     for req in requirements:
         uid = req.get("uid") or ""
         if not uid:
@@ -85,8 +90,49 @@ def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
                       f"no method for {uid}; every requirement is one element of code",
                       "uncovered")
             )
+            continue
+        # -- a fragment that writes no output port
+        #
+        # This is half of what keeps atomicity honest. G1' punishes
+        # under-splitting; nothing punished over-splitting, so a requirement too
+        # small to constrain anything could pass every gate by producing a method
+        # that computes and discards. Measured on `or1200_ctrl`, 15 of 31
+        # fragments wrote nothing at all -- a majority of the reference model was
+        # inert and no gate said so.
+        #
+        # It is an error rather than a warning because the pair of opposing
+        # pressures only works if both sides bite. A warning here would leave
+        # "split until each requirement is a word" as a viable strategy.
+        if not _writes_an_output(by_name[want]):
+            issues.append(
+                Issue("error", f"ref_model.py.{want}",
+                      f"{uid}'s fragment writes no output port; a requirement "
+                      f"whose method determines nothing is not a requirement")
+            )
 
     return issues
+
+
+def _writes_an_output(fn: ast.AST) -> bool:
+    """True when the method assigns into the output dict at least once.
+
+    Matches `o[...] = ...` and `out[...] = ...` under any binding name the
+    renderer uses, plus augmented and annotated assignment, since a fragment
+    that only does `o["q"] |= x` still determines `q`.
+    """
+    for node in ast.walk(fn):
+        targets: list[ast.AST] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            targets = [node.target]
+        for t in targets:
+            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name):
+                return True
+            if isinstance(t, (ast.Tuple, ast.List)):
+                if any(isinstance(e, ast.Subscript) for e in t.elts):
+                    return True
+    return False
 
 
 def _random_inputs(contract: dict, rng: random.Random) -> dict:

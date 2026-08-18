@@ -170,7 +170,10 @@ def test_wrong_dispatch_name_blocks(tmp_path):
 
 
 def test_raising_model_blocks(tmp_path):
-    boom = "def _req_0001(self, i, o):\n    raise ValueError('nope')\n"
+    # Writes an output statically, then raises at run time. A fragment that only
+    # raised would now be caught by the writes-no-output static check instead,
+    # which is correct but would leave this test exercising the wrong gate.
+    boom = "def _req_0001(self, i, o):\n    o['cout'] = 1 // 0\n"
     res, _ = run(out([("REQ-0000", SUM), ("REQ-0001", boom)]), tmp_path)
     assert not res.ok
     assert any("raised on inputs" in i.message for i in res.issues)
@@ -310,3 +313,39 @@ def test_an_unwritten_output_survives_as_none_for_the_gate(tmp_path):
     ns: dict = {}
     exec(compile(render(out, _hadd_contract()), "ref_model.py", "exec"), ns)
     assert ns["Model"]().evaluate({"a": 1, "b": 1}) == {"sum": 0, "cout": None}
+
+
+def test_a_fragment_that_writes_no_output_port_blocks(tmp_path):
+    """The other half of what keeps atomicity honest.
+
+    G1' punishes under-splitting -- a unit whose obligations do not tile it, a
+    restatement carrying two obligations. Nothing punished *over*-splitting, so
+    "split until each requirement is a word" was a viable strategy: a
+    requirement too small to constrain anything still produced a method, and the
+    method computed and discarded. Measured on `or1200_ctrl`, 15 of 31 fragments
+    wrote nothing at all and no gate said so.
+
+    An error rather than a warning, because a pair of opposing pressures only
+    works if both sides bite.
+    """
+    inert = "def _req_0001(self, i, o):\n    total = i['a'] + i['b']\n    return total\n"
+    both = (
+        "def evaluate(self, i):\n"
+        "    o = {}\n"
+        "    self._req_0000(i, o)\n"
+        "    self._req_0001(i, o)\n"
+        "    o['cout'] = (i['a'] & i['b']) & 1\n"
+        "    return o\n"
+    )
+    res, _ = run(out([("REQ-0000", SUM), ("REQ-0001", inert)], helpers=both), tmp_path)
+    assert not res.ok
+    assert any("writes no output port" in i.message for i in res.issues), [
+        i.message for i in res.issues
+    ]
+
+
+def test_an_augmented_write_counts_as_determining_the_port(tmp_path):
+    """`o['q'] |= x` determines q. The check must not demand plain assignment."""
+    aug = "def _req_0001(self, i, o):\n    o['cout'] = 0\n    o['cout'] |= (i['a'] & i['b']) & 1\n"
+    res, _ = run(out([("REQ-0000", SUM), ("REQ-0001", aug)]), tmp_path)
+    assert res.ok, [i.message for i in res.issues]
