@@ -221,7 +221,7 @@ def test_expect_dispatches_on_what_the_model_implements():
         def evaluate(self, i):
             return {"y": i["a"] ^ 1}
 
-    env = Env.__new__(Env)          # only `expect` is under test
+    env = Env(None, "TP-0001", None, "results")   # only `expect` is under test
 
     env.ref = Sequential()
     assert env.expect({"d": 1}) == {"q": 1}, "sequential model not driven via step"

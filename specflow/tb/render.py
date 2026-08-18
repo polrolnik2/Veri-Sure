@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..schema import Issue
+from ..ports import classify, input_names, pinned_inputs
 
 _SAFE = re.compile(r"[^A-Za-z0-9_]")
 
@@ -41,12 +42,20 @@ def default_stimulus(contract: dict, limit: int = 64) -> list[dict]:
     Exhaustive matters: a sampled sweep can miss exactly the corner the
     specification cared about, and for the small designs this pipeline targets
     the whole space is usually cheap.
+
+    Clock and reset are excluded from the sweep because the runtime owns them:
+    `Env.reset()` sequences the reset and calls the model's own `reset()`, so a
+    testcase that toggled reset underneath would desynchronise the two. They are
+    excluded from the *stimulus*, not from the model's input bundle -- `Env` fills
+    them in from the DUT, which is why `tb/ports.py` exists rather than three
+    local name sets that each drop a different port.
     """
-    inputs = [
-        (str(p["name"]), int(p.get("width") or 1))
+    _, _, functional = classify(contract)
+    widths = {
+        str(p.get("name")): int(p.get("width") or 1)
         for p in (contract.get("io") or [])
-        if p.get("dir") == "input" and str(p.get("name")) not in {"clk", "rst", "reset"}
-    ]
+    }
+    inputs = [(name, widths.get(name) or 1) for name in functional]
     if not inputs:
         return [{}]
 
@@ -100,6 +109,8 @@ def render_testcase(
     checks: list[dict],
     stimulus: list[dict],
     suffix: str = "",
+    input_ports: list[str] | None = None,
+    pinned: dict[str, int] | None = None,
 ) -> str:
     tp_uid = tp["uid"]
     lines = [
@@ -121,10 +132,17 @@ def render_testcase(
         "",
         f"STIMULUS = {stimulus!r}",
         "",
+        "# Every declared input, not only the ones the stimulus drives. The runtime",
+        "# completes the reference model's bundle from the DUT so a model that reads",
+        "# a runtime-owned port sees it instead of raising KeyError.",
+        f"INPUT_PORTS = {list(input_ports or [])!r}",
+        f"PINNED_INPUTS = {dict(pinned or {})!r}",
+        "",
         "",
         "@cocotb.test()",
         f"async def {_fn_name(tp_uid, suffix)}(dut):",
-        f'    env = await Env.start(dut, tp_uid="{tp_uid}", model=Model())',
+        f'    env = await Env.start(dut, tp_uid="{tp_uid}", model=Model(),',
+        "                          input_ports=INPUT_PORTS, pinned=PINNED_INPUTS)",
         "    for stim in STIMULUS:",
         "        await env.drive(stim)",
     ]
@@ -156,6 +174,7 @@ def render_suite(
 
     bins_by_tp, checks_by_tp = _by_tp(bins), _by_tp(checks)
     default = default_stimulus(contract)
+    ports, pinned = input_names(contract), pinned_inputs(contract)
     manifest = Manifest()
 
     for tp in testplan:
@@ -166,6 +185,8 @@ def render_suite(
             bins=bins_by_tp.get(uid, []),
             checks=checks_by_tp.get(uid, []),
             stimulus=stim,
+            input_ports=ports,
+            pinned=pinned,
         )
         name = module_name(uid)
         (tests_dir / f"{name}.py").write_text(source, encoding="utf-8")

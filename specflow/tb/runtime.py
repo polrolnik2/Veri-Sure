@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..ports import inactive_value, is_reset
+
 
 @dataclass
 class Scoreboard:
@@ -90,21 +92,42 @@ def _plain(value: Any) -> Any:
 class Env:
     """Per-testpoint environment: clock, reset, reference model, verdict record."""
 
-    def __init__(self, dut, tp_uid: str, model, results_dir: Path):
+    def __init__(
+        self,
+        dut,
+        tp_uid: str,
+        model,
+        results_dir: Path,
+        input_ports: list[str] | None = None,
+        pinned: dict[str, int] | None = None,
+    ):
         self.dut = dut
         self.tp_uid = tp_uid
         self.ref = model
         self.results_dir = Path(results_dir)
         self.sb = Scoreboard()
         self.cov = CoverageRecorder()
+        # Every declared input, and the subset the runtime owns. The stimulus is
+        # deliberately a strict subset of the first; `expect` closes the gap.
+        self.input_ports = list(input_ports or [])
+        self.pinned = dict(pinned or {})
         self._finished = False
 
     # -- construction ------------------------------------------------------
 
     @classmethod
-    async def start(cls, dut, *, tp_uid: str, model, period_ns: int = 10) -> "Env":
+    async def start(
+        cls,
+        dut,
+        *,
+        tp_uid: str,
+        model,
+        period_ns: int = 10,
+        input_ports: list[str] | None = None,
+        pinned: dict[str, int] | None = None,
+    ) -> "Env":
         results_dir = Path(os.environ.get("SPECFLOW_RESULTS", "results"))
-        env = cls(dut, tp_uid, model, results_dir)
+        env = cls(dut, tp_uid, model, results_dir, input_ports, pinned)
 
         clk = getattr(dut, "clk", None)
         if clk is not None:
@@ -116,18 +139,29 @@ class Env:
         return env
 
     async def reset(self, cycles: int = 2) -> None:
-        rst = None
-        for name in ("rst", "reset", "rst_n", "resetn"):
-            rst = getattr(self.dut, name, None)
-            if rst is not None:
-                break
-        if rst is None:
+        """Assert every declared reset, hold, release, then reset the model.
+
+        Reset names come from the contract via `tb/ports.py`, not from a local
+        probe list. The probe list this replaced knew `rst`/`reset`/`rst_n`/
+        `resetn` and therefore found nothing on a design whose reset is called
+        `nReset` -- so the DUT ran the entire suite un-reset and the reference
+        model's own `reset()` was never called.
+        """
+        names = [n for n in self.input_ports if is_reset(n)]
+        if not names:
+            names = [n for n in ("rst", "reset", "rst_n", "resetn", "nReset")
+                     if getattr(self.dut, n, None) is not None]
+
+        handles = [(n, getattr(self.dut, n, None)) for n in names]
+        handles = [(n, h) for n, h in handles if h is not None]
+        if not handles:
             return
 
-        active_low = "n" in rst._name.lower().split("_")[-1] if hasattr(rst, "_name") else False
-        rst.value = 0 if active_low else 1
+        for name, handle in handles:
+            handle.value = 1 - inactive_value(name)
         await self.tick(cycles)
-        rst.value = 1 if active_low else 0
+        for name, handle in handles:
+            handle.value = inactive_value(name)
         await self.tick(1)
         if hasattr(self.ref, "reset"):
             self.ref.reset()
@@ -188,9 +222,35 @@ class Env:
         """
         from ..refmodel.base import RefModel
 
+        bundle = self._bundle(stim)
         if type(self.ref).step is not RefModel.step:
-            return self.ref.step(dict(stim))
-        return self.ref.evaluate(dict(stim))
+            return self.ref.step(bundle)
+        return self.ref.evaluate(bundle)
+
+    def _bundle(self, stim: dict) -> dict:
+        """The complete declared input set, not just the ports being swept.
+
+        The stimulus drives functional inputs only -- the runtime owns clock and
+        reset. But the contract declares all of them, so the reference model is
+        entitled to read any of them, and a model that read one it was not given
+        raised `KeyError` and killed the testpoint before `finish()` could write
+        a record. Fill the gap from the DUT, which is the truth at this instant,
+        and fall back to the pinned inactive value when the handle is absent.
+        """
+        bundle = dict(stim)
+        for name in self.input_ports:
+            if name in bundle:
+                continue
+            handle = getattr(self.dut, name, None)
+            if handle is None:
+                bundle[name] = self.pinned.get(name, inactive_value(name))
+                continue
+            sampled = _plain(handle.value)
+            bundle[name] = (
+                sampled if isinstance(sampled, int)
+                else self.pinned.get(name, inactive_value(name))
+            )
+        return bundle
 
     # -- verdict -----------------------------------------------------------
 

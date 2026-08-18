@@ -19,6 +19,7 @@ import random
 from pathlib import Path
 
 from ..ids import method_name
+from ..ports import classify, pinned_inputs
 from ..schema import Issue
 
 # Names a reference model has no business importing. `os`/`sys`/`pathlib` are
@@ -89,14 +90,23 @@ def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
 
 
 def _random_inputs(contract: dict, rng: random.Random) -> dict:
-    values: dict[str, int] = {}
-    for port in contract.get("io") or []:
-        if port.get("dir") != "input":
-            continue
-        name = str(port.get("name"))
-        if name in {"clk", "clock", "rst", "reset", "rst_n", "resetn"}:
-            continue
-        width = port.get("width")
+    """A complete input bundle: functional ports randomised, runtime-owned ports pinned.
+
+    Clock and reset are not randomised -- a randomly-asserted reset makes every
+    later output legitimately reset-valued and the determination check
+    meaningless -- but they *are* present. Dropping them was the bug: the model
+    is written against the contract, so a model that reads a declared reset used
+    to raise `KeyError` on G4's first call and abort the node before any real
+    defect could be reported.
+    """
+    values: dict[str, int] = dict(pinned_inputs(contract))
+    _, _, functional = classify(contract)
+    widths = {
+        str(p.get("name")): p.get("width")
+        for p in (contract.get("io") or [])
+    }
+    for name in functional:
+        width = widths.get(name)
         width = int(width) if isinstance(width, int) and width > 0 else 1
         values[name] = rng.getrandbits(min(width, 32))
     return values
