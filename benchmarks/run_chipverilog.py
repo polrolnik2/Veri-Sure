@@ -155,6 +155,14 @@ async def run(args: argparse.Namespace) -> dict:
         result = await agent.run(spec=spec, output_dir_per_run=out)
         record["is_sim_pass"] = bool(getattr(result, "is_sim_pass", False))
         record["rtl_bytes"] = len(getattr(result, "rtl_code", "") or "")
+        # Cost belongs in a baseline: two arms that score the same are not
+        # equivalent if one spent several times the tokens. TopAgentResult
+        # already carries this and both runners were dropping it.
+        record["tokens"] = {
+            "eda_agent_input": int(getattr(result, "input_tokens", 0) or 0),
+            "eda_agent_output": int(getattr(result, "output_tokens", 0) or 0),
+            "breakdown": getattr(result, "usage_breakdown", None),
+        }
     except Exception as exc:  # noqa: BLE001
         # A crash is a legitimate baseline outcome and must be recorded as one
         # rather than lost -- it says the loop cannot reach a verdict at all,
@@ -171,6 +179,22 @@ async def run(args: argparse.Namespace) -> dict:
         for name in ("s1", "s2", "s3", "refmodel")
     }
     record["artifacts_present"] = sorted(p.name for p in sf.glob("*")) if sf.exists() else []
+
+    # specflow's ApiPort writes a per-call record, so its share is recoverable
+    # from disk and separable from the eda_agent agents' share. Knowing which
+    # half of the bill the oracle costs is the point.
+    agent_io = out / "agent_io"
+    sflow = {"calls": 0, "prompt": 0, "completion": 0, "reasoning": 0}
+    for meta in sorted(agent_io.glob("*_meta.json")) if agent_io.exists() else []:
+        u = (json.loads(meta.read_text(encoding="utf-8")).get("usage") or {})
+        if not u:
+            continue
+        sflow["calls"] += 1
+        sflow["prompt"] += u.get("prompt_tokens", 0)
+        sflow["completion"] += u.get("completion_tokens", 0)
+        sflow["reasoning"] += (u.get("completion_tokens_details") or {}).get(
+            "reasoning_tokens") or 0
+    record.setdefault("tokens", {})["specflow"] = sflow
 
     record["compile_gate"] = compile_gate(out / "rtl.sv", top, kid_files)
     record["submodule_sources_supplied"] = [p.name for p in kid_files]

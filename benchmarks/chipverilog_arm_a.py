@@ -106,6 +106,14 @@ async def run(args: argparse.Namespace) -> dict:
         result = await agent.run(spec=spec, output_dir_per_run=out)
         record["is_sim_pass"] = bool(getattr(result, "is_sim_pass", False))
         record["rtl_bytes"] = len(getattr(result, "rtl_code", "") or "")
+        # Cost belongs in a baseline: two arms that score the same are not
+        # equivalent if one spent several times the tokens. TopAgentResult
+        # already carries this and both runners were dropping it.
+        record["tokens"] = {
+            "eda_agent_input": int(getattr(result, "input_tokens", 0) or 0),
+            "eda_agent_output": int(getattr(result, "output_tokens", 0) or 0),
+            "breakdown": getattr(result, "usage_breakdown", None),
+        }
     except Exception as exc:  # noqa: BLE001
         record["is_sim_pass"] = False
         record["exception"] = f"{type(exc).__name__}: {exc}"
