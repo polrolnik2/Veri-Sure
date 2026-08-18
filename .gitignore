@@ -12,3 +12,4 @@ sim_build/
 *.xml
 
 .venv/
+.env.local
