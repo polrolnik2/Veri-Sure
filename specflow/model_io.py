@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -157,6 +157,14 @@ class ApiPort:
     root: Path
     model: object | None = None
     _config: object | None = None
+    #: Overrides `OPENAI_MODEL` for this port only. The fanned-out stages run a
+    #: small model on a narrow task -- measured, `gpt-5-mini` at `low` effort
+    #: answers a one-requirement prompt in 9s median with 4/4 structurally valid
+    #: output -- while the whole-artifact stages keep the configured one. Named
+    #: `SPECFLOW_SMALL_MODEL` in the environment.
+    model_override: str | None = None
+    #: Reasoning effort for this port only, same reasoning.
+    effort_override: str | None = None
     #: Where prompt-cache accounting goes. Optional, because the single-call
     #: stages have nothing to cache across; supplied by every fanned-out stage,
     #: because there a silent cache loss is a ~30x cost regression that no gate,
@@ -189,6 +197,11 @@ class ApiPort:
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+        if self.model_override:
+            cfg = replace(cfg, model=self.model_override)
+        if self.effort_override:
+            cfg = replace(cfg, reasoning_effort=self.effort_override)
 
         if not cfg.api_key:
             raise RuntimeError(
@@ -317,10 +330,23 @@ class ApiPort:
         return text
 
 
-def make_port(kind: str, root: Path) -> ModelPort:
+def make_port(kind: str, root: Path, stats: object | None = None) -> ModelPort:
+    """`stats` is only meaningful for the API path -- the file and replay ports
+    make no requests, so there is no cache to account for.
+
+    Keyword-optional rather than required so a caller that substitutes this
+    function (tests do) is not broken by the addition.
+    """
     kinds = {"file": FilePort, "replay": ReplayPort, "api": ApiPort}
     if kind not in kinds:
         raise ValueError(f"unknown model port {kind!r}; expected one of {sorted(kinds)}")
+    if kind == "api":
+        return ApiPort(
+            root=Path(root),
+            stats=stats,
+            model_override=os.environ.get("SPECFLOW_SMALL_MODEL") or None,
+            effort_override=os.environ.get("SPECFLOW_SMALL_EFFORT") or None,
+        )
     return kinds[kind](root=Path(root))  # type: ignore[abstract]
 
 

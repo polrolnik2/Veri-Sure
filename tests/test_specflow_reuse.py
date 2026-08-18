@@ -69,7 +69,7 @@ def _build(run_dir: Path, *, reuse: bool):
     import specflow.integration as integration
 
     real_make_port = integration.make_port
-    integration.make_port = lambda kind, root: port
+    integration.make_port = lambda kind, root, stats=None: port
     try:
         res = build_artifacts(
             run_dir=run_dir,

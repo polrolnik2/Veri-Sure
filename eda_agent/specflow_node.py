@@ -227,6 +227,8 @@ async def run_specflow_node(
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
+    divide_s1: bool = False,
+    fanout: bool = False,
 ) -> Tuple[bool, str, dict[str, Any]]:
     """Build the oracle, generate RTL, repair until the gate accepts.
 
@@ -248,8 +250,17 @@ async def run_specflow_node(
         model_port=model_port,
         max_repairs=max_repairs,
         reuse=reuse,
+        divide_s1=divide_s1,
+        fanout=fanout,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
+    if getattr(built, "cache", None) is not None:
+        # Reported next to the verdict rather than only on disk: a cache that
+        # stopped working costs ~30x while every artifact still validates, so it
+        # has to land where someone already looks.
+        detail["cache"] = built.cache.to_dict()
+        if built.cache.failing():
+            logger.warning("prompt cache below threshold:\n%s", built.cache.render())
     if not built.ok:
         logger.error("specflow artifacts failed at %s: %s", built.stage, built.reason)
         return False, "", detail

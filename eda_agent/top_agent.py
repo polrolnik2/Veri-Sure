@@ -232,6 +232,12 @@ class TopAgentConfig:
     #: of regenerating them. The gates are always re-run on what is reused, so
     #: this skips the model calls, never the checks.
     specflow_reuse: bool = False
+    #: S1 by division at authorial boundaries plus a per-unit classifier,
+    #: instead of the generative decomposition. Off by default so the generative
+    #: arm stays runnable for A/B on the same task, model and effort.
+    specflow_divide_s1: bool = False
+    #: One small call per item for S2, S3 and the reference model.
+    specflow_fanout: bool = False
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -571,6 +577,8 @@ class TopAgent:
             extra_sources=self.config.specflow_extra_sources,
             include_dirs=self.config.specflow_include_dirs,
             reuse=self.config.specflow_reuse,
+            divide_s1=self.config.specflow_divide_s1,
+            fanout=self.config.specflow_fanout,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

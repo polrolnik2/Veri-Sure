@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import make_port
@@ -75,6 +76,9 @@ class BuildResult:
     #: than aborting: a weaker sweep beats no node at all, and the coverage
     #: gate is what reports the gap it leaves.
     stimulus_issues: list[Issue] | None = None
+    #: Prompt-cache accounting for this build. Its verdict fails the *report*,
+    #: never the run -- the artifacts are fine and the cost is already spent.
+    cache: object | None = None
 
     @property
     def reason(self) -> str:
@@ -212,7 +216,8 @@ def build_artifacts(
     """
     run_dir = Path(run_dir)
     ensure_prompt_file(run_dir, spec)
-    port = make_port(model_port, run_dir / "agent_io")
+    stats = CacheStats()
+    port = make_port(model_port, run_dir / "agent_io", stats)
     contract = json.loads(contract_json) if contract_json.strip() else {}
 
     # Set once a stage regenerates: everything downstream must regenerate too,
@@ -364,9 +369,14 @@ def build_artifacts(
     if any(i.severity == "error" for i in g5):
         return BuildResult(False, "G5", g5)
 
+    # Written on the way out of every build, successful or not: a run that
+    # failed at S3 still spent whatever it spent, and a cache that stopped
+    # working is most likely to be noticed on the run that also went wrong.
+    stats.write(run_dir)
+
     return BuildResult(
         True, suite_dir=suite_dir, refmodel_path=refmodel_path, bins=bins,
-        stimulus_issues=stim_issues,
+        stimulus_issues=stim_issues, cache=stats,
     )
 
 

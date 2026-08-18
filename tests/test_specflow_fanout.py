@@ -308,7 +308,7 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
     import specflow.integration as integration
 
     real = integration.make_port
-    integration.make_port = lambda kind, root: Scripted(reply)
+    integration.make_port = lambda kind, root, stats=None: Scripted(reply)
     try:
         res = build_artifacts(
             run_dir=run_dir, spec=spec, contract_json=CONTRACT,
