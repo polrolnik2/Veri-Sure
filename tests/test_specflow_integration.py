@@ -292,3 +292,40 @@ def test_the_suite_runs_outside_pytest(tmp_path):
         f"suite did not run outside pytest\nstdout:\n{proc.stdout[-2000:]}"
         f"\nstderr:\n{proc.stderr[-2000:]}"
     )
+
+
+def test_the_specflow_node_path_calls_its_own_helpers_correctly():
+    """`_run_instance_specflow` had never executed, and it crashed on its first
+    real statement with a plain TypeError: `_build_contract_json` takes
+    `golden_tb_path` as a required keyword and the call omitted it.
+
+    Nothing here caught that, because every other test in this file enters
+    through `specflow.integration`, which is deliberately independent of
+    `top_agent`. So bind the call the way Python will at run time -- no model,
+    no network, no run directory -- and let the signature mismatch surface.
+    """
+    import inspect
+
+    from eda_agent.top_agent import TopAgent
+
+    node = inspect.signature(TopAgent._run_instance_specflow)
+    build = inspect.signature(TopAgent._build_contract_json)
+
+    # Every parameter `_build_contract_json` requires must be something the node
+    # path can actually supply: either its own parameter or a default.
+    required = {
+        name for name, p in build.parameters.items()
+        if p.default is inspect.Parameter.empty and name != "self"
+    }
+    available = set(node.parameters) | {"architect", "output_dir_per_run"}
+    assert required <= available, (
+        f"_run_instance_specflow cannot satisfy {sorted(required - available)}"
+    )
+
+    # And the dispatch must forward what `run` was given, or the benchmark path
+    # silently builds its contract without the interface it is compiled against.
+    assert "golden_tb_path" in node.parameters
+    src = inspect.getsource(TopAgent.run)
+    assert "golden_tb_path=golden_tb_path" in src, (
+        "run() does not forward golden_tb_path to the specflow node path"
+    )

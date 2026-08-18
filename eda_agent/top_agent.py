@@ -490,6 +490,7 @@ class TopAgent:
         *,
         spec: str,
         output_dir_per_run: Path,
+        golden_tb_path: str | None = None,
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
@@ -508,9 +509,21 @@ class TopAgent:
         rtl_gen = RTLGenerator(self.cfg)
 
         architect.reset()
+        # `golden_tb_path` reaches the ARCHITECT only, and only to pin the
+        # interface: module name, port names, directions and widths. On the
+        # benchmark path the generated RTL is compiled against the golden
+        # testbench, so an inferred name that differs by one character fails
+        # every node for a reason that has nothing to do with the design.
+        #
+        # It goes no further. `build_artifacts` receives `spec` and
+        # `contract_json` and nothing else, so neither the requirements nor the
+        # reference model can see golden -- which is the isolation property the
+        # oracle depends on, and it is enforced by what is passed rather than by
+        # an instruction.
         contract_json = await self._build_contract_json(
             architect=architect,
             spec=spec,
+            golden_tb_path=golden_tb_path,
             output_dir_per_run=output_dir_per_run,
         )
 
@@ -624,6 +637,7 @@ class TopAgent:
                 ) = await self._run_instance_specflow(
                     spec=spec,
                     output_dir_per_run=output_dir_per_run,
+                    golden_tb_path=golden_tb_path,
                     contract_sva=contract_sva,
                     child_assumes=child_assumes,
                     child_rtl=child_rtl,

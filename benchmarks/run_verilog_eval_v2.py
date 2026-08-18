@@ -177,7 +177,10 @@ async def main_async(argv: list[str] | None = None) -> int:
         default="spec-to-rtl",
     )
     parser.add_argument("--samples", type=int, default=1)
-    parser.add_argument("--temperature", type=float, default=0.0)
+    # None means "omit the parameter" -- see eda_agent/cli.py. Reasoning models
+    # reject an explicit temperature, so a hardcoded default blocked the whole
+    # benchmark for them.
+    parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--stream", action="store_true", help="Enable streaming model output")
     parser.add_argument("--max-completion-tokens", type=int, default=4096)
@@ -252,7 +255,8 @@ async def main_async(argv: list[str] | None = None) -> int:
     run_dir = make_timestamped_dir(
         out_root,
         "verilogeval-v2-ext_"
-        f"{args.task}_t{args.temperature}_p{args.top_p}_n{args.samples}"
+        f"{args.task}_t{args.temperature if args.temperature is not None else 'default'}"
+        f"_p{args.top_p}_n{args.samples}"
         f"_r{args.sim_max_retry}"
         f"{'_ablation' if args.ablation else ''}",
     )
