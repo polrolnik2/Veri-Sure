@@ -169,10 +169,27 @@ class Env:
         return _plain(getattr(self.dut, signal).value)
 
     def expect(self, stim: dict) -> dict:
-        """Expected outputs from the reference model, never from the testcase."""
-        fn = getattr(self.ref, "step", None) if hasattr(self.ref, "step") else None
-        if int(getattr(self.ref, "LATENCY_CYCLES", 0) or 0) > 1 and callable(fn):
-            return fn(dict(stim))
+        """Expected outputs from the reference model, never from the testcase.
+
+        Dispatch by what the model actually implements, not by re-deriving the
+        choice here. `compose.choose_base` already decides `evaluate` vs `step`
+        from the contract and the generated model implements exactly that one,
+        so a second, differently-worded decision in the runtime can only
+        disagree with the first.
+
+        It did. This gated on `LATENCY_CYCLES > 1`, so a sequential model with
+        latency 0 or 1 -- which `choose_base` still routes to `step`, because it
+        also keys on `clocking.is_sequential` and completion signals -- fell
+        through to `evaluate`, which such a model does not define. The base
+        class raised `NotImplementedError` and every testpoint in the suite
+        crashed before writing a record. On i2c_master_bit_ctrl that was 23 of
+        23, and it means specflow's sequential path had never once run; the half
+        adder worked only because a combinational model does define `evaluate`.
+        """
+        from ..refmodel.base import RefModel
+
+        if type(self.ref).step is not RefModel.step:
+            return self.ref.step(dict(stim))
         return self.ref.evaluate(dict(stim))
 
     # -- verdict -----------------------------------------------------------

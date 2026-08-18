@@ -190,3 +190,41 @@ def test_all_failing_scenarios_are_reported_in_one_run(tmp_path):
 
     # And a single testpoint records more than one mismatch.
     assert any(len(r.mismatches) > 1 for r in outcome.results.values())
+
+
+def test_expect_dispatches_on_what_the_model_implements():
+    """A sequential model must be driven through `step`, not `evaluate`.
+
+    `compose.choose_base` decides the entry point from the contract and the
+    generated model implements exactly that one. The runtime used to re-derive
+    the choice from `LATENCY_CYCLES > 1`, so a sequential model with latency 0
+    or 1 -- which `choose_base` still routes to `step`, since it also keys on
+    `clocking.is_sequential` and completion signals -- fell through to
+    `evaluate`, which such a model does not define.
+
+    The base class raised `NotImplementedError` and every testpoint crashed
+    before writing a record: 23 of 23 on i2c_master_bit_ctrl. specflow's
+    sequential path had never once run, and the whole test suite stayed green
+    throughout, because the only fixture is a combinational half adder.
+    """
+    from specflow.refmodel.base import RefModel
+    from specflow.tb.runtime import Env
+
+    class Sequential(RefModel):
+        OUTPUT_PORTS = ["q"]
+        LATENCY_CYCLES = 0          # the value that used to route to evaluate
+        def step(self, i):
+            return {"q": i["d"]}
+
+    class Combinational(RefModel):
+        OUTPUT_PORTS = ["y"]
+        def evaluate(self, i):
+            return {"y": i["a"] ^ 1}
+
+    env = Env.__new__(Env)          # only `expect` is under test
+
+    env.ref = Sequential()
+    assert env.expect({"d": 1}) == {"q": 1}, "sequential model not driven via step"
+
+    env.ref = Combinational()
+    assert env.expect({"a": 1}) == {"y": 0}, "combinational model must still work"
