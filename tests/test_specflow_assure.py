@@ -263,3 +263,66 @@ def test_attributing_nothing_is_still_caught():
                                              "quote": SPEC.strip()[:8]}]}],
     )
     assert any(i.kind == "uncovered" for i in issues)
+
+
+# ------------------------------------------------- G1 whitespace-insensitivity
+
+
+def test_locate_tolerates_indentation_but_not_fabrication():
+    """A faithful quote that differs only in whitespace runs still locates.
+
+    The check exists to catch a fabricated quote, and it still does: the words
+    must be the spec's words in the spec's order. What it no longer rejects is a
+    transcription that lost two spaces of list indentation -- which is what
+    hard-failed the `i2c_master_bit_ctrl` node after four rounds, on a span whose
+    every one of 14,842 characters `difflib` placed in a matching block.
+    """
+    from specflow.assure import _locate
+
+    spec = "Modes:\n    - START\n        - STOP\n  Any other command is ignored.\n"
+
+    # exact still wins, and returns the exact span
+    assert _locate(spec, "- STOP", 0) == (spec.index("- STOP"), spec.index("- STOP") + 6)
+
+    # re-indented and re-wrapped: same words, different whitespace runs
+    located = _locate(spec, "- START\n  - STOP\nAny other command is ignored.", 0)
+    assert located is not None
+    start, end = located
+    assert spec[start:end].split() == "- START - STOP Any other command is ignored.".split()
+
+    # fabricated text is still rejected, whitespace or not
+    assert _locate(spec, "- RESTART", 0) is None
+    assert _locate(spec, "Any   other   command   is   forbidden.", 0) is None
+
+
+def test_locate_maps_whitespace_match_back_to_real_offsets():
+    """The returned span must index the original text, not the projection."""
+    from specflow.assure import _locate
+
+    spec = "aaa\n\n\nbbb ccc\n\nddd"
+    located = _locate(spec, "bbb ccc ddd", 0)
+    assert located is not None
+    start, end = located
+    assert spec[start:end] == "bbb ccc\n\nddd"
+
+
+def test_g1_accepts_a_span_that_differs_only_in_indentation():
+    """End to end: the coverage hole closes, so the gate does not block."""
+    from specflow.assure import check_spec_attribution
+
+    spec = (
+        "The counter counts up.\n"
+        "  - On overflow it saturates.\n"
+        "      - It does not wrap.\n"
+    )
+    # One span, covering the whole spec, with the list indentation flattened --
+    # the exact shape that failed on i2c_master_bit_ctrl.
+    reqs = [
+        {"uid": "REQ-0000", "rev": 1, "text": "counts up and saturates",
+         "kind": "function", "needs": ["testplan"],
+         "spec_spans": [{"start": 0, "end": len(spec), "quote":
+                         "The counter counts up.\n"
+                         "- On overflow it saturates.\n"
+                         "- It does not wrap."}]},
+    ]
+    assert check_spec_attribution(spec, reqs) == []

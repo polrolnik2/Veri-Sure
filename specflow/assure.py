@@ -218,23 +218,81 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
     return issues
 
 
+def _collapse_ws(text: str) -> tuple[str, list[int]]:
+    """Whitespace-collapsed projection of `text`, plus each kept char's offset.
+
+    Returned offsets index back into the original, so a match found in the
+    projection maps to a real span without re-searching.
+    """
+    out: list[str] = []
+    index: list[int] = []
+    prev_space = False
+    for i, ch in enumerate(text):
+        if ch.isspace():
+            if prev_space or not out:
+                continue
+            out.append(" ")
+            index.append(i)
+            prev_space = True
+        else:
+            out.append(ch)
+            index.append(i)
+            prev_space = False
+    return "".join(out), index
+
+
+def _find_all(haystack: str, needle: str) -> list[int]:
+    positions = []
+    at = haystack.find(needle)
+    while at != -1:
+        positions.append(at)
+        at = haystack.find(needle, at + 1)
+    return positions
+
+
 def _locate(spec_text: str, quote: str, hint: int) -> tuple[int, int] | None:
     """Find `quote` in the spec, preferring the occurrence nearest `hint`.
 
     The hint is the model's own offset. It is used only to disambiguate a quote
     that appears more than once -- never to reject one that is genuinely there.
+
+    Matching ignores *runs* of whitespace, and that is a narrowing of the check
+    to what it is actually for rather than a softening of it. The check exists to
+    catch a fabricated quote -- prose the model invented and attributed to the
+    spec -- and a whitespace-insensitive match still catches every one of those,
+    because the words must still be the spec's words in the spec's order.
+
+    What it stops rejecting is a faithful quote that differs in indentation. On
+    `i2c_master_bit_ctrl` the model reproduced 14,842 characters of spec text and
+    lost the entire span to two missing spaces of list indentation at offset
+    2474; `difflib` put every one of those 14,842 characters in a matching block.
+    The span was rejected, the coverage hole it filled reopened, and the node
+    hard-failed after four rounds over whitespace. Attribution is a claim about
+    which prose a requirement covers, not a transcription exercise.
     """
     if not quote:
         return None
-    positions = []
-    at = spec_text.find(quote)
-    while at != -1:
-        positions.append(at)
-        at = spec_text.find(quote, at + 1)
-    if not positions:
+
+    positions = _find_all(spec_text, quote)
+    if positions:
+        best = min(positions, key=lambda p: abs(p - hint))
+        return (best, best + len(quote))
+
+    flat_spec, index = _collapse_ws(spec_text)
+    flat_quote, _ = _collapse_ws(quote)
+    if not flat_quote:
         return None
-    best = min(positions, key=lambda p: abs(p - hint))
-    return (best, best + len(quote))
+    flat_positions = _find_all(flat_spec, flat_quote)
+    if not flat_positions:
+        return None
+
+    # Compare in projection space, so the hint is meaningful either way.
+    hint_flat = min(range(len(index)), key=lambda k: abs(index[k] - hint)) if index else 0
+    best = min(flat_positions, key=lambda p: abs(p - hint_flat))
+    start = index[best]
+    end_idx = best + len(flat_quote) - 1
+    end = index[end_idx] + 1 if end_idx < len(index) else len(spec_text)
+    return (start, end)
 
 
 def _unattributed(spec_text: str, spans: list[tuple[int, int]]) -> list[Issue]:
