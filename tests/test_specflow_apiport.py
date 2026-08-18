@@ -249,3 +249,86 @@ def test_an_unrelated_error_is_not_relabelled(tmp_path, monkeypatch):
     )
     with pytest.raises(BadRequestError, match="Unknown parameter"):
         port.complete(stage="s1", round_=0, prompt="p")
+
+
+def test_streaming_reassembles_content_and_keeps_usage(tmp_path, monkeypatch):
+    """Streaming exists here to outlast a gateway that cuts idle-looking
+    requests, not for latency -- so the recorded fixture must come out identical
+    to the non-streaming path, cost included.
+
+    Usage arrives in a final chunk carrying no choices, which is why
+    `include_usage` is requested. Dropping it would record a replayable fixture
+    with no cost attached, and the token accounting would silently under-report
+    every streamed call.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("SPECFLOW_ENV_FILE", str(tmp_path / "absent"))
+    monkeypatch.delenv("OPENAI_EXTRA_BODY", raising=False)
+
+    def _chunk(text=None, usage=None, finish=None):
+        if text is None and usage is not None:
+            return SimpleNamespace(choices=[], usage=usage)      # the usage tail
+        delta = SimpleNamespace(content=text)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(delta=delta, finish_reason=finish)], usage=None
+        )
+
+    class _Usage:
+        def model_dump(self):
+            return {"total_tokens": 99}
+
+    seen: dict = {}
+
+    class _Completions:
+        def create(self, **kwargs):
+            seen.update(kwargs)
+            return iter([
+                _chunk('{"ok"'), _chunk(": true}"),
+                _chunk(None, usage=_Usage()),
+            ])
+
+    port = ApiPort(root=tmp_path / "agent_io")
+    port._config = SimpleNamespace(          # type: ignore[assignment]
+        model="gpt-5.6-luna", api_key="k", base_url=None, organization=None,
+        reasoning_effort="xhigh", stream=True, generate_kwargs={},
+    )
+    port._client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Completions())
+    )
+
+    assert port.complete(stage="s1", round_=0, prompt="p") == '{"ok": true}'
+    assert seen["stream"] is True
+    assert seen["stream_options"] == {"include_usage": True}
+
+    root = tmp_path / "agent_io"
+    # Replayable exactly like a non-streamed round, with the cost preserved.
+    assert make_port("replay", root).complete(
+        stage="s1", round_=0, prompt="ignored") == '{"ok": true}'
+    meta = json.loads((root / "s1_r0_meta.json").read_text(encoding="utf-8"))
+    assert meta["usage"] == {"total_tokens": 99}
+
+
+def test_a_stream_that_yields_no_content_is_still_refused(tmp_path, monkeypatch):
+    """The empty-completion guard must not be bypassed by the streaming path;
+    a reasoning model that spends its budget before emitting content produces
+    exactly this, and it must not reach the parser."""
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("SPECFLOW_ENV_FILE", str(tmp_path / "absent"))
+
+    class _Completions:
+        def create(self, **kwargs):
+            return iter([SimpleNamespace(
+                choices=[SimpleNamespace(delta=SimpleNamespace(content=None),
+                                         finish_reason="length")],
+                usage=None)])
+
+    port = ApiPort(root=tmp_path / "agent_io")
+    port._config = SimpleNamespace(          # type: ignore[assignment]
+        model="m", api_key="k", base_url=None, organization=None,
+        reasoning_effort="xhigh", stream=True, generate_kwargs={},
+    )
+    port._client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Completions())
+    )
+    with pytest.raises(RuntimeError, match="no content"):
+        port.complete(stage="s1", round_=0, prompt="p")

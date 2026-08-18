@@ -121,6 +121,26 @@ def load_env_file(path: Path | None = None) -> dict[str, str]:
 
 
 @dataclass
+class _StreamedResponse:
+    """Enough of a completion object for the recording path to be shared.
+
+    Reassembling into the same shape keeps one code path for the empty-content
+    guard and the fixture record, rather than forking them by transport.
+    """
+
+    text: str
+    usage: object | None
+    finish_reason: str | None
+    model: str
+
+    @property
+    def choices(self):
+        message = type("_M", (), {"content": self.text})()
+        return [type("_C", (), {"message": message,
+                                "finish_reason": self.finish_reason})()]
+
+
+@dataclass
 class ApiPort:
     """The HTTP path: one blocking chat completion per stage round.
 
@@ -198,6 +218,17 @@ class ApiPort:
         if cfg.reasoning_effort:
             kwargs["reasoning_effort"] = cfg.reasoning_effort
 
+        if cfg.stream:
+            # Streaming is not about latency here. A non-streaming reasoning
+            # request sends nothing until generation completes, so to any
+            # intermediary a long one looks idle -- and this gateway cuts such a
+            # request at ~300s regardless of the client timeout. Streaming keeps
+            # bytes flowing, which is what lets a generation outlast the
+            # ceiling. Whether it does is a property of the gateway, so
+            # `--stream` is offered rather than assumed.
+            kwargs["stream"] = True
+            kwargs["stream_options"] = {"include_usage": True}
+
         try:
             response = self._client().chat.completions.create(
                 model=cfg.model,
@@ -226,7 +257,25 @@ class ApiPort:
                     f"the client timeout does not help, the cut is upstream."
                 ) from exc
             raise
-        text = (response.choices[0].message.content or "").strip()
+        if cfg.stream:
+            # Reassemble the response, and keep the usage record: it arrives in
+            # a final chunk that carries no choices, which is why
+            # `include_usage` is set above. Without it an API run would record a
+            # fixture with no cost attached.
+            parts: list[str] = []
+            usage_obj = None
+            finish = None
+            for chunk in response:
+                usage_obj = getattr(chunk, "usage", None) or usage_obj
+                for choice in getattr(chunk, "choices", None) or []:
+                    delta = getattr(choice, "delta", None)
+                    if delta is not None and getattr(delta, "content", None):
+                        parts.append(delta.content)
+                    finish = getattr(choice, "finish_reason", None) or finish
+            text = "".join(parts).strip()
+            response = _StreamedResponse(text, usage_obj, finish, cfg.model)
+        else:
+            text = (response.choices[0].message.content or "").strip()
 
         # An empty completion is its own failure and must not reach the parser.
         # A reasoning model that spends its whole token budget before emitting
