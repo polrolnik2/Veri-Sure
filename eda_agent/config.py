@@ -13,6 +13,13 @@ class OpenAIConfig:
     base_url: str | None = None
     organization: str | None = None
     reasoning_effort: str | None = None
+    #: Which OpenAI surface to call: "chat" (/v1/chat/completions) or
+    #: "responses" (/v1/responses). Not cosmetic -- a gateway may refuse
+    #: function tools together with reasoning effort on chat-completions and
+    #: direct callers to Responses, which is the only way a tool-using agent
+    #: gets a reasoning budget at all. Defaults to "chat" so nothing changes
+    #: surface without being told to.
+    api_flavor: str = "chat"
     stream: bool = False
     generate_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -24,6 +31,7 @@ def load_openai_config(
     base_url: str | None = None,
     organization: str | None = None,
     reasoning_effort: str | None = None,
+    api_flavor: str | None = None,
     stream: bool | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
@@ -41,6 +49,7 @@ def load_openai_config(
     # chat-completions schema defines -- the nested {"reasoning":{"effort":...}}
     # form belongs to the Responses API and is rejected as an unknown parameter.
     env_effort = os.environ.get("OPENAI_REASONING_EFFORT")
+    env_flavor = os.environ.get("OPENAI_API_FLAVOR")
     env_extra_body = os.environ.get("OPENAI_EXTRA_BODY")
 
     generate_kwargs: dict[str, Any] = {}
@@ -72,6 +81,7 @@ def load_openai_config(
         base_url=base_url or env_base_url,
         organization=organization or env_org,
         reasoning_effort=reasoning_effort or env_effort,
+        api_flavor=(api_flavor or env_flavor or OpenAIConfig.api_flavor).lower(),
         stream=OpenAIConfig.stream if stream is None else stream,
         generate_kwargs=generate_kwargs,
     )

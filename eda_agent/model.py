@@ -458,6 +458,27 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
+    if cfg.api_flavor == "responses":
+        # Selected when tools and reasoning effort have to coexist: a gateway
+        # can refuse that combination on chat-completions and point at
+        # /v1/responses instead, and every agent here is tool-using. The
+        # adapter reports truncation through the same
+        # `metadata["finish_reason"]` channel, so the usage and truncation
+        # guards below are unaffected by the switch.
+        from .responses_model import OpenAIResponsesModel
+
+        return UsageTrackingModel(
+            OpenAIResponsesModel(
+                model_name=cfg.model,
+                api_key=cfg.api_key,
+                stream=cfg.stream,
+                reasoning_effort=cfg.reasoning_effort,
+                organization=cfg.organization,
+                client_args=client_args or None,
+                generate_kwargs=cfg.generate_kwargs or None,
+            )
+        )
+
     base_model = FinishReasonPreservingModel(
         model_name=cfg.model,
         api_key=cfg.api_key,
