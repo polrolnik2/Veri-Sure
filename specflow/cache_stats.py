@@ -27,10 +27,18 @@ Two accounting rules that stop the number from lying:
   misses on its first calls by construction; folding those into the rate makes a
   healthy stage look broken and hides the difference between "warming" and
   "never warmed".
-* **rates are keyed by `(stage, model)`.** The escalation ladder moves a failing
-  fragment to a different model, whose cache is separate. Pooling them lets one
-  escalated miss drag a stage under the threshold, and lets a stage that quietly
-  switched model hide behind another's hits.
+* **rates are keyed by `(stage family, model)`.** The escalation ladder moves a
+  failing fragment to a different model, whose cache is separate. Pooling those
+  lets one escalated miss drag a stage under the threshold, and lets a stage
+  that quietly switched model hide behind another's hits.
+
+  *Family*, not the raw stage name, and that distinction was found the hard way.
+  A fanned-out stage names each call after its item -- `classify_869`,
+  `s2_REQ-0004` -- so keying on the raw name gave 65 keys of one call each, every
+  one of them "too few calls to judge", and the report gate was inert on exactly
+  the runs it exists for. The offline tests missed it because they passed a
+  uniform stage name. `family()` strips the item suffix, and a test now asserts
+  the fan-out shape rather than the convenient one.
 """
 
 from __future__ import annotations
@@ -50,6 +58,15 @@ MIN_HIT_RATE = 0.80
 
 #: Fewer calls than this and a rate is noise, so no verdict is issued.
 MIN_CALLS_FOR_VERDICT = 8
+
+
+def family(stage: str) -> str:
+    """The stage a per-item call belongs to: `classify_869` -> `classify`.
+
+    Stage names are `<family>_<item>` by convention across the fanned-out stages,
+    and the single-call stages have no underscore, so both shapes land correctly.
+    """
+    return stage.split("_", 1)[0] if "_" in stage else stage
 
 
 @dataclass(frozen=True)
@@ -107,15 +124,16 @@ class StageStats:
 
 @dataclass
 class CacheStats:
-    """Accumulates every call, keyed by `(stage, model)`."""
+    """Accumulates every call, keyed by `(stage family, model)`."""
 
     by_key: dict[tuple[str, str], StageStats] = field(default_factory=dict)
 
     def record(self, *, stage: str, model: str, input_tokens: int,
                cached_tokens: int | None) -> Call:
-        call = Call(stage, model, int(input_tokens or 0), int(cached_tokens or 0))
-        key = (stage, model)
-        self.by_key.setdefault(key, StageStats(stage, model)).calls.append(call)
+        fam = family(stage)
+        call = Call(fam, model, int(input_tokens or 0), int(cached_tokens or 0))
+        key = (fam, model)
+        self.by_key.setdefault(key, StageStats(fam, model)).calls.append(call)
         return call
 
     def record_usage(self, *, stage: str, model: str, usage) -> Call | None:

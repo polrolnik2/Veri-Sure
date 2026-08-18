@@ -279,3 +279,30 @@ def test_c6_the_gateway_still_caches():
         port.complete(stage="probe", round_=round_, prompt=prompt)
     calls = next(iter(stats.by_key.values())).calls
     assert calls[-1].cached_tokens > 0, "the gateway stopped caching"
+
+
+def test_c5_a_fanned_stage_is_one_key_not_one_key_per_item():
+    """Found live, missed offline.
+
+    A fanned-out stage names each call after its item -- `classify_869`,
+    `s2_REQ-0004`. Keying on the raw name gave 65 keys of one call each on a real
+    65-unit spec, every one "too few calls to judge", so the report gate was
+    inert on exactly the runs it exists for. The tests above all passed a uniform
+    stage name and could not see it.
+    """
+    from specflow.cache_stats import family
+
+    assert family("classify_869") == "classify"
+    assert family("s2_REQ-0004") == "s2"
+    assert family("refmodel_REQ-0012") == "refmodel"
+    assert family("refmodel") == "refmodel", "a single-call stage keeps its name"
+
+    stats = CacheStats()
+    for i in range(WARMUP_CALLS + 20):
+        stats.record(stage=f"classify_{i * 37}", model="m",
+                     input_tokens=5000, cached_tokens=4736)
+    assert list(stats.by_key) == [("classify", "m")]
+    d = stats.by_key[("classify", "m")].to_dict()
+    assert d["stage"] == "classify", "the report shows one item's name, not the family"
+    assert d["calls"] == WARMUP_CALLS + 20
+    assert d["verdict"] == "ok", "a healthy fanned stage must be judgeable at all"
