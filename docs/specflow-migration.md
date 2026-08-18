@@ -160,11 +160,55 @@ deliberately, since its calls carry no tools.
 Reasoning models also reject an explicit `temperature`, which both entry points
 sent by default. `--temperature` now defaults to unset.
 
+### The ~300s request ceiling
+
+The gateway cuts a single request at ~301s. This is not a client setting and
+cannot be raised from inside the container: a 2400s client timeout dies at the
+same 301s, and so does a streamed request, whose failure is the informative one
+--
+
+    STREAM FAILED after 301s (first chunk at None): APIConnectionError
+
+no chunk ever arrived, because reasoning emits no content deltas. A streamed
+reasoning request therefore looks exactly as idle as a non-streamed one, and
+`stream=True` does not buy anything against this particular ceiling. (It is
+supported anyway, off by default, since the same limit elsewhere may be
+idle-based.)
+
+Measured on the `or1200_ctrl` S1 prompt (37.9KB, from a 14.3KB spec):
+
+| effort | max tokens | wall clock | |
+| --- | --- | --- | --- |
+| `medium` | 16000 | 57s | fits |
+| `high` | 24000 | 220s | fits, ~80s margin |
+| `xhigh` | 40000 | 301s | **cut** |
+
+Two consequences worth stating plainly.
+
+**The failure is silent and expensive.** The OpenAI SDK retries connection
+errors and logs those retries at DEBUG, so a call that structurally cannot fit
+burns `max_retries` x ~300s writing nothing at all. Both ChipVerilog arms sat in
+that loop for 47 minutes with an empty log and no error signature -- a watchdog
+grepping for errors could not see it, because there were none. `ApiPort` now
+translates the death into a message naming the ceiling, and
+`OPENAI_MAX_RETRIES=2` keeps the failure cheap.
+
+**S1 is the stage that will breach it first.** It must attribute verbatim spans
+across the entire specification in one call, so its prompt and its output both
+scale with spec size. 220s of a 300s ceiling on a 14.3KB spec leaves no room for
+a larger one. Splitting S1 is the only option that preserves both high effort
+and ChipVerilog-scale specs; that is now a measured constraint rather than a
+design preference.
+
 ### Still open
 
 - **No VerilogEval-v2-EXT baseline.** Not a missing key any more, a runtime
   one: S1 alone took 5m44s on a half adder at this effort, so 209 problems runs
   into days. It needs a lower effort or a much longer window.
+- **No ChipVerilog baseline yet.** The first attempt at `or1200_ctrl` was lost
+  to the request ceiling above; both arms now run at `high` rather than the
+  `xhigh` originally asked for, which is a condition change the baseline records
+  rather than hides.
 - **ChipVerilog is the sharper target** and has its own runner
   (`benchmarks/run_chipverilog.py`). Note that specflow is scoped to leaf
   nodes, so the 16 hierarchical tasks of its 64 are out of scope by
