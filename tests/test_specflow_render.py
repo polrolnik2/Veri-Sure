@@ -228,3 +228,44 @@ def test_expect_dispatches_on_what_the_model_implements():
 
     env.ref = Combinational()
     assert env.expect({"a": 1}) == {"y": 0}, "combinational model must still work"
+
+
+@needs_verilator
+def test_a_waveform_is_produced_for_the_repair_agent(tmp_path):
+    """The single largest gap measured in what the repair agent receives.
+
+    On the last run that reached the debugger, `trace_report` came back with
+    `fail_time=None`, `fail_outputs=0`, `input_window=0` and
+    `alignment_diagnosis=0` -- every field it derives from a waveform -- because
+    this backend dumped none. The agent could see which testpoints failed and
+    nothing whatever about when.
+
+    Tracing is two-sided and both halves are required: `--trace` at compile time
+    defines `VM_TRACE`, and the harness then looks for `--trace` in argv at run
+    time before it opens a file. Passing it as a plusarg instead made the model
+    exit with "Unknown runtime argument", which is the failure this pins.
+    """
+    suite, _, _, _, model_path, _ = build_suite(tmp_path)
+    outcome = run_suite(
+        rtl_path=GOLDEN, hdl_toplevel="RefModule", suite_dir=suite,
+        refmodel_path=model_path,
+    )
+    assert outcome.build_ok, outcome.build_log
+    assert outcome.wave_vcd is not None, "no waveform was produced"
+    assert outcome.wave_vcd.exists() and outcome.wave_vcd.stat().st_size > 0
+    assert "$var" in outcome.wave_vcd.read_text(errors="replace")[:20000], (
+        "the dump exists but declares no signals"
+    )
+
+
+@needs_verilator
+def test_tracing_can_be_turned_off(tmp_path):
+    """It costs simulation time and disk on every repair iteration, so the
+    switch has to work in both directions."""
+    suite, _, _, _, model_path, _ = build_suite(tmp_path)
+    outcome = run_suite(
+        rtl_path=GOLDEN, hdl_toplevel="RefModule", suite_dir=suite,
+        refmodel_path=model_path, trace=False,
+    )
+    assert outcome.build_ok, outcome.build_log
+    assert outcome.wave_vcd is None

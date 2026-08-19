@@ -421,6 +421,47 @@ def judge(
         "results": {u: r.status for u, r in outcome.results.items()},
         "uncovered": report.undisposed,
         "build_ok": outcome.build_ok,
+        # The waveform, so a caller can hand the repair agent a real file rather
+        # than guess a path. Absent when tracing is off or the build failed.
+        "wave_vcd": str(outcome.wave_vcd) if outcome.wave_vcd else None,
+    }
+
+
+def trace_summary(suite_dir: Path, wave_vcd: Path | None = None) -> dict:
+    """The failure half of a trace report, from specflow's own records.
+
+    `eda_agent.trace_report` derives `fail_time`, `fail_outputs` and
+    `input_window` by parsing a SystemVerilog testbench's mismatch log. This
+    backend has no such log -- it has something better, a structured record per
+    testpoint -- but nothing was reading it, so every one of those fields
+    reached the repair agent null or zero while the data sat on disk.
+
+    `fail_step` replaces `fail_time`: a stimulus step index, which is what a
+    specflow failure is actually located by. The waveform is named alongside so
+    the agent can go from "step 7 of TP-0031, sda_oen wrong" to the wave.
+    """
+    payload = failure_payload(suite_dir)
+    by_signal: dict[str, int] = {}
+    first_step: int | None = None
+    total = 0
+    for entry in payload:
+        for m in entry.get("mismatches") or []:
+            total += 1
+            sig = m.get("signal")
+            if sig:
+                by_signal[sig] = by_signal.get(sig, 0) + 1
+            step = m.get("step")
+            if isinstance(step, int) and (first_step is None or step < first_step):
+                first_step = step
+    return {
+        "fail_step": first_step,
+        "total_mismatches": total,
+        "failing_testpoints": [e["testpoint"] for e in payload],
+        "fail_outputs": [
+            {"sig": k, "mismatches": v}
+            for k, v in sorted(by_signal.items(), key=lambda kv: -kv[1])
+        ],
+        "wave_vcd": str(wave_vcd) if wave_vcd else None,
     }
 
 

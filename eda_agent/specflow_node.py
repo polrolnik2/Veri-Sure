@@ -89,7 +89,8 @@ def _collapse(rows: list[dict]) -> list[dict]:
 
 
 def format_failures(
-    payload: list[dict], *, per_testpoint: int = 6, limit: int = 160
+    payload: list[dict], *, per_testpoint: int = 6, limit: int = 160,
+    trace: dict | None = None,
 ) -> str:
     """Turn per-testpoint records into the repair agent's prompt payload.
 
@@ -111,6 +112,22 @@ def format_failures(
         return ""
 
     lines: list[str] = []
+    if trace:
+        # Ahead of the per-testpoint detail on purpose: "which output is wrong
+        # most often, and from which step" is the question a repair agent asks
+        # first, and it is answerable across the whole failure set rather than
+        # one testpoint at a time.
+        outs = ", ".join(f"{d['sig']}x{d['mismatches']}" for d in trace.get("fail_outputs") or [])
+        lines.append(
+            f"SUMMARY: {trace.get('total_mismatches')} mismatches across "
+            f"{len(trace.get('failing_testpoints') or [])} testpoints"
+            + (f"; first at stimulus step {trace['fail_step']}"
+               if trace.get("fail_step") is not None else "")
+            + (f"; diverging outputs {outs}" if outs else "")
+        )
+        if trace.get("wave_vcd"):
+            lines.append(f"WAVEFORM: {trace['wave_vcd']}")
+        lines.append("")
     shown = 0
     for entry in payload:
         checks = ", ".join(entry.get("failed_checks") or [])
@@ -175,7 +192,7 @@ class SpecflowReviewer:
         self.golden_rtl_path = None  # rtl_editor getattrs this
 
     def review(self) -> Tuple[bool, int, str]:
-        from specflow.integration import failure_payload, judge
+        from specflow.integration import failure_payload, judge, trace_summary
 
         verdict, info = judge(
             rtl_path=self._dir / "rtl.sv",
@@ -190,7 +207,9 @@ class SpecflowReviewer:
         self._iteration += 1
 
         payload = failure_payload(self._built.suite_dir)
-        stdout = format_failures(payload) or verdict.reason
+        wave = info.get("wave_vcd")
+        tr = trace_summary(self._built.suite_dir, Path(wave) if wave else None)
+        stdout = format_failures(payload, trace=tr) or verdict.reason
 
         # A build failure is reported as such rather than as failing testpoints,
         # so the editor is not sent after RTL logic for a lowering error.
@@ -207,6 +226,12 @@ class SpecflowReviewer:
                 "verdict": verdict.outcome,
                 "testpoints": info.get("results", {}),
                 "uncovered": info.get("uncovered", []),
+                # The temporal half. Without this the repair agent gets which
+                # testpoints failed and nothing about when or where to look --
+                # measured on the last run to reach the debugger, `fail_time`,
+                # `fail_outputs`, `input_window` and `alignment_diagnosis` were
+                # all null or zero while the data sat on disk unread.
+                "trace": tr,
             },
             indent=2,
         )

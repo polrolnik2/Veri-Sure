@@ -217,3 +217,55 @@ def test_the_runtime_records_which_step_diverged():
     sb.check("CHK-0001", 0, 1, {"a": 1}, signal="y", step=4)
     assert sb.mismatches[0]["step"] == 4
     assert sb.mismatches[0]["signal"] == "y"
+
+
+def test_the_payload_leads_with_a_cross_testpoint_summary():
+    """"Which output is wrong most often, and from which step" is the question a
+    repair agent asks first, and it is answerable across the whole failure set
+    rather than one testpoint at a time. It was answerable nowhere."""
+    from eda_agent.specflow_node import format_failures
+
+    payload = _records((f"TP-{i:04d}", [_row("sda_oen", 3 + i)]) for i in range(3))
+    trace = {"fail_step": 3, "total_mismatches": 3,
+             "failing_testpoints": ["TP-0000", "TP-0001", "TP-0002"],
+             "fail_outputs": [{"sig": "sda_oen", "mismatches": 3}],
+             "wave_vcd": "/runs/x/wave_0.vcd"}
+    text = format_failures(payload, trace=trace)
+    head = text.splitlines()[0]
+    assert "3 mismatches across 3 testpoints" in head
+    assert "first at stimulus step 3" in head
+    assert "sda_oenx3" in head
+    assert "WAVEFORM: /runs/x/wave_0.vcd" in text
+
+
+def test_trace_summary_reads_the_records_rather_than_a_log(tmp_path):
+    """`eda_agent.trace_report` derives fail_time and fail_outputs by parsing a
+    SystemVerilog testbench's mismatch log. This backend has no such log -- it
+    has a structured record per testpoint, which is strictly better -- but
+    nothing read it, so every one of those fields reached the agent null or
+    zero while the data sat on disk."""
+    from specflow.integration import trace_summary
+
+    suite = _suite(tmp_path, failing=["TP-0001", "TP-0003"])
+    # give the records a signal and a step, as the runtime now does
+    for uid in ("TP-0001", "TP-0003"):
+        p = suite / "results" / f"{uid}.json"
+        d = json.loads(p.read_text())
+        d["mismatches"] = [
+            {"check": "CHK-0001", "signal": "busy", "step": 9, "got": 1,
+             "expected": 0, "ctx": {"a": 1}},
+            {"check": "CHK-0001", "signal": "al", "step": 4, "got": 1,
+             "expected": 0, "ctx": {"a": 1}},
+        ]
+        p.write_text(json.dumps(d), encoding="utf-8")
+
+    tr = trace_summary(suite, tmp_path / "wave_0.vcd")
+    assert tr["total_mismatches"] == 4
+    assert tr["fail_step"] == 4, "the earliest failing step, not the first seen"
+    assert tr["fail_outputs"] == [
+        {"sig": "al", "mismatches": 2}, {"sig": "busy", "mismatches": 2}
+    ] or tr["fail_outputs"] == [
+        {"sig": "busy", "mismatches": 2}, {"sig": "al", "mismatches": 2}
+    ]
+    assert tr["wave_vcd"].endswith("wave_0.vcd")
+    assert sorted(tr["failing_testpoints"]) == ["TP-0001", "TP-0003"]

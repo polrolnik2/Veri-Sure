@@ -35,6 +35,10 @@ class RunOutcome:
     results: dict[str, TestpointResult]
     build_log: str = ""
     coverage_dat: Path | None = None
+    #: The waveform, when one was dumped. Carried on the outcome rather than
+    #: rediscovered by path convention, so a caller can hand the repair agent a
+    #: real file instead of guessing where one might be.
+    wave_vcd: Path | None = None
 
     @property
     def failing(self) -> list[str]:
@@ -89,6 +93,10 @@ def run_suite(
     refmodel_path: Path,
     iteration: int = 0,
     coverage: bool = True,
+    #: Dump a waveform. On by default: without it the repair agent has no
+    #: temporal view of a failure at all, which is the single largest gap
+    #: measured in what it actually receives.
+    trace: bool = True,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
 ) -> RunOutcome:
@@ -123,9 +131,11 @@ def run_suite(
 
     build_dir = suite_dir / "sim_build"
     cov_dat = suite_dir / f"cov_{iteration}.dat"
+    wave = suite_dir / f"wave_{iteration}.vcd"
     runner = get_runner("verilator")
 
     build_args = ["--coverage-line", "--coverage-toggle"] if coverage else []
+
     try:
         runner.build(
             sources=[str(rtl_path), *(str(p) for p in extra_sources)],
@@ -134,6 +144,16 @@ def run_suite(
             build_args=build_args,
             build_dir=str(build_dir),
             always=True,
+            # Tracing is two-sided and both sides are required: `--trace` at
+            # *compile* time defines VM_TRACE, and the harness then looks for
+            # `--trace` in argv at *run* time before it opens a file. `waves`
+            # is cocotb's switch for the first half.
+            #
+            # Without a waveform this backend gives the repair agent no temporal
+            # view of a failure at all: `fail_time`, `fail_outputs`,
+            # `input_window` and `alignment_diagnosis` were all null or zero on
+            # the last run that reached the debugger.
+            waves=trace,
         )
     except Exception as exc:  # noqa: BLE001
         return RunOutcome(False, {}, build_log=f"{type(exc).__name__}: {exc}")
@@ -146,6 +166,11 @@ def run_suite(
             test_dir=str(suite_dir / "tests"),
             results_xml=str(suite_dir / "results.xml"),
             plusargs=[f"+verilator+coverage+file+{cov_dat.name}"],
+            # The run-time half. These are argv arguments the cocotb Verilator
+            # harness parses itself -- NOT plusargs, which it forwards to the
+            # model and which made it exit with "Unknown runtime argument".
+            test_args=[*(["--trace", "--trace-file", str(wave)] if trace else [])],
+            waves=trace,
             extra_env={
                 "SPECFLOW_RESULTS": str(results_dir),
                 "SPECFLOW_ITER": str(iteration),
@@ -160,10 +185,19 @@ def run_suite(
     if produced.exists():
         produced.replace(cov_dat)
 
+    # cocotb/Verilator writes the dump relative to the test directory.
+    if trace and not wave.exists():
+        for candidate in (suite_dir / "tests" / wave.name, suite_dir / "tests" / "dump.vcd",
+                          build_dir / wave.name, Path.cwd() / wave.name):
+            if candidate.exists():
+                candidate.replace(wave)
+                break
+
     return RunOutcome(
         True,
         _read_results(results_dir),
         coverage_dat=cov_dat if cov_dat.exists() else None,
+        wave_vcd=wave if trace and wave.exists() else None,
     )
 
 
