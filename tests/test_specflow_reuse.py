@@ -144,3 +144,70 @@ def test_a_broken_reference_model_is_regenerated(tmp_path):
     assert res.ok, res.reason
     assert "refmodel" in calls
     assert "s1" not in calls, "an unrelated stage was invalidated"
+
+
+def test_the_divided_arm_reuses_downstream_stages_too(tmp_path):
+    """A stage that was *reused* does not invalidate the stages after it.
+
+    `_run_divided_s1` used to report itself as regenerated unconditionally, so
+    the divided arm could never benefit from `--reuse` downstream: the
+    requirements came back from disk in milliseconds and then S2, S3 and the
+    reference model all re-ran anyway. Measured on one live run before the fix --
+    72 + 200 calls and about ten minutes rebuilding artifacts that were already
+    on disk and still passing their gates.
+    """
+    import specflow.integration as integration
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "specflow").mkdir()
+    spec = "The sum output is a xor b.\n\nThe cout output is a and b.\n"
+    (run_dir / "prompt.txt").write_text(spec, encoding="utf-8")
+    contract = json.dumps({
+        "io": [
+            {"name": "a", "dir": "input", "width": 1},
+            {"name": "b", "dir": "input", "width": 1},
+            {"name": "sum", "dir": "output", "width": 1},
+        ],
+        "clocking": {"is_sequential": False},
+        "timing": {"sum": {"latency_cycles": 0}},
+    })
+    # Requirements already on disk, in the shape the divided arm writes.
+    (run_dir / "specflow" / "requirements.json").write_text(json.dumps({
+        "requirements": [{
+            "uid": "REQ-0000", "rev": 1, "text": "The sum output is a xor b.",
+            "kind": "function",
+            "spec_spans": [{"start": 0, "end": 26, "quote": spec[:26]}],
+            "ports": ["sum"], "needs": ["testplan", "refmodel"],
+        }]
+    }), encoding="utf-8")
+
+    reqs, issues, regenerated = integration._run_divided_s1(
+        run_dir=run_dir, spec=spec, contract_json=contract,
+        port=None, max_repairs=0, reuse=True,
+    )
+    assert issues == [] and len(reqs) == 1
+    assert regenerated is False, (
+        "a reused S1 reported itself as regenerated, which invalidates every "
+        "stage after it"
+    )
+
+
+def test_a_regenerated_divided_s1_does_invalidate_downstream(tmp_path):
+    """The other direction: a genuinely new S1 must not leave a stale S2."""
+    import specflow.integration as integration
+
+    run_dir = tmp_path / "run"
+    (run_dir / "specflow").mkdir(parents=True)
+    spec = "The sum output is a xor b.\n"
+    (run_dir / "prompt.txt").write_text(spec, encoding="utf-8")
+
+    class _Port:
+        def complete(self, *, stage, round_, prompt):
+            return json.dumps({"kind": "scaffolding", "obligations": []})
+
+    _, _, regenerated = integration._run_divided_s1(
+        run_dir=run_dir, spec=spec, contract_json="{}",
+        port=_Port(), max_repairs=0, reuse=True,   # nothing on disk to reuse
+    )
+    assert regenerated is True

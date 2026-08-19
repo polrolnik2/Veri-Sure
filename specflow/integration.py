@@ -121,13 +121,18 @@ def _reuse(
 def _run_divided_s1(
     *, run_dir: Path, spec: str, contract_json: str, port, max_repairs: int,
     reuse: bool,
-) -> tuple[list[dict], list[Issue]]:
+) -> tuple[list[dict], list[Issue], bool]:
     """S1 by division, and the artifact it leaves behind.
 
     Writes the same `requirements.json` the generative arm writes, so every
     downstream stage, the `reuse` path and the committed baselines all read one
     shape regardless of which arm produced it. What differs is `s1_gate.json`,
     which records G1' per unit rather than G1 over the whole spec.
+
+    Returns `(requirements, issues, regenerated)`. The caller needs the last one:
+    a stage that was reused does not invalidate the stages after it, and treating
+    it as though it did is how `--reuse` ends up rebuilding everything downstream
+    of a cache hit.
     """
     from .divide import coverage as unit_coverage
     from .s1_classify import divide_and_classify
@@ -139,7 +144,7 @@ def _run_divided_s1(
             data = json.loads(reqs_path.read_text(encoding="utf-8"))
             cached = data.get("requirements") if isinstance(data, dict) else data
             if cached:
-                return list(cached), []
+                return list(cached), [], False
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -181,7 +186,7 @@ def _run_divided_s1(
         ) + "\n",
         encoding="utf-8",
     )
-    return reqs, issues
+    return reqs, issues, True
 
 
 def build_artifacts(
@@ -230,13 +235,19 @@ def build_artifacts(
         # the model's to choose. Its gate is G1' rather than G1, and it has no
         # `RequirementsOutput` to re-validate, so reuse is by artifact presence
         # plus the downstream gates that consume it.
-        reqs, s1_issues = _run_divided_s1(
+        reqs, s1_issues, regenerated = _run_divided_s1(
             run_dir=run_dir, spec=spec, contract_json=contract_json, port=port,
             max_repairs=max_repairs, reuse=not stale,
         )
         if has_errors(s1_issues):
             return BuildResult(False, "S1", s1_issues)
-        stale = True
+        # Only when S1 actually regenerated. Setting this unconditionally meant
+        # the divided arm could never benefit from `--reuse` downstream: the
+        # requirements came back from disk in milliseconds and then S2, S3 and
+        # the reference model all re-ran anyway. Measured on one run before the
+        # fix -- 72 + 200 calls and about ten minutes, to rebuild artifacts that
+        # were already on disk and still passing their gates.
+        stale = stale or regenerated
     else:
         cached = None if stale else _reuse(
             run_dir, "requirements.json", RequirementsOutput,
