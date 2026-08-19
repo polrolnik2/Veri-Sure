@@ -184,18 +184,6 @@ def _min_latency_checks(model_cls, contract: dict, expected_base: str) -> list[I
         # a combinational model has no steps to count.
         return []
 
-    try:
-        model = model_cls()
-        if hasattr(model, "reset"):
-            model.reset()
-    except Exception:  # noqa: BLE001
-        return []  # already reported by the load/instantiate check
-
-    # A constant vector held from reset. Constant matters: every change in an
-    # output is then a response to the one stimulus applied at step 0, so the
-    # step at which it first moves IS its latency. `clk_cnt` is pinned to 0
-    # where present, which is the fastest the design can legally run and so the
-    # setting under which an over-eager model shows up soonest.
     # Two models from the same reset, differing ONLY in the trigger. Comparing
     # against an idle twin rather than against a remembered first output is what
     # makes this sound: an output that free-runs (a divider tick, a counter) is
