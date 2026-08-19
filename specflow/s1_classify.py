@@ -32,7 +32,7 @@ import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
@@ -93,6 +93,16 @@ class UnitClassification(BaseModel):
     #: The spec is silent or ambiguous here. An honest "it does not say" is worth
     #: more than a guess, which becomes a wrong oracle that fails correct designs.
     underdetermined: list[str] = Field(default_factory=list)
+
+    @field_validator("underdetermined", mode="before")
+    @classmethod
+    def _accept_either_shape(cls, v):
+        """Some calls answer with `{req_uid, question}` dicts rather than bare
+        strings. Both are the same information; rejecting one shape throws away
+        the fragments in the same response."""
+        if isinstance(v, list):
+            return [x.get("question", "") if isinstance(x, dict) else str(x) for x in v]
+        return v
 
 
 SYSTEM = """\

@@ -349,3 +349,43 @@ def test_an_augmented_write_counts_as_determining_the_port(tmp_path):
     aug = "def _req_0001(self, i, o):\n    o['cout'] = 0\n    o['cout'] |= (i['a'] & i['b']) & 1\n"
     res, _ = run(out([("REQ-0000", SUM), ("REQ-0001", aug)]), tmp_path)
     assert res.ok, [i.message for i in res.issues]
+
+
+def test_an_honest_underdetermined_question_does_not_discard_the_fragment():
+    """The schema penalised exactly the behaviour the prompt asks for.
+
+    The prompt says to record "the question you would ask" when the spec does
+    not pin a behaviour down, because an honest "the spec does not say" is worth
+    more than a guess -- a guess becomes a wrong oracle that fails correct
+    designs. A model answering a question-shaped field with a question, i.e. a
+    string, was then rejected by a dict-only type, and the *whole response* went
+    with it: fragments included.
+
+    Measured live on `i2c_master_bit_ctrl`: 27 of 60 reference-model calls were
+    re-asked for this and nothing else, which read as the model failing at the
+    modelling task when it was doing the right thing.
+    """
+    from specflow.refmodel.agent import parse_response
+
+    raw = json.dumps({
+        "base": "evaluate", "helpers": "",
+        "fragments": [{"req_uid": "REQ-0036", "method_name": "",
+                       "code": "def _req_0036(self, i, o):\n    o['sum'] = 1\n"}],
+        "underdetermined": ["Which clock edge samples SDA during the READ phase?"],
+    })
+    out = parse_response(raw)
+    assert not out.reasoning.startswith("Parse Error"), out.reasoning
+    assert len(out.fragments) == 1, "the fragment was discarded with the question"
+    assert out.underdetermined[0]["question"].startswith("Which clock edge")
+
+
+def test_the_dict_shape_still_works():
+    """Both shapes carry the same information; neither may be rejected."""
+    from specflow.refmodel.agent import parse_response
+
+    out = parse_response(json.dumps({
+        "base": "evaluate", "helpers": "", "fragments": [],
+        "underdetermined": [{"req_uid": "REQ-0001", "question": "What on overflow?"}],
+    }))
+    assert not out.reasoning.startswith("Parse Error")
+    assert out.underdetermined[0]["req_uid"] == "REQ-0001"

@@ -12,9 +12,11 @@ concept: one requirement's worth of generated Python plus its metadata.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
+
+from ..schema import Underdetermined
 
 
 class Fragment(BaseModel):
@@ -36,6 +38,15 @@ class RefModelOutput(BaseModel):
     #: that fails correct designs, whereas this is recorded, excluded from the
     #: accept criterion, and surfaced.
     underdetermined: list[dict] = Field(default_factory=list)
+
+    @field_validator("underdetermined", mode="before")
+    @classmethod
+    def _accept_bare_questions(cls, v):
+        """A model answering "the question you would ask" with a question -- a
+        string -- is following the prompt. See `schema.Underdetermined.coerce`."""
+        if isinstance(v, list):
+            return [Underdetermined.coerce(x) for x in v]
+        return v
 
 
 SYSTEM = """\

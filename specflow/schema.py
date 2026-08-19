@@ -110,6 +110,26 @@ class Underdetermined(BaseModel):
     req_uid: str
     question: str
 
+    @classmethod
+    def coerce(cls, value):
+        """Accept a bare question string as well as `{req_uid, question}`.
+
+        The prompts ask for "the question you would ask", so a model answering
+        with a question -- a string -- is following the instruction. Typing the
+        field as dict-only rejected the whole response as a parse error and threw
+        away the fragments alongside it.
+
+        That penalised precisely the behaviour this pipeline most wants. The
+        prompt says an honest "the spec does not say" is worth more than a
+        confident guess, because a guess becomes a wrong oracle that fails
+        correct designs -- and then the schema discarded every response that said
+        it. Measured live on `i2c_master_bit_ctrl`: 27 of 60 reference-model
+        calls were re-asked for this and nothing else.
+        """
+        if isinstance(value, str):
+            return {"req_uid": "", "question": value}
+        return value
+
 
 # --- agent output wrappers (always `reasoning` + payload) -------------------
 
