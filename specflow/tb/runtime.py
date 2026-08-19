@@ -32,6 +32,7 @@ from typing import Any
 from ..ports import inactive_value, is_reset
 
 
+
 @dataclass
 class Scoreboard:
     """Accumulates check outcomes. Never raises."""
@@ -137,6 +138,10 @@ class Env:
         # repeats a step, two identical context dicts are two different
         # situations, and without the index they are indistinguishable.
         self.step_index = -1
+        #: Outputs from the most recent `drive()`, computed by advancing the
+        #: model in lockstep with the DUT's clock. `expect()` returns this
+        #: rather than taking a fresh step -- see `settle`.
+        self._expected: dict | None = None
         self._finished = False
 
     # -- construction ------------------------------------------------------
@@ -208,23 +213,52 @@ class Env:
 
     async def drive(self, stim: dict) -> None:
         self.step_index += 1
+        self._expected = None
         for name, value in stim.items():
             port = getattr(self.dut, name, None)
             if port is None:
                 raise AttributeError(f"{self.tp_uid}: DUT has no port {name!r}")
             port.value = int(value)
-        await self.settle()
+        await self.settle(stim)
 
-    async def settle(self) -> None:
-        """Let the DUT respond: one delta for combinational, LATENCY+1 edges
-        for a registered output."""
+    async def settle(self, stim: dict | None = None) -> None:
+        """Hold the vector and advance the DUT and the model TOGETHER.
+
+        One `step()` per clock edge. `RefModel.step` is documented as "advance
+        one clock edge and return the outputs", so a model driven any other
+        rate is not the design's oracle -- it is a different machine.
+
+        This used to tick the DUT `LATENCY_CYCLES + 1` edges and let `expect()`
+        take a SINGLE step, which on a design whose contract reports
+        `latency_cycles: 3` ran the DUT at 4x the model's rate. Every
+        multi-cycle sequence then diverged structurally, and no RTL could
+        satisfy the suite: driven through it, the *golden* i2c_master_bit_ctrl
+        failed 120 of 168 testpoints (373 mismatches) -- worse than the
+        LLM-written candidate's 91/203. A known-correct design scoring below a
+        generated one is the signature of a broken oracle, and the skew was it.
+
+        The trap is that `latency_cycles: 0` gives `max(1, 1) = 1` and the bug
+        vanishes, so it is invisible on combinational designs and on anything
+        whose contract reports no latency. It survived every earlier test for
+        that reason.
+
+        `LATENCY_CYCLES` keeps its documented meaning -- how long an output
+        takes to answer a stimulus -- and is used here only to decide how long
+        to HOLD each vector. It no longer paces the model, because with the two
+        advancing together there is nothing left to align.
+        """
         latency = int(getattr(self.ref, "LATENCY_CYCLES", 0) or 0)
         if getattr(self.dut, "clk", None) is None:
             from cocotb.triggers import Timer
 
             await Timer(1, unit="ns")
-        else:
-            await self.tick(max(1, latency + 1))
+            if stim is not None:
+                self._expected = self._advance_model(stim)
+            return
+        for _ in range(max(1, latency + 1)):
+            await self.tick(1)
+            if stim is not None:
+                self._expected = self._advance_model(stim)
 
     def sample(self, signal: str) -> int:
         return _plain(getattr(self.dut, signal).value)
@@ -246,6 +280,20 @@ class Env:
         crashed before writing a record. On i2c_master_bit_ctrl that was 23 of
         23, and it means specflow's sequential path had never once run; the half
         adder worked only because a combinational model does define `evaluate`.
+        """
+        if self._expected is not None:
+            return self._expected
+        # `expect()` without a preceding `drive()` -- the standalone path a few
+        # unit tests use. One step, which is the whole answer for a
+        # combinational model and the best available one otherwise.
+        return self._advance_model(stim)
+
+    def _advance_model(self, stim: dict) -> dict:
+        """Advance the reference model exactly one clock edge.
+
+        Split out of `expect` so `settle` can call it once per DUT edge. The
+        dispatch choice is unchanged and still made by what the model
+        implements, never re-derived here.
         """
         from ..refmodel.base import RefModel
 

@@ -80,6 +80,29 @@ You write the whole class body, including the dispatch:
 `i` is a dict of input port values (plain ints); return the output dict. You own
 the order things happen in, which is the point.
 
+HOW THE TESTBENCH CALLS YOU -- this was not stated before, and a model written
+against the wrong assumption is wrong in a way no gate here used to catch:
+
+  * ONE `step(i)` call is ONE clock edge. Not one transaction, not one command,
+    not one bus phase. If the design takes 26 clocks to finish a START, your
+    model takes 26 `step` calls to finish it.
+  * `i` holds the input values present AT that edge. They do not change during
+    the call and you do not get to see the future.
+  * You keep your own state between calls; nothing is reset between them except
+    by `reset()` or by the reset inputs you are given.
+  * `evaluate(i)` is the combinational form: no state, no edges, inputs to
+    outputs.
+
+The consequence that has actually gone wrong: if the design gates its state
+machine on an enable that is only true every N clocks -- a prescaler, a divider
+tick, a `clk_en` -- then ONE such tick advances the machine ONE phase. A
+five-phase sequence takes five ticks, not one. Collapsing the sequence into a
+single tick makes a model that answers far sooner than the design, and it will
+mark a correct design broken at every step of the sequence. `LATENCY_CYCLES`
+and the contract's `timing.<port>.latency_cycles` tell you how many cycles an
+output is allowed to take; a gate rejects a model that answers sooner than the
+contract says it can.
+
 Then declare `covers`: for each requirement uid, the method names that implement
 it. A requirement may map to several methods and a method may serve several
 requirements. This is how the requirement -> code link is checked, so it must be

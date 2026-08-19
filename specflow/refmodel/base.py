@@ -18,10 +18,16 @@ from __future__ import annotations
 class RefModel:
     """Expected-value oracle derived from the specification alone.
 
-    Subclasses are generated: one method per requirement, named `_req_NNNN`, plus
-    a dispatch that calls them in order. The generated subclass never sees the
-    RTL -- `compose.py` does not put it in the agent's input bundle, and at the
-    point S1-S5 run there is no `rtl.sv` in existence to see.
+    The subclass is generated whole and shaped like the DESIGN -- a synchroniser,
+    a filter, a divider, an FSM -- not like the requirement list. It writes its
+    own dispatch, because execution order is where reset priority lives, and
+    declares a coverage map from requirement uid to the methods implementing it.
+    (It used to be one method per requirement named `_req_NNNN`; that produced a
+    262-line `_req_0000` holding 85% of the design and 23 stubs around it.)
+
+    The generated subclass never sees the RTL -- `compose.py` does not put it in
+    the agent's input bundle, and at the point S1-S5 run there is no `rtl.sv` in
+    existence to see.
     """
 
     #: Output port names, from the contract. `evaluate`/`step` must write every
@@ -41,7 +47,17 @@ class RefModel:
         raise NotImplementedError
 
     def step(self, inputs: dict) -> dict:
-        """Sequential: advance one clock edge and return the outputs.
+        """Sequential: advance ONE clock edge and return the outputs.
+
+        One call, one edge. The testbench calls this once per rising edge of the
+        DUT's clock and compares the result against the DUT at that same edge,
+        so a model that advances a whole transaction per call is a different
+        machine from the design and will fail a correct DUT.
+
+        `tb/runtime.py` used to call it once per stimulus VECTOR while clocking
+        the DUT `LATENCY_CYCLES + 1` edges, which on a design whose contract
+        reported `latency_cycles: 3` ran the DUT at 4x the model's rate. Both
+        sides now advance together in `Env.settle`.
 
         Default delegates to `evaluate` so a combinational model can be driven
         through either entry point without the caller special-casing it.
