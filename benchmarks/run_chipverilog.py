@@ -244,11 +244,35 @@ def main(argv: list[str] | None = None) -> int:
              "regenerating them. The gates are always re-run on what is reused, "
              "so this skips the model calls and none of the checks.",
     )
+    p.add_argument(
+        "--no-rollback-guard", action="store_true",
+        help="keep an RTL edit even when it increases the mismatch count. The "
+             "guard is a hill-climber, so a repair that needs several parts to "
+             "land together is rejected at every partial step; without it the "
+             "search can cross that valley. The best RTL seen is still what the "
+             "run returns, so this cannot end worse than it started.",
+    )
+    p.add_argument(
+        "--stall-rounds", type=int, default=None,
+        help="consecutive rounds without beating the best mismatch count before "
+             "the debug loop gives up (default 2). Worth raising alongside "
+             "--no-rollback-guard, which needs several non-improving rounds by "
+             "construction.",
+    )
     args = p.parse_args(argv)
 
     # A running container cannot re-read its own environment, so credentials
     # rotated after start only arrive through a file. See specflow.model_io.
     os.environ.update(load_env_file(Path(args.env_file)))
+
+    # AFTER the env file, so an explicit flag beats a stale value left in
+    # .env.local. Read in RTLEditor rather than passed down the call chain,
+    # which runs through TopAgent and would mean threading a debug-loop knob
+    # through an orchestrator that has no other reason to know about it.
+    if args.no_rollback_guard:
+        os.environ["EDA_ROLLBACK_GUARD"] = "off"
+    if args.stall_rounds is not None:
+        os.environ["EDA_STALL_ROUNDS"] = str(args.stall_rounds)
 
     record = asyncio.run(run(args))
     print(json.dumps({k: v for k, v in record.items() if k != "traceback"}, indent=2))

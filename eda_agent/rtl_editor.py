@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -44,12 +45,51 @@ _FAIL_TIME_FAILED_RE = re.compile(
 )
 
 
+#: Values that turn the rollback guard OFF. Anything else -- including a typo,
+#: an empty string, or a word nobody intended -- leaves it ON, so a mistake in
+#: this variable fails safe INTO the guard rather than silently out of it.
+_GUARD_OFF_WORDS = frozenset({"off", "0", "false", "no"})
+
+
+def resolve_rollback_guard(explicit: bool | None = None, env=None) -> bool:
+    """Whether an edit that increases the mismatch count should be reverted.
+
+    An explicit argument always wins; `None` consults `EDA_ROLLBACK_GUARD`.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    source = os.environ if env is None else env
+    return str(source.get("EDA_ROLLBACK_GUARD", "on")).strip().lower() not in _GUARD_OFF_WORDS
+
+
 def _extract_fail_time_from_sim_log_json(sim_log_json: str) -> int | None:
-    """Best-effort earliest mismatch time from a CommandResult JSON string."""
+    """Best-effort earliest mismatch time from a CommandResult JSON string.
+
+    On the specflow backend there is no Verilog testbench and therefore none of
+    the `Hint: Output '<x>' has N mismatches...` lines these regexes look for.
+    The temporal coordinate is `trace.fail_step` -- the earliest stimulus step
+    at which any testpoint diverged -- and it was simply never read, so this
+    returned None on every call.
+
+    That mattered because the ONLY escape from the rollback guard is
+    `new_fail_time > prev_fail_time` (see `_judge_replace_action_execution`).
+    With both sides None the comparison is dead, the allowance never fires, and
+    the guard degrades to a strictly greedy filter that cannot accept any edit
+    which trades a small regression for a later first failure. On
+    i2c_master_bit_ctrl that stalled the loop at 91 failing testpoints with four
+    consecutive rollbacks -- the guard rejecting each partial step of a repair
+    that only pays off once several parts land together.
+    """
     try:
         obj = json.loads(sim_log_json)
     except Exception:  # noqa: BLE001
         return None
+    if str(obj.get("format") or "") == "specflow":
+        step = (obj.get("trace") or {}).get("fail_step")
+        try:
+            return int(step) if step is not None else None
+        except Exception:  # noqa: BLE001
+            return None
     stdout = str(obj.get("stdout") or "")
     times: list[int] = []
     for m in _FAIL_TIME_HINT_RE.finditer(stdout):
@@ -460,6 +500,20 @@ class _EditSession:
     # loop. See `_child_outputs_gone_dark`.
     child_names: Tuple[str, ...] = ()
 
+    #: When False, an edit that increases the mismatch count is KEPT rather than
+    #: reverted. The guard exists because a greedy filter is a good default; it
+    #: is also, exactly, a hill-climber, and a repair needing several parts to
+    #: land together has to pass through a worse state to get there. Turning it
+    #: off makes the search able to cross that valley; `best_rtl` below is what
+    #: keeps that from being a licence to end up worse than it started.
+    rollback_on_regression: bool = True
+    #: Best (lowest) mismatch count seen this session, and the RTL that produced
+    #: it. Recorded on every simulated edit regardless of accept/rollback, and
+    #: restored before `chat()` returns -- so with the guard off the loop is
+    #: free to wander uphill while the ANSWER is still the best point found.
+    best_mismatch_cnt: int | None = None
+    best_rtl: str | None = None
+
     is_done: bool = False
     action_calls: int = 0
     trace_report: Dict[str, Any] | None = None
@@ -495,6 +549,36 @@ class _EditSession:
     def write_rtl(self, content: str) -> None:
         with open(self.rtl_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+    def note_best(self, mismatch_cnt: int, rtl_text: str) -> bool:
+        """Record `rtl_text` if it is the best seen. Returns True when it is.
+
+        Ties do NOT overwrite: the earliest RTL achieving a given count is kept,
+        so a run that wanders across a plateau returns the point it reached
+        first rather than the last one it happened to touch.
+        """
+        try:
+            cnt = int(mismatch_cnt)
+        except Exception:  # noqa: BLE001
+            return False
+        if self.best_mismatch_cnt is None or cnt < self.best_mismatch_cnt:
+            self.best_mismatch_cnt = cnt
+            self.best_rtl = rtl_text
+            return True
+        return False
+
+    def restore_best(self) -> bool:
+        """Put the best-seen RTL back on disk. Returns True if it changed anything.
+
+        A no-op when the guard is on, because a monotone search already ends at
+        its best point. Load-bearing when it is off.
+        """
+        if self.best_rtl is None:
+            return False
+        if self.read_rtl() == self.best_rtl:
+            return False
+        self.write_rtl(self.best_rtl)
+        return True
 
     def run_simulation(self) -> Dict[str, Any]:
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
@@ -799,6 +883,13 @@ class _EditSession:
         new_fail_time = _extract_fail_time_from_sim_log_json(sim_output)
         result["new_fail_time"] = new_fail_time
 
+        # Recorded BEFORE the accept/rollback decision, because a regressing
+        # edit is exactly when the best-so-far matters, and because an edit that
+        # improves things is worth checkpointing whether or not a later one
+        # undoes it.
+        improved_best = self.note_best(sim_mismatch_cnt, self.read_rtl())
+        result["best_mismatch_cnt"] = self.best_mismatch_cnt
+
         if sim_mismatch_cnt > prev_mismatch_cnt:
             # Sometimes fixing an early-cycle issue can expose additional later-cycle mismatches.
             # Allow a small mismatch increase only if the FIRST mismatch time moves later.
@@ -810,16 +901,35 @@ class _EditSession:
                 and (new_fail_time > prev_fail_time)
                 and (increase <= max_increase)
             )
-            if not allow:
+            if not allow and self.rollback_on_regression:
                 self.write_rtl(old_file_content)
                 result["error_msg"] = (
                     "Mismatch_cnt increased after replacement. Action rolled back. "
                     f"(prev={prev_mismatch_cnt}, new={sim_mismatch_cnt}, prev_fail_time={prev_fail_time}, new_fail_time={new_fail_time})"
                 )
                 return result
+            if not allow:
+                # Guard off: keep the regression and say so plainly. The agent
+                # is told the count went UP so it can judge whether it is part
+                # way through a multi-part repair or simply wrong -- reporting
+                # this as an ordinary acceptance would hide the one fact it
+                # needs to decide that.
+                result["accept_reason"] = (
+                    f"KEPT DESPITE REGRESSION (rollback guard off): mismatches "
+                    f"{prev_mismatch_cnt} -> {sim_mismatch_cnt} (+{increase}). "
+                    f"Best seen this session is {self.best_mismatch_cnt}, and that "
+                    "version is what will be returned if nothing beats it. If this "
+                    "edit is one part of a repair that needs several parts to land "
+                    "together, continue; if it was simply wrong, revert it yourself."
+                )
+            else:
+                result["accept_reason"] = (
+                    "Accepted despite slight mismatch increase because earliest mismatch moved later "
+                    f"(+{increase} mismatches, fail_time {prev_fail_time}->{new_fail_time})."
+                )
+        elif improved_best:
             result["accept_reason"] = (
-                "Accepted despite slight mismatch increase because earliest mismatch moved later "
-                f"(+{increase} mismatches, fail_time {prev_fail_time}->{new_fail_time})."
+                f"New best: {sim_mismatch_cnt} mismatches."
             )
 
         if sim_mismatch_cnt == 0 and not is_sim_pass:
@@ -937,6 +1047,11 @@ class RTLEditor:
         # convergence quality, independent of cost.
         memory_window: int = 0,
         stall_rounds: int = 2,
+        #: None reads EDA_ROLLBACK_GUARD from the environment ("off"/"0"/"false"
+        #: disable it); anything explicit wins over the environment. The guard
+        #: stays ON by default -- a greedy filter is the right default, and this
+        #: exists to make its cost measurable rather than to remove it.
+        rollback_guard: bool | None = None,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
@@ -947,7 +1062,17 @@ class RTLEditor:
         # detects non-convergence early, so a stuck debugger yields back to the
         # orchestrator (decomposition) instead of grinding through its full
         # budget on rounds that are structurally not making progress.
+        # Crossing a valley takes several consecutive non-improving rounds by
+        # definition, so a stall limit tuned for a monotone search will cut the
+        # search off before it can get anywhere. Overridable rather than derived
+        # from `rollback_guard`, because tying them together would silently
+        # change one knob when the caller set the other.
+        try:
+            stall_rounds = int(os.environ.get("EDA_STALL_ROUNDS") or stall_rounds)
+        except ValueError:
+            pass
         self._stall_rounds = max(1, int(stall_rounds))
+        self._rollback_guard = resolve_rollback_guard(rollback_guard)
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
@@ -1083,6 +1208,7 @@ class RTLEditor:
             sim_reviewer=self.sim_reviewer,
             max_trials=session_max_trials,
             child_names=child_names,
+            rollback_on_regression=self._rollback_guard,
         )
 
         if tb_text is not None:
@@ -1274,12 +1400,31 @@ class RTLEditor:
         prev_mismatch_for_stall = int(sim_mismatch_cnt)
 
         def _update_stall_tracking() -> None:
+            """Count rounds that did not improve on the best point so far.
+
+            With the guard ON, `last_mismatch_cnt` only ever falls, so comparing
+            against the previous value and against the best are the same test.
+            With the guard OFF they are not: an uphill step raises
+            `last_mismatch_cnt`, and comparing to the previous value would score
+            every deliberate valley-crossing move as a stall -- ending the search
+            after `stall_rounds` uphill steps, which is precisely the search the
+            guard was turned off to allow. Measuring against the best instead
+            gives the loop N rounds to find something better than anything it has
+            seen, which is the question actually being asked.
+            """
             nonlocal stall_count, prev_mismatch_for_stall
-            if self._session.last_mismatch_cnt < prev_mismatch_for_stall:
+            best = self._session.best_mismatch_cnt
+            reference = (
+                min(prev_mismatch_for_stall, best) if best is not None
+                else prev_mismatch_for_stall
+            )
+            if self._session.last_mismatch_cnt < prev_mismatch_for_stall or (
+                best is not None and best < prev_mismatch_for_stall
+            ):
                 stall_count = 0
             else:
                 stall_count += 1
-            prev_mismatch_for_stall = self._session.last_mismatch_cnt
+            prev_mismatch_for_stall = reference
 
         _turn_start_iter = self._session.traj_iter + 1
         response = await self._agent(Msg("user", first_prompt, role="user"))
@@ -1343,6 +1488,16 @@ class RTLEditor:
                     _justification = _last_content[idx:].strip()
                     break
 
+        # The answer is the best point the search found. With the guard on this
+        # is already where the RTL sits and the call is a no-op; with it off, the
+        # loop may have ended part way up a hill it was allowed to climb, and
+        # returning that would make "no guard" lose by construction rather than
+        # on the merits.
+        if not self._session.is_done and self._session.restore_best():
+            logger.info(
+                "restored best-seen RTL (%s mismatches) over the loop's final state",
+                self._session.best_mismatch_cnt,
+            )
         with open(rtl_path, "r", encoding="utf-8") as f:
             rtl_code = f.read()
         used = int(getattr(self._session, "action_calls", 0) or 0)
