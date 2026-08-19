@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
@@ -63,6 +63,29 @@ class RequirementVerdict(BaseModel):
     evidence: str = ""
     #: What the generator should change. Empty when met.
     remedy: str = ""
+
+    @field_validator("reason", "evidence", "remedy", mode="before")
+    @classmethod
+    def _accept_a_list_of_lines(cls, v):
+        """A model answering a free-text field with a list of lines is being
+        reasonable, and rejecting it discards the whole verdict.
+
+        This is the second time this shape has cost real verdicts. First
+        `RefModelOutput.underdetermined` was typed dict-only and the model sent
+        question strings, so 27 of 60 generation calls were re-asked for nothing
+        else. Then `evidence` here was typed `str` and the model sent
+        `["_sync_and_filter_step lines 4-9", "..."]` -- every one of the five
+        `ambiguous` verdicts on the first live judging round was a parse error,
+        not a judgement.
+
+        Free-text fields take prose or a list of lines. There is no information
+        in the distinction and nothing downstream reads it structurally.
+        """
+        if isinstance(v, (list, tuple)):
+            return "; ".join(str(x) for x in v if str(x).strip())
+        if v is None:
+            return ""
+        return v
 
     @property
     def blocks(self) -> bool:

@@ -174,29 +174,35 @@ def _behavioural_checks(
 
     declared = set(model_cls.OUTPUT_PORTS or [])
     rng = random.Random(1337)  # noqa: S311 -- fixed seed: G4 must be reproducible
+    vectors = [_random_inputs(contract, rng) for _ in range(8)]
 
-    for trial in range(8):
-        inputs = _random_inputs(contract, rng)
-        try:
-            first = call(dict(inputs))
-        except Exception as exc:  # noqa: BLE001
-            issues.append(
-                Issue("error", f"ref_model.py.{expected_base}",
-                      f"raised on inputs {inputs!r}: {exc!r}")
-            )
-            break
+    def run_sequence() -> tuple[list[dict] | None, Issue | None]:
+        """Drive a *fresh* model through the whole vector sequence."""
+        m = model_cls()
+        fn = getattr(m, expected_base)
+        out: list[dict] = []
+        for inputs in vectors:
+            try:
+                result = fn(dict(inputs))
+            except Exception as exc:  # noqa: BLE001
+                return None, Issue(
+                    "error", f"ref_model.py.{expected_base}",
+                    f"raised on inputs {inputs!r}: {exc!r}")
+            if not isinstance(result, dict):
+                return None, Issue(
+                    "error", f"ref_model.py.{expected_base}",
+                    f"returned {type(result).__name__}, expected a dict of outputs")
+            out.append(result)
+        return out, None
 
-        if not isinstance(first, dict):
-            issues.append(
-                Issue("error", f"ref_model.py.{expected_base}",
-                      f"returned {type(first).__name__}, expected a dict of outputs")
-            )
-            break
+    first_run, err = run_sequence()
+    if err is not None:
+        return [*issues, err]
 
-        # check 3a: output determination. A port the model leaves unwritten is a
-        # port the model does not determine -- Bormann's criterion in miniature,
-        # and free to check here.
-        missing = declared - {k for k, v in first.items() if v is not None}
+    # -- check 3a: output determination. A port the model leaves unwritten is a
+    # port the model does not determine -- Bormann's criterion in miniature.
+    for inputs, result in zip(vectors, first_run or []):
+        missing = declared - {k for k, v in result.items() if v is not None}
         if missing:
             issues.append(
                 Issue("error", f"ref_model.py.{expected_base}",
@@ -205,22 +211,60 @@ def _behavioural_checks(
             )
             break
 
-        # check 3b: determinism. Re-instantiate rather than reuse, so hidden
-        # state shows up rather than being carried silently between calls.
-        second = getattr(model_cls(), expected_base)(dict(inputs))
-        if second != first:
-            issues.append(
-                Issue("error", f"ref_model.py.{expected_base}",
-                      f"is not deterministic: inputs {inputs!r} gave {first!r} "
-                      f"then {second!r}")
-            )
-            break
+    # -- check 3b: determinism, stated as a property of the *sequence*.
+    #
+    # This compared call N of one long-lived instance against call 0 of a fresh
+    # one. For a combinational model those agree, so the half-adder fixture never
+    # noticed -- and for a sequential model they are *supposed* to differ, since
+    # accumulated state is the entire point of `step`. Every correct sequential
+    # model was therefore reported non-deterministic. Measured on
+    # `i2c_master_bit_ctrl`: three consecutive generation rounds rejected for it,
+    # each one re-asking a strong model to fix something that was not wrong.
+    #
+    # Determinism actually means: the same inputs from the same starting state
+    # give the same outputs. So drive two fresh instances through the identical
+    # sequence and compare the sequences.
+    second_run, err = run_sequence()
+    if err is not None:
+        return [*issues, err]
+    if second_run != first_run:
+        for k, (a, b) in enumerate(zip(first_run or [], second_run or [])):
+            if a != b:
+                issues.append(
+                    Issue("error", f"ref_model.py.{expected_base}",
+                          f"is not deterministic: two fresh models driven through "
+                          f"the same {len(vectors)}-step sequence diverged at step "
+                          f"{k} on inputs {vectors[k]!r}: {a!r} then {b!r}")
+                )
+                break
 
-        if trial == 0 and not declared:
+    # -- check 3c: a COMBINATIONAL model must carry no state at all.
+    #
+    # The sequence check above cannot see this: a model that counts its own calls
+    # is perfectly reproducible sequence-to-sequence. For `evaluate` that is
+    # still a defect -- a combinational output depends on its inputs and nothing
+    # else -- so repeat one vector on one instance and require the same answer.
+    # For `step` the identical behaviour is correct and is not checked.
+    if expected_base == "evaluate" and vectors:
+        m = model_cls()
+        fn = getattr(m, expected_base)
+        try:
+            a, b = fn(dict(vectors[0])), fn(dict(vectors[0]))
+        except Exception:  # noqa: BLE001
+            a = b = None
+        if a != b:
             issues.append(
-                Issue("warning", "ref_model.py",
-                      "OUTPUT_PORTS is empty; output determination cannot be checked")
+                Issue("error", "ref_model.py.evaluate",
+                      f"carries state: the same inputs {vectors[0]!r} gave {a!r} "
+                      f"then {b!r} on one instance, and a combinational model "
+                      f"depends on its inputs and nothing else")
             )
+
+    if not declared:
+        issues.append(
+            Issue("error", "ref_model.py",
+                  "OUTPUT_PORTS is empty; output determination cannot be checked")
+        )
 
     return issues
 

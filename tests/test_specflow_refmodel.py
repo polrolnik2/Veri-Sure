@@ -330,3 +330,84 @@ def test_the_dict_shape_still_works():
     }))
     assert not out.reasoning.startswith("Parse Error")
     assert out.underdetermined[0]["req_uid"] == "REQ-0001"
+
+
+# ------------------------------------------------- determinism, both dispatches
+
+
+SEQ_CONTRACT = json.dumps(dict(
+    CONTRACT_OBJ,
+    clocking={"is_sequential": True, "clock": {"name": "clk", "edge": "posedge"}},
+    io=CONTRACT_OBJ["io"] + [{"name": "clk", "dir": "input", "width": 1}],
+    timing={"sum": {"latency_cycles": 4}, "cout": {"latency_cycles": 4}},
+))
+SEQ_REQS = [{"uid": "REQ-0000", "rev": 1, "needs": ["refmodel"]}]
+
+
+def test_a_correct_sequential_model_is_not_called_non_deterministic(tmp_path):
+    """The regression this fixes, and it made G4 near-unpassable for real designs.
+
+    The check compared call N of one long-lived instance against call 0 of a
+    fresh one. For a combinational model those agree, which is why the half-adder
+    fixture never noticed. For a sequential model they are *supposed* to differ --
+    accumulated state is the entire point of `step` -- so every correct
+    sequential model was reported non-deterministic. Measured live on
+    `i2c_master_bit_ctrl`: three consecutive generation rounds rejected for it,
+    each re-asking a strong model to fix something that was not wrong.
+    """
+    stateful = (
+        "def step(self, i):\n"
+        "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+        "    self._n = getattr(self, '_n', 0) + 1\n"
+        "    o['sum'] = self._n & 1\n"        # depends on accumulated state
+        "    o['cout'] = (i['a'] & i['b']) & 1\n"
+        "    return o\n"
+    )
+    res, _ = run(out(stateful, covers={"REQ-0000": ["step"]}, base="step"),
+                 tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
+    assert res.ok, [i.message for i in res.issues]
+
+
+def test_a_genuinely_non_deterministic_model_still_blocks(tmp_path):
+    """Two fresh models driven through the same sequence must agree.
+
+    State on the *class* rather than the instance is the real shape of this: a
+    fresh `Model()` does not reset it, so the second run starts where the first
+    left off and the sequences diverge. (`id(self)` looks like it would work and
+    does not -- CPython reuses the address when the first object is collected
+    before the second is made, so both runs agree and the test passes vacuously.)
+    """
+    # The leak must not be periodic in the sequence length. `_calls & 1` looks
+    # right and is not: with 8 vectors, calls 1..8 and 9..16 have identical
+    # parity, so both runs agree and the test passes for the wrong reason. A
+    # threshold on the running count cannot alias that way.
+    leaky = (
+        "def step(self, i):\n"
+        "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+        "    type(self)._calls = getattr(type(self), '_calls', 0) + 1\n"
+        "    o['sum'] = 1 if type(self)._calls > 8 else 0\n"
+        "    o['cout'] = 0\n"
+        "    return o\n"
+    )
+    res, _ = run(out(leaky, covers={"REQ-0000": ["step"]}, base="step"),
+                 tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
+    assert not res.ok
+    assert any("not deterministic" in i.message for i in res.issues)
+
+
+def test_a_combinational_model_carrying_state_still_blocks(tmp_path):
+    """The sequence check cannot see this -- a model that counts its own calls is
+    perfectly reproducible sequence-to-sequence -- so `evaluate` gets its own
+    check: same inputs twice on one instance must give the same answer."""
+    counting = (
+        "def evaluate(self, i):\n"
+        "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+        "    self._n = getattr(self, '_n', 0) + 1\n"
+        "    o['sum'] = self._n & 1\n"
+        "    o['cout'] = 0\n"
+        "    return o\n"
+    )
+    res, _ = run(out(counting, covers={"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]}),
+                 tmp_path)
+    assert not res.ok
+    assert any("carries state" in i.message for i in res.issues)
