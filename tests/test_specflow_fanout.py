@@ -19,7 +19,6 @@ import os
 import pytest
 
 from specflow.fanout import PREFIX_SENTINEL, compose, json_block, shared_block
-from specflow.refmodel.compose import run_refmodel_fanout
 from specflow.s2_testplan import build_prompt_one as s2_prompt
 from specflow.s2_testplan import run_s2_fanout
 from specflow.s2_testplan import shared_prefix as s2_shared
@@ -173,79 +172,14 @@ def test_s3_makes_one_call_per_element_and_renumbers_once():
     assert [c.uid for c in merged.checks] == [f"CHK-{i:04d}" for i in range(6)]
 
 
-# ---------------------------------------------------------- refmodel fan-out
-
-
-def test_refmodel_fanout_composes_one_model_from_per_requirement_calls(tmp_path):
-    reqs = [
-        {"uid": "REQ-0000", "rev": 1, "needs": ["refmodel"]},
-        {"uid": "REQ-0001", "rev": 1, "needs": ["refmodel"]},
-    ]
-    bodies = {
-        "REQ-0000": "def _req_0000(self, i, o):\n    o['sum'] = (i['a'] ^ i['b']) & 1\n",
-        "REQ-0001": "def _req_0001(self, i, o):\n    o['cout'] = (i['a'] & i['b']) & 1\n",
-    }
-
-    def reply(stage, round_):
-        uid = stage.split("_", 1)[1]
-        return json.dumps({
-            "base": "evaluate", "helpers": "",
-            "fragments": [{"req_uid": uid, "method_name": "", "code": bodies[uid]}],
-        })
-
-    result, source = run_refmodel_fanout(
-        requirements=reqs, contract_json=CONTRACT, port=Scripted(reply),
-        workdir=tmp_path, fanout=False)
-
-    assert result.ok, [i.message for i in result.issues]
-    ns: dict = {}
-    exec(compile(source, "ref_model.py", "exec"), ns)  # noqa: S102
-    assert ns["Model"]().evaluate({"a": 1, "b": 1}) == {"sum": 0, "cout": 1}
-
-
-def test_refmodel_fanout_rejects_a_fragment_for_the_wrong_requirement(tmp_path):
-    """A call answering for its neighbours would let one worker overwrite
-    another's fragment depending on completion order."""
-    reqs = [{"uid": "REQ-0000", "rev": 1, "needs": ["refmodel"]}]
-
-    def reply(stage, round_):
-        return json.dumps({
-            "base": "evaluate", "helpers": "",
-            "fragments": [
-                {"req_uid": "REQ-0000", "method_name": "", "code":
-                 "def _req_0000(self, i, o):\n    o['sum'] = 1\n"},
-                {"req_uid": "REQ-0999", "method_name": "", "code":
-                 "def _req_0999(self, i, o):\n    o['cout'] = 1\n"},
-            ],
-        })
-
-    result, _ = run_refmodel_fanout(
-        requirements=reqs, contract_json=CONTRACT, port=Scripted(reply),
-        workdir=tmp_path, max_repairs=0, fanout=False)
-    assert not result.ok
-    assert any(i.kind == "unwanted" for i in result.issues)
-
-
-def test_refmodel_fanout_still_gates_the_composed_whole(tmp_path):
-    """G4's load-bearing checks are properties of the assembled class.
-
-    Every fragment here is individually fine; together they leave `cout`
-    undetermined. A per-fragment gate alone would pass this.
-    """
-    reqs = [{"uid": "REQ-0000", "rev": 1, "needs": ["refmodel"]}]
-
-    def reply(stage, round_):
-        return json.dumps({
-            "base": "evaluate", "helpers": "",
-            "fragments": [{"req_uid": "REQ-0000", "method_name": "", "code":
-                           "def _req_0000(self, i, o):\n    o['sum'] = 1\n"}],
-        })
-
-    result, _ = run_refmodel_fanout(
-        requirements=reqs, contract_json=CONTRACT, port=Scripted(reply),
-        workdir=tmp_path, max_repairs=0, fanout=False)
-    assert not result.ok
-    assert any("unwritten" in i.message and "cout" in i.message for i in result.issues)
+# The refmodel fan-out and its four tests are gone. Splitting *generation* was
+# the wrong half to fan out: a reference model needs global context for
+# execution order, reset priority and the state several requirements share, and
+# per-requirement calls removed exactly that -- then `helpers` had to be deduped
+# across calls that had never seen each other, which was the shape of the
+# problem rather than a fix for it. The fan-out moved into the gate instead,
+# where "does this model satisfy requirement N" is a local question with a local
+# answer. See tests/test_specflow_judge.py.
 
 
 # ------------------------------------------------- the divided arm end to end
@@ -294,15 +228,18 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
                 "bins": [{"uid": "BIN-9999", "covers": [f"{uid}@1"], "condition": "a is 1"}],
                 "checks": [{"uid": "CHK-9999", "covers": [f"{uid}@1"],
                             "expr": "matches the model", "signals": ["sum"]}]})
-        if stage.startswith("refmodel_"):
-            uid = stage.split("_", 1)[1]
-            n = int(uid.split("-")[1])
-            port = "sum" if n == 0 else "cout"
-            expr = "(i['a'] ^ i['b']) & 1" if n == 0 else "(i['a'] & i['b']) & 1"
+        if stage == "refmodel":
+            # One call, one whole model -- shaped by the design, not by the
+            # requirement list -- plus its own claim about where each
+            # requirement lives.
             return json.dumps({
-                "base": "evaluate", "helpers": "",
-                "fragments": [{"req_uid": uid, "method_name": "", "code":
-                               f"def _req_{n:04d}(self, i, o):\n    o['{port}'] = {expr}\n"}]})
+                "base": "evaluate",
+                "source": "def evaluate(self, i):\n"
+                          "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+                          "    o['sum'] = (i['a'] ^ i['b']) & 1\n"
+                          "    o['cout'] = (i['a'] & i['b']) & 1\n"
+                          "    return o\n",
+                "covers": {"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]}})
         raise AssertionError(f"unexpected stage {stage}")
 
     import specflow.integration as integration
@@ -332,40 +269,3 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
         "a requirement still claims the whole specification"
     )
     assert (run_dir / "specflow" / "suite" / "manifest.json").exists()
-
-
-def test_refmodel_fanout_dedupes_helpers_defined_by_several_calls(tmp_path):
-    """Shared state is what no single requirement owns.
-
-    Under fan-out, N independent calls each write `helpers` without seeing each
-    other, so every call that needs a synchroniser or a filter emits one. Plain
-    concatenation produces the same `def` several times; Python tolerates that
-    and the surviving definition is whichever call was ordered last -- silent,
-    and decided by ordering rather than by content.
-    """
-    reqs = [{"uid": f"REQ-{i:04d}", "rev": 1, "needs": ["refmodel"]} for i in range(2)]
-    # Helpers are rendered inside the class, so they are methods -- the same
-    # convention the live model uses (`self.mask(...)` from the base class).
-    helper = "def majority(self, a, b, c):\n    return (a & b) | (a & c) | (b & c)\n"
-
-    def reply(stage, round_):
-        uid = stage.split("_", 1)[1]
-        n = int(uid.split("-")[1])
-        port = "sum" if n == 0 else "cout"
-        return json.dumps({
-            "base": "evaluate",
-            "helpers": helper,                      # both calls emit it
-            "fragments": [{"req_uid": uid, "method_name": "", "code":
-                           f"def _req_{n:04d}(self, i, o):\n"
-                           f"    o['{port}'] = self.majority(i['a'], i['b'], 1)\n"}],
-        })
-
-    result, source = run_refmodel_fanout(
-        requirements=reqs, contract_json=CONTRACT, port=Scripted(reply),
-        workdir=tmp_path, fanout=False)
-
-    assert source.count("def majority(") == 1, "the helper was emitted twice"
-    assert "defined by more than one fragment call" in source, (
-        "a collision resolved by ordering must be reported, not hidden"
-    )
-    assert result.ok, [i.message for i in result.issues]

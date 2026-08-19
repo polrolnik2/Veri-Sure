@@ -1,18 +1,16 @@
 {
-  "reasoning": "The contract declares a purely combinational module (clocking.is_sequential is false, both outputs at latency_cycles 0), so the dispatch is `evaluate` and there is no state to carry between calls. REQ-0000 fixes sum = a XOR b (half-adder sum, explicitly with no carry-in) and REQ-0001 fixes cout = a AND b (carry-out asserted only when both input bits are 1); together they cover both declared output ports, so every output is written on every call. All four ports are one bit wide: XOR and AND of two 1-bit values cannot exceed one bit, but I mask both the inputs on read and the results on write so the model stays truthful to the declared port widths even if the harness ever presents a wider int for a or b -- an unmasked input would otherwise leak bit 1 and above into sum. The methods are pure functions of `i`: no imports, no randomness, no time, no I/O and no global or instance state. Nothing here is ambiguous -- the specification names the half adder outright and both requirements state the boolean function directly -- so `underdetermined` is empty.",
+  "reasoning": "The contract declares a purely combinational module (clocking.is_sequential is false, both outputs at latency_cycles 0), so the dispatch is `evaluate` and there is no state to carry between calls. I have written one helper, `_half_add`, rather than one method per requirement: REQ-0000 (sum = a XOR b) and REQ-0001 (cout = a AND b) are two sentences about the same piece of hardware, and splitting them would separate a function from its own carry. `covers` records that both requirements are implemented there and surfaced by `evaluate`. All four ports are one bit wide; I mask on read and on write so the model stays truthful to the declared widths even if the harness presents a wider int. The model is a pure function of `i`: no imports, no randomness, no time, no I/O, no state. Nothing is ambiguous -- the specification names the half adder outright -- so `underdetermined` is empty.",
   "base": "evaluate",
-  "helpers": "def evaluate(self, i):\n    o = {}\n    self._req_0000(i, o)\n    self._req_0001(i, o)\n    return o\n",
-  "fragments": [
-    {
-      "req_uid": "REQ-0000",
-      "method_name": "_req_0000",
-      "code": "def _req_0000(self, i, o):\n    # REQ-0000: sum is the exclusive-OR of the one-bit inputs a and b\n    # (half-adder sum, no carry-in). Inputs are masked to their declared\n    # 1-bit width before use, and the result is masked to the 1-bit\n    # width of the 'sum' output port.\n    a = self.mask(i['a'], 1)\n    b = self.mask(i['b'], 1)\n    o['sum'] = self.mask(a ^ b, 1)\n"
-    },
-    {
-      "req_uid": "REQ-0001",
-      "method_name": "_req_0001",
-      "code": "def _req_0001(self, i, o):\n    # REQ-0001: cout is the logical AND of the one-bit inputs a and b,\n    # i.e. the half-adder carry-out, 1 only when both input bits are 1.\n    # Inputs are masked to their declared 1-bit width, and the result is\n    # masked to the 1-bit width of the 'cout' output port.\n    a = self.mask(i['a'], 1)\n    b = self.mask(i['b'], 1)\n    o['cout'] = self.mask(a & b, 1)\n"
-    }
-  ],
+  "source": "def _half_add(self, a, b):\n    # The half adder itself, factored out because both outputs are two\n    # halves of one function -- REQ-0000 and REQ-0001 are two sentences\n    # about the same piece of hardware, not two pieces.\n    a = self.mask(a, 1)\n    b = self.mask(b, 1)\n    return self.mask(a ^ b, 1), self.mask(a & b, 1)\n\ndef evaluate(self, i):\n    o = {p: None for p in self.OUTPUT_PORTS}\n    o['sum'], o['cout'] = self._half_add(i['a'], i['b'])\n    return o\n",
+  "covers": {
+    "REQ-0000": [
+      "_half_add",
+      "evaluate"
+    ],
+    "REQ-0001": [
+      "_half_add",
+      "evaluate"
+    ]
+  },
   "underdetermined": []
 }

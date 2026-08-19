@@ -18,7 +18,6 @@ import ast
 import random
 from pathlib import Path
 
-from ..ids import method_name
 from ..ports import classify, pinned_inputs
 from ..schema import Issue
 
@@ -28,7 +27,9 @@ _FORBIDDEN_IMPORTS = {"os", "sys", "pathlib", "random", "time", "subprocess", "i
 _RTL_HINTS = ("rtl.sv", "rtl_", "/rtl", "dut.sv", "tb.sv")
 
 
-def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
+def _static_checks(
+    source: str, requirements: list[dict], coverage: dict[str, list[str]] | None = None
+) -> list[Issue]:
     issues: list[Issue] = []
 
     try:
@@ -68,14 +69,21 @@ def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
                           f"reference model must not read the design")
                 )
 
-    # -- check 2: every requirement has its method
+    # -- check 2: every requirement is claimed by the coverage map, and every
+    # method the map names exists.
+    #
+    # This replaces "every requirement has a `_req_NNNN` method". That check
+    # bought traceability by forcing the model's *shape*, and the shape was the
+    # problem: a model organised by the specification's sentence order has
+    # nowhere to put execution order, reset priority, or state that several
+    # requirements share. Measured on the artifact it produced -- one method held
+    # 85% of the code, 23 of 24 were <=4 lines, three were literally `pass`.
+    #
+    # The map carries the link instead, so the model can be shaped by the design.
+    # The script checks the map is complete and its names resolve; the judge
+    # checks the named code actually does the thing.
     defined = {
         n.name
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    by_name = {
-        n.name: n
         for n in ast.walk(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
@@ -83,56 +91,29 @@ def _static_checks(source: str, requirements: list[dict]) -> list[Issue]:
         uid = req.get("uid") or ""
         if not uid:
             continue
-        want = method_name(uid)
-        if want not in defined:
+        methods = coverage.get(uid) if coverage else None
+        if not methods:
             issues.append(
-                Issue("error", f"ref_model.py.{want}",
-                      f"no method for {uid}; every requirement is one element of code",
+                Issue("error", f"ref_model.py.{uid}",
+                      f"{uid} appears in no coverage map entry; the generator "
+                      f"must say which methods implement each requirement",
                       "uncovered")
             )
             continue
-        # -- a fragment that writes no output port
-        #
-        # This is half of what keeps atomicity honest. G1' punishes
-        # under-splitting; nothing punished over-splitting, so a requirement too
-        # small to constrain anything could pass every gate by producing a method
-        # that computes and discards. Measured on `or1200_ctrl`, 15 of 31
-        # fragments wrote nothing at all -- a majority of the reference model was
-        # inert and no gate said so.
-        #
-        # It is an error rather than a warning because the pair of opposing
-        # pressures only works if both sides bite. A warning here would leave
-        # "split until each requirement is a word" as a viable strategy.
-        if not _writes_an_output(by_name[want]):
-            issues.append(
-                Issue("error", f"ref_model.py.{want}",
-                      f"{uid}'s fragment writes no output port; a requirement "
-                      f"whose method determines nothing is not a requirement")
-            )
+        for name in methods:
+            if name not in defined:
+                issues.append(
+                    Issue("error", f"ref_model.py.{uid}",
+                          f"the coverage map names {name!r} for {uid}, and no "
+                          f"such method exists in the model")
+                )
 
+    # Deliberately NOT checked here: whether the named methods actually satisfy
+    # the requirement, and whether one method is claimed for everything. Those
+    # are judgements about meaning, and the per-requirement judge makes them --
+    # a script that tried would either be a naming convention (which is what
+    # this replaced) or a guess.
     return issues
-
-
-def _writes_an_output(fn: ast.AST) -> bool:
-    """True when the method assigns into the output dict at least once.
-
-    Matches `o[...] = ...` and `out[...] = ...` under any binding name the
-    renderer uses, plus augmented and annotated assignment, since a fragment
-    that only does `o["q"] |= x` still determines `q`.
-    """
-    for node in ast.walk(fn):
-        targets: list[ast.AST] = []
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
-            targets = [node.target]
-        for t in targets:
-            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name):
-                return True
-            if isinstance(t, (ast.Tuple, ast.List)):
-                if any(isinstance(e, ast.Subscript) for e in t.elts):
-                    return True
-    return False
 
 
 def _random_inputs(contract: dict, rng: random.Random) -> dict:
@@ -257,10 +238,10 @@ def validate(
     if out.reasoning.startswith("Parse Error: "):
         return [Issue("error", "refmodel.response", out.reasoning)]
 
-    if not out.fragments:
-        return [Issue("error", "refmodel.fragments", "no fragments produced")]
+    if not out.source.strip():
+        return [Issue("error", "refmodel.source", "no model source produced")]
 
-    issues = _static_checks(source, requirements)
+    issues = _static_checks(source, requirements, out.covers)
 
     # check 8 (cheap, and it catches a real disagreement): the agent's own view
     # of the dispatch must match the one the contract dictates.
@@ -285,6 +266,7 @@ def validate_source(
     contract: dict,
     expected_base: str,
     workdir: Path,
+    coverage: dict[str, list[str]] | None = None,
 ) -> list[Issue]:
     """G4 over a `ref_model.py` already on disk, with no generation round.
 
@@ -297,7 +279,7 @@ def validate_source(
     never trusted; the model is re-executed, so a requirement set that changed
     underneath it, or a gate that has since been tightened, regenerates it.
     """
-    issues = _static_checks(source, requirements)
+    issues = _static_checks(source, requirements, coverage)
     if any(i.severity == "error" for i in issues):
         return issues
     return issues + _behavioural_checks(source, contract, expected_base, workdir)

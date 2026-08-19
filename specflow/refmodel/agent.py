@@ -19,20 +19,24 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from ..schema import Underdetermined
 
 
-class Fragment(BaseModel):
-    req_uid: str
-    method_name: str = ""
-    code: str = ""
-
-
 class RefModelOutput(BaseModel):
     reasoning: str = ""
     #: Cross-checked against `compose.py`'s script-chosen base. A disagreement
     #: means the agent read the timing differently from the contract, which is
     #: worth surfacing rather than silently accepting either reading.
     base: str = "evaluate"
-    helpers: str = ""
-    fragments: list[Fragment] = Field(default_factory=list)
+    #: The whole class body, written by the generator: helpers, state, and the
+    #: dispatch. Previously the harness synthesised the dispatch by calling one
+    #: method per requirement in list order, which meant the generator could not
+    #: express execution order at all -- and execution order is where reset
+    #: priority lives.
+    source: str = ""
+    #: The generator's own claim about where each requirement is implemented:
+    #: `{"REQ-0031": ["_fsm", "_ack_pulse"]}`. Many-to-many on purpose. This
+    #: carries traceability so the *structure* no longer has to, which is what
+    #: frees the model to be shaped by the design instead of by the
+    #: specification's sentence order.
+    covers: dict[str, list[str]] = Field(default_factory=dict)
     #: Requirements the spec does not pin down. An honest "the spec does not
     #: say" is worth more than a confident guess: a guess becomes a wrong oracle
     #: that fails correct designs, whereas this is recorded, excluded from the
@@ -59,22 +63,32 @@ You are NOT shown the RTL. That is deliberate and not an oversight -- at this
 point in the pipeline no RTL exists. Model what the specification says the
 design must do, not how you imagine it is built.
 
-Emit ONE method per requirement, named `_req_NNNN` for `REQ-NNNN`. Each method
-has the signature:
+Write ONE coherent model, structured the way the DESIGN is structured -- a
+synchroniser, a filter, a divider, an FSM, whatever this design actually is.
+Do NOT structure it around the requirement list. A requirement is a sentence
+from a document; it is not a unit of hardware, and shaping the model around
+sentences leaves nowhere to put execution order, reset priority, or the state
+that several requirements share.
 
-    def _req_0007(self, i, o):
+You write the whole class body, including the dispatch:
+
+    def step(self, i):       # or evaluate(self, i) -- see `base` below
+        o = {p: None for p in self.OUTPUT_PORTS}
         ...
+        return o
 
-where `i` is a dict of input port values (plain ints) and `o` is the output dict
-you write into. Methods mutate `o`; they return nothing.
+`i` is a dict of input port values (plain ints); return the output dict. You own
+the order things happen in, which is the point.
 
-Do NOT write the dispatch (`evaluate` or `step`). It is generated for you: your
-methods are called in the order you list them, and the output dict is seeded
-before the first call. Emit the `_req_NNNN` methods and nothing else.
+Then declare `covers`: for each requirement uid, the method names that implement
+it. A requirement may map to several methods and a method may serve several
+requirements. This is how the requirement -> code link is checked, so it must be
+accurate: a judge reads your model against one requirement at a time and asks
+whether the methods you named actually satisfy it.
 
 Rules the gate enforces mechanically:
-  * every requirement gets exactly one `_req_NNNN` method
-  * every output port declared in the contract is written by some method
+  * every requirement appears in `covers`, and every method named there exists
+  * every output port declared in the contract is written on every call
   * the model is deterministic: no randomness, no time, no I/O, no global state
   * import nothing. `self.mask(value, width)` and `self.sign_extend(value, width)`
     are available from the base class
@@ -84,25 +98,25 @@ exceed its port width, wrap it with `self.mask(...)`. Modelling an unbounded int
 where the hardware truncates is the most common way this file goes wrong, and it
 only shows up at the boundary the specification cared about.
 
-If a requirement is not pinned down by the specification, still emit a method
-for it implementing your best reading, and record the ambiguity in
-`underdetermined` with the question you would ask.
+If a requirement is not pinned down by the SPECIFICATION, still implement your
+best reading, and record the ambiguity in `underdetermined` with the question you
+would ask. That field is about the spec being silent -- it is not the place for
+"my code is unclear".
 
 Reply with ONE JSON object and nothing else:
 
 {
   "reasoning": "...",
   "base": "evaluate",
-  "helpers": "",
-  "fragments": [
-    {"req_uid": "REQ-0000", "method_name": "_req_0000",
-     "code": "def _req_0000(self, i, o):\\n    o['sum'] = (i['a'] ^ i['b']) & 1\\n"}
-  ],
+  "source": "def evaluate(self, i):\\n    o = {p: None for p in self.OUTPUT_PORTS}\\n    o['sum'] = (i['a'] ^ i['b']) & 1\\n    o['cout'] = (i['a'] & i['b']) & 1\\n    return o\\n",
+  "covers": {"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]},
   "underdetermined": []
 }
 
-`code` is the complete method source at module indentation level zero -- it will
-be re-indented into the class body. Include the `def` line.
+`source` is the complete class body at module indentation level zero -- every
+method including the dispatch, which will be re-indented into the class. Do not
+emit the `class` line; the harness writes that, with `OUTPUT_PORTS` and
+`LATENCY_CYCLES` set from the contract.
 """
 
 

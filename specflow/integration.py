@@ -21,7 +21,7 @@ from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import make_port
-from .refmodel.compose import choose_base, run_refmodel, run_refmodel_fanout
+from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
 from .run import reconcile, run_suite
@@ -308,8 +308,13 @@ def build_artifacts(
     rm_issues: list[Issue] = []
     if stale or not refmodel_path.is_file():
         stale = True
-        build = run_refmodel_fanout if fanout else run_refmodel
-        rm, source = build(
+        # The reference model is generated whole, by the configured (strong)
+        # model, regardless of `fanout`. Splitting generation was the wrong half
+        # to fan out: a model needs global context for ordering, reset priority
+        # and shared state, and per-requirement calls removed exactly that. The
+        # fan-out moved into the gate, where "does this model satisfy
+        # requirement N" is a local question with a local answer.
+        rm, source = run_refmodel(
             requirements=reqs, contract_json=contract_json, port=port,
             workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
         )
@@ -318,11 +323,24 @@ def build_artifacts(
         if not rm.ok:
             return BuildResult(False, "refmodel", rm.issues)
     else:
+        # The coverage map lives in the recorded gate file, not in the model
+        # source -- it is the generator's claim about the source, not part of
+        # it. Without it the re-gate reports every requirement as unclaimed and
+        # regenerates a model that was fine, which is `--reuse` doing the exact
+        # opposite of its job.
+        try:
+            recorded = json.loads(
+                (run_dir / "specflow" / "refmodel_gate.json").read_text(encoding="utf-8")
+            )
+            covers = recorded.get("covers") or {}
+        except (OSError, json.JSONDecodeError):
+            covers = {}
         rm_issues = validate_source(
             source=refmodel_path.read_text(encoding="utf-8"),
             requirements=reqs, contract=contract,
             expected_base=choose_base(contract),
             workdir=run_dir / "specflow" / "_refmodel_check",
+            coverage=covers,
         )
         if has_errors(rm_issues):
             stale = True

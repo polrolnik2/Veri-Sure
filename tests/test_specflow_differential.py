@@ -80,8 +80,11 @@ def test_generated_model_agrees_with_golden_rtl(tmp_path):
 def test_differential_detects_a_wrong_model(tmp_path):
     """The gate must fail when it should, or it certifies anything."""
     path = _refmodel(tmp_path)
+    # Break the carry only. The fixture factors both outputs into one helper --
+    # they are two sentences about one piece of hardware -- so the substitution
+    # targets the returned carry expression rather than a per-requirement method.
     broken = path.read_text(encoding="utf-8").replace(
-        "o['cout'] = self.mask(a & b, 1)", "o['cout'] = self.mask(a | b, 1)"
+        "self.mask(a & b, 1)", "self.mask(a | b, 1)"
     )
     assert "a | b" in broken, "the substitution did not apply"
     wrong = path.parent / "wrong_model.py"
