@@ -150,8 +150,8 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_extra_sources=tuple(str(p) for p in kid_files),
             specflow_include_dirs=tuple(inc_dirs),
             specflow_reuse=bool(getattr(args, "reuse", False)),
-            specflow_divide_s1=bool(getattr(args, "divide_s1", False)),
-            specflow_fanout=bool(getattr(args, "fanout", False)),
+            specflow_divide_s1=not getattr(args, "generative_s1", False),
+            specflow_fanout=not getattr(args, "no_fanout", False),
         ),
     )
     try:
@@ -215,15 +215,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--debug-max-trials", type=int, default=6)
     p.add_argument("--env-file", default=str(REPO_ROOT / ".env.local"))
     p.add_argument(
-        "--divide-s1", action="store_true",
-        help="decompose the spec by dividing it at authorial boundaries and "
-             "classifying each unit, instead of generating requirements. The "
-             "generative arm stays the default so the two are comparable.",
+        "--generative-s1", action="store_true",
+        help="use the generative decomposition instead of dividing the spec at "
+             "authorial boundaries. For A/B against the committed baselines.",
     )
     p.add_argument(
-        "--fanout", action="store_true",
-        help="run S2, S3 and the reference model as one small call per item "
-             "instead of one batched call.",
+        "--no-fanout", action="store_true",
+        help="run S2, S3 and the reference model as one batched call each "
+             "instead of one small call per item.",
     )
     p.add_argument(
         "--reuse", action="store_true",

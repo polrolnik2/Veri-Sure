@@ -227,8 +227,8 @@ async def run_specflow_node(
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
-    divide_s1: bool = False,
-    fanout: bool = False,
+    divide_s1: bool = True,
+    fanout: bool = True,
 ) -> Tuple[bool, str, dict[str, Any]]:
     """Build the oracle, generate RTL, repair until the gate accepts.
 

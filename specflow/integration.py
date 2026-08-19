@@ -193,8 +193,8 @@ def build_artifacts(
     max_repairs: int = 3,
     stimulus_agent: bool = True,
     reuse: bool = False,
-    divide_s1: bool = False,
-    fanout: bool = False,
+    divide_s1: bool = True,
+    fanout: bool = True,
 ) -> BuildResult:
     """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
 

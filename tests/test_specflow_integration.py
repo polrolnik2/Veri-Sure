@@ -42,6 +42,7 @@ def _run_dir(tmp_path: Path) -> Path:
 def _build(tmp_path: Path):
     run_dir = _run_dir(tmp_path)
     return run_dir, build_artifacts(
+        divide_s1=False, fanout=False,  # generative arm: these fixtures record its stage names
         run_dir=run_dir,
         spec=(run_dir / "prompt.txt").read_text(encoding="utf-8"),
         contract_json=(run_dir / "contract.json").read_text(encoding="utf-8"),
@@ -90,6 +91,7 @@ def test_a_failing_gate_stops_the_chain_and_names_the_stage(tmp_path):
         json.dumps({"reasoning": "r", "elements": []}), encoding="utf-8"
     )
     result = build_artifacts(
+        divide_s1=False, fanout=False,  # generative arm: these fixtures record its stage names
         run_dir=run_dir,
         spec=(run_dir / "prompt.txt").read_text(encoding="utf-8"),
         contract_json=(run_dir / "contract.json").read_text(encoding="utf-8"),
@@ -271,6 +273,7 @@ def test_the_suite_runs_outside_pytest(tmp_path):
         from specflow.integration import build_artifacts, judge
         run = Path({str(run_dir)!r})
         built = build_artifacts(
+        divide_s1=False, fanout=False,  # generative arm: these fixtures record its stage names
             run_dir=run, spec=(run / "prompt.txt").read_text(),
             contract_json=(run / "contract.json").read_text(), model_port="replay")
         assert built.ok, built.reason

@@ -233,11 +233,11 @@ class TopAgentConfig:
     #: this skips the model calls, never the checks.
     specflow_reuse: bool = False
     #: S1 by division at authorial boundaries plus a per-unit classifier,
-    #: instead of the generative decomposition. Off by default so the generative
-    #: arm stays runnable for A/B on the same task, model and effort.
-    specflow_divide_s1: bool = False
+    #: instead of the generative decomposition. On by default; set False for an
+    #: A/B against the generative arm on the same task, model and effort.
+    specflow_divide_s1: bool = True
     #: One small call per item for S2, S3 and the reference model.
-    specflow_fanout: bool = False
+    specflow_fanout: bool = True
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in

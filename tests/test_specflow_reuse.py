@@ -76,6 +76,10 @@ def _build(run_dir: Path, *, reuse: bool):
             spec=(run_dir / "prompt.txt").read_text(encoding="utf-8"),
             contract_json=(run_dir / "contract.json").read_text(encoding="utf-8"),
             reuse=reuse, stimulus_agent=False,
+            # The generative arm, explicitly: division is the default now,
+            # and these fixtures record the generative stage names. This
+            # module is about `reuse`, which both arms share.
+            divide_s1=False, fanout=False,
         )
     finally:
         integration.make_port = real_make_port
