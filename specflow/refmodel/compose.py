@@ -11,7 +11,7 @@ import textwrap
 from pathlib import Path
 
 from ..model_io import ModelPort
-from ..schema import Issue
+from ..schema import Issue, has_errors
 from ..stage import (
     StageResult,
     gate_failures_block,
@@ -111,8 +111,18 @@ def run_refmodel(
     port: ModelPort,
     workdir: Path,
     max_repairs: int = 3,
+    judge_port: ModelPort | None = None,
+    run_dir: Path | None = None,
 ) -> tuple[StageResult[RefModelOutput], str]:
-    """R2-R6. Returns the stage result and the rendered source."""
+    """R2-R6. Returns the stage result and the rendered source.
+
+    `judge_port`, when supplied, adds the per-requirement judge to the gate: one
+    small call per requirement over the composed model, whose blocking verdicts
+    join the script issues and drive the same bounded repair round. It is a
+    separate port because the judge runs a small model while the generator runs
+    the configured one -- and because a run without it is still a valid run, just
+    one gated on structure alone.
+    """
     try:
         contract = json.loads(contract_json) if contract_json.strip() else {}
     except Exception:  # noqa: BLE001
@@ -141,9 +151,12 @@ def run_refmodel(
             parts.append(gate_failures_block(issues))
         return "\n\n".join(parts)
 
+    rounds = {"n": 0}
+    judged: dict[str, object] = {"result": None}
+
     def gate(out: RefModelOutput) -> list[Issue]:
         rendered["src"] = render(out, contract)
-        return validate(
+        issues = validate(
             out=out,
             source=rendered["src"],
             requirements=requirements,
@@ -151,6 +164,25 @@ def run_refmodel(
             expected_base=base,
             workdir=workdir,
         )
+        # The judge runs only on a model that already passes the mechanical
+        # checks. Asking ~70 questions about a model that does not import, or
+        # leaves an output undetermined, spends a fan-out to rediscover what a
+        # script already said -- and the verdicts would be about code that is
+        # going to be regenerated anyway.
+        if judge_port is not None and not has_errors(issues):
+            from .judge import run_judge, write_report
+
+            result = run_judge(
+                source=rendered["src"], contract_json=contract_json,
+                requirements=requirements, covers=out.covers,
+                port=judge_port, round_=rounds["n"],
+            )
+            judged["result"] = result
+            if run_dir is not None:
+                write_report(run_dir, result)
+            issues = issues + result.issues
+        rounds["n"] += 1
+        return issues
 
     result = run_stage(
         stage=STAGE,

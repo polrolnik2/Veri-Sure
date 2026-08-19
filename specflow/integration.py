@@ -195,6 +195,7 @@ def build_artifacts(
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
+    judge: bool = True,
 ) -> BuildResult:
     """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
 
@@ -317,6 +318,12 @@ def build_artifacts(
         rm, source = run_refmodel(
             requirements=reqs, contract_json=contract_json, port=port,
             workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
+            # The judge shares the port -- and therefore the small-model
+            # override -- because it is a fanned-out per-item stage like the
+            # others. The generator above is the same port but a whole-artifact
+            # call; the model split is by `SPECFLOW_SMALL_MODEL`, not by port.
+            judge_port=port if judge else None,
+            run_dir=run_dir,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)

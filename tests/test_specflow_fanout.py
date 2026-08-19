@@ -240,6 +240,16 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
                           "    o['cout'] = (i['a'] & i['b']) & 1\n"
                           "    return o\n",
                 "covers": {"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]}})
+        if stage.startswith("judge_"):
+            # The judge blocks and cannot accept, so a `met` here does not make
+            # the build pass -- the script checks above still decide. See
+            # test_specflow_judge.py for that guarantee under test.
+            return json.dumps({
+                "verdict": "met",
+                "reason": "the dispatch computes the named output directly",
+                "evidence": "evaluate",
+                "remedy": "",
+            })
         raise AssertionError(f"unexpected stage {stage}")
 
     import specflow.integration as integration
