@@ -152,6 +152,8 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_reuse=bool(getattr(args, "reuse", False)),
             specflow_divide_s1=not getattr(args, "generative_s1", False),
             specflow_fanout=not getattr(args, "no_fanout", False),
+            specflow_max_repairs=args.max_repairs,
+            specflow_refmodel_max_repairs=args.refmodel_max_repairs,
         ),
     )
     try:
@@ -214,6 +216,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sim-max-retry", type=int, default=2)
     p.add_argument("--debug-max-trials", type=int, default=6)
     p.add_argument("--env-file", default=str(REPO_ROOT / ".env.local"))
+    p.add_argument(
+        "--max-repairs", type=int, default=3,
+        help="repair rounds per specflow stage before the node hard-fails.",
+    )
+    p.add_argument(
+        "--refmodel-max-repairs", type=int, default=6,
+        help="repair rounds for the reference model, which gets its own budget: "
+             "its feedback comes from a per-requirement judge rather than a "
+             "script, and it converges. Measured on i2c_master_bit_ctrl, "
+             "blocking verdicts fell 8 -> 4 -> 3 -> 2 over four rounds and the "
+             "node then hard-failed with the trajectory still descending.",
+    )
     p.add_argument(
         "--generative-s1", action="store_true",
         help="use the generative decomposition instead of dividing the spec at "

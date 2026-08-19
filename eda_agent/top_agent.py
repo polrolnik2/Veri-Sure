@@ -238,6 +238,13 @@ class TopAgentConfig:
     specflow_divide_s1: bool = True
     #: One small call per item for S2, S3 and the reference model.
     specflow_fanout: bool = True
+    #: Repair rounds for each specflow stage, and for the reference model
+    #: specifically. The reference model gets its own because its feedback comes
+    #: from a judge rather than a script, and it converges: 8 -> 4 -> 3 -> 2
+    #: blocking verdicts over four rounds on i2c_master_bit_ctrl, still
+    #: descending when the budget ran out.
+    specflow_max_repairs: int = 3
+    specflow_refmodel_max_repairs: int = 6
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -579,6 +586,8 @@ class TopAgent:
             reuse=self.config.specflow_reuse,
             divide_s1=self.config.specflow_divide_s1,
             fanout=self.config.specflow_fanout,
+            max_repairs=self.config.specflow_max_repairs,
+            refmodel_max_repairs=self.config.specflow_refmodel_max_repairs,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

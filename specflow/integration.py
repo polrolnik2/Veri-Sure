@@ -196,6 +196,14 @@ def build_artifacts(
     contract_json: str,
     model_port: str = "replay",
     max_repairs: int = 3,
+    #: The reference model gets its own budget, and a larger default. Its repair
+    #: round is the only one whose feedback comes from a judge reading the
+    #: artifact rather than from a script checking its shape, and that feedback
+    #: converges rather than plateauing. Measured on `i2c_master_bit_ctrl`:
+    #: blocking verdicts went 8 -> 4 -> 3 -> 2 over four rounds, monotonically,
+    #: and the node then hard-failed on exhaustion with the trajectory still
+    #: descending. The budget was the binding constraint, not the model.
+    refmodel_max_repairs: int | None = None,
     stimulus_agent: bool = True,
     reuse: bool = False,
     divide_s1: bool = True,
@@ -328,7 +336,9 @@ def build_artifacts(
         # requirement N" is a local question with a local answer.
         rm, source = run_refmodel(
             requirements=reqs, contract_json=contract_json, port=port,
-            workdir=run_dir / "specflow" / "_refmodel_check", max_repairs=max_repairs,
+            workdir=run_dir / "specflow" / "_refmodel_check",
+            max_repairs=(max_repairs if refmodel_max_repairs is None
+                         else refmodel_max_repairs),
             # The judge shares the port -- and therefore the small-model
             # override -- because it is a fanned-out per-item stage like the
             # others. The generator above is the same port but a whole-artifact
