@@ -332,3 +332,40 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
         "a requirement still claims the whole specification"
     )
     assert (run_dir / "specflow" / "suite" / "manifest.json").exists()
+
+
+def test_refmodel_fanout_dedupes_helpers_defined_by_several_calls(tmp_path):
+    """Shared state is what no single requirement owns.
+
+    Under fan-out, N independent calls each write `helpers` without seeing each
+    other, so every call that needs a synchroniser or a filter emits one. Plain
+    concatenation produces the same `def` several times; Python tolerates that
+    and the surviving definition is whichever call was ordered last -- silent,
+    and decided by ordering rather than by content.
+    """
+    reqs = [{"uid": f"REQ-{i:04d}", "rev": 1, "needs": ["refmodel"]} for i in range(2)]
+    # Helpers are rendered inside the class, so they are methods -- the same
+    # convention the live model uses (`self.mask(...)` from the base class).
+    helper = "def majority(self, a, b, c):\n    return (a & b) | (a & c) | (b & c)\n"
+
+    def reply(stage, round_):
+        uid = stage.split("_", 1)[1]
+        n = int(uid.split("-")[1])
+        port = "sum" if n == 0 else "cout"
+        return json.dumps({
+            "base": "evaluate",
+            "helpers": helper,                      # both calls emit it
+            "fragments": [{"req_uid": uid, "method_name": "", "code":
+                           f"def _req_{n:04d}(self, i, o):\n"
+                           f"    o['{port}'] = self.majority(i['a'], i['b'], 1)\n"}],
+        })
+
+    result, source = run_refmodel_fanout(
+        requirements=reqs, contract_json=CONTRACT, port=Scripted(reply),
+        workdir=tmp_path, fanout=False)
+
+    assert source.count("def majority(") == 1, "the helper was emitted twice"
+    assert "defined by more than one fragment call" in source, (
+        "a collision resolved by ordering must be reported, not hidden"
+    )
+    assert result.ok, [i.message for i in result.issues]

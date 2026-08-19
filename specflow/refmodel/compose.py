@@ -301,7 +301,7 @@ def run_refmodel_fanout(
     merged = RefModelOutput(
         reasoning="; ".join(r.output.reasoning for r in results if r.output.reasoning)[:2000],
         base=base,
-        helpers="\n".join(r.output.helpers for r in results if r.output.helpers),
+        helpers=_merge_helpers(results),
         fragments=[f for r in results for f in r.output.fragments],
         underdetermined=[u for r in results for u in (r.output.underdetermined or [])],
     )
@@ -312,6 +312,53 @@ def run_refmodel_fanout(
         expected_base=base, workdir=workdir,
     )
     return StageResult(merged, issues, max(r.rounds for r in results) if results else 0), source
+
+
+def _merge_helpers(results: list) -> str:
+    """Concatenate helper blocks, dropping duplicate definitions.
+
+    Naive concatenation is wrong here in a way the batched call never had. Under
+    fan-out, N independent calls each write `helpers` without seeing each other,
+    and shared state is exactly what none of them owns individually -- a
+    synchroniser, a majority filter, a clock divider. Every call that needs one
+    emits it, so a plain join produces the same `def` several times.
+
+    Python tolerates that (last definition wins) which is precisely the problem:
+    it is silent, and the surviving definition is whichever call happened to be
+    ordered last. Dedupe by the name being bound, keeping the first, and report
+    the collisions so a genuine disagreement between two calls is visible rather
+    than resolved by ordering.
+    """
+    import ast as _ast
+
+    seen: set[str] = set()
+    kept: list[str] = []
+    collisions: list[str] = []
+    for r in results:
+        block = (getattr(r.output, "helpers", "") or "").strip()
+        if not block:
+            continue
+        try:
+            tree = _ast.parse(textwrap.dedent(block))
+        except SyntaxError:
+            # Not parseable on its own -- keep it and let G4 reject the whole.
+            kept.append(block)
+            continue
+        for node in tree.body:
+            name = getattr(node, "name", None)
+            if name is None and isinstance(node, _ast.Assign):
+                targets = [t.id for t in node.targets if isinstance(t, _ast.Name)]
+                name = targets[0] if targets else None
+            if name is not None and name in seen:
+                collisions.append(name)
+                continue
+            if name is not None:
+                seen.add(name)
+            kept.append(_ast.get_source_segment(textwrap.dedent(block), node) or "")
+    if collisions:
+        kept.insert(0, "# helper(s) defined by more than one fragment call, first "
+                       f"kept: {sorted(set(collisions))}")
+    return "\n\n".join(x for x in kept if x.strip())
 
 
 def _gate_one_fragment(out: RefModelOutput, req: dict) -> list[Issue]:
