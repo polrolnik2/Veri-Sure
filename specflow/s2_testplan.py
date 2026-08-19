@@ -225,20 +225,27 @@ def build_prompt_one(
 
 
 def gate_one(requirement: dict, out: TestplanOutput) -> list[Issue]:
-    """G2 for one requirement.
+    """G2, scoped to the one requirement this call was given.
 
-    **The uncovered-requirement check is vacuous on this path and says so.**
-    Fanning out one call per requirement guarantees structurally that every
-    requirement has an element, so `assure_requirements_to_testplan` can no
-    longer catch the thing it exists to catch. The completeness argument moves
-    upstream to G1', where it belongs: completeness is a property of how the spec
-    was divided, not of how many testplan rows exist.
+    The call is 1:1 on the way in -- one requirement, nothing else -- and 1:N on
+    the way out, because one requirement legitimately needs several testpoints: a
+    boundary case, a timing case, an error-injection case. Measured on
+    `i2c_master_bit_ctrl`, 72 requirements produced 164 elements.
 
-    What survives here still bites: an element with no dimension, no stimulus, no
-    expected response or no check method is not a testpoint, and over-splitting
+    **The uncovered-requirement check still fires**, contrary to an earlier
+    version of this docstring which claimed the fan-out made it vacuous. It does
+    not: a call that returns nothing fails on "no testplan elements produced",
+    and a call that answers for some other requirement fails as both `orphaned`
+    and `uncovered`. What the fan-out changes is narrower and runs the other way
+    -- "requirement 47 was silently dropped from a batch of 72" is no longer a
+    thing that can happen quietly, because it becomes a call that fails its own
+    gate rather than an item missing from a list.
+
+    The rest still bites too: an element with no dimension, no stimulus, no
+    expected response or no check method is not a testpoint. Over-splitting
     upstream shows up as exactly that -- a requirement too small to have an
-    expected response cannot be given one. That is half of the opposing pressure
-    that replaces a span-length threshold; the other half is G4's
+    expected response cannot be given one -- which is half of the opposing
+    pressure that replaces a span-length threshold. The other half is G4's
     writes-no-output-port check.
     """
     return gate([requirement], out)
