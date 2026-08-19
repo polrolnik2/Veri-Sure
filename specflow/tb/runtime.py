@@ -190,12 +190,19 @@ class Env:
 
         for name, handle in handles:
             handle.value = 1 - inactive_value(name)
-        await self.tick(cycles)
+        if hasattr(self.ref, "reset"):
+            self.ref.reset()
+        # Lockstep through reset too. The DUT takes `cycles + 1` edges here, and
+        # a model that took none arrives at the first stimulus vector that many
+        # edges behind -- which for a design whose outputs move on specific
+        # edges misaligns every comparison that follows.
+        for _ in range(cycles):
+            await self.tick(1)
+            self._advance_model({})
         for name, handle in handles:
             handle.value = inactive_value(name)
         await self.tick(1)
-        if hasattr(self.ref, "reset"):
-            self.ref.reset()
+        self._advance_model({})
 
     # -- driving -----------------------------------------------------------
 
@@ -259,6 +266,13 @@ class Env:
             await self.tick(1)
             if stim is not None:
                 self._expected = self._advance_model(stim)
+        # Let this edge's non-blocking updates land before anything samples the
+        # DUT. `RisingEdge` fires in the same delta as the edge, so a read taken
+        # straight after it returns the PREVIOUS cycle's value -- the DUT would
+        # then be compared one edge behind the model.
+        from cocotb.triggers import Timer
+
+        await Timer(1, unit="ps")
 
     def sample(self, signal: str) -> int:
         return _plain(getattr(self.dut, signal).value)
