@@ -229,9 +229,16 @@ Other requirements:
 5. NEVER USE 'inside' operator in RTL code. Code like 'state inside {STATE_B, STATE_C, STATE_D}' should NOT be used.
 6. Never USE 'unique' or 'unique0' keywords in RTL code. Code like 'unique case' should NOT be used.
 7. Respect any explicit latency/timing described in the contract (e.g., next-cycle outputs).
-8. LATENCY IS A HARD CONSTRAINT, NOT A PREFERENCE. `timing.<output>.latency_cycles`
-   is the EXACT number of clocked stages between an input being presented and that
-   output being observable. Count the registers on the path before you finish:
+8. WHERE THE CONTRACT DECLARES A LATENCY, IT IS A HARD CONSTRAINT, NOT A
+   PREFERENCE. `timing.<output>.latency_cycles` is the number of edges of the
+   DECLARED CLOCK between the edge that captures a stimulus and the edge on
+   which that output first reflects it -- edges of the declared clock, not
+   enable ticks, so a design whose FSM advances on a prescaled `clk_en` legitimately
+   takes more clock edges than it has phases. The field is present only when the
+   specification determines the count or a completion signal makes it observable.
+   WHERE IT IS ABSENT, the specification does not settle the depth: build what
+   the function needs and do not invent a pipeline to fill a number that is not
+   there. Count the registers on the path before you finish:
 
      latency_cycles = 0  -> purely combinational. The output must NOT be assigned
                             with `<=` in any clocked block.
@@ -247,10 +254,13 @@ Other requirements:
    sensible instinct and is WRONG here unless the contract asked for that depth:
    a deeper pipeline is not a better design, it is a different contract.
 
-   Nothing downstream will catch a mistake here. The testbench compares against a
-   queue that realigns to whatever latency your design happens to have, so a
-   design of the wrong depth passes its own checks and fails every consumer that
-   holds it to the contract. Getting this right is your responsibility alone.
+   Nothing downstream will catch a mistake here, and that is deliberate rather
+   than an oversight. The specflow testbench compares the ordered sequence of
+   output states and ignores how long each is held, precisely because a cycle
+   count nothing can check against the specification is a fiction -- so it will
+   not reject a design for its depth. Cycle structure depends on the hardware
+   the specification does not pin down, which makes it yours: getting it right
+   is your responsibility alone.
 """
 # Some prompts above comes from:
 # @misc{ho2024verilogcoderautonomousverilogcoding,

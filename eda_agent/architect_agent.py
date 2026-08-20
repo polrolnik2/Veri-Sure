@@ -6,13 +6,33 @@ from typing import Any, Dict, List, Optional
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .agents import SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
 from .prompts import ORDER_PROMPT
 from .utils import extract_json_object
+
+
+#: The one definition of `latency_cycles`, quoted verbatim into every prompt
+#: that mentions the field. It had four wordings across `architect_agent`,
+#: `contract_linter`, `rtl_generator` and `refmodel/agent`, and four wordings
+#: are four fields.
+LATENCY_DEFINITION = """\
+`timing.<output>.latency_cycles` is the number of edges of the DECLARED CLOCK
+between the edge that captures a stimulus and the edge on which <output> first
+reflects it. Edges of the declared clock -- not enable ticks: a design whose FSM
+advances on a prescaled `clk_en` takes more clock edges than phases, and that is
+not a violation of a declared latency, it is what a prescaler is.
+
+Give the field ONLY when the specification states the count, or when the
+interface makes it observable from outside (a valid/ready/done/ack output tells
+a consumer when to look). If neither holds, OMIT the field. An omitted latency
+says "the specification does not determine this", which is true and harmless. A
+guessed one is read downstream as a requirement, and a requirement nobody can
+check against the specification is a fiction the design is then forced to
+implement."""
 
 
 SYSTEM_PROMPT = r"""
@@ -71,12 +91,11 @@ What to include (keep it compact):
   first stimulus, and a design that samples a bus you have declared to idle low
   will be marked broken for behaving correctly.
 - clocking: whether sequential; clock/reset names and edge semantics if applicable
-- timing: per-output latency expectations (0 = combinational / same-cycle, 1 = next-cycle, etc.) when inferable.
+- timing: per-output latency, for the outputs whose latency the SPECIFICATION
+  determines. Omit the entry otherwise.
+{latency_definition}
   State the MINIMUM latency the function inherently needs — do not add pipeline
-  stages the behaviour does not require. If the interface carries NO completion
-  signal (no valid/ready/done output) and the spec names no specific cycle count,
-  then nothing tells a consumer when an output is ready, and a multi-cycle latency
-  is unobservable from outside the module: choose 0 or 1. Prose suggesting a
+  stages the behaviour does not require. Prose suggesting a
   pipeline is a permission, not a requirement — it never overrides an interface
   that cannot signal completion.
 - functional_summary: 3-8 bullets describing behavior precisely
@@ -152,7 +171,7 @@ EXAMPLE_OUTPUT: Dict[str, Any] = {
     "guidance": {
         "verifier": [
             "Sample outputs on the opposite edge to avoid race (if posedge sequential, check at negedge).",
-            "If latency_cycles=1, compute expected with a one-cycle queue.",
+            "Where the contract declares no latency for an output, do not assume one.",
         ],
         "coder": [
             "Match the exact port list and names.",
@@ -166,13 +185,69 @@ EXAMPLE_OUTPUT: Dict[str, Any] = {
 }
 
 
+
+class TimingSpec(BaseModel):
+    """One output's timing, typed rather than an untyped bag.
+
+    `timing` was `Dict[str, Any]`, so nothing at the boundary distinguished a
+    considered figure from a typo -- and because a validation failure anywhere
+    in `ContractFormat` falls back to a stub contract with `timing={}`, a single
+    malformed entry could silently take the whole contract down with it.
+
+    `latency_cycles` is OPTIONAL, and that is the substantive change. The
+    architect used to be told that where the spec names no count and the
+    interface carries no completion signal it should "choose 0 or 1" -- an
+    instruction to invent a number in exactly the case where nothing can check
+    it. On `i2c_master_bit_ctrl` that produced 3 in one run of the same spec and
+    1 in the next, against a golden design that takes 5 `clk_en` phases. The
+    field gated a reference-model check (G4e), set the testbench's stimulus
+    pacing, and picked the model's dispatch, so an unstable guess perturbed all
+    three. It now informs the RTL agent and gates nothing.
+    """
+
+    model_config = {"extra": "allow"}
+
+    latency_cycles: Optional[int] = None
+    notes: str = ""
+
+    @field_validator("latency_cycles", mode="before")
+    @classmethod
+    def _only_a_usable_count(cls, value: Any) -> Optional[int]:
+        """A value that is not a cycle count degrades to absent, not to a stub.
+
+        Typing the field is only an improvement if a bad value costs less than
+        it did before. It cannot cost MORE: `ContractFormat.model_validate`
+        raising anywhere means `parse_output` returns a stub contract with no
+        io, no clocking and `timing={}`, so one nonsense latency would take the
+        whole interface down with it. Degrading to `None` says "the count is not
+        determined", which is now a first-class answer and is no worse than the
+        truth. `contract_linter` still reports an invalid value on a contract
+        read from disk, which is the path that never passes through here.
+        """
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            cycles = int(value)
+        except (TypeError, ValueError):
+            return None
+        return cycles if cycles >= 0 else None
+
+
 class ContractFormat(BaseModel):
     source_of_truth: str
     module_name: str
     parameters: List[Dict[str, Any]] = []
     io: List[Dict[str, Any]]
     clocking: Dict[str, Any]
-    timing: Dict[str, Any]
+    timing: Dict[str, TimingSpec] = {}
+
+    @field_validator("timing", mode="before")
+    @classmethod
+    def _drop_unusable_entries(cls, value: Any) -> Any:
+        """Same containment one level up: a bad ENTRY costs its entry, not the contract."""
+        if not isinstance(value, dict):
+            return {}
+        return {k: v for k, v in value.items() if isinstance(v, dict)}
     functional_summary: List[str]
     corner_cases: List[str]
     test_plan: List[str]
@@ -242,7 +317,10 @@ class ArchitectAgent:
             if excerpt:
                 golden_tb_block = f"<golden_testbench>\n{excerpt}</golden_testbench>\n"
 
-        prompt = CONTRACT_PROMPT.format(input_spec=input_spec, golden_tb_block=golden_tb_block)
+        prompt = CONTRACT_PROMPT.format(
+            input_spec=input_spec, golden_tb_block=golden_tb_block,
+            latency_definition=LATENCY_DEFINITION,
+        )
         order = ORDER_PROMPT.format(output_format=json.dumps(EXAMPLE_OUTPUT, indent=4))
         full_prompt = f"{prompt}\n\n{order}"
         self.last_prompt = full_prompt

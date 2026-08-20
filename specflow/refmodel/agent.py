@@ -97,11 +97,16 @@ The consequence that has actually gone wrong: if the design gates its state
 machine on an enable that is only true every N clocks -- a prescaler, a divider
 tick, a `clk_en` -- then ONE such tick advances the machine ONE phase. A
 five-phase sequence takes five ticks, not one. Collapsing the sequence into a
-single tick makes a model that answers far sooner than the design, and it will
-mark a correct design broken at every step of the sequence. `LATENCY_CYCLES`
-and the contract's `timing.<port>.latency_cycles` tell you how many cycles an
-output is allowed to take; a gate rejects a model that answers sooner than the
-contract says it can.
+single tick makes a model that produces a DIFFERENT SEQUENCE of output states
+from the design, and the testbench compares sequences.
+
+Do not try to hit a cycle count. The testbench compares the ordered sequence of
+distinct output states and ignores how long each is held, so your model does not
+have to be cycle-accurate and `timing.<port>.latency_cycles` is not a target to
+aim at -- where it is present at all it is informational, and where the
+specification did not determine it the contract omits it. What matters is that
+you produce the states the design produces, in the order it produces them, and
+that you do not merge two phases the specification describes as distinct.
 
 Then declare `covers`: for each requirement uid, the method names that implement
 it. A requirement may map to several methods and a method may serve several
@@ -139,7 +144,8 @@ Reply with ONE JSON object and nothing else:
 `source` is the complete class body at module indentation level zero -- every
 method including the dispatch, which will be re-indented into the class. Do not
 emit the `class` line; the harness writes that, with `OUTPUT_PORTS` and
-`LATENCY_CYCLES` set from the contract.
+`LATENCY_CYCLES` set from the contract. `LATENCY_CYCLES` is carried for
+information only; nothing compares your model against it.
 """
 
 

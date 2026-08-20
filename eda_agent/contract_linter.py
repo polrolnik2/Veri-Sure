@@ -341,20 +341,25 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
     if isinstance(timing, dict):
         for out in sorted(outputs):
             tinfo = timing.get(out)
+            # A MISSING entry is no longer flagged. It used to be a warning, and
+            # a warning is fed back to the architect as something to fix -- so
+            # the pressure was to produce a number for every output whether or
+            # not the specification determined one. On i2c_master_bit_ctrl that
+            # produced `cmd_ack: 3` in one run of the same spec and `1` in the
+            # next, against a golden design that takes 5 clk_en phases. An
+            # absent latency states that the spec does not settle it, which is
+            # true; an invented one is read downstream as a requirement.
             if tinfo is None:
-                issues.append(ContractIssue("warning", f"timing.{out}", "Missing timing entry for output; latency may be ambiguous."))
                 continue
             if not isinstance(tinfo, dict):
                 issues.append(ContractIssue("warning", f"timing.{out}", "Timing entry should be an object."))
                 continue
             lat = tinfo.get("latency_cycles")
-            if lat is None:
-                issues.append(ContractIssue("warning", f"timing.{out}.latency_cycles", "Missing latency_cycles."))
-            else:
-                l = _as_int(lat)
-                if l is None or l < 0:
+            if lat is not None:
+                cycles = _as_int(lat)
+                if cycles is None or cycles < 0:
                     issues.append(ContractIssue("error", f"timing.{out}.latency_cycles", f"Invalid latency_cycles: {lat!r}"))
-                elif l > 1 and not _has_completion_signal(outputs):
+                elif cycles > 1 and not _has_completion_signal(outputs):
                     # A latency beyond a registered output is only integrable if a
                     # consumer can learn when the value is ready -- either from a
                     # completion signal, or from a latency the spec states outright.
@@ -370,12 +375,14 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                     # FROM that contract and unusable to anything else.
                     issues.append(ContractIssue(
                         "warning", f"timing.{out}.latency_cycles",
-                        f"latency_cycles={l} but the interface has no completion signal "
-                        f"(no valid/ready/done/valid_out output). Nothing tells a consumer "
-                        f"when {out} is ready, so a multi-cycle latency is unobservable "
-                        f"from outside this module. Unless the spec names a specific cycle "
-                        f"count, state the MINIMUM latency the function needs (0 for "
-                        f"combinational, 1 for a registered output).",
+                        f"latency_cycles={cycles} but the interface has no completion "
+                        f"signal (no valid/ready/done/valid_out output). Nothing tells a "
+                        f"consumer when {out} is ready, so a multi-cycle latency is "
+                        f"unobservable from outside this module. If the spec names a "
+                        f"specific cycle count, quote it in `notes`; otherwise OMIT "
+                        f"latency_cycles rather than choosing a number -- an absent "
+                        f"latency says the spec does not determine it, which is true, "
+                        f"and a guessed one is read downstream as a requirement.",
                     ))
 
     issues.extend(_latency_prose_conflicts(obj, timing, outputs))
