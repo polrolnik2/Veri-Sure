@@ -210,3 +210,54 @@ def test_run_judge_without_a_contract_still_works():
               covers={"REQ-0001": ["step"]}, port=Port())
     # the closing tag, not the bare word: SYSTEM itself names the block.
     assert seen and "</observed_behaviour>" not in seen[0]
+
+
+#: A prescaled sequential contract: the shape where a scenario needs many edges.
+PRESCALED = {
+    "top": "d",
+    "io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "rst_n", "dir": "input", "width": 1, "role": "reset", "active_low": True},
+        {"name": "ena", "dir": "input", "width": 1},
+        {"name": "clk_cnt", "dir": "input", "width": 16},
+        {"name": "cmd", "dir": "input", "width": 4},
+        {"name": "ack", "dir": "output", "width": 1},
+    ],
+}
+
+
+def test_the_generic_sweep_cannot_contain_a_multi_cycle_scenario():
+    """Why "absence of the scenario" is explicitly NOT a finding.
+
+    "ambiguous" is BLOCKING. If the judge treated a scenario missing from the
+    trace as grounds for it, nearly every requirement of a sequential design
+    would block and no generation round could ever pass.
+
+    And the scenarios really are missing, by construction rather than by luck:
+    `default_stimulus` is a corner-first sweep that varies inputs at EVERY step,
+    so it never holds a command stable across the many edges a prescaled FSM
+    needs to advance. Measured on the real `i2c_master_bit_ctrl` contract: the
+    longest run of consecutive steps that could advance its FSM is 0, where one
+    START on golden needs ~26 edges at clk_cnt=4. The known-correct control
+    model reaches busy=1 on 0 of 64 steps.
+
+    The trace is still worth sending -- that same control model shows 12
+    distinct output states where the inert model shows 1 -- but its authority is
+    over liveness and contradiction, never over coverage.
+    """
+    from specflow.ports import pinned_inputs
+    from specflow.tb.render import default_stimulus
+
+    pinned = dict(pinned_inputs(PRESCALED))
+    walk = [{**pinned, **v} for v in default_stimulus(PRESCALED)]
+    assert len(walk) > 8
+
+    held = max(
+        (sum(1 for a, b in zip(walk, walk[1:]) if a.get(port) == b.get(port))
+         for port in ("cmd", "ena")),
+        default=0,
+    )
+    assert held < len(walk) - 1, (
+        "if the sweep DID hold inputs stable it could reach scenarios, and the "
+        "instruction telling the judge to ignore their absence would be wrong"
+    )
