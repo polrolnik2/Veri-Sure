@@ -385,19 +385,23 @@ each vector held 60 edges so a command can actually complete:
 
 | DUT | cycle-exact | transactional |
 | --- | --- | --- |
-| golden (correct) | 63 / 168 | **113 / 168** |
+| golden (correct) | 63 / 168 | **168 / 168** |
 | generated (wrong) | 20 / 168 | **28 / 168** |
-| **separation** | **43** | **85** |
+| **separation** | **43** | **140** |
 
-Ignoring durations discriminates about **twice** as well, because phase noise
-from a guessed latency was swamping the behavioural signal.
+**A correct design scores 168/168** — every testpoint, all 219 checks invoked,
+no timeouts. That is the plan's stated target for the control, and reaching it is
+what licenses reading the rest of the table: on this design the harness produces
+**no false failures at all**.
 
-Both columns are measured with testpoint isolation. An earlier revision of this
-table paired a post-isolation transactional column with a pre-isolation
-cycle-exact one and read a 5x ratio off the mismatch; isolation lifts cycle-exact
-from 36 to 63 too, so the honest ratio is 2x. The direction of the finding is
-unchanged and the reason for it is unchanged — the size was overstated by
-comparing two different harnesses.
+Cycle-exact is 63/168 on the same isolated harness with the same oracle, so a
+criterion built on the contract's guessed `latency_cycles` would still reject a
+correct design in 105 of 168 places. That is the argument for comparing content
+rather than cycles, and the separation it buys is 140 against 43.
+
+An earlier revision of this table read a 5x ratio between the two criteria off a
+mismatch — a post-isolation transactional column against a pre-isolation
+cycle-exact one. Both columns here are post-isolation.
 
 **Read both numbers, never one.** A criterion that passes everything scores well
 on the pass rate and is worthless. The pass rate of a *correct* design says how
@@ -643,15 +647,43 @@ alone. The only known-good-TB measurement in this repo is
 agree by construction, each also required to reject a tied-off DUT. Those score
 100%, on designs far smaller than an i2c core.
 
-**One of the 55 was attributed, and it is the oracle.** TP-0035 drives a WRITE
-at `clk_cnt=0`. Golden's FSM is `wr_a (scl_oen=0) → wr_b (1) → wr_c (1) →
-wr_d (0, cmd_ack=1) → idle`, and `idle` never touches `scl_oen`, so it holds 0 —
-giving a per-command sequence of `0,0,1,1,0+ack`, period 5. That is exactly the
-DUT's trace. The transliteration instead **releases SCL on the two edges right
-after `cmd_ack`**, where golden holds it low. Golden's own RTL settles it: the
-model is wrong there. Eight more failures carry the identical signature
-(`scl_oen` alone, model 1, DUT 0).
+**All 55 were attributed, and every one was the oracle.** They came from exactly
+two bugs in the transliteration, both the same mistake — reading a value from the
+wrong clock generation — and neither in the harness.
 
-The full residual: `al` alone 16, one side ran out of states 12, `scl_oen` alone
-10, `cmd_ack`+`scl_oen`+`sda_oen` 5, `busy` 3, and a tail of 9. One cluster
-attributed; the other three unexamined.
+**1. `sta_condition`/`sto_condition` computed combinationally (46 of 55).**
+Golden registers them (`sta_condition <= #1 ~sSDA & dSDA & sSCL;`) and `busy`/
+`al` read the *registered* value. Collapsing that stage made `al` fire one edge
+early, which aborted the command the DUT was completing; the model then fell a
+whole command period behind and missed a command window at the next stimulus
+vector boundary. That single error produced the `al` cluster, the `busy` cluster,
+the "`scl_oen` alone, model 1, DUT 0" cluster (the FSM releases both lines when
+`al` fires), and every "one side ran out of states" report. Golden went
+**113 → 159**.
+
+**2. The FSM gated on `clk_en` after the divider overwrote it (the other 9).**
+Golden's `if (clk_en) case (c_state)` sits in an `always @(posedge clk)` block,
+so it reads the value latched on the *previous* edge. Reading the freshly
+computed one advances the machine one edge early. Invisible while `ena = 0` —
+`clk_en` is then 1 every cycle, so old and new agree — and it appeared the
+instant the prescaler started toggling: DUT and model agreed exactly for the
+first twelve `cmd_ack` pulses, then the model sat one edge behind for the rest of
+the run. Golden went **159 → 168**.
+
+How each was pinned: dump both sides' internals edge by edge through the real
+`Env` and compare against the Verilog. The filter chain (`cSDA`, `fSDA`, `sSDA`,
+`dSDA` and the SCL equivalents) matched on every edge in both investigations,
+which is what ruled the harness out — the reset alignment and the lockstep
+advance were doing their job, and the divergence was downstream of them in the
+model's own logic.
+
+**The wrong candidate scored 28/168 before, during and after both fixes.** That
+is the control that matters: correcting the oracle removed false failures on a
+correct design without softening the criterion on a wrong one.
+
+What this does and does not establish. It establishes that the harness produces
+**no false failures** on this design, this stimulus and this coverage model —
+which is precisely the property the repair loop needs, since a false failure is
+what deforms correct RTL. It does not establish the absence of false *passes*;
+that is what the null-oracle sweep across all 64 designs is for, and what the
+tied-off-DUT half of the conformance suite is for.
