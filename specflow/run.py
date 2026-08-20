@@ -134,7 +134,23 @@ def run_suite(
     wave = suite_dir / f"wave_{iteration}.vcd"
     runner = get_runner("verilator")
 
-    build_args = ["--coverage-line", "--coverage-toggle"] if coverage else []
+    # `--no-timing` makes Verilator IGNORE `#` delay controls rather than
+    # refusing to elaborate. That is the synthesis reading of a delay
+    # annotation -- hardware has no `#1` -- and it is what makes the OpenCores
+    # reference designs simulable at all: every non-blocking assignment in the
+    # i2c core is written `sda_oen <= #1 1'b1;`, and without this Verilator
+    # stops with NEEDTIMINGOPT before a single check runs. A candidate that
+    # depended on a delay for its function would not be synthesisable either,
+    # so ignoring it verifies the design that would actually be built.
+    # `-Wno-fatal` for the same reason, one level up: lint findings belong to
+    # the lint gate, which reports them and which runs `-Wno-fatal` ITSELF
+    # (`sim_reviewer.check_syntax`). Leaving them fatal here means a design the
+    # lint gate passes cannot be simulated -- the OpenCores i2c reference stops
+    # on a WIDTHTRUNC warning -- so a correct design is rejected at build time
+    # for a reason that is about the invocation rather than the behaviour.
+    build_args = ["--no-timing", "-Wno-fatal"]
+    if coverage:
+        build_args += ["--coverage-line", "--coverage-toggle"]
 
     try:
         runner.build(

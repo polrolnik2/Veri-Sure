@@ -269,6 +269,10 @@ class Env:
         self._expected: dict | None = None
         #: The inputs of the step being driven, for `expect`/`check` context.
         self._inputs: dict = {}
+        #: Declared ports the DUT does not expose. A verdict, not a crash.
+        self.missing_ports: list[str] = []
+        #: Stimulus values a port could not hold. Also a verdict, not a crash.
+        self.bad_stimulus: list[str] = []
         #: `until` steps whose condition never occurred. Recorded rather than
         #: raised: a timeout is a verdict about the design, and one testpoint
         #: timing out must not stop the rest of the suite reporting.
@@ -363,9 +367,9 @@ class Env:
                 continue
             handle = getattr(self.dut, name, None)
             if handle is not None:
-                handle.value = int(self.idle.get(name, 0))
-        for name, handle in handles:
-            handle.value = 1 - inactive_value(name)
+                self._drive(name, self.idle.get(name, 0))
+        for name, _ in handles:
+            self._drive(name, 1 - inactive_value(name))
         if hasattr(self.ref, "reset"):
             self.ref.reset()
         # Lockstep through reset too. The DUT takes `cycles + 1` edges here, and
@@ -375,8 +379,8 @@ class Env:
         for _ in range(cycles):
             await self.tick(1)
             self._advance_model({})
-        for name, handle in handles:
-            handle.value = inactive_value(name)
+        for name, _ in handles:
+            self._drive(name, inactive_value(name))
         await self.tick(1)
         self._advance_model({})
 
@@ -402,9 +406,40 @@ class Env:
         for name, value in inputs.items():
             port = getattr(self.dut, name, None)
             if port is None:
-                raise AttributeError(f"{self.tp_uid}: DUT has no port {name!r}")
-            port.value = int(value)
+                # Recorded, not raised. Raising here killed the testpoint before
+                # `finish()` could write its record, so a candidate that simply
+                # omitted a declared input produced NO verdict rather than a
+                # verdict naming the missing port -- and the suite lost the
+                # evidence for the very defect it had found. `_resolve` turns
+                # this into a failing check with the port named.
+                if name not in self.missing_ports:
+                    self.missing_ports.append(name)
+                continue
+            self._drive(name, value)
         await self.settle(inputs, hold=hold, until=until, timeout=timeout)
+
+    def _drive(self, name: str, value) -> None:
+        """Write one input, recording rather than raising when it will not take.
+
+        Two things go wrong here and both used to kill the testpoint before
+        `finish()` could write its record -- so the suite lost the evidence for
+        the very defect it had just found. A value the port cannot hold (2 on a
+        1-bit input) and a handle the simulator will not let us write (Verilator
+        has optimised the signal into a constant, or it is not really an input)
+        are both verdicts about this run, and `_resolve` reports them as failing
+        checks that name the port.
+        """
+        handle = getattr(self.dut, name, None)
+        if handle is None:
+            if name not in self.missing_ports:
+                self.missing_ports.append(name)
+            return
+        try:
+            handle.value = int(value)
+        except Exception as exc:  # noqa: BLE001 -- any refusal is the same verdict
+            note = f"{name}={value!r} could not be driven ({type(exc).__name__}: {exc})"
+            if note not in self.bad_stimulus:
+                self.bad_stimulus.append(note)
 
     async def settle(
         self,
@@ -484,8 +519,25 @@ class Env:
 
         await Timer(1, unit="step")
 
-    def sample(self, signal: str) -> int:
-        return _plain(getattr(self.dut, signal).value)
+    def sample(self, signal: str) -> int | None:
+        """Read one DUT output, or `None` if the design does not expose it.
+
+        A missing port used to raise `AttributeError` out of `drive()`, which
+        killed the testpoint before `finish()` could write its record -- so a
+        candidate that simply omitted a declared output produced no verdict at
+        all rather than a verdict saying so. That is the same failure the
+        per-testpoint record exists to prevent: a crash mid-suite must cost the
+        crashing testpoint, never the evidence.
+
+        `None` is not swallowed. It enters the trace as the DUT's value, the
+        model's declared value is not `None`, and the comparison fails at the
+        first state with `got={'<port>': None}` -- which names the missing port
+        instead of a traceback that names cocotb's `handle.py`.
+        """
+        handle = getattr(self.dut, signal, None)
+        if handle is None:
+            return None
+        return _plain(handle.value)
 
     def expect(self, stim: dict) -> dict:
         """Expected outputs from the reference model, never from the testcase.
@@ -624,6 +676,29 @@ class Env:
 
         for chk_uid, signals in self._registered.items():
             if not signals:
+                continue
+            missing = self.missing_ports + [
+                s for s in signals
+                if getattr(self.dut, s, None) is None and s not in self.missing_ports
+            ]
+            if self.bad_stimulus:
+                self.sb.record(
+                    chk_uid, signals,
+                    Verdict(False, reason="; ".join(self.bad_stimulus)),
+                    ctx=dict(self._inputs), timeouts=self.timeouts,
+                )
+                continue
+            if missing:
+                verdict = Verdict(
+                    False,
+                    reason=f"the design does not expose "
+                           f"{', '.join(sorted(missing))}; the contract declares "
+                           f"{'it' if len(missing) == 1 else 'them'} as "
+                           f"{'a port' if len(missing) == 1 else 'ports'}, so the "
+                           f"stimulus could not be applied or the outputs read",
+                )
+                self.sb.record(chk_uid, signals, verdict,
+                               ctx=dict(self._inputs), timeouts=self.timeouts)
                 continue
             if not self._trace:
                 verdict = Verdict(

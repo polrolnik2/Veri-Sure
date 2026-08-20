@@ -196,3 +196,80 @@ def test_a_clockless_design_records_its_evaluation(tmp_path):
     assert len(env._trace) == 4
     sb = _rows(env)
     assert sb.failed == [], sb.mismatches
+
+
+# ------------------------------------------------- a crash is not a verdict
+
+
+class _Immutable:
+    """A handle the simulator refuses to write, as Verilator's do for a signal
+    it has optimised into a constant."""
+
+    def __init__(self):
+        self._value = 0
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, _):
+        raise TypeError("Attempted setting an immutable object")
+
+
+def test_a_port_the_design_does_not_have_is_a_verdict_not_a_crash(tmp_path):
+    """A crash before `finish()` costs the evidence, not just the testpoint.
+
+    `drive()` raised `AttributeError` on a missing port and `sample()` raised it
+    on a missing output, so a candidate that simply omitted a declared port
+    produced NO record at all -- and the suite lost the verdict for exactly the
+    defect it had found. Measured across the 64 ChipVerilog references, this
+    accounted for 7 designs reporting no record.
+    """
+    env = Env(_Dut(y=0), "TP-0001", _Model(), tmp_path, input_ports=["a", "gone"])
+    env._drive("gone", 1)
+    env.check("CHK-0001", "y")
+    env._resolve()
+    assert env.sb.failed == ["CHK-0001"]
+    assert "gone" in env.sb.mismatches[0]["reason"]
+
+
+def test_a_value_the_port_cannot_hold_is_a_verdict_not_a_crash(tmp_path):
+    """2 on a 1-bit input. `gate_suite` rejects it in a generated suite, but the
+    runtime must not lose the record when one reaches it anyway."""
+    class _OneBit:
+        def __init__(self):
+            self._v = 0
+
+        @property
+        def value(self):
+            return self._v
+
+        @value.setter
+        def value(self, v):
+            if v > 1:
+                raise ValueError(f"{v} is not convertible to Logic")
+            self._v = v
+
+    dut = _Dut(y=0)
+    dut.a = _OneBit()
+    env = Env(dut, "TP-0001", _Model(), tmp_path, input_ports=["a"])
+    env._drive("a", 2)
+    env.check("CHK-0001", "y")
+    env._resolve()
+    assert env.sb.failed == ["CHK-0001"]
+    assert "could not be driven" in env.sb.mismatches[0]["reason"]
+
+
+def test_a_handle_the_simulator_will_not_write_is_a_verdict_too(tmp_path):
+    """And it must be caught in `reset()`, not only in `drive()`.
+
+    Reset drives every input to its idle value before the stimulus runs, so an
+    unwritable handle killed the testpoint one step earlier than `drive()` --
+    before a single vector had been applied.
+    """
+    dut = _Dut(y=0)
+    dut.a = _Immutable()
+    env = Env(dut, "TP-0001", _Model(), tmp_path, input_ports=["a"])
+    env._drive("a", 0)
+    assert env.bad_stimulus and "immutable" in env.bad_stimulus[0]

@@ -52,12 +52,21 @@ def contract_from_rtl(path: Path) -> dict | None:
     text = path.read_text(errors="replace")
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"//[^\n]*", "", text)
-    m = _PORT_RE.search(text)
-    if not m:
+    # The module named after the file, not merely the first one in it. Several
+    # references define helper modules ahead of the top -- `cordic.v` opens with
+    # an iteration stage -- and taking the first gave a port list belonging to a
+    # different design, so the probe drove ports the DUT does not have and
+    # reported a harness failure that was entirely its own.
+    matches = list(_PORT_RE.finditer(text))
+    if not matches:
         return None
+    m = next((x for x in matches if x.group(1) == path.stem), matches[0])
     top = m.group(1)
+    body = text[m.start():]
+    end = re.search(r"\bendmodule\b", body)
+    body = body[:end.end()] if end else body
     io, seen = [], set()
-    for direction, hi, lo, name in _DECL_RE.findall(text):
+    for direction, hi, lo, name in _DECL_RE.findall(body):
         if name in seen:
             continue
         seen.add(name)

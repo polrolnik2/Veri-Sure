@@ -453,3 +453,60 @@ is severed (a stimulus step states its own `hold` or waits `until` a condition),
 and the field is now optional with one definition quoted into every prompt that
 mentions it: **edges of the declared clock**, not enable ticks. On a prescaled
 design that distinction is the difference between 5 and 26.
+
+### Breadth: does the harness discriminate on all 64 designs?
+
+The measurements above are one design. `benchmarks/harness_discrimination.py`
+asks the same question benchmark-wide and costs no model calls: build a real
+specflow suite against each golden reference, hand it a reference model that is
+**deliberately wrong** — every output zero, forever — and require the harness to
+report FAIL. A design that passes an all-zeros oracle was not verified.
+
+Unlike `harness_liveness.py`, this drives the real `Env`: declared idle values,
+the reset sequence, the per-edge lockstep advance, the recorded trace and the
+sequence comparison.
+
+| | first sweep | after the fixes below |
+| --- | --- | --- |
+| rejected the null oracle | 29 | **45** |
+| passed it | 2 | 1 |
+| no record written | 7 | 0 |
+| did not elaborate | 26 | 18 |
+
+**Of the 46 designs that elaborate, 45 reject a null oracle.** The one that
+passes (`instruction_mem`) has outputs that never move under the liveness probe
+either, so its agreement is honest. **No design whose outputs move passes a null
+oracle** — that is the discrimination claim, benchmark-wide.
+
+The 18 that do not elaborate are the corpus, not the harness: 13 instantiate
+vendor RAM macros (`rf_sub`, `dc_ram_sub`, `ic_tag_sub`, the TLB RAMs) that are
+**defined nowhere in the ChipVerilog release**, and 5 `double_fpu` designs trip
+Verilator on duplicate signal declarations.
+
+Six defects the sweep found, all now fixed:
+
+* **A crash was costing the evidence, not just the testpoint.** `drive()` raised
+  on a port the DUT lacks and `sample()` raised on a missing output, so a
+  candidate that omitted a declared port produced **no record at all** rather
+  than a verdict naming the port — 7 designs. A port that cannot be found, a
+  value the port cannot hold (2 on a 1-bit input) and a handle the simulator
+  refuses to write are now all verdicts, and `reset()` is guarded too, since it
+  drives every input to idle one step before the first vector.
+* **A uniform random sweep never decodes a decoder.** `default_stimulus` drew
+  32-bit inputs uniformly, so `or1200_cfgr` — which gates its whole decode on
+  `~|spr_addr[31:4]` — sat at its reset value for the entire run and then
+  *agreed* with the all-zeros model. Corner vectors come first now, including
+  each input walked through small values while the rest sit at zero.
+* **`--no-timing` and `-Wno-fatal`.** Every non-blocking assignment in the
+  OpenCores i2c core is written `sda_oen <= #1 1'b1;`, and Verilator stopped
+  with NEEDTIMINGOPT before a single check ran; the i2c core then stopped on a
+  WIDTHTRUNC *warning*. Lint findings belong to the lint gate — which runs
+  `-Wno-fatal` itself — so leaving them fatal here rejected a correct design at
+  build time for a reason about the invocation.
+* **Child modules were collected one level deep.** `i2c_master_top` instantiates
+  `i2c_master_byte_ctrl`, which instantiates `i2c_master_bit_ctrl`, and the
+  grandchild was never supplied. Collection is transitive now.
+* **The contract recovered from RTL took the first module in the file**, not the
+  one named after it — so on `cordic.v`, which opens with an iteration stage,
+  the probe drove ports belonging to a different design and reported a harness
+  failure that was entirely its own.

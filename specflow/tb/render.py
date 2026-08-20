@@ -71,8 +71,47 @@ def default_stimulus(contract: dict, limit: int = 64) -> list[dict]:
             for combo in itertools.product(*[range(1 << w) for _, w in inputs])
         ]
 
+    # Corners first, then random fill. A uniform draw over a 32-bit input is
+    # never small, so a decoder is never decoded: `or1200_cfgr` reads a
+    # configuration register out of `spr_addr[3:0]` and gates the whole decode
+    # on `~|spr_addr[31:4]`, so 64 uniform 32-bit draws left `spr_dat_o` at its
+    # reset value for the entire run -- and the design then AGREED with a
+    # reference model that declares every output zero forever. The suite passed
+    # having exercised nothing, which is a stimulus failure wearing the costume
+    # of a verdict.
+    #
+    # Not a substitute for the testcase agent's stimulus, which is what a real
+    # run uses. This is the floor beneath it.
     rng = random.Random(1337)  # noqa: S311 -- reproducibility over entropy
-    return [{n: rng.getrandbits(w) for n, w in inputs} for _ in range(limit)]
+    names = [n for n, _ in inputs]
+    corners: list[dict] = []
+    for value in (0, 1, 2, 3):
+        corners.append({n: min(value, (1 << w) - 1) for n, w in inputs})
+    corners.append({n: (1 << w) - 1 for n, w in inputs})
+    # One input walked through the small values while the rest sit at zero: a
+    # decode is usually a function of ONE field, and a vector that moves every
+    # input at once never isolates it.
+    for name, width in inputs:
+        top = (1 << width) - 1
+        for value in (1, 2, 3, top):
+            corners.append({n: (min(value, top) if n == name else 0) for n in names})
+
+    seen: set[tuple] = set()
+    out: list[dict] = []
+    for vector in corners:
+        key = tuple(vector[n] for n in names)
+        if key not in seen:
+            seen.add(key)
+            out.append(vector)
+        if len(out) >= limit:
+            return out
+    while len(out) < limit:
+        vector = {n: rng.getrandbits(w) for n, w in inputs}
+        key = tuple(vector[n] for n in names)
+        if key not in seen:
+            seen.add(key)
+            out.append(vector)
+    return out
 
 
 @dataclass

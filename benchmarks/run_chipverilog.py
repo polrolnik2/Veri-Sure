@@ -58,7 +58,16 @@ def child_sources(kids: list[str]) -> list[Path]:
     """
     out = []
     for k in kids:
+        # A child that is itself a task comes first -- that file is the one the
+        # benchmark scores against. Failing that, ANY definition in the tree:
+        # `or1200_rf` instantiates `rf_sub`, which is not a task and lives
+        # inside another module's file, so requiring a task directory left 20
+        # of the 64 references unable to elaborate at all.
         hits = [p for p in DES.rglob(f"{k}.v") if p.parent.name == k]
+        if not hits:
+            hits = sorted(DES.rglob(f"{k}.v"))
+        if not hits:
+            hits = sorted((REPO_ROOT / "benchmarks" / "chipverilog" / "Src").rglob(f"{k}.v"))
         out.extend(hits[:1])
     return out
 
@@ -80,16 +89,36 @@ def submodules(task_dir: Path, top: str) -> list[str]:
     for path in DES.rglob("*.v"):
         defined |= set(re.findall(r"^\s*module\s+(\w+)", strip(path.read_text(errors="ignore")), re.M))
 
-    src = strip((task_dir / f"{top}.v").read_text(errors="ignore"))
-    own = set(re.findall(r"^\s*module\s+(\w+)", src, re.M))
     keywords = {
         "if", "else", "for", "while", "case", "begin", "end", "assign", "always",
         "module", "endmodule", "input", "output", "inout", "wire", "reg",
         "parameter", "localparam", "initial", "posedge", "negedge", "function",
         "task", "generate", "endgenerate", "defparam",
     }
-    found = re.findall(r"^[ \t]*(\w+)[ \t]+(?:#\s*\([^;]*?\)[ \t\n]*)?(\w+)[ \t]*\(", src, re.M)
-    return sorted({m for m, _ in found if m in defined and m not in own and m not in keywords})
+
+    def instantiated(path: Path) -> tuple[set[str], set[str]]:
+        src = strip(path.read_text(errors="ignore"))
+        own = set(re.findall(r"^\s*module\s+(\w+)", src, re.M))
+        found = re.findall(
+            r"^[ \t]*(\w+)[ \t]+(?:#\s*\([^;]*?\)[ \t\n]*)?(\w+)[ \t]*\(", src, re.M)
+        return {m for m, _ in found if m in defined and m not in keywords}, own
+
+    # TRANSITIVE. A child's own children are needed too, and stopping at depth
+    # one left 15 of the 64 references unable to elaborate: `i2c_master_top`
+    # instantiates `i2c_master_byte_ctrl`, which instantiates
+    # `i2c_master_bit_ctrl` -- and the grandchild was never supplied, so
+    # Verilator stopped with MODMISSING on a design whose whole subtree is in
+    # the tree.
+    seen: set[str] = set()
+    queue = [(task_dir / f"{top}.v", {top})]
+    while queue:
+        path, defined_here = queue.pop()
+        kids, own = instantiated(path)
+        for kid in sorted(kids - own - defined_here - seen):
+            seen.add(kid)
+            for child in child_sources([kid]):
+                queue.append((child, defined_here | own | {kid}))
+    return sorted(seen)
 
 
 def compile_gate(rtl: Path, top: str, extra: list[Path]) -> dict:
