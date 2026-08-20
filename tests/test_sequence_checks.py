@@ -273,3 +273,23 @@ def test_a_handle_the_simulator_will_not_write_is_a_verdict_too(tmp_path):
     env = Env(dut, "TP-0001", _Model(), tmp_path, input_ports=["a"])
     env._drive("a", 0)
     assert env.bad_stimulus and "immutable" in env.bad_stimulus[0]
+
+
+def test_internal_trace_is_off_unless_asked(tmp_path, monkeypatch):
+    """The per-edge internal dump is a debug instrument. Unset, `_record` must
+    do no extra work and `finish` must write no extra file -- it runs inside
+    every testpoint of every suite."""
+    import importlib
+
+    import specflow.tb.runtime as runtime
+
+    monkeypatch.delenv("SPECFLOW_TRACE_INTERNALS", raising=False)
+    importlib.reload(runtime)
+    assert runtime._INTERNALS == []
+
+    monkeypatch.setenv("SPECFLOW_TRACE_INTERNALS", "cnt, clk_en ,")
+    importlib.reload(runtime)
+    assert runtime._INTERNALS == ["cnt", "clk_en"]
+
+    monkeypatch.delenv("SPECFLOW_TRACE_INTERNALS", raising=False)
+    importlib.reload(runtime)

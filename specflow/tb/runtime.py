@@ -31,6 +31,24 @@ from typing import Any
 
 from ..ports import idle_value, inactive_value, is_clock, is_reset
 
+#: Internal signals to record per edge, from `SPECFLOW_TRACE_INTERNALS`.
+#:
+#: A defect in a reference model is almost never visible in its outputs at the
+#: edge where it happens -- both control-model bugs were "read a value from the
+#: wrong clock generation", and each surfaced as an output divergence many edges
+#: later, in a different signal, after the model had fallen a whole command
+#: behind. Localising one means comparing the two sides' INTERNALS edge by edge,
+#: which is how both were pinned.
+#:
+#: An environment variable rather than a constructor argument because this has
+#: to cross into the cocotb subprocess, which the harness does not construct --
+#: the same reason `SPECFLOW_COMPARE` is one. Debug only: unset, `_record` does
+#: no extra work and `finish` writes no extra file.
+_INTERNALS: list[str] = [
+    n.strip() for n in os.environ.get("SPECFLOW_TRACE_INTERNALS", "").split(",")
+    if n.strip()
+]
+
 #: Edges an `until` step waits before giving up. Generous on purpose: a
 #: prescaled design can legitimately take hundreds -- one i2c testpoint sets a
 #: prescaler needing 506 edges for a single command -- and a bound that is too
@@ -282,6 +300,9 @@ class Env:
         #: than a second simulation, and it is what lets a check compare
         #: SEQUENCES instead of one sampled point per stimulus vector.
         self._trace: list[tuple[dict, dict]] = []
+        #: Per-edge internal signals, when `SPECFLOW_TRACE_INTERNALS` names any.
+        #: Empty and untouched otherwise -- see `_INTERNALS`.
+        self._internals: list[tuple[dict, dict]] = []
         #: Signals registered per check uid, in the order the renderer emitted
         #: them. The comparison runs at `finish()` over the whole trace.
         self._registered: dict[str, list[str]] = {}
@@ -625,6 +646,11 @@ class Env:
             self.step_index,
             self._inputs,
         ))
+        if _INTERNALS:
+            self._internals.append((
+                {n: self.sample(n) for n in _INTERNALS},
+                {n: _plain(getattr(self.ref, n, None)) for n in _INTERNALS},
+            ))
 
     def check(self, chk_uid: str, *signals: str) -> None:
         """Register a check. The comparison happens at `finish()`.
@@ -766,6 +792,21 @@ class Env:
         (self.results_dir / f"{self.tp_uid}.json").write_text(
             json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
+        if _INTERNALS:
+            (self.results_dir / f"{self.tp_uid}.trace.json").write_text(
+                json.dumps({
+                    "tp_uid": self.tp_uid,
+                    "signals": _INTERNALS,
+                    "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
+                    "edges": [
+                        {"edge": i, "step": t[2], "inputs": t[3],
+                         "dut": t[0], "model": t[1],
+                         "dut_internal": v[0], "model_internal": v[1]}
+                        for i, (t, v) in enumerate(zip(self._trace, self._internals))
+                    ],
+                }, indent=2, ensure_ascii=False, default=str) + "\n",
+                encoding="utf-8",
+            )
 
         assert not self.sb.failed, (
             f"{self.tp_uid}: {len(self.sb.failed)} of {len(self.sb.invoked)} checks "
