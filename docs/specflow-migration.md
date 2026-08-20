@@ -838,3 +838,120 @@ and until now only the scratch copy had been scored. `benchmarks/controls/
 i2c_master_bit_ctrl/ref_model.py` scores **168/168 against golden and 28/168
 against the cv-j3 candidate, separation 140** — so the artifact in the
 repository is the one the claims were measured on, not a near copy of it.
+
+## Phase 3: a defect taxonomy across three shapes
+
+Three designs, one generation configuration (`gpt-5.6-luna`, effort `xhigh`,
+monolithic reference model plus per-requirement judge). Every model is scored
+against golden RTL and against a wrong DUT, and **both numbers are reported**.
+
+| design | shape | vs golden | vs wrong DUT | separation | refmodel rounds |
+| --- | --- | --- | --- | --- | --- |
+| `alu` | combinational | **40 / 40** | 0 / 40 | +40 | 1 |
+| `or1200_gmultp2_32x32` | 2-stage pipeline | **36 / 36** | 4 / 36 | +32 | 1 |
+| `i2c_master_bit_ctrl` (round 0) | prescaled FSM + 4-stage input filter | 34 / 181 | 11 / 181 | +23 | — |
+| `i2c_master_bit_ctrl` (round 4) | " | 18 / 181 | 27 / 181 | **−9** | 5 |
+
+The i2c baseline is not assumed. The hand-written control oracle scores
+**181/181 on this run's own testplan** (wrong candidate 11/181, separation 170),
+so 181/181 is reachable with this stimulus and this coverage model, and the
+generated model's shortfall is a model defect rather than a harness or stimulus
+limit.
+
+### Shape predicts it, in this sample
+
+The two designs whose entire behaviour is one expression or two registers were
+correct on the first round and needed no repair. The design with a
+synchroniser, a majority filter, a prescaler and a twelve-phase FSM was not, and
+five rounds did not fix it. That is a sample of three and should be read as
+such — but the split is not marginal, it is 40/40 and 36/36 against 34/181.
+
+Notably, gmult contains the exact trap that defeated the hand-written control
+oracle twice, and the generated model handled it correctly:
+
+```python
+previous_p0 = self.p0                    # capture BEFORE overwriting
+self.p0 = self.mask(product, 64)
+if not reset_active:
+    self.p1 = self.mask(previous_p0, 64)  # p1 reads the PREVIOUS p0
+```
+
+It also reproduces golden's asymmetric reset — `RST` is asynchronous and
+affects only `p1`, while `p0` advances unconditionally. So "reads a value from
+the wrong clock generation" is not a defect the generator commits merely
+because a design contains the opportunity.
+
+### It is NOT the control's defect class, and it is not point-localisable
+
+The control's two bugs were both one-line, single-stage, and independently
+repairable: fixing them took it 113 → 159 → 168. The generated i2c model is not
+like that.
+
+**Localised, by the three-way trace** (DUT / control / generated) on `TP-0006`.
+The generated model's `sSCL` and `sSDA` never move at all, where both the DUT
+and the 181/181 control drop them at edge 1 and restore them at edge 4:
+
+| edge | `scl_i` | DUT `sSCL` | control | generated |
+| --- | --- | --- | --- | --- |
+| e1–e3 | 1 | 0 | 0 | **1** |
+| e9 | 0 | 0 | 0 | **1** |
+
+The cause is visible in `_update_filter`: `if not ena:` takes a branch that
+skips the filter shift entirely. Golden gates only `filter_cnt`, and forcing it
+to zero makes `~|filter_cnt` **true**, so golden's filter shifts on every cycle
+while disabled — it runs faster, it does not stop.
+
+**But repairing it does not help, and that is the finding.** Two attempts, both
+measured rather than reasoned:
+
+| repair | vs golden | separation |
+| --- | --- | --- |
+| none (round 0 as generated) | 34 / 181 | +23 |
+| the whole filter transliterated faithfully | 18 / 181 | −12 |
+| ONLY the `ena` gating, phase left alone | 11 / 181 | −10 |
+
+Both make the model match the **wrong** RTL better than golden. The model's
+phase convention is load-bearing across every downstream stage, so a
+single-stage repair desynchronises the rest. On this design the shortfall is
+**not attributable to a point defect** — which matters for the repair loop,
+because an agent shown a failing check can fix a point defect and cannot fix a
+global disagreement about pipeline phase.
+
+The divergence is behavioural, not phasing. All 184 mismatches are "a state has
+the wrong value" and none are "one side ran out of states" — and the
+transactional criterion already ignores durations, so the model emits a
+different sequence of output *values*, not merely different timing.
+
+### The judge cannot see it, and made it worse
+
+Four judge rounds, 231 judgements each, and `ena` still freezes the filter in
+every one of rounds 0 through 4. The judge compares the model against the
+**specification**, and the specification licenses what the model wrote:
+
+> `ena`: Core enable signal. **It gates normal timing/filter operation.** When
+> `ena` is low, the clock divider is reloaded and the input filter counter is
+> reset, preventing normal bit-timing progression.
+
+The model implemented the summary clause. Golden implements the precise one
+that follows it — the *counter* is reset — which has the opposite effect. A
+judge that compares a model to the specification cannot catch a defect the
+specification supports. Only golden RTL exposes it, and production has no
+golden.
+
+Worse, the loop **degraded** the model. Round 0 was wrong but active and
+discriminating (+23). Round 4 is inert: driven through 60 edges of varied
+stimulus it emits **one distinct output state**, where round 0 emits five. Its
+score inverts to −9 because a constant model agrees with whichever DUT is
+quietest, and the wrong candidate is quieter than golden.
+
+### The gate that should have caught it does not exist
+
+`refmodel/validate.py`'s behavioural checks are: it imports, it instantiates,
+it is deterministic, and it writes every declared output. **A constant model
+passes all four.** The conformance suite already holds the DUT side to the
+right standard — every fixture must also *reject a tied-off DUT* — and there is
+no equivalent requirement on the model itself.
+
+That is the concrete, actionable gap this measurement found: a reference model
+whose outputs never move cannot discriminate anything, and nothing in the
+pipeline says so.
