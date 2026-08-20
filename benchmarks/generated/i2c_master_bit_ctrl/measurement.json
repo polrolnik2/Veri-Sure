@@ -45,7 +45,31 @@
     },
     "hold": 60,
     "compare": "transactional",
-    "verdict": "DEFECTIVE, and vacuous from round 1 onward. The shipped model returns a single constant output state, so it scores HIGHER against known-wrong RTL than against golden -- the separation inverts."
+    "verdict": "DEFECTIVE, and vacuous from round 1 onward. The shipped model returns a single constant output state, so it scores HIGHER against known-wrong RTL than against golden -- the separation inverts.",
+    "per_round_liveness": {
+      "measured_with": "specflow.refmodel.compose.render on agent_io/refmodel_r{N}_response.txt, driven through default_stimulus (64 corner-first vectors)",
+      "round0": {
+        "distinct_output_states": 4,
+        "verdict": "active",
+        "vs_golden": 34,
+        "separation": 23
+      },
+      "round1": {
+        "distinct_output_states": 1,
+        "verdict": "INERT"
+      },
+      "round2": {
+        "distinct_output_states": 1,
+        "verdict": "INERT"
+      },
+      "round3_shipped": {
+        "distinct_output_states": 1,
+        "verdict": "INERT",
+        "vs_golden": 18,
+        "separation": -9
+      },
+      "finding": "The repair loop made it inert at the FIRST repair round and it never recovered. The model did not start vacuous -- per-requirement judging drove it there, and reported met on 77 of 77 requirements for every inert round."
+    }
   },
   "gates_that_passed_it": {
     "G4_refmodel_gate": "0 issues",

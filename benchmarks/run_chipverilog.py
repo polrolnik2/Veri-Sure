@@ -121,7 +121,50 @@ def submodules(task_dir: Path, top: str) -> list[str]:
     return sorted(seen)
 
 
-def compile_gate(rtl: Path, top: str, extra: list[Path]) -> dict:
+def scorer_language_flag(task_dir: Path | None) -> str:
+    """Which iverilog dialect the SCORER will actually hold this task to.
+
+    Not a blanket choice, because the scorer's routing is not blanket. A task
+    that ships a testbench is scored by SIMULATING it, and the deciding compile
+    is the scorer's no-language-flag retry (formal_equivalence.py:1456) --
+    iverilog 12's default, `-g2005`, which rejects `logic` in a port list. A
+    task with NO testbench never reaches iverilog: it goes to yosys
+    equivalence, which accepts SystemVerilog, so port dialect costs it nothing.
+
+    Measured in both directions, on real generated RTL:
+
+      * `alu` ships alu_tb_0.v. A design our transactional testbench passed
+        40/40 against golden was scored `function_fail` purely for declaring
+        `input logic [15:0] a`; rewriting the four port lines moved it to
+        `pass`.
+      * `or1200_gmultp2_32x32` ships no testbench. A design with those SAME
+        `input logic` ports was scored `pass` by temporal induction (k=16).
+
+    So holding every task to `-g2005` would reject correct work -- the gate
+    would fail gmult, which the benchmark passes. The routing decision is taken
+    from the scorer's own `classify_module_dir`, so the gate cannot drift away
+    from the authority it is mirroring. If that cannot be consulted we fall
+    back to the permissive flag: a gate that wrongly rejects sends the repair
+    loop after a correct design, which is worse than one that wrongly admits.
+    """
+    if task_dir is None:
+        return "-g2012"
+    try:
+        from benchmarks.chipverilog.tools.formal_equivalence import (
+            classify_module_dir,
+            discover_reference_file,
+        )
+
+        reference = discover_reference_file(Path(task_dir))
+        tb_info, _ = classify_module_dir(Path(task_dir), reference)
+    except Exception:  # noqa: BLE001 -- vendored tool absent or restructured
+        return "-g2012"
+    return "-g2005" if tb_info is not None else "-g2012"
+
+
+def compile_gate(
+    rtl: Path, top: str, extra: list[Path], task_dir: Path | None = None
+) -> dict:
     """ChipVerilog's first gate: iverilog must elaborate `top` by its own name.
 
     Verilog-2005, NOT `-g2012`, and the difference decides scores. The scorer
@@ -152,13 +195,14 @@ def compile_gate(rtl: Path, top: str, extra: list[Path]) -> dict:
     """
     if not rtl.exists() or not rtl.stat().st_size:
         return {"status": "fail", "reason": "no candidate RTL was produced"}
-    cmd = ["iverilog", "-g2005", "-s", top, "-o", "/dev/null", str(rtl), *map(str, extra)]
+    cmd = ["iverilog", scorer_language_flag(task_dir), "-s", top, "-o", "/dev/null", str(rtl), *map(str, extra)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     return {
         "status": "pass" if proc.returncode == 0 else "fail",
         "exit_code": proc.returncode,
         "stderr": proc.stderr[-4000:],
         "command": " ".join(cmd),
+        "language_flag": cmd[1],
     }
 
 
@@ -272,7 +316,7 @@ async def run(args: argparse.Namespace) -> dict:
             "reasoning_tokens") or 0
     record.setdefault("tokens", {})["specflow"] = sflow
 
-    record["compile_gate"] = compile_gate(out / "rtl.sv", top, kid_files)
+    record["compile_gate"] = compile_gate(out / "rtl.sv", top, kid_files, task_dir)
     record["submodule_sources_supplied"] = [p.name for p in kid_files]
 
     (out / "baseline.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

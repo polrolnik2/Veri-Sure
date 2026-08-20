@@ -16,6 +16,7 @@ design the scorer will refuse to build.
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +25,24 @@ from benchmarks.run_chipverilog import compile_gate
 needs_iverilog = pytest.mark.skipif(
     not shutil.which("iverilog"), reason="iverilog not installed"
 )
+
+DES = Path("benchmarks/chipverilog/Des")
+
+#: A task that ships a testbench, so the scorer simulates it and the dialect
+#: decides. `alu` was scored `function_fail` purely for SystemVerilog ports.
+TASK_WITH_TB = DES / "mips_16" / "alu"
+
+#: A task that ships none, so the scorer proves equivalence with yosys and
+#: never invokes iverilog. `or1200_gmultp2_32x32` was scored `pass` (temporal
+#: induction, k=16) with `input logic` ports -- the same declarations that cost
+#: `alu` its verdict.
+TASK_WITHOUT_TB = DES / "or1200" / "or1200_gmultp2_32x32"
+
+needs_corpus = pytest.mark.skipif(
+    not TASK_WITH_TB.exists() or not TASK_WITHOUT_TB.exists(),
+    reason="ChipVerilog corpus not present",
+)
+
 
 #: Verilog-2005 port declarations; a SystemVerilog body. What the RTL prompt asks for.
 PORTABLE_PORTS = """
@@ -44,17 +63,19 @@ endmodule
 """
 
 
+@needs_corpus
 @needs_iverilog
 def test_the_gate_rejects_systemverilog_port_declarations(tmp_path):
     rtl = tmp_path / "rtl.sv"
     rtl.write_text(SV_PORTS, encoding="utf-8")
-    result = compile_gate(rtl, "alu", [])
+    result = compile_gate(rtl, "alu", [], TASK_WITH_TB)
     assert result["status"] == "fail", (
         "a design the scorer diverts to formal must not pass the compile gate"
     )
     assert "SystemVerilog" in result["stderr"], result["stderr"]
 
 
+@needs_corpus
 @needs_iverilog
 def test_the_gate_still_allows_systemverilog_inside_the_body(tmp_path):
     """The constraint is the port list alone, or it would reject correct work.
@@ -66,7 +87,7 @@ def test_the_gate_still_allows_systemverilog_inside_the_body(tmp_path):
     """
     rtl = tmp_path / "rtl.sv"
     rtl.write_text(PORTABLE_PORTS, encoding="utf-8")
-    result = compile_gate(rtl, "alu", [])
+    result = compile_gate(rtl, "alu", [], TASK_WITH_TB)
     assert result["status"] == "pass", result["stderr"]
 
 
@@ -85,3 +106,44 @@ def test_the_two_differ_only_in_the_port_list(tmp_path):
         "the shared body must actually contain SystemVerilog, or the "
         "body-is-still-allowed test proves nothing"
     )
+
+
+@needs_corpus
+def test_the_dialect_is_only_enforced_where_the_scorer_enforces_it():
+    """A uniform -g2005 gate rejects correct work, which is the mirror defect.
+
+    Tightening every task to Verilog-2005 fails `or1200_gmultp2_32x32` -- a
+    design the benchmark scores `pass`. A gate that wrongly rejects is not the
+    safe direction: it sends the repair loop after a design that was already
+    correct.
+    """
+    from benchmarks.run_chipverilog import scorer_language_flag
+
+    assert scorer_language_flag(TASK_WITH_TB) == "-g2005"
+    assert scorer_language_flag(TASK_WITHOUT_TB) == "-g2012"
+
+
+@needs_corpus
+@needs_iverilog
+def test_systemverilog_ports_pass_where_no_testbench_will_ever_see_them(tmp_path):
+    rtl = tmp_path / "rtl.sv"
+    rtl.write_text(SV_PORTS.replace("module alu", "module or1200_gmultp2_32x32"),
+                   encoding="utf-8")
+    result = compile_gate(rtl, "or1200_gmultp2_32x32", [], TASK_WITHOUT_TB)
+    assert result["status"] == "pass", (
+        "this task is scored by yosys equivalence, which accepts SystemVerilog"
+    )
+
+
+def test_the_flag_falls_back_to_permissive_when_routing_is_unknown(tmp_path):
+    """Unknown routing must not become a rejection.
+
+    The gate mirrors an authority it may fail to consult -- a vendored tool
+    that is absent or restructured. Failing open keeps an unrecognised task
+    scoring as it did before; failing closed would reject every such task on a
+    guess.
+    """
+    from benchmarks.run_chipverilog import scorer_language_flag
+
+    assert scorer_language_flag(None) == "-g2012"
+    assert scorer_language_flag(tmp_path) == "-g2012"
