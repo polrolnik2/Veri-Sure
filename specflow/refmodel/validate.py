@@ -139,6 +139,17 @@ def _random_inputs(contract: dict, rng: random.Random) -> dict:
     return values
 
 
+def _hashable(value):
+    """Outputs are ints, but a model may return a list or dict. The gate must
+    not be the thing that crashes on a malformed model -- that is what the
+    checks above are for."""
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
 def _behavioural_checks(
     source: str, contract: dict, expected_base: str, workdir: Path
 ) -> list[Issue]:
@@ -259,6 +270,65 @@ def _behavioural_checks(
                       f"then {b!r} on one instance, and a combinational model "
                       f"depends on its inputs and nothing else")
             )
+
+    # -- check 3d: the outputs must actually MOVE.
+    #
+    # Every check above is satisfied by a model that returns the same constant
+    # forever: it imports, it instantiates, it is reproducible, and it writes
+    # every declared port. It is also useless -- a constant oracle agrees with
+    # whichever DUT is quietest and discriminates nothing.
+    #
+    # Not hypothetical. The i2c reference model was regenerated five times under
+    # per-requirement judging, and round 4 emitted ONE distinct output state over
+    # 60 edges of varied stimulus where round 0 emitted five. Scored against
+    # golden RTL it went 34/181 to 18/181, and its separation from a known-WRONG
+    # design inverted to -9: the vacuous model matched the wrong design better
+    # than the right one. Nothing in the pipeline said so.
+    #
+    # This is the model-side counterpart of a rule the harness already applies to
+    # the DUT side -- every conformance fixture must also REJECT a tied-off DUT,
+    # which is the only check that caught `clock_named_clock` agreeing for the
+    # wrong reason.
+    #
+    # A warning rather than an error, deliberately. A design can be legitimately
+    # quiet under this vector set -- the null-oracle sweep across all 64
+    # ChipVerilog designs found exactly one, `instruction_mem`, whose outputs
+    # never move under the liveness probe either. One false positive in 64 is not
+    # worth blocking a correct generation over, and a warning still puts the
+    # finding in front of the next round.
+    # It needs its own stimulus. The eight vectors above randomise every
+    # functional input across its full width, and for a prescaled design that
+    # means `clk_cnt` is a random 16-bit number, the divider never ticks, and
+    # NOTHING moves in eight steps -- so the check would fire on a perfectly
+    # good model. Measured: the i2c round-0 model, which is wrong but active
+    # and discriminating (+23 separation), is constant across those eight and
+    # emits five distinct states under a corner-first sweep.
+    #
+    # `default_stimulus` is the corner-first sweep the testbench renderer
+    # already uses, and for the same reason -- "a uniform random sweep never
+    # decodes a decoder".
+    from ..tb.render import default_stimulus  # noqa: PLC0415 -- avoid a cycle
+
+    pinned = dict(pinned_inputs(contract))
+    walk = [{**pinned, **v} for v in default_stimulus(contract)]
+    mover = model_cls()
+    fn = getattr(mover, expected_base)
+    states: set = set()
+    for step_inputs in walk:
+        try:
+            result = fn(dict(step_inputs))
+        except Exception:  # noqa: BLE001, S110 -- already reported above
+            states = set()
+            break
+        if isinstance(result, dict):
+            states.add(tuple(sorted((k, _hashable(v)) for k, v in result.items())))
+    if declared and walk and len(states) == 1:
+        issues.append(
+            Issue("warning", f"ref_model.py.{expected_base}",
+                  f"returns the same output state on all {len(walk)} vectors of a "
+                  f"corner-first sweep; a reference model whose outputs never "
+                  f"move cannot discriminate a correct design from a wrong one")
+        )
 
     if not declared:
         issues.append(
