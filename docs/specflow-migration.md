@@ -786,3 +786,49 @@ designs and looking for a constant-`x` driver on a declared output port finds
 internal don't-care pad on a shift or mux node, not an output. This is a
 one-design defect in the benchmark, not a systematic one — worth knowing so that
 an `alu` equivalence result is never quoted as a function verdict.
+
+### Localising a model defect: what the edge-by-edge dump can and cannot see
+
+`benchmarks/divergence_trace.py` exists because scoring does not localise. A
+model at 118/168 gives no clue which of the 50 failures share a cause, and the
+cause is never at the edge the score points to.
+
+Validated against a defect with known ground truth, by reintroducing the
+control oracle's own bug into the corrected model. Two variants, because they
+answer different questions.
+
+**The stored-state variant — the tool sees the cause before any output moves.**
+Computing `sta_condition`/`sto_condition` from the freshly updated filter
+outputs instead of the previous generation (golden registers them:
+`sta_condition <= #1 ~sSDA & dSDA & sSCL`) reproduces the original defect. On
+`TP-0054`:
+
+```
+e7   outputs-differ: -            internals-differ: ['sto_condition=0/1']
+e8   outputs-differ: ['al=0/1']   internals-differ: ['sto_condition=1/0']
+e9   outputs-differ: ['al=1/0', 'scl_oen=0/1']
+```
+
+The internal fires **one edge early and one edge before any output moves**, and
+the tool names the signal. That is the whole claim, demonstrated rather than
+asserted.
+
+**The transient-read variant — the tool sees the signature, not the signal.**
+Leaving the computation correct but making `busy`/`al` *read* the fresh value
+scores 118/168 with the same `al`-dominant profile, and the internal trace shows
+**no disagreement on `sta_condition` at all**: the stored end-of-edge value is
+identical, and only the intermediate read is wrong. What survives is the
+fingerprint — `al=0/1` at one edge, `al=1/0` at the next — which identifies the
+class ("one clock generation early") without naming the signal.
+
+So the honest statement of what the instrument buys: it converts "50 testpoints
+failed" into "these failures begin at edge N on signal S", whenever the
+wrongly-read value is stored state. When the mis-read value is a transient, it
+still bounds the search to one edge and identifies the class, and the analyst
+reads the remaining step off the Verilog. Neither variant required looking at
+the failing testpoint's score at all.
+
+Two numbers worth keeping alongside: the reintroduced bug costs the control
+model **168/168 → 118/168**, and the wrong candidate stays at 28/168 through
+both variants. A defect that moves only the correct design's score, never the
+wrong one's, is the shape a false-failure defect has.
