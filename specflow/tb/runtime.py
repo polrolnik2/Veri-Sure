@@ -316,7 +316,15 @@ class Env:
         # then be compared one edge behind the model.
         from cocotb.triggers import Timer
 
-        await Timer(1, unit="ps")
+        # One simulator time STEP, not one picosecond. `Timer(1, unit="ps")`
+        # raises `Unable to accurately represent 1(ps) with the simulator
+        # precision of 1e-11` on any design whose timescale is coarser than a
+        # picosecond -- which killed every testpoint on i2c_master_bit_ctrl the
+        # moment its timescale header was on the include path. "step" is
+        # whatever the simulator's precision happens to be, so it is always
+        # representable and always the smallest delay that lets this edge's
+        # non-blocking updates land before anything samples the DUT.
+        await Timer(1, unit="step")
 
     def sample(self, signal: str) -> int:
         return _plain(getattr(self.dut, signal).value)
