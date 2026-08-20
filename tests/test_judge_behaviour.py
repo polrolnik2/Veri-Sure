@@ -409,3 +409,28 @@ def test_distinct_states_are_never_merged():
     assert sum("ack=0" in r for r in rows) == 1
     assert sum("ack=1" in r for r in rows) == 1
     assert "held 4 edges" in rows[0]
+
+
+def test_the_prefix_puts_invariant_sections_before_changing_ones():
+    """Prefix caching keeps a prefix only up to its first differing byte.
+
+    The model source changes every repair round. Anything emitted after it is
+    therefore cold every round, however fixed it is in itself. `contract_json`
+    is fixed for the whole node and was being emitted after the source, which
+    stranded 10.2 kB behind a 7.9 kB block on all ~77 calls of every round
+    after the first.
+    """
+    prefix = shared_prefix(ACTIVE, json.dumps(CONTRACT), "trace")
+
+    def at(tag: str) -> int:
+        # The delimited block, not the bare word: SYSTEM's own prose names
+        # <observed_behaviour>, and matching that would compare the wrong thing.
+        return prefix.index(f"\n<{tag}>\n")
+
+    assert at("contract_json") < at("reference_model"), (
+        "the contract is invariant across rounds and must precede the model "
+        "source, which is not"
+    )
+    assert prefix.index("<system>") < at("contract_json")
+    # The trace derives from the source, so it belongs after it.
+    assert at("reference_model") < at("observed_behaviour")

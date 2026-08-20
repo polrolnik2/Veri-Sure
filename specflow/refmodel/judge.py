@@ -268,10 +268,18 @@ def shared_prefix(
     round that is still nearly all of them hitting; `cache_stats` reports it as a
     lower per-round rate rather than a defect.
     """
+    # INVARIANT sections first, then the ones that change per round. Prefix
+    # caching keeps a prefix only up to its first differing byte, so a block
+    # that changes each repair round makes everything after it cold too.
+    # `contract_json` is fixed for the whole node and was sitting AFTER the
+    # model source: measured on i2c_master_bit_ctrl, that stranded 10.2 kB
+    # behind a 7.9 kB block that changes every round, on all ~77 calls of every
+    # round after the first. Ordering it ahead grows the cross-round warm head
+    # from 3.5 kB to 13.7 kB and costs nothing.
     blocks = [
         ("system", SYSTEM),
-        ("reference_model", source),
         ("contract_json", contract_json),
+        ("reference_model", source),
     ]
     if behaviour:
         blocks.append(("observed_behaviour", behaviour))
