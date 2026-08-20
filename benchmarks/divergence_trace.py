@@ -44,7 +44,15 @@ from specflow.tb.render import render_suite  # noqa: E402
 
 
 def _fmt(value: object) -> str:
-    return "-" if value is None else str(value)
+    """Render a bool as its int. The tool's entire job is making a disagreement
+    visible, so a model returning `True` where the DUT reads `1` must not print
+    as `1/True` -- they compare equal, and showing them differently invites the
+    reader to see a divergence that is not there."""
+    if value is None:
+        return "-"
+    if isinstance(value, bool):
+        return str(int(value))
+    return str(value)
 
 
 def _row(names: list[str], dut: dict, model: dict) -> str:
