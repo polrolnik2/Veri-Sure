@@ -170,6 +170,10 @@ class ApiPort:
     #: because there a silent cache loss is a ~30x cost regression that no gate,
     #: artifact or verdict would notice. See `specflow/cache_stats.py`.
     stats: object | None = None
+    #: Client kwargs resolved in `config()` while `.env.local`'s overrides are
+    #: applied. Defaulted here so a port whose `_config` was injected still
+    #: builds a client rather than raising AttributeError.
+    _client_kwargs: dict | None = None
 
     # ------------------------------------------------------------------ config
     def config(self):
@@ -191,6 +195,20 @@ class ApiPort:
         os.environ.update(overrides)
         try:
             cfg = load_openai_config()
+            # Captured INSIDE the override window. `_client()` used to read
+            # these from `os.environ` after this `finally` had already put the
+            # environment back, so `.env.local` could not set either one: a
+            # declared `OPENAI_MAX_RETRIES=2` still built a client with 8.
+            # A request that cannot survive the network path then costs eight
+            # attempts, which is the ~40 minutes of silence recorded in
+            # docs/specflow-migration.md as a fixed problem. It was not fixed on
+            # this path -- `benchmarks/run_chipverilog.py` only appeared to fix
+            # it because it updates os.environ permanently before any port is
+            # built.
+            self._client_kwargs = {
+                "max_retries": int(os.environ.get("OPENAI_MAX_RETRIES", "8")),
+                "timeout": float(os.environ.get("OPENAI_TIMEOUT_S", "600")),
+            }
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -215,11 +233,8 @@ class ApiPort:
         from openai import OpenAI
 
         cfg = self.config()
-        kwargs: dict = {
-            "api_key": cfg.api_key,
-            "max_retries": int(os.environ.get("OPENAI_MAX_RETRIES", "8")),
-            "timeout": float(os.environ.get("OPENAI_TIMEOUT_S", "600")),
-        }
+        kwargs: dict = {"api_key": cfg.api_key,
+                        **(self._client_kwargs or {"max_retries": 8, "timeout": 600.0})}
         if cfg.base_url:
             kwargs["base_url"] = cfg.base_url
         if cfg.organization:
