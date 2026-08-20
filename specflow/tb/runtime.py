@@ -31,6 +31,13 @@ from typing import Any
 
 from ..ports import idle_value, inactive_value, is_clock, is_reset
 
+#: Edges an `until` step waits before giving up. Generous on purpose: a
+#: prescaled design can legitimately take hundreds -- one i2c testpoint sets a
+#: prescaler needing 506 edges for a single command -- and a bound that is too
+#: tight turns a slow-but-correct design into a timeout. It exists to stop a
+#: design that never responds from hanging the suite, not to police latency.
+DEFAULT_UNTIL_TIMEOUT = 2000
+
 
 
 @dataclass
@@ -94,6 +101,46 @@ class CoverageRecorder:
         self.hits[bin_uid] = self.hits.get(bin_uid, 0) + 1
 
 
+def normalise_step(step: dict) -> tuple[dict, int, dict | None, int]:
+    """A stimulus step, in either shape, as `(inputs, hold, until, timeout)`.
+
+    Two shapes are accepted so the change is not a flag day:
+
+        {"a": 1, "b": 0}                                  # bare: inputs, held 1 edge
+        {"inputs": {...}, "hold": 8}                      # held for N edges
+        {"inputs": {...}, "until": {"port": "cmd_ack", "value": 1},
+         "timeout": 200}                                  # held until an event
+
+    A bare dict holds for ONE edge. It used to hold for `LATENCY_CYCLES + 1`,
+    which tied how long a stimulus is applied to a per-output latency figure the
+    contract guesses -- so an unstable contract silently changed the stimulus
+    timing of the whole suite between runs, and two runs of one design were not
+    comparable. Duration is a property of the test, not of a port's latency.
+
+    `until` is what a multi-cycle design actually needs. Every testpoint on
+    i2c_master_bit_ctrl had 3 vectors, and at 4 edges each that is 12 clocks
+    against the 26 golden needs to finish one START: 61 of 168 testpoints could
+    not complete a single command, and one asked for a prescaler needing 506.
+    "Drive the command, then wait until it acknowledges" expresses that; a fixed
+    edge count cannot.
+    """
+    if not isinstance(step, dict):
+        return {}, 1, None, 0
+    if "inputs" in step or "hold" in step or "until" in step:
+        inputs = dict(step.get("inputs") or {})
+        until = step.get("until") if isinstance(step.get("until"), dict) else None
+        try:
+            hold = max(1, int(step.get("hold", 1)))
+        except (TypeError, ValueError):
+            hold = 1
+        try:
+            timeout = max(0, int(step.get("timeout", 0)))
+        except (TypeError, ValueError):
+            timeout = 0
+        return inputs, hold, until, timeout
+    return dict(step), 1, None, 0
+
+
 def _plain(value: Any) -> Any:
     """Make a cocotb BinaryValue (or anything) JSON-safe."""
     if isinstance(value, (int, float, str, bool)) or value is None:
@@ -149,6 +196,12 @@ class Env:
         #: model in lockstep with the DUT's clock. `expect()` returns this
         #: rather than taking a fresh step -- see `settle`.
         self._expected: dict | None = None
+        #: The inputs of the step being driven, for `expect`/`check` context.
+        self._inputs: dict = {}
+        #: `until` steps whose condition never occurred. Recorded rather than
+        #: raised: a timeout is a verdict about the design, and one testpoint
+        #: timing out must not stop the rest of the suite reporting.
+        self.timeouts: list[str] = []
         self._finished = False
 
     def _clk(self):
@@ -265,40 +318,38 @@ class Env:
     async def drive(self, stim: dict) -> None:
         self.step_index += 1
         self._expected = None
-        for name, value in stim.items():
+        inputs, hold, until, timeout = normalise_step(stim)
+        self._inputs = inputs
+        for name, value in inputs.items():
             port = getattr(self.dut, name, None)
             if port is None:
                 raise AttributeError(f"{self.tp_uid}: DUT has no port {name!r}")
             port.value = int(value)
-        await self.settle(stim)
+        await self.settle(inputs, hold=hold, until=until, timeout=timeout)
 
-    async def settle(self, stim: dict | None = None) -> None:
+    async def settle(
+        self,
+        stim: dict | None = None,
+        *,
+        hold: int = 1,
+        until: dict | None = None,
+        timeout: int = 0,
+    ) -> None:
         """Hold the vector and advance the DUT and the model TOGETHER.
 
         One `step()` per clock edge. `RefModel.step` is documented as "advance
-        one clock edge and return the outputs", so a model driven any other
+        one clock edge and return the outputs", so a model driven at any other
         rate is not the design's oracle -- it is a different machine.
 
-        This used to tick the DUT `LATENCY_CYCLES + 1` edges and let `expect()`
-        take a SINGLE step, which on a design whose contract reports
-        `latency_cycles: 3` ran the DUT at 4x the model's rate. Every
-        multi-cycle sequence then diverged structurally, and no RTL could
-        satisfy the suite: driven through it, the *golden* i2c_master_bit_ctrl
-        failed 120 of 168 testpoints (373 mismatches) -- worse than the
-        LLM-written candidate's 91/203. A known-correct design scoring below a
-        generated one is the signature of a broken oracle, and the skew was it.
-
-        The trap is that `latency_cycles: 0` gives `max(1, 1) = 1` and the bug
-        vanishes, so it is invisible on combinational designs and on anything
-        whose contract reports no latency. It survived every earlier test for
-        that reason.
-
-        `LATENCY_CYCLES` keeps its documented meaning -- how long an output
-        takes to answer a stimulus -- and is used here only to decide how long
-        to HOLD each vector. It no longer paces the model, because with the two
-        advancing together there is nothing left to align.
+        How LONG a vector is held is the test's business, not a port's. This
+        used to be `LATENCY_CYCLES + 1`, which made the contract's guessed
+        per-output latency set the pace of every stimulus in the suite. On a
+        design whose contract reported 3 the DUT ran at 4x the model's rate
+        until both were advanced together; even after that was fixed, the figure
+        still silently rescaled the whole suite whenever the contract changed --
+        and it changed between two runs of the same spec, 3 then 1.
         """
-        latency = int(getattr(self.ref, "LATENCY_CYCLES", 0) or 0)
+        latency_free_hold = max(1, int(hold))
         if self._clk() is None:
             from cocotb.triggers import Timer
 
@@ -306,24 +357,46 @@ class Env:
             if stim is not None:
                 self._expected = self._advance_model(stim)
             return
-        for _ in range(max(1, latency + 1)):
+
+        async def one_edge() -> None:
             await self.tick(1)
             if stim is not None:
                 self._expected = self._advance_model(stim)
-        # Let this edge's non-blocking updates land before anything samples the
-        # DUT. `RisingEdge` fires in the same delta as the edge, so a read taken
-        # straight after it returns the PREVIOUS cycle's value -- the DUT would
-        # then be compared one edge behind the model.
+
+        if until:
+            # Run until the design says it is done. `timeout` bounds it so a
+            # design that never responds fails as a timeout rather than hanging
+            # the suite; 0 means "use the default bound".
+            port = str(until.get("port") or "")
+            want = until.get("value", 1)
+            budget = timeout or DEFAULT_UNTIL_TIMEOUT
+            handle = getattr(self.dut, port, None) if port else None
+            for _ in range(budget):
+                await one_edge()
+                await self._settled()
+                if handle is not None and _plain(handle.value) == want:
+                    break
+            else:
+                self.timeouts.append(
+                    f"step {self.step_index}: waited {budget} edges for "
+                    f"{port}=={want} and it never happened"
+                )
+            return
+
+        for _ in range(latency_free_hold):
+            await one_edge()
+        await self._settled()
+
+    async def _settled(self) -> None:
+        """Let this edge's non-blocking updates land before anything samples.
+
+        `RisingEdge` fires in the same delta as the edge, so a read taken
+        straight after it returns the PREVIOUS cycle's value. One simulator time
+        STEP, not one picosecond: `Timer(1, unit="ps")` raises on any design
+        whose timescale is coarser than a picosecond.
+        """
         from cocotb.triggers import Timer
 
-        # One simulator time STEP, not one picosecond. `Timer(1, unit="ps")`
-        # raises `Unable to accurately represent 1(ps) with the simulator
-        # precision of 1e-11` on any design whose timescale is coarser than a
-        # picosecond -- which killed every testpoint on i2c_master_bit_ctrl the
-        # moment its timescale header was on the include path. "step" is
-        # whatever the simulator's precision happens to be, so it is always
-        # representable and always the smallest delay that lets this edge's
-        # non-blocking updates land before anything samples the DUT.
         await Timer(1, unit="step")
 
     def sample(self, signal: str) -> int:

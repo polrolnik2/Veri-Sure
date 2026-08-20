@@ -32,6 +32,7 @@ from .ids import PREFIX_TESTCASE, mint, next_index
 from .model_io import ModelPort
 from .ports import classify
 from .schema import Issue
+from .tb.runtime import normalise_step
 from .stage import (
     StageResult,
     gate_failures_block,
@@ -256,15 +257,32 @@ values that actually performs it.
 
 Order matters and state persists. The steps of one testpoint are applied in
 order to a sequential design that is reset once at the start, so step N sees
-whatever state steps 0..N-1 produced. A command that takes many cycles to
-complete needs the cycles.
+whatever state steps 0..N-1 produced.
+
+ONE STEP IS ONE CLOCK EDGE unless you say otherwise, and a step can state its
+own duration. This matters more than it sounds: a design gated on a prescaler
+advances one phase per tick, so a command can take tens or hundreds of clocks,
+and a sequence that runs out of edges half way through verifies nothing after
+that point.
+
+  {"a": 1, "b": 0}                          one edge
+  {"inputs": {...}, "hold": 8}              the same inputs, held 8 edges
+  {"inputs": {...}, "until": {"port": "done", "value": 1}, "timeout": 200}
+                                            held until the DESIGN says so
+
+Prefer `until` over a large `hold`. "Wait for the acknowledge" is a fact about
+the design; "wait 26 clocks" is a guess about its implementation, and it will be
+wrong on the next prescaler value. `until` waits on a declared OUTPUT -- what the
+design reports, never what you drive.
 
 Supply:
   testpoints  one entry per testplan element, each with
                 tp_uid          the element's uid, exactly as given
-                stimulus_steps  an ordered list of steps, each a dict of
-                                input port name -> integer value. Every
-                                drivable input must appear in every step.
+                stimulus_steps  an ordered list of steps. A step is either a
+                                bare dict of input port name -> integer value,
+                                or {"inputs": {...}} with an optional "hold" or
+                                "until"/"timeout". Every drivable input must
+                                appear in every step.
 
 Return ONE json object:
 
@@ -334,6 +352,14 @@ def parse_suite_response(text: str) -> SuiteStimulus:
         return SuiteStimulus(reasoning=f"Parse Error: {exc}")
 
 
+#: Bounds on a step's declared duration. `hold` is capped low deliberately: a
+#: large fixed edge count is a guess, and `until` is the honest way to say "wait
+#: for the design". The timeout bound only has to be generous enough for a
+#: heavily prescaled design -- one i2c testpoint needs 506 edges for one command.
+MAX_HOLD = 64
+MAX_TIMEOUT = 4000
+
+
 def gate_suite(
     spec: SuiteStimulus, *, testplan: list[dict], contract: dict, max_steps: int
 ) -> list[Issue]:
@@ -352,6 +378,10 @@ def gate_suite(
 
     issues: list[Issue] = []
     inputs = _drivable(contract)
+    outputs = {
+        str(p.get("name")) for p in (contract.get("io") or [])
+        if p.get("dir") == "output" and p.get("name")
+    }
     wanted = [str(tp.get("uid")) for tp in testplan]
     by_uid = {tp.tp_uid: tp for tp in spec.testpoints}
 
@@ -367,8 +397,36 @@ def gate_suite(
                 Issue("error", f"stimulus.{uid}",
                       f"{len(entry.stimulus_steps)} steps exceeds the {max_steps} limit")
             )
-        for i, step in enumerate(entry.stimulus_steps):
+        for i, raw in enumerate(entry.stimulus_steps):
             path = f"stimulus.{uid}.steps[{i}]"
+            step, hold, until, timeout = normalise_step(raw)
+            # A step may state its own duration. Before this, `hold`/`until`
+            # were rejected as "not a drivable input" -- there was no way to say
+            # a command needs cycles except to repeat the identical dict, and
+            # how long a vector was actually applied came from the contract's
+            # guessed `latency_cycles` instead of from the test.
+            if hold > MAX_HOLD:
+                issues.append(
+                    Issue("error", path,
+                          f"hold={hold} exceeds the {MAX_HOLD} edge limit; use "
+                          f"`until` to wait for the design instead of guessing "
+                          f"a large edge count")
+                )
+            if until is not None:
+                port = str(until.get("port") or "")
+                if port not in outputs:
+                    issues.append(
+                        Issue("error", path,
+                              f"until.port={port!r} is not a declared output; a "
+                              f"step waits on what the DESIGN reports, not on "
+                              f"what the test drives")
+                    )
+                if timeout and timeout > MAX_TIMEOUT:
+                    issues.append(
+                        Issue("error", path,
+                              f"timeout={timeout} exceeds the {MAX_TIMEOUT} "
+                              f"edge limit")
+                    )
             for name, value in step.items():
                 if name not in inputs:
                     issues.append(

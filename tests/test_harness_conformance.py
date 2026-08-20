@@ -53,6 +53,23 @@ CASES = {
 }
 
 
+#: Stimulus per fixture. Only the prescaled FSM needs one: the harness no longer
+#: guesses how long to hold a vector from `LATENCY_CYCLES`, so a design that
+#: takes many clocks per phase has to say so. That is the point of Phase 3 --
+#: duration is a property of the test, not of a port's latency figure.
+STIMULUS = {
+    "prescaled_fsm": [
+        {"inputs": {"ena": 1, "prescale": 2, "go": 0}, "hold": 4},
+        # Drive the command and wait for the design to acknowledge it, rather
+        # than guessing an edge count. At prescale=2 one phase takes 3 clocks
+        # and the sequence is 5 phases, but the test does not need to know that.
+        {"inputs": {"ena": 1, "prescale": 2, "go": 1},
+         "until": {"port": "done", "value": 1}, "timeout": 200},
+        {"inputs": {"ena": 1, "prescale": 2, "go": 0}, "hold": 4},
+    ],
+}
+
+
 def _plan(contract: dict) -> tuple[list[dict], list[dict], list[dict]]:
     """One testpoint, one bin, one check over every declared output.
 
@@ -81,8 +98,12 @@ def _build(name: str, tmp_path: Path):
     contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
     testplan, bins, checks = _plan(contract)
     suite = tmp_path / "suite"
-    manifest = render_suite(testplan=testplan, bins=bins, checks=checks,
-                            contract=contract, out_dir=suite)
+    stim = STIMULUS.get(name)
+    manifest = render_suite(
+        testplan=testplan, bins=bins, checks=checks, contract=contract,
+        out_dir=suite,
+        stimulus_by_tp={"TP-0000": stim} if stim else None,
+    )
     return src, contract, suite, manifest
 
 
@@ -148,4 +169,100 @@ def test_every_case_rejects_a_tied_off_dut(name, tmp_path):
         f"{name} ({CASES[name]}): a tied-off DUT passed. The harness cannot "
         f"distinguish this design from a constant, so the case above proves "
         f"nothing."
+    )
+
+
+# --------------------------------------------------------------- reach (Phase 3)
+
+
+_LATE_BUG_MODEL = '''
+"""Correct until the very last phase, where `done` is dropped.
+
+A bug that only shows up when a sequence COMPLETES is exactly what a suite with
+too few edges cannot see. That is not hypothetical: every testpoint on
+i2c_master_bit_ctrl had three vectors, and 61 of 168 could not finish a single
+command.
+"""
+
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ["busy", "done"]
+    LATENCY_CYCLES = 5
+
+    def reset(self):
+        self.cnt = 0
+        self.clk_en = 1
+        self.state = 0
+        self.busy = 0
+        self.done = 0
+
+    def step(self, i):
+        if not hasattr(self, "state"):
+            self.reset()
+        if not i.get("rst_n", 1):
+            self.reset()
+            return {"busy": self.busy, "done": self.done}
+        ena = i.get("ena", 0)
+        o_cnt, o_clk_en, o_state = self.cnt, self.clk_en, self.state
+        if o_cnt == 0 or not ena:
+            self.cnt, self.clk_en = self.mask(i.get("prescale", 0), 4), 1
+        else:
+            self.cnt, self.clk_en = o_cnt - 1, 0
+        self.done = 0
+        if o_clk_en and ena:
+            if o_state == 0:
+                if i.get("go", 0):
+                    self.state, self.busy = 1, 1
+            elif o_state in (1, 2, 3):
+                self.state = o_state + 1
+            elif o_state == 4:
+                # THE BUG: the sequence ends but `done` is never pulsed.
+                self.state, self.busy = 0, 0
+        return {"busy": self.busy, "done": self.done}
+'''
+
+
+@needs_verilator
+@pytest.mark.parametrize(
+    "stimulus,must_catch",
+    [
+        (STIMULUS["prescaled_fsm"], True),
+        # The same test with every step held for a single edge -- what a bare
+        # dict now means, and what the whole suite effectively had before a step
+        # could state its own duration.
+        ([{"inputs": s["inputs"], "hold": 1} for s in STIMULUS["prescaled_fsm"]],
+         False),
+    ],
+    ids=["until-reaches-the-end", "one-edge-per-step-does-not"],
+)
+def test_a_late_bug_is_only_caught_if_the_sequence_completes(
+    stimulus, must_catch, tmp_path
+):
+    """Reach is the point of `hold`/`until`, and this is what reach buys.
+
+    The model is correct except that it drops `done` at the final phase. Waiting
+    for the design to acknowledge finds it; giving every step one edge never
+    gets there, and the suite reports a clean pass over a real disagreement.
+    """
+    src = FIXTURES / "prescaled_fsm"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite, stimulus_by_tp={"TP-0000": stimulus})
+    model = tmp_path / "late_bug.py"
+    model.write_text(_LATE_BUG_MODEL, encoding="utf-8")
+
+    outcome = run_suite(
+        rtl_path=src / "dut.sv", hdl_toplevel=contract["module_name"],
+        suite_dir=suite, refmodel_path=model, coverage=False, trace=False,
+    )
+    assert outcome.build_ok, outcome.build_log
+    caught = bool(outcome.failing)
+    assert caught is must_catch, (
+        "waiting for the design to finish must catch a bug at the last phase, "
+        "and one edge per step must not -- that difference is the whole reason "
+        f"a step can state its own duration. caught={caught}"
     )
