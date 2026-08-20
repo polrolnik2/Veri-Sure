@@ -241,11 +241,123 @@ class ApiPort:
             kwargs["organization"] = cfg.organization
         return OpenAI(**kwargs)
 
+    # -------------------------------------------------------------- responses
+    def _complete_responses(
+        self, cfg, *, stage: str, round_: int, prompt: str, response_path: Path
+    ) -> str:
+        """The `/v1/responses` surface, streamed, with reasoning summaries on.
+
+        This exists for one reason: it is the only shape that survives a long
+        generation on this gateway. Measured, all three ways:
+
+        * NOT streaming -- nothing goes over the wire until generation finishes,
+          so a long reasoning request looks idle and is cut at ~300s regardless
+          of the client timeout;
+        * streaming `/v1/chat/completions` -- the only deltas it emits are
+          `content`, so the connection is just as silent for the whole reasoning
+          phase, which is where the time actually goes. Streaming there buys
+          nothing;
+        * streaming `/v1/responses` with `reasoning.summary = "auto"` -- summary
+          deltas flow throughout. A 437s call measured a **maximum gap between
+          events of 10.0s**, never approaching the ceiling.
+
+        So the flavour and the streaming are not independent preferences: on
+        this gateway only their combination works, and `chat` remains the
+        default so nothing changes surface without being told to.
+        """
+        effort = cfg.reasoning_effort or "medium"
+        body: dict = {
+            "model": cfg.model,
+            "input": prompt,
+            "reasoning": {"effort": effort, "summary": "auto"},
+        }
+        gen = dict(cfg.generate_kwargs or {})
+        # `max_completion_tokens` is the chat spelling; Responses calls it
+        # `max_output_tokens`. Carrying the chat name over silently drops the
+        # cap, and an uncapped reasoning request is exactly the one that runs
+        # out of budget with no content to show for it.
+        cap = gen.pop("max_completion_tokens", None) or gen.pop("max_output_tokens", None)
+        # An UNCAPPED reasoning request is the one that dies. Measured on this
+        # gateway: the same surface, streaming and never idle (max gap 10.0s),
+        # was cut at 536s with `RemoteProtocolError: peer closed connection` when
+        # no cap was set, while a 30k-capped call on the same surface finished
+        # its stream cleanly at 437s. There is a wall around 500s that streaming
+        # does not move; the cap is what keeps a call on the near side of it.
+        # `SPECFLOW_MAX_OUTPUT_TOKENS` overrides.
+        if not cap:
+            cap = os.environ.get("SPECFLOW_MAX_OUTPUT_TOKENS") or 48000
+        body["max_output_tokens"] = int(cap)
+        if gen.get("extra_body"):
+            body.update(gen["extra_body"])
+
+        client = self._client()
+        parts: list[str] = []
+        final = None
+        try:
+            with client.responses.stream(**body) as stream:
+                for event in stream:
+                    kind = getattr(event, "type", "")
+                    if kind == "response.output_text.delta":
+                        parts.append(event.delta)
+                    elif kind == "response.completed":
+                        final = event.response
+                    elif kind == "response.incomplete":
+                        final = getattr(event, "response", None)
+                if final is None:
+                    final = stream.get_final_response()
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                f"{stage} r{round_}: the /v1/responses stream failed "
+                f"({type(exc).__name__}: {exc}). Effort={effort!r}, "
+                f"{len(prompt)} bytes of prompt."
+            ) from exc
+
+        text = "".join(parts).strip() or (getattr(final, "output_text", "") or "").strip()
+        if not text:
+            # A reasoning model that spends its whole budget before emitting any
+            # content lands here, and the incomplete reason says which. The
+            # probe that motivated this path hit exactly that at 30k output
+            # tokens on `xhigh`, so the message names the cap.
+            reason = getattr(getattr(final, "incomplete_details", None), "reason", None)
+            raise RuntimeError(
+                f"{stage} r{round_}: model returned no content "
+                f"(status={getattr(final, 'status', None)!r}, "
+                f"incomplete={reason!r}). At effort={effort!r} the reasoning "
+                f"budget can consume the whole of max_output_tokens "
+                f"({body.get('max_output_tokens')}); raise it or lower the effort."
+            )
+
+        response_path.write_text(text, encoding="utf-8")
+        usage = getattr(final, "usage", None)
+        if self.stats is not None:
+            self.stats.record_usage(
+                stage=stage,
+                model=str(getattr(final, "model", None) or cfg.model),
+                usage=usage,
+            )
+        record_fixture(
+            Path(self.root), stage, round_,
+            {
+                "port": "api",
+                "surface": "responses",
+                "requested_model": cfg.model,
+                "served_model": getattr(final, "model", None),
+                "generate_kwargs": body,
+                "usage": usage.model_dump() if hasattr(usage, "model_dump") else None,
+            },
+        )
+        return text
+
     # ------------------------------------------------------------------- call
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
         cfg = self.config()
         prompt_path, response_path = _paths(Path(self.root), stage, round_)
         prompt_path.write_text(prompt, encoding="utf-8")
+
+        if str(getattr(cfg, "api_flavor", "chat")).lower() == "responses":
+            return self._complete_responses(
+                cfg, stage=stage, round_=round_, prompt=prompt,
+                response_path=response_path)
 
         kwargs: dict = dict(cfg.generate_kwargs or {})
         if cfg.reasoning_effort:

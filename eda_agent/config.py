@@ -51,6 +51,12 @@ def load_openai_config(
     env_effort = os.environ.get("OPENAI_REASONING_EFFORT")
     env_flavor = os.environ.get("OPENAI_API_FLAVOR")
     env_extra_body = os.environ.get("OPENAI_EXTRA_BODY")
+    # Streaming was settable only from Python, so an operator could not turn on
+    # the one thing that lets a long reasoning request survive this gateway. It
+    # is not a latency preference: a non-streaming request sends nothing until
+    # generation finishes, so to any intermediary a long one looks idle, and
+    # measured here such a request is cut at ~300s whatever the client timeout.
+    env_stream = os.environ.get("OPENAI_STREAM")
 
     generate_kwargs: dict[str, Any] = {}
     if temperature is not None:
@@ -82,6 +88,10 @@ def load_openai_config(
         organization=organization or env_org,
         reasoning_effort=reasoning_effort or env_effort,
         api_flavor=(api_flavor or env_flavor or OpenAIConfig.api_flavor).lower(),
-        stream=OpenAIConfig.stream if stream is None else stream,
+        stream=(
+            stream if stream is not None
+            else (env_stream.strip().lower() in ("1", "true", "yes", "on")
+                  if env_stream else OpenAIConfig.stream)
+        ),
         generate_kwargs=generate_kwargs,
     )
