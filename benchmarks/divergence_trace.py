@@ -55,6 +55,23 @@ def _fmt(value: object) -> str:
     return str(value)
 
 
+def unmodelled(names: list[str], edges: list[dict]) -> list[str]:
+    """Names the MODEL does not carry at all, so they cannot be compared.
+
+    A name the model lacks reads back `None` on every edge, which is the model
+    not having that concept -- not a disagreement. Counting it as one is worse
+    than useless: on the generated i2c model, naming golden's `sta_condition`
+    (which that model never stores) made every edge disagree and reported the
+    first divergence at edge 0, hiding the real one at edge 1.
+
+    Reported separately rather than silently dropped, because "the model does
+    not model this at all" is itself a finding -- it is how a collapsed
+    pipeline stage announces itself.
+    """
+    return [n for n in names
+            if edges and all(r["model_internal"].get(n) is None for r in edges)]
+
+
 def _row(names: list[str], dut: dict, model: dict) -> str:
     cells = []
     for n in names:
@@ -126,8 +143,14 @@ def main(argv: list[str] | None = None) -> int:
     data = json.loads(dump.read_text(encoding="utf-8"))
     outputs, edges = data["outputs"], data["edges"]
 
+    absent = unmodelled(dut_names, edges)
+    compared = [n for n in dut_names if n not in absent]
+
     print(f"{args.tp}: {len(edges)} edges, hold={args.hold}")
-    print(f"outputs {outputs}   internals {dut_names}")
+    print(f"outputs {outputs}   internals compared {compared}")
+    if absent:
+        print(f"NOT MODELLED (absent from the model on every edge, excluded from "
+              f"the comparison): {absent}")
     print("dut/model, ! marks a disagreement\n")
 
     first = None
@@ -136,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         disagrees = (
             any(row["dut"].get(n) != row["model"].get(n) for n in outputs)
             or any(row["dut_internal"].get(n) != row["model_internal"].get(n)
-                   for n in dut_names)
+                   for n in compared)
         )
         if disagrees and first is None:
             first = row["edge"]
@@ -146,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         mark = "<<<" if row["edge"] == first else "   "
         print(f"e{row['edge']:<5} step{row['step']:<3} {mark} "
               f"{_row(outputs, row['dut'], row['model'])}  |  "
-              f"{_row(dut_names, row['dut_internal'], row['model_internal'])}")
+              f"{_row(compared, row['dut_internal'], row['model_internal'])}")
 
     print()
     if first is None:

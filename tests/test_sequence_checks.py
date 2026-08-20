@@ -293,3 +293,44 @@ def test_internal_trace_is_off_unless_asked(tmp_path, monkeypatch):
 
     monkeypatch.delenv("SPECFLOW_TRACE_INTERNALS", raising=False)
     importlib.reload(runtime)
+
+
+def test_a_signal_the_model_does_not_carry_is_not_a_disagreement():
+    """`divergence_trace` compares DUT internals against model attributes of the
+    same name. A name the model lacks reads back `None` on every edge, which is
+    the model not having that concept -- not a disagreement.
+
+    Counting it as one is worse than useless. On the generated i2c model, naming
+    golden's `sta_condition` (which that model never stores) made every edge
+    disagree and reported the first divergence at edge 0, hiding the real one at
+    edge 1.
+    """
+    from benchmarks.divergence_trace import unmodelled
+
+    edges = [
+        {"dut_internal": {"absent": 0, "real": 1},
+         "model_internal": {"absent": None, "real": 1}},
+        {"dut_internal": {"absent": 1, "real": 1},
+         "model_internal": {"absent": None, "real": 0}},
+    ]
+    assert unmodelled(["absent", "real"], edges) == ["absent"]
+
+
+def test_a_signal_the_model_carries_only_sometimes_is_still_compared():
+    """`None` on SOME edges is a real divergence -- a model that stops updating
+    a register half way through is exactly the defect worth catching."""
+    from benchmarks.divergence_trace import unmodelled
+
+    edges = [
+        {"dut_internal": {"s": 0}, "model_internal": {"s": 0}},
+        {"dut_internal": {"s": 1}, "model_internal": {"s": None}},
+    ]
+    assert unmodelled(["s"], edges) == []
+
+
+def test_no_edges_means_nothing_is_declared_unmodelled():
+    """An empty trace proves nothing either way; it must not silently mark every
+    named signal as absent and report a clean comparison."""
+    from benchmarks.divergence_trace import unmodelled
+
+    assert unmodelled(["a", "b"], []) == []
