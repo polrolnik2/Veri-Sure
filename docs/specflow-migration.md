@@ -488,6 +488,12 @@ passes (`instruction_mem`) has outputs that never move under the liveness probe
 either, so its agreement is honest. **No design whose outputs move passes a null
 oracle** — that is the discrimination claim, benchmark-wide.
 
+**Re-verified after testpoint isolation.** The sweep above was measured before
+"every testpoint gets its own simulator process" landed, and that change alters
+how every suite runs, so the figure was stale evidence for a current claim. The
+re-run reproduces it exactly: 45 rejected, `instruction_mem` the sole pass, the
+same 18 build failures in the same two groups.
+
 The 18 that do not elaborate are the corpus, not the harness: 13 instantiate
 vendor RAM macros (`rf_sub`, `dc_ram_sub`, `ic_tag_sub`, the TLB RAMs) that are
 **defined nowhere in the ChipVerilog release**, and 5 `double_fpu` designs trip
