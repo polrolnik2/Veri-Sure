@@ -1,0 +1,14 @@
+{
+  "module_name": "Dut",
+  "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "rst_n", "dir": "input", "width": 1},
+    {"name": "ena", "dir": "input", "width": 1},
+    {"name": "prescale", "dir": "input", "width": 4},
+    {"name": "go", "dir": "input", "width": 1},
+    {"name": "busy", "dir": "output", "width": 1},
+    {"name": "done", "dir": "output", "width": 1}
+  ],
+  "clocking": {"is_sequential": true},
+  "timing": {"busy": {"latency_cycles": 1}, "done": {"latency_cycles": 5}}
+}

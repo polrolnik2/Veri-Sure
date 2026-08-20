@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..ports import inactive_value, is_reset
+from ..ports import inactive_value, is_clock, is_reset
 
 
 
@@ -144,6 +144,29 @@ class Env:
         self._expected: dict | None = None
         self._finished = False
 
+    def _clk(self):
+        """The clock handle, found by name classification rather than literally.
+
+        Three sites used to look up `getattr(self.dut, "clk")`. `ports.is_clock`
+        already knows `clock`, `clk_i`, `aclk`, `sysclk` and the rest, and
+        `classify()` uses it -- but the runtime did not, so a design whose clock
+        is named `clock` got no cocotb `Clock`, no `reset()` call (it is only
+        invoked when a clock is found), and the combinational `Timer` path.
+        28 of the ~90 ChipVerilog designs name it `clock` or `Clock`.
+
+        The failure is silent and looks like success: with nothing driving the
+        reset either, the DUT sits held in reset, `_bundle` reads that same
+        reset off the DUT so the model resets too, and every check compares two
+        constants that agree. `tests/test_harness_conformance.py` pins it with a
+        tied-off DUT, which is the only thing that tells the two apart.
+        """
+        for name in self.input_ports:
+            if is_clock(name):
+                handle = getattr(self.dut, name, None)
+                if handle is not None:
+                    return handle
+        return getattr(self.dut, "clk", None)
+
     # -- construction ------------------------------------------------------
 
     @classmethod
@@ -160,7 +183,7 @@ class Env:
         results_dir = Path(os.environ.get("SPECFLOW_RESULTS", "results"))
         env = cls(dut, tp_uid, model, results_dir, input_ports, pinned)
 
-        clk = getattr(dut, "clk", None)
+        clk = env._clk()
         if clk is not None:
             import cocotb
             from cocotb.clock import Clock
@@ -207,7 +230,7 @@ class Env:
     # -- driving -----------------------------------------------------------
 
     async def tick(self, n: int = 1) -> None:
-        clk = getattr(self.dut, "clk", None)
+        clk = self._clk()
         if clk is None:
             from cocotb.triggers import Timer
 
@@ -255,7 +278,7 @@ class Env:
         advancing together there is nothing left to align.
         """
         latency = int(getattr(self.ref, "LATENCY_CYCLES", 0) or 0)
-        if getattr(self.dut, "clk", None) is None:
+        if self._clk() is None:
             from cocotb.triggers import Timer
 
             await Timer(1, unit="ns")
