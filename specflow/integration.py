@@ -349,6 +349,9 @@ def build_artifacts(
             # call; the model split is by `SPECFLOW_SMALL_MODEL`, not by port.
             judge_port=port if judge else None,
             run_dir=run_dir,
+            # S2 ran before this, so every testpoint -- and the requirement each
+            # one covers -- already exists by the time the judge is asked.
+            testplan=tps,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)

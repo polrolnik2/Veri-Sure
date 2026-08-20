@@ -100,8 +100,34 @@ ORACLE a testbench will compare a design against, so a requirement it fails to
 implement becomes a behaviour nobody ever verifies, and a requirement it
 implements wrongly becomes a correct design marked as broken.
 
-You are given the whole model, one requirement, and the method names its author
-claims implement that requirement. Read those methods. Decide:
+You are given the whole model, one requirement, the method names its author
+claims implement that requirement, and -- when it could be produced -- an
+<observed_behaviour> trace of the model actually running, plus the testpoints
+the test plan wrote for this requirement.
+
+The trace OUTRANKS the source. Source shows what the model was written to do;
+the trace shows what it did. Where they disagree, the trace decides: code can
+be structurally perfect and sit behind a condition that is never true, and a
+requirement implemented in unreachable code is a requirement nobody verifies.
+Before answering "met", find the steps of the trace where this requirement's
+behaviour should be visible and check that it is. If the outputs never move at
+all, no requirement about an output is met, whatever the source says.
+
+The testpoints say what exercising this requirement looks like. They are prose,
+and the trace is a GENERIC input sweep, not the testpoint's scenario -- so for
+most requirements the exact scenario will NOT appear in the trace. That is
+expected and is NOT a finding: absence of the scenario is not evidence of
+anything, and must not by itself make a requirement "ambiguous". Where the
+scenario is absent, judge from the source as you otherwise would.
+
+Use the trace where it does bear:
+  - outputs that CONTRADICT the requirement at a step where the relevant
+    behaviour is visible -> "not_met", citing the step;
+  - outputs that never move AT ALL across the whole trace -> "not_met" for any
+    requirement about an output, whatever the source says. This case is always
+    visible, needs no scenario, and is stated for you at the end of the trace.
+
+Read those methods. Decide:
 
   "met"         the code satisfies the requirement. Say which lines do it.
   "not_met"     the code demonstrably does not satisfy it -- it does something
@@ -154,7 +180,86 @@ def parse_response(text: str) -> RequirementVerdict:
 # ------------------------------------------------------------------ prompting
 
 
-def shared_prefix(source: str, contract_json: str) -> str:
+def observed_behaviour(source: str, contract: dict, *, base: str) -> str | None:
+    """Drive the model over the corner-first sweep and render what it DID.
+
+    The judge was asked whether source code implements a requirement, and it
+    answered from the code alone. That reads a claim, not a behaviour, and code
+    can be structurally perfect and never reached. Measured on
+    `i2c_master_bit_ctrl`: rounds 1, 2 and 3 each emitted exactly ONE output
+    state across 64 vectors -- outputs that never move, an oracle that cannot
+    discriminate any DUT from any other -- and the judge returned "met" on 77 of
+    77 requirements for every one of them.
+
+    The whole trace, not a summary. A requirement is about a particular moment
+    ("on the eligible clk_en edge while idle the DUT accepts START"), so a
+    judge reasoning about it needs the steps, not an aggregate over them. The
+    distinct-state count is appended as a stated fact rather than left for the
+    judge to derive by counting 64 rows.
+
+    Rendered into the SHARED prefix, which is byte-identical across every
+    requirement of a round, so this is sent once per round and cached for the
+    remaining ~70 calls rather than repeated per requirement.
+
+    Returns None when the model cannot be driven at all. That is not this
+    function's failure to report: `_behavioural_checks` already blocks on it,
+    and the judge does not run on a model with mechanical errors.
+    """
+    try:
+        from ..ports import pinned_inputs
+        from ..tb.render import default_stimulus
+
+        namespace: dict = {}
+        exec(compile(source, "<judge_trace>", "exec"), namespace)  # noqa: S102
+        model_cls = namespace.get("Model")
+        if model_cls is None:
+            return None
+        model = model_cls()
+        fn = getattr(model, base, None)
+        if not callable(fn):
+            return None
+        pinned = dict(pinned_inputs(contract))
+        walk = [{**pinned, **v} for v in default_stimulus(contract)]
+        if not walk:
+            return None
+        rows: list[str] = []
+        states: set = set()
+        for step, inputs in enumerate(walk):
+            out = fn(dict(inputs))
+            if not isinstance(out, dict):
+                return None
+            states.add(tuple(sorted((k, str(v)) for k, v in out.items())))
+            rows.append(
+                f"{step:>3}  "
+                + " ".join(f"{k}={inputs[k]}" for k in sorted(inputs))
+                + "  ->  "
+                + " ".join(f"{k}={out[k]}" for k in sorted(out))
+            )
+    except Exception:  # noqa: BLE001 -- never let instrumentation fail a round
+        return None
+
+    verdict = (
+        f"{len(states)} distinct output state(s) over {len(walk)} vectors."
+        + (
+            "  The outputs NEVER CHANGE. A reference model whose outputs never "
+            "move agrees with whichever DUT is quietest and can discriminate no "
+            "correct design from any wrong one, whatever its source says."
+            if len(states) == 1
+            else ""
+        )
+    )
+    return (
+        "Every step of the model driven over a corner-first input sweep.\n"
+        "This is what the model DOES; the source above is only what it claims.\n"
+        "step  inputs  ->  outputs\n"
+        + "\n".join(rows)
+        + f"\n\n{verdict}"
+    )
+
+
+def shared_prefix(
+    source: str, contract_json: str, behaviour: str | None = None
+) -> str:
     """Byte-identical across every requirement of one judging round.
 
     It contains the model source, which changes every repair round -- so unlike
@@ -163,11 +268,33 @@ def shared_prefix(source: str, contract_json: str) -> str:
     round that is still nearly all of them hitting; `cache_stats` reports it as a
     lower per-round rate rather than a defect.
     """
-    return shared_block(
+    blocks = [
         ("system", SYSTEM),
         ("reference_model", source),
         ("contract_json", contract_json),
-    )
+    ]
+    if behaviour:
+        blocks.append(("observed_behaviour", behaviour))
+    return shared_block(*blocks)
+
+
+#: Testpoints per requirement run 1 to 6, median 2, at ~1.1 kB each, and they
+#: are the only part of this that cannot be cached -- the trace rides in the
+#: shared prefix and is sent once per round. Unprojected and uncapped they added
+#: 260 kB (~65k tokens) per round on `i2c_master_bit_ctrl`, which is a real cost
+#: for context whose job is narrow: telling the judge which moment of the trace
+#: bears on this requirement.
+_TP_LIMIT = 3
+#: `check_method` tells the TESTBENCH how to check, not the judge how to judge;
+#: `dimension`, `needs`, `rev` and `covers` say nothing about the behaviour.
+_TP_FIELDS = ("uid", "stimulus", "expected_response")
+
+
+def _for_judge(testpoints: list[dict]) -> list[dict]:
+    return [
+        {k: tp[k] for k in _TP_FIELDS if k in tp}
+        for tp in testpoints[:_TP_LIMIT]
+    ]
 
 
 def build_prompt(
@@ -178,14 +305,24 @@ def build_prompt(
     methods: list[str],
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    behaviour: str | None = None,
+    testpoints: list[dict] | None = None,
 ) -> str:
-    item = "\n\n".join([
+    parts = [
         json_block("requirement", requirement),
         "<claimed_methods>\n"
         + (", ".join(methods) if methods else "(none declared)")
         + "\n</claimed_methods>",
-    ])
-    return compose(shared_prefix(source, contract_json), item,
+    ]
+    # The testpoints S2 wrote for THIS requirement, which say what exercising it
+    # looks like -- "present cmd=START and keep it stable through that clk_en
+    # edge". Prose, not vectors: `testcase_agent` concretises these, and it runs
+    # later, in the repair loop. Their value here is telling the judge which
+    # moment of the trace above bears on the requirement it was asked about.
+    if testpoints:
+        parts.append(json_block("testpoints_covering_this_requirement",
+                                _for_judge(testpoints)))
+    return compose(shared_prefix(source, contract_json, behaviour), "\n\n".join(parts),
                    issues=issues, previous=previous)
 
 
@@ -249,6 +386,9 @@ def run_judge(
     port: ModelPort,
     round_: int = 0,
     fanout: bool = True,
+    contract: dict | None = None,
+    base: str = "step",
+    testplan: list[dict] | None = None,
 ) -> JudgeResult:
     """One small call per requirement, concurrent, over one frozen model.
 
@@ -257,11 +397,21 @@ def run_judge(
     the same judge about the same source would only resample its opinion, which
     is not evidence.
     """
+    behaviour = (
+        observed_behaviour(source, contract, base=base) if contract else None
+    )
+    # testpoint.covers holds "REQ-0007@1"; the revision is not part of the key.
+    by_req: dict[str, list[dict]] = {}
+    for tp in testplan or []:
+        for ref in tp.get("covers") or []:
+            by_req.setdefault(str(ref).split("@", 1)[0], []).append(tp)
+
     def one(req: dict) -> RequirementVerdict:
         uid = str(req.get("uid") or "")
         prompt = build_prompt(
             source=source, contract_json=contract_json, requirement=req,
             methods=list(covers.get(uid) or []),
+            behaviour=behaviour, testpoints=by_req.get(uid),
         )
         raw = port.complete(stage=f"{STAGE}_{uid}", round_=round_, prompt=prompt)
         v = parse_response(raw)

@@ -113,6 +113,7 @@ def run_refmodel(
     max_repairs: int = 3,
     judge_port: ModelPort | None = None,
     run_dir: Path | None = None,
+    testplan: list[dict] | None = None,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -176,6 +177,7 @@ def run_refmodel(
                 source=rendered["src"], contract_json=contract_json,
                 requirements=requirements, covers=out.covers,
                 port=judge_port, round_=rounds["n"],
+                contract=contract, base=base, testplan=testplan,
             )
             judged["result"] = result
             if run_dir is not None:
