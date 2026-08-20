@@ -157,12 +157,19 @@ def render_testcase(
     ]
     for b in bins:
         lines.append(f'        env.cov.hit("{b["uid"]}")')
-    lines.append("        expected = env.expect(stim)")
+    lines += [
+        "",
+        "    # Registered once, AFTER the stimulus. Each check asks a question",
+        "    # about the whole run -- did the DUT produce the same ordered",
+        "    # sequence of output states as the reference model -- rather than",
+        "    # about one sampled instant per vector. Sampling looked at 3 of 12",
+        "    # cycles and a median of 4 of 8 outputs on i2c_master_bit_ctrl, so",
+        "    # a faithful oracle scored 77 of 168 not because it was aligned but",
+        "    # because most of the divergence was never examined.",
+    ]
     for c in checks:
         for signal in c.get("signals") or []:
-            lines.append(
-                f'        env.check("{c["uid"]}", "{signal}", expected, stim)'
-            )
+            lines.append(f'    env.check("{c["uid"]}", "{signal}")')
     lines += ["    await env.finish()", ""]
     return "\n".join(lines)
 

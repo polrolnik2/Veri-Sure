@@ -153,22 +153,66 @@ def test_every_failing_testpoint_carries_a_concrete_value():
     assert "omitted" in text, "a truncated list must say it was truncated"
 
 
-def test_repeated_identical_mismatches_collapse_with_their_step_range():
-    """A step held for several cycles must not cost several lines of budget."""
+def test_a_check_yields_one_row_and_needs_no_collapsing():
+    """The redundancy `_collapse` existed to fold is gone at the source.
+
+    A check used to be evaluated once per stimulus vector, so a vector held for
+    N cycles produced N byte-identical mismatch rows and `format_failures` had
+    to fold them back into one with a step range. A check now asks one question
+    about the whole run -- did the DUT produce the model's sequence of output
+    states -- and so contributes at most one row. Nothing is left to collapse,
+    and `_collapse`/`_steps` were retired with the redundancy.
+    """
+    from eda_agent import specflow_node
     from eda_agent.specflow_node import format_failures
 
-    rows = [_row("y", s) for s in range(5)]          # identical but for step
-    text = format_failures(_records([("TP-0001", rows)]))
-    value_lines = [x for x in text.splitlines() if "expected=" in x]
-    assert len(value_lines) == 1, value_lines
-    assert "@steps0-4" in value_lines[0] and "(x5)" in value_lines[0]
-
-
-def test_a_single_step_reports_its_index_not_a_range():
-    from eda_agent.specflow_node import format_failures
+    assert not hasattr(specflow_node, "_collapse")
+    assert not hasattr(specflow_node, "_steps")
 
     text = format_failures(_records([("TP-0001", [_row("y", 7)])]))
-    assert "@step7" in text and "@steps" not in text
+    value_lines = [x for x in text.splitlines() if "expected=" in x]
+    assert len(value_lines) == 1, value_lines
+
+
+def test_the_divergence_is_located_by_state_not_by_cycle():
+    """`@state7` and not `@step7`, because the two are different claims.
+
+    Durations are deliberately not compared, so the temporal coordinate is the
+    index of the first output state that differs -- not a cycle number and not a
+    stimulus vector. Printing it as `@step` would invite the agent to look for
+    vector 7, which on a design holding a vector for many cycles is somewhere
+    else entirely. The stimulus in force at that state travels in the context as
+    `vector=`.
+    """
+    from eda_agent.specflow_node import format_failures
+
+    row = dict(_row("y", 7), ctx={"vector": 2, "a": 1})
+    text = format_failures(_records([("TP-0001", [row])]))
+    assert "@state7" in text and "@step7" not in text
+    assert "vector=2" in text
+
+
+def test_a_run_that_stopped_early_says_so_rather_than_naming_a_signal():
+    """Truncation is not attributable to one output, so it reports its reason.
+
+    When the DUT runs out of output states the values are `None` on one side and
+    there is no diverging signal to name -- the line would read
+    `expected=None got=None` and say nothing. The reason carries it instead.
+    """
+    from eda_agent.specflow_node import format_failures
+
+    row = {
+        "check": "CHK-0001", "signal": None, "signals": [], "step": 3,
+        "got": None, "expected": {"y": 1}, "ctx": {"vector": 1},
+        "reason": "the design stopped after 3 output state(s); the model expected 5",
+        "timeouts": ["step 1: waited 2000 edges for cmd_ack==1 and it never happened"],
+    }
+    text = format_failures([{
+        "testpoint": "TP-0001", "failed_checks": ["CHK-0001"],
+        "failed_signals": [], "mismatches": [row],
+    }])
+    assert "the design stopped after 3 output state(s)" in text
+    assert "timeout: step 1: waited 2000 edges" in text
 
 
 def test_the_structured_payload_is_not_run_through_the_systemverilog_filter():

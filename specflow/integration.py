@@ -493,8 +493,13 @@ def trace_summary(suite_dir: Path, wave_vcd: Path | None = None) -> dict:
     for entry in payload:
         for m in entry.get("mismatches") or []:
             total += 1
-            sig = m.get("signal")
-            if sig:
+            # Every diverging signal, not just the first. One check covers all
+            # the outputs the coverage model listed for it and a state is the
+            # tuple of them, so several can leave the model's sequence on the
+            # same state -- ranking by the first alone would under-report the
+            # rest to exactly the question this summary exists to answer.
+            names = m.get("signals") or ([m["signal"]] if m.get("signal") else [])
+            for sig in names:
                 by_signal[sig] = by_signal.get(sig, 0) + 1
             step = m.get("step")
             if isinstance(step, int) and (first_step is None or step < first_step):

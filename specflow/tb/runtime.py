@@ -85,6 +85,60 @@ class Scoreboard:
             )
         return ok
 
+    def record(
+        self,
+        chk_uid: str,
+        signals: list[str],
+        verdict: Any,
+        ctx: dict | None = None,
+        timeouts: list[str] | None = None,
+    ) -> bool:
+        """Record one whole-run comparison, as `check` records one instant.
+
+        The mismatch row keeps the shape everything downstream already reads --
+        `check`, `signal`, `step`, `got`, `expected`, `ctx` -- so
+        `integration.trace_summary`, `specflow_node.format_failures` and the
+        repair loop's rollback guard need no change. Only the MEANING of `step`
+        moves: it was a stimulus vector index, and it is now the index of the
+        first divergent output state. Both are integers on the same monotone
+        later-is-better axis, which is the only property the rollback guard
+        relies on.
+
+        `signals` is added alongside `signal` because a state is the tuple of
+        every signal the check covers, and more than one of them can diverge on
+        the same state. `signal` keeps naming the first, so an older reader sees
+        what it always saw.
+        """
+        self.invoked.append(chk_uid)
+        if getattr(verdict, "ok", False):
+            return True
+        self.failed.append(chk_uid)
+
+        names = list(signals)
+        got, expected = verdict.got, verdict.expected
+        if got is None or expected is None:
+            # The two runs are different lengths -- one side stopped. That is
+            # not attributable to a signal, and naming one would be a guess.
+            diverging: list[str] = []
+        else:
+            diverging = [
+                n for n, g, e in zip(names, got, expected) if g != e
+            ]
+        self.mismatches.append(
+            {
+                "check": chk_uid,
+                "signal": diverging[0] if diverging else None,
+                "signals": diverging,
+                "step": verdict.diverged_at,
+                "got": _state(names, got),
+                "expected": _state(names, expected),
+                "ctx": {k: _plain(v) for k, v in (ctx or {}).items()},
+                "reason": getattr(verdict, "reason", ""),
+                "timeouts": list(timeouts or []),
+            }
+        )
+        return False
+
 
 @dataclass
 class CoverageRecorder:
@@ -156,6 +210,23 @@ def _plain(value: Any) -> Any:
         return str(value)
 
 
+def _state(names: list[str], state: Any) -> Any:
+    """A state tuple as something a repair agent can read.
+
+    One signal stays a bare value, because `expected=1 got=0` is what the
+    failure payload has always said. Several become a dict, so
+    `expected={'scl_oen': 1, 'sda_oen': 0}` names which output is which instead
+    of asking the reader to match a tuple against the check's signal list.
+    `None` means the side had no state at all -- it ran out.
+    """
+    if state is None:
+        return None
+    values = [_plain(v) for v in state]
+    if len(names) == 1 and len(values) == 1:
+        return values[0]
+    return dict(zip(names, values))
+
+
 class Env:
     """Per-testpoint environment: clock, reset, reference model, verdict record."""
 
@@ -202,6 +273,14 @@ class Env:
         #: raised: a timeout is a verdict about the design, and one testpoint
         #: timing out must not stop the rest of the suite reporting.
         self.timeouts: list[str] = []
+        #: One row per clock edge after reset: (dut outputs, model outputs).
+        #: Both sides already advance in lockstep, so this is a recording rather
+        #: than a second simulation, and it is what lets a check compare
+        #: SEQUENCES instead of one sampled point per stimulus vector.
+        self._trace: list[tuple[dict, dict]] = []
+        #: Signals registered per check uid, in the order the renderer emitted
+        #: them. The comparison runs at `finish()` over the whole trace.
+        self._registered: dict[str, list[str]] = {}
         self._finished = False
 
     def _clk(self):
@@ -356,12 +435,20 @@ class Env:
             await Timer(1, unit="ns")
             if stim is not None:
                 self._expected = self._advance_model(stim)
+            # Record here too. A combinational design has no edge, so without
+            # this its trace stays empty, `transactional([], [])` is trivially
+            # equal, and EVERY check on it passes having compared nothing. That
+            # is the vacuity the whole design exists to prevent, and it would
+            # have been reintroduced by the comparison moving off the sample.
+            self._record()
             return
 
         async def one_edge() -> None:
             await self.tick(1)
             if stim is not None:
                 self._expected = self._advance_model(stim)
+            await self._settled()
+            self._record()
 
         if until:
             # Run until the design says it is done. `timeout` bounds it so a
@@ -373,7 +460,6 @@ class Env:
             handle = getattr(self.dut, port, None) if port else None
             for _ in range(budget):
                 await one_edge()
-                await self._settled()
                 if handle is not None and _plain(handle.value) == want:
                     break
             else:
@@ -385,7 +471,6 @@ class Env:
 
         for _ in range(latency_free_hold):
             await one_edge()
-        await self._settled()
 
     async def _settled(self) -> None:
         """Let this edge's non-blocking updates land before anything samples.
@@ -468,11 +553,107 @@ class Env:
 
     # -- verdict -----------------------------------------------------------
 
-    def check(self, chk_uid: str, signal: str, expected_map: dict, ctx: dict) -> bool:
-        return self.sb.check(
-            chk_uid, self.sample(signal), expected_map.get(signal), ctx,
-            signal=signal, step=self.step_index,
+    def _record(self) -> None:
+        """Append this edge to the trace: both sides' outputs, and its stimulus.
+
+        The stimulus travels with the edge because the divergence index is an
+        index into the run-length-encoded STATE sequence, and a repair agent
+        cannot act on "state 4 is wrong" without knowing what was being driven
+        when state 4 began. Carrying it per edge is what lets `_resolve` hand
+        back the vector that produced the divergence rather than whichever
+        vector happened to be last.
+        """
+        ports = list(getattr(self.ref, "OUTPUT_PORTS", []) or [])
+        if not ports:
+            return
+        expected = self._expected or {}
+        self._trace.append((
+            {p: self.sample(p) for p in ports},
+            {p: _plain(expected.get(p)) for p in ports},
+            self.step_index,
+            self._inputs,
+        ))
+
+    def check(self, chk_uid: str, *signals: str) -> None:
+        """Register a check. The comparison happens at `finish()`.
+
+        It used to compare one signal at one instant, once per stimulus vector,
+        and the verdict was the conjunction of those samples. That looked at 3
+        of 12 cycles on i2c and a median of 4 of 8 outputs, so a faithful oracle
+        scored 77 of 168 not because it was aligned but because most divergence
+        was never examined.
+
+        Registering here and comparing at the end keeps the emitted call shape
+        that G5's AST vacuity gate looks for -- a literal `env.check("CHK-...")`
+        -- and keeps `finish()`'s "no check ran" assertion meaningful, while the
+        comparison itself becomes a question about the whole run.
+        """
+        names = [s for s in signals if s]
+        self._registered.setdefault(chk_uid, [])
+        for name in names:
+            if name not in self._registered[chk_uid]:
+                self._registered[chk_uid].append(name)
+
+    def _resolve(self) -> None:
+        """Run every registered check over the recorded trace.
+
+        An empty trace fails rather than passing. `transactional([], [])` is
+        trivially equal, so a testpoint that recorded nothing -- no clock and no
+        `_record`, or a model declaring no outputs -- would otherwise report
+        every one of its checks as passed having compared nothing. That is the
+        exact vacuity `render.py` and G5 exist to make impossible, and moving
+        the comparison off the per-vector sample is precisely where it could
+        creep back in.
+        """
+        from ..trace_compare import Verdict, cycle_exact, transactional
+
+        # `SPECFLOW_COMPARE=cycle_exact` is a measuring instrument and nothing
+        # else. The gap between the two criteria is how much of a disagreement
+        # is phasing rather than behaviour, and that is a question about the
+        # harness -- asked in this repo's own experiments against golden RTL by
+        # `benchmarks/golden_check.py`. It is never set by the pipeline, and the
+        # cycle-exact verdict is never shown to an agent: telling a repair agent
+        # its failure is "phasing only" understates the one thing the
+        # benchmark's sequential-equivalence scoring cares about, where a single
+        # surplus hold cycle is a function failure.
+        compare = (
+            cycle_exact
+            if os.environ.get("SPECFLOW_COMPARE") == "cycle_exact"
+            else transactional
         )
+
+        for chk_uid, signals in self._registered.items():
+            if not signals:
+                continue
+            if not self._trace:
+                verdict = Verdict(
+                    False,
+                    reason="nothing was recorded for this testpoint; the check "
+                           "compared no cycles and cannot be said to have passed",
+                )
+            else:
+                dut = [tuple(row[0].get(s) for s in signals) for row in self._trace]
+                model = [tuple(row[1].get(s) for s in signals) for row in self._trace]
+                verdict = compare(dut, model)
+            self.sb.record(
+                chk_uid, signals, verdict,
+                ctx=self._ctx_at(verdict), timeouts=self.timeouts,
+            )
+
+    def _ctx_at(self, verdict) -> dict:
+        """The stimulus vector in force when the divergent state began."""
+        at = getattr(verdict, "diverged_at", None)
+        if at is None or not self._trace:
+            return dict(self._inputs)
+        # Run `at` of the DUT's encoding starts after every earlier run's edges.
+        # When the DUT ran OUT of states, `at == len(runs)` and the sum lands
+        # one past the end -- the last edge is the closest true answer. The
+        # cycle-exact instrument reports no durations because its index already
+        # IS an edge, so an empty list means "take it literally".
+        offset = sum(verdict.dut_durations[:at]) if verdict.dut_durations else at
+        edge = min(offset, len(self._trace) - 1)
+        _, _, step, inputs = self._trace[edge]
+        return {"vector": step, **{k: _plain(v) for k, v in inputs.items()}}
 
     async def finish(self) -> None:
         """Write this testpoint's record, then assert once.
@@ -487,6 +668,7 @@ class Env:
         if self._finished:
             return
         self._finished = True
+        self._resolve()
 
         status = "FAIL" if self.sb.failed else ("PASS" if self.sb.invoked else "NOT_EXERCISED")
         record = {
@@ -495,8 +677,13 @@ class Env:
             "checks_invoked": sorted(set(self.sb.invoked)),
             "checks_failed": sorted(set(self.sb.failed)),
             "signals_failed": sorted(
-                {m["signal"] for m in self.sb.mismatches if m.get("signal")}
+                {
+                    name
+                    for m in self.sb.mismatches
+                    for name in (m.get("signals") or ([m["signal"]] if m.get("signal") else []))
+                }
             ),
+            "timeouts": list(self.timeouts),
             "bins_hit": sorted(self.cov.hits),
             "mismatches": self.sb.mismatches,
         }

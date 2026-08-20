@@ -78,14 +78,53 @@ def test_rendered_testcase_contains_no_expected_value(tmp_path):
     """Expected values come from the reference model, never from the testcase.
 
     A testcase that hard-codes a number is an oracle that cannot notice a design
-    change, so the renderer must never emit one.
+    change, so the renderer must never emit one. The check call itself is the
+    proof: it names a UID and a signal and carries no value at all, because the
+    comparison happens inside the runtime against the model's own recorded
+    outputs. It used to take `expected` as an argument, and an argument is a
+    place a value could be substituted.
+    """
+    import ast
+
+    suite, manifest, _, _, _, _ = build_suite(tmp_path)
+    for name in manifest.modules:
+        src = (suite / "tests" / f"{name}.py").read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        # No name `expected` is bound anywhere in the emitted code. The word
+        # still occurs in the header prose, which is why this asks the AST.
+        assert not [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Name) and n.id == "expected"
+        ], src
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "check":
+                assert not node.keywords
+                assert all(
+                    isinstance(a, ast.Constant) and isinstance(a.value, str)
+                    for a in node.args
+                ), ast.dump(node)
+                assert len(node.args) == 2, ast.dump(node)
+
+
+def test_checks_are_registered_after_the_stimulus_loop(tmp_path):
+    """A check asks about the whole run, so it cannot live inside the loop.
+
+    Registering inside the loop is what made the comparison a per-vector sample:
+    3 of 12 cycles and a median of 4 of 8 outputs on i2c_master_bit_ctrl, so a
+    faithful transliteration of golden scored 77 of 168 not because it was
+    aligned but because most of the divergence was never looked at.
     """
     suite, manifest, _, _, _, _ = build_suite(tmp_path)
     for name in manifest.modules:
         src = (suite / "tests" / f"{name}.py").read_text(encoding="utf-8")
-        assert "env.expect(stim)" in src
-        # The only literals are the stimulus and the UIDs.
-        assert "expected =" in src and "expected = {" not in src
+        lines = src.splitlines()
+        loop = next(i for i, x in enumerate(lines) if x.strip().startswith("for stim in"))
+        checks = [i for i, x in enumerate(lines) if x.strip().startswith("env.check(")]
+        assert checks, src
+        for i in checks:
+            assert i > loop
+            # Loop body is indented 8; a registration at the function level is 4.
+            assert len(lines[i]) - len(lines[i].lstrip()) == 4, lines[i]
 
 
 def test_g5_accepts_the_rendered_suite(tmp_path):

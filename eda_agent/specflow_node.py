@@ -59,33 +59,21 @@ def _load_testplan(run_dir: Path) -> list[dict] | None:
     return data if isinstance(data, list) else None
 
 
-def _steps(m: dict) -> str:
-    lo, hi = m.get("step_first"), m.get("step_last")
-    if lo is None:
-        return ""
-    return f"@step{lo}" if lo == hi else f"@steps{lo}-{hi} (x{m.get('repeats', 1)})"
+def _where(m: dict) -> str:
+    """Where in the run the DUT first left the model's output sequence.
 
+    A state index, not a cycle and not a stimulus vector. The checks compare
+    run-length-encoded output states, so "@state7" means the DUT's seventh
+    distinct output state is not the model's seventh -- how many cycles each was
+    held is deliberately not part of the question.
 
-def _collapse(rows: list[dict]) -> list[dict]:
-    """One entry per distinct (check, signal, values, stimulus), with its span."""
-    out: dict[tuple, dict] = {}
-    for m in rows:
-        key = (
-            m.get("check"), m.get("signal"), m.get("got"), m.get("expected"),
-            json.dumps(m.get("ctx") or {}, sort_keys=True),
-        )
-        step = m.get("step")
-        seen = out.get(key)
-        if seen is None:
-            out[key] = dict(m, step_first=step, step_last=step, repeats=1)
-        else:
-            seen["repeats"] += 1
-            if step is not None:
-                if seen["step_first"] is None or step < seen["step_first"]:
-                    seen["step_first"] = step
-                if seen["step_last"] is None or step > seen["step_last"]:
-                    seen["step_last"] = step
-    return list(out.values())
+    This replaces `_collapse`, which existed only because a vector held N cycles
+    produced N byte-identical mismatch rows that had to be folded back into one
+    with a step range. Comparing sequences instead of instants means each check
+    yields at most one row, so there is nothing left to collapse.
+    """
+    at = m.get("step")
+    return f"@state{at}" if isinstance(at, int) else ""
 
 
 def format_failures(
@@ -138,12 +126,7 @@ def format_failures(
         # which output is wrong -- and that is the whole question a repair agent
         # is trying to answer.
         lines.append(head + (f" -- diverging outputs: {sigs}" if sigs else ""))
-        # Collapse rows that are identical in every respect but the step: a
-        # stimulus step held for several cycles produces the same mismatch each
-        # cycle, and three identical lines cost three lines of budget to say
-        # what one line and a count say. The step range is kept, because on a
-        # stateful design *when* it diverged is the question.
-        rows = _collapse(entry.get("mismatches") or [])
+        rows = entry.get("mismatches") or []
         here = 0
         for m in rows:
             if here >= per_testpoint or shown >= limit:
@@ -155,14 +138,23 @@ def format_failures(
                 )
                 break
             ctx = ", ".join(f"{k}={v}" for k, v in (m.get("ctx") or {}).items())
-            sig = m.get("signal")
+            sig = ", ".join(m.get("signals") or []) or m.get("signal")
             head = " ".join(
-                x for x in (str(m.get("check")), sig, _steps(m)) if x
+                x for x in (str(m.get("check")), sig, _where(m)) if x
             )
             lines.append(
                 f"  {head}: expected={m.get('expected')} got={m.get('got')}"
                 + (f" on {ctx}" if ctx else "")
             )
+            # The reason carries the cases a value pair cannot state: a design
+            # that stopped producing states early, or produced more than the
+            # model has. Those have no diverging signal to name, so without it
+            # the line would read "expected=None got=None" and say nothing.
+            reason = m.get("reason")
+            if reason and not m.get("signals") and not m.get("signal"):
+                lines.append(f"    {reason}")
+            for t in m.get("timeouts") or []:
+                lines.append(f"    timeout: {t}")
             shown += 1
             here += 1
     return "\n".join(lines)
