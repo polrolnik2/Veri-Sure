@@ -165,6 +165,20 @@ class ApiPort:
     model_override: str | None = None
     #: Reasoning effort for this port only, same reasoning.
     effort_override: str | None = None
+    #: Stages the override must NOT touch. The docstring above has always said
+    #: "the whole-artifact stages keep the configured one", and the code did not
+    #: do it: `make_port` attaches the override to the single port the whole run
+    #: shares, so `SPECFLOW_SMALL_MODEL` silently captured EVERY stage.
+    #:
+    #: Measured on a live `alu` run: the operator had configured
+    #: `gpt-5.6-luna` at `xhigh`, and every artifact in the run -- including the
+    #: reference model -- was written by `gpt-5-mini` at `low`. Nothing reported
+    #: it; the artifacts looked plausible and the node accepted. The reference
+    #: model is the one artifact whose correctness the whole pipeline rests on,
+    #: so it is the one that must never be quietly downgraded.
+    #:
+    #: `SPECFLOW_FULL_STRENGTH_STAGES` overrides the set (comma-separated).
+    full_strength_stages: frozenset = frozenset({"refmodel"})
     #: Where prompt-cache accounting goes. Optional, because the single-call
     #: stages have nothing to cache across; supplied by every fanned-out stage,
     #: because there a silent cache loss is a ~30x cost regression that no gate,
@@ -176,7 +190,7 @@ class ApiPort:
     _client_kwargs: dict | None = None
 
     # ------------------------------------------------------------------ config
-    def config(self):
+    def config(self, stage: str | None = None):
         """Resolve model, key, base URL and generation kwargs.
 
         `.env.local` (or `$SPECFLOW_ENV_FILE`) wins over the process
@@ -185,9 +199,28 @@ class ApiPort:
         parsing `OPENAI_EXTRA_BODY`, which is where a reasoning effort set by the
         operator lives.
         """
-        if self._config is not None:
-            return self._config
+        # The BASE config is cached; the stage-dependent overrides are not, and
+        # that separation is the whole point. Caching the fully-resolved config
+        # meant the first stage to call this froze its own model choice for the
+        # entire run -- `classify` runs first, so the small model captured every
+        # later stage including `refmodel`, which is exactly the stage the
+        # override is supposed to leave alone.
+        cfg = self._config
+        if cfg is None:
+            cfg = self._resolve_base()
+            self._config = cfg
+        return self._apply_overrides(cfg, stage)
 
+    def _apply_overrides(self, cfg, stage: str | None):
+        full_strength = stage is not None and stage in self.full_strength_stages
+        if self.model_override and not full_strength:
+            cfg = replace(cfg, model=self.model_override)
+        if self.effort_override and not full_strength:
+            cfg = replace(cfg, reasoning_effort=self.effort_override)
+        return cfg
+
+    def _resolve_base(self):
+        """`.env.local` plus the process environment, without any stage override."""
         from eda_agent.config import load_openai_config
 
         overrides = load_env_file()
@@ -216,17 +249,11 @@ class ApiPort:
                 else:
                     os.environ[k] = v
 
-        if self.model_override:
-            cfg = replace(cfg, model=self.model_override)
-        if self.effort_override:
-            cfg = replace(cfg, reasoning_effort=self.effort_override)
-
         if not cfg.api_key:
             raise RuntimeError(
                 "no API key: set OPENAI_API_KEY, or write it to .env.local "
                 "(a running session cannot re-read its own environment)"
             )
-        self._config = cfg
         return cfg
 
     def _client(self):
@@ -350,7 +377,7 @@ class ApiPort:
 
     # ------------------------------------------------------------------- call
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
-        cfg = self.config()
+        cfg = self.config(stage)
         prompt_path, response_path = _paths(Path(self.root), stage, round_)
         prompt_path.write_text(prompt, encoding="utf-8")
 
@@ -497,6 +524,11 @@ def make_port(kind: str, root: Path, stats: object | None = None) -> ModelPort:
             stats=stats,
             model_override=os.environ.get("SPECFLOW_SMALL_MODEL") or None,
             effort_override=os.environ.get("SPECFLOW_SMALL_EFFORT") or None,
+            full_strength_stages=frozenset(
+                s.strip() for s in (
+                    os.environ.get("SPECFLOW_FULL_STRENGTH_STAGES") or "refmodel"
+                ).split(",") if s.strip()
+            ),
         )
     return kinds[kind](root=Path(root))  # type: ignore[abstract]
 
