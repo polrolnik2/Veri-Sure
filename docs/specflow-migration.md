@@ -385,15 +385,19 @@ each vector held 60 edges so a command can actually complete:
 
 | DUT | cycle-exact | transactional |
 | --- | --- | --- |
-| golden (correct) | 36 / 168 | **113 / 168** |
+| golden (correct) | 63 / 168 | **113 / 168** |
 | generated (wrong) | 20 / 168 | **28 / 168** |
-| **separation** | **16** | **85** |
+| **separation** | **43** | **85** |
 
-Ignoring durations discriminates **more than five times better**, because phase
-noise from a guessed latency was swamping the behavioural signal. (The
-transactional column moved from 69/28 to 113/28 once testpoint isolation landed
-— see below; the cycle-exact column is the pre-isolation figure and is only kept
-for the shape of the comparison.)
+Ignoring durations discriminates about **twice** as well, because phase noise
+from a guessed latency was swamping the behavioural signal.
+
+Both columns are measured with testpoint isolation. An earlier revision of this
+table paired a post-isolation transactional column with a pre-isolation
+cycle-exact one and read a 5x ratio off the mismatch; isolation lifts cycle-exact
+from 36 to 63 too, so the honest ratio is 2x. The direction of the finding is
+unchanged and the reason for it is unchanged — the size was overstated by
+comparing two different harnesses.
 
 **Read both numbers, never one.** A criterion that passes everything scores well
 on the pass rate and is worthless. The pass rate of a *correct* design says how
@@ -618,3 +622,36 @@ Pinned by `tests/fixtures/harness/unreset_reg`, a design with one deliberately
 unreset register, driven by two testpoints where the first loads it and the
 second never does. Both the behaviour and the mechanism are asserted: batching
 the modules back together fails both tests.
+
+
+### What the control measurement is, and is not
+
+Only the **DUT** in that measurement is known-good. Three of the four things
+making up the "testbench" are unvetted:
+
+| component | status |
+| --- | --- |
+| `specflow/tb/runtime.py` + renderer | repo code — the thing under test |
+| the oracle (`scratchpad/goldmodel/ref_model.py`) | a hand transliteration of golden into Python; best-effort, never verified |
+| the stimulus | LLM-generated in the cv-j3 run, re-expressed at `hold=60` |
+| the checks and coverage model | LLM-generated in cv-j3 |
+
+So a failure in it is **not** attributable to the harness by construction, and
+the 113/168 figure is a ceiling on the *pair*, not a measurement of the harness
+alone. The only known-good-TB measurement in this repo is
+`tests/test_harness_conformance.py`: seven hand-matched (RTL, model) pairs that
+agree by construction, each also required to reject a tied-off DUT. Those score
+100%, on designs far smaller than an i2c core.
+
+**One of the 55 was attributed, and it is the oracle.** TP-0035 drives a WRITE
+at `clk_cnt=0`. Golden's FSM is `wr_a (scl_oen=0) → wr_b (1) → wr_c (1) →
+wr_d (0, cmd_ack=1) → idle`, and `idle` never touches `scl_oen`, so it holds 0 —
+giving a per-command sequence of `0,0,1,1,0+ack`, period 5. That is exactly the
+DUT's trace. The transliteration instead **releases SCL on the two edges right
+after `cmd_ack`**, where golden holds it low. Golden's own RTL settles it: the
+model is wrong there. Eight more failures carry the identical signature
+(`scl_oen` alone, model 1, DUT 0).
+
+The full residual: `al` alone 16, one side ran out of states 12, `scl_oen` alone
+10, `cmd_ack`+`scl_oen`+`sda_oen` 5, `busy` 3, and a tail of 9. One cluster
+attributed; the other three unexamined.
