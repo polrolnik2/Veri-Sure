@@ -29,6 +29,16 @@ You write clean, synthesizable, syntactically-correct SystemVerilog RTL that mat
 
 Toolchain note:
 - The harness uses Verilator. Keep RTL compatible with Verilator (standard synthesizable SystemVerilog).
+- BUT DECLARE THE MODULE PORTS IN PLAIN VERILOG-2005: `input [15:0] a`,
+  `output reg [15:0] r`. Never `input logic` / `output logic` in the port list.
+  The body may stay SystemVerilog; only the port declarations must be portable.
+  This is not a style preference. Benchmark testbenches are Verilog-2005, and
+  one `logic` keyword in a port list makes the testbench fail to compile with
+  "Net data type requires SystemVerilog". The scoring flow then falls back to a
+  formal miter, which is stricter and reports a functionally CORRECT design as
+  not equivalent. Measured on `alu`: identical logic scored `function_fail`
+  with `input logic` and `pass` with `input` -- the whole difference was the
+  keyword, and every design generated so far carried it.
 
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
