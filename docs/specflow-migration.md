@@ -546,17 +546,15 @@ carry the extra span rather than a repair round adding it.
 
 ### What this work does not establish
 
-**The control model is at 129/168, not 168/168.** After excluding the one known
-asymmetry, 39 of 168 testpoints still fail with a correct DUT and an oracle
-transliterated line by line from it. The residual is not uniform: 60 of the
-99 raw failures diverge on `dout` **alone, at the very first recorded state**,
-while every other output diverges at spread-out state indices (1, 2, 3, 4, 13,
-15, 29, 31, 32…). That distribution says the comparison and the reset alignment
-are sound and that `dout` specifically is wrong from the first sample — it is
-the one output captured through a three-stage input filter whose post-reset
-transient the transliteration may not reproduce edge for edge. **Which side owns
-that transient was not settled**, and it is the next question worth asking of
-this oracle.
+**The control model is at 113/168, not 168/168.** 55 testpoints still fail with
+a correct DUT and an oracle transliterated line by line from it, spread across
+`scl_oen` (21), `al` (16), `sda_oen` (11), `cmd_ack` (11) and `busy` (3) — no
+longer dominated by any single output, which is what testpoint isolation
+removed. Each remaining cluster is its own question and none has been chased.
+
+The `dout` residual this section originally described as an open question about
+a post-reset filter transient was settled and that guess was wrong: it was state
+leaking across testpoints, fixed above.
 
 **Two of the plan's verification items need a live model run and did not get
 one.** Whether Phase 3 actually removes the 61 testpoints that end mid-command
