@@ -163,8 +163,22 @@ def main(argv: list[str] | None = None) -> int:
               f"   diverging outputs {row['by_signal']}")
     if len(rows) >= 2:
         best, worst = rows[0], rows[-1]
-        print(f"\nseparation ({best['label']} - {worst['label']}): "
-              f"{best['passed'] - worst['passed']}")
+        gap = best["passed"] - worst["passed"]
+        print(f"\nseparation ({best['label']} - {worst['label']}): {gap}")
+        if gap <= 0:
+            # Read this as an indictment of the instrument before the model.
+            # `or1200_gmultp2_32x32` scored 36/36 against golden AND 36/36
+            # against its mutant, which is the exact signature of a vacuous
+            # oracle -- and the oracle was correct. `mutate.py` had picked a
+            # site inside `input [`OR1200_W-1:0] X`, which only widens the port;
+            # the harness drives the 32-bit contract port and `xi` is an
+            # `integer`, so the "wrong" DUT was byte-for-byte golden's
+            # behaviour. A correct model is OBLIGED to pass both.
+            print(f"  !! separation {gap} does not mean the model is vacuous, "
+                  f"and this number is not yet interpretable.")
+            print(f"  !! First show that {worst['label']} differs from "
+                  f"{best['label']} at all: an equivalent mutant makes every "
+                  f"model score identically on both, however good or bad.")
         # No silent caps: name what a per-signal exclusion would be worth, so
         # the headline number is never read as if one output were not dominating.
         for row in rows:
