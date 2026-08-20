@@ -157,3 +157,78 @@ def test_backoff_grows_and_stays_bounded(tmp_path, monkeypatch):
 
     assert slept == [4.0, 8.0, 16.0, 30.0]
     assert max(slept) <= 30.0
+
+
+class _Chat:
+    """Fails `fail_times` times mid-stream, then streams a complete answer."""
+
+    def __init__(self, exc, fail_times, stream=True):
+        self.exc, self.fail_times, self.calls, self.stream = exc, fail_times, 0, stream
+
+    def create(self, **_kw):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise self.exc
+        if not self.stream:
+            msg = type("M", (), {"content": "ok"})()
+            choice = type("C", (), {"message": msg, "finish_reason": "stop"})()
+            return type("R", (), {"choices": [choice], "usage": None})()
+        chunk = type("Ch", (), {
+            "usage": None,
+            "choices": [type("C", (), {
+                "delta": type("D", (), {"content": "hello"})(),
+                "finish_reason": "stop"})()],
+        })()
+        return iter([chunk])
+
+
+def _chat_client(chat):
+    completions = chat
+    return type("C", (), {
+        "chat": type("Chat", (), {"completions": completions})()
+    })()
+
+
+def _chat_cfg(stream=True):
+    return type("Cfg", (), {"model": "m", "stream": stream})()
+
+
+def test_chat_completions_retries_a_mid_stream_failure(tmp_path, monkeypatch):
+    """The same defect lived on the DEFAULT flavour. `/chat/completions`
+    iterated the stream outside any try/except, so the identical bare
+    `APIError` propagated raw and unretried."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    exc = openai.APIError("server had an error", request=_request(),
+                          body={"code": "server_error"})
+    chat = _Chat(exc, fail_times=1)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(), {}, "prompt")
+
+    assert text == "hello"
+    assert chat.calls == 2
+
+
+def test_chat_completions_does_not_retry_a_permanent_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _Chat(_status(openai.BadRequestError, 400), fail_times=99)
+    port = _port(tmp_path, 3)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    with pytest.raises(openai.BadRequestError):
+        port._chat_call(_chat_cfg(), {}, "prompt")
+    assert chat.calls == 1
+
+
+def test_chat_completions_non_streaming_still_works(tmp_path, monkeypatch):
+    """The refactor moved the non-streamed branch too; it must still return
+    the message content rather than a reassembled stream."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _Chat(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok"
+    assert chat.calls == 1

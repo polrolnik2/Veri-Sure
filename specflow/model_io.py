@@ -657,6 +657,56 @@ class ApiPort:
         )
         return text
 
+    def _chat_call(self, cfg, kwargs: dict, prompt: str):
+        """`/chat/completions`, resent on a failure a resend could fix.
+
+        The streamed branch used to iterate the response OUTSIDE any try/except,
+        so a mid-stream error -- which the SDK raises as a bare `APIError` when
+        the SSE carries an error event -- propagated raw and unretried. That is
+        the identical defect that cost a 30-minute reference-model generation on
+        the `/v1/responses` path; this path is the DEFAULT flavour, so it had
+        the same hole in the more travelled road.
+
+        Unlike the responses path there is nothing partial worth keeping: the
+        text is only meaningful once the stream ends, so a retry re-issues the
+        whole call. Returns `(response, text)` because the streamed branch has
+        to reassemble before it can produce either.
+        """
+        attempts = max(0, self.settings.stream_retries) + 1
+        last: Exception | None = None
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(min(30.0, 4.0 * (2 ** (attempt - 1))))
+            try:
+                response = self._client().chat.completions.create(
+                    model=cfg.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    **kwargs,
+                )
+                if not cfg.stream:
+                    return response, (response.choices[0].message.content or "").strip()
+                # Reassemble, and keep the usage record: it arrives in a final
+                # chunk that carries no choices, which is why `include_usage` is
+                # set by the caller. Without it an API run would record a
+                # fixture with no cost attached.
+                parts: list[str] = []
+                usage_obj = None
+                finish = None
+                for chunk in response:
+                    usage_obj = getattr(chunk, "usage", None) or usage_obj
+                    for choice in getattr(chunk, "choices", None) or []:
+                        delta = getattr(choice, "delta", None)
+                        if delta is not None and getattr(delta, "content", None):
+                            parts.append(delta.content)
+                        finish = getattr(choice, "finish_reason", None) or finish
+                text = "".join(parts).strip()
+                return _StreamedResponse(text, usage_obj, finish, cfg.model), text
+            except Exception as exc:  # noqa: BLE001
+                if not _retryable(exc):
+                    raise
+                last = exc
+        raise last  # type: ignore[misc]
+
     # ------------------------------------------------------------------- call
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
         cfg = self.config(stage)
@@ -684,11 +734,7 @@ class ApiPort:
             kwargs["stream_options"] = {"include_usage": True}
 
         try:
-            response = self._client().chat.completions.create(
-                model=cfg.model,
-                messages=[{"role": "user", "content": prompt}],
-                **kwargs,
-            )
+            response, text = self._chat_call(cfg, kwargs, prompt)
         except Exception as exc:  # noqa: BLE001
             # A generation longer than the network path will tolerate dies as a
             # bare connection error, which reads like a flaky link and is not.
@@ -735,25 +781,6 @@ class ApiPort:
                     f"the gateway actually serves."
                 ) from exc
             raise
-        if cfg.stream:
-            # Reassemble the response, and keep the usage record: it arrives in
-            # a final chunk that carries no choices, which is why
-            # `include_usage` is set above. Without it an API run would record a
-            # fixture with no cost attached.
-            parts: list[str] = []
-            usage_obj = None
-            finish = None
-            for chunk in response:
-                usage_obj = getattr(chunk, "usage", None) or usage_obj
-                for choice in getattr(chunk, "choices", None) or []:
-                    delta = getattr(choice, "delta", None)
-                    if delta is not None and getattr(delta, "content", None):
-                        parts.append(delta.content)
-                    finish = getattr(choice, "finish_reason", None) or finish
-            text = "".join(parts).strip()
-            response = _StreamedResponse(text, usage_obj, finish, cfg.model)
-        else:
-            text = (response.choices[0].message.content or "").strip()
 
         # An empty completion is its own failure and must not reach the parser.
         # A reasoning model that spends its whole token budget before emitting
