@@ -351,16 +351,23 @@ class ApiPort:
             got: list[str] = []
             final = None
             try:
-                with client.responses.stream(**call) as stream:
-                    for event in stream:
-                        kind = getattr(event, "type", "")
-                        if kind == "response.output_text.delta":
-                            got.append(event.delta)
-                        elif kind in ("response.completed", "response.incomplete",
-                                      "response.failed"):
-                            final = getattr(event, "response", None) or final
-                    if final is None:
-                        final = stream.get_final_response()
+                # `create(stream=True)`, NOT the `stream()` helper. The helper
+                # runs an accumulator that rebuilds a response snapshot from
+                # every event, and it raises on shapes this gateway actually
+                # sends: `IndexError: list index out of range` from
+                # `snapshot.output[event.output_index]`, which killed a live run
+                # in `classify` -- a small, cheap stage that has nothing to do
+                # with long generations. Raw event iteration never hit it once
+                # across every probe run here, thousands of events. The
+                # accumulation was never needed: the final response arrives in
+                # the terminal event.
+                for event in client.responses.create(**call, stream=True):
+                    kind = getattr(event, "type", "")
+                    if kind == "response.output_text.delta":
+                        got.append(event.delta)
+                    elif kind in ("response.completed", "response.incomplete",
+                                  "response.failed"):
+                        final = getattr(event, "response", None) or final
                 return got, final
             except Exception as exc:  # noqa: BLE001
                 if type(exc).__name__ not in (

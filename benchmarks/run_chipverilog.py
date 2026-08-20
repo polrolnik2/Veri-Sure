@@ -292,6 +292,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # A running container cannot re-read its own environment, so credentials
     # rotated after start only arrive through a file. See specflow.model_io.
+    # Both halves, or the flag is a lie. Updating `os.environ` is not enough:
+    # every specflow port calls `load_env_file()` itself, which reads
+    # `SPECFLOW_ENV_FILE` or falls back to `.env.local` -- and those values
+    # OVERRIDE the process environment by design, because a rotated key must be
+    # able to reach a running session. So `--env-file other.env` set the
+    # environment and was then silently overwritten by `.env.local` inside every
+    # stage. Measured: a run launched with an env file naming `high` did its
+    # reference-model generation at `xhigh`, and the only reason anyone noticed
+    # was that a failure message happened to print the effort it used.
+    os.environ["SPECFLOW_ENV_FILE"] = str(Path(args.env_file))
     os.environ.update(load_env_file(Path(args.env_file)))
 
     # AFTER the env file, so an explicit flag beats a stale value left in
