@@ -30,6 +30,7 @@ from pathlib import Path
 MUTATIONS: list[tuple[str, str, str]] = [
     (r"(?<![+\-*/<>=!&|^~])\+(?![+=])", "-", "+ becomes -"),
     (r"(?<![+\-*/<>=!&|^~])-(?![-=>])", "+", "- becomes +"),
+    (r"(?<![*/])\*(?![*/=])", "+", "* becomes +"),
     (r"(?<![&])&(?![&=])", "|", "bitwise & becomes |"),
     (r"(?<![|])\|(?![|=])", "&", "bitwise | becomes &"),
     (r"<<", ">>", "<< becomes >>"),
@@ -38,12 +39,23 @@ MUTATIONS: list[tuple[str, str, str]] = [
 
 _COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 
+#: `[msb:lsb]` — a width or part-select range. Editing one resizes a
+#: declaration rather than changing logic, and the result is very often an
+#: EQUIVALENT mutant: widening `input [`W-1:0] X` to `[`W+1:0]` leaves every
+#: driven bit untouched when the extra bits are never read. `or1200_gmultp2_32x32`
+#: is the extreme case — all five of its sites were ranges, so the tool could not
+#: express a wrong version of that design at all, and the discrimination check it
+#: fed reported separation 0 for a reason that had nothing to do with the model.
+#: Bit-selects without a colon (`x[i+1]`) stay mutable; they are logic.
+_RANGE = re.compile(r"\[[^\[\]\n]*:[^\[\]\n]*\]")
+
 
 def _maskable(text: str) -> list[tuple[int, int]]:
-    """Spans that must not be mutated: comments, strings, and `include lines."""
+    """Spans that must not be mutated: comments, strings, `directives, ranges."""
     spans = [(m.start(), m.end()) for m in _COMMENT.finditer(text)]
     spans += [(m.start(), m.end()) for m in re.finditer(r'"[^"\n]*"', text)]
     spans += [(m.start(), m.end()) for m in re.finditer(r"^\s*`\w+[^\n]*", text, re.M)]
+    spans += [(m.start(), m.end()) for m in _RANGE.finditer(text)]
     return spans
 
 

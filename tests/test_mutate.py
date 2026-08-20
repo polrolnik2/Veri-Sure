@@ -57,3 +57,34 @@ def test_it_refuses_rather_than_returning_golden_unchanged():
     """Silently returning the input would make every discrimination check pass."""
     with pytest.raises(SystemExit):
         mutate("module m; endmodule\n", 99)
+
+
+def test_width_ranges_are_never_mutated():
+    """`[`W-1:0]` -> `[`W+1:0]` resizes a declaration, and the extra bits are
+    read by nothing, so the "mutant" is behaviourally identical to golden.
+    Every applicable site in `or1200_gmultp2_32x32` was one of these, so the
+    tool could not express a wrong version of that design at all and the
+    discrimination check it fed reported separation 0 for a reason that had
+    nothing to do with the reference model under test."""
+    src = "module m(input [`W-1:0] x, output [`WW-1:0] p); assign p = x & 1; endmodule\n"
+    out, what = mutate(src)
+    assert "[`W-1:0]" in out and "[`WW-1:0]" in out
+    assert "x | 1" in out
+    assert "becomes" in what
+
+
+def test_a_bit_select_is_still_logic():
+    """Masking every bracket would be over-broad: `a[i-1]` selects a different
+    bit, which is a real behavioural change."""
+    src = "module m; assign y = a[i-1]; endmodule\n"
+    out, _ = mutate(src)
+    assert "a[i+1]" in out
+
+
+def test_multiply_is_mutable():
+    """`or1200_gmultp2_32x32`'s only logic is one `*`; without this operator the
+    design has no applicable site once ranges are masked."""
+    src = "module m; always @(posedge clk) p <= xi * yi; endmodule\n"
+    out, what = mutate(src)
+    assert "xi + yi" in out
+    assert "* becomes +" in what
