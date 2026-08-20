@@ -687,3 +687,96 @@ which is precisely the property the repair loop needs, since a false failure is
 what deforms correct RTL. It does not establish the absence of false *passes*;
 that is what the null-oracle sweep across all 64 designs is for, and what the
 tied-off-DUT half of the conformance suite is for.
+
+## Generated reference models, measured the same way
+
+The control measurement above used a **hand** transliteration of golden. That
+answers "can the harness be driven correctly", not "does the pipeline produce a
+correct oracle". This section runs the pipeline end to end and scores what it
+generated, with no hand-written model anywhere in the loop.
+
+Two designs were chosen to contrast: `alu` (`mips_16`, combinational, 3-bit
+command mux) and `or1200_gmultp2_32x32` (sequential, two pipeline stages, one
+reset). `i2c_master_bit_ctrl` is the third and is reported separately.
+
+Every model is scored twice — against golden RTL and against a wrong RTL — and
+**both numbers are reported**. The pass rate alone cannot distinguish a correct
+model from a vacuous one, which the gmult result below demonstrates the hard way.
+
+| design | model vs golden | model vs mutant | separation |
+| --- | --- | --- | --- |
+| `alu` | 40 / 40 | 0 / 40 | **40** |
+| `or1200_gmultp2_32x32` | 36 / 36 | 4 / 36 | **32** |
+
+Both generated models are correct on the golden design and fully discriminating
+against a wrong one. Neither needed a repair iteration.
+
+### The first gmult measurement was an artefact of the instrument
+
+It first read **36/36 against golden and 36/36 against the mutant** — separation
+0, which is the exact signature of a vacuous oracle. Longer holds (4, 12) drove
+both columns to 2/36 with separation still 0, ruling out a stimulus-reach
+explanation.
+
+The oracle was fine. `benchmarks/mutate.py` masked comments, strings and
+`` ` ``-directive lines but not `[msb:lsb]` ranges, so `input [`OR1200_W-1:0] X`
+was an applicable mutation site. Changing that `-` to `+` widens the port to 34
+bits; `xi` is an `integer`, so `xi <= X` truncates back to `X[31:0]`, and the
+harness only ever drives the 32-bit contract port. The mutant was **behaviourally
+identical to golden**, so a perfectly discriminating model was obliged to pass
+both.
+
+All five of gmult's applicable sites were ranges — the tool could not express a
+wrong version of that design at all. With ranges masked and `*` added as an
+operator, the design has exactly one site (`p0 <= #1 xi * yi` -> `xi + yi`, real
+logic) and the same model scores 36/36 against golden and 4/36 against the
+mutant.
+
+Bit-selects without a colon (`x[i+1]`) stay mutable, because selecting a
+different bit is a genuine behavioural change. When masking leaves a design with
+no site the tool raises rather than returning golden unchanged, so the failure is
+loud instead of a silently passing check. The `mips_16/alu` mutant is
+byte-identical before and after the fix, so the alu column is unaffected.
+
+**The general lesson is about the measurement, not the tool.** "Model passes
+golden" is unfalsifiable on its own, and the check that is supposed to falsify it
+is itself a piece of code that can be wrong in a direction that manufactures
+agreement. A separation of 0 should be read as "the instrument is suspect" before
+it is read as "the model is vacuous".
+
+### One SystemVerilog keyword decided the `alu` score
+
+The generated `alu` RTL scored `function_fail`. Rewriting **only** its port
+declarations from `input logic [15:0] a` to `input [15:0] a` — body byte-for-byte
+identical, verified — scores `pass`. The generated gmult RTL has the same
+`input logic` ports and scores `pass` regardless.
+
+The difference is which oracle ChipVerilog reaches, and the chain has two links:
+
+1. `alu` is one of the 16 tasks that ship a self-checking testbench, so it is
+   scored by simulation. That testbench is plain Verilog and iverilog rejects
+   `logic` in a port list — `Net data type requires SystemVerilog`. The scorer
+   falls back to formal equivalence.
+2. **The formal fallback for `alu` cannot be passed by any correct design.**
+   Golden's first case arm is `` `ALU_NC `` = `3'bxxx`, and yosys treats `x` in a
+   case item as a don't-care that matches every `cmd`. Yosys synthesises golden
+   itself to `assign r = 16'hxxxx;` — the whole design. Anything computing real
+   values is "not equivalent" to that.
+
+So the keyword does not merely change a verdict; it diverts scoring from a
+passable path to an unpassable one. Confirmed at both ends: iverilog simulation
+of golden against the candidate agrees on every `cmd` including yosys's own
+counterexample (`a=0x8000, b=13, cmd=6`), and the candidate passes the shipped
+testbench once its ports are portable.
+
+`rtl_generator`'s prompt now requires Verilog-2005 port declarations while
+leaving the body free to be SystemVerilog; `tests/test_rtl_port_dialect.py`
+pins it.
+
+**How far the yosys degeneracy reaches: one task.** Synthesising all 64 golden
+designs and looking for a constant-`x` driver on a declared output port finds
+`alu` and nothing else. Four `double_fpu` designs (`fpu_add`, `fpu_div`,
+`fpu_round`, `fpu_sub`) emit constant-`x` assignments, but every one is an
+internal don't-care pad on a shift or mux node, not an output. This is a
+one-design defect in the benchmark, not a systematic one — worth knowing so that
+an `alu` equivalence result is never quoted as a function verdict.
