@@ -140,6 +140,23 @@ class _StreamedResponse:
                                 "finish_reason": self.finish_reason})()]
 
 
+def _as_input_item(item) -> dict:
+    """An output item, reshaped into something the API accepts as INPUT.
+
+    The two are not the same schema, and the difference is not written down
+    anywhere you would look for it. Feeding a reasoning item straight back
+    yields `Unknown parameter: 'input[1].status'` -- `status` is emitted on
+    output and rejected on input. Nulls go for the same reason: to a strict
+    validator an explicit `"content": null` is not an absent key.
+    """
+    if hasattr(item, "model_dump"):
+        data = item.model_dump(exclude_none=True)
+    else:
+        data = {k: v for k, v in dict(item).items() if v is not None}
+    data.pop("status", None)
+    return data
+
+
 def _responses_body(cfg, prompt: str) -> dict:
     """The request body for `/v1/responses`, built where it can be tested.
 
@@ -309,6 +326,52 @@ class ApiPort:
         return OpenAI(**kwargs)
 
     # -------------------------------------------------------------- responses
+    def _stream_chunk(self, client, call: dict):
+        """One streamed chunk, retried on a DROPPED CONNECTION only.
+
+        Two things this gets right that the obvious version does not.
+
+        The final response is taken from the `response.completed` /
+        `response.incomplete` EVENT, not from `stream.get_final_response()`.
+        That helper raises "Didn't receive a `response.completed` event" on
+        anything else -- and `incomplete` is the normal path here, because
+        hitting the chunk cap is exactly how a continuation is signalled. Using
+        the helper alone made the chunking unable to ever take its own
+        continuation branch.
+
+        And a mid-stream `RemoteProtocolError` is retried, because it is
+        intermittent: the identical request and prompt completed in 120s on one
+        attempt and dropped on another. Retrying is cheap precisely because the
+        work is chunked -- one chunk is lost, not a whole generation -- so the
+        thing that made chunking necessary also makes it affordable.
+        """
+        attempts = int(os.environ.get("SPECFLOW_STREAM_RETRIES") or 2) + 1
+        last: Exception | None = None
+        for _ in range(attempts):
+            got: list[str] = []
+            final = None
+            try:
+                with client.responses.stream(**call) as stream:
+                    for event in stream:
+                        kind = getattr(event, "type", "")
+                        if kind == "response.output_text.delta":
+                            got.append(event.delta)
+                        elif kind in ("response.completed", "response.incomplete",
+                                      "response.failed"):
+                            final = getattr(event, "response", None) or final
+                    if final is None:
+                        final = stream.get_final_response()
+                return got, final
+            except Exception as exc:  # noqa: BLE001
+                if type(exc).__name__ not in (
+                    "RemoteProtocolError", "ReadTimeout", "ReadError",
+                    "APIConnectionError", "APITimeoutError",
+                ):
+                    raise
+                last = exc
+        raise last  # type: ignore[misc]
+
+
     def _complete_responses(
         self, cfg, *, stage: str, round_: int, prompt: str, response_path: Path
     ) -> str:
@@ -364,11 +427,7 @@ class ApiPort:
             call["input"] = conversation
             got: list[str] = []
             try:
-                with client.responses.stream(**call) as stream:
-                    for event in stream:
-                        if getattr(event, "type", "") == "response.output_text.delta":
-                            got.append(event.delta)
-                    final = stream.get_final_response()
+                got, final = self._stream_chunk(client, call)
             except Exception as exc:  # noqa: BLE001
                 # Two different failures used to read identically here, and
                 # telling them apart is the difference between "the network
@@ -402,7 +461,7 @@ class ApiPort:
             # Feed the model's own reasoning items back, verbatim. Anything less
             # -- a summary, or a bare "carry on" -- restarts the reasoning.
             conversation = conversation + [
-                item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                _as_input_item(item)
                 for item in (getattr(final, "output", None) or [])
             ] + [{"role": "user",
                   "content": "Continue from exactly where you stopped. Do not "
