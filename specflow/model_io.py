@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
@@ -256,6 +257,59 @@ def _responses_body(cfg, prompt: str, default_cap: int = 48000) -> dict:
     return body
 
 
+#: Exceptions that will fail identically however many times we resend.
+#:
+#: Everything else is retried. That asymmetry is deliberate: a wrong guess in
+#: this direction costs one wasted resend, and a wrong guess the other way
+#: throws away a whole generation -- an i2c reference model at `xhigh` is ~30
+#: minutes of work, and one was lost to a gateway 500 whose own message said
+#: "You can retry your request".
+_PERMANENT = frozenset({
+    "BadRequestError",           # 400 -- the body is malformed; it still will be
+    "AuthenticationError",       # 401
+    "PermissionDeniedError",     # 403
+    "NotFoundError",             # 404 -- wrong route, or a model this gateway
+                                 # cannot resolve
+    "UnprocessableEntityError",  # 422
+    "TypeError", "KeyError", "IndexError",  # an event shape the SDK cannot parse
+})
+
+#: Error `code`/`type` values that stay permanent inside a 500-shaped reply.
+_PERMANENT_CODES = frozenset({
+    "content_filter", "invalid_request_error", "context_length_exceeded",
+    "invalid_prompt", "model_not_found", "string_above_max_length",
+})
+
+
+def _retryable(exc: BaseException) -> bool:
+    """Should this failure be resent?
+
+    The exception's type alone is not enough to decide. When an SSE stream
+    carries an error event the SDK raises a **bare `APIError`** -- not an
+    `APIStatusError`, so there is no `status_code` to read -- and that is
+    exactly how this gateway reports a transient server-side 500 in the middle
+    of a long generation. Classifying by name filed it with the permanent
+    failures, so a 500 that explicitly invited a retry killed a 30-minute
+    reference-model generation on its second continuation chunk instead.
+
+    Permanent by name, permanent by error code in the body, retryable
+    otherwise -- deliberately biased towards retrying, because the two mistakes
+    do not cost the same.
+    """
+    if type(exc).__name__ in _PERMANENT:
+        return False
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        for key in ("code", "type"):
+            value = body.get(key)
+            if isinstance(value, str) and value in _PERMANENT_CODES:
+                return False
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and 400 <= status < 500 and status not in (408, 409, 429):
+        return False
+    return True
+
+
 @dataclass
 class ApiPort:
     """The HTTP path: one blocking chat completion per stage round.
@@ -409,7 +463,7 @@ class ApiPort:
 
     # -------------------------------------------------------------- responses
     def _stream_chunk(self, client, call: dict):
-        """One streamed chunk, retried on a DROPPED CONNECTION only.
+        """One streamed chunk, resent on any failure that a resend could fix.
 
         Two things this gets right that the obvious version does not.
 
@@ -421,15 +475,25 @@ class ApiPort:
         the helper alone made the chunking unable to ever take its own
         continuation branch.
 
-        And a mid-stream `RemoteProtocolError` is retried, because it is
-        intermittent: the identical request and prompt completed in 120s on one
-        attempt and dropped on another. Retrying is cheap precisely because the
-        work is chunked -- one chunk is lost, not a whole generation -- so the
-        thing that made chunking necessary also makes it affordable.
+        And a mid-stream failure is retried with backoff whenever a resend
+        could fix it -- see `_retryable`. It is intermittent: the identical
+        request and prompt completed in 120s on one attempt and dropped on
+        another. Retrying is cheap precisely because the work is chunked -- one
+        chunk is lost, not a whole generation -- so the thing that made chunking
+        necessary also makes it affordable. The list used to be transport
+        errors by name, which let a gateway 500 arriving as a bare `APIError`
+        through as fatal and cost a 30-minute i2c generation at `xhigh`.
         """
         attempts = max(0, self.settings.stream_retries) + 1
         last: Exception | None = None
-        for _ in range(attempts):
+        for attempt in range(attempts):
+            if attempt:
+                # Backoff, because the failure that makes this loop necessary is
+                # usually a server-side 500 and resending it instantly tends to
+                # hit the same unhealthy backend. Bounded so the retries cannot
+                # themselves become the 300s idle gap this whole path exists to
+                # avoid.
+                time.sleep(min(30.0, 4.0 * (2 ** (attempt - 1))))
             got: list[str] = []
             final = None
             try:
@@ -452,10 +516,7 @@ class ApiPort:
                         final = getattr(event, "response", None) or final
                 return got, final
             except Exception as exc:  # noqa: BLE001
-                if type(exc).__name__ not in (
-                    "RemoteProtocolError", "ReadTimeout", "ReadError",
-                    "APIConnectionError", "APITimeoutError",
-                ):
+                if not _retryable(exc):
                     raise
                 last = exc
         raise last  # type: ignore[misc]
@@ -518,19 +579,24 @@ class ApiPort:
             try:
                 got, final = self._stream_chunk(client, call)
             except Exception as exc:  # noqa: BLE001
-                # Two different failures used to read identically here, and
-                # telling them apart is the difference between "the network
-                # dropped us" and "the gateway sent an event this SDK cannot
-                # parse". The SDK's stream helper accumulates a response
-                # snapshot from every event and raises TypeError/KeyError on a
-                # shape it does not expect -- a gateway quirk, not a transport
-                # problem, and retrying it will fail identically forever.
-                transport = type(exc).__name__ in (
-                    "RemoteProtocolError", "ReadTimeout", "ConnectError",
-                    "ReadError", "APIConnectionError", "APITimeoutError",
-                )
-                what = ("the connection dropped mid-stream" if transport
-                        else "the SDK could not parse an event the gateway sent")
+                # Distinct failures used to read identically here, and this
+                # message is the only record of which one ended the run -- the
+                # exception has already been retried to exhaustion by
+                # `_stream_chunk` before it reaches this point.
+                #
+                # The earlier version had two buckets and put everything that
+                # was not a named transport error into "the SDK could not parse
+                # an event", which is how a gateway 500 came to be reported as
+                # an SDK parse bug. Three buckets, and the middle one is the one
+                # that was missing.
+                name = type(exc).__name__
+                if name in ("RemoteProtocolError", "ReadTimeout", "ConnectError",
+                            "ReadError", "APIConnectionError", "APITimeoutError"):
+                    what = "the connection dropped mid-stream"
+                elif name in ("TypeError", "KeyError", "IndexError"):
+                    what = "the SDK could not parse an event the gateway sent"
+                else:
+                    what = "the gateway failed the request"
                 raise RuntimeError(
                     f"{stage} r{round_}: /v1/responses -- {what} "
                     f"({type(exc).__name__}: {exc}). Effort={effort!r}, "
