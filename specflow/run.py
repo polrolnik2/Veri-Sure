@@ -16,13 +16,17 @@ Three details that are easy to get wrong and were verified rather than assumed:
 from __future__ import annotations
 
 import json
+import logging
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from .schema import TestpointResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -175,39 +179,85 @@ def run_suite(
         return RunOutcome(False, {}, build_log=f"{type(exc).__name__}: {exc}")
 
     _ensure_importable()
-    try:
-        runner.test(
-            test_module=list(manifest["modules"]),
-            hdl_toplevel=hdl_toplevel,
-            test_dir=str(suite_dir / "tests"),
-            results_xml=str(suite_dir / "results.xml"),
-            plusargs=[f"+verilator+coverage+file+{cov_dat.name}"],
-            # The run-time half. These are argv arguments the cocotb Verilator
-            # harness parses itself -- NOT plusargs, which it forwards to the
-            # model and which made it exit with "Unknown runtime argument".
-            test_args=[*(["--trace", "--trace-file", str(wave)] if trace else [])],
-            waves=trace,
-            extra_env={
-                "SPECFLOW_RESULTS": str(results_dir),
-                "SPECFLOW_ITER": str(iteration),
-                # PYTHONPATH deliberately absent: cocotb overwrites it from the
-                # parent's sys.path, which `_ensure_importable` prepares instead.
-            },
-        )
-    except SystemExit:
-        pass  # a failing suite is a verdict; the records on disk are the answer
 
-    produced = suite_dir / "tests" / cov_dat.name
-    if produced.exists():
-        produced.replace(cov_dat)
+    # ONE SIMULATOR PROCESS PER TESTPOINT. cocotb runs every test module in a
+    # single process by default, and the DUT is elaborated once -- so its
+    # registers keep whatever the PREVIOUS testpoint left in them. Any register
+    # the design does not reset carries state across the boundary, and
+    # `Env.reset()` cannot clear it: there is no reset path to drive.
+    #
+    # Measured on the golden `i2c_master_bit_ctrl`, whose `dout` is written by
+    # `always @(posedge clk) if (sSCL & ~dSCL) dout <= sSDA;` with no reset at
+    # all. Run alone, TP-0002 PASSES. Run in the 168-test suite it FAILS, because
+    # TP-0000 and TP-0001 left `dout` at 1 while the reference model -- a fresh
+    # `Model()` per test whose `reset()` sets it to 0 -- starts at 0. That single
+    # effect accounted for 60 of the 99 testpoints a CORRECT design failed.
+    #
+    # It is worse than a wrong number: verdicts depend on test ORDER, so a
+    # testpoint can pass for a reason that has nothing to do with it, and
+    # reordering the suite changes the score. A testpoint is supposed to be an
+    # independent claim about the design.
+    #
+    # The build is shared; only the run repeats, and a run is cheap: measured at
+    # ~0.39s per extra process, so 168 testpoints cost about a minute more than
+    # one batched process. That is the price of every testpoint meaning what it
+    # says.
+    modules = list(manifest["modules"])
+    cov_parts: list[Path] = []
+    waves: list[Path] = []
+    for module in modules:
+        part_dat = suite_dir / f"cov_{iteration}_{module}.dat"
+        part_wave = suite_dir / f"wave_{iteration}_{module}.vcd"
+        try:
+            runner.test(
+                test_module=[module],
+                hdl_toplevel=hdl_toplevel,
+                test_dir=str(suite_dir / "tests"),
+                results_xml=str(suite_dir / f"results_{module}.xml"),
+                plusargs=[f"+verilator+coverage+file+{part_dat.name}"],
+                # The run-time half. These are argv arguments the cocotb Verilator
+                # harness parses itself -- NOT plusargs, which it forwards to the
+                # model and which made it exit with "Unknown runtime argument".
+                test_args=[*(["--trace", "--trace-file", str(part_wave)] if trace else [])],
+                waves=trace,
+                extra_env={
+                    "SPECFLOW_RESULTS": str(results_dir),
+                    "SPECFLOW_ITER": str(iteration),
+                    # PYTHONPATH deliberately absent: cocotb overwrites it from the
+                    # parent's sys.path, which `_ensure_importable` prepares instead.
+                },
+            )
+        except SystemExit:
+            pass  # a failing testpoint is a verdict; the record on disk is the answer
+        except Exception as exc:  # noqa: BLE001
+            # One testpoint that cannot start must not take the suite with it.
+            # `reconcile` reports it as NOT_EXERCISED from the missing record,
+            # which is the honest verdict and keeps it in the denominator.
+            logger.warning("%s: could not run (%s: %s)", module, type(exc).__name__, exc)
 
-    # cocotb/Verilator writes the dump relative to the test directory.
-    if trace and not wave.exists():
-        for candidate in (suite_dir / "tests" / wave.name, suite_dir / "tests" / "dump.vcd",
-                          build_dir / wave.name, Path.cwd() / wave.name):
-            if candidate.exists():
-                candidate.replace(wave)
-                break
+        produced = suite_dir / "tests" / part_dat.name
+        if produced.exists():
+            produced.replace(part_dat)
+        if part_dat.exists():
+            cov_parts.append(part_dat)
+
+        if trace:
+            if not part_wave.exists():
+                for candidate in (suite_dir / "tests" / part_wave.name,
+                                  suite_dir / "tests" / "dump.vcd",
+                                  build_dir / part_wave.name, Path.cwd() / part_wave.name):
+                    if candidate.exists():
+                        candidate.replace(part_wave)
+                        break
+            if part_wave.exists():
+                waves.append(part_wave)
+
+    _merge_coverage(cov_parts, cov_dat)
+    # One waveform still has to be nameable, because `trace_summary` hands the
+    # repair agent a single path. The FIRST failing testpoint's is the useful
+    # one -- that is the failure the agent is being asked to explain -- and it
+    # falls back to the first that exists so a fully passing run still has one.
+    _pick_wave(waves, results_dir, iteration, wave)
 
     return RunOutcome(
         True,
@@ -215,6 +265,59 @@ def run_suite(
         coverage_dat=cov_dat if cov_dat.exists() else None,
         wave_vcd=wave if trace and wave.exists() else None,
     )
+
+
+def _merge_coverage(parts: list[Path], out: Path) -> None:
+    """One coverage file from many, because the run is now many processes.
+
+    `verilator_coverage --write` sums the buckets, which is the right operation:
+    a line covered by any testpoint is covered. `coverage.py` already merges
+    across ITERATIONS with the same tool, so this is the same reduction one
+    level down.
+    """
+    parts = [p for p in parts if p.exists()]
+    if not parts:
+        return
+    if len(parts) == 1:
+        parts[0].replace(out)
+        return
+    try:
+        subprocess.run(  # noqa: S603
+            ["verilator_coverage", "--write", str(out), *[str(p) for p in parts]],
+            check=True, capture_output=True, timeout=300,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        # A coverage merge that fails must not fail the run: the verdict is in
+        # the per-testpoint records, and G7 reports missing coverage itself.
+        logger.warning("coverage merge failed (%s); keeping the first part", exc)
+        parts[0].replace(out)
+        return
+    for part in parts:
+        part.unlink(missing_ok=True)
+
+
+def _pick_wave(waves: list[Path], results_dir: Path, iteration: int, out: Path) -> None:
+    """The waveform `trace_summary` hands the agent: the first FAILING one.
+
+    With one process per testpoint there is one dump per testpoint, and the
+    agent is given a single path. The failure it is being asked to explain is
+    the useful one; a fully passing run keeps the first dump so the field is
+    never silently empty.
+    """
+    if not waves:
+        return
+    chosen = waves[0]
+    for path in waves:
+        module = path.stem.split(f"wave_{iteration}_", 1)[-1]
+        uid = module.replace("test_TP", "TP-")
+        record = results_dir / f"{uid}.json"
+        try:
+            if json.loads(record.read_text(encoding="utf-8")).get("status") == "FAIL":
+                chosen = path
+                break
+        except (OSError, json.JSONDecodeError):
+            continue
+    shutil.copyfile(chosen, out)
 
 
 def reconcile(outcome: RunOutcome, manifest: dict) -> list[str]:

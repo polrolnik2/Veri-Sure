@@ -50,6 +50,9 @@ CASES = {
                     "is not idle",
     "clock_named_clock": "reg1 with the clock port named `clock`; runtime.py "
                          "hardcodes getattr(dut, 'clk') at three sites",
+    "unreset_reg": "a register the design never resets -- the shape of golden "
+                   "i2c's `dout`, and the one place a previous testpoint's "
+                   "state can survive into the next",
 }
 
 
@@ -266,3 +269,105 @@ def test_a_late_bug_is_only_caught_if_the_sequence_completes(
         "and one edge per step must not -- that difference is the whole reason "
         f"a step can state its own duration. caught={caught}"
     )
+
+
+# --------------------------------------------------------- testpoint isolation
+
+
+def _two_testpoints(contract: dict):
+    """Two testpoints in one suite: the first LOADS, the second must not see it."""
+    outs = [p["name"] for p in contract["io"] if p.get("dir") == "output"]
+    tps, bins, checks = [], [], []
+    for i in range(2):
+        uid = f"TP-{i:04d}"
+        tps.append({"uid": uid, "rev": 1, "covers": ["REQ-0000@1"],
+                    "dimension": "D2_control_flow", "stimulus": "...",
+                    "expected_response": "...", "check_method": "..."})
+        bins.append({"uid": f"BIN-{i:04d}", "rev": 1, "covers": [f"{uid}@1"],
+                     "condition": "any"})
+        checks.append({"uid": f"CHK-{i:04d}", "rev": 1, "covers": [f"{uid}@1"],
+                       "expr": "outputs match the reference model", "signals": outs})
+    return tps, bins, checks
+
+
+@needs_verilator
+def test_a_testpoint_does_not_inherit_the_previous_one_s_state(tmp_path):
+    """The defect this found, in the smallest design that can hold it.
+
+    cocotb runs every test module in ONE simulator process by default, and the
+    DUT is elaborated once -- so a register the design does not reset keeps
+    whatever the previous testpoint left in it, and `Env.reset()` cannot clear
+    it because there is no reset path to drive.
+
+    Measured on the golden `i2c_master_bit_ctrl`, whose `dout` is exactly this
+    shape: TP-0002 PASSES run alone and FAILS inside the 168-test suite, because
+    two earlier testpoints left `dout` at 1 while the reference model -- a fresh
+    `Model()` per test -- starts at 0. It accounted for 60 of the 99 testpoints a
+    CORRECT design failed, and it made every verdict depend on test ORDER.
+
+    Here TP-0000 loads a 1 into the unreset register and TP-0001 never loads at
+    all, so TP-0001 can only pass if its DUT started fresh.
+    """
+    src = FIXTURES / "unreset_reg"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _two_testpoints(contract)
+    suite = tmp_path / "suite"
+    render_suite(
+        testplan=testplan, bins=bins, checks=checks, contract=contract,
+        out_dir=suite,
+        stimulus_by_tp={
+            # Leaves `latched` at 1 in the DUT.
+            "TP-0000": [{"inputs": {"load": 1, "d": 1}, "hold": 4}],
+            # Never loads: `latched` must still read its power-on 0.
+            "TP-0001": [{"inputs": {"load": 0, "d": 0}, "hold": 4},
+                        {"inputs": {"load": 0, "d": 1}, "hold": 4}],
+        },
+    )
+    outcome = run_suite(
+        rtl_path=src / "dut.sv", hdl_toplevel=contract["module_name"],
+        suite_dir=suite, refmodel_path=src / "ref_model.py",
+        coverage=False, trace=False,
+    )
+    assert outcome.build_ok, outcome.build_log
+    failing = [(u, r.mismatches) for u, r in outcome.results.items() if r.status != "PASS"]
+    assert not failing, (
+        "a testpoint inherited state from the one before it -- the DUT was not "
+        f"re-elaborated: {failing}"
+    )
+
+
+def test_each_testpoint_gets_its_own_simulator_process(tmp_path, monkeypatch):
+    """The mechanism, pinned without a simulator.
+
+    Behavioural coverage above needs an unreset register to detect the leak at
+    all. This asserts the property directly, so a future change that batches the
+    modules back together is caught even on a design where nothing happens to
+    carry over.
+    """
+    import specflow.run as run_module
+
+    calls: list[list[str]] = []
+
+    class _Runner:
+        def build(self, **_):
+            return None
+
+        def test(self, *, test_module, **_):
+            calls.append(list(test_module))
+
+    monkeypatch.setattr(run_module, "get_runner", lambda _: _Runner(), raising=False)
+    monkeypatch.setattr(
+        "cocotb_tools.runner.get_runner", lambda _: _Runner(), raising=False)
+
+    suite = tmp_path / "suite"
+    (suite / "tests").mkdir(parents=True)
+    (suite / "manifest.json").write_text(
+        json.dumps({"modules": ["test_TP0000", "test_TP0001", "test_TP0002"]}),
+        encoding="utf-8")
+    model = tmp_path / "ref_model.py"
+    model.write_text("class Model:\n    OUTPUT_PORTS = []\n", encoding="utf-8")
+
+    run_suite(rtl_path=tmp_path / "dut.sv", hdl_toplevel="Dut", suite_dir=suite,
+              refmodel_path=model, coverage=False, trace=False)
+
+    assert calls == [["test_TP0000"], ["test_TP0001"], ["test_TP0002"]], calls

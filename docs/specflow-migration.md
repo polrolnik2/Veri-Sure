@@ -383,15 +383,17 @@ than discarded so a requirement that states one can be checked on top.
 Same oracle (a line-by-line transliteration of golden), same stimulus, two DUTs,
 each vector held 60 edges so a command can actually complete:
 
-| DUT | cycle-exact | transactional | cycle-exact, less `dout`-only | transactional, less `dout`-only |
-| --- | --- | --- | --- | --- |
-| golden (correct) | 36 / 168 | 69 / 168 | 89 / 168 | **129 / 168** |
-| generated (wrong) | 20 / 168 | 28 / 168 | 56 / 168 | **31 / 168** |
-| **separation** | **16** | **41** | **33** | **98** |
+| DUT | cycle-exact | transactional |
+| --- | --- | --- |
+| golden (correct) | 36 / 168 | **113 / 168** |
+| generated (wrong) | 20 / 168 | **28 / 168** |
+| **separation** | **16** | **85** |
 
-Ignoring durations discriminates ~2.6× better on every output and ~3× better
-once the one known asymmetry is set aside, because phase noise from a guessed
-latency was swamping the behavioural signal.
+Ignoring durations discriminates **more than five times better**, because phase
+noise from a guessed latency was swamping the behavioural signal. (The
+transactional column moved from 69/28 to 113/28 once testpoint isolation landed
+— see below; the cycle-exact column is the pre-isolation figure and is only kept
+for the shape of the comparison.)
 
 **Read both numbers, never one.** A criterion that passes everything scores well
 on the pass rate and is worthless. The pass rate of a *correct* design says how
@@ -570,3 +572,51 @@ owns the experiment, not a default to pick.
 stated before any of it was written. A transactional testbench accepts RTL that
 fails sequential equivalence; it stops the oracle destroying correct RTL, which
 is a precondition for anything else, not a scoring improvement.
+
+### Every testpoint gets its own simulator process
+
+The `dout` residual above was **not** a reference-model fidelity problem. It was
+state leaking between testpoints.
+
+cocotb runs every test module in **one** simulator process, and the DUT is
+elaborated once. Any register the design does not reset keeps whatever the
+previous testpoint left in it, and `Env.reset()` cannot clear it — there is no
+reset path to drive. Golden `i2c_master_bit_ctrl` writes `dout` with
+
+```verilog
+always @(posedge clk) if (sSCL & ~dSCL) dout <= #1 sSDA;
+```
+
+and no reset at all. TP-0002 **passes run alone** and **fails inside the
+168-test suite**, because TP-0000 and TP-0001 left `dout` at 1 while the
+reference model — a fresh `Model()` per test whose `reset()` sets it to 0 —
+starts at 0.
+
+That is worse than a wrong number: verdicts depended on test **order**, so a
+testpoint could pass for a reason that had nothing to do with it, and reordering
+the suite changed the score. A testpoint is supposed to be an independent claim
+about the design.
+
+`run_suite` now runs one simulator process per testpoint. The build is shared;
+only the run repeats, measured at ~0.39s per extra process — about a minute more
+for 168 testpoints. Per-process coverage files are merged with
+`verilator_coverage --write`, the same reduction `coverage.py` already performs
+across iterations, and the waveform handed to the repair agent is the first
+**failing** testpoint's.
+
+| | before | after |
+| --- | --- | --- |
+| golden | 69 / 168 | **113 / 168** |
+| generated (wrong) | 28 / 168 | 28 / 168 |
+| **separation** | **41** | **85** |
+
+`dout` disappears from golden's diverging outputs entirely. The wrong candidate
+does not move, which is the check that matters: isolation removed a false
+failure, not discrimination. The remaining 55 golden failures are `scl_oen` 21,
+`al` 16, `sda_oen` 11, `cmd_ack` 11, `busy` 3 — the next layer, and no longer
+dominated by one output.
+
+Pinned by `tests/fixtures/harness/unreset_reg`, a design with one deliberately
+unreset register, driven by two testpoints where the first loads it and the
+second never does. Both the behaviour and the mechanism are asserted: batching
+the modules back together fails both tests.
