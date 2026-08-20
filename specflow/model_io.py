@@ -140,6 +140,46 @@ class _StreamedResponse:
                                 "finish_reason": self.finish_reason})()]
 
 
+def _responses_body(cfg, prompt: str) -> dict:
+    """The request body for `/v1/responses`, built where it can be tested.
+
+    Pure on purpose: the two bugs this had were both invisible from the outside
+    -- the request looked fine in the code and wrong on the wire -- so the thing
+    that needs a test is the body itself, not the call around it.
+    """
+    body: dict = {
+        "model": cfg.model,
+        "input": prompt,
+        "reasoning": {"effort": cfg.reasoning_effort or "medium", "summary": "auto"},
+    }
+    gen = dict(cfg.generate_kwargs or {})
+    # `max_completion_tokens` is the chat spelling; Responses calls it
+    # `max_output_tokens`. Carrying the chat name over silently drops the cap,
+    # and an uncapped reasoning request is exactly the one that runs out of
+    # budget with no content to show for it.
+    cap = gen.pop("max_completion_tokens", None) or gen.pop("max_output_tokens", None)
+    if not cap:
+        cap = os.environ.get("SPECFLOW_MAX_OUTPUT_TOKENS") or 48000
+    body["max_output_tokens"] = int(cap)
+
+    # DEEP merge, because a shallow one silently destroys the keepalive.
+    # `body.update({"reasoning": {"effort": "xhigh"}})` REPLACES the whole
+    # reasoning dict, dropping `summary` -- and with no summary the gateway
+    # sends nothing for the entire reasoning phase, so the connection really is
+    # idle. This container is launched with exactly that value in
+    # `OPENAI_EXTRA_BODY`, and it is only harmless because `.env.local` clears
+    # the key; an operator who set it themselves would lose the keepalive with
+    # no signal at all.
+    for key, value in (gen.get("extra_body") or {}).items():
+        if isinstance(value, dict) and isinstance(body.get(key), dict):
+            body[key] = {**body[key], **value}
+        else:
+            body[key] = value
+    if isinstance(body.get("reasoning"), dict):
+        body["reasoning"].setdefault("summary", "auto")
+    return body
+
+
 @dataclass
 class ApiPort:
     """The HTTP path: one blocking chat completion per stage round.
@@ -293,29 +333,7 @@ class ApiPort:
         default so nothing changes surface without being told to.
         """
         effort = cfg.reasoning_effort or "medium"
-        body: dict = {
-            "model": cfg.model,
-            "input": prompt,
-            "reasoning": {"effort": effort, "summary": "auto"},
-        }
-        gen = dict(cfg.generate_kwargs or {})
-        # `max_completion_tokens` is the chat spelling; Responses calls it
-        # `max_output_tokens`. Carrying the chat name over silently drops the
-        # cap, and an uncapped reasoning request is exactly the one that runs
-        # out of budget with no content to show for it.
-        cap = gen.pop("max_completion_tokens", None) or gen.pop("max_output_tokens", None)
-        # An UNCAPPED reasoning request is the one that dies. Measured on this
-        # gateway: the same surface, streaming and never idle (max gap 10.0s),
-        # was cut at 536s with `RemoteProtocolError: peer closed connection` when
-        # no cap was set, while a 30k-capped call on the same surface finished
-        # its stream cleanly at 437s. There is a wall around 500s that streaming
-        # does not move; the cap is what keeps a call on the near side of it.
-        # `SPECFLOW_MAX_OUTPUT_TOKENS` overrides.
-        if not cap:
-            cap = os.environ.get("SPECFLOW_MAX_OUTPUT_TOKENS") or 48000
-        body["max_output_tokens"] = int(cap)
-        if gen.get("extra_body"):
-            body.update(gen["extra_body"])
+        body = _responses_body(cfg, prompt)
 
         client = self._client()
         parts: list[str] = []
@@ -333,10 +351,25 @@ class ApiPort:
                 if final is None:
                     final = stream.get_final_response()
         except Exception as exc:  # noqa: BLE001
+            # Two different failures used to read identically here, and telling
+            # them apart is the difference between "the network dropped us" and
+            # "the gateway sent an event this SDK cannot parse". The SDK's
+            # stream helper accumulates a response snapshot from every event and
+            # raises TypeError/KeyError/IndexError on a shape it does not expect
+            # -- a gateway quirk, not a transport problem, and retrying it will
+            # fail identically forever.
+            transport = type(exc).__name__ in (
+                "RemoteProtocolError", "ReadTimeout", "ConnectError",
+                "ReadError", "APIConnectionError", "APITimeoutError",
+            )
+            what = ("the connection dropped mid-stream" if transport
+                    else "the SDK could not parse an event the gateway sent")
             raise RuntimeError(
-                f"{stage} r{round_}: the /v1/responses stream failed "
+                f"{stage} r{round_}: /v1/responses -- {what} "
                 f"({type(exc).__name__}: {exc}). Effort={effort!r}, "
-                f"{len(prompt)} bytes of prompt."
+                f"{len(prompt)} bytes of prompt, "
+                f"max_output_tokens={body.get('max_output_tokens')}, "
+                f"{len(parts)} content deltas received."
             ) from exc
 
         text = "".join(parts).strip() or (getattr(final, "output_text", "") or "").strip()
