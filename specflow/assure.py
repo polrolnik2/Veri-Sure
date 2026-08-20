@@ -185,6 +185,7 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
             )
             continue
 
+        quoted: list[str] = []
         for i, sp in enumerate(req_spans):
             path = f"requirement.{uid}.spec_spans[{i}]"
             try:
@@ -213,8 +214,117 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
                 continue
 
             spans.append(located)
+            quoted.append(quote)
+
+        issues.extend(_unsupported_quantities(
+            uid, str(req.get("text") or ""), " \n".join(quoted), spec_text))
 
     issues.extend(_unattributed(spec_text, spans))
+    return issues
+
+
+#: Number words S1 and the specifications both use interchangeably with digits.
+_WORD_NUMBERS = {
+    "a": "1", "an": "1", "one": "1", "single": "1", "two": "2", "three": "3",
+    "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8",
+    "nine": "9", "ten": "10",
+}
+
+#: A quantity is a number AND a unit. The unit is what keeps this narrow: bare
+#: numbers are everywhere in a hardware specification -- bit indices, register
+#: addresses, state encodings -- and flagging them would make the check noise.
+_UNITS = r"(?:clock\s+cycles?|clk\s+cycles?|cycles?|clocks?|bits?|ns|us|ms)"
+_QUANTITY = re.compile(
+    rf"\b(\d+|{'|'.join(_WORD_NUMBERS)})[\s-]+(?:`?clk`?[\s-]+)?({_UNITS})\b",
+    re.I,
+)
+
+
+#: `clk_cnt[15:0]` states a width of 16 as plainly as the words do.
+_BIT_RANGE = re.compile(r"\[\s*(\d+)\s*:\s*(\d+)\s*\]")
+
+
+def _quantities(text: str, *, as_evidence: bool = False) -> set[tuple[str, str]]:
+    """Numeric claims in `text`, as `(count, unit)` with words normalised.
+
+    `one clock cycle`, `1 clk cycle` and `a single cycle` all reduce to
+    `("1", "cycle")`, because a specification and a requirement written from it
+    routinely differ in exactly that way and the difference is not a defect.
+
+    `as_evidence` also reads bit ranges. A span quoting `clk_cnt[15:0]` states
+    the width of `clk_cnt`, so a requirement calling it "the 16-bit clk_cnt" is
+    attributed -- and without this the check reported two such requirements as
+    unsupported, which is the false-positive class G1 cannot afford, since it
+    blocks the pipeline. Only the EVIDENCE side reads ranges: the conservative
+    direction is one that enlarges what counts as support.
+    """
+    found: set[tuple[str, str]] = set()
+    for number, unit in _QUANTITY.findall(text):
+        count = _WORD_NUMBERS.get(number.lower(), number)
+        unit = re.sub(r"\s+", " ", unit.lower()).rstrip("s")
+        unit = "cycle" if unit in ("clock cycle", "clk cycle", "clock") else unit
+        found.add((count, unit))
+    if as_evidence:
+        for hi, lo in _BIT_RANGE.findall(text):
+            found.add((str(abs(int(hi) - int(lo)) + 1), "bit"))
+    return found
+
+
+def _unsupported_quantities(
+    uid: str, text: str, quoted: str, spec_text: str = "",
+) -> list[Issue]:
+    """A quantity the requirement asserts that its own cited spec text does not.
+
+    Measured on `i2c_master_bit_ctrl`: SEVEN of 72 requirements assert that
+    `cmd_ack` is one clock cycle wide, and each cites a span reading only
+    "asserts `cmd_ack`" -- no duration at all. The count was carried over from a
+    statement elsewhere in the document. REQ-0068, cited from a span that
+    likewise says only "asserts `cmd_ack`", did NOT assert a duration -- so the
+    same specification produced both readings, which is what a claim arriving
+    from outside the evidence looks like. The rate is stable: 3-10% of
+    requirements in every recorded run, and the flagged quantity is the same one
+    every time.
+
+    Attribution is the whole point of G1. A requirement asserting more than its
+    span supports is unfalsifiable: nothing downstream can check the extra claim
+    against the specification, and everything downstream treats a requirement as
+    given -- so the number becomes an obligation the design is held to that no
+    gate can question.
+
+    **Severity is proportionate to which failure it is**, because the two are
+    genuinely different. A quantity that appears NOWHERE in the specification
+    was invented, and blocks. A quantity the specification states somewhere the
+    requirement did not cite is an attribution gap: the evidence exists, it is
+    simply not linked, and the fix is to add a span. That warns. Blocking the
+    latter would stop a pipeline over a citation while the claim itself is sound
+    -- and G1 blocks, so its false-positive cost is the whole run.
+    """
+    missing = _quantities(text) - _quantities(quoted, as_evidence=True)
+    if not missing:
+        return []
+    elsewhere = _quantities(spec_text, as_evidence=True) if spec_text else set()
+    issues: list[Issue] = []
+    for quantity in sorted(missing):
+        named = f"{quantity[0]} {quantity[1]}"
+        if quantity in elsewhere:
+            issues.append(Issue(
+                "warning", f"requirement.{uid}.text",
+                f"asserts {named}. The specification does state it, but not in "
+                f"any span this requirement cites -- so the claim is not "
+                f"attributable as written. Add the span that states it; a "
+                f"requirement may cite several.",
+                "unattributed",
+            ))
+        else:
+            issues.append(Issue(
+                "error", f"requirement.{uid}.text",
+                f"asserts {named}, which appears NOWHERE in the specification. "
+                f"A quantity with no source in the document cannot be checked "
+                f"against it by anything downstream, and everything downstream "
+                f"treats a requirement as given. Drop it, or record the "
+                f"question in `underdetermined`.",
+                "unattributed",
+            ))
     return issues
 
 

@@ -510,3 +510,34 @@ Six defects the sweep found, all now fixed:
   one named after it — so on `cordic.v`, which opens with an iteration stage,
   the probe drove ports belonging to a different design and reported a harness
   failure that was entirely its own.
+
+### G1: a requirement may not assert a number its evidence does not contain
+
+Found while measuring the duration obligations, and worth fixing independent of
+any timing work. On `i2c_master_bit_ctrl`, **seven of 72 requirements** assert
+that `cmd_ack` is one clock cycle wide while each cites a span reading only
+"asserts `cmd_ack`" — no duration at all. REQ-0068, citing a span that likewise
+says only "asserts `cmd_ack`", did *not* assert a duration. The same
+specification produced both readings, which is what a claim arriving from
+outside the evidence looks like. The rate is stable: 3–10% of requirements in
+every recorded run, and the flagged quantity is the same one every time.
+
+The claim happens to be true — the specification states it in a global sentence
+elsewhere. That is exactly why it is worth catching. Nothing downstream can
+check a claim against evidence that does not contain it, and everything
+downstream treats a requirement as given, so the number becomes an obligation
+the design is held to that no gate can question.
+
+G1 now extracts quantities — a number *and* a unit, so bit indices and state
+encodings are not flagged — from each requirement's text and requires them in
+the spans it cites. `one clock cycle`, `1 clk cycle` and `a single cycle` are
+the same claim; `clk_cnt[15:0]` states a width of 16 on the evidence side.
+
+**Severity is proportionate to which failure it is.** A quantity that appears
+nowhere in the specification was invented, and blocks. A quantity the
+specification states somewhere the requirement did not cite is an attribution
+gap — the evidence exists, it is simply not linked — and warns, because the fix
+is to add a span and G1 blocks the whole run. Across every recorded run the
+split is **0 errors, all warnings**: nothing was invented, and everything was
+uncited. The S1 prompt now states the rule up front, so the first attempt should
+carry the extra span rather than a repair round adding it.

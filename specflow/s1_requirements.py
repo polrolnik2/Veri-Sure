@@ -52,6 +52,22 @@ requirement's spec_spans. Unclaimed spec text is a hard error -- it means a
 behaviour nobody will ever verify. Interface declarations and port lists count
 as claimable text: attribute them to the requirements they constrain.
 
+The reverse is also checked: EVERY NUMBER YOUR TEXT ASSERTS MUST APPEAR IN THE
+SPANS YOU CITE. If you write "for one clock cycle", "the 16-bit input" or
+"within 3 cycles", the quoted spec text must say so. When the specification
+states the quantity somewhere ELSE -- a global sentence, a port table, an
+overview paragraph -- cite that span TOO. Adding a span is always allowed and is
+usually the right fix. `clk_cnt[15:0]` counts as stating a width of 16.
+
+This is not pedantry about wording. Measured on i2c_master_bit_ctrl, seven
+requirements asserted that `cmd_ack` is one clock cycle wide while each cited a
+span reading only "asserts `cmd_ack`" -- the count was carried over from a
+statement elsewhere in the document. The claim happened to be true. But nothing
+downstream can check a claim against evidence that does not contain it, and
+everything downstream treats a requirement as given, so a manufactured number
+becomes an obligation the design is held to and no gate can question. Either
+quote the text that states the number, or do not state it.
+
 If the specification does not determine some behaviour -- it is silent or
 ambiguous about a corner -- do NOT invent an answer. Record it in
 `underdetermined` with the question you would ask. An honest "the spec does not
