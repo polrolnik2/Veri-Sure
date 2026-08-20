@@ -832,3 +832,9 @@ Two numbers worth keeping alongside: the reintroduced bug costs the control
 model **168/168 → 118/168**, and the wrong candidate stays at 28/168 through
 both variants. A defect that moves only the correct design's score, never the
 wrong one's, is the shape a false-failure defect has.
+
+**The committed control is the 168/168 one.** Everything above rests on that,
+and until now only the scratch copy had been scored. `benchmarks/controls/
+i2c_master_bit_ctrl/ref_model.py` scores **168/168 against golden and 28/168
+against the cv-j3 candidate, separation 140** — so the artifact in the
+repository is the one the claims were measured on, not a near copy of it.

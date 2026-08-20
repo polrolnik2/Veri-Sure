@@ -371,3 +371,95 @@ def test_each_testpoint_gets_its_own_simulator_process(tmp_path, monkeypatch):
               refmodel_path=model, coverage=False, trace=False)
 
     assert calls == [["test_TP0000"], ["test_TP0001"], ["test_TP0002"]], calls
+
+
+#: A model that reads one of its own registers a clock generation too early --
+#: the defect class that produced BOTH bugs in the hand-written i2c control
+#: oracle. `s2` takes the freshly computed `s1` instead of the previous one, so
+#: the pipeline runs a stage short.
+_EARLY_READ_MODEL = '''
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ["q"]
+    LATENCY_CYCLES = 3
+
+    def reset(self):
+        self.s1 = self.s2 = self.s3 = 0
+
+    def step(self, i):
+        if not hasattr(self, "s1"):
+            self.reset()
+        if not i.get("rst_n", 1):
+            self.reset()
+        else:
+            prev2 = self.s2
+            self.s1 = self.mask(i["d"] + 1, 8)
+            self.s2 = self.s1          # BUG: the fresh s1, not the previous one
+            self.s3 = prev2
+        return {"q": self.s3}
+'''
+
+
+@needs_verilator
+def test_the_internal_trace_localises_a_one_generation_early_read(tmp_path, monkeypatch):
+    """The capability `benchmarks/divergence_trace.py` rests on.
+
+    A reference-model defect is almost never visible where it happens. Both
+    control-oracle bugs were "read a value from the wrong clock generation" and
+    each surfaced many edges later, in a different signal. So the per-edge
+    internal recording has to show the offending REGISTER diverging strictly
+    before any output does -- otherwise the tool localises nothing and the
+    analyst is back to reading the score.
+    """
+    monkeypatch.setenv("SPECFLOW_TRACE_INTERNALS", "s1,s2,s3")
+    import importlib
+
+    import specflow.tb.runtime as runtime
+    importlib.reload(runtime)
+    try:
+        _src, _contract, suite, _manifest = _build("pipe3", tmp_path)
+        model = tmp_path / "ref_model.py"
+        model.write_text(_EARLY_READ_MODEL, encoding="utf-8")
+        run_suite(
+            rtl_path=FIXTURES / "pipe3" / "dut.sv", hdl_toplevel="Dut",
+            suite_dir=suite, refmodel_path=model, iteration=0,
+            coverage=False, trace=False,
+        )
+        dump = json.loads(
+            (suite / "results" / "TP-0000.trace.json").read_text(encoding="utf-8")
+        )
+    finally:
+        monkeypatch.delenv("SPECFLOW_TRACE_INTERNALS", raising=False)
+        importlib.reload(runtime)
+
+    def internals_differ(r):
+        return any(r["dut_internal"][n] != r["model_internal"][n]
+                   for n in ("s1", "s2", "s3"))
+
+    def output_differs(r):
+        return r["dut"]["q"] != r["model"]["q"]
+
+    assert any(internals_differ(r) for r in dump["edges"]), \
+        "the seeded defect produced no internal divergence at all"
+    assert any(output_differs(r) for r in dump["edges"]), \
+        "the seeded defect never reached an output; it would not be a defect"
+
+    # The property that matters, and the one the whole tool rests on: an edge
+    # where a REGISTER already disagrees while every OUTPUT still agrees. That
+    # is the edge a score can never point at -- on the i2c control oracle the
+    # equivalent edge was e7, `sto_condition` differing with `al` still matching
+    # on both sides, one edge before the symptom appeared.
+    #
+    # Not "the first internal divergence strictly precedes the first output
+    # one": `q` IS the register `s3` in this fixture, so the last stage and the
+    # output necessarily move together, and the model has already been stepped
+    # during `Env.reset` before edge 0 is recorded. Those are properties of the
+    # fixture and the harness, not of the instrument.
+    hidden = [r["edge"] for r in dump["edges"]
+              if internals_differ(r) and not output_differs(r)]
+    assert hidden, (
+        "no edge shows an internal disagreement while the outputs agree, so the "
+        "trace adds nothing a plain output comparison did not already give"
+    )
