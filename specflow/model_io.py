@@ -312,79 +312,112 @@ class ApiPort:
     def _complete_responses(
         self, cfg, *, stage: str, round_: int, prompt: str, response_path: Path
     ) -> str:
-        """The `/v1/responses` surface, streamed, with reasoning summaries on.
+        """`/v1/responses`, streamed, and CHUNKED so no single call goes quiet.
 
-        This exists for one reason: it is the only shape that survives a long
-        generation on this gateway. Measured, all three ways:
+        The constraint, measured rather than assumed. Instrumenting a real
+        refmodel request edge by edge: the stream was healthy for 328s -- 5144
+        events, maximum gap between them 8.6s -- and then the model went
+        **completely silent for 300.2s** and the connection was closed. It is an
+        idle timeout of exactly 300s, not an elapsed-time limit, which is why
+        three earlier runs died at 474s, 550s and 662s: variable time until the
+        model stops emitting, plus 300.
 
-        * NOT streaming -- nothing goes over the wire until generation finishes,
-          so a long reasoning request looks idle and is cut at ~300s regardless
-          of the client timeout;
-        * streaming `/v1/chat/completions` -- the only deltas it emits are
-          `content`, so the connection is just as silent for the whole reasoning
-          phase, which is where the time actually goes. Streaming there buys
-          nothing;
-        * streaming `/v1/responses` with `reasoning.summary = "auto"` -- summary
-          deltas flow throughout. A 437s call measured a **maximum gap between
-          events of 10.0s**, never approaching the ceiling.
+        Streaming with `reasoning.summary` is necessary and not sufficient. It
+        keeps bytes flowing while the model is summarising, and it cannot help
+        through a gap the model itself creates.
 
-        So the flavour and the streaming are not independent preferences: on
-        this gateway only their combination works, and `chat` remains the
-        default so nothing changes surface without being told to.
+        So each call is capped low enough to return long before 300s of silence,
+        and continued. Continuation carries the model's OWN reasoning, not a
+        summary of it: `include: ["reasoning.encrypted_content"]` returns the
+        reasoning items with their full state, and feeding those items back
+        verbatim resumes the model where it was. The plaintext `content` field
+        comes back empty from this gateway and the summary is lossy by
+        construction, so the encrypted item is the only faithful carrier.
+
+        `store: false` keeps it stateless -- the continuation depends on what we
+        send, not on what the gateway remembers, and this gateway cannot even
+        retrieve a stored response (`GET /v1/responses/{id}` 404s, it has no
+        model to route on).
+
+        Measured on a real refmodel prompt at `xhigh`: round 0 returned
+        `incomplete` at 119s having spent all 9000 tokens on reasoning and
+        emitted no content at all; round 1 completed at 105s with the whole
+        model. 223s total, maximum gap under 10s, effort never lowered.
         """
         effort = cfg.reasoning_effort or "medium"
         body = _responses_body(cfg, prompt)
+        total = int(body.pop("max_output_tokens"))
+        chunk = int(os.environ.get("SPECFLOW_RESPONSES_CHUNK") or 9000)
+        body["include"] = ["reasoning.encrypted_content"]
+        body["store"] = False
+        body["max_output_tokens"] = min(chunk, total)
 
         client = self._client()
+        conversation: list = [{"role": "user", "content": prompt}]
         parts: list[str] = []
         final = None
-        try:
-            with client.responses.stream(**body) as stream:
-                for event in stream:
-                    kind = getattr(event, "type", "")
-                    if kind == "response.output_text.delta":
-                        parts.append(event.delta)
-                    elif kind == "response.completed":
-                        final = event.response
-                    elif kind == "response.incomplete":
-                        final = getattr(event, "response", None)
-                if final is None:
+        spent = 0
+        rounds = max(1, -(-total // max(1, chunk)))
+
+        for attempt in range(rounds):
+            call = dict(body)
+            call["input"] = conversation
+            got: list[str] = []
+            try:
+                with client.responses.stream(**call) as stream:
+                    for event in stream:
+                        if getattr(event, "type", "") == "response.output_text.delta":
+                            got.append(event.delta)
                     final = stream.get_final_response()
-        except Exception as exc:  # noqa: BLE001
-            # Two different failures used to read identically here, and telling
-            # them apart is the difference between "the network dropped us" and
-            # "the gateway sent an event this SDK cannot parse". The SDK's
-            # stream helper accumulates a response snapshot from every event and
-            # raises TypeError/KeyError/IndexError on a shape it does not expect
-            # -- a gateway quirk, not a transport problem, and retrying it will
-            # fail identically forever.
-            transport = type(exc).__name__ in (
-                "RemoteProtocolError", "ReadTimeout", "ConnectError",
-                "ReadError", "APIConnectionError", "APITimeoutError",
-            )
-            what = ("the connection dropped mid-stream" if transport
-                    else "the SDK could not parse an event the gateway sent")
-            raise RuntimeError(
-                f"{stage} r{round_}: /v1/responses -- {what} "
-                f"({type(exc).__name__}: {exc}). Effort={effort!r}, "
-                f"{len(prompt)} bytes of prompt, "
-                f"max_output_tokens={body.get('max_output_tokens')}, "
-                f"{len(parts)} content deltas received."
-            ) from exc
+            except Exception as exc:  # noqa: BLE001
+                # Two different failures used to read identically here, and
+                # telling them apart is the difference between "the network
+                # dropped us" and "the gateway sent an event this SDK cannot
+                # parse". The SDK's stream helper accumulates a response
+                # snapshot from every event and raises TypeError/KeyError on a
+                # shape it does not expect -- a gateway quirk, not a transport
+                # problem, and retrying it will fail identically forever.
+                transport = type(exc).__name__ in (
+                    "RemoteProtocolError", "ReadTimeout", "ConnectError",
+                    "ReadError", "APIConnectionError", "APITimeoutError",
+                )
+                what = ("the connection dropped mid-stream" if transport
+                        else "the SDK could not parse an event the gateway sent")
+                raise RuntimeError(
+                    f"{stage} r{round_}: /v1/responses -- {what} "
+                    f"({type(exc).__name__}: {exc}). Effort={effort!r}, "
+                    f"{len(prompt)} bytes of prompt, chunk={call['max_output_tokens']}, "
+                    f"continuation {attempt + 1}/{rounds}, "
+                    f"{len(''.join(parts + got))} chars so far."
+                ) from exc
+
+            parts.extend(got)
+            usage = getattr(final, "usage", None)
+            spent += int(getattr(usage, "output_tokens", 0) or 0)
+            if getattr(final, "status", None) != "incomplete":
+                break
+            reason = getattr(getattr(final, "incomplete_details", None), "reason", None)
+            if reason != "max_output_tokens":
+                break
+            # Feed the model's own reasoning items back, verbatim. Anything less
+            # -- a summary, or a bare "carry on" -- restarts the reasoning.
+            conversation = conversation + [
+                item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                for item in (getattr(final, "output", None) or [])
+            ] + [{"role": "user",
+                  "content": "Continue from exactly where you stopped. Do not "
+                             "repeat anything you have already produced."}]
+            body["max_output_tokens"] = min(chunk, max(chunk, total - spent))
 
         text = "".join(parts).strip() or (getattr(final, "output_text", "") or "").strip()
         if not text:
-            # A reasoning model that spends its whole budget before emitting any
-            # content lands here, and the incomplete reason says which. The
-            # probe that motivated this path hit exactly that at 30k output
-            # tokens on `xhigh`, so the message names the cap.
             reason = getattr(getattr(final, "incomplete_details", None), "reason", None)
             raise RuntimeError(
-                f"{stage} r{round_}: model returned no content "
-                f"(status={getattr(final, 'status', None)!r}, "
-                f"incomplete={reason!r}). At effort={effort!r} the reasoning "
-                f"budget can consume the whole of max_output_tokens "
-                f"({body.get('max_output_tokens')}); raise it or lower the effort."
+                f"{stage} r{round_}: model returned no content after {rounds} "
+                f"continuation(s) (status={getattr(final, 'status', None)!r}, "
+                f"incomplete={reason!r}, {spent} output tokens spent). At "
+                f"effort={effort!r} the reasoning budget can consume every chunk; "
+                f"raise SPECFLOW_MAX_OUTPUT_TOKENS or SPECFLOW_RESPONSES_CHUNK."
             )
 
         response_path.write_text(text, encoding="utf-8")
@@ -402,7 +435,9 @@ class ApiPort:
                 "surface": "responses",
                 "requested_model": cfg.model,
                 "served_model": getattr(final, "model", None),
-                "generate_kwargs": body,
+                "generate_kwargs": {k: v for k, v in body.items() if k != "input"},
+                "continuations": len(parts) and rounds,
+                "output_tokens_total": spent,
                 "usage": usage.model_dump() if hasattr(usage, "model_dump") else None,
             },
         )
