@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -140,6 +140,65 @@ class _StreamedResponse:
                                 "finish_reason": self.finish_reason})()]
 
 
+@dataclass(frozen=True)
+class PortSettings:
+    """Every runtime switch the model path has, in one explicit object.
+
+    Passed in, never read from the environment at call time. That is not a style
+    preference -- it is the fix for a class of failure this code kept producing.
+    `load_env_file` values OVERRIDE `os.environ` on purpose, so a rotated key can
+    reach a session already running; the consequence is that any knob also read
+    from the environment is decided by whichever file the *callee* happens to
+    load, not by what the caller asked for. Measured: a benchmark run launched
+    with `--env-file env.high` did its reference-model generation at `xhigh`,
+    because every stage re-read `.env.local` behind the caller's back. A switch
+    that a caller sets and a callee silently overrides is worse than no switch.
+
+    Credentials stay in the env file deliberately. A key or base URL is not a
+    runtime choice, and the file is the one channel a live process can re-read
+    when one rotates.
+    """
+
+    #: Whole-artifact model and effort. `None` defers to the resolved config.
+    model: str | None = None
+    effort: str | None = None
+    api_flavor: str | None = None
+    stream: bool | None = None
+
+    #: The narrow, fanned-out stages run a small model on a narrow task.
+    #: `full_strength_stages` names the ones that must NOT be downgraded --
+    #: the reference model above all, since every check in the suite compares
+    #: the design against it.
+    small_model: str | None = None
+    small_effort: str | None = None
+    full_strength_stages: frozenset[str] = frozenset({"refmodel"})
+
+    #: Total output budget for one stage call, and the per-continuation slice of
+    #: it. The slice exists because a single long call goes silent long enough
+    #: to be reaped; see `_complete_responses`.
+    max_output_tokens: int = 48000
+    responses_chunk: int = 9000
+
+    #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
+    #: applies before a response starts.
+    stream_retries: int = 2
+
+    #: 2, not the SDK's 8. A request this gateway structurally cannot complete
+    #: costs `max_retries` x ~300s of silence, and eight of those is ~40 minutes
+    #: with nothing written -- the incident that first made this configurable.
+    #: It used to be recoverable only by putting `OPENAI_MAX_RETRIES` in the env
+    #: file, which is exactly the ambient-knob pattern this class removes, so the
+    #: lesson lives in the default instead. Genuine rate limits still get two.
+    max_retries: int = 2
+    timeout_s: float = 600.0
+
+    def for_stage(self, stage: str | None) -> tuple[str | None, str | None]:
+        """`(model, effort)` overrides for one stage, or `(None, None)`."""
+        if stage is not None and stage in self.full_strength_stages:
+            return None, None
+        return self.small_model, self.small_effort
+
+
 def _as_input_item(item) -> dict:
     """An output item, reshaped into something the API accepts as INPUT.
 
@@ -157,7 +216,7 @@ def _as_input_item(item) -> dict:
     return data
 
 
-def _responses_body(cfg, prompt: str) -> dict:
+def _responses_body(cfg, prompt: str, default_cap: int = 48000) -> dict:
     """The request body for `/v1/responses`, built where it can be tested.
 
     Pure on purpose: the two bugs this had were both invisible from the outside
@@ -174,9 +233,9 @@ def _responses_body(cfg, prompt: str) -> dict:
     # `max_output_tokens`. Carrying the chat name over silently drops the cap,
     # and an uncapped reasoning request is exactly the one that runs out of
     # budget with no content to show for it.
-    cap = gen.pop("max_completion_tokens", None) or gen.pop("max_output_tokens", None)
-    if not cap:
-        cap = os.environ.get("SPECFLOW_MAX_OUTPUT_TOKENS") or 48000
+    cap = (gen.pop("max_completion_tokens", None)
+           or gen.pop("max_output_tokens", None)
+           or default_cap)
     body["max_output_tokens"] = int(cap)
 
     # DEEP merge, because a shallow one silently destroys the keepalive.
@@ -222,6 +281,10 @@ class ApiPort:
     model_override: str | None = None
     #: Reasoning effort for this port only, same reasoning.
     effort_override: str | None = None
+    #: Every runtime switch, supplied by the caller. Defaults are the dataclass
+    #: defaults -- NOT the environment, which is what let a caller's `--env-file`
+    #: be silently overridden by whichever file a stage happened to re-read.
+    settings: PortSettings = field(default_factory=PortSettings)
     #: Stages the override must NOT touch. The docstring above has always said
     #: "the whole-artifact stages keep the configured one", and the code did not
     #: do it: `make_port` attaches the override to the single port the whole run
@@ -234,7 +297,8 @@ class ApiPort:
     #: model is the one artifact whose correctness the whole pipeline rests on,
     #: so it is the one that must never be quietly downgraded.
     #:
-    #: `SPECFLOW_FULL_STRENGTH_STAGES` overrides the set (comma-separated).
+    #: Kept for callers that construct an ApiPort directly; `settings` is the
+    #: supported route and wins when it names anything.
     full_strength_stages: frozenset = frozenset({"refmodel"})
     #: Where prompt-cache accounting goes. Optional, because the single-call
     #: stages have nothing to cache across; supplied by every fanned-out stage,
@@ -269,11 +333,29 @@ class ApiPort:
         return self._apply_overrides(cfg, stage)
 
     def _apply_overrides(self, cfg, stage: str | None):
-        full_strength = stage is not None and stage in self.full_strength_stages
-        if self.model_override and not full_strength:
-            cfg = replace(cfg, model=self.model_override)
-        if self.effort_override and not full_strength:
-            cfg = replace(cfg, reasoning_effort=self.effort_override)
+        st = self.settings
+        if st.model:
+            cfg = replace(cfg, model=st.model)
+        if st.effort:
+            cfg = replace(cfg, reasoning_effort=st.effort)
+        if st.api_flavor:
+            cfg = replace(cfg, api_flavor=st.api_flavor)
+        if st.stream is not None:
+            cfg = replace(cfg, stream=st.stream)
+
+        small_model, small_effort = st.for_stage(stage)
+        small_model = small_model or (
+            None if (stage is not None and stage in self.full_strength_stages)
+            else self.model_override
+        )
+        small_effort = small_effort or (
+            None if (stage is not None and stage in self.full_strength_stages)
+            else self.effort_override
+        )
+        if small_model:
+            cfg = replace(cfg, model=small_model)
+        if small_effort:
+            cfg = replace(cfg, reasoning_effort=small_effort)
         return cfg
 
     def _resolve_base(self):
@@ -296,8 +378,8 @@ class ApiPort:
             # it because it updates os.environ permanently before any port is
             # built.
             self._client_kwargs = {
-                "max_retries": int(os.environ.get("OPENAI_MAX_RETRIES", "8")),
-                "timeout": float(os.environ.get("OPENAI_TIMEOUT_S", "600")),
+                "max_retries": self.settings.max_retries,
+                "timeout": self.settings.timeout_s,
             }
         finally:
             for k, v in saved.items():
@@ -345,7 +427,7 @@ class ApiPort:
         work is chunked -- one chunk is lost, not a whole generation -- so the
         thing that made chunking necessary also makes it affordable.
         """
-        attempts = int(os.environ.get("SPECFLOW_STREAM_RETRIES") or 2) + 1
+        attempts = max(0, self.settings.stream_retries) + 1
         last: Exception | None = None
         for _ in range(attempts):
             got: list[str] = []
@@ -415,9 +497,9 @@ class ApiPort:
         model. 223s total, maximum gap under 10s, effort never lowered.
         """
         effort = cfg.reasoning_effort or "medium"
-        body = _responses_body(cfg, prompt)
+        body = _responses_body(cfg, prompt, self.settings.max_output_tokens)
         total = int(body.pop("max_output_tokens"))
-        chunk = int(os.environ.get("SPECFLOW_RESPONSES_CHUNK") or 9000)
+        chunk = int(self.settings.responses_chunk)
         body["include"] = ["reasoning.encrypted_content"]
         body["store"] = False
         body["max_output_tokens"] = min(chunk, total)
@@ -642,7 +724,8 @@ class ApiPort:
         return text
 
 
-def make_port(kind: str, root: Path, stats: object | None = None) -> ModelPort:
+def make_port(kind: str, root: Path, stats: object | None = None,
+              settings: PortSettings | None = None) -> ModelPort:
     """`stats` is only meaningful for the API path -- the file and replay ports
     make no requests, so there is no cache to account for.
 
@@ -653,16 +736,12 @@ def make_port(kind: str, root: Path, stats: object | None = None) -> ModelPort:
     if kind not in kinds:
         raise ValueError(f"unknown model port {kind!r}; expected one of {sorted(kinds)}")
     if kind == "api":
+        st = settings or PortSettings()
         return ApiPort(
             root=Path(root),
             stats=stats,
-            model_override=os.environ.get("SPECFLOW_SMALL_MODEL") or None,
-            effort_override=os.environ.get("SPECFLOW_SMALL_EFFORT") or None,
-            full_strength_stages=frozenset(
-                s.strip() for s in (
-                    os.environ.get("SPECFLOW_FULL_STRENGTH_STAGES") or "refmodel"
-                ).split(",") if s.strip()
-            ),
+            settings=st,
+            full_strength_stages=st.full_strength_stages,
         )
     return kinds[kind](root=Path(root))  # type: ignore[abstract]
 

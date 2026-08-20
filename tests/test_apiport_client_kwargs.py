@@ -37,27 +37,47 @@ def _port(monkeypatch, overrides: dict) -> ApiPort:
     return ApiPort(root=Path("/tmp"))
 
 
-def test_env_file_values_reach_the_client(_env, monkeypatch):
-    port = _port(monkeypatch, {
-        "OPENAI_API_KEY": "k", "OPENAI_MAX_RETRIES": "2", "OPENAI_TIMEOUT_S": "123",
-    })
+def test_the_retry_switch_reaches_the_client(_env, monkeypatch):
+    """Retries and timeout are SWITCHES now, not env-file entries.
+
+    They were env-file entries because that was the only channel that worked at
+    the time. The channel was the bug: a value read from the environment is
+    settled by whichever file a callee re-reads, not by the caller.
+    """
+    from specflow.model_io import PortSettings
+
+    port = _port(monkeypatch, {"OPENAI_API_KEY": "k"})
+    port = ApiPort(root=port.root,
+                   settings=PortSettings(max_retries=2, timeout_s=123.0))
+    monkeypatch.setattr(mio, "load_env_file", lambda *a, **k: {"OPENAI_API_KEY": "k"})
     port.config()
     assert port._client_kwargs == {"max_retries": 2, "timeout": 123.0}
 
 
-def test_defaults_apply_when_the_env_file_is_silent(_env, monkeypatch):
+def test_the_default_retry_count_is_two_not_eight(_env, monkeypatch):
+    """The incident that made this configurable, preserved in the default.
+
+    A request the gateway structurally cannot complete costs `max_retries` x
+    ~300s of silence. Eight of those is ~40 minutes with nothing written. That
+    used to be recoverable only by putting `OPENAI_MAX_RETRIES` in the env file
+    -- the exact ambient-knob pattern now removed -- so the lesson has to live
+    in the default instead of in a file somebody remembers to write.
+    """
     port = _port(monkeypatch, {"OPENAI_API_KEY": "k"})
     port.config()
-    assert port._client_kwargs == {"max_retries": 8, "timeout": 600.0}
+    assert port._client_kwargs == {"max_retries": 2, "timeout": 600.0}
 
 
-def test_the_override_window_is_still_closed_afterwards(_env, monkeypatch):
-    """The restore must survive the fix -- the values are captured, not leaked."""
+def test_the_environment_cannot_set_the_retry_count(_env, monkeypatch):
+    """A hostile ambient value must be inert."""
     import os
-    port = _port(monkeypatch, {"OPENAI_API_KEY": "k", "OPENAI_MAX_RETRIES": "2"})
+    monkeypatch.setenv("OPENAI_MAX_RETRIES", "8")
+    port = _port(monkeypatch, {"OPENAI_API_KEY": "k", "OPENAI_MAX_RETRIES": "8"})
     port.config()
-    assert os.environ.get("OPENAI_MAX_RETRIES") is None
     assert port._client_kwargs["max_retries"] == 2
+    assert os.environ.get("OPENAI_MAX_RETRIES") == "8", (
+        "the override window still restores what it borrowed"
+    )
 
 
 def test_client_kwargs_are_read_from_the_port_not_the_environment(_env, monkeypatch):

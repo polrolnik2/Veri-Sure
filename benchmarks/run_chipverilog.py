@@ -143,6 +143,25 @@ def compile_gate(rtl: Path, top: str, extra: list[Path]) -> dict:
 async def run(args: argparse.Namespace) -> dict:
     task_dir = find_task(args.task)
     top = task_dir.name
+    from specflow.model_io import PortSettings
+
+    port_settings = PortSettings(
+        model=args.model,
+        effort=args.effort,
+        api_flavor=args.api_flavor,
+        stream=args.stream,
+        small_model=args.small_model,
+        small_effort=args.small_effort,
+        full_strength_stages=frozenset(
+            x.strip() for x in (args.full_strength_stages or "").split(",") if x.strip()
+        ),
+        max_output_tokens=args.max_output_tokens,
+        responses_chunk=args.responses_chunk,
+        stream_retries=args.stream_retries,
+        max_retries=args.api_max_retries,
+        timeout_s=args.api_timeout,
+    )
+
     spec = (task_dir / "description.txt").read_text(encoding="utf-8")
     kids = submodules(task_dir, top)
 
@@ -174,6 +193,7 @@ async def run(args: argparse.Namespace) -> dict:
         config=TopAgentConfig(
             tb_backend="specflow",
             specflow_model_port="api",
+            specflow_port_settings=port_settings,
             sim_max_retry=args.sim_max_retry,
             debug_max_trials=args.debug_max_trials,
             specflow_extra_sources=tuple(str(p) for p in kid_files),
@@ -237,14 +257,46 @@ async def run(args: argparse.Namespace) -> dict:
     return record
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI, built where a test can read it.
+
+    Extracted so the switch list is checkable: every one of these
+    replaced an environment variable, and an environment variable is
+    settled by whichever file a callee re-reads rather than by the
+    caller. A knob reachable only from Python is not a runtime switch.
+    """
     p = argparse.ArgumentParser(prog="run_chipverilog")
     p.add_argument("--task", required=True, help="module name, e.g. i2c_master_top")
     p.add_argument("--out", required=True, help="run directory")
     p.add_argument("--max-tokens", type=int, default=40000)
     p.add_argument("--sim-max-retry", type=int, default=2)
     p.add_argument("--debug-max-trials", type=int, default=6)
-    p.add_argument("--env-file", default=str(REPO_ROOT / ".env.local"))
+    p.add_argument("--env-file", default=str(REPO_ROOT / ".env.local"),
+                   help="credentials only. Every behavioural knob below is a "
+                        "switch, because an env file is read by callees and "
+                        "silently overrides what the caller asked for.")
+    g = p.add_argument_group("model switches (explicit; never ambient)")
+    g.add_argument("--model", help="whole-artifact model; overrides the env file")
+    g.add_argument("--effort", help="reasoning effort: low|medium|high|xhigh. "
+                                    "`max` is not accepted by every gateway.")
+    g.add_argument("--api-flavor", choices=("chat", "responses"))
+    g.add_argument("--stream", dest="stream", action="store_true", default=None)
+    g.add_argument("--no-stream", dest="stream", action="store_false")
+    g.add_argument("--small-model", help="model for the narrow fanned-out stages")
+    g.add_argument("--small-effort")
+    g.add_argument("--full-strength-stages", default="refmodel",
+                   help="comma-separated stages the small model must NOT touch. "
+                        "`refmodel` above all: every check compares the design "
+                        "against it.")
+    g.add_argument("--max-output-tokens", type=int, default=48000)
+    g.add_argument("--responses-chunk", type=int, default=9000,
+                   help="per-continuation output slice. One long call goes "
+                        "silent long enough to be reaped; this bounds it.")
+    g.add_argument("--stream-retries", type=int, default=2,
+                   help="retries for a DROPPED stream, which is intermittent "
+                        "on some gateways. Cheap because work is chunked.")
+    g.add_argument("--api-max-retries", type=int, default=8)
+    g.add_argument("--api-timeout", type=float, default=600.0)
     p.add_argument(
         "--max-repairs", type=int, default=3,
         help="repair rounds per specflow stage before the node hard-fails.",
@@ -288,6 +340,11 @@ def main(argv: list[str] | None = None) -> int:
              "--no-rollback-guard, which needs several non-improving rounds by "
              "construction.",
     )
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = build_parser()
     args = p.parse_args(argv)
 
     # A running container cannot re-read its own environment, so credentials

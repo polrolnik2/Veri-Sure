@@ -20,7 +20,7 @@ from typing import Sequence
 from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
-from .model_io import make_port
+from .model_io import PortSettings, make_port
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
@@ -209,6 +209,10 @@ def build_artifacts(
     divide_s1: bool = True,
     fanout: bool = True,
     judge: bool = True,
+    #: Every model-call switch, stated by the caller. `None` means the defaults
+    #: in `PortSettings` -- never the ambient environment, which is what let a
+    #: caller's `--env-file` be overridden by whichever file a stage re-read.
+    port_settings: "PortSettings | None" = None,
 ) -> BuildResult:
     """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
 
@@ -231,7 +235,7 @@ def build_artifacts(
     run_dir = Path(run_dir)
     ensure_prompt_file(run_dir, spec)
     stats = CacheStats()
-    port = make_port(model_port, run_dir / "agent_io", stats)
+    port = make_port(model_port, run_dir / "agent_io", stats, port_settings)
     contract = json.loads(contract_json) if contract_json.strip() else {}
 
     # Set once a stage regenerates: everything downstream must regenerate too,

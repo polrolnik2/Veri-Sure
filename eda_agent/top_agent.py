@@ -220,6 +220,12 @@ class TopAgentConfig:
     # stops so it can be answered by hand; "replay" reads recorded fixtures and
     # needs no model at all; "api" is the eventual HTTP path.
     specflow_model_port: str = "file"
+    #: Every model-call switch for the specflow stages, as one explicit object.
+    #: `None` means the defaults. Never read from the environment at call time:
+    #: `load_env_file` overrides `os.environ` so a rotated key can reach a live
+    #: session, which means any knob also taken from the environment is settled
+    #: by whichever file a callee re-reads rather than by what the caller asked.
+    specflow_port_settings: object | None = None
     # Pre-made modules the generated RTL may instantiate but does not define,
     # and the include directories their headers live in. A hierarchical DUT
     # cannot elaborate without them, and the resulting build error reads as a
@@ -581,6 +587,7 @@ class TopAgent:
             sim_max_retry=self.config.sim_max_retry,
             debug_max_trials=self.config.debug_max_trials,
             model_port=self.config.specflow_model_port,
+            port_settings=self.config.specflow_port_settings,
             extra_sources=self.config.specflow_extra_sources,
             include_dirs=self.config.specflow_include_dirs,
             reuse=self.config.specflow_reuse,

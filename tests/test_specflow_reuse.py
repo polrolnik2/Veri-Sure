@@ -69,7 +69,10 @@ def _build(run_dir: Path, *, reuse: bool):
     import specflow.integration as integration
 
     real_make_port = integration.make_port
-    integration.make_port = lambda kind, root, stats=None: port
+    # `*_, **__`: this stands in for a real function whose signature grows.
+    # A double pinned to today's arity turns an added parameter into a
+    # test failure that says nothing about behaviour.
+    integration.make_port = lambda *_, **__: port
     try:
         res = build_artifacts(
             run_dir=run_dir,

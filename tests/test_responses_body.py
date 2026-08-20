@@ -68,8 +68,9 @@ def test_the_chat_spelling_of_the_cap_is_translated_not_dropped():
     assert "max_completion_tokens" not in body
 
 
-def test_there_is_always_a_cap(monkeypatch):
-    monkeypatch.delenv("SPECFLOW_MAX_OUTPUT_TOKENS", raising=False)
+def test_there_is_always_a_cap():
+    """An uncapped reasoning request is the one that spends its whole budget
+    before emitting any content, so the cap is a parameter with a default rather
+    than something to remember to pass."""
     assert _responses_body(_Cfg(), "p")["max_output_tokens"] == 48000
-    monkeypatch.setenv("SPECFLOW_MAX_OUTPUT_TOKENS", "9000")
-    assert _responses_body(_Cfg(), "p")["max_output_tokens"] == 9000
+    assert _responses_body(_Cfg(), "p", 9000)["max_output_tokens"] == 9000
