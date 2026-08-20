@@ -289,6 +289,30 @@ class ApiPort:
                     f"lower max_completion_tokens, or split the stage -- raising "
                     f"the client timeout does not help, the cut is upstream."
                 ) from exc
+            if type(exc).__name__ == "NotFoundError":
+                # A 404 from a gateway has two causes and they read identically
+                # in the SDK's message, so both are named. Measured here: an
+                # `OPENAI_BASE_URL` with no path component made every call land
+                # on `/chat/completions` and 404, when the gateway serves at
+                # `/v1`; and separately, the configured model had been withdrawn
+                # from the gateway while the URL was fine. A run dies the same
+                # way either time, and the difference is one `curl` nobody
+                # thinks to make.
+                from urllib.parse import urlparse
+
+                base = cfg.base_url or ""
+                hint = ""
+                if base and not urlparse(base).path.strip("/"):
+                    hint = (f" The base URL {base!r} has no path: most "
+                            f"OpenAI-compatible gateways serve at <base>/v1, so "
+                            f"this request went to /chat/completions.")
+                raise RuntimeError(
+                    f"{stage} r{round_}: the gateway returned 404. Either the "
+                    f"model {cfg.model!r} is not available on it, or the base "
+                    f"URL is wrong.{hint} `curl -H \"Authorization: Bearer "
+                    f"$OPENAI_API_KEY\" {base.rstrip('/')}/v1/models` lists what "
+                    f"the gateway actually serves."
+                ) from exc
             raise
         if cfg.stream:
             # Reassemble the response, and keep the usage record: it arrives in
