@@ -541,3 +541,32 @@ is to add a span and G1 blocks the whole run. Across every recorded run the
 split is **0 errors, all warnings**: nothing was invented, and everything was
 uncited. The S1 prompt now states the rule up front, so the first attempt should
 carry the extra span rather than a repair round adding it.
+
+### What this work does not establish
+
+**The control model is at 129/168, not 168/168.** After excluding the one known
+asymmetry, 39 of 168 testpoints still fail with a correct DUT and an oracle
+transliterated line by line from it. The residual is not uniform: 60 of the
+99 raw failures diverge on `dout` **alone, at the very first recorded state**,
+while every other output diverges at spread-out state indices (1, 2, 3, 4, 13,
+15, 29, 31, 32…). That distribution says the comparison and the reset alignment
+are sound and that `dout` specifically is wrong from the first sample — it is
+the one output captured through a three-stage input filter whose post-reset
+transient the transliteration may not reproduce edge for edge. **Which side owns
+that transient was not settled**, and it is the next question worth asking of
+this oracle.
+
+**Two of the plan's verification items need a live model run and did not get
+one.** Whether Phase 3 actually removes the 61 testpoints that end mid-command
+depends on the testcase agent emitting `hold`/`until`, and the benchmark score
+depends on RTL a live run produces. Neither could be checked from this session:
+the configured gateway no longer serves `openai/gpt-5.6-luna` — it now exposes
+only Google Gemini models — and `OPENAI_BASE_URL` is missing its `/v1` path, so
+every call 404s twice over. Switching models would make any result
+incomparable with the baselines recorded above, which is a decision for whoever
+owns the experiment, not a default to pick.
+
+**The benchmark score is expected to be unmoved by this work**, and that was
+stated before any of it was written. A transactional testbench accepts RTL that
+fails sequential equivalence; it stops the oracle destroying correct RTL, which
+is a precondition for anything else, not a scoring improvement.
