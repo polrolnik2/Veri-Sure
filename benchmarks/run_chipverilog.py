@@ -124,13 +124,35 @@ def submodules(task_dir: Path, top: str) -> list[str]:
 def compile_gate(rtl: Path, top: str, extra: list[Path]) -> dict:
     """ChipVerilog's first gate: iverilog must elaborate `top` by its own name.
 
-    Reproduced here (rather than invoked from the vendored tool) only so the
-    baseline records the same first-order fact the suite would; the vendored
-    flow remains the authority for a comparable verdict.
+    Verilog-2005, NOT `-g2012`, and the difference decides scores. The scorer
+    compiles the task's shipped testbench against the candidate at `-g2012`
+    first and, when that fails, retries with NO language flag
+    (`formal_equivalence.py:1456`) -- which for iverilog 12 is `-g2005`. On the
+    `alu` task the shipped testbench itself fails the `-g2012` attempt, so the
+    plain retry is the path that actually decides, and a candidate that only
+    compiles at `-g2012` never reaches simulation at all: it is diverted to
+    formal equivalence and scored `function_fail`.
+
+    Gating at `-g2012` therefore passed designs the scorer could not admit. A
+    generated `alu` scoring 40/40 against golden through our own transactional
+    testbench was scored `function_fail` for declaring `input logic [15:0] a`;
+    rewriting only the four port declarations, body byte-identical, moved the
+    same design to `pass`.
+
+    `-g2005` constrains exactly that and nothing more. It rejects `logic` in a
+    PORT LIST while still accepting `logic`, `always_comb` and the rest inside
+    the module body, which is why the RTL prompt asks only for portable ports
+    and leaves the body alone. Measured on iverilog 12.0:
+
+        flag         logic in body    logic in ports
+        <default>    accept           reject
+        -g2005       accept           reject
+        -g2005-sv    accept           accept
+        -g2012       accept           accept
     """
     if not rtl.exists() or not rtl.stat().st_size:
         return {"status": "fail", "reason": "no candidate RTL was produced"}
-    cmd = ["iverilog", "-g2012", "-s", top, "-o", "/dev/null", str(rtl), *map(str, extra)]
+    cmd = ["iverilog", "-g2005", "-s", top, "-o", "/dev/null", str(rtl), *map(str, extra)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     return {
         "status": "pass" if proc.returncode == 0 else "fail",
