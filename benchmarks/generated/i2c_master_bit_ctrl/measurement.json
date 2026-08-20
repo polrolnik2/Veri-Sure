@@ -1,0 +1,74 @@
+{
+  "task": "i2c_master_bit_ctrl",
+  "family": "i2c",
+  "shape": "prescaled 12-phase FSM, 2-stage synchroniser, 3-sample majority filter",
+  "golden": "benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/i2c_master_bit_ctrl.v",
+  "generated_by": {
+    "command": "python -m benchmarks.run_chipverilog --task i2c_master_bit_ctrl --effort xhigh --small-model gpt-5-mini --small-effort low --full-strength-stages refmodel --responses-chunk 22000 --max-output-tokens 90000",
+    "refmodel_rounds": 5,
+    "shipped_round": 3
+  },
+  "baseline": {
+    "note": "This run generated its own 181-testpoint testplan, so 168/168 is not the comparator. The hand-written control oracle was scored on THIS testplan to establish what is reachable.",
+    "control_vs_golden": {
+      "passed": 181,
+      "total": 181
+    },
+    "control_vs_candidate": {
+      "passed": 11,
+      "total": 181
+    },
+    "control_separation": 170
+  },
+  "reference_model": {
+    "round0": {
+      "vs_golden": 34,
+      "vs_candidate": 11,
+      "separation": 23,
+      "total": 181,
+      "distinct_output_states_over_a_corner_sweep": 5
+    },
+    "shipped_round3": {
+      "vs_golden": "not scored -- the run was still in flight when this was recorded",
+      "vs_candidate": "not scored",
+      "separation": "not scored",
+      "total": 181,
+      "distinct_output_states_over_a_corner_sweep": 1,
+      "note": "Byte-identical in behaviour class to round 4, which WAS scored: both emit a single constant output state over a corner-first sweep. Round 4's measured 18/181 with separation -9 is the number to read for this class; the shipped round was not separately scored."
+    },
+    "round4": {
+      "vs_golden": 18,
+      "vs_candidate": 27,
+      "separation": -9,
+      "total": 181,
+      "distinct_output_states_over_a_corner_sweep": 1
+    },
+    "hold": 60,
+    "compare": "transactional",
+    "verdict": "DEFECTIVE, and vacuous from round 1 onward. The shipped model returns a single constant output state, so it scores HIGHER against known-wrong RTL than against golden -- the separation inverts."
+  },
+  "gates_that_passed_it": {
+    "G4_refmodel_gate": "0 issues",
+    "per_requirement_judge": "77 of 77 requirements 'met'",
+    "why": "Both compare the model against the SPECIFICATION. Neither requires the model's outputs to ever move, and the spec's own summary clause licenses the filter defect: 'ena: Core enable signal. It gates normal timing/filter operation.' Golden implements the precise clause that follows -- the filter COUNTER is reset -- which makes the filter run every cycle rather than stop.",
+    "fix": "specflow/refmodel/validate.py now reports a model whose outputs never move across a corner-first sweep. It clears round 0 and flags rounds 1-4, with zero false positives on the three known-correct models in this repo."
+  },
+  "localisation": {
+    "method": "benchmarks/divergence_trace.py, three-way (DUT / 181-181 control / generated) on TP-0006",
+    "finding": "the generated model's sSCL and sSDA never move; both the DUT and the control drop them at edge 1 and restore at edge 4",
+    "cause_in_source": "_update_filter takes `if not ena:` and skips the filter shift entirely",
+    "repairs_attempted": [
+      {
+        "what": "the whole filter transliterated faithfully",
+        "vs_golden": 18,
+        "separation": -12
+      },
+      {
+        "what": "ONLY the ena gating, phase left alone",
+        "vs_golden": 11,
+        "separation": -10
+      }
+    ],
+    "conclusion": "NOT point-localisable. Both repairs made the model match the wrong RTL better than golden, so the phase convention is load-bearing across every downstream stage. This is a different failure mode from the control oracle's two bugs, which were one line each and independently repairable (113 -> 159 -> 168)."
+  }
+}
