@@ -1,0 +1,26 @@
+{
+  "task": "or1200_gmultp2_32x32",
+  "family": "or1200",
+  "shape": "simple sequential (two pipeline registers, asynchronous reset on the second only)",
+  "golden": "benchmarks/chipverilog/Des/or1200/or1200_gmultp2_32x32/or1200_gmultp2_32x32.v",
+  "generated_by": {
+    "command": "python -m benchmarks.run_chipverilog --task or1200_gmultp2_32x32 --effort xhigh --small-model gpt-5-mini --small-effort low --full-strength-stages refmodel",
+    "repairs_needed": 0
+  },
+  "reference_model": {
+    "vs_golden": {"passed": 36, "total": 36},
+    "vs_mutant": {"passed": 4, "total": 36},
+    "separation": 32,
+    "mutant": "python -m benchmarks.mutate <golden> <out> --op 0 -> line 44: * becomes + (p0 <= #1 xi * yi)",
+    "hold": 1,
+    "compare": "transactional",
+    "verdict": "correct on golden and discriminating against a wrong DUT",
+    "note": "An earlier reading of 36/36 against BOTH DUTs -- separation 0 -- was an equivalent mutant, not a vacuous model. mutate.py was picking a site inside `input [`OR1200_W-1:0] X`, which only widens the port; `xi` is an integer so `xi <= X` truncates back, and the harness drives only the 32-bit contract port. See the mutate.py commit."
+  },
+  "rtl": {
+    "as_generated": "pass",
+    "proof_type": "induction",
+    "reason": "equivalence proven by temporal induction (k=16)",
+    "note": "This design ships no testbench, so it is scored by the equivalence flow and never reaches iverilog -- which is why its `input logic` ports cost it nothing, unlike alu's."
+  }
+}
