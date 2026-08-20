@@ -349,3 +349,107 @@ the lower rows is within run-to-run noise — 2 workers is not better than 4 —
 call in the divided, fanned-out chain is a small one: 7–26s measured across
 `gpt-5-nano`, `gpt-5-mini` and `gpt-5.6-luna`. Nothing comes within 30x of the
 limit that killed the monolithic S1.
+
+## The oracle, measured against golden RTL
+
+The oracle had never been scored against RTL that is known to be correct. The
+first time it was, the **golden `i2c_master_bit_ctrl` failed 120 of 168
+testpoints** — worse than the LLM-written candidate it was supposed to judge. A
+known-correct design scoring below a generated one means the oracle is the
+broken part, and the repair loop had been deforming correct RTL to match it.
+
+`benchmarks/golden_check.py` is the instrument. Debug only: it is never a gate,
+and its cycle-exact verdict never reaches an agent.
+
+### The testbench verifies content, not cycles
+
+`contract.timing.cmd_ack.latency_cycles` came back **3** in one run of this
+specification and **1** in the next. Golden takes **5** `clk_en` phases. The
+specification cannot settle it — it describes START as three transitions, golden
+implements five, and two of those five are invisible (`start_a`/`start_b` are
+no-ops from reset and `start_d` is byte-identical to `start_c`, a pure hold).
+The phase count appears nowhere in 15,715 characters, because it is an
+arbitrary-but-fixed choice of that core.
+
+So cycle-exactness was being enforced against a fiction: the full cost of
+strictness — rejecting correct RTL, which was observed — and none of the
+benefit, since it still did not match golden.
+
+A check now compares the **ordered sequence of distinct output states** and
+ignores how long each is held. A skipped state, a spurious state and a wrong
+value all fail; only duration is ignored, and the durations are returned rather
+than discarded so a requirement that states one can be checked on top.
+
+Same oracle (a line-by-line transliteration of golden), same stimulus, two DUTs,
+each vector held 60 edges so a command can actually complete:
+
+| DUT | cycle-exact | transactional | cycle-exact, less `dout`-only | transactional, less `dout`-only |
+| --- | --- | --- | --- | --- |
+| golden (correct) | 36 / 168 | 69 / 168 | 89 / 168 | **129 / 168** |
+| generated (wrong) | 20 / 168 | 28 / 168 | 56 / 168 | **31 / 168** |
+| **separation** | **16** | **41** | **33** | **98** |
+
+Ignoring durations discriminates ~2.6× better on every output and ~3× better
+once the one known asymmetry is set aside, because phase noise from a guessed
+latency was swamping the behavioural signal.
+
+**Read both numbers, never one.** A criterion that passes everything scores well
+on the pass rate and is worthless. The pass rate of a *correct* design says how
+much of the harness is defect; the separation says whether the criterion
+discriminates at all.
+
+**The inversion is gone.** With `dout` included the harness used to rank the
+wrong candidate above golden — golden's `dout` has no reset and samples the idle
+bus, while the wrong RTL resets it to 0 exactly as the model does, and
+`ports.inactive_value` was handing the model `scl_i=0, sda_i=0`: an open-drain
+bus held *low*. Every input now has a declared `idle_value` and both sides start
+there.
+
+**Accepted cost, stated plainly.** A transactional testbench will accept RTL
+that fails the benchmark's sequential-equivalence scoring — proven by
+experiment, golden with one invisible hold phase removed is `function_fail`. It
+will not lift the score by itself. It stops the oracle destroying correct RTL,
+which is a precondition for anything else working.
+
+### Duration obligations: measured, and not built
+
+Where a requirement states a duration, that duration is worth checking — on the
+recorded DUT trace directly, never through the reference model. So the question
+is how many such requirements exist. `benchmarks/timing_obligations.py` answers
+it across all 64 specifications:
+
+| | |
+| --- | --- |
+| candidate sentences with a quantified cycle count | 36 |
+| — naming no declared output port | 23 |
+| — a port-glossary noun phrase, no assertion | 8 |
+| — a *latency* claim ("one-cycle delayed"), not a width claim | 4 |
+| — a clause that **denies** the duration | 1 |
+| **real obligations** | **3, in 2 of 64 modules** |
+| distinct claims among them | 1 (`cmd_ack` is one `clk` wide) |
+| validated against golden | 3 hold, 0 golden-fails |
+
+Both modules are in the i2c family. The word "exactly" occurs **once in the
+entire corpus** — the canonical example is the strongest timing sentence in the
+benchmark, not a representative one.
+
+**So Phase 5 does not ship as a pipeline feature.** One sentence is not a
+feature. The extractor stays as a measurement, and its own development produced
+two live examples of the failure the measurement exists to prevent: it read
+`or1200_except`'s "except_start is a combinational level signal, **not** a
+one-cycle pulse" as an obligation and generated a check golden fails, and it
+scanned the golden Verilog for `output` without stripping comments, matching the
+word inside `// i2c clock line output enable (active low)` — so
+`i2c_master_bit_ctrl` acquired ports named `enable`, `end` and `yet`, and "At the
+**end** of a command sequence" became a claim about a port. Both are tests now.
+
+### `latency_cycles` gates nothing
+
+The field was load-bearing in three places at once — it gated a reference-model
+check (G4e), set the testbench's stimulus hold length, and picked the reference
+model's dispatch — and the architect had been told, in as many words, to
+"choose 0 or 1" where the specification named no count. G4e is deleted, pacing
+is severed (a stimulus step states its own `hold` or waits `until` a condition),
+and the field is now optional with one definition quoted into every prompt that
+mentions it: **edges of the declared clock**, not enable ticks. On a prescaled
+design that distinction is the difference between 5 and 26.
