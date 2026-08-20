@@ -69,6 +69,52 @@ def inactive_value(name: str) -> int:
     return 0
 
 
+#: Suffixes that mark a FUNCTIONAL input as asserted-low. Deliberately narrow:
+#: `reset_is_active_low` accepts a bare trailing "n", which is right for reset
+#: names but catastrophic here -- `din`, `en`, `sda_in` and `token` all end in
+#: "n" and none of them is active-low. An explicit contract field is the real
+#: answer; this only catches the unambiguous `_n` convention.
+_ACTIVE_LOW_SUFFIXES = ("_n", "_ni", "_l", "_b")
+
+
+def idle_value(name: str, spec: dict | None = None) -> int:
+    """The value an input holds when nothing is asking the design to do anything.
+
+    Order: the contract's own `idle_value` for the port, then the reset rule,
+    then the `_n` convention, then 0.
+
+    `inactive_value` returned 0 for every non-reset port, and 0 is simply wrong
+    for an active-low or open-drain input. On `i2c_master_bit_ctrl` that put
+    `scl_i` and `sda_i` LOW during reset -- a bus stuck low -- while the DUT saw
+    X on the same pins, so the two started from different states. It also made
+    the comparison actively perverse: `dout` accounted for 996 of 2016 diverging
+    edges, and because golden leaves `dout` unreset while a wrong candidate
+    zeroes it exactly as the model does, the harness scored the WRONG RTL above
+    golden. A harness that rewards disagreeing with the reference is worse than
+    no harness.
+    """
+    if spec is not None:
+        declared = spec.get("idle_value")
+        if isinstance(declared, bool):
+            return int(declared)
+        if isinstance(declared, int):
+            return int(declared)
+    if is_reset(name):
+        return 1 if reset_is_active_low(name) else 0
+    if is_clock(name):
+        return 0
+    return 1 if str(name).strip().lower().endswith(_ACTIVE_LOW_SUFFIXES) else 0
+
+
+def idle_values(contract: dict) -> dict[str, int]:
+    """Every declared input mapped to its idle value, in declaration order."""
+    return {
+        str(p.get("name")): idle_value(str(p.get("name")), p)
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "input" and p.get("name")
+    }
+
+
 def classify(contract: dict) -> tuple[list[str], list[str], list[str]]:
     """(clocks, resets, functional) over the contract's declared inputs, in order."""
     clocks: list[str] = []
@@ -99,6 +145,17 @@ def input_names(contract: dict) -> list[str]:
 
 
 def pinned_inputs(contract: dict) -> dict[str, int]:
-    """The runtime-owned inputs and the values they hold during stimulus."""
+    """The runtime-owned inputs and the values they hold during stimulus.
+
+    Contract-aware now, so a design that declares an explicit `idle_value` for
+    its reset is honoured rather than second-guessed by the name rule.
+    """
     clocks, resets, _ = classify(contract)
-    return {name: inactive_value(name) for name in (*clocks, *resets)}
+    by_name = {
+        str(p.get("name")): p
+        for p in (contract.get("io") or []) if p.get("name")
+    }
+    return {
+        name: idle_value(name, by_name.get(name))
+        for name in (*clocks, *resets)
+    }

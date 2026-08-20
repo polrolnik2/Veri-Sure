@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..schema import Issue
-from ..ports import classify, input_names, pinned_inputs
+from ..ports import classify, idle_values, input_names, pinned_inputs
 
 _SAFE = re.compile(r"[^A-Za-z0-9_]")
 
@@ -111,6 +111,7 @@ def render_testcase(
     suffix: str = "",
     input_ports: list[str] | None = None,
     pinned: dict[str, int] | None = None,
+    idle: dict[str, int] | None = None,
 ) -> str:
     tp_uid = tp["uid"]
     lines = [
@@ -138,11 +139,19 @@ def render_testcase(
         f"INPUT_PORTS = {list(input_ports or [])!r}",
         f"PINNED_INPUTS = {dict(pinned or {})!r}",
         "",
+        "# Every input's quiescent value, from the contract. The runtime drives",
+        "# all of them to idle before releasing reset so the DUT and the model",
+        "# start from the same state; 0 is not idle for an active-low or",
+        "# open-drain input, and assuming it was is what let the harness score a",
+        "# wrong design above golden.",
+        f"IDLE_INPUTS = {dict(idle or {})!r}",
+        "",
         "",
         "@cocotb.test()",
         f"async def {_fn_name(tp_uid, suffix)}(dut):",
         f'    env = await Env.start(dut, tp_uid="{tp_uid}", model=Model(),',
-        "                          input_ports=INPUT_PORTS, pinned=PINNED_INPUTS)",
+        "                          input_ports=INPUT_PORTS, pinned=PINNED_INPUTS,",
+        "                          idle=IDLE_INPUTS)",
         "    for stim in STIMULUS:",
         "        await env.drive(stim)",
     ]
@@ -175,6 +184,7 @@ def render_suite(
     bins_by_tp, checks_by_tp = _by_tp(bins), _by_tp(checks)
     default = default_stimulus(contract)
     ports, pinned = input_names(contract), pinned_inputs(contract)
+    idle = idle_values(contract)
     manifest = Manifest()
 
     for tp in testplan:
@@ -187,6 +197,7 @@ def render_suite(
             stimulus=stim,
             input_ports=ports,
             pinned=pinned,
+            idle=idle,
         )
         name = module_name(uid)
         (tests_dir / f"{name}.py").write_text(source, encoding="utf-8")

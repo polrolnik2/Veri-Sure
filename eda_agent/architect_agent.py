@@ -58,7 +58,18 @@ What to include (keep it compact):
   the interface declares — even ones derived from another (e.g. M = clog2(N));
   if the golden TB overrides a name via #(.NAME(...)) or positional #(...), that
   name MUST appear here. Use [] only if the module genuinely has no parameters.
-- io: concise list of ports with direction and bit width when known
+- io: concise list of ports with direction and bit width when known.
+  For every INPUT, give `idle_value` when its quiescent level is not 0 — the
+  value the port holds when nothing is asking the design to do anything. An
+  active-low input (`req_n`, `cs_n`, `oe_b`) idles at 1. An open-drain or
+  wired-AND bus input (I2C `scl_i`/`sda_i`, a shared interrupt line) idles at 1,
+  because the pull-up wins when nobody drives it. Omit it for an ordinary
+  active-high input; 0 is the default and is right for most ports.
+  This is not cosmetic. The testbench drives every input to its idle value
+  before releasing reset so that the design and its reference model start from
+  the same defined state. Get it wrong and the two begin disagreeing before the
+  first stimulus, and a design that samples a bus you have declared to idle low
+  will be marked broken for behaving correctly.
 - clocking: whether sequential; clock/reset names and edge semantics if applicable
 - timing: per-output latency expectations (0 = combinational / same-cycle, 1 = next-cycle, etc.) when inferable.
   State the MINIMUM latency the function inherently needs — do not add pipeline
@@ -118,6 +129,8 @@ EXAMPLE_OUTPUT: Dict[str, Any] = {
         {"name": "clk", "dir": "input", "width": 1, "notes": "posedge clock"},
         {"name": "reset", "dir": "input", "width": 1, "notes": "active-high synchronous reset"},
         {"name": "in_", "dir": "input", "width": "WIDTH", "notes": ""},
+        {"name": "req_n", "dir": "input", "width": 1, "idle_value": 1,
+         "notes": "active low: asserted when 0"},
         {"name": "out", "dir": "output", "width": "WIDTH", "notes": "registered output"},
     ],
     "clocking": {

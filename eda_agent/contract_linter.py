@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+from specflow.ports import is_reset
+
 
 @dataclass(frozen=True)
 class ContractIssue:
@@ -295,6 +297,43 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                 rst_name = str(rst.get("name"))
                 if rst_name not in inputs:
                     issues.append(ContractIssue("warning", "clocking.reset.name", f"Reset {rst_name} not found as input port."))
+
+    # -- idle_value: the quiescent level of every input ----------------------
+    #
+    # The testbench drives every input to its idle value before releasing reset
+    # so the DUT and the reference model start from the same defined state. 0 is
+    # the default and is right for most ports, but it is WRONG for an active-low
+    # or open-drain input -- and getting it wrong is not a cosmetic error. On
+    # i2c_master_bit_ctrl, `scl_i`/`sda_i` defaulted to 0, which is a bus held
+    # low; `dout` then accounted for 996 of 2016 diverging edges, and because a
+    # wrong candidate zeroed `dout` exactly as the model did while golden left it
+    # unreset, the harness scored the WRONG design above golden.
+    for port in obj.get("io") or []:
+        if not isinstance(port, dict) or port.get("dir") != "input":
+            continue
+        name = str(port.get("name") or "")
+        if not name:
+            continue
+        declared = port.get("idle_value")
+        if declared is not None:
+            if not isinstance(declared, bool) and not isinstance(declared, int):
+                issues.append(ContractIssue(
+                    "error", f"io.{name}.idle_value",
+                    f"idle_value must be an integer, got {declared!r}."))
+            elif isinstance(declared, int) and declared < 0:
+                issues.append(ContractIssue(
+                    "error", f"io.{name}.idle_value",
+                    f"idle_value must not be negative, got {declared!r}."))
+            continue
+        # Undeclared and the name says active-low. A warning, not an error: the
+        # convention is strong but not universal, and a false error here would
+        # block a contract that is merely unconventional.
+        if name.strip().lower().endswith(("_n", "_ni", "_b")) and not is_reset(name):
+            issues.append(ContractIssue(
+                "warning", f"io.{name}.idle_value",
+                f"{name} looks active-low but declares no idle_value, so the "
+                f"testbench will hold it at 0 -- i.e. permanently asserted -- "
+                f"through reset. State idle_value: 1 if that is wrong."))
 
     timing = obj.get("timing")
     if timing is not None and not isinstance(timing, dict):

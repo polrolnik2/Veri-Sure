@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..ports import inactive_value, is_clock, is_reset
+from ..ports import idle_value, inactive_value, is_clock, is_reset
 
 
 
@@ -120,6 +120,7 @@ class Env:
         results_dir: Path,
         input_ports: list[str] | None = None,
         pinned: dict[str, int] | None = None,
+        idle: dict[str, int] | None = None,
     ):
         self.dut = dut
         self.tp_uid = tp_uid
@@ -131,6 +132,12 @@ class Env:
         # deliberately a strict subset of the first; `expect` closes the gap.
         self.input_ports = list(input_ports or [])
         self.pinned = dict(pinned or {})
+        #: Every declared input's quiescent value. Supplied by the renderer from
+        #: the contract; falls back to the name rules so an older suite still
+        #: runs. `pinned` stays the runtime-owned subset and takes precedence.
+        self.idle = {n: idle_value(n) for n in self.input_ports}
+        self.idle.update(dict(idle or {}))
+        self.idle.update(self.pinned)
         # Which stimulus step is being driven. The SystemVerilog path gave the
         # repair agent a `fail_time` to locate a failure in the waveform; this
         # backend had no temporal pointer at all, so a mismatch on a stateful
@@ -179,9 +186,10 @@ class Env:
         period_ns: int = 10,
         input_ports: list[str] | None = None,
         pinned: dict[str, int] | None = None,
+        idle: dict[str, int] | None = None,
     ) -> "Env":
         results_dir = Path(os.environ.get("SPECFLOW_RESULTS", "results"))
-        env = cls(dut, tp_uid, model, results_dir, input_ports, pinned)
+        env = cls(dut, tp_uid, model, results_dir, input_ports, pinned, idle)
 
         clk = env._clk()
         if clk is not None:
@@ -211,6 +219,19 @@ class Env:
         if not handles:
             return
 
+        # Every input to its idle value BEFORE reset is released, so the DUT and
+        # the model start from the same defined state. Without this, functional
+        # inputs are never driven at all during reset: the DUT samples X while
+        # `_bundle` hands the model `inactive_value` -- a plain 0 -- and the two
+        # begin the first stimulus vector already disagreeing. On i2c that is
+        # where `dout` picks up the X it never loses, and `dout` alone was 996 of
+        # 2016 diverging edges.
+        for name in self.input_ports:
+            if is_reset(name):
+                continue
+            handle = getattr(self.dut, name, None)
+            if handle is not None:
+                handle.value = int(self.idle.get(name, 0))
         for name, handle in handles:
             handle.value = 1 - inactive_value(name)
         if hasattr(self.ref, "reset"):
@@ -355,12 +376,12 @@ class Env:
                 continue
             handle = getattr(self.dut, name, None)
             if handle is None:
-                bundle[name] = self.pinned.get(name, inactive_value(name))
+                bundle[name] = self.idle.get(name, inactive_value(name))
                 continue
             sampled = _plain(handle.value)
             bundle[name] = (
                 sampled if isinstance(sampled, int)
-                else self.pinned.get(name, inactive_value(name))
+                else self.idle.get(name, inactive_value(name))
             )
         return bundle
 
