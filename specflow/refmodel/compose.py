@@ -114,6 +114,7 @@ def run_refmodel(
     judge_port: ModelPort | None = None,
     run_dir: Path | None = None,
     testplan: list[dict] | None = None,
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -178,6 +179,7 @@ def run_refmodel(
                 requirements=requirements, covers=out.covers,
                 port=judge_port, round_=rounds["n"],
                 contract=contract, base=base, testplan=testplan,
+                stimulus_by_tp=stimulus_by_tp,
             )
             judged["result"] = result
             if run_dir is not None:

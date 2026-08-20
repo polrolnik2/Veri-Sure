@@ -261,3 +261,151 @@ def test_the_generic_sweep_cannot_contain_a_multi_cycle_scenario():
         "if the sweep DID hold inputs stable it could reach scenarios, and the "
         "instruction telling the judge to ignore their absence would be wrong"
     )
+
+
+def _edges(rows: list[str]) -> int:
+    """Edges represented by an RLE'd trace: "  3-8  ..." is six of them.
+
+    The traces are run-length encoded, losslessly, because a prescaled design
+    spends most of a scenario holding one state. These tests are about how many
+    EDGES were replayed, which is a property of the replay; how they are
+    rendered is not.
+    """
+    n = 0
+    for row in rows:
+        head = row.strip().split()[0]
+        if "-" in head:
+            lo, hi = head.split("-", 1)
+            n += int(hi) - int(lo) + 1
+        elif head.isdigit():
+            n += 1
+    return n
+
+
+COUNTER = '''
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ["ack"]
+    LATENCY_CYCLES = 0
+
+    def __init__(self):
+        self.n = 0
+
+    def step(self, i):
+        self.n = self.n + 1 if i.get("ena") else 0
+        return {"ack": 1 if self.n >= 5 else 0}
+'''
+
+
+def test_a_held_step_is_replayed_for_every_edge_it_declares():
+    """`hold` is what lets a scenario span the edges a prescaled design needs."""
+    from specflow.refmodel.judge import scenario_trace
+
+    rows = scenario_trace(COUNTER, PRESCALED,
+                          [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 6}],
+                          base="step")
+    assert _edges(rows) == 6, f"expected 6 edges, got {_edges(rows)}"
+
+
+def test_a_bare_step_is_one_edge():
+    from specflow.refmodel.judge import scenario_trace
+
+    rows = scenario_trace(COUNTER, PRESCALED,
+                          [{"ena": 1, "cmd": 0, "clk_cnt": 1}] * 3, base="step")
+    assert _edges(rows) == 3
+
+
+def test_until_stops_the_replay_when_the_model_reaches_the_condition():
+    """The point of `until`: wait for the design rather than guess a duration.
+
+    With no DUT at this stage the condition resolves against the MODEL, which is
+    the right reading -- this trace is the model's own run.
+    """
+    from specflow.refmodel.judge import scenario_trace
+
+    rows = scenario_trace(
+        COUNTER, PRESCALED,
+        [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1},
+          "until": {"port": "ack", "value": 1}, "timeout": 200}],
+        base="step")
+    assert _edges(rows) == 5, f"should stop the edge ack rises, got {_edges(rows)}"
+    assert "ack=1" in rows[-1]
+    assert sum("ack=1" in r for r in rows) == 1
+
+
+def test_a_replay_that_never_satisfies_until_is_capped_and_says_so():
+    """An `until` may wait 200 edges; 77 requirements of those is megabytes."""
+    from specflow.refmodel.judge import _SCENARIO_EDGES, scenario_trace
+
+    rows = scenario_trace(
+        COUNTER, PRESCALED,
+        [{"inputs": {"ena": 0, "cmd": 0, "clk_cnt": 1},   # ena=0 -> ack never rises
+          "until": {"port": "ack", "value": 1}, "timeout": 200}],
+        base="step")
+    assert _edges(rows) == _SCENARIO_EDGES
+    assert "never reached" in rows[-1], (
+        "an `until` that never fires is a finding about the model -- the "
+        "testbench will wait for that condition too -- not a silent stop"
+    )
+
+
+def test_the_concrete_trace_replaces_the_prose_it_supersedes():
+    from specflow.refmodel.judge import _for_judge
+
+    tp = {"uid": "TP-0000", "covers": ["REQ-0001@1"],
+          "stimulus": "drive ena high for a while",
+          "expected_response": "ack rises"}
+    steps = {"TP-0000": [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 6}]}
+
+    out = _for_judge([tp], source=COUNTER, contract=PRESCALED,
+                     stimulus_by_tp=steps, base="step")[0]
+    assert "model_run_on_this_testpoint_stimulus" in out
+    assert "stimulus" not in out, "the vectors ARE the stimulus; prose is redundant"
+    assert out["expected_response"] == "ack rises", (
+        "the specification's claim must stay -- it is what the trace is judged against"
+    )
+
+    # ...and with no concrete stimulus, the prose is all there is, so it stays.
+    bare = _for_judge([tp], source=COUNTER, contract=PRESCALED,
+                      stimulus_by_tp={}, base="step")[0]
+    assert bare["stimulus"] == "drive ena high for a while"
+    assert "model_run_on_this_testpoint_stimulus" not in bare
+
+
+def test_a_long_held_replay_is_capped_and_says_so():
+    """The other truncation path: many edges of `hold`, no `until` involved."""
+    from specflow.refmodel.judge import _SCENARIO_EDGES, scenario_trace
+
+    rows = scenario_trace(
+        COUNTER, PRESCALED,
+        [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 60}], base="step")
+    assert _edges(rows) == _SCENARIO_EDGES
+    assert "truncated" in rows[-1], "truncation must be announced, not silent"
+
+
+def test_the_encoding_is_lossless_and_records_how_long_a_state_held():
+    """A duration claim needs the hold length, so collapsing must keep it."""
+    from specflow.refmodel.judge import scenario_trace
+
+    rows = scenario_trace(COUNTER, PRESCALED,
+                          [{"inputs": {"ena": 0, "cmd": 0, "clk_cnt": 1}, "hold": 9}],
+                          base="step")
+    assert _edges(rows) == 9
+    assert len(rows) == 1, "nine identical edges should collapse to one row"
+    assert "held 9 edges" in rows[0], "the duration must survive the collapse"
+
+
+def test_distinct_states_are_never_merged():
+    """Lossless means the model's state sequence is still fully visible."""
+    from specflow.refmodel.judge import scenario_trace
+
+    rows = scenario_trace(COUNTER, PRESCALED,
+                          [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 8}],
+                          base="step")
+    assert _edges(rows) == 8
+    # ack rises at the 5th edge, so the run splits: ack=0 for 4, then ack=1.
+    assert sum("ack=0" in r for r in rows) == 1
+    assert sum("ack=1" in r for r in rows) == 1
+    assert "held 4 edges" in rows[0]

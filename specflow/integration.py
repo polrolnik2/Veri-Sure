@@ -326,6 +326,34 @@ def build_artifacts(
     bins = [b.model_dump() for b in s3.output.bins]
     checks = [c.model_dump() for c in s3.output.checks]
 
+    # Concrete stimulus BEFORE the reference model, not after it.
+    #
+    # It depends on nothing the refmodel produces -- only on the testplan and
+    # the contract, both of which S2/S3 have already written -- and running it
+    # first is what lets the judge replay each requirement's own scenario
+    # against the model. Judging on the generic sweep alone cannot do that:
+    # the sweep varies every input every step, so on i2c_master_bit_ctrl the
+    # longest run that could advance the FSM is 0, where one START needs ~26
+    # edges. These steps are written to hold a command stable for exactly as
+    # long as the design needs.
+    stim_by_tp: dict[str, list[dict]] = {}
+    stim_issues: list[Issue] = []
+    if stimulus_agent:
+        # A stimulus failure is not fatal: `default_stimulus` still renders a
+        # valid suite, and a weaker sweep is worth more than an aborted node.
+        # The gate's EXTEND_TB branch is what reports the resulting gap. This
+        # also lets a ReplayPort with no recorded stimulus stage fall through
+        # to the old behaviour rather than crashing a fixture-driven run.
+        try:
+            st = run_suite_stimulus(
+                testplan=tps, contract=contract, port=port, max_repairs=max_repairs
+            )
+        except Exception as exc:  # noqa: BLE001
+            stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
+        else:
+            stim_issues = list(st.issues) + stimulus_diagnostics(st.output)
+            stim_by_tp = stimulus_by_tp(st.output)
+
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
     refmodel_path = run_dir / "specflow" / "ref_model.py"
@@ -352,6 +380,7 @@ def build_artifacts(
             # S2 ran before this, so every testpoint -- and the requirement each
             # one covers -- already exists by the time the judge is asked.
             testplan=tps,
+            stimulus_by_tp=stim_by_tp or None,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -396,24 +425,6 @@ def build_artifacts(
     # on i2c_master_bit_ctrl: 25 modules, 1 distinct stimulus list, and seven
     # failing testpoints failing on the identical 19 vectors. The testplan's
     # `stimulus` field, which S2 is gated on producing, was consumed by nothing.
-    stim_by_tp: dict[str, list[dict]] = {}
-    stim_issues: list[Issue] = []
-    if stimulus_agent:
-        # A stimulus failure is not fatal: `default_stimulus` still renders a
-        # valid suite, and a weaker sweep is worth more than an aborted node.
-        # The gate's EXTEND_TB branch is what reports the resulting gap. This
-        # also lets a ReplayPort with no recorded stimulus stage fall through
-        # to the old behaviour rather than crashing a fixture-driven run.
-        try:
-            st = run_suite_stimulus(
-                testplan=tps, contract=contract, port=port, max_repairs=max_repairs
-            )
-        except Exception as exc:  # noqa: BLE001
-            stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
-        else:
-            stim_issues = list(st.issues) + stimulus_diagnostics(st.output)
-            stim_by_tp = stimulus_by_tp(st.output)
-
     manifest = render_suite(
         testplan=tps, bins=bins, checks=checks, contract=contract, out_dir=suite_dir,
         stimulus_by_tp=stim_by_tp or None,

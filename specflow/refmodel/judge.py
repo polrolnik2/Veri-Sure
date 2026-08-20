@@ -278,6 +278,112 @@ def shared_prefix(
     return shared_block(*blocks)
 
 
+#: Edges rendered per testpoint. An `until` step may legitimately wait 200
+#: edges for a slow prescaler, and rendering every one of them for 3 testpoints
+#: across 77 requirements is megabytes of uncacheable prompt. Truncation is
+#: announced in the trace rather than silent.
+_SCENARIO_EDGES = 40
+
+
+def _rle(rows: list[tuple[str, str]]) -> list[str]:
+    """Collapse consecutive identical edges, losslessly.
+
+    A prescaled design spends most of a scenario waiting: of the 35 edges one
+    START takes at clk_cnt=4, the great majority are byte-identical rows while
+    the divider counts down. Sending all of them, for 3 testpoints across ~77
+    requirements, measured 894 kB (~223k tokens) of uncacheable prompt per
+    round against 146 kB for the prose alone.
+
+    Nothing is dropped -- an identical row repeated N times becomes the same row
+    with a count -- so the judge still sees every state the model passed through
+    and how long it held, which is what a duration claim needs. The edge index
+    of each run is kept so the trace can still be cited by step.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(rows):
+        j = i
+        while j + 1 < len(rows) and rows[j + 1] == rows[i]:
+            j += 1
+        span = f"{i:>3}" if j == i else f"{i:>3}-{j}"
+        held = "" if j == i else f"   (held {j - i + 1} edges)"
+        out.append(f"{span}  {rows[i][0]}  ->  {rows[i][1]}{held}")
+        i = j + 1
+    return out
+
+
+def scenario_trace(
+    source: str, contract: dict, steps: list[dict], *, base: str
+) -> list[str] | None:
+    """Replay ONE testpoint's concrete stimulus against a fresh model.
+
+    The generic sweep in `observed_behaviour` cannot contain a multi-cycle
+    scenario -- it varies every input at every step, so on the real
+    `i2c_master_bit_ctrl` contract the longest run that could advance the FSM is
+    0, where one START needs ~26 edges. That is why the judge is told a missing
+    scenario is not a finding.
+
+    These steps are different: `run_suite_stimulus` writes them precisely to
+    hold a command stable across the edges a design needs. Replayed here, the
+    judge sees the model under the scenario its own testpoint describes, and
+    "the requirement is not implemented" becomes a statement about behaviour
+    under the right stimulus rather than about unexercised source.
+
+    `normalise_step` is the testbench's own decoder, reused rather than
+    reimplemented, so a replay cannot drift from what the suite will really do.
+    `until` resolves against the MODEL here -- there is no DUT at this stage, and
+    the model's own wait is what its trace should show.
+    """
+    try:
+        from ..ports import pinned_inputs
+        from ..tb.runtime import normalise_step
+
+        namespace: dict = {}
+        exec(compile(source, "<judge_scenario>", "exec"), namespace)  # noqa: S102
+        model_cls = namespace.get("Model")
+        if model_cls is None:
+            return None
+        fn = getattr(model_cls(), base, None)
+        if not callable(fn):
+            return None
+
+        state = dict(pinned_inputs(contract))
+        rows: list[tuple[str, str]] = []
+        notes: list[str] = []
+        for raw in steps:
+            if notes:
+                break
+            inputs, hold, until, timeout = normalise_step(raw)
+            state.update(inputs)
+            edges = min(timeout, _SCENARIO_EDGES) if until else hold
+            reached = False
+            for _ in range(max(1, edges)):
+                if len(rows) >= _SCENARIO_EDGES:
+                    notes.append(f"... truncated at {_SCENARIO_EDGES} edges")
+                    break
+                out = fn(dict(state))
+                if not isinstance(out, dict):
+                    return None
+                rows.append((
+                    " ".join(f"{k}={state[k]}" for k in sorted(state)),
+                    " ".join(f"{k}={out[k]}" for k in sorted(out)),
+                ))
+                if until and out.get(str(until.get("port"))) == until.get("value"):
+                    reached = True
+                    break
+            # An `until` that never fires is a FINDING about the model, not a
+            # detail of the replay: the testbench will wait for that condition
+            # too. Saying so beats a trace that simply stops.
+            if until and not reached and not notes:
+                notes.append(
+                    f"... {until.get('port')} never reached {until.get('value')!r} "
+                    f"in {edges} edges; the model did not complete this scenario"
+                )
+    except Exception:  # noqa: BLE001 -- never let instrumentation fail a round
+        return None
+    return (_rle(rows) + notes) or None
+
+
 #: Testpoints per requirement run 1 to 6, median 2, at ~1.1 kB each, and they
 #: are the only part of this that cannot be cached -- the trace rides in the
 #: shared prefix and is sent once per round. Unprojected and uncapped they added
@@ -290,11 +396,33 @@ _TP_LIMIT = 3
 _TP_FIELDS = ("uid", "stimulus", "expected_response")
 
 
-def _for_judge(testpoints: list[dict]) -> list[dict]:
-    return [
-        {k: tp[k] for k in _TP_FIELDS if k in tp}
-        for tp in testpoints[:_TP_LIMIT]
-    ]
+def _for_judge(
+    testpoints: list[dict],
+    *,
+    source: str | None = None,
+    contract: dict | None = None,
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
+) -> list[dict]:
+    """Each testpoint as the judge should see it, with its replay when there is one.
+
+    When the concrete stimulus exists the prose `stimulus` is dropped: the
+    vectors ARE the stimulus, and the trace beneath them shows what the model
+    did on exactly those vectors. `expected_response` stays either way -- that
+    is the specification's claim, and it is what the trace has to be judged
+    against.
+    """
+    out: list[dict] = []
+    for tp in testpoints[:_TP_LIMIT]:
+        entry = {k: tp[k] for k in _TP_FIELDS if k in tp}
+        steps = (stimulus_by_tp or {}).get(str(tp.get("uid")))
+        if steps and source and contract:
+            rows = scenario_trace(source, contract, steps, base=base)
+            if rows:
+                entry.pop("stimulus", None)
+                entry["model_run_on_this_testpoint_stimulus"] = rows
+        out.append(entry)
+    return out
 
 
 def build_prompt(
@@ -307,6 +435,9 @@ def build_prompt(
     previous: str | None = None,
     behaviour: str | None = None,
     testpoints: list[dict] | None = None,
+    contract: dict | None = None,
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
 ) -> str:
     parts = [
         json_block("requirement", requirement),
@@ -320,8 +451,11 @@ def build_prompt(
     # later, in the repair loop. Their value here is telling the judge which
     # moment of the trace above bears on the requirement it was asked about.
     if testpoints:
-        parts.append(json_block("testpoints_covering_this_requirement",
-                                _for_judge(testpoints)))
+        parts.append(json_block(
+            "testpoints_covering_this_requirement",
+            _for_judge(testpoints, source=source, contract=contract,
+                       stimulus_by_tp=stimulus_by_tp, base=base),
+        ))
     return compose(shared_prefix(source, contract_json, behaviour), "\n\n".join(parts),
                    issues=issues, previous=previous)
 
@@ -389,6 +523,7 @@ def run_judge(
     contract: dict | None = None,
     base: str = "step",
     testplan: list[dict] | None = None,
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
 ) -> JudgeResult:
     """One small call per requirement, concurrent, over one frozen model.
 
@@ -412,6 +547,7 @@ def run_judge(
             source=source, contract_json=contract_json, requirement=req,
             methods=list(covers.get(uid) or []),
             behaviour=behaviour, testpoints=by_req.get(uid),
+            contract=contract, stimulus_by_tp=stimulus_by_tp, base=base,
         )
         raw = port.complete(stage=f"{STAGE}_{uid}", round_=round_, prompt=prompt)
         v = parse_response(raw)
