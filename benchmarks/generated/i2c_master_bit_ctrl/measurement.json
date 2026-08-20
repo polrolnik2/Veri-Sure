@@ -29,12 +29,12 @@
       "distinct_output_states_over_a_corner_sweep": 5
     },
     "shipped_round3": {
-      "vs_golden": "not scored -- the run was still in flight when this was recorded",
-      "vs_candidate": "not scored",
-      "separation": "not scored",
+      "vs_golden": 18,
+      "vs_candidate": 27,
+      "separation": -9,
       "total": 181,
       "distinct_output_states_over_a_corner_sweep": 1,
-      "note": "Byte-identical in behaviour class to round 4, which WAS scored: both emit a single constant output state over a corner-first sweep. Round 4's measured 18/181 with separation -9 is the number to read for this class; the shipped round was not separately scored."
+      "note": "The model the pipeline actually shipped, scored directly. Identical to round 4: it matches known-WRONG RTL on 27 testpoints and golden on 18, so the separation inverts. refmodel_gate.json recorded 0 issues and the per-requirement judge returned 'met' on 77 of 77 requirements for this file."
     },
     "round4": {
       "vs_golden": 18,
