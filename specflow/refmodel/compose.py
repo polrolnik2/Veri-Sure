@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
+from typing import Protocol
 
 from ..model_io import ModelPort
 from ..schema import Issue, has_errors
@@ -18,7 +19,9 @@ from ..stage import (
     previous_answer_block,
     run_stage,
 )
+from . import trust
 from .agent import SYSTEM, RefModelOutput, parse_response
+from .session import DebugSession
 from .validate import validate
 
 STAGE = "refmodel"
@@ -104,6 +107,21 @@ def render(out: RefModelOutput, contract: dict) -> str:
     )
 
 
+class RefModelDebugger(Protocol):
+    """An agent that edits a reference model until its oracles pass.
+
+    Injected rather than imported, exactly as `specflow/loop.py` injects
+    `RtlRepair`: the implementation lives in `eda_agent` and needs AgentScope,
+    and `specflow/` deliberately imports none of that. Absent one, the stage
+    behaves as it always has.
+
+    Returns `(best_source, attempts, note)` -- BEST, not last, so a turn that
+    wandered downhill hands back where it was highest.
+    """
+
+    def debug(self, session: DebugSession) -> tuple[str, int, str]: ...
+
+
 def run_refmodel(
     *,
     requirements: list[dict],
@@ -115,6 +133,9 @@ def run_refmodel(
     run_dir: Path | None = None,
     testplan: list[dict] | None = None,
     stimulus_by_tp: dict[str, list[dict]] | None = None,
+    debugger: RefModelDebugger | None = None,
+    max_judge_turns: int = 3,
+    control_source: str | None = None,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -171,7 +192,12 @@ def run_refmodel(
         # leaves an output undetermined, spends a fan-out to rediscover what a
         # script already said -- and the verdicts would be about code that is
         # going to be regenerated anyway.
-        if judge_port is not None and not has_errors(issues):
+        # With a debugger, the judge does NOT run inside the gate. Generation
+        # is gated on the mechanical checks alone and repaired by regenerating,
+        # which is the right tool for a missing quote or an unwritten output --
+        # a whole round was lost to exactly that. Behavioural failures go to the
+        # debug turns below, which EDIT rather than regenerate.
+        if judge_port is not None and debugger is None and not has_errors(issues):
             from .judge import run_judge, write_report
 
             result = run_judge(
@@ -196,7 +222,96 @@ def run_refmodel(
         gate=gate,
         max_repairs=max_repairs,
     )
+
+    if debugger is not None and judge_port is not None and result.ok:
+        source, issues = _debug_turns(
+            source=rendered["src"], contract=contract, contract_json=contract_json,
+            requirements=requirements, covers=result.output.covers,
+            judge_port=judge_port, base=base, testplan=testplan or [],
+            stimulus_by_tp=stimulus_by_tp or {}, run_dir=run_dir,
+            debugger=debugger, max_turns=max_judge_turns,
+            control_source=control_source,
+        )
+        rendered["src"] = source
+        result = StageResult(result.output, issues, result.rounds)
+
     return result, rendered["src"]
+
+
+def _debug_turns(
+    *,
+    source: str,
+    contract: dict,
+    contract_json: str,
+    requirements: list[dict],
+    covers: dict[str, list[str]],
+    judge_port: ModelPort,
+    base: str,
+    testplan: list[dict],
+    stimulus_by_tp: dict[str, list[dict]],
+    run_dir: Path | None,
+    debugger: RefModelDebugger,
+    max_turns: int,
+    control_source: str | None,
+) -> tuple[str, list[Issue]]:
+    """Judge, screen, debug; repeat. Returns the final source and its issues.
+
+    One turn is one expensive judging pass (~77 model calls) and several cheap
+    debug attempts (milliseconds each, pure Python). The judge re-runs only when
+    the session stops, which is what makes "a few attempts against one frozen
+    oracle set" the unit of work.
+    """
+    from .judge import oracles_of, run_judge, verdict_map, write_round
+
+    issues: list[Issue] = []
+    for turn in range(max(1, int(max_turns))):
+        result = run_judge(
+            source=source, contract_json=contract_json,
+            requirements=requirements, covers=covers,
+            port=judge_port, round_=turn,
+            contract=contract, base=base, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp,
+        )
+        issues = result.issues
+        if run_dir is not None:
+            write_round(run_dir, turn, result)
+        if not has_errors(issues):
+            return source, issues
+
+        screened = trust.screen(
+            oracles_of(result), verdict_map(result), source, contract,
+            stimulus_by_tp, testplan, base=base, control_source=control_source,
+        )
+        if run_dir is not None:
+            (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
+             ).write_text(
+                json.dumps({"rates": screened.rates(),
+                            "discarded": screened.discarded,
+                            "sensitivity": screened.sensitivity},
+                           indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        if not screened.trusted:
+            # Nothing usable this turn. The verdicts still block, and the
+            # caller sees them as prose -- which is exactly today's behaviour,
+            # so a judge that cannot write oracles costs nothing beyond the
+            # screening.
+            return source, issues
+
+        session = DebugSession(
+            source, contract, stimulus_by_tp, screened.trusted, base=base,
+            requirements=requirements,
+            verdicts=verdict_map(result),
+            reasons={v.req_uid: {"reason": v.reason, "evidence": v.evidence,
+                                 "remedy": v.remedy}
+                     for v in result.verdicts},
+            covers=covers,
+            workdir=Path(run_dir) / "specflow" / "_refmodel_debug"
+            if run_dir is not None else None,
+        )
+        source, _attempts, _note = debugger.debug(session)
+
+    return source, issues
 
 
 def write_artifacts(

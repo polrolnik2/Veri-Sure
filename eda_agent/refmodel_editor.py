@@ -324,3 +324,35 @@ def _continue(session: DebugSession) -> str:
     for r in failing[:20]:
         lines.append(f"  {r.req_uid}: {r.detail or '(no detail)'}")
     return "\n".join(lines)
+
+
+class SyncRefModelDebugger:
+    """The `RefModelDebugger` Protocol `specflow` expects, over the async editor.
+
+    `run_specflow_node` is async and calls `build_artifacts` synchronously, so
+    the stage runs INSIDE a live event loop. `asyncio.run` raises there, so the
+    turn goes to a worker thread with a loop of its own. This is the only reason
+    the class exists: specflow stays synchronous and imports no AgentScope, and
+    the editor stays async because AgentScope is.
+    """
+
+    def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 6):
+        self._cfg = cfg
+        self._max_attempts = max_attempts
+
+    def debug(self, session: DebugSession) -> tuple[str, int, str]:
+        import concurrent.futures
+
+        def _run() -> tuple[str, int, str]:
+            # A fresh editor per turn: the oracle set it was briefed on is gone,
+            # and carrying that conversation into the next turn would have the
+            # agent reasoning about findings that no longer hold.
+            editor = RefModelEditor(self._cfg, max_attempts=self._max_attempts)
+            return asyncio.run(editor.debug(session))
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(_run).result()
+        except Exception as exc:  # noqa: BLE001 -- a turn must not kill the stage
+            log.warning("reference-model debug turn could not run: %r", exc)
+            return session.best(), len(session.history), f"debug unavailable: {exc!r}"

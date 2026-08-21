@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Sequence, Tuple
 
 from .config import OpenAIConfig
+from .refmodel_editor import SyncRefModelDebugger
 from .rtl_editor import RTLEditor
 from .rtl_generator import RTLGenerator
 from .sim_reviewer import check_syntax
@@ -243,6 +244,13 @@ async def run_specflow_node(
     port_settings: object | None = None,
     max_repairs: int = 3,
     refmodel_max_repairs: int | None = None,
+    #: Edit attempts per debug turn. Zero disables the agentic path entirely and
+    #: the stage falls back to prose-driven regeneration, which is what every
+    #: run did before this existed.
+    refmodel_debug_attempts: int = 6,
+    #: Judging passes. Each is ~one model call per requirement, so this is the
+    #: expensive budget; attempts inside a turn are pure Python and nearly free.
+    refmodel_judge_turns: int = 3,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -273,6 +281,15 @@ async def run_specflow_node(
         reuse=reuse,
         divide_s1=divide_s1,
         fanout=fanout,
+        # The reference model is repaired by EDITING it against the judge's
+        # oracles rather than by regenerating it from the judge's prose. This is
+        # the only place holding both a specflow model port and an OpenAIConfig,
+        # which is why the construction happens here and not in `specflow/`.
+        refmodel_debugger=(
+            SyncRefModelDebugger(cfg, max_attempts=refmodel_debug_attempts)
+            if refmodel_debug_attempts > 0 else None
+        ),
+        refmodel_judge_turns=refmodel_judge_turns,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:

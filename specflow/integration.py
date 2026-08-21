@@ -208,6 +208,12 @@ def build_artifacts(
     #: and the node then hard-failed on exhaustion with the trajectory still
     #: descending. The budget was the binding constraint, not the model.
     refmodel_max_repairs: int | None = None,
+    #: An agent that EDITS the reference model against the judge's oracles,
+    #: instead of the judge's prose driving a regeneration. Injected as a
+    #: Protocol, like `loop.RtlRepair`, so nothing here imports AgentScope.
+    #: Absent one, the stage behaves exactly as it always has.
+    refmodel_debugger: object | None = None,
+    refmodel_judge_turns: int = 3,
     stimulus_agent: bool = True,
     reuse: bool = False,
     divide_s1: bool = True,
@@ -422,6 +428,8 @@ def build_artifacts(
             # one covers -- already exists by the time the judge is asked.
             testplan=tps,
             stimulus_by_tp=stim_by_tp or None,
+            debugger=refmodel_debugger,
+            max_judge_turns=refmodel_judge_turns,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -463,6 +471,8 @@ def build_artifacts(
                 run_dir=run_dir,
                 testplan=tps,
                 stimulus_by_tp=stim_by_tp or None,
+                debugger=refmodel_debugger,
+                max_judge_turns=refmodel_judge_turns,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:
