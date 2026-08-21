@@ -173,6 +173,17 @@ class CoverageRecorder:
         self.hits[bin_uid] = self.hits.get(bin_uid, 0) + 1
 
 
+def is_reset_step(step: object) -> bool:
+    """`{"reset": true}` -- sequence a reset here, rather than drive inputs.
+
+    A separate predicate rather than a fifth element of `normalise_step`'s tuple
+    because five call sites unpack that tuple by arity, and a reset step is
+    something a caller must handle deliberately: a replay that ignored it would
+    silently run the scenario without the reset it was written for.
+    """
+    return isinstance(step, dict) and bool(step.get("reset"))
+
+
 def normalise_step(step: dict) -> tuple[dict, int, dict | None, int]:
     """A stimulus step, in either shape, as `(inputs, hold, until, timeout)`.
 
@@ -198,7 +209,7 @@ def normalise_step(step: dict) -> tuple[dict, int, dict | None, int]:
     """
     if not isinstance(step, dict):
         return {}, 1, None, 0
-    if "inputs" in step or "hold" in step or "until" in step:
+    if "reset" in step or "inputs" in step or "hold" in step or "until" in step:
         inputs = dict(step.get("inputs") or {})
         until = step.get("until") if isinstance(step.get("until"), dict) else None
         try:
@@ -423,6 +434,13 @@ class Env:
         self.step_index += 1
         self._expected = None
         inputs, hold, until, timeout = normalise_step(stim)
+        if is_reset_step(stim):
+            # `reset()` already sequences the DUT and the model together, which
+            # is the invariant that keeps reset out of `_drivable`. Routing the
+            # step here rather than driving the port directly is what lets a
+            # testpoint exercise reset without the two sides diverging.
+            await self.reset(cycles=hold)
+            return
         self._inputs = inputs
         for name, value in inputs.items():
             port = getattr(self.dut, name, None)

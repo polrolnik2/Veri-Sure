@@ -33,7 +33,7 @@ from .ids import PREFIX_TESTCASE, mint, next_index
 from .model_io import ModelPort
 from .ports import classify
 from .schema import Issue
-from .tb.runtime import normalise_step
+from .tb.runtime import is_reset_step, normalise_step
 from .fanout import compose, json_block, shared_block
 from .stage import (
     StageResult,
@@ -284,14 +284,38 @@ the design; "wait 26 clocks" is a guess about its implementation, and it will be
 wrong on the next prescaler value. `until` waits on a declared OUTPUT -- what the
 design reports, never what you drive.
 
+IF YOU PROGRAM A CLOCK DIVIDER, THE RUN MUST OUTLAST IT. A prescaler input
+(`clk_cnt`, `prescale`, `divider`) means the design advances one phase every
+N+1 clocks, so the edges you supply must exceed N by the number of phases the
+scenario needs -- a value of 1000 needs thousands of edges, not tens. This is
+the single most common way a testpoint ends up testing nothing: on the last
+measured run, 60 of 167 testpoints programmed a divider their own duration
+could not complete ONE tick of, and 35 left the design in its idle state for
+every edge of the run. If you want a large divider value, either pair it with
+`until` and a timeout larger than the divider, or choose a small value -- a
+prescaler of 0 to 4 exercises the same logic and leaves edges for the scenario.
+
+TO EXERCISE RESET, USE A RESET STEP. Reset is not a drivable input: the harness
+owns it, so that the design and the reference model are reset together and
+cannot diverge. Ask for one with
+
+  {"reset": true}                           assert reset, hold 2 edges, release
+  {"reset": true, "hold": 8}                the same, held 8 edges
+
+A reset step drives no inputs -- put the values you want afterwards in the step
+that follows it. Use one whenever the testpoint asks for reset to be applied
+mid-sequence, and only then: every testpoint is already reset once before its
+first step, so "start from reset" needs no step at all.
+
 Supply:
   testpoints  one entry per testplan element, each with
                 tp_uid          the element's uid, exactly as given
                 stimulus_steps  an ordered list of steps. A step is either a
                                 bare dict of input port name -> integer value,
                                 or {"inputs": {...}} with an optional "hold" or
-                                "until"/"timeout". Every drivable input must
-                                appear in every step.
+                                "until"/"timeout", or {"reset": true}. Every
+                                drivable input must appear in every step that
+                                is not a reset step.
 
 Return ONE json object:
 
@@ -409,6 +433,20 @@ def gate_suite(
         for i, raw in enumerate(entry.stimulus_steps):
             path = f"stimulus.{uid}.steps[{i}]"
             step, hold, until, timeout = normalise_step(raw)
+            if is_reset_step(raw):
+                # A reset step drives nothing: the runtime sequences the reset
+                # on both sides at once, which is exactly why reset stays out of
+                # `_drivable`. Only its duration is the test's business.
+                if hold > MAX_HOLD:
+                    issues.append(
+                        Issue("error", path,
+                              f"hold={hold} exceeds the {MAX_HOLD} edge limit"))
+                if step:
+                    issues.append(
+                        Issue("error", path,
+                              f"a reset step drives no inputs, but sets "
+                              f"{sorted(step)}; put them in the step after it"))
+                continue
             # A step may state its own duration. Before this, `hold`/`until`
             # were rejected as "not a drivable input" -- there was no way to say
             # a command needs cycles except to repeat the identical dict, and
@@ -515,6 +553,67 @@ def unrealisable_reset(testplan: list[dict]) -> list[Issue]:
               f"requirement resting only on these is unjudgeable by replay: "
               f"{', '.join(hits[:8])}{'...' if len(hits) > 8 else ''}")
     ]
+
+
+#: Inputs that gate a design's whole datapath on a countdown. Named by
+#: convention because the contract has no field for "this is a prescaler", and
+#: the convention is strong: every ChipVerilog design that has one calls it one
+#: of these.
+_DIVIDER_NAMES = ("clk_cnt", "prescale", "prescaler", "divider", "div", "clk_div")
+
+
+def _divider_ports(contract: dict) -> list[str]:
+    return [name for name in _drivable(contract)
+            if name.lower() in _DIVIDER_NAMES]
+
+
+def starved_by_divider(spec: SuiteStimulus, contract: dict) -> list[Issue]:
+    """Testpoints that program a clock divider longer than their own run.
+
+    A prescaler of N means one phase per N+1 clocks, so a testpoint holding
+    `clk_cnt=1000` for 129 edges cannot complete a single tick and the design
+    correctly does nothing for the whole run. Its oracles then report "no STOP
+    condition observed in trace", which reads as an over-strict oracle or a dead
+    model rather than as the testpoint being impossible.
+
+    Measured on a-i2c: 13 of 167 testpoints cannot complete one tick, and they
+    account for 10 of the 39 testpoints the known-good control cannot move. An
+    earlier hand count said 60 and 26; it summed `hold` and ignored that an
+    `until` step is budgeted by its timeout, which is usually far larger. This
+    function is the honest version, which is the point of it being code.
+
+    A warning rather than an error, and one issue per testpoint so a repair
+    round can act on each. An `until` step counts its TIMEOUT, since that is the
+    most edges it can consume -- waiting on the design is the right answer to a
+    slow prescaler only when the timeout actually outlasts it.
+    """
+    dividers = _divider_ports(contract)
+    if not dividers:
+        return []
+    issues: list[Issue] = []
+    for tp in spec.testpoints:
+        worst = 0
+        edges = 0
+        for raw in tp.stimulus_steps:
+            if is_reset_step(raw):
+                continue
+            step, hold, until, timeout = normalise_step(raw)
+            for name in dividers:
+                try:
+                    worst = max(worst, int(step.get(name, 0) or 0))
+                except (TypeError, ValueError):
+                    continue
+            edges += timeout if until else hold
+        if worst <= 0:
+            continue
+        if edges < worst + 1:
+            issues.append(Issue(
+                "warning", f"stimulus.{tp.tp_uid}",
+                f"programs {dividers[0]}={worst} but runs only {edges} edge(s); "
+                f"one divider tick needs {worst + 1}, so the design cannot "
+                f"advance at all. Use a smaller divider, or `until` with a "
+                f"timeout above {worst + 1}"))
+    return issues
 
 
 def stimulus_diagnostics(spec: SuiteStimulus) -> list[Issue]:

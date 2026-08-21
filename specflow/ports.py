@@ -115,6 +115,23 @@ def idle_values(contract: dict) -> dict[str, int]:
     }
 
 
+def asserted_resets(contract: dict) -> dict[str, int]:
+    """Each reset port mapped to its ACTIVE value -- the mirror of `pinned_inputs`.
+
+    `idle_value` gives the level a reset holds when it is NOT asserting; for a
+    one-bit reset the assertion is its complement, whether that came from the
+    contract's own `idle_value`, the active-low convention, or the name rule.
+    Deriving it rather than re-reading the convention keeps a design that
+    declares an explicit `idle_value` honoured in both directions.
+    """
+    _, resets, _ = classify(contract)
+    by_name = {
+        str(port.get("name")): port
+        for port in (contract.get("io") or []) if port.get("name")
+    }
+    return {name: 0 if idle_value(name, by_name.get(name)) else 1 for name in resets}
+
+
 def classify(contract: dict) -> tuple[list[str], list[str], list[str]]:
     """(clocks, resets, functional) over the contract's declared inputs, in order."""
     clocks: list[str] = []

@@ -86,3 +86,75 @@ def test_it_is_a_warning_so_it_cannot_fail_a_run_it_cannot_fix():
     """
     out = unrealisable_reset([_tp("TP-0", "assert reset")])
     assert [i.severity for i in out] == ["warning"]
+
+
+# --------------------------------------------------- divider starvation (#50)
+
+
+def test_a_testpoint_that_cannot_complete_one_divider_tick_is_reported():
+    from specflow.testcase_agent import SuiteStimulus, starved_by_divider
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "clk_cnt", "dir": "input", "width": 16},
+        {"name": "cmd", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+    ]}
+    spec = SuiteStimulus(testpoints=[
+        {"tp_uid": "TP-STARVED",
+         "stimulus_steps": [{"inputs": {"clk_cnt": 1000, "cmd": 1}, "hold": 129}]},
+        {"tp_uid": "TP-FINE",
+         "stimulus_steps": [{"inputs": {"clk_cnt": 4, "cmd": 1}, "hold": 40}]},
+    ])
+    out = starved_by_divider(spec, contract)
+    assert [i.path for i in out] == ["stimulus.TP-STARVED"]
+    assert "1001" in out[0].message and i_ok(out[0])
+
+
+def i_ok(issue) -> bool:
+    return issue.severity == "warning"
+
+
+def test_an_until_step_is_budgeted_by_its_timeout_not_treated_as_unbounded():
+    """The overcount this function was written to replace.
+
+    A hand count that summed `hold` and skipped `until` steps read 60 starved
+    testpoints out of 167; the real figure under the step semantics the replay
+    actually uses is 13.
+    """
+    from specflow.testcase_agent import SuiteStimulus, starved_by_divider
+
+    contract = {"io": [
+        {"name": "clk_cnt", "dir": "input", "width": 16},
+        {"name": "q", "dir": "output", "width": 8},
+    ]}
+    too_short = SuiteStimulus(testpoints=[{"tp_uid": "TP-0", "stimulus_steps": [
+        {"inputs": {"clk_cnt": 500}, "until": {"port": "q", "value": 1},
+         "timeout": 100}]}])
+    long_enough = SuiteStimulus(testpoints=[{"tp_uid": "TP-0", "stimulus_steps": [
+        {"inputs": {"clk_cnt": 500}, "until": {"port": "q", "value": 1},
+         "timeout": 2000}]}])
+    assert len(starved_by_divider(too_short, contract)) == 1
+    assert starved_by_divider(long_enough, contract) == []
+
+
+def test_a_design_with_no_divider_is_never_flagged():
+    from specflow.testcase_agent import SuiteStimulus, starved_by_divider
+
+    contract = {"io": [{"name": "a", "dir": "input", "width": 4},
+                       {"name": "q", "dir": "output", "width": 8}]}
+    spec = SuiteStimulus(testpoints=[
+        {"tp_uid": "TP-0", "stimulus_steps": [{"inputs": {"a": 1}, "hold": 1}]}])
+    assert starved_by_divider(spec, contract) == []
+
+
+def test_a_reset_step_does_not_count_against_the_divider_budget():
+    """It drives no divider value and its edges are the harness's, not the test's."""
+    from specflow.testcase_agent import SuiteStimulus, starved_by_divider
+
+    contract = {"io": [{"name": "clk_cnt", "dir": "input", "width": 16},
+                       {"name": "q", "dir": "output", "width": 8}]}
+    spec = SuiteStimulus(testpoints=[{"tp_uid": "TP-0", "stimulus_steps": [
+        {"reset": True, "hold": 2},
+        {"inputs": {"clk_cnt": 2}, "hold": 30}]}])
+    assert starved_by_divider(spec, contract) == []

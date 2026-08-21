@@ -49,6 +49,7 @@ from .testcase_agent import (
     run_suite_stimulus,
     run_suite_stimulus_fanout,
     stimulus_by_tp,
+    starved_by_divider,
     stimulus_diagnostics,
     unrealisable_reset,
 )
@@ -374,7 +375,8 @@ def build_artifacts(
     )
     if stim_cached is not None:
         stim_issues = (list(stim_cached[1]) + stimulus_diagnostics(stim_cached[0])
-                       + unrealisable_reset(tps))
+                       + unrealisable_reset(tps)
+                       + starved_by_divider(stim_cached[0], contract))
         stim_by_tp = stimulus_by_tp(stim_cached[0])
     elif stimulus_agent:
         # A stimulus failure is not fatal: `default_stimulus` still renders a
@@ -409,7 +411,8 @@ def build_artifacts(
             stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
         else:
             stim_issues = (list(st.issues) + stimulus_diagnostics(st.output)
-                           + unrealisable_reset(tps))
+                           + unrealisable_reset(tps)
+                           + starved_by_divider(st.output, contract))
             stim_by_tp = stimulus_by_tp(st.output)
             if not has_errors(stim_issues):
                 (run_dir / "specflow" / "stimulus.json").write_text(

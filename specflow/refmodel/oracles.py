@@ -32,8 +32,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ..ports import pinned_inputs
-from ..tb.runtime import normalise_step
+from ..ports import asserted_resets, idle_values, pinned_inputs
+from ..tb.runtime import is_reset_step, normalise_step
 from .validate import _static_checks
 
 #: Hard bound on edges any one replay will simulate. A stimulus step may declare
@@ -141,20 +141,54 @@ def replay(
     if err:
         return Replay([], [], err)
 
-    state = dict(pinned_inputs(contract))
+    idle_resets = dict(pinned_inputs(contract))
+    active_resets = asserted_resets(contract)
+    all_idle = dict(idle_values(contract))
+    state = dict(idle_resets)
     rows: list[dict] = []
     notes: list[str] = []
+    resetting = False
     for raw in steps:
         if notes:
             break
         inputs, hold, until, timeout = normalise_step(raw)
-        state.update(inputs)
+        if is_reset_step(raw):
+            # Both halves, together. `model.reset()` restores the state the
+            # runtime's own reset would, and driving the reset port ACTIVE makes
+            # that visible to an oracle -- a requirement about reset behaviour
+            # is otherwise unjudgeable, because it can never observe the event
+            # it is about. Doing only the first would leave the trace showing
+            # reset de-asserted throughout; doing only the second would trust a
+            # generated model to honour a port it may ignore.
+            # Every input to its idle value while reset is held, mirroring
+            # `Env.reset()`, which does the same so the DUT and the model start
+            # from one defined state rather than from whatever the last vector
+            # left. Holding the previous functional inputs instead would let the
+            # design keep advancing through its own reset.
+            state = dict(all_idle)
+            state.update(active_resets)
+            until, timeout = None, 0
+            resetting = True
+        else:
+            resetting = False
+            state.update(idle_resets)
+            state.update(inputs)
         edges = timeout if until else hold
         reached = False
         for _ in range(max(1, edges)):
             if len(rows) >= edge_budget:
                 notes.append(f"stopped after {edge_budget} edges")
                 break
+            if resetting:
+                # Re-applied every edge: reset is a level, not a pulse, so the
+                # model must be in its reset state for as long as it is held --
+                # and a generated model that ignores the reset PORT would
+                # otherwise keep running underneath an asserted reset.
+                try:
+                    fn.__self__.reset()
+                except Exception as exc:  # noqa: BLE001
+                    return Replay(rows, notes,
+                                  f"reset() raised at edge {len(rows)}: {exc!r}")
             try:
                 out = fn(dict(state))
             except Exception as exc:  # noqa: BLE001
