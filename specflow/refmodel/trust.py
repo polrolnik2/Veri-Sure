@@ -69,6 +69,10 @@ class Screened:
     #: executably, so the two disagreeing means the translation is wrong, not
     #: that the oracle is untrustworthy in itself.
     conflicts: dict[str, str] = field(default_factory=dict)
+    #: req_uid -> why gate 3 had nothing to say: the control never reaches this
+    #: clause's scenario either. NOT a discard and NOT over-strictness -- it is
+    #: the stimulus that is thin, and saying otherwise blames the oracle for it.
+    unexercised: dict[str, str] = field(default_factory=dict)
     #: Whether gate 3 ran at all -- i.e. whether a control model was supplied.
     #: Recorded because without it `over_strict: 0` is unreadable, and reads as
     #: the reassuring half of an ambiguity it has no right to.
@@ -100,6 +104,10 @@ class Screened:
                 if self.control_available else None
             ),
             "unknown": sum(1 for v in self.sensitivity.values() if v == UNKNOWN),
+            #: The oracle's own scenario never occurred in the stimulus it
+            #: named -- a testplan finding, counted apart from every gate.
+            "unexercised": sum(1 for r in reasons if r.startswith("unexercised:")),
+            "control_unexercised": len(self.unexercised),
         }
 
 
@@ -177,7 +185,7 @@ def sensitivity(
         if _project(run.rows, ports) == reference:
             continue                      # invisible to this clause: not evidence
         in_scope += 1
-        if not decide(oracle, run.rows).ok:
+        if decide(oracle, run.rows).failed():
             return SENSITIVE, f"killed by {mutant.description}"
     if in_scope < MIN_IN_SCOPE:
         return UNKNOWN, (
@@ -209,6 +217,7 @@ def screen(
     discarded: dict[str, str] = {}
     sens: dict[str, str] = {}
     conflicts: dict[str, str] = {}
+    unexercised: dict[str, str] = {}
 
     for oracle in oracles:
         uid = oracle.req_uid
@@ -233,9 +242,27 @@ def screen(
             continue
 
         # -- gate 1: does it reproduce the verdict it shipped with?
-        expected_pass = verdicts.get(uid) == "met"
+        #
+        # An oracle that cannot SEE its scenario is a third outcome, and it
+        # disagrees with any verdict at all: a judge that called a requirement
+        # met or not_met claimed to have observed something its own check then
+        # could not find. That is worth a reconcile call, not a discard -- most
+        # often the tp_uids are wrong, which the judge can fix.
+        said = verdicts.get(uid)
+        expected_pass = said == "met"
+        if result.unexercised():
+            conflicts[uid] = (
+                f"You judged this {said!r}, but your oracle reports that its "
+                f"scenario never occurs in the stimulus for {oracle.tp_uids}: "
+                f"{result.detail or '(no detail)'}. Either it names the wrong "
+                f"testpoints, or the verdict was not based on this trace."
+            )
+            discarded[uid] = (
+                f"unexercised: its author said {said!r} but the oracle's "
+                f"scenario never occurs in the stimulus it named"
+            )
+            continue
         if result.ok != expected_pass:
-            said = verdicts.get(uid)
             where = f" at edge {result.edge}" if result.edge is not None else ""
             conflicts[uid] = (
                 f"You judged this {said!r}. Your oracle "
@@ -258,7 +285,15 @@ def screen(
             if verdict.broken:
                 discarded[uid] = f"malformed: {verdict.broken}"
                 continue
-            if not verdict.ok:
+            if verdict.unexercised():
+                # The control never reaches this clause's situation either, so
+                # the gate has nothing to say. Reported, not discarded -- the
+                # same call gate 2 makes with UNKNOWN, and for the same reason.
+                unexercised[uid] = (
+                    f"the control never reaches this clause's scenario: "
+                    f"{verdict.detail}"
+                )
+            elif verdict.failed():
                 discarded[uid] = (
                     f"over-strict: the known-good control fails it"
                     f"{' at edge ' + str(verdict.edge) if verdict.edge is not None else ''}"
@@ -280,10 +315,10 @@ def screen(
         trusted.append(oracle)
 
     return Screened(trusted=trusted, discarded=discarded, sensitivity=sens,
-                    conflicts=conflicts,
+                    conflicts=conflicts, unexercised=unexercised,
                     control_available=control_source is not None)
 
 
 def failing(results: list[OracleResult]) -> list[OracleResult]:
     """The oracles a session still has to satisfy. Broken ones do not count."""
-    return [r for r in results if not r.ok and not r.broken]
+    return [r for r in results if r.failed()]

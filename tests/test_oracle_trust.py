@@ -208,7 +208,8 @@ def test_the_rates_separate_unknown_from_convicted():
     out = _screen([_oracle(), always], {"REQ-0000": "met", "REQ-0001": "met"})
     rates = out.rates()
     assert set(rates) == {"trusted", "malformed", "disagreed", "convicted",
-                          "over_strict", "unknown"}
+                          "over_strict", "unknown", "unexercised",
+                          "control_unexercised"}
     assert rates["trusted"] + rates["convicted"] == 2
 
 
@@ -218,3 +219,92 @@ def test_a_malformed_oracle_is_rejected_before_any_mutation_sweep():
     out = _screen([bad], {"REQ-0000": "met"})
     assert out.discarded["REQ-0000"].startswith("malformed:")
     assert "REQ-0000" not in out.sensitivity, "gate 2 must not have run"
+
+
+# ------------------------------------- a scenario that never occurred (tri-state)
+
+
+def test_an_oracle_whose_scenario_never_occurs_is_not_a_failing_model():
+    """The defect this tri-state exists for, in one assertion.
+
+    Measured on a-i2c: 13 of the 22 oracles a known-good control "failed" were
+    failing with details like "no STOP condition observed in trace" and "nReset
+    was never asserted low". They were handed to a debug agent as model defects.
+    It could not fix them because there was nothing wrong to fix.
+    """
+    from specflow.refmodel.oracles import decide
+
+    absent = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="on STOP, release SDA",
+        source=("def decide(trace):\n"
+                "    for row in trace:\n"
+                "        if row['inputs'].get('stop'):\n"
+                "            return (True, row['edge'], 'saw it')\n"
+                "    return (None, None, 'no STOP condition observed in trace')\n"))
+    out = decide(absent, [{"edge": 0, "inputs": {"a": 1}, "outputs": {"q": 0}}])
+    assert out.unexercised(), "None must not be read as a broken oracle"
+    assert not out.failed(), "and must not be read as a failing model"
+    assert out.broken == ""
+    assert "no STOP condition" in out.detail
+
+
+def test_a_malformed_return_is_still_a_broken_oracle():
+    """The tri-state must not turn every shape error into a free pass."""
+    from specflow.refmodel.oracles import decide
+
+    junk = RequirementOracle(req_uid="REQ-0000", tp_uids=["TP-0000"], clause="x",
+                             source="def decide(trace):\n    return 'banana'\n")
+    out = decide(junk, [])
+    assert out.broken and not out.unexercised()
+
+
+def test_the_control_failing_to_reach_a_scenario_is_not_over_strictness():
+    """Gate 3 must not convict an oracle for a scenario the control never reaches.
+
+    The clause is conditional on an event -- "after ack pulses, q must move" --
+    so on a control that never pulses ack the oracle has nothing to judge. That
+    is the control's coverage gap, not the oracle demanding too much, and the
+    two must not land in the same bucket.
+
+    Note the difference from a misuse of None: absent `ack` is unexercised HERE
+    because ack is this clause's TRIGGER. For a clause that says "ack pulses",
+    absent ack would be the failure itself, and returning None would be the
+    oracle excusing a real defect.
+    """
+    after_ack = '''
+def decide(trace):
+    for n, row in enumerate(trace):
+        if row["outputs"]["ack"] == 1 and n + 1 < len(trace):
+            nxt = trace[n + 1]
+            want = (row["outputs"]["q"] * 2 + 4) % 256
+            got = nxt["outputs"]["q"]
+            return (got == want, nxt["edge"], f"q={got} want={want}")
+    return (None, None, "ack never pulses, so this clause never applies")
+'''
+    never_acks = GOOD.replace("1 if self.k == 3 else 0", "0")
+    out = _screen([_oracle(source=after_ack)], {"REQ-0000": "met"},
+                  control=never_acks)
+    assert "REQ-0000" not in out.discarded, "not a discard"
+    assert out.rates()["over_strict"] == 0, "and not counted as over-strict"
+    assert "REQ-0000" in out.unexercised, "but it must be REPORTED"
+    assert out.rates()["control_unexercised"] == 1
+
+
+def test_an_unexercised_oracle_is_a_gate_1_conflict_worth_reconciling():
+    """A judge that ruled on a clause its own check cannot see did not use it.
+
+    Usually the tp_uids are wrong, which is exactly the kind of thing the
+    reconcile call can fix -- so this leaves a conflict, not a bare discard.
+    """
+    blind = _oracle(source=(
+        "def decide(trace):\n"
+        "    for row in trace:\n"
+        "        if row['inputs'].get('rst_n') == 0 and row['outputs']['ack']:\n"
+        "            return (True, row['edge'], 'saw it')\n"
+        "    return (None, None, 'never occurs: reset is never asserted')\n"))
+    out = _screen([blind], {"REQ-0000": "met"})
+    assert out.trusted == []
+    assert "unexercised" in out.discarded["REQ-0000"]
+    assert "REQ-0000" in out.conflicts
+    assert "never occurs" in out.conflicts["REQ-0000"]
+    assert out.rates()["unexercised"] == 1

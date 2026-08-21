@@ -169,7 +169,16 @@ would convince you, and it is checked against your own verdict.
   def decide(trace):
       # trace is a list of {"edge": int, "inputs": {...}, "outputs": {...}},
       # one entry per clock edge, from replaying ONE testpoint's stimulus.
-      # Return (ok: bool, edge: int | None, detail: str).
+      # Return (ok: bool | None, edge: int | None, detail: str).
+      #
+      # Return ok=None when the SCENARIO YOUR CLAUSE IS ABOUT NEVER OCCURS in
+      # this trace -- no STOP was issued, reset was never asserted, the arbitration
+      # case never arose, the signal you need is not a declared port. Do NOT
+      # return False for that. False means you SAW the situation and the model
+      # got it wrong; it sends an agent to fix code that may be perfectly
+      # correct. And do NOT return True to be safe -- an oracle that passes
+      # because it never looked is vacuous, and the mutation gate will convict
+      # it. ok=None is the honest answer and costs you nothing.
 
 Rules it must obey, each for a reason:
 

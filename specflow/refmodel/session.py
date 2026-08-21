@@ -97,7 +97,7 @@ class DebugSession:
         in the oracle by editing the model -- which is the confusion this whole
         design exists to prevent.
         """
-        return [r for r in self._results if not r.ok and not r.broken]
+        return [r for r in self._results if r.failed()]
 
     def all_met(self) -> bool:
         return not self.failing()
@@ -131,7 +131,8 @@ class DebugSession:
                 "clause": oracle.clause,
                 "tp_uids": oracle.tp_uids,
                 "status": ("broken" if r and r.broken else
-                           "met" if r and r.ok else "NOT MET"),
+                           "met" if r and r.ok else
+                            "NOT EXERCISED" if r and r.unexercised() else "NOT MET"),
                 "edge": None if r is None else r.edge,
                 "detail": "" if r is None else (r.broken or r.detail),
             })
@@ -312,6 +313,7 @@ class DebugSession:
                 for r in self.failing()
             ],
             "met": sum(1 for r in self._results if r.ok),
+            "not_exercised": sum(1 for r in self._results if r.unexercised()),
             "not_met": len(self.failing()),
             "broken_oracles": [r.req_uid for r in self._results if r.broken],
             "distinct_output_states": states,

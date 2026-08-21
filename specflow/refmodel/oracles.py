@@ -53,7 +53,7 @@ class RequirementOracle(BaseModel):
     #: reader can tell an over-strict oracle from a real defect.
     clause: str = ""
     #: Python defining `def decide(trace)` and returning
-    #: `(ok: bool, edge: int | None, detail: str)`.
+    #: `(ok: bool | None, edge: int | None, detail: str)`.
     source: str = ""
 
 
@@ -68,12 +68,25 @@ class OracleResult:
     """
 
     req_uid: str
-    ok: bool
+    #: True, False, or None. None means the clause's SCENARIO never occurred in
+    #: this trace -- see `decide` for why that cannot be folded into False.
+    ok: bool | None
     edge: int | None = None
     detail: str = ""
     broken: str = ""
     #: The trace it judged, so a caller never re-runs to find out why.
     rows: list[dict] = field(default_factory=list)
+
+    def failed(self) -> bool:
+        """The model is wrong here. The only state a repair loop should chase."""
+        return self.ok is False and not self.broken
+
+    def unexercised(self) -> bool:
+        """The stimulus never created the situation the clause is about.
+
+        Not a model defect and not an oracle defect -- a testplan finding.
+        """
+        return self.ok is None and not self.broken
 
 
 @dataclass(frozen=True)
@@ -173,7 +186,28 @@ def replay(
 
 
 def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
-    """Run one oracle over one trace. Never raises."""
+    """Run one oracle over one trace. Never raises.
+
+    `ok` is True, False, or **None -- the clause's scenario never occurred**.
+
+    That third state is not fastidiousness. Without it an oracle whose
+    precondition is absent has two choices and both are wrong: return True and
+    it is vacuous, which the sensitivity gate exists to convict; return False
+    and a correct model is blamed for stimulus that never drove the case. Every
+    judge in the a-i2c run faced that choice and most took the second option --
+    of the 22 oracles a known-good control failed, 13 fail with details like
+    "no STOP condition observed in trace", "nReset was never asserted low", and
+    (this one wrote its own epitaph) "trace does not expose cnt or clk_en;
+    cannot determine reload".
+
+    Those 13 were then handed to a debug agent as model defects. It could not
+    fix them, because there was nothing wrong to fix.
+
+    This is the same discipline gate 2 already applies when it reports UNKNOWN
+    rather than vacuous, and that the trace note applies when it refuses to call
+    a short timeout a defect: a check that cannot see must never report a
+    verdict it has not earned.
+    """
     fn, err = _oracle_fn(oracle)
     if err:
         return OracleResult(oracle.req_uid, ok=False, broken=err, rows=trace)
@@ -185,7 +219,7 @@ def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
             broken=f"decide() raised: {exc!r}",
         )
     ok, edge, detail = _unpack(verdict)
-    if ok is None:
+    if ok is MALFORMED:
         return OracleResult(
             oracle.req_uid, ok=False, rows=trace,
             broken=f"decide() returned {verdict!r}, expected (ok, edge, detail)",
@@ -205,16 +239,24 @@ def _oracle_fn(oracle: RequirementOracle):
     return fn, ""
 
 
-def _unpack(verdict: Any) -> tuple[bool | None, int | None, str]:
-    """Accept `(ok, edge, detail)`, and a bare bool for the trivial case."""
+#: `_unpack` cannot use None to mean "bad shape" any more -- None is now a
+#: verdict in its own right.
+MALFORMED = object()
+
+
+def _unpack(verdict: Any) -> tuple[Any, int | None, str]:
+    """Accept `(ok, edge, detail)`, and a bare bool for the trivial case.
+
+    `ok` may be True, False, or None; None means the scenario never occurred.
+    """
     if isinstance(verdict, bool):
         return verdict, None, ""
     if isinstance(verdict, (tuple, list)) and len(verdict) == 3:
         ok, edge, detail = verdict
-        if isinstance(ok, bool):
+        if isinstance(ok, bool) or ok is None:
             edge = edge if isinstance(edge, int) and not isinstance(edge, bool) else None
             return ok, edge, str(detail)
-    return None, None, ""
+    return MALFORMED, None, ""
 
 
 def decide_all(
@@ -260,14 +302,23 @@ def decide_all(
 
 
 def _worst(req_uid: str, results: list[OracleResult]) -> OracleResult:
-    """Broken beats failing beats passing -- a broken oracle decides nothing."""
+    """Broken beats failing beats unexercised beats passing.
+
+    Unexercised ranks below failing because a clause shown to be violated on one
+    testpoint is violated, whatever the others could not see. It ranks above
+    passing because an oracle that passed only where its scenario never arose
+    has not actually agreed to anything.
+    """
     if not results:
         return OracleResult(req_uid, ok=False, broken="the oracle names no testpoint")
     for r in results:
         if r.broken:
             return r
     for r in results:
-        if not r.ok:
+        if r.failed():
+            return r
+    for r in results:
+        if r.unexercised():
             return r
     return results[0]
 
