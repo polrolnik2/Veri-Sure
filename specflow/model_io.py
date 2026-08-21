@@ -194,9 +194,27 @@ class PortSettings:
     timeout_s: float = 600.0
 
     def for_stage(self, stage: str | None) -> tuple[str | None, str | None]:
-        """`(model, effort)` overrides for one stage, or `(None, None)`."""
-        if stage is not None and stage in self.full_strength_stages:
-            return None, None
+        """`(model, effort)` overrides for one stage, or `(None, None)`.
+
+        Matches the stage's LEADING SEGMENT as well as its full name, because a
+        fanned-out stage is named per item -- `judge_REQ-0000`,
+        `stimulus_TP-0000`, `classify_224`. Exact membership could therefore
+        only ever name the monolithic stages (`s1`, `s2`, `s3`, `refmodel`), so
+        every fanned-out stage was locked to the small model with no way to
+        raise it.
+
+        The judge is the one that matters. It returned "met" on 77 of 77
+        requirements for a reference model whose outputs never moved, and it was
+        doing so on the small model at low effort -- not because anyone chose
+        that for it, but because `--full-strength-stages judge` silently matched
+        nothing. It is also the stage now asked to read execution traces, which
+        is a harder task than reading source.
+        """
+        if stage is not None:
+            if stage in self.full_strength_stages:
+                return None, None
+            if stage.split("_", 1)[0] in self.full_strength_stages:
+                return None, None
         return self.small_model, self.small_effort
 
 

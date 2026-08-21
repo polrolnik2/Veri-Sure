@@ -130,3 +130,34 @@ def test_the_model_call_path_reads_no_ambient_knobs():
               "OPENAI_MAX_RETRIES", "OPENAI_TIMEOUT_S")
     for name in banned:
         assert f'os.environ.get("{name}"' not in text, name
+
+
+def test_a_fanned_out_stage_can_be_named_full_strength():
+    """Its stage name is per item, so exact membership could never match it.
+
+    `judge_REQ-0000`, `stimulus_TP-0000`, `classify_224` -- only the monolithic
+    stages (`s1`, `s2`, `s3`, `refmodel`) have a name a caller can write down.
+    So `--full-strength-stages judge` matched nothing and the judge stayed on
+    the small model at low effort, with no way to raise it. It returned "met"
+    on 77 of 77 requirements for a model whose outputs never moved.
+    """
+    from specflow.model_io import PortSettings
+
+    s = PortSettings(small_model="mini", small_effort="low",
+                     full_strength_stages=frozenset({"refmodel", "judge"}))
+    assert s.for_stage("judge_REQ-0000") == (None, None)
+    assert s.for_stage("judge") == (None, None)
+    assert s.for_stage("refmodel") == (None, None)
+
+
+def test_naming_one_fanned_out_stage_does_not_promote_the_others():
+    """Prefix matching must not become "anything that starts similarly"."""
+    from specflow.model_io import PortSettings
+
+    s = PortSettings(small_model="mini", small_effort="low",
+                     full_strength_stages=frozenset({"judge"}))
+    assert s.for_stage("stimulus_TP-0000") == ("mini", "low")
+    assert s.for_stage("classify_224") == ("mini", "low")
+    assert s.for_stage("s2") == ("mini", "low")
+    # A stage merely sharing a prefix substring is not the named stage.
+    assert s.for_stage("judgement") == ("mini", "low")
