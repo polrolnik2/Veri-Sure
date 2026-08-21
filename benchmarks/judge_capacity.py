@@ -55,19 +55,28 @@ def analyse(run_dir: Path) -> dict:
     )["requirements"]
     by_uid = {str(r.get("uid")): r for r in reqs}
 
-    report = run_dir / "specflow" / "refmodel_judge.json"
-    verdicts: dict[str, str] = {}
-    if report.exists():
-        data = json.loads(report.read_text(encoding="utf-8"))
-        for v in data.get("verdicts") or []:
-            if isinstance(v, dict) and v.get("req_uid"):
-                verdicts[str(v["req_uid"])] = str(v.get("verdict") or "")
-
+    # Verdict and prompt must come from the SAME round. `refmodel_judge.json`
+    # holds one round's verdicts -- the last COMPLETED one -- while agent_io
+    # holds prompts for every round, so reading verdicts from the report and
+    # prompts from the glob pairs a round-0 `met` with a round-2 trace. On this
+    # run that manufactured 17 contradictions out of nothing: round 0's model
+    # had 3 output states and round 2's had 1, so every round-0 `met` looked
+    # like a verdict against a flat trace. The per-round response files are the
+    # only place where a verdict and the prompt that produced it are known to
+    # belong together.
     contradictions, checked, inert_prompts = [], 0, 0
     for path in sorted((run_dir / "agent_io").glob("judge_REQ-*_r*_prompt.txt")):
-        uid = re.search(r"(REQ-\d+)", path.name).group(1)
-        verdict = verdicts.get(uid)
-        if verdict is None:
+        m = re.search(r"judge_(REQ-\d+)_r(\d+)_prompt", path.name)
+        if not m:
+            continue
+        uid, rnd = m.group(1), m.group(2)
+        answer = path.parent / f"judge_{uid}_r{rnd}_response.txt"
+        if not answer.exists():
+            continue
+        try:
+            body = re.search(r"\{.*\}", answer.read_text(encoding="utf-8"), re.S)
+            verdict = str(json.loads(body.group(0)).get("verdict") or "")
+        except Exception:  # noqa: BLE001 -- an unparseable answer judges nothing
             continue
         prompt = path.read_text(encoding="utf-8")
         inert = _trace_is_inert(prompt)
