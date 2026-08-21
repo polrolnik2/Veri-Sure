@@ -50,6 +50,7 @@ from .testcase_agent import (
     run_suite_stimulus_fanout,
     stimulus_by_tp,
     stimulus_diagnostics,
+    unrealisable_reset,
 )
 from .tb.render import gate_g5, render_suite
 
@@ -372,7 +373,8 @@ def build_artifacts(
                                max_steps=STIMULUS_MAX_STEPS),
     )
     if stim_cached is not None:
-        stim_issues = list(stim_cached[1]) + stimulus_diagnostics(stim_cached[0])
+        stim_issues = (list(stim_cached[1]) + stimulus_diagnostics(stim_cached[0])
+                       + unrealisable_reset(tps))
         stim_by_tp = stimulus_by_tp(stim_cached[0])
     elif stimulus_agent:
         # A stimulus failure is not fatal: `default_stimulus` still renders a
@@ -406,7 +408,8 @@ def build_artifacts(
         except Exception as exc:  # noqa: BLE001
             stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
         else:
-            stim_issues = list(st.issues) + stimulus_diagnostics(st.output)
+            stim_issues = (list(st.issues) + stimulus_diagnostics(st.output)
+                           + unrealisable_reset(tps))
             stim_by_tp = stimulus_by_tp(st.output)
             if not has_errors(stim_issues):
                 (run_dir / "specflow" / "stimulus.json").write_text(

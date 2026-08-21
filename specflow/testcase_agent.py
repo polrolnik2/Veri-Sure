@@ -22,6 +22,7 @@ agent is asked to respect.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -465,6 +466,55 @@ def gate_suite(
         )
 
     return issues
+
+
+#: Prose asking for a reset to be ASSERTED, as opposed to released or held off.
+#: Deliberately narrow: "start with reset released" is the overwhelmingly common
+#: phrasing and describes the harness default, so matching it would fire on
+#: nearly every testpoint and mean nothing.
+_WANTS_RESET_ASSERTED = re.compile(
+    r"(assert\w*\s+(the\s+)?(a?sync\w*\s+)?reset|apply\s+reset|pulse\s+reset"
+    r"|drive\s+reset\s+low|during\s+reset|reset\s+is\s+asserted"
+    # The literal forms. `nReset=0` and `rst=1` ARE the assertion; their
+    # opposites (`nReset=1`, `rst=0`) are the harness default and must not match.
+    r"|\bnReset\s*=\s*0\b|\brst\s*=\s*1\b|\brst_n\s*=\s*0\b)", re.I)
+
+
+def unrealisable_reset(testplan: list[dict]) -> list[Issue]:
+    """Testpoints asking for a mid-run reset the stimulus schema cannot express.
+
+    `_drivable` excludes clock and reset on purpose -- the runtime owns them, and
+    a testcase toggling reset underneath would desynchronise `Env.reset()` from
+    the model's own `reset()`. That reasoning is sound and this does not change
+    it. What it does is stop the consequence being invisible.
+
+    S2 does not know about that exclusion, so it writes testpoints whose stated
+    scenario is "apply reset mid-sequence and check the outputs clear". On the
+    a-i2c run 37 of 167 testpoints did, covering 32 requirements, and not one
+    could drive `rst` or `nReset` -- the schema forbids it. Their oracles then
+    reported "nReset was never asserted low in this trace", which the loop read
+    as a failing model and sent an agent to fix.
+
+    A warning, not an error, and aimed at the testplan rather than the stimulus:
+    the stimulus agent did nothing wrong and regenerating it cannot help. The
+    real fix is a first-class reset step that the runtime sequences on both
+    sides at once, which is a change to the harness, not to a prompt.
+    """
+    hits = [
+        str(tp.get("uid")) for tp in testplan
+        if _WANTS_RESET_ASSERTED.search(
+            " ".join(str(tp.get(k, "")) for k in
+                     ("stimulus", "expected_response", "check_method")))
+    ]
+    if not hits:
+        return []
+    return [
+        Issue("warning", "testplan.reset",
+              f"{len(hits)} testpoint(s) ask for reset to be asserted mid-run, "
+              f"which no stimulus can do -- the runtime owns reset. Every "
+              f"requirement resting only on these is unjudgeable by replay: "
+              f"{', '.join(hits[:8])}{'...' if len(hits) > 8 else ''}")
+    ]
 
 
 def stimulus_diagnostics(spec: SuiteStimulus) -> list[Issue]:
