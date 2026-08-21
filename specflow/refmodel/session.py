@@ -40,6 +40,36 @@ class Edit:
     failing_after: int
 
 
+def _activity(rows: list[dict]) -> dict:
+    """Where each output first moves, and how many states the run reaches.
+
+    Without this the window IS the view, and it defaults to the first 60 edges.
+    On a prescaled design the first thousand edges are identical idle rows, so
+    an agent reading them sees a flat trace and cannot tell "this testpoint
+    exercises nothing" from "I did not look far enough" -- two conclusions that
+    demand opposite responses, with six attempts to spend on the difference.
+    The a-i2c debug turn reported the former about testpoints whose head was all
+    it had seen, and it had no tool that could have told it otherwise.
+
+    Computed over the whole replay, never the window, because its entire purpose
+    is to describe what the window is missing.
+    """
+    if not rows:
+        return {"distinct_output_states": 0, "inert": True, "first_change": {}}
+    first = dict(rows[0]["outputs"])
+    changes: dict[str, int | None] = dict.fromkeys(first)
+    for row in rows:
+        for name, value in row["outputs"].items():
+            if changes.get(name) is None and value != first.get(name):
+                changes[name] = row["edge"]
+    states = len({tuple(sorted(r["outputs"].items())) for r in rows})
+    return {
+        "distinct_output_states": states,
+        "inert": states <= 1,
+        "first_change": changes,
+    }
+
+
 class DebugSession:
     """Edit a reference model until a frozen set of oracles is satisfied."""
 
@@ -172,7 +202,9 @@ class DebugSession:
             },
             "current": {
                 "status": ("broken" if result and result.broken else
-                           "met" if result and result.ok else "NOT MET"),
+                           "met" if result and result.ok else
+                           "NOT EXERCISED" if result and result.unexercised() else
+                           "NOT MET"),
                 "edge": None if result is None else result.edge,
                 "detail": "" if result is None else (result.broken or result.detail),
             },
@@ -205,6 +237,7 @@ class DebugSession:
             window = rep.rows[max(0, int(from_edge)):max(0, int(from_edge)) + max(1, int(rows))]
             out["testpoints"][tp] = {
                 "edges_total": len(rep.rows),
+                "activity": _activity(rep.rows),
                 "showing": f"{from_edge}..{from_edge + len(window) - 1}"
                            if window else "(none)",
                 "notes": rep.notes,
@@ -218,7 +251,9 @@ class DebugSession:
         result = next((r for r in self._results if r.req_uid == req_uid), None)
         out["verdict"] = {
             "status": ("broken" if result and result.broken else
-                       "met" if result and result.ok else "NOT MET"),
+                       "met" if result and result.ok else
+                       "NOT EXERCISED" if result and result.unexercised() else
+                       "NOT MET"),
             "edge": None if result is None else result.edge,
             "detail": "" if result is None else (result.broken or result.detail),
         }

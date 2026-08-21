@@ -64,7 +64,14 @@ Work like this:
   3. `run_oracle(req_uid)` to see the model actually running that scenario, edge
      by edge. This is where a wrong clock generation becomes visible -- an
      output diverges many edges after the cause, so read the internals leading
-     up to the failing edge, not just the failing edge.
+     up to the failing edge, not just the failing edge. Its `activity` field
+     describes the WHOLE replay while the trace shows one window: use
+     `first_change` to jump to where an output actually moves, and treat
+     `inert: true` as "this testpoint cannot be satisfied by editing".
+
+A status of NOT EXERCISED is not a failure you can fix. It means the oracle's
+scenario never occurs in the stimulus, so the model is not being accused of
+anything. Leave those alone.
   4. `read_model(method)` on the method that should be doing the work.
   5. `replace_method(name, code)` with the whole corrected `def`.
 
@@ -170,6 +177,13 @@ class RefModelEditor:
 
         Use this to localise. An output usually diverges many edges after the
         cause, so read the edges leading up to the failure.
+
+        READ `activity` BEFORE THE TRACE. It covers the whole replay, not the
+        window: `first_change` gives the edge each output first moves on, so
+        page straight there instead of reading from edge 0. If `inert` is true
+        the testpoint never moves the model at all, and no edit can make its
+        oracle pass -- say so and move to another requirement rather than
+        spending attempts on it.
 
         Args:
             req_uid: the requirement, e.g. "REQ-0031".

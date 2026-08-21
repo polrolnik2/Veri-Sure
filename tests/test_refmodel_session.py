@@ -213,3 +213,63 @@ def test_the_session_exposes_no_way_to_edit_an_oracle():
     assert not [n for n in dir(s)
                 if "oracle" in n.lower() and n.startswith(("set_", "replace_",
                                                            "write_", "edit_"))]
+
+
+# ------------------------------------------- what the debugger can actually see
+
+
+def test_run_oracle_reports_activity_for_the_whole_replay_not_the_window():
+    """The window defaults to 60 edges; the map must describe what it misses.
+
+    Without this an agent reading a flat first-60 cannot tell "this testpoint
+    exercises nothing" from "I did not look far enough", and those demand
+    opposite responses.
+    """
+    late = ('from specflow.refmodel.base import RefModel\n\n\n'
+            'class Model(RefModel):\n'
+            '    OUTPUT_PORTS = ["q", "ack"]\n\n'
+            '    def reset(self):\n        self.k = 0\n\n'
+            '    def step(self, i):\n'
+            '        if not hasattr(self, "k"):\n            self.reset()\n'
+            '        self.k += 1\n'
+            '        return {"q": 0, "ack": 1 if self.k > 70 else 0}\n')
+    s = DebugSession(
+        late, CONTRACT, {"TP-0000": [{"inputs": {"a": 1}, "hold": 90}]},
+        [_oracle()], base="step",
+        requirements=[{"uid": "REQ-0000", "text": "ack"}],
+        verdicts={"REQ-0000": "met"}, covers={})
+    tp = s.run_oracle("REQ-0000", from_edge=0, rows=60)["testpoints"]["TP-0000"]
+    assert [r["edge"] for r in tp["trace"]][-1] == 59, "the window ends before it moves"
+    act = tp["activity"]
+    assert act["inert"] is False, "the run is NOT inert, and the window hides that"
+    assert act["first_change"]["ack"] == 70, "it must point past the window"
+    assert act["first_change"]["q"] is None, "a port that never moves says so"
+    assert act["distinct_output_states"] == 2
+
+
+def test_an_inert_testpoint_is_named_as_such():
+    """No edit can make its oracle pass; the agent must not spend attempts."""
+    inert = ('from specflow.refmodel.base import RefModel\n\n\n'
+             'class Model(RefModel):\n'
+             '    OUTPUT_PORTS = ["q", "ack"]\n\n'
+             '    def step(self, i):\n        return {"q": 0, "ack": 0}\n')
+    s = _session(model=inert)
+    tp = s.run_oracle("REQ-0000")["testpoints"]["TP-0000"]
+    assert tp["activity"]["inert"] is True
+    assert tp["activity"]["distinct_output_states"] == 1
+
+
+def test_an_unexercised_oracle_is_not_reported_as_a_failing_model():
+    """`explain` and `run_oracle` both said NOT MET, which is the conflation
+    the tri-state exists to prevent -- in the two tools the agent uses most."""
+    absent = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="on reset, ack clears",
+        source=("def decide(trace):\n"
+                "    for row in trace:\n"
+                "        if row['inputs'].get('rst_n') == 0:\n"
+                "            return (row['outputs']['ack'] == 0, row['edge'], 'checked')\n"
+                "    return (None, None, 'reset never asserted in this trace')\n"))
+    s = _session(model=WORKING, oracles=[absent])
+    assert s.explain("REQ-0000")["current"]["status"] == "NOT EXERCISED"
+    assert s.run_oracle("REQ-0000")["verdict"]["status"] == "NOT EXERCISED"
+    assert s.failing() == [], "and it is not something to chase"
