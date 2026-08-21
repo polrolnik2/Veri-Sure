@@ -32,6 +32,7 @@ contain, and not worth inviting even though it is contained.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -41,6 +42,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from ..fanout import compose, json_block, shared_block
 from ..model_io import ModelPort
 from ..schema import Issue
+from .oracles import RequirementOracle
 from ..stage import run_fanout
 
 STAGE = "judge"
@@ -63,6 +65,11 @@ class RequirementVerdict(BaseModel):
     evidence: str = ""
     #: What the generator should change. Empty when met.
     remedy: str = ""
+    #: The requirement's mini-oracle, written by this judge and run by the
+    #: repair loop. A NEW field rather than structure routed through the three
+    #: prose slots above: `_accept_a_list_of_lines` joins lists with "; " and
+    #: would flatten anything put there.
+    oracle: RequirementOracle | None = None
 
     @field_validator("reason", "evidence", "remedy", mode="before")
     @classmethod
@@ -113,12 +120,18 @@ Before answering "met", find the steps of the trace where this requirement's
 behaviour should be visible and check that it is. If the outputs never move at
 all, no requirement about an output is met, whatever the source says.
 
-The testpoints say what exercising this requirement looks like. They are prose,
-and the trace is a GENERIC input sweep, not the testpoint's scenario -- so for
-most requirements the exact scenario will NOT appear in the trace. That is
-expected and is NOT a finding: absence of the scenario is not evidence of
-anything, and must not by itself make a requirement "ambiguous". Where the
-scenario is absent, judge from the source as you otherwise would.
+You get TWO kinds of trace, and they answer different questions.
+
+<observed_behaviour> is a generic corner sweep over every input. It settles one
+question outright -- whether the outputs move at all -- and is poor evidence
+about any particular scenario, because it varies every input at every step.
+
+Each testpoint additionally carries `model_run_on_this_testpoint_stimulus`: the
+model replayed under THAT testpoint's own concrete stimulus, written to hold a
+command stable for as long as the design needs. This is the scenario. When it is
+present, judge from it. When a testpoint has no replay, absence of the scenario
+is not evidence of anything and must not by itself make a requirement
+"ambiguous" -- judge from the source as you otherwise would.
 
 Use the trace where it does bear:
   - outputs that CONTRADICT the requirement at a step where the relevant
@@ -148,6 +161,32 @@ mechanical checks and a simulation against real hardware do that. So there is no
 value in being generous, and a wrong "met" simply wastes the one thing you were
 asked for. Be exact.
 
+ALSO WRITE THE ORACLE for this requirement -- a small Python function that
+DECIDES it mechanically, so a repair loop can re-check the requirement without
+asking you again. Write it whatever your verdict is: it is how you say what
+would convince you, and it is checked against your own verdict.
+
+  def decide(trace):
+      # trace is a list of {"edge": int, "inputs": {...}, "outputs": {...}},
+      # one entry per clock edge, from replaying ONE testpoint's stimulus.
+      # Return (ok: bool, edge: int | None, detail: str).
+
+Rules it must obey, each for a reason:
+
+  - Read only DECLARED PORTS out of `outputs`/`inputs`. Internal signals are not
+    in the trace, and an oracle naming none is rejected as deciding nothing.
+  - Decide ONLY this requirement's clause. An oracle that also checks
+    neighbouring behaviour gets discarded for rejecting a known-good model.
+  - Return the EDGE your decision turns on, so a failure localises itself.
+  - No imports, no file or network access.
+  - It must FAIL a model that violates the clause and PASS one that honours it.
+    It is mutation-tested: an oracle nothing can falsify is discarded as
+    demanding nothing, and one your own verdict contradicts is discarded too.
+
+`tp_uids` names the testpoints whose stimulus exercises this clause -- choose
+from the testpoints you were given. Prefer the one whose replay actually shows
+the behaviour.
+
 Reply with ONE JSON object and nothing else:
 
 {
@@ -157,7 +196,18 @@ _fsm sets cmd_ack and never clears it",
   "evidence": "_fsm lines 12-18: `o['cmd_ack'] = 1` with no reset on the \
 following call",
   "remedy": "clear cmd_ack at the start of each step so it is high for one \
-cycle only"
+cycle only",
+  "oracle": {
+    "tp_uids": ["TP-0007"],
+    "clause": "cmd_ack is high for exactly one clock when the command completes",
+    "source": "def decide(trace):\n    runs = []\n    n = 0\n    for row in \
+trace:\n        if row['outputs']['cmd_ack']:\n            n += 1\n        \
+elif n:\n            runs.append(n)\n            n = 0\n    if n:\n        \
+runs.append(n)\n    if not runs:\n        return (False, None, 'cmd_ack never \
+rose')\n    bad = [r for r in runs if r != 1]\n    if bad:\n        return \
+(False, None, f'cmd_ack held for {bad} edges, expected 1')\n    return (True, \
+None, f'{len(runs)} single-edge pulse(s)')"
+  }
 }
 """
 
@@ -622,7 +672,13 @@ def run_judge(
         # The uid is the harness's to assign, never the judge's: a judge that
         # answered about the wrong requirement would otherwise silently retarget
         # its own verdict.
-        return v.model_copy(update={"req_uid": uid})
+        # `req_uid` is the harness's to assign, on the verdict and on its
+        # oracle alike -- a model that mislabels one would misroute the whole
+        # finding, and `tp_uids` is checked against the real testplan later.
+        oracle = v.oracle
+        if oracle is not None:
+            oracle = oracle.model_copy(update={"req_uid": uid})
+        return v.model_copy(update={"req_uid": uid, "oracle": oracle})
 
     verdicts = (
         run_fanout(requirements, one) if fanout else [one(r) for r in requirements]
@@ -654,3 +710,56 @@ def write_report(run_dir, result: JudgeResult) -> None:
         + "\n",
         encoding="utf-8",
     )
+
+
+def write_round(run_dir, round_: int, result: JudgeResult) -> Path:
+    """Persist ONE round's verdicts and oracles, keyed by round.
+
+    `write_report` writes a single fixed path and is overwritten every round, so
+    only the last judged round survives it -- `benchmarks/judge_capacity.py`
+    already refuses to read that file for exactly this reason and pairs verdicts
+    with prompts out of `agent_io` instead. A repair loop needs the round it is
+    working on, so this keeps them apart.
+
+    Oracles land as real `.py` files, not JSON strings. The debug agent reads
+    them with the same tool it reads the model with, a human can run one by
+    hand, and a traceback from a broken oracle names a file that exists.
+    """
+    out = Path(run_dir) / "specflow" / "judge" / f"r{int(round_)}"
+    (out / "oracles").mkdir(parents=True, exist_ok=True)
+    (out / "verdicts.json").write_text(
+        json.dumps(
+            {
+                "round": int(round_),
+                "counts": result.counts(),
+                "blocking": sorted(v.req_uid for v in result.verdicts if v.blocks),
+                "verdicts": [v.model_dump() for v in result.verdicts],
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    for v in result.verdicts:
+        if v.oracle is None or not v.oracle.source.strip():
+            continue
+        (out / "oracles" / f"{v.req_uid or 'REQ-UNKNOWN'}.py").write_text(
+            f'''"""{v.oracle.clause}
+
+{v.req_uid}, judged {v.verdict!r}. Replayed against: {", ".join(v.oracle.tp_uids)}
+"""
+''' + v.oracle.source.strip() + "\n",
+            encoding="utf-8",
+        )
+    return out
+
+
+def oracles_of(result: JudgeResult) -> list[RequirementOracle]:
+    """Every oracle the judge actually wrote, in verdict order."""
+    return [v.oracle for v in result.verdicts if v.oracle is not None]
+
+
+def verdict_map(result: JudgeResult) -> dict[str, str]:
+    """`req_uid -> verdict`, the input the agreement gate compares against."""
+    return {v.req_uid: v.verdict for v in result.verdicts if v.req_uid}
