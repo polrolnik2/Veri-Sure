@@ -43,6 +43,9 @@ from .s3_coverage import write_artifacts as write_s3
 from .schema import GateVerdict, Issue, has_errors
 from .stage import StageResult
 from .testcase_agent import (
+    STIMULUS_MAX_STEPS,
+    SuiteStimulus,
+    gate_suite,
     run_suite_stimulus,
     run_suite_stimulus_fanout,
     stimulus_by_tp,
@@ -339,7 +342,20 @@ def build_artifacts(
     # long as the design needs.
     stim_by_tp: dict[str, list[dict]] = {}
     stim_issues: list[Issue] = []
-    if stimulus_agent:
+    # Reused like every other stage, and for the same reason. Stimulus was the
+    # one major artifact never written to `specflow/`, so `--reuse` could not
+    # cover it and every rerun paid for it again -- 167 calls on
+    # i2c_master_bit_ctrl, the most expensive stage in the pipeline now that it
+    # fans out, repeated even when nothing upstream of it had changed.
+    stim_cached = None if stale else _reuse(
+        run_dir, "stimulus.json", SuiteStimulus,
+        lambda out: gate_suite(out, testplan=tps, contract=contract,
+                               max_steps=STIMULUS_MAX_STEPS),
+    )
+    if stim_cached is not None:
+        stim_issues = list(stim_cached[1]) + stimulus_diagnostics(stim_cached[0])
+        stim_by_tp = stimulus_by_tp(stim_cached[0])
+    elif stimulus_agent:
         # A stimulus failure is not fatal: `default_stimulus` still renders a
         # valid suite, and a weaker sweep is worth more than an aborted node.
         # The gate's EXTEND_TB branch is what reports the resulting gap. This
@@ -373,6 +389,11 @@ def build_artifacts(
         else:
             stim_issues = list(st.issues) + stimulus_diagnostics(st.output)
             stim_by_tp = stimulus_by_tp(st.output)
+            if not has_errors(stim_issues):
+                (run_dir / "specflow" / "stimulus.json").write_text(
+                    json.dumps(st.output.model_dump(), indent=2) + "\n",
+                    encoding="utf-8",
+                )
 
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.

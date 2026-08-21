@@ -45,6 +45,12 @@ from .stage import (
 STAGE = "testcase"
 SUITE_STAGE = "stimulus"
 
+#: Steps one testpoint may declare. Named rather than an inline default so the
+#: gate applied when a recorded `stimulus.json` is REUSED is provably the same
+#: bound applied when it was generated -- a reuse path gated more loosely than
+#: the generator is a way to accept what a fresh run would reject.
+STIMULUS_MAX_STEPS = 24
+
 
 def _drivable(contract: dict) -> dict[str, int]:
     """Input ports a testcase may drive: the functional ones.
@@ -482,7 +488,7 @@ def run_suite_stimulus(
     testplan: list[dict],
     contract: dict,
     port: ModelPort,
-    max_steps: int = 24,
+    max_steps: int = STIMULUS_MAX_STEPS,
     max_repairs: int = 2,
 ) -> StageResult[SuiteStimulus]:
     """One call for the whole suite, not one per testpoint.
@@ -603,7 +609,7 @@ def run_suite_stimulus_fanout(
     testplan: list[dict],
     contract: dict,
     port: ModelPort,
-    max_steps: int = 24,
+    max_steps: int = STIMULUS_MAX_STEPS,
     max_repairs: int = 2,
     fanout: bool = True,
     requirements: list[dict] | None = None,
