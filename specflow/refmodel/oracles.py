@@ -385,3 +385,73 @@ def well_formed(
         # behaviour, and the mutation gate could never scope a mutant to it.
         return "names no declared port, so it decides nothing observable"
     return None
+
+
+@dataclass(frozen=True)
+class Liveness:
+    """Which testpoints actually make the model do something."""
+
+    #: tp_uid -> distinct output states observed across its replay.
+    states: dict[str, int] = field(default_factory=dict)
+    #: tp_uid -> edges replayed.
+    edges: dict[str, int] = field(default_factory=dict)
+    #: tp_uids whose replay never changed a single output.
+    inert: list[str] = field(default_factory=list)
+    #: tp_uid -> why the replay could not run at all.
+    errors: dict[str, str] = field(default_factory=dict)
+
+    def summary(self) -> dict:
+        total = len(self.states) + len(self.errors)
+        return {
+            "testpoints": total,
+            "inert": len(self.inert),
+            "failed_to_replay": len(self.errors),
+            "inert_fraction": round(len(self.inert) / total, 3) if total else 0.0,
+        }
+
+
+def stimulus_liveness(
+    source: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    *,
+    base: str,
+    edge_budget: int = EDGE_BUDGET,
+) -> Liveness:
+    """Replay every testpoint and record whether the model moved at all.
+
+    An inert testpoint cannot decide anything, so every oracle naming one is
+    unjudgeable however well it is written. That makes this the root cause
+    underneath two symptoms that look like other people's fault: an oracle
+    reporting "no STOP condition observed in trace" reads as over-strictness,
+    and a sensitivity sweep finding no in-scope mutant reads as a thin oracle.
+    Both are the stimulus.
+
+    Measured on the a-i2c run, where 35 of 167 testpoints moved neither the
+    generated model nor the known-good control: the dominant cause was a
+    prescaler driven far faster than the run is long. `clk_cnt` selects a
+    divider, and 60 of 167 testpoints hold a value so large that the run ends
+    before one tick completes -- `clk_cnt=1000` with 129 edges, `clk_cnt=65535`
+    at all. On testpoints where the control moves the median run affords 3.5
+    ticks; on the inert ones, 0.2.
+
+    This cannot move into `gate_suite`, which runs before any model exists and
+    which deliberately refuses distinctness rules for reasons its own docstring
+    gives. Inertness is not distinctness: it is a property of the DUT's response,
+    so it can only be measured once there is something to respond.
+    """
+    states: dict[str, int] = {}
+    edges: dict[str, int] = {}
+    inert: list[str] = []
+    errors: dict[str, str] = {}
+    for tp, steps in stimulus_by_tp.items():
+        run = replay(source, contract, steps, base=base, edge_budget=edge_budget)
+        if run.error:
+            errors[tp] = run.error
+            continue
+        seen = {tuple(sorted(r["outputs"].items())) for r in run.rows}
+        states[tp] = len(seen)
+        edges[tp] = len(run.rows)
+        if len(seen) <= 1:
+            inert.append(tp)
+    return Liveness(states=states, edges=edges, inert=sorted(inert), errors=errors)

@@ -21,6 +21,7 @@ from ..stage import (
 )
 from . import trust
 from .agent import SYSTEM, RefModelOutput, parse_response
+from .oracles import stimulus_liveness
 from .session import DebugSession
 from .validate import validate
 
@@ -336,12 +337,27 @@ def _debug_turns(
                     write_round(run_dir, turn, result)
 
         if run_dir is not None:
+            # Measured beside the trust rates because it is what most often
+            # explains them. An inert testpoint makes every oracle naming it
+            # unjudgeable, and the resulting UNKNOWNs and "never observed"
+            # failures otherwise read as findings about the judge.
+            live = stimulus_liveness(source, contract, stimulus_by_tp, base=base)
             (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
              ).write_text(
                 json.dumps({"rates": screened.rates(),
                             "discarded": screened.discarded,
                             "sensitivity": screened.sensitivity,
-                            "unresolved_conflicts": screened.conflicts},
+                            "unresolved_conflicts": screened.conflicts,
+                            "control_unexercised": screened.unexercised,
+                            "stimulus": {
+                                **live.summary(),
+                                "inert_testpoints": live.inert,
+                                "requirements_left_unjudgeable": sorted(
+                                    o.req_uid for o in oracles_of(result)
+                                    if o.tp_uids
+                                    and all(t in live.inert for t in o.tp_uids)
+                                ),
+                            }},
                            indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )

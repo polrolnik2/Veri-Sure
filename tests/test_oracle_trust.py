@@ -308,3 +308,39 @@ def test_an_unexercised_oracle_is_a_gate_1_conflict_worth_reconciling():
     assert "REQ-0000" in out.conflicts
     assert "never occurs" in out.conflicts["REQ-0000"]
     assert out.rates()["unexercised"] == 1
+
+
+# ------------------------------------------------------- the stimulus itself
+
+
+def test_liveness_names_the_testpoints_that_move_nothing():
+    """An inert testpoint makes every oracle naming it unjudgeable.
+
+    Measured on a-i2c: 35 of 167 testpoints moved neither the generated model
+    nor the known-good control, and the dominant cause was a prescaler starved
+    of time -- 60 of 167 hold a `clk_cnt` so large the run ends before one
+    divider tick completes.
+    """
+    from specflow.refmodel.oracles import stimulus_liveness
+
+    live = stimulus_liveness(
+        GOOD, CONTRACT,
+        {"TP-0000": [{"inputs": {"a": 3}, "hold": 8}],       # q climbs
+         "TP-DEAD": [{"inputs": {"a": 0}, "hold": 0}]},      # no edges at all
+        base="step")
+    assert "TP-0000" not in live.inert
+    assert "TP-DEAD" in live.inert
+    assert live.summary()["inert"] == 1
+    assert live.summary()["inert_fraction"] == 0.5
+
+
+def test_liveness_reports_a_model_that_will_not_replay_apart_from_an_inert_one():
+    """Both leave a testpoint undecidable, for opposite reasons.
+
+    Folding them together would report a broken model as a thin testplan.
+    """
+    from specflow.refmodel.oracles import stimulus_liveness
+
+    live = stimulus_liveness("class NotAModel:\n    pass\n", CONTRACT, STIM, base="step")
+    assert live.errors and not live.inert
+    assert live.summary()["failed_to_replay"] == 1

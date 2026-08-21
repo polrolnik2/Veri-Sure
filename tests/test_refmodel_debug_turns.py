@@ -211,8 +211,17 @@ def test_each_turn_persists_its_own_oracles_and_screening(tmp_path: Path):
         assert (base / "oracles" / "REQ-0000.py").exists()
         trust_report = json.loads((base / "trust.json").read_text())
         assert set(trust_report) == {"rates", "discarded", "sensitivity",
-                                     "unresolved_conflicts"}
+                                     "unresolved_conflicts",
+                                     "control_unexercised", "stimulus"}
         assert trust_report["rates"]["trusted"] >= 1
+        # The stimulus is measured every turn, beside the rates it explains:
+        # an inert testpoint makes every oracle naming it unjudgeable, and the
+        # resulting UNKNOWNs read as findings about the judge if nothing says
+        # otherwise.
+        assert set(trust_report["stimulus"]) >= {
+            "testpoints", "inert", "inert_fraction", "inert_testpoints",
+            "requirements_left_unjudgeable"}
+        assert trust_report["stimulus"]["testpoints"] >= 1
 
 
 def test_the_control_gate_reaches_the_screening(tmp_path: Path):
