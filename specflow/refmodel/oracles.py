@@ -1,0 +1,336 @@
+"""One executable mini-oracle per requirement.
+
+The reference model is the oracle for a whole design. A `RequirementOracle` is
+the same object scoped to one clause of the specification: given the model's
+trace under the stimulus written for that requirement, it DECIDES whether the
+clause holds, and says at which edge it made up its mind.
+
+Why executable rather than declarative. A closed vocabulary of predicates was
+tried on paper first and does not survive the corpus: `cmd_ack` pulsing for
+exactly one clock is a duration claim, SDA released while filtered SCL is high
+relates two ports at one edge, and arbitration lost when the value read back
+differs from the value driven relates an input to an output. Anything covering
+those is a temporal language, and writing one is a larger project than the loop
+it would serve.
+
+Why one per requirement rather than several. A bag of unordered predicates
+cannot decide -- nobody can say which subset means "met" -- and this codebase
+would not call anything an oracle that could not decide. One-per-requirement
+also gives the repair loop a metric with the same shape as the verdict set it
+came from: N failing oracles going to zero, comparable turn against turn.
+
+Nothing here does I/O and nothing here calls a model. That is what lets a debug
+attempt cost milliseconds: `specflow/refmodel/base.py` imports nothing from
+cocotb, so a generated model runs in a plain interpreter.
+"""
+
+from __future__ import annotations
+
+import ast
+from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from ..ports import pinned_inputs
+from ..tb.runtime import normalise_step
+from .validate import _static_checks
+
+#: Hard bound on edges any one replay will simulate. A stimulus step may declare
+#: `until ... timeout=4000`, and an oracle that never fires must not spin.
+EDGE_BUDGET = 4000
+
+
+class RequirementOracle(BaseModel):
+    """A decision procedure for one requirement, written by the judge."""
+
+    #: Stamped by the harness, never trusted from the model -- the same
+    #: treatment `run_judge` already gives `RequirementVerdict.req_uid`.
+    req_uid: str = ""
+    #: The testpoints whose stimulus exercises this clause.
+    tp_uids: list[str] = Field(default_factory=list)
+    #: The sentence of the requirement this oracle decides, verbatim, so a
+    #: reader can tell an over-strict oracle from a real defect.
+    clause: str = ""
+    #: Python defining `def decide(trace)` and returning
+    #: `(ok: bool, edge: int | None, detail: str)`.
+    source: str = ""
+
+
+@dataclass(frozen=True)
+class OracleResult:
+    """Why `broken` is separate from `ok`.
+
+    An oracle that raises, returns the wrong shape, or names a testpoint that
+    does not exist is a defect in the ORACLE. Reporting that as a failing model
+    would send a repair loop after code that may be perfectly correct, which is
+    the exact failure this whole design exists to stop -- one level up.
+    """
+
+    req_uid: str
+    ok: bool
+    edge: int | None = None
+    detail: str = ""
+    broken: str = ""
+    #: The trace it judged, so a caller never re-runs to find out why.
+    rows: list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Replay:
+    rows: list[dict]
+    notes: list[str] = field(default_factory=list)
+    error: str = ""
+
+
+def _load(source: str, base: str):
+    """`(fn, error)` -- a callable bound method of a fresh `Model`, or why not."""
+    namespace: dict = {}
+    try:
+        exec(compile(source, "<refmodel>", "exec"), namespace)  # noqa: S102
+    except Exception as exc:  # noqa: BLE001
+        return None, f"does not import: {exc!r}"
+    model_cls = namespace.get("Model")
+    if model_cls is None:
+        return None, "defines no class named Model"
+    try:
+        fn = getattr(model_cls(), base, None)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"Model() does not instantiate: {exc!r}"
+    if not callable(fn):
+        return None, f"has no callable {base!r}"
+    return fn, ""
+
+
+def replay(
+    source: str,
+    contract: dict,
+    steps: list[dict],
+    *,
+    base: str,
+    edge_budget: int = EDGE_BUDGET,
+) -> Replay:
+    """Drive `source` over one testpoint's concrete stimulus, structurally.
+
+    Rows are `{"edge": int, "inputs": {...}, "outputs": {...}}` -- the shape an
+    oracle reasons over. The run-length-encoded strings elsewhere in this
+    package exist for prompts, where repetition costs tokens; a decision
+    procedure wants the edges.
+
+    `normalise_step` is the testbench's own decoder, imported rather than
+    reimplemented, so a replay cannot drift from what the suite will really do.
+    `until` resolves against the MODEL's output here -- there is no DUT at this
+    stage -- and runs to the timeout the testpoint declared, because capping it
+    at a render budget makes a scenario stop early and read as one the model
+    never completed.
+    """
+    fn, err = _load(source, base)
+    if err:
+        return Replay([], [], err)
+
+    state = dict(pinned_inputs(contract))
+    rows: list[dict] = []
+    notes: list[str] = []
+    for raw in steps:
+        if notes:
+            break
+        inputs, hold, until, timeout = normalise_step(raw)
+        state.update(inputs)
+        edges = timeout if until else hold
+        reached = False
+        for _ in range(max(1, edges)):
+            if len(rows) >= edge_budget:
+                notes.append(f"stopped after {edge_budget} edges")
+                break
+            try:
+                out = fn(dict(state))
+            except Exception as exc:  # noqa: BLE001
+                return Replay(rows, notes, f"raised at edge {len(rows)}: {exc!r}")
+            if not isinstance(out, dict):
+                return Replay(
+                    rows, notes,
+                    f"returned {type(out).__name__} at edge {len(rows)}, "
+                    f"expected a dict of outputs",
+                )
+            rows.append({
+                "edge": len(rows),
+                "inputs": dict(state),
+                "outputs": dict(out),
+            })
+            if until and out.get(str(until.get("port"))) == until.get("value"):
+                reached = True
+                break
+        if until and not reached and not notes:
+            # Stated, never blamed. Checked against the known-correct control on
+            # this run's own stimulus: 23 of 60 scenarios never fire their
+            # `until`, because the stimulus paired clk_cnt=200 with timeout=500
+            # when one command at that divider needs upwards of 1000 edges.
+            notes.append(
+                f"{until.get('port')} did not reach {until.get('value')!r} "
+                f"within the {edges} edges this testpoint allows"
+            )
+    return Replay(rows, notes, "")
+
+
+def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
+    """Run one oracle over one trace. Never raises."""
+    fn, err = _oracle_fn(oracle)
+    if err:
+        return OracleResult(oracle.req_uid, ok=False, broken=err, rows=trace)
+    try:
+        verdict = fn(trace)
+    except Exception as exc:  # noqa: BLE001
+        return OracleResult(
+            oracle.req_uid, ok=False, rows=trace,
+            broken=f"decide() raised: {exc!r}",
+        )
+    ok, edge, detail = _unpack(verdict)
+    if ok is None:
+        return OracleResult(
+            oracle.req_uid, ok=False, rows=trace,
+            broken=f"decide() returned {verdict!r}, expected (ok, edge, detail)",
+        )
+    return OracleResult(oracle.req_uid, ok=ok, edge=edge, detail=detail, rows=trace)
+
+
+def _oracle_fn(oracle: RequirementOracle):
+    namespace: dict = {}
+    try:
+        exec(compile(oracle.source, f"<oracle:{oracle.req_uid}>", "exec"), namespace)  # noqa: S102
+    except Exception as exc:  # noqa: BLE001
+        return None, f"oracle does not import: {exc!r}"
+    fn = namespace.get("decide")
+    if not callable(fn):
+        return None, "oracle defines no callable named `decide`"
+    return fn, ""
+
+
+def _unpack(verdict: Any) -> tuple[bool | None, int | None, str]:
+    """Accept `(ok, edge, detail)`, and a bare bool for the trivial case."""
+    if isinstance(verdict, bool):
+        return verdict, None, ""
+    if isinstance(verdict, (tuple, list)) and len(verdict) == 3:
+        ok, edge, detail = verdict
+        if isinstance(ok, bool):
+            edge = edge if isinstance(edge, int) and not isinstance(edge, bool) else None
+            return ok, edge, str(detail)
+    return None, None, ""
+
+
+def decide_all(
+    oracles: list[RequirementOracle],
+    source: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    *,
+    base: str,
+    edge_budget: int = EDGE_BUDGET,
+) -> list[OracleResult]:
+    """Decide every oracle, replaying each testpoint at most once.
+
+    An oracle naming several testpoints holds only if it holds on all of them:
+    each is a scenario the clause is supposed to survive, so the first failure
+    is the answer and carries its own edge.
+    """
+    cache: dict[str, Replay] = {}
+    out: list[OracleResult] = []
+    for oracle in oracles:
+        results: list[OracleResult] = []
+        for tp in oracle.tp_uids:
+            steps = stimulus_by_tp.get(tp)
+            if not steps:
+                results.append(OracleResult(
+                    oracle.req_uid, ok=False,
+                    broken=f"no stimulus recorded for {tp}",
+                ))
+                continue
+            if tp not in cache:
+                cache[tp] = replay(
+                    source, contract, steps, base=base, edge_budget=edge_budget)
+            rep = cache[tp]
+            if rep.error:
+                results.append(OracleResult(
+                    oracle.req_uid, ok=False, rows=rep.rows,
+                    broken=f"the MODEL {rep.error}",
+                ))
+                continue
+            results.append(decide(oracle, rep.rows))
+        out.append(_worst(oracle.req_uid, results))
+    return out
+
+
+def _worst(req_uid: str, results: list[OracleResult]) -> OracleResult:
+    """Broken beats failing beats passing -- a broken oracle decides nothing."""
+    if not results:
+        return OracleResult(req_uid, ok=False, broken="the oracle names no testpoint")
+    for r in results:
+        if r.broken:
+            return r
+    for r in results:
+        if not r.ok:
+            return r
+    return results[0]
+
+
+def ports_read(oracle: RequirementOracle, contract: dict) -> set[str]:
+    """The declared ports this oracle's source mentions.
+
+    Used to project a trace down to what this clause is about. Without it the
+    mutation gate convicts a correct narrow oracle for staying silent about a
+    signal it was never meant to watch -- and pushing oracles wider is exactly
+    what the over-strictness gate then punishes.
+
+    A string-literal scan rather than dataflow: an oracle reads a trace row by
+    subscripting it with port names, so the names appear as constants. Over-
+    approximating here is safe -- it only makes the gate more conservative.
+    """
+    declared = {
+        str(p.get("name")) for p in (contract.get("io") or []) if p.get("name")
+    }
+    try:
+        tree = ast.parse(oracle.source)
+    except SyntaxError:
+        return set()
+    seen = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    return {name for name in declared if name in seen}
+
+
+def well_formed(
+    oracle: RequirementOracle, contract: dict, testplan: list[dict]
+) -> str | None:
+    """Why this oracle cannot be used, or None.
+
+    Screened BEFORE the loop sees it, so no debug attempt is ever spent
+    satisfying something malformed. The sandbox is `validate._static_checks`,
+    reused rather than re-derived: an oracle is the same trust class as the
+    reference model -- generated Python this process will execute -- and if that
+    screen is not good enough for one it is not good enough for the other.
+    """
+    if not oracle.source.strip():
+        return "the oracle has no source"
+    issues = [i for i in _static_checks(oracle.source, [], {}) if i.severity == "error"]
+    if issues:
+        return issues[0].message
+    if not oracle.tp_uids:
+        return "the oracle names no testpoint to replay"
+    known = {str(tp.get("uid")) for tp in testplan}
+    unknown = [tp for tp in oracle.tp_uids if tp not in known]
+    if unknown:
+        return f"names testpoints that are not in the testplan: {sorted(unknown)}"
+    fn, err = _oracle_fn(oracle)
+    if err:
+        return err
+    try:
+        arity = fn.__code__.co_argcount
+    except AttributeError:
+        return "`decide` is not an ordinary function"
+    if arity != 1:
+        return f"`decide` takes {arity} arguments, expected exactly 1 (the trace)"
+    if not ports_read(oracle, contract):
+        # An oracle naming no declared port cannot be about observable
+        # behaviour, and the mutation gate could never scope a mutant to it.
+        return "names no declared port, so it decides nothing observable"
+    return None

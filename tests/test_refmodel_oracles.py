@@ -1,0 +1,220 @@
+"""Requirement oracles: replay, decide, and what must never be confused.
+
+The distinction this file exists to pin is between a FAILING MODEL and a BROKEN
+ORACLE. Both look like "not ok" from a distance, and treating the second as the
+first sends a repair loop after code that may be perfectly correct -- which is
+the failure this whole design exists to stop, one level up from the inert
+reference model that started it.
+"""
+
+from __future__ import annotations
+
+from specflow.refmodel.oracles import (
+    RequirementOracle,
+    decide,
+    decide_all,
+    ports_read,
+    replay,
+    well_formed,
+)
+
+CONTRACT = {
+    "io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "rst_n", "dir": "input", "width": 1, "role": "reset"},
+        {"name": "a", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+        {"name": "ack", "dir": "output", "width": 1},
+    ]
+}
+PLAN = [{"uid": "TP-0000"}, {"uid": "TP-0001"}]
+STIM = {"TP-0000": [{"inputs": {"a": 3}, "hold": 4}]}
+
+#: Accumulates, and pulses `ack` once on the third edge.
+LIVE = '''
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ["q", "ack"]
+
+    def reset(self):
+        self.n = 0
+        self.k = 0
+
+    def step(self, i):
+        if not hasattr(self, "n"):
+            self.reset()
+        self.n = self.mask(self.n + i.get("a", 0), 8)
+        self.k += 1
+        return {"q": self.n, "ack": 1 if self.k == 3 else 0}
+'''
+
+#: The inert failure mode that started all of this: outputs never move.
+INERT = '''
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ["q", "ack"]
+
+    def step(self, i):
+        return {"q": 0, "ack": 0}
+'''
+
+
+def _oracle(source: str, *, tps=("TP-0000",), uid="REQ-0000") -> RequirementOracle:
+    return RequirementOracle(
+        req_uid=uid, tp_uids=list(tps), clause="q must move", source=source
+    )
+
+
+Q_MOVES = '''
+def decide(trace):
+    for row in trace:
+        if row["outputs"]["q"] != 0:
+            return (True, row["edge"], "q moved")
+    return (False, None, "q never left 0")
+'''
+
+
+# ----------------------------------------------------------------- replay
+
+
+def test_replay_returns_one_structured_row_per_edge():
+    rep = replay(LIVE, CONTRACT, STIM["TP-0000"], base="step")
+    assert not rep.error
+    assert [r["edge"] for r in rep.rows] == [0, 1, 2, 3]
+    assert rep.rows[0]["outputs"] == {"q": 3, "ack": 0}
+    # Inputs the stimulus did not name are still present, from `pinned_inputs`.
+    assert rep.rows[0]["inputs"]["rst_n"] == 1
+
+
+def test_replay_reports_a_model_that_raises_rather_than_propagating():
+    rep = replay("class Model:\n    def step(self, i):\n        raise ValueError('x')\n",
+                 CONTRACT, STIM["TP-0000"], base="step")
+    assert "raised at edge 0" in rep.error
+    assert rep.rows == []
+
+
+def test_until_runs_to_the_testpoints_own_timeout():
+    """Capping it at a render budget made scenarios read as never completing."""
+    steps = [{"inputs": {"a": 1}, "until": {"port": "ack", "value": 1}, "timeout": 50}]
+    rep = replay(LIVE, CONTRACT, steps, base="step")
+    assert len(rep.rows) == 3, "should stop the edge ack rises, not before or after"
+    assert rep.rows[-1]["outputs"]["ack"] == 1
+    assert not rep.notes
+
+
+def test_an_until_that_never_fires_is_stated_but_not_blamed():
+    """On the known-good control, 23 of 60 scenarios never fire their `until`.
+
+    The stimulus paired clk_cnt=200 with timeout=500 when one command at that
+    divider needs upwards of 1000 edges. Phrasing that as a model defect would
+    make a correct model look broken.
+    """
+    steps = [{"inputs": {"a": 0}, "until": {"port": "ack", "value": 9}, "timeout": 6}]
+    rep = replay(LIVE, CONTRACT, steps, base="step")
+    assert rep.notes and "did not reach" in rep.notes[0]
+    assert not rep.error, "an unfired `until` is not an error"
+
+
+# ----------------------------------------------------------------- decide
+
+
+def test_a_failing_model_is_reported_as_failing_not_broken():
+    trace = replay(INERT, CONTRACT, STIM["TP-0000"], base="step").rows
+    result = decide(_oracle(Q_MOVES), trace)
+    assert result.ok is False
+    assert not result.broken, "the model is wrong; the oracle worked perfectly"
+    assert "never left 0" in result.detail
+
+
+def test_a_passing_model_carries_the_edge_the_oracle_decided_on():
+    trace = replay(LIVE, CONTRACT, STIM["TP-0000"], base="step").rows
+    result = decide(_oracle(Q_MOVES), trace)
+    assert result.ok is True
+    assert result.edge == 0, "a failure that cannot localise itself is prose again"
+
+
+def test_an_oracle_that_raises_is_broken_not_a_failing_model():
+    trace = replay(LIVE, CONTRACT, STIM["TP-0000"], base="step").rows
+    result = decide(_oracle("def decide(trace):\n    return trace['nope']\n"), trace)
+    assert result.broken, (
+        "an oracle that throws must never be reported as a model defect -- that "
+        "sends the repair loop after correct code"
+    )
+
+
+def test_an_oracle_returning_the_wrong_shape_is_broken():
+    trace = replay(LIVE, CONTRACT, STIM["TP-0000"], base="step").rows
+    result = decide(_oracle("def decide(trace):\n    return 'yes'\n"), trace)
+    assert result.broken and "expected (ok, edge, detail)" in result.broken
+
+
+def test_a_bare_bool_is_accepted_for_the_trivial_case():
+    trace = replay(LIVE, CONTRACT, STIM["TP-0000"], base="step").rows
+    result = decide(_oracle("def decide(trace):\n    return True\n"), trace)
+    assert result.ok is True and not result.broken
+
+
+# ----------------------------------------------------------------- decide_all
+
+
+def test_a_missing_stimulus_is_broken_rather_than_a_silent_pass():
+    results = decide_all([_oracle(Q_MOVES, tps=("TP-0001",))],
+                         LIVE, CONTRACT, STIM, base="step")
+    assert results[0].broken and "no stimulus recorded" in results[0].broken
+
+
+def test_an_oracle_holds_only_if_it_holds_on_every_testpoint_it_names():
+    stim = {"TP-0000": [{"inputs": {"a": 3}, "hold": 4}],
+            "TP-0001": [{"inputs": {"a": 0}, "hold": 4}]}   # q stays 0 here
+    results = decide_all([_oracle(Q_MOVES, tps=("TP-0000", "TP-0001"))],
+                         LIVE, CONTRACT, stim, base="step")
+    assert results[0].ok is False, "the first failing scenario is the answer"
+
+
+def test_a_broken_model_is_attributed_to_the_model_not_the_oracle():
+    results = decide_all(
+        [_oracle(Q_MOVES)],
+        "class Model:\n    def step(self, i):\n        raise ValueError('x')\n",
+        CONTRACT, STIM, base="step")
+    assert results[0].broken.startswith("the MODEL "), (
+        "the reader must be able to tell whose defect this is"
+    )
+
+
+# ----------------------------------------------------------------- screening
+
+
+def test_well_formed_accepts_a_sound_oracle():
+    assert well_formed(_oracle(Q_MOVES), CONTRACT, PLAN) is None
+
+
+def test_an_unknown_testpoint_is_rejected_before_the_loop_sees_it():
+    bad = _oracle(Q_MOVES, tps=("TP-9999",))
+    assert "not in the testplan" in (well_formed(bad, CONTRACT, PLAN) or "")
+
+
+def test_the_model_sandbox_is_reused_rather_than_re_derived():
+    """An oracle is the same trust class as the reference model."""
+    bad = _oracle("import os\n\n\ndef decide(trace):\n    return True\n")
+    assert well_formed(bad, CONTRACT, PLAN) is not None
+
+
+def test_wrong_arity_is_rejected():
+    bad = _oracle("def decide(trace, extra):\n    return True\n")
+    assert "expected exactly 1" in (well_formed(bad, CONTRACT, PLAN) or "")
+
+
+def test_an_oracle_naming_no_declared_port_decides_nothing_observable():
+    """It would also be unscopeable by the mutation gate, which projects on ports."""
+    bad = _oracle("def decide(trace):\n    return (True, None, 'sure')\n")
+    assert "names no declared port" in (well_formed(bad, CONTRACT, PLAN) or "")
+
+
+def test_ports_read_finds_only_declared_ports():
+    o = _oracle('def decide(trace):\n    x = "not_a_port"\n'
+                '    return (trace[0]["outputs"]["ack"] == 1, 0, x)\n')
+    assert ports_read(o, CONTRACT) == {"ack"}
