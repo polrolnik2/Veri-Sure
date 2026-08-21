@@ -251,6 +251,12 @@ class TopAgentConfig:
     #: descending when the budget ran out.
     specflow_max_repairs: int = 3
     specflow_refmodel_max_repairs: int = 6
+    #: Edit attempts per debug turn on the reference model. 0 disables the
+    #: agentic path and falls back to prose-driven regeneration.
+    specflow_refmodel_debug_attempts: int = 6
+    #: Judging passes. Each is ~one call per requirement, so this is the
+    #: expensive budget; the attempts inside a turn are pure Python.
+    specflow_refmodel_judge_turns: int = 3
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -595,6 +601,8 @@ class TopAgent:
             fanout=self.config.specflow_fanout,
             max_repairs=self.config.specflow_max_repairs,
             refmodel_max_repairs=self.config.specflow_refmodel_max_repairs,
+            refmodel_debug_attempts=self.config.specflow_refmodel_debug_attempts,
+            refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

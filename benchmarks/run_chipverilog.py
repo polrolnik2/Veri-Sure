@@ -269,6 +269,8 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_fanout=not getattr(args, "no_fanout", False),
             specflow_max_repairs=args.max_repairs,
             specflow_refmodel_max_repairs=args.refmodel_max_repairs,
+            specflow_refmodel_debug_attempts=args.refmodel_debug_attempts,
+            specflow_refmodel_judge_turns=args.refmodel_judge_turns,
         ),
     )
     try:
@@ -384,6 +386,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-fanout", action="store_true",
         help="run S2, S3 and the reference model as one batched call each "
              "instead of one small call per item.",
+    )
+    p.add_argument(
+        "--refmodel-debug-attempts", type=int, default=6,
+        help="edit attempts per reference-model debug turn; 0 disables the "
+             "agentic path and repairs by regenerating from the judge's prose, "
+             "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--refmodel-judge-turns", type=int, default=3,
+        help="judging passes over the reference model. Each is ~one model call "
+             "per requirement and is the expensive budget; the debug attempts "
+             "inside a turn are pure Python and near-free",
     )
     p.add_argument(
         "--reuse", action="store_true",
