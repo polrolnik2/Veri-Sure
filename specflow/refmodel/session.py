@@ -151,7 +151,27 @@ class DebugSession:
 
     # ------------------------------------------------------------- tools
 
+    #: Said on every finding that has no executable check behind it. The verdict
+    #: is unchanged -- losing an oracle is not evidence about the model -- but
+    #: what supports it is different in kind, and a caller that cannot tell the
+    #: two apart will spend the same effort on both.
+    ANECDOTAL = (
+        "NO EXECUTABLE CHECK. This verdict rests only on the judge's reading of "
+        "the source -- it was never mechanically confirmed, and no oracle "
+        "survived screening for it. Treat it as a lead, not a proven defect: "
+        "read `explain` for the reasoning, replay the behaviour yourself, and "
+        "if the reasoning does not hold up, leave the model alone."
+    )
+
     def list_oracles(self) -> list[dict]:
+        """Every finding the turn is working on, checked or not.
+
+        Requirements whose oracle was discarded during screening used to be
+        absent entirely, which made the loss of an oracle look like the loss of
+        the finding. The verdict still blocks and it is still the judge's
+        conclusion; all that changed is that nothing can decide it mechanically.
+        Hiding it left the agent unable to act on it or to argue with it.
+        """
         by_uid = {r.req_uid: r for r in self._results}
         out = []
         for oracle in self.oracles:
@@ -165,6 +185,20 @@ class DebugSession:
                             "NOT EXERCISED" if r and r.unexercised() else "NOT MET"),
                 "edge": None if r is None else r.edge,
                 "detail": "" if r is None else (r.broken or r.detail),
+                "checked": True,
+            })
+        have = {o.req_uid for o in self.oracles}
+        for uid, verdict in sorted(self.verdicts.items()):
+            if uid in have or verdict not in ("not_met", "ambiguous"):
+                continue
+            out.append({
+                "req_uid": uid,
+                "clause": str((self.reasons.get(uid) or {}).get("reason") or "")[:200],
+                "tp_uids": [],
+                "status": verdict.upper().replace("_", " "),
+                "edge": None,
+                "detail": self.ANECDOTAL,
+                "checked": False,
             })
         return out
 
@@ -181,10 +215,30 @@ class DebugSession:
         the second is a real possibility this design has to survive.
         """
         oracle = next((o for o in self.oracles if o.req_uid == req_uid), None)
-        if oracle is None:
-            return {"error": f"no oracle for {req_uid!r}",
-                    "known": [o.req_uid for o in self.oracles]}
         req = self.requirements.get(req_uid, {})
+        if oracle is None:
+            # A finding with no oracle is still a finding, and this is the only
+            # place its reasoning can be read. Returning an error here made a
+            # discarded oracle look like a mistyped uid, so an agent that saw
+            # the verdict in `list_oracles` could not follow it up.
+            if req_uid not in self.verdicts:
+                return {"error": f"no such requirement {req_uid!r}",
+                        "known": sorted(self.verdicts)}
+            return {
+                "req_uid": req_uid,
+                "requirement": req.get("text", ""),
+                "specification_quoted": [
+                    s.get("quote", "") for s in (req.get("spec_spans") or [])
+                ],
+                "judge_verdict": self.verdicts.get(req_uid, ""),
+                "judge_reasoning": self.reasons.get(req_uid, {}),
+                "methods_claimed_to_implement_it": self.covers.get(req_uid, []),
+                "oracle_clause": None,
+                "oracle_source": None,
+                "evidence_quality": self.ANECDOTAL,
+                "current": {"status": "NO EXECUTABLE CHECK", "edge": None,
+                            "detail": self.ANECDOTAL},
+            }
         result = next((r for r in self._results if r.req_uid == req_uid), None)
         return {
             "req_uid": req_uid,
@@ -223,7 +277,13 @@ class DebugSession:
         """
         oracle = next((o for o in self.oracles if o.req_uid == req_uid), None)
         if oracle is None:
-            return {"error": f"no oracle for {req_uid!r}"}
+            if req_uid in self.verdicts:
+                return {"req_uid": req_uid,
+                        "verdict": {"status": "NO EXECUTABLE CHECK",
+                                    "edge": None, "detail": self.ANECDOTAL},
+                        "testpoints": {},
+                        "next": "call explain() for the judge's reasoning"}
+            return {"error": f"no such requirement {req_uid!r}"}
         out: dict = {"req_uid": req_uid, "clause": oracle.clause, "testpoints": {}}
         for tp in oracle.tp_uids:
             steps = self.stimulus_by_tp.get(tp)

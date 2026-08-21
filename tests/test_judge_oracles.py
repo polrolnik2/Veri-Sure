@@ -294,3 +294,82 @@ def test_the_reconcile_prompt_shows_the_oracle_object_not_just_its_name():
     assert '"clause"' in RECONCILE_SYSTEM
     assert '"source"' in RECONCILE_SYSTEM
     assert "not a bare string" in RECONCILE_SYSTEM
+
+
+def test_a_no_conclusion_synonym_becomes_ambiguous_rather_than_nothing():
+    """The gap this session opened, and the words it produced.
+
+    Giving the ORACLE `ok=None` for an unstaged scenario left the VERDICT with
+    no word for the same idea, so judges that had correctly written
+    `return (None, ...)` invented one. In the b-i2c r0 reconcile round that was
+    11 of 42 replies, each thrown away whole along with its oracle.
+    """
+    for word in ("not_assessed", "inconclusive", "unverified",
+                 "not_observable", "uncovered", "not assessed"):
+        v = parse_response(json.dumps({"verdict": word, "reason": "no trace",
+                                       "oracle": ORACLE_SRC}))
+        assert v.verdict == "ambiguous", word
+        assert v.oracle is not None, f"{word} must not cost the oracle too"
+
+
+def test_a_satisfied_synonym_becomes_met():
+    assert parse_response(json.dumps({"verdict": "holds"})).verdict == "met"
+    assert parse_response(json.dumps({"verdict": "violated"})).verdict == "not_met"
+
+
+def test_an_unrecognised_word_is_still_a_parse_error():
+    """Leniency must not turn any word at all into a verdict."""
+    v = parse_response(json.dumps({"verdict": "mostly fine, I think"}))
+    assert v.verdict == "ambiguous"
+    assert str(v.reason).startswith("Parse Error: ")
+
+
+def test_the_prompt_names_ambiguous_as_the_home_for_an_unstaged_scenario():
+    """Fixing it at source; the synonym map is the net under that."""
+    assert "not_assessed" in SYSTEM, "it must name the invented words it rejects"
+    assert "NEVER STAGES THE SCENARIO" in SYSTEM
+    assert "ok=None" in SYSTEM
+
+
+def test_an_unreadable_reply_is_re_asked_rather_than_spent():
+    """One of 77 judge replies had a stray escaped quote mid-string.
+
+    Treating that as `ambiguous` spends a requirement's whole judgement on a
+    typo; one re-ask costs one call and recovers it.
+    """
+    from specflow.refmodel.judge import _ask
+
+    class _OnceBroken:
+        def __init__(self):
+            self.prompts = []
+
+        def complete(self, *, stage, round_, prompt):
+            self.prompts.append((stage, prompt))
+            if len(self.prompts) == 1:
+                return '{"verdict": "met", "reason": "oops\\"}'      # broken
+            return json.dumps({"verdict": "met", "reason": "second time"})
+
+    port = _OnceBroken()
+    v = _ask(port, stage="judge_REQ-0000", round_=0, prompt="P")
+    assert v.verdict == "met" and v.reason == "second time"
+    assert len(port.prompts) == 2
+    assert port.prompts[1][0] == "judge_REQ-0000_retry1", (
+        "the retry needs its own stage so the first reply survives on disk"
+    )
+    assert "COULD NOT BE READ" in port.prompts[1][1]
+
+
+def test_a_readable_reply_is_never_re_asked():
+    from specflow.refmodel.judge import _ask
+
+    class _Counting:
+        def __init__(self):
+            self.n = 0
+
+        def complete(self, *, stage, round_, prompt):
+            self.n += 1
+            return json.dumps({"verdict": "met"})
+
+    port = _Counting()
+    assert _ask(port, stage="s", round_=0, prompt="P").verdict == "met"
+    assert port.n == 1

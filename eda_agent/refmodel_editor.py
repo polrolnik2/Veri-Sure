@@ -72,6 +72,15 @@ Work like this:
 A status of NOT EXERCISED is not a failure you can fix. It means the oracle's
 scenario never occurs in the stimulus, so the model is not being accused of
 anything. Leave those alone.
+
+Some findings come back with `checked: false` and NO EXECUTABLE CHECK. The
+judge reached a verdict but no oracle survived screening for it, so nothing can
+decide it mechanically. The verdict is unchanged and it is still worth reading
+-- `explain` gives the reasoning -- but it is one reader's opinion of the source
+and was never confirmed. Treat it as a lead: check whether the reasoning holds
+against what the model actually does, and if it does not, LEAVE THE MODEL ALONE
+and say so. Editing to satisfy an unverified opinion is how a correct model
+gets broken. Fix the checked failures first; they are the ones with evidence.
   4. `read_model(method)` on the method that should be doing the work.
   5. `replace_method(name, code)` with the whole corrected `def`.
 

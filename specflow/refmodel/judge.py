@@ -145,7 +145,17 @@ Read those methods. Decide:
   "met"         the code satisfies the requirement. Say which lines do it.
   "not_met"     the code demonstrably does not satisfy it -- it does something
                 else, or does nothing.
-  "ambiguous"   you cannot determine whether it is satisfied.
+  "ambiguous"   you cannot determine whether it is satisfied. THIS IS ALSO THE
+                VERDICT WHEN THE STIMULUS NEVER STAGES THE SCENARIO -- if the
+                trace never issues the command, never asserts reset, never
+                creates the arbitration case, then nothing here shows you
+                whether the requirement holds, and "ambiguous" is what that is
+                called. Say so in `reason`, and have your oracle return
+                `ok=None` for the same situation.
+
+THESE THREE ARE THE ONLY VERDICTS. There is no "not_assessed", "inconclusive",
+"unverified", "not_observable" or "uncovered" -- they all mean "ambiguous", and
+inventing one gets the whole reply rejected.
 
 On "ambiguous": this does NOT mean "probably met but unclear". It means you do
 not know, and both possibilities are open -- the requirement may be implemented
@@ -225,6 +235,36 @@ None, f'{len(runs)} single-edge pulse(s)')"
 #: from "the conclusion was ambiguous". `gate_suite` uses the same convention.
 PARSE_ERROR = "Parse Error: "
 
+#: Words judges reach for when the enum has no slot for what they mean.
+#:
+#: The "no conclusion" family is the interesting one, and it is a gap this
+#: session opened. Giving the ORACLE a third state -- `ok=None` for a scenario
+#: the stimulus never stages -- left the VERDICT with three values and no word
+#: for the same idea, so a judge that had correctly written `return (None, ...)`
+#: went looking for a matching verdict and invented one. In the b-i2c r0
+#: reconcile round that was 11 of 42 replies, thrown away whole: `not_assessed`,
+#: `inconclusive`, `unverified`, `not_observable`, `uncovered`.
+#:
+#: `ambiguous` IS that slot -- it already means "no conclusion was reached", and
+#: it is where an unparseable reply lands too. Mapping to it keeps the reason,
+#: the evidence and the oracle, all of which were fine. The prompts now say so
+#: outright, which is the fix at source; this is the safety net under it.
+#:
+#: Only unmistakable words are listed. Anything else still fails to parse,
+#: because a verdict nobody can read must not be quietly turned into one.
+_VERDICT_SYNONYMS = {
+    "met": "met", "not_met": "not_met", "ambiguous": "ambiguous",
+    "holds": "met", "satisfied": "met", "pass": "met", "passes": "met",
+    "fails": "not_met", "failed": "not_met", "violated": "not_met",
+    "not_satisfied": "not_met",
+    "not_assessed": "ambiguous", "unassessed": "ambiguous",
+    "inconclusive": "ambiguous", "unverified": "ambiguous",
+    "not_observable": "ambiguous", "unobservable": "ambiguous",
+    "uncovered": "ambiguous", "undetermined": "ambiguous",
+    "unknown": "ambiguous", "not_applicable": "ambiguous",
+    "not_exercised": "ambiguous", "unexercised": "ambiguous",
+}
+
 
 def _coerce(obj: object) -> object:
     """Repair the two slips that cost this pipeline 42 oracles in one round.
@@ -250,9 +290,44 @@ def _coerce(obj: object) -> object:
     verdict = out.get("verdict")
     if isinstance(verdict, str):
         squashed = verdict.strip().lower().replace(" ", "_").replace("-", "_")
-        if squashed in ("met", "not_met", "ambiguous"):
-            out["verdict"] = squashed
+        out["verdict"] = _VERDICT_SYNONYMS.get(squashed, squashed)
     return out
+
+
+RETRY_SUFFIX = """
+
+YOUR PREVIOUS REPLY COULD NOT BE READ -- it was not valid JSON. Send the same
+judgement again as ONE JSON object and nothing else: no prose before or after,
+no markdown fence, and no stray quote inside a string. `oracle` is an object
+with "tp_uids", "clause" and "source"; `verdict` is exactly one of "met",
+"not_met" or "ambiguous".
+"""
+
+
+def _ask(port, *, stage: str, round_: int, prompt: str,
+         retries: int = 1) -> RequirementVerdict:
+    """Ask, and re-ask once when the reply cannot be read at all.
+
+    A mangled reply is not a verdict, and treating it as `ambiguous` silently
+    spends a requirement's whole judgement on a stray quote. One re-ask costs
+    one call and recovers it. `_coerce` handles the slips that are merely
+    formatting; this is for the residue where the JSON itself is broken -- one
+    of 77 judge replies in the b-i2c r0 round, which had an extra escaped quote
+    in the middle of a string.
+
+    The retry is recorded under its own stage so the original reply survives on
+    disk: a run where the first answer was thrown away and the second one saved
+    is a run whose artifacts cannot explain their own verdicts.
+    """
+    raw = port.complete(stage=stage, round_=round_, prompt=prompt)
+    verdict = parse_response(raw)
+    attempt = 0
+    while attempt < retries and str(verdict.reason or "").startswith(PARSE_ERROR):
+        attempt += 1
+        raw = port.complete(stage=f"{stage}_retry{attempt}", round_=round_,
+                            prompt=prompt + RETRY_SUFFIX)
+        verdict = parse_response(raw)
+    return verdict
 
 
 def parse_response(text: str) -> RequirementVerdict:
@@ -710,8 +785,7 @@ def run_judge(
             behaviour=behaviour, testpoints=by_req.get(uid),
             contract=contract, stimulus_by_tp=stimulus_by_tp, base=base,
         )
-        raw = port.complete(stage=f"{STAGE}_{uid}", round_=round_, prompt=prompt)
-        v = parse_response(raw)
+        v = _ask(port, stage=f"{STAGE}_{uid}", round_=round_, prompt=prompt)
         # The uid is the harness's to assign, never the judge's: a judge that
         # answered about the wrong requirement would otherwise silently retarget
         # its own verdict.
@@ -853,7 +927,9 @@ is an OBJECT, not a bare string -- putting the source directly in "oracle" is
 the single most common way this reply is thrown away:
 
 {
-  "verdict": "met" | "not_met" | "ambiguous",
+  "verdict": "met" | "not_met" | "ambiguous",     <- these three ONLY. If the
+      stimulus never stages the scenario, that is "ambiguous"; there is no
+      "not_assessed" or "inconclusive", and inventing one loses the reply.
   "reason": "...", "evidence": "...", "remedy": "...",
   "oracle": {
     "tp_uids": ["TP-0007"],
@@ -932,9 +1008,7 @@ def reconcile(
             requirement=by_uid.get(uid, {"uid": uid}),
             verdict=verdict, conflict=conflicts[uid], behaviour=behaviour,
         )
-        raw = port.complete(
-            stage=f"reconcile_{uid}", round_=round_, prompt=prompt)
-        fixed = parse_response(raw)
+        fixed = _ask(port, stage=f"reconcile_{uid}", round_=round_, prompt=prompt)
         # A repair that could not be read is not a repair. Returning it would
         # overwrite the verdict AND the oracle it was asked to fix with an
         # empty `ambiguous`, so a failed call would leave the requirement worse

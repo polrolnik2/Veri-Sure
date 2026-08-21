@@ -273,3 +273,77 @@ def test_an_unexercised_oracle_is_not_reported_as_a_failing_model():
     assert s.explain("REQ-0000")["current"]["status"] == "NOT EXERCISED"
     assert s.run_oracle("REQ-0000")["verdict"]["status"] == "NOT EXERCISED"
     assert s.failing() == [], "and it is not something to chase"
+
+
+# ----------------------------- findings with no oracle behind them
+
+
+def _mixed_session():
+    """One checked failure, one blocking verdict whose oracle was discarded."""
+    return DebugSession(
+        BROKEN, CONTRACT, STIM, [_oracle()], base="step",
+        requirements=[{"uid": "REQ-0000", "text": "ack must pulse"},
+                      {"uid": "REQ-0009", "text": "al rises on arbitration loss",
+                       "spec_spans": [{"quote": "the master loses arbitration"}]}],
+        verdicts={"REQ-0000": "not_met", "REQ-0009": "not_met",
+                  "REQ-0010": "met"},
+        reasons={"REQ-0009": {"reason": "al is never assigned"}},
+        covers={"REQ-0009": ["_bus"]},
+    )
+
+
+def test_losing_an_oracle_does_not_hide_the_finding():
+    """It used to vanish from the tool surface entirely.
+
+    The verdict still blocks and it is still the judge's conclusion; all that
+    changed is that nothing can decide it mechanically. An agent that cannot
+    see it can neither act on it nor argue with it.
+    """
+    rows = {r["req_uid"]: r for r in _mixed_session().list_oracles()}
+    assert set(rows) == {"REQ-0000", "REQ-0009"}, "the met one is not a finding"
+    assert rows["REQ-0000"]["checked"] is True
+    assert rows["REQ-0009"]["checked"] is False
+    assert "NO EXECUTABLE CHECK" in rows["REQ-0009"]["detail"]
+
+
+def test_the_verdict_itself_is_unchanged_by_the_loss_of_its_oracle():
+    """Losing a check is not evidence about the model."""
+    rows = {r["req_uid"]: r for r in _mixed_session().list_oracles()}
+    assert rows["REQ-0009"]["status"] == "NOT MET"
+
+
+def test_an_uncheckable_finding_still_carries_its_whole_provenance():
+    out = _mixed_session().explain("REQ-0009")
+    assert "error" not in out
+    assert out["requirement"] == "al rises on arbitration loss"
+    assert out["specification_quoted"] == ["the master loses arbitration"]
+    assert out["judge_reasoning"]["reason"] == "al is never assigned"
+    assert out["methods_claimed_to_implement_it"] == ["_bus"]
+    assert out["oracle_source"] is None
+    assert "never mechanically confirmed" in out["evidence_quality"]
+
+
+def test_the_disclaimer_tells_the_agent_not_to_edit_on_an_unproven_lead():
+    """Editing to satisfy an unverified opinion is how a correct model breaks."""
+    out = _mixed_session().explain("REQ-0009")
+    assert "lead, not a proven defect" in out["evidence_quality"]
+    assert "leave the model alone" in out["evidence_quality"].lower()
+
+
+def test_run_oracle_on_an_uncheckable_finding_says_so_rather_than_erroring():
+    out = _mixed_session().run_oracle("REQ-0009")
+    assert "error" not in out
+    assert out["verdict"]["status"] == "NO EXECUTABLE CHECK"
+    assert "explain" in out["next"]
+
+
+def test_a_genuinely_unknown_uid_is_still_an_error():
+    """The leniency must not swallow a typo."""
+    assert "error" in _mixed_session().explain("REQ-9999")
+    assert "error" in _mixed_session().run_oracle("REQ-9999")
+
+
+def test_an_uncheckable_finding_is_not_counted_as_failing():
+    """Nothing decided it, so it cannot score -- but it is still listed."""
+    s = _mixed_session()
+    assert [r.req_uid for r in s.failing()] == ["REQ-0000"]
