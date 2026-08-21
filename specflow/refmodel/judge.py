@@ -194,6 +194,12 @@ Rules it must obey, each for a reason:
 
   - Read only DECLARED PORTS out of `outputs`/`inputs`. Internal signals are not
     in the trace, and an oracle naming none is rejected as deciding nothing.
+  - NEVER look for a clock transition. Every row IS one rising clock edge, so
+    the clock port is pinned at its idle value for the whole trace and carries
+    no information. "the next rising edge" is simply the next row. An oracle
+    hunting a 0->1 on the clock finds a flat line and reports, correctly, that
+    it cannot see its scenario -- which reads as a thin testplan when nothing
+    is wrong with the testplan.
   - Decide ONLY this requirement's clause. An oracle that also checks
     neighbouring behaviour gets discarded for rejecting a known-good model.
   - Return the EDGE your decision turns on, so a failure localises itself.

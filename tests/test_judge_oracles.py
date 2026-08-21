@@ -425,3 +425,20 @@ def test_an_invented_testpoint_is_dropped_but_a_real_retarget_is_kept():
 
     retarget = reconcile(port=_port(["TP-0042"]), **common)
     assert retarget["REQ-0031"].oracle.tp_uids == ["TP-0042"], "honoured"
+
+
+def test_the_prompt_forbids_hunting_for_a_clock_transition():
+    """REQ-0058 on d-i2c wanted "a rising clk edge after rst assertion".
+
+    Every trace row IS a rising edge, so the clock port is pinned at its idle
+    value throughout and an oracle looking for a 0->1 on it finds a flat line.
+    It then reports -- correctly -- that it cannot see its scenario, and the
+    result reads as a thin testplan when the testplan is fine. The
+    representation invites the mistake, so the prompt has to name it.
+    """
+    flat = " ".join(SYSTEM.split())
+    assert "NEVER look for a clock transition" in flat
+    assert "Every row IS one rising clock edge" in flat
+    assert "the next rising edge" in flat, (
+        "it must say what to use INSTEAD, not only what to avoid"
+    )
