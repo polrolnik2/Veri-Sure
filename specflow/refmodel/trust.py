@@ -69,14 +69,25 @@ class Screened:
     #: executably, so the two disagreeing means the translation is wrong, not
     #: that the oracle is untrustworthy in itself.
     conflicts: dict[str, str] = field(default_factory=dict)
+    #: Whether gate 3 ran at all -- i.e. whether a control model was supplied.
+    #: Recorded because without it `over_strict: 0` is unreadable, and reads as
+    #: the reassuring half of an ambiguity it has no right to.
+    control_available: bool = False
 
-    def rates(self) -> dict[str, int]:
-        """Four counts, each accusing something different.
+    def rates(self) -> dict[str, int | None]:
+        """Five counts, each accusing something different.
 
         `malformed`/`disagreed` say the judge does not mean what it says;
         `convicted` says it demands nothing; `over_strict` says it demands too
         much; a high `unknown` says the STIMULUS is too thin to qualify oracles
         at all -- a finding about the testplan, not about the judge.
+
+        `over_strict` is None, never 0, when no control was supplied. The
+        distinction is not pedantic: on the a-i2c run it reported 0 with the
+        gate switched off, and the true figure measured afterwards was 22 of 54.
+        Ten of the eighteen oracles that run's debug agent failed to discharge
+        were ones no correct model could satisfy, and a 0 in this field is what
+        made that look like the agent's failure rather than the gate's absence.
         """
         reasons = list(self.discarded.values())
         return {
@@ -84,7 +95,10 @@ class Screened:
             "malformed": sum(1 for r in reasons if r.startswith("malformed:")),
             "disagreed": sum(1 for r in reasons if r.startswith("disagreed:")),
             "convicted": sum(1 for r in reasons if r.startswith("vacuous:")),
-            "over_strict": sum(1 for r in reasons if r.startswith("over-strict:")),
+            "over_strict": (
+                sum(1 for r in reasons if r.startswith("over-strict:"))
+                if self.control_available else None
+            ),
             "unknown": sum(1 for v in self.sensitivity.values() if v == UNKNOWN),
         }
 
@@ -266,7 +280,8 @@ def screen(
         trusted.append(oracle)
 
     return Screened(trusted=trusted, discarded=discarded, sensitivity=sens,
-                    conflicts=conflicts)
+                    conflicts=conflicts,
+                    control_available=control_source is not None)
 
 
 def failing(results: list[OracleResult]) -> list[OracleResult]:

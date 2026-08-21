@@ -121,6 +121,26 @@ def submodules(task_dir: Path, top: str) -> list[str]:
     return sorted(seen)
 
 
+def control_model(top: str) -> str | None:
+    """A hand-written reference model known to be right, if this design has one.
+
+    Trust gate 3 discards oracles that a correct model fails, and it is the only
+    gate that can: gate 1 asks an oracle to agree with its author about the
+    GENERATED model, which an oracle overfitted to that model satisfies by
+    construction. Measured on a-i2c with no control supplied, the generated
+    model passed 35 of 54 trusted oracles while the control passed 25 -- the
+    oracles preferred the model they were written against to the one that is
+    actually correct.
+
+    Only i2c_master_bit_ctrl has one today, so most runs still get None and gate
+    3 still does not run. That is a gap in coverage, not a silent pass: it is
+    why `Screened.rates()` reports `over_strict` separately rather than folding
+    it into a single trust number.
+    """
+    path = Path(__file__).parent / "controls" / top / "ref_model.py"
+    return str(path) if path.is_file() else None
+
+
 def scorer_language_flag(task_dir: Path | None) -> str:
     """Which iverilog dialect the SCORER will actually hold this task to.
 
@@ -271,6 +291,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_max_repairs=args.refmodel_max_repairs,
             specflow_refmodel_debug_attempts=args.refmodel_debug_attempts,
             specflow_refmodel_judge_turns=args.refmodel_judge_turns,
+            specflow_refmodel_control=control_model(top),
         ),
     )
     try:

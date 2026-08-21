@@ -257,6 +257,10 @@ class TopAgentConfig:
     #: Judging passes. Each is ~one call per requirement, so this is the
     #: expensive budget; the attempts inside a turn are pure Python.
     specflow_refmodel_judge_turns: int = 3
+    #: Path to a known-good reference model for this design, for trust gate 3.
+    #: Only the benchmark runners know where controls live, so this stays a
+    #: path they set rather than something discovered here.
+    specflow_refmodel_control: str | None = None
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -603,6 +607,7 @@ class TopAgent:
             refmodel_max_repairs=self.config.specflow_refmodel_max_repairs,
             refmodel_debug_attempts=self.config.specflow_refmodel_debug_attempts,
             refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
+            refmodel_control=self.config.specflow_refmodel_control,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

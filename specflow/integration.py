@@ -214,6 +214,19 @@ def build_artifacts(
     #: Absent one, the stage behaves exactly as it always has.
     refmodel_debugger: object | None = None,
     refmodel_judge_turns: int = 3,
+    #: A known-good reference model for this design, if one exists. It is the
+    #: ONLY input to trust gate 3, and it never reaches the debug agent or the
+    #: generator -- it is used solely to throw away oracles that demand
+    #: something no correct model does.
+    #:
+    #: Leaving it unset does not skip a formality. Measured on the a-i2c run,
+    #: where it was unset: 22 of 54 trusted oracles (41%) are failed by the
+    #: control model that scores 181/181 against golden RTL, and 10 of the 18
+    #: oracles the debug agent could not discharge were in that set. The agent
+    #: spent its attempts on demands that no correct model can satisfy, and
+    #: `over_strict: 0` in the trust report read as "none found" when it
+    #: actually meant "never looked".
+    refmodel_control: str | None = None,
     stimulus_agent: bool = True,
     reuse: bool = False,
     divide_s1: bool = True,
@@ -430,6 +443,7 @@ def build_artifacts(
             stimulus_by_tp=stim_by_tp or None,
             debugger=refmodel_debugger,
             max_judge_turns=refmodel_judge_turns,
+            control_source=refmodel_control,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -473,6 +487,7 @@ def build_artifacts(
                 stimulus_by_tp=stim_by_tp or None,
                 debugger=refmodel_debugger,
                 max_judge_turns=refmodel_judge_turns,
+                control_source=refmodel_control,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

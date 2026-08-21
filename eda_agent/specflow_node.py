@@ -251,6 +251,10 @@ async def run_specflow_node(
     #: Judging passes. Each is ~one model call per requirement, so this is the
     #: expensive budget; attempts inside a turn are pure Python and nearly free.
     refmodel_judge_turns: int = 3,
+    #: Source of a known-good reference model for this design, for trust gate 3.
+    #: Read here rather than passed as text so the caller only has to know where
+    #: its controls live. It is never shown to the debugger or the generator.
+    refmodel_control: Path | str | None = None,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -290,6 +294,10 @@ async def run_specflow_node(
             if refmodel_debug_attempts > 0 else None
         ),
         refmodel_judge_turns=refmodel_judge_turns,
+        refmodel_control=(
+            Path(refmodel_control).read_text(encoding="utf-8")
+            if refmodel_control and Path(refmodel_control).is_file() else None
+        ),
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:
