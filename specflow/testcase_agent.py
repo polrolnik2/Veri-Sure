@@ -508,15 +508,69 @@ def run_suite_stimulus(
 
 
 def suite_shared_prefix(contract: dict, max_steps: int) -> str:
-    """Everything identical across testpoints: the task, the limits, the ports."""
+    """Everything identical across testpoints: the task, the limits, the ports.
+
+    OUTPUTS are listed as well as inputs, because `until` waits on a declared
+    output and `gate_suite` rejects one that is not. Listing only the inputs
+    left the agent to guess output names out of the testpoint prose, and the
+    prose names internal signals: measured on i2c_master_bit_ctrl, 12 of the
+    first 41 testpoints needed a repair round, and the errors were
+    `until.port='clk_en'`, `'idle'`, `'slave_wait'`, `'filtered_sda'` -- all
+    real signals of the design, none of them ports. The gate was validating
+    against a list the agent had never been shown.
+
+    Both lists sit in the shared prefix, so they cost one cache write rather
+    than one copy per testpoint.
+    """
     inputs = [
         {"name": name, "width": width} for name, width in _drivable(contract).items()
+    ]
+    outputs = [
+        {"name": p.get("name"), "width": p.get("width", 1)}
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "output" and p.get("name")
     ]
     return shared_block(
         ("system", SUITE_SYSTEM),
         ("limits", f"At most {max_steps} steps for this testpoint."),
         ("input_ports", json.dumps(inputs, indent=2)),
+        ("output_ports",
+         json.dumps(outputs, indent=2)
+         + "\n\nThese are the ONLY signals `until` may wait on. Anything else "
+           "named in the testpoint prose is internal to the design and is not "
+           "observable at the boundary."),
     )
+
+
+def spec_quotes_for(element: dict, requirements: list[dict] | None) -> list[str]:
+    """The specification text behind this testpoint, via `covers`.
+
+    A testpoint carries no spec of its own -- its fields are uid, rev, covers,
+    dimension, stimulus, expected_response, needs -- so the stimulus stage was
+    working purely from S2's paraphrase. Measured across a whole run, every
+    stage keyed on a REQUIREMENT carried spec text (s2 77/77, refmodel 7/7,
+    judge 539/539) and every stage keyed on a TESTPOINT carried none (s3 0/226,
+    stimulus 0/34).
+
+    The paraphrase is lossy in the direction that matters here. TP-0000's prose
+    reads "clk_cnt large so clk_en ticks predictably", which is sound advice to
+    a reader who knows clk_cnt is the divider reload and actively misleading to
+    one who does not: larger means FEWER edges per command, and the monolithic
+    run duly chose clk_cnt=1000 and then drove it for a single edge.
+
+    `covers` holds "REQ-0007@1"; the revision is not part of the key.
+    """
+    if not requirements:
+        return []
+    by_uid = {str(r.get("uid")): r for r in requirements}
+    quotes: list[str] = []
+    for ref in element.get("covers") or []:
+        req = by_uid.get(str(ref).split("@", 1)[0])
+        for span in (req or {}).get("spec_spans") or []:
+            quote = (span or {}).get("quote")
+            if quote and quote not in quotes:
+                quotes.append(quote)
+    return quotes
 
 
 def build_suite_prompt_one(
@@ -525,15 +579,20 @@ def build_suite_prompt_one(
     max_steps: int,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    requirements: list[dict] | None = None,
 ) -> str:
+    item = {
+        "uid": element.get("uid"),
+        "dimension": element.get("dimension"),
+        "stimulus": element.get("stimulus"),
+        "expected_response": element.get("expected_response"),
+    }
+    quotes = spec_quotes_for(element, requirements)
+    if quotes:
+        item["specification_this_testpoint_covers"] = quotes
     return compose(
         suite_shared_prefix(contract, max_steps),
-        json_block("testplan_element", {
-            "uid": element.get("uid"),
-            "dimension": element.get("dimension"),
-            "stimulus": element.get("stimulus"),
-            "expected_response": element.get("expected_response"),
-        }),
+        json_block("testplan_element", item),
         issues=issues,
         previous=previous,
     )
@@ -547,6 +606,7 @@ def run_suite_stimulus_fanout(
     max_steps: int = 24,
     max_repairs: int = 2,
     fanout: bool = True,
+    requirements: list[dict] | None = None,
 ) -> tuple[SuiteStimulus, list[StageResult[SuiteStimulus]]]:
     """One call per testpoint, because testpoints do not constrain each other.
 
@@ -575,7 +635,8 @@ def run_suite_stimulus_fanout(
             stage=f"{SUITE_STAGE}_{element.get('uid', 'unknown')}",
             port=port,
             build_prompt=lambda issues, previous: build_suite_prompt_one(
-                element, contract, max_steps, issues, previous),
+                element, contract, max_steps, issues, previous,
+                requirements=requirements),
             parse=parse_suite_response,
             gate=lambda spec: gate_suite(
                 spec, testplan=[element], contract=contract, max_steps=max_steps),

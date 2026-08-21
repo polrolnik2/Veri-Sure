@@ -355,6 +355,9 @@ def build_artifacts(
                 merged, per_item = run_suite_stimulus_fanout(
                     testplan=tps, contract=contract, port=port,
                     max_repairs=max_repairs,
+                    # The spec quotes behind each testpoint, joined through
+                    # `covers`. A testpoint carries no spec of its own.
+                    requirements=reqs,
                 )
                 st = StageResult(
                     merged, [i for r in per_item for i in r.issues],
