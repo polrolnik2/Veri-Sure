@@ -277,6 +277,17 @@ def _oracle_fn(oracle: RequirementOracle):
 #: verdict in its own right.
 MALFORMED = object()
 
+#: `decide` returns a bool, but its author also writes a VERDICT in the same
+#: reply and sometimes carries that vocabulary across. Only exact words map;
+#: anything else is still a malformed oracle.
+_WORD_TO_OK: dict[str, object] = {
+    "true": True, "met": True, "pass": True, "passed": True, "holds": True,
+    "false": False, "not_met": False, "fail": False, "failed": False,
+    "violated": False,
+    "none": None, "ambiguous": None, "unknown": None, "inconclusive": None,
+    "not_exercised": None, "unexercised": None, "not_applicable": None,
+}
+
 
 def _unpack(verdict: Any) -> tuple[Any, int | None, str]:
     """Accept `(ok, edge, detail)`, and a bare bool for the trivial case.
@@ -285,8 +296,19 @@ def _unpack(verdict: Any) -> tuple[Any, int | None, str]:
     """
     if isinstance(verdict, bool):
         return verdict, None, ""
-    if isinstance(verdict, (tuple, list)) and len(verdict) == 3:
-        ok, edge, detail = verdict
+    if isinstance(verdict, (tuple, list)) and len(verdict) in (2, 3):
+        ok, edge, detail = (
+            verdict if len(verdict) == 3 else (verdict[0], None, verdict[1])
+        )
+        # A verdict WORD where the tri-state wants a bool. The judge writes the
+        # verdict and the oracle in one reply, and it carries the vocabulary of
+        # the first across into the second: on d-i2c r0 that was 5 oracles
+        # returning ('met', ...), ('ambiguous', ...) or ('not_met', ...). The
+        # mapping is exact and the rest of the tuple is fine, so reading it
+        # loses nothing -- and an oracle discarded here is a requirement handed
+        # back to the model agent as unverifiable prose.
+        if isinstance(ok, str):
+            ok = _WORD_TO_OK.get(ok.strip().lower().replace(" ", "_"), MALFORMED)
         if isinstance(ok, bool) or ok is None:
             edge = edge if isinstance(edge, int) and not isinstance(edge, bool) else None
             return ok, edge, str(detail)

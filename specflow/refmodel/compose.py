@@ -321,6 +321,8 @@ def _debug_turns(
                 requirements=requirements, source=source,
                 contract_json=contract_json, contract=contract,
                 port=judge_port, base=base, round_=turn,
+                known_tps={str(t.get("uid")) for t in (testplan or [])
+                           if t.get("uid")},
             )
             if fixed:
                 merged = [fixed.get(v.req_uid, v) for v in result.verdicts]

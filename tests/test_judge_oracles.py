@@ -373,3 +373,55 @@ def test_a_readable_reply_is_never_re_asked():
     port = _Counting()
     assert _ask(port, stage="s", round_=0, prompt="P").verdict == "met"
     assert port.n == 1
+
+
+def test_a_repair_keeps_the_testpoints_it_was_pointed_at():
+    """17 of 23 malformed oracles on d-i2c r0 were malformed for this alone.
+
+    11 came back with `tp_uids` omitted and 6 invented names no testplan
+    contains. A repair is asked to mend a check, not to re-target it.
+    """
+    from specflow.refmodel.judge import reconcile
+
+    class _Forgetful:
+        def complete(self, *, stage, round_, prompt):
+            return json.dumps({
+                "verdict": "not_met", "reason": "fixed",
+                "oracle": {"clause": "c", "source": ORACLE_SRC},   # no tp_uids
+            })
+
+    out = reconcile(
+        conflicts={"REQ-0031": "x"},
+        verdicts={"REQ-0031": _verdict(uid="REQ-0031")},
+        requirements=[{"uid": "REQ-0031", "text": "t"}],
+        source="class Model: pass", contract_json="{}", contract=None,
+        port=_Forgetful(), fanout=False, known_tps={"TP-0007"},
+    )
+    assert out["REQ-0031"].oracle.tp_uids == ["TP-0007"], "inherited, not lost"
+
+
+def test_an_invented_testpoint_is_dropped_but_a_real_retarget_is_kept():
+    """Re-targeting is the POINT of an unexercised conflict, so real uids stay."""
+    from specflow.refmodel.judge import reconcile
+
+    def _port(tps):
+        class _P:
+            def complete(self, *, stage, round_, prompt):
+                return json.dumps({
+                    "verdict": "not_met", "reason": "r",
+                    "oracle": {"tp_uids": tps, "clause": "c", "source": ORACLE_SRC},
+                })
+        return _P()
+
+    common = dict(
+        conflicts={"REQ-0031": "x"},
+        verdicts={"REQ-0031": _verdict(uid="REQ-0031")},
+        requirements=[{"uid": "REQ-0031", "text": "t"}],
+        source="class Model: pass", contract_json="{}", contract=None,
+        fanout=False, known_tps={"TP-0007", "TP-0042"},
+    )
+    invented = reconcile(port=_port(["TP-START-S"]), **common)
+    assert invented["REQ-0031"].oracle.tp_uids == ["TP-0007"], "fell back"
+
+    retarget = reconcile(port=_port(["TP-0042"]), **common)
+    assert retarget["REQ-0031"].oracle.tp_uids == ["TP-0042"], "honoured"

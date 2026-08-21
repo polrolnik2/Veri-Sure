@@ -986,6 +986,7 @@ def reconcile(
     base: str = "step",
     round_: int = 0,
     fanout: bool = True,
+    known_tps: set[str] | frozenset[str] | None = None,
 ) -> dict[str, RequirementVerdict]:
     """Re-ask the judge about each verdict its own oracle contradicts.
 
@@ -1024,7 +1025,22 @@ def reconcile(
             return uid, None
         oracle = fixed.oracle
         if oracle is not None:
-            oracle = oracle.model_copy(update={"req_uid": uid})
+            # Keep the testpoints it was already pointed at. A repair is asked
+            # to mend a check, not to re-target it, and on d-i2c r0 17 of 23
+            # malformed oracles were malformed for this alone: 11 came back with
+            # `tp_uids` simply omitted, and 6 invented names -- TP-START-S,
+            # TP-WRITE-A, TP-RESET-A -- that no testplan contains. Both discard
+            # a repair that may be perfectly good otherwise.
+            #
+            # An unexercised conflict is the one case where re-targeting IS the
+            # point, so a repair naming REAL testpoints is honoured; only names
+            # the testplan does not have are dropped.
+            named = list(oracle.tp_uids or [])
+            if known_tps is not None:
+                named = [t for t in named if t in known_tps]
+            if not named:
+                named = list((verdict.oracle.tp_uids if verdict.oracle else []) or [])
+            oracle = oracle.model_copy(update={"req_uid": uid, "tp_uids": named})
         return uid, fixed.model_copy(update={"req_uid": uid, "oracle": oracle})
 
     uids = sorted(conflicts)

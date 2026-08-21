@@ -218,3 +218,32 @@ def test_ports_read_finds_only_declared_ports():
     o = _oracle('def decide(trace):\n    x = "not_a_port"\n'
                 '    return (trace[0]["outputs"]["ack"] == 1, 0, x)\n')
     assert ports_read(o, CONTRACT) == {"ack"}
+
+
+def test_decide_may_answer_with_the_verdict_vocabulary_it_also_writes():
+    """The judge writes a verdict and an oracle in one reply and mixes them.
+
+    On d-i2c r0 five oracles returned ('met', ...), ('ambiguous', ...) or
+    ('not_met', ...). The mapping is exact and the rest of the tuple is fine,
+    so discarding them handed five requirements back as unverifiable prose.
+    """
+    from specflow.refmodel.oracles import RequirementOracle, decide
+
+    def _o(body):
+        return RequirementOracle(req_uid="R", tp_uids=["TP-0000"], clause="c",
+                                 source=f"def decide(trace):\n    return {body}\n")
+    row = [{"edge": 0, "inputs": {}, "outputs": {"q": 1}}]
+    assert decide(_o("('met', 3, 'ok')"), row).ok is True
+    assert decide(_o("('not_met', 3, 'no')"), row).failed()
+    assert decide(_o("('ambiguous', None, 'unseen')"), row).unexercised()
+    assert decide(_o("('banana', 1, 'x')"), row).broken, "only exact words map"
+
+
+def test_a_two_tuple_is_read_as_ok_and_detail():
+    """The edge is optional; dropping the whole verdict over it is not a trade."""
+    from specflow.refmodel.oracles import RequirementOracle, decide
+
+    o = RequirementOracle(req_uid="R", tp_uids=["TP-0000"], clause="c",
+                          source="def decide(trace):\n    return (False, 'no ack')\n")
+    out = decide(o, [{"edge": 0, "inputs": {}, "outputs": {"q": 1}}])
+    assert out.failed() and out.detail == "no ack" and out.edge is None
