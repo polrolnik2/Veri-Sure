@@ -263,8 +263,18 @@ def _debug_turns(
     """
     from .judge import oracles_of, run_judge, verdict_map, write_round
 
+    # `max_turns + 1` passes, and the extra one is not slack. The judge must
+    # have seen the model that is actually returned: satisfying every trusted
+    # oracle is NOT the same as the requirements being met -- oracles are a
+    # subset (screening discards some) and each is a necessary condition the
+    # judge wrote down, never its whole verdict. Only the judge closes that gap.
+    #
+    # Without the final pass the stage reports verdicts about a model that no
+    # longer exists: a turn that fixed everything still looks blocked, and one
+    # that broke something the oracles do not cover still looks clean.
     issues: list[Issue] = []
-    for turn in range(max(1, int(max_turns))):
+    turns = max(1, int(max_turns))
+    for turn in range(turns + 1):
         result = run_judge(
             source=source, contract_json=contract_json,
             requirements=requirements, covers=covers,
@@ -277,6 +287,10 @@ def _debug_turns(
             write_round(run_dir, turn, result)
         if not has_errors(issues):
             return source, issues
+        if turn == turns:
+            # Budget spent. `issues` describes `source`, which is the invariant
+            # this loop owes its caller.
+            break
 
         screened = trust.screen(
             oracles_of(result), verdict_map(result), source, contract,
@@ -309,7 +323,13 @@ def _debug_turns(
             workdir=Path(run_dir) / "specflow" / "_refmodel_debug"
             if run_dir is not None else None,
         )
+        before = source
         source, _attempts, _note = debugger.debug(session)
+        if source == before:
+            # The turn changed nothing, so re-judging would return the verdicts
+            # already in hand. Spending ~77 model calls to rediscover them is
+            # the expensive way to learn nothing.
+            return source, issues
 
     return source, issues
 

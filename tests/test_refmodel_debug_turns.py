@@ -57,6 +57,37 @@ class _Debugger:
         return session.best(), len(session.history), "done"
 
 
+Q_MOVES = '''
+def decide(trace):
+    for row in trace:
+        if row["outputs"]["q"] != 0:
+            return (True, row["edge"], "q moved")
+    return (False, None, "q never moved")
+'''
+INERT = ('from specflow.refmodel.base import RefModel\n\n\n'
+         'class Model(RefModel):\n'
+         '    OUTPUT_PORTS = ["q", "ack"]\n\n'
+         '    def reset(self):\n        self.n = 0\n        self.k = 0\n\n'
+         '    def step(self, i):\n        return {"q": 0, "ack": 0}\n')
+Q_ONLY = ('def step(self, i):\n'
+          '    if not hasattr(self, "n"):\n        self.reset()\n'
+          '    self.n = self.mask(self.n + i.get("a", 0), 8)\n'
+          '    return {"q": self.n, "ack": 0}')
+
+
+def _pair(ack: str, q: str):
+    """A two-oracle round whose verdicts AGREE with the oracles.
+
+    Gate 1 discards an oracle its author contradicts, so a scripted judge whose
+    verdict disagrees with what the model does would be screened out -- which
+    is the gate working, and makes for a test that measures nothing.
+    """
+    return JudgeResult(verdicts=[
+        _verdict(ack, uid="REQ-0000"),
+        _verdict(q, oracle_source=Q_MOVES, uid="REQ-0001"),
+    ])
+
+
 def _turns(judge, debugger, *, source=BROKEN, max_turns=2, run_dir=None,
            control=None):
     # `_debug_turns` imports run_judge from the judge module at call time, so
@@ -128,18 +159,16 @@ def test_the_session_is_given_the_judges_reasoning_and_the_requirement():
 
 
 def test_each_turn_persists_its_own_oracles_and_screening(tmp_path: Path):
-    judge = _Judge([
-        JudgeResult(verdicts=[_verdict("not_met")]),
-        JudgeResult(verdicts=[_verdict("not_met")]),
-    ])
-    _turns(judge, _Debugger([]), max_turns=2, run_dir=tmp_path)
+    judge = _Judge([_pair("not_met", "not_met"), _pair("not_met", "met")])
+    _turns(judge, _Debugger([("step", Q_ONLY)]), max_turns=2, run_dir=tmp_path,
+           source=INERT)
     for turn in (0, 1):
         base = tmp_path / "specflow" / "judge" / f"r{turn}"
         assert (base / "verdicts.json").exists()
         assert (base / "oracles" / "REQ-0000.py").exists()
         trust_report = json.loads((base / "trust.json").read_text())
         assert set(trust_report) == {"rates", "discarded", "sensitivity"}
-        assert trust_report["rates"]["trusted"] == 1
+        assert trust_report["rates"]["trusted"] >= 1
 
 
 def test_the_control_gate_reaches_the_screening(tmp_path: Path):
@@ -205,3 +234,58 @@ def test_working_model_needs_no_debug_session():
     debugger = _Debugger([])
     source, issues = _turns(judge, debugger, source=WORKING, max_turns=3)
     assert source == WORKING and not issues and not debugger.sessions
+
+
+def test_the_verdicts_returned_describe_the_model_returned():
+    """The invariant the loop owes its caller.
+
+    Satisfying every trusted oracle is NOT the requirements being met: oracles
+    are a subset, screening having discarded some, and each is a necessary
+    condition the judge wrote rather than its whole verdict. So the model a
+    debug turn produces must be JUDGED before it is handed back -- otherwise a
+    turn that fixed everything still reports as blocked, and one that broke
+    something no oracle covers still reports as clean.
+    """
+    seen = []
+
+    class _Recording(_Judge):
+        def __call__(self, **kwargs):
+            seen.append(kwargs["source"])
+            return super().__call__(**kwargs)
+
+    # One turn of budget. The edit lands, and the loop must judge the result.
+    judge = _Recording([
+        JudgeResult(verdicts=[_verdict("not_met")]),
+        JudgeResult(verdicts=[_verdict("met")]),
+    ])
+    source, issues = _turns(judge, _Debugger([("step", GOOD_STEP)]), max_turns=1)
+
+    assert len(seen) == 2, "the edited model was never judged"
+    assert seen[-1] == source, "the final judging pass must be on what is returned"
+    assert not issues, "and its verdicts are what the caller receives"
+
+
+def test_a_turn_that_changes_nothing_does_not_pay_for_another_judging_pass():
+    """~77 model calls to rediscover verdicts already in hand."""
+    judge = _Judge([JudgeResult(verdicts=[_verdict("not_met")])] * 4)
+    source, issues = _turns(judge, _Debugger([]), max_turns=3)
+    assert judge.turns == 1
+    assert source == BROKEN and issues
+
+
+def test_exhausting_the_budget_still_judges_the_last_model():
+    """The boundary case: the extra pass is not slack, it is the invariant."""
+    seen = []
+
+    class _Recording(_Judge):
+        def __call__(self, **kwargs):
+            seen.append(kwargs["source"])
+            return super().__call__(**kwargs)
+
+    judge = _Recording([_pair("not_met", "not_met"),
+                        _pair("not_met", "met"),
+                        _pair("not_met", "met")])
+    source, _ = _turns(judge, _Debugger([("step", Q_ONLY), ("step", GOOD_STEP)]),
+                       max_turns=2, source=INERT)
+    assert len(seen) == 3, "two debug turns, and a judging pass after each plus one"
+    assert seen[-1] == source, "the model handed back is the model last judged"
