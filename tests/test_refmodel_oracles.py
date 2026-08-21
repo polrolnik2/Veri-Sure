@@ -247,3 +247,89 @@ def test_a_two_tuple_is_read_as_ok_and_detail():
                           source="def decide(trace):\n    return (False, 'no ack')\n")
     out = decide(o, [{"edge": 0, "inputs": {}, "outputs": {"q": 1}}])
     assert out.failed() and out.detail == "no ack" and out.edge is None
+
+
+def test_a_timed_out_wait_does_not_abandon_the_rest_of_the_testpoint():
+    """The defect that made a good testplan look thin.
+
+    `until` waits for the design to say something. When it never does, that is
+    a complete observation -- "waited, it did not happen" -- and the steps after
+    it are a different part of the scenario, not a continuation of the wait.
+
+    Breaking on the timeout note truncated 61 of 167 testpoints on d-i2c,
+    discarding 259 stimulus steps and 17 reset steps that never executed. The
+    oracles then correctly reported they could not see their scenario, and the
+    loss read as a testplan gap when the testplan had asked for the right thing.
+    """
+    from specflow.refmodel.oracles import replay
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "rst_n", "dir": "input", "width": 1, "role": "reset"},
+        {"name": "a", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+        {"name": "done", "dir": "output", "width": 1},
+    ]}
+    model = ('from specflow.refmodel.base import RefModel\n\n\n'
+             'class Model(RefModel):\n'
+             '    OUTPUT_PORTS = ["q", "done"]\n\n'
+             '    def reset(self):\n        self.n = 0\n\n'
+             '    def step(self, i):\n'
+             '        if not hasattr(self, "n"):\n            self.reset()\n'
+             '        self.n = self.mask(self.n + i.get("a", 0), 8)\n'
+             '        return {"q": self.n, "done": 0}\n')   # `done` never rises
+
+    rep = replay(model, contract, [
+        {"inputs": {"a": 1}, "until": {"port": "done", "value": 1}, "timeout": 5},
+        {"inputs": {"a": 2}, "hold": 3},
+    ], base="step")
+    assert rep.notes, "the wait really did time out, and must say so"
+    assert len(rep.rows) == 8, "5 waiting + 3 after -- the tail still ran"
+    assert rep.rows[-1]["inputs"]["a"] == 2, "the step after the wait was applied"
+
+
+def test_a_reset_step_after_a_timed_out_wait_still_fires():
+    """17 reset steps were skipped this way, so reset requirements read as
+    unexercised while the stimulus had asked for exactly the right thing."""
+    from specflow.refmodel.oracles import replay
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "rst_n", "dir": "input", "width": 1, "role": "reset"},
+        {"name": "a", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+        {"name": "done", "dir": "output", "width": 1},
+    ]}
+    model = ('from specflow.refmodel.base import RefModel\n\n\n'
+             'class Model(RefModel):\n'
+             '    OUTPUT_PORTS = ["q", "done"]\n\n'
+             '    def reset(self):\n        self.n = 0\n\n'
+             '    def step(self, i):\n'
+             '        if not hasattr(self, "n"):\n            self.reset()\n'
+             '        self.n = self.mask(self.n + i.get("a", 0), 8)\n'
+             '        return {"q": self.n, "done": 0}\n')
+    rep = replay(model, contract, [
+        {"inputs": {"a": 1}, "until": {"port": "done", "value": 1}, "timeout": 4},
+        {"reset": True, "hold": 2},
+    ], base="step")
+    assert any(r["inputs"]["rst_n"] == 0 for r in rep.rows), "reset was asserted"
+
+
+def test_the_edge_budget_still_stops_a_replay():
+    """It is a resource limit, not an observation, and must remain terminal."""
+    from specflow.refmodel.oracles import replay
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "a", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+    ]}
+    model = ('from specflow.refmodel.base import RefModel\n\n\n'
+             'class Model(RefModel):\n'
+             '    OUTPUT_PORTS = ["q"]\n\n'
+             '    def step(self, i):\n        return {"q": i.get("a", 0)}\n')
+    rep = replay(model, contract,
+                 [{"inputs": {"a": 1}, "hold": 50}] * 4, base="step",
+                 edge_budget=30)
+    assert len(rep.rows) == 30
+    assert any("stopped after 30 edges" in n for n in rep.notes)

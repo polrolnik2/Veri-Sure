@@ -148,8 +148,20 @@ def replay(
     rows: list[dict] = []
     notes: list[str] = []
     resetting = False
+    exhausted = False
     for raw in steps:
-        if notes:
+        if exhausted:
+            # ONLY the edge budget stops a replay. A step whose `until` timed
+            # out has produced a real, complete observation -- "waited, it did
+            # not happen" -- and the steps after it are a different part of the
+            # scenario, not a continuation of that wait.
+            #
+            # Breaking on any note instead truncated 61 of the 167 testpoints on
+            # d-i2c, throwing away 259 stimulus steps and 17 reset steps that
+            # were never executed at all. The oracles then reported, correctly,
+            # that they could not see their scenario -- and the loss looked like
+            # a thin testplan when the testplan had asked for exactly the right
+            # thing and the harness had declined to run it.
             break
         inputs, hold, until, timeout = normalise_step(raw)
         if is_reset_step(raw):
@@ -178,6 +190,7 @@ def replay(
         for _ in range(max(1, edges)):
             if len(rows) >= edge_budget:
                 notes.append(f"stopped after {edge_budget} edges")
+                exhausted = True
                 break
             if resetting:
                 # Re-applied every edge: reset is a level, not a pulse, so the
@@ -207,7 +220,7 @@ def replay(
             if until and out.get(str(until.get("port"))) == until.get("value"):
                 reached = True
                 break
-        if until and not reached and not notes:
+        if until and not reached and not exhausted:
             # Stated, never blamed. Checked against the known-correct control on
             # this run's own stimulus: 23 of 60 scenarios never fire their
             # `until`, because the stimulus paired clk_cnt=200 with timeout=500
