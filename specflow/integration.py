@@ -44,6 +44,7 @@ from .schema import GateVerdict, Issue, has_errors
 from .stage import StageResult
 from .testcase_agent import (
     run_suite_stimulus,
+    run_suite_stimulus_fanout,
     stimulus_by_tp,
     stimulus_diagnostics,
 )
@@ -345,9 +346,25 @@ def build_artifacts(
         # also lets a ReplayPort with no recorded stimulus stage fall through
         # to the old behaviour rather than crashing a fixture-driven run.
         try:
-            st = run_suite_stimulus(
-                testplan=tps, contract=contract, port=port, max_repairs=max_repairs
-            )
+            if fanout:
+                # One call per testpoint. Testpoints do not constrain each
+                # other, so nothing is lost by splitting -- and monolithic was
+                # measured degrading badly at scale: on i2c_master_bit_ctrl's
+                # 167 testpoints, three rounds returned stimulus for ten of
+                # them and the fourth returned all 167 with one step each.
+                merged, per_item = run_suite_stimulus_fanout(
+                    testplan=tps, contract=contract, port=port,
+                    max_repairs=max_repairs,
+                )
+                st = StageResult(
+                    merged, [i for r in per_item for i in r.issues],
+                    sum(r.rounds for r in per_item),
+                )
+            else:
+                st = run_suite_stimulus(
+                    testplan=tps, contract=contract, port=port,
+                    max_repairs=max_repairs,
+                )
         except Exception as exc:  # noqa: BLE001
             stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
         else:

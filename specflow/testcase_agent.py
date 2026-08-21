@@ -33,10 +33,12 @@ from .model_io import ModelPort
 from .ports import classify
 from .schema import Issue
 from .tb.runtime import normalise_step
+from .fanout import compose, json_block, shared_block
 from .stage import (
     StageResult,
     gate_failures_block,
     previous_answer_block,
+    run_fanout,
     run_stage,
 )
 
@@ -503,6 +505,90 @@ def run_suite_stimulus(
         ),
         max_repairs=max_repairs,
     )
+
+
+def suite_shared_prefix(contract: dict, max_steps: int) -> str:
+    """Everything identical across testpoints: the task, the limits, the ports."""
+    inputs = [
+        {"name": name, "width": width} for name, width in _drivable(contract).items()
+    ]
+    return shared_block(
+        ("system", SUITE_SYSTEM),
+        ("limits", f"At most {max_steps} steps for this testpoint."),
+        ("input_ports", json.dumps(inputs, indent=2)),
+    )
+
+
+def build_suite_prompt_one(
+    element: dict,
+    contract: dict,
+    max_steps: int,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    return compose(
+        suite_shared_prefix(contract, max_steps),
+        json_block("testplan_element", {
+            "uid": element.get("uid"),
+            "dimension": element.get("dimension"),
+            "stimulus": element.get("stimulus"),
+            "expected_response": element.get("expected_response"),
+        }),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def run_suite_stimulus_fanout(
+    *,
+    testplan: list[dict],
+    contract: dict,
+    port: ModelPort,
+    max_steps: int = 24,
+    max_repairs: int = 2,
+    fanout: bool = True,
+) -> tuple[SuiteStimulus, list[StageResult[SuiteStimulus]]]:
+    """One call per testpoint, because testpoints do not constrain each other.
+
+    The reference model is generated whole for a real reason -- it needs global
+    context for ordering, reset priority and shared state. Stimulus has no such
+    coupling: each testpoint's vectors are independent of every other's, which
+    is exactly the condition that makes fanning out correct rather than merely
+    cheaper.
+
+    Monolithic generation was measured failing on `i2c_master_bit_ctrl` at 167
+    testpoints. Three repair rounds returned stimulus for TEN of them; the
+    fourth returned all 167 with exactly one step each, every `hold` equal to 1
+    and only 59 distinct sequences -- one testpoint drove `clk_cnt=1000` for a
+    single edge, which cannot advance a prescaler that needs 1000 ticks, let
+    alone complete a START. `gate_suite` passed it, because it requires stimulus
+    to be non-empty and one step is non-empty.
+
+    That is what a single call carrying 167 x 24 steps x 6 ports degrades into,
+    and the repair channel makes it worse rather than better: one invalid step
+    anywhere invalidates the whole batch and re-asks for all of it, so the
+    cheapest way out is to shrink every sequence. Per testpoint, the same budget
+    buys the depth the scenario actually needs.
+    """
+    def one(element: dict) -> StageResult[SuiteStimulus]:
+        return run_stage(
+            stage=f"{SUITE_STAGE}_{element.get('uid', 'unknown')}",
+            port=port,
+            build_prompt=lambda issues, previous: build_suite_prompt_one(
+                element, contract, max_steps, issues, previous),
+            parse=parse_suite_response,
+            gate=lambda spec: gate_suite(
+                spec, testplan=[element], contract=contract, max_steps=max_steps),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(testplan, one) if fanout else [one(e) for e in testplan]
+    merged = SuiteStimulus(
+        reasoning="; ".join(
+            r.output.reasoning for r in results if r.output.reasoning)[:2000],
+        testpoints=[tp for r in results for tp in r.output.testpoints],
+    )
+    return merged, results
 
 
 def stimulus_by_tp(spec: SuiteStimulus) -> dict[str, list[dict]]:
