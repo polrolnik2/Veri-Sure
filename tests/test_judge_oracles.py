@@ -215,3 +215,82 @@ def test_reconcile_stamps_the_req_uid_on_the_repaired_oracle():
     assert out["REQ-0031"].req_uid == "REQ-0031"
     assert out["REQ-0031"].oracle.req_uid == "REQ-0031"
     assert out["REQ-0031"].verdict == "not_met"
+
+
+# ----------------------------------------- a failed repair must not lose ground
+
+
+def test_a_bare_string_oracle_is_read_as_its_source():
+    """The exact slip that cost 42 oracles in one round.
+
+    `RECONCILE_SYSTEM` named the field without showing its shape, so every one
+    of 42 reconcile calls returned the `decide` source directly. Discarding the
+    whole verdict over the missing wrapper loses a conclusion the model reached.
+    """
+    v = parse_response(json.dumps({"verdict": "met", "oracle": ORACLE_SRC}))
+    assert v.verdict == "met"
+    assert v.oracle is not None and v.oracle.source == ORACLE_SRC
+
+
+def test_a_prose_verdict_is_normalised_rather_than_thrown_away():
+    assert parse_response(json.dumps({"verdict": "not met"})).verdict == "not_met"
+    assert parse_response(json.dumps({"verdict": "NOT-MET"})).verdict == "not_met"
+    assert parse_response(json.dumps({"verdict": "Met"})).verdict == "met"
+
+
+def test_genuine_nonsense_is_still_a_parse_error():
+    """Leniency must not become a way for anything at all to pass."""
+    v = parse_response(json.dumps({"verdict": "probably fine"}))
+    assert v.verdict == "ambiguous"
+    assert str(v.reason).startswith("Parse Error: ")
+    assert parse_response("not json").verdict == "ambiguous"
+
+
+def test_an_unreadable_repair_keeps_the_original_verdict():
+    """Returning it would overwrite the verdict AND the oracle it was mending.
+
+    On b-i2c r0 that turned 42 good verdicts into empty `ambiguous` ones, so a
+    failed reconcile left each requirement worse than not calling at all.
+    """
+    from specflow.refmodel.judge import reconcile
+
+    class _Broken:
+        def complete(self, *, stage, round_, prompt):
+            return "the model wandered off and wrote prose"
+
+    out = reconcile(
+        conflicts={"REQ-0031": "they disagree"},
+        verdicts={"REQ-0031": _verdict(uid="REQ-0031")},
+        requirements=[{"uid": "REQ-0031", "text": "t"}],
+        source="class Model: pass", contract_json="{}", contract=None,
+        port=_Broken(), fanout=False,
+    )
+    assert out == {}, "nothing to merge, so the original survives untouched"
+
+
+def test_a_repair_that_drops_the_oracle_is_not_accepted_either():
+    """The call exists to mend an oracle; answering without one is not a mend."""
+    from specflow.refmodel.judge import reconcile
+
+    class _NoOracle:
+        def complete(self, *, stage, round_, prompt):
+            return json.dumps({"verdict": "met", "reason": "on reflection, fine"})
+
+    out = reconcile(
+        conflicts={"REQ-0031": "vacuous"},
+        verdicts={"REQ-0031": _verdict(uid="REQ-0031")},
+        requirements=[{"uid": "REQ-0031", "text": "t"}],
+        source="class Model: pass", contract_json="{}", contract=None,
+        port=_NoOracle(), fanout=False,
+    )
+    assert out == {}
+
+
+def test_the_reconcile_prompt_shows_the_oracle_object_not_just_its_name():
+    """Naming the field without its shape is what produced 42/42 failures."""
+    from specflow.refmodel.judge import RECONCILE_SYSTEM
+
+    assert '"tp_uids"' in RECONCILE_SYSTEM
+    assert '"clause"' in RECONCILE_SYSTEM
+    assert '"source"' in RECONCILE_SYSTEM
+    assert "not a bare string" in RECONCILE_SYSTEM

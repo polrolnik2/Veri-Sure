@@ -221,17 +221,51 @@ None, f'{len(runs)} single-edge pulse(s)')"
 """
 
 
+#: Marks a verdict that could not be read, so a caller can tell "no conclusion"
+#: from "the conclusion was ambiguous". `gate_suite` uses the same convention.
+PARSE_ERROR = "Parse Error: "
+
+
+def _coerce(obj: object) -> object:
+    """Repair the two slips that cost this pipeline 42 oracles in one round.
+
+    Both are formatting, not judgement, and throwing the whole verdict away over
+    either one loses a real conclusion the model did reach.
+
+    `oracle` as a bare string: every reconcile call in the b-i2c r0 round
+    returned the `decide` source directly instead of the object wrapping it,
+    because `RECONCILE_SYSTEM` named the field without showing its shape. The
+    string IS the source, so read it as one -- `well_formed` still screens it,
+    and an oracle with no `tp_uids` is caught there rather than here.
+
+    `verdict` as "not met": the enum wants "not_met" and the prose form is one
+    space away. Nothing else in the response is ambiguous when this happens.
+    """
+    if not isinstance(obj, dict):
+        return obj
+    out = dict(obj)
+    oracle = out.get("oracle")
+    if isinstance(oracle, str) and oracle.strip():
+        out["oracle"] = {"source": oracle}
+    verdict = out.get("verdict")
+    if isinstance(verdict, str):
+        squashed = verdict.strip().lower().replace(" ", "_").replace("-", "_")
+        if squashed in ("met", "not_met", "ambiguous"):
+            out["verdict"] = squashed
+    return out
+
+
 def parse_response(text: str) -> RequirementVerdict:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
-        return RequirementVerdict.model_validate(obj)
+        return RequirementVerdict.model_validate(_coerce(obj))
     except Exception as exc:  # noqa: BLE001
         # A verdict that will not parse is not a pass. Defaulting to `ambiguous`
         # keeps the failure inside the blocking set rather than letting a
         # malformed response through as silence.
         return RequirementVerdict(
             verdict="ambiguous",
-            reason=f"Parse Error: {exc}",
+            reason=f"{PARSE_ERROR}{exc}",
             remedy="the judge's response could not be read; no conclusion was reached",
         )
 
@@ -814,8 +848,19 @@ oracle trivially true, deleting its check, or narrowing it until nothing reaches
 it. An oracle nothing can falsify is caught by the same screening on the next
 pass, and buys you nothing.
 
-Reply with ONE JSON object in the same shape you replied with before -- verdict,
-reason, evidence, remedy, oracle -- corrected so the check is sound.
+Reply with ONE JSON object in the same shape you replied with before. The oracle
+is an OBJECT, not a bare string -- putting the source directly in "oracle" is
+the single most common way this reply is thrown away:
+
+{
+  "verdict": "met" | "not_met" | "ambiguous",
+  "reason": "...", "evidence": "...", "remedy": "...",
+  "oracle": {
+    "tp_uids": ["TP-0007"],
+    "clause": "the sentence of the requirement this decides",
+    "source": "def decide(trace):\n    ..."
+  }
+}
 """
 
 
@@ -890,6 +935,19 @@ def reconcile(
         raw = port.complete(
             stage=f"reconcile_{uid}", round_=round_, prompt=prompt)
         fixed = parse_response(raw)
+        # A repair that could not be read is not a repair. Returning it would
+        # overwrite the verdict AND the oracle it was asked to fix with an
+        # empty `ambiguous`, so a failed call would leave the requirement worse
+        # than not calling at all -- which is exactly what happened on b-i2c r0,
+        # where 42 of 42 reconcile responses failed to parse and took 42 good
+        # verdicts with them. Same rule as `note_best`: a step that does not
+        # improve things must not be allowed to lose ground.
+        if str(fixed.reason or "").startswith(PARSE_ERROR):
+            return uid, None
+        # Nor is a repair that answers with no oracle, when the whole point of
+        # the call was to mend one.
+        if fixed.oracle is None and verdict.oracle is not None:
+            return uid, None
         oracle = fixed.oracle
         if oracle is not None:
             oracle = oracle.model_copy(update={"req_uid": uid})
@@ -897,4 +955,4 @@ def reconcile(
 
     uids = sorted(conflicts)
     pairs = run_fanout(uids, one) if fanout else [one(u) for u in uids]
-    return dict(pairs)
+    return {uid: v for uid, v in pairs if v is not None}
