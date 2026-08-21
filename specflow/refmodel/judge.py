@@ -286,11 +286,32 @@ def shared_prefix(
     return shared_block(*blocks)
 
 
-#: Edges rendered per testpoint. An `until` step may legitimately wait 200
-#: edges for a slow prescaler, and rendering every one of them for 3 testpoints
-#: across 77 requirements is megabytes of uncacheable prompt. Truncation is
-#: announced in the trace rather than silent.
-_SCENARIO_EDGES = 40
+#: Rows rendered per testpoint, counted AFTER run-length compression -- not
+#: raw edges. The distinction decides what the judge actually sees.
+#:
+#: Measured by replaying this run's stimulus against the known-correct control
+#: oracle, 60 testpoints: median 107 raw edges but a median of FOUR compressed
+#: rows, because a prescaled design spends nearly every edge idle while the
+#: divider counts down. Capping at 40 raw edges showed 22 of 60 scenarios in
+#: full; capping at 40 compressed rows shows 55 of 60. Same budget, far more of
+#: the scenario, because the compression drops only repetition.
+#:
+#: A raw-edge cap also truncates in the worst place. Stimulus now runs to a
+#: median of 432 edges, so 40 edges is the opening ~9% -- the setup, ending
+#: before the command it is meant to demonstrate ever completes.
+_SCENARIO_ROWS = 40
+
+#: Head and tail kept when a scenario exceeds the row budget. Completion is at
+#: the END -- `cmd_ack` pulses when the command finishes -- so keeping only the
+#: first rows preserves the setup and loses the outcome, which is the half a
+#: requirement is usually about.
+_SCENARIO_HEAD, _SCENARIO_TAIL = 25, 15
+
+#: Hard bound on edges actually simulated, so an `until` that never resolves
+#: cannot spin. Generous: this stimulus reaches 8008 edges on its longest
+#: testpoint, and the point is to let `until` reach its real timeout rather
+#: than stop early and imply the design never responded.
+_SCENARIO_EDGE_BUDGET = 4000
 
 
 def _rle(rows: list[tuple[str, str]]) -> list[str]:
@@ -358,17 +379,24 @@ def scenario_trace(
         state = dict(pinned_inputs(contract))
         rows: list[tuple[str, str]] = []
         notes: list[str] = []
+        simulated = 0
         for raw in steps:
             if notes:
                 break
             inputs, hold, until, timeout = normalise_step(raw)
             state.update(inputs)
-            edges = min(timeout, _SCENARIO_EDGES) if until else hold
+            # `until` runs to its REAL timeout. Capping it at the render budget
+            # made a scenario stop early and read as one the model never
+            # completed -- and 354 of this stimulus's steps are `until`, so that
+            # was most of them. The edge budget only stops a runaway.
+            edges = timeout if until else hold
             reached = False
             for _ in range(max(1, edges)):
-                if len(rows) >= _SCENARIO_EDGES:
-                    notes.append(f"... truncated at {_SCENARIO_EDGES} edges")
+                if simulated >= _SCENARIO_EDGE_BUDGET:
+                    notes.append(
+                        f"... stopped after {_SCENARIO_EDGE_BUDGET} edges")
                     break
+                simulated += 1
                 out = fn(dict(state))
                 if not isinstance(out, dict):
                     return None
@@ -379,17 +407,49 @@ def scenario_trace(
                 if until and out.get(str(until.get("port"))) == until.get("value"):
                     reached = True
                     break
-            # An `until` that never fires is a FINDING about the model, not a
-            # detail of the replay: the testbench will wait for that condition
-            # too. Saying so beats a trace that simply stops.
+            # An `until` that never fires is worth saying -- a trace that just
+            # stops reads as one that finished -- but it must NOT be phrased as
+            # a defect. Checked against the known-correct control oracle on this
+            # run's own stimulus: 23 of 60 scenarios never fire, because the
+            # stimulus picked a timeout too short for the prescaler it also
+            # picked (`clk_cnt=200` with `timeout=500`, when one command at that
+            # divider needs upwards of 1000 edges). Blaming the model there
+            # would have the judge return `not_met` on correct behaviour, which
+            # is the very failure this evidence exists to prevent.
             if until and not reached and not notes:
                 notes.append(
-                    f"... {until.get('port')} never reached {until.get('value')!r} "
-                    f"in {edges} edges; the model did not complete this scenario"
+                    f"... {until.get('port')} did not reach "
+                    f"{until.get('value')!r} within the {edges} edges this "
+                    f"testpoint allows. That may mean the model never gets "
+                    f"there, or that the testpoint's own timeout is too short "
+                    f"for the clock divider it selected -- the trace above "
+                    f"shows which. Do not treat it as a defect on its own."
                 )
     except Exception:  # noqa: BLE001 -- never let instrumentation fail a round
         return None
-    return (_rle(rows) + notes) or None
+    return (_budget(_rle(rows)) + notes) or None
+
+
+def _budget(lines: list[str]) -> list[str]:
+    """Bound the trace by COMPRESSED rows, keeping both ends.
+
+    Applied after `_rle`, so the budget is spent on distinct states rather than
+    on repetition: median 4 rows from a median 107 edges on this stimulus.
+
+    When it does overflow, the middle goes. Completion lives at the end -- the
+    acknowledge pulses when the command finishes -- and a requirement is usually
+    about whether that happened, so head-only truncation drops the half being
+    judged. The elision says how many rows it covers, so the judge can see that
+    a gap exists rather than reading two ends as adjacent.
+    """
+    if len(lines) <= _SCENARIO_ROWS:
+        return lines
+    dropped = len(lines) - _SCENARIO_HEAD - _SCENARIO_TAIL
+    return [
+        *lines[:_SCENARIO_HEAD],
+        f"        ... {dropped} further state changes elided ...",
+        *lines[-_SCENARIO_TAIL:],
+    ]
 
 
 #: Testpoints per requirement run 1 to 6, median 2, at ~1.1 kB each, and they

@@ -335,19 +335,25 @@ def test_until_stops_the_replay_when_the_model_reaches_the_condition():
     assert sum("ack=1" in r for r in rows) == 1
 
 
-def test_a_replay_that_never_satisfies_until_is_capped_and_says_so():
-    """An `until` may wait 200 edges; 77 requirements of those is megabytes."""
-    from specflow.refmodel.judge import _SCENARIO_EDGES, scenario_trace
+def test_a_replay_that_never_satisfies_until_runs_its_full_timeout():
+    """`until` runs to the timeout the TESTPOINT set, not to a render budget.
+
+    Capping it at the render budget made the scenario stop early and read as
+    one the model never completed. 354 of this run's stimulus steps are
+    `until`, so that was most of them.
+    """
+    from specflow.refmodel.judge import _SCENARIO_ROWS, scenario_trace
 
     rows = scenario_trace(
         COUNTER, PRESCALED,
         [{"inputs": {"ena": 0, "cmd": 0, "clk_cnt": 1},   # ena=0 -> ack never rises
           "until": {"port": "ack", "value": 1}, "timeout": 200}],
         base="step")
-    assert _edges(rows) == _SCENARIO_EDGES
-    assert "never reached" in rows[-1], (
-        "an `until` that never fires is a finding about the model -- the "
-        "testbench will wait for that condition too -- not a silent stop"
+    assert len(rows) <= _SCENARIO_ROWS + 1        # +1 for the note
+    assert "did not reach" in rows[-1], "a silent stop reads as a completion"
+    assert "200 edges" in rows[-1], (
+        "the note must state the testpoint's own timeout, so the judge can see "
+        "whether the budget or the model was the limit"
     )
 
 
@@ -374,15 +380,25 @@ def test_the_concrete_trace_replaces_the_prose_it_supersedes():
     assert "model_run_on_this_testpoint_stimulus" not in bare
 
 
-def test_a_long_held_replay_is_capped_and_says_so():
-    """The other truncation path: many edges of `hold`, no `until` involved."""
-    from specflow.refmodel.judge import _SCENARIO_EDGES, scenario_trace
+def test_a_long_held_replay_is_bounded_by_rows_and_says_what_it_dropped():
+    """Truncation is announced, and it removes the MIDDLE, not the tail.
+
+    Completion is at the end -- an acknowledge pulses when the command
+    finishes -- so head-only truncation drops the half a requirement is
+    usually about.
+    """
+    from specflow.refmodel.judge import _SCENARIO_ROWS, scenario_trace
 
     rows = scenario_trace(
         COUNTER, PRESCALED,
-        [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 60}], base="step")
-    assert _edges(rows) == _SCENARIO_EDGES
-    assert "truncated" in rows[-1], "truncation must be announced, not silent"
+        [{"inputs": {"ena": 1, "cmd": 0, "clk_cnt": 1}, "hold": 4000}],
+        base="step")
+    assert len(rows) <= _SCENARIO_ROWS + 2
+    if any("elided" in r for r in rows):
+        assert "elided" in "\n".join(rows), "truncation must be announced"
+        assert not rows[-1].startswith("        ..."), (
+            "the elision must sit in the middle; the final state must survive"
+        )
 
 
 def test_the_encoding_is_lossless_and_records_how_long_a_state_held():
@@ -434,3 +450,46 @@ def test_the_prefix_puts_invariant_sections_before_changing_ones():
     assert prefix.index("<system>") < at("contract_json")
     # The trace derives from the source, so it belongs after it.
     assert at("reference_model") < at("observed_behaviour")
+
+
+def test_the_replay_is_bounded_by_compressed_rows_not_raw_edges():
+    """The budget must be spent on distinct states, not on repetition.
+
+    Measured by replaying a real run's stimulus against the known-correct
+    control oracle, 60 testpoints: median 107 raw edges but median 4 compressed
+    rows, because a prescaled design idles nearly every edge while the divider
+    counts down. A 40-RAW-EDGE cap showed 22 of 60 scenarios in full; a 40-ROW
+    cap shows 55 of 60.
+    """
+    from specflow.refmodel.judge import _SCENARIO_ROWS, scenario_trace
+
+    # 300 edges of idle, then one change. A raw-edge cap never reaches the change.
+    steps = [{"inputs": {"a": 0}, "hold": 300}, {"inputs": {"a": 1}, "hold": 4}]
+    rows = scenario_trace(ACTIVE, CONTRACT, steps, base="step")
+    assert rows, "the replay produced nothing"
+    assert len(rows) <= _SCENARIO_ROWS
+    assert any("a=1" in r for r in rows), (
+        "the change after 300 idle edges was never reached; the budget is "
+        "being spent on repetition rather than on distinct states"
+    )
+
+
+def test_an_unfired_until_is_reported_without_blaming_the_model():
+    """It is as often the testpoint's timeout as the model's behaviour.
+
+    On the control oracle -- known correct -- 23 of 60 of this run's scenarios
+    never fire their `until`, because the stimulus chose `clk_cnt=200` with
+    `timeout=500` and one command at that divider needs upwards of 1000 edges.
+    Phrasing that as "the model did not complete this scenario" would push the
+    judge toward `not_met` on correct behaviour.
+    """
+    from specflow.refmodel.judge import scenario_trace
+
+    steps = [{"inputs": {"a": 1}, "until": {"port": "q", "value": 99}, "timeout": 6}]
+    rows = scenario_trace(ACTIVE, CONTRACT, steps, base="step")
+    note = "\n".join(rows or [])
+    assert "did not reach" in note
+    assert "did not complete this scenario" not in note, (
+        "the note attributes a stimulus problem to the model"
+    )
+    assert "Do not treat it as a defect on its own." in note
