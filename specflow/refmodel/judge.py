@@ -763,3 +763,110 @@ def oracles_of(result: JudgeResult) -> list[RequirementOracle]:
 def verdict_map(result: JudgeResult) -> dict[str, str]:
     """`req_uid -> verdict`, the input the agreement gate compares against."""
     return {v.req_uid: v.verdict for v in result.verdicts if v.req_uid}
+
+
+RECONCILE_SYSTEM = """\
+You wrote a verdict on one requirement, and an oracle meant to decide that same
+requirement mechanically. Replayed against the very model you judged, THEY
+DISAGREE.
+
+The oracle is not an independent authority. It is your verdict written down so
+it can be re-run without asking you again. So a disagreement means one of two
+things, and you are the only one who can say which:
+
+  - the ORACLE is a bad translation -- it checks something narrower, wider, or
+    simply other than what you decided. Fix the oracle.
+  - the VERDICT was wrong -- writing the check made the behaviour concrete and
+    the concrete version does not hold. Change the verdict.
+
+Both are legitimate outcomes and the second is valuable: it means formalising
+the claim caught something reading the code did not.
+
+What you may NOT do is leave them disagreeing, or make the oracle trivially
+true to end the argument. An oracle that nothing can falsify is discarded later
+by a mutation check, so it buys nothing.
+
+Reply with ONE JSON object in the same shape you replied with before -- verdict,
+reason, evidence, remedy, oracle -- corrected so the two agree.
+"""
+
+
+def build_reconcile_prompt(
+    *,
+    source: str,
+    contract_json: str,
+    requirement: dict,
+    verdict: RequirementVerdict,
+    conflict: str,
+    behaviour: str | None = None,
+) -> str:
+    """Ask the judge to settle its own contradiction, with the evidence."""
+    item = "\n\n".join([
+        json_block("requirement", requirement),
+        json_block("your_verdict", {
+            "verdict": verdict.verdict,
+            "reason": verdict.reason,
+            "evidence": verdict.evidence,
+            "remedy": verdict.remedy,
+        }),
+        "<your_oracle>\n"
+        + (verdict.oracle.source if verdict.oracle else "(none)")
+        + "\n</your_oracle>",
+        f"<the_contradiction>\n{conflict}\n</the_contradiction>",
+    ])
+    return compose(
+        shared_block(
+            ("system", RECONCILE_SYSTEM),
+            ("contract_json", contract_json),
+            ("reference_model", source),
+            *((("observed_behaviour", behaviour),) if behaviour else ()),
+        ),
+        item,
+    )
+
+
+def reconcile(
+    *,
+    conflicts: dict[str, str],
+    verdicts: dict[str, RequirementVerdict],
+    requirements: list[dict],
+    source: str,
+    contract_json: str,
+    contract: dict | None,
+    port: ModelPort,
+    base: str = "step",
+    round_: int = 0,
+    fanout: bool = True,
+) -> dict[str, RequirementVerdict]:
+    """Re-ask the judge about each verdict its own oracle contradicts.
+
+    One focused call per conflict -- 18 on the run this was built for, against
+    77 for a full judging pass -- and it recovers oracles that would otherwise
+    be thrown away over a translation bug.
+
+    Deliberately NOT a silent rewrite of the oracle to match the verdict. That
+    would fabricate the agreement rather than resolve it, and would lose the
+    case worth having: the judge changing its VERDICT because writing the check
+    made the claim concrete enough to fail.
+    """
+    by_uid = {str(r.get("uid")): r for r in requirements}
+    behaviour = observed_behaviour(source, contract, base=base) if contract else None
+
+    def one(uid: str) -> tuple[str, RequirementVerdict]:
+        verdict = verdicts[uid]
+        prompt = build_reconcile_prompt(
+            source=source, contract_json=contract_json,
+            requirement=by_uid.get(uid, {"uid": uid}),
+            verdict=verdict, conflict=conflicts[uid], behaviour=behaviour,
+        )
+        raw = port.complete(
+            stage=f"reconcile_{uid}", round_=round_, prompt=prompt)
+        fixed = parse_response(raw)
+        oracle = fixed.oracle
+        if oracle is not None:
+            oracle = oracle.model_copy(update={"req_uid": uid})
+        return uid, fixed.model_copy(update={"req_uid": uid, "oracle": oracle})
+
+    uids = sorted(conflicts)
+    pairs = run_fanout(uids, one) if fanout else [one(u) for u in uids]
+    return dict(pairs)

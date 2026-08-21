@@ -88,8 +88,28 @@ def _pair(ack: str, q: str):
     ])
 
 
+class _Port:
+    """A judge port for the reconciliation call.
+
+    `reconcile` re-asks the judge about each verdict its own oracle
+    contradicts, so a test that produces a conflict must supply an answer or it
+    is testing the absence of one.
+    """
+
+    def __init__(self, answer: str | None = None):
+        self.answer = answer
+        self.calls: list[str] = []
+
+    def complete(self, *, stage, round_, prompt):
+        self.calls.append(stage)
+        return self.answer or json.dumps({
+            "verdict": "not_met", "reason": "unresolved",
+            "oracle": {"tp_uids": ["TP-0000"], "clause": "c", "source": ACK},
+        })
+
+
 def _turns(judge, debugger, *, source=BROKEN, max_turns=2, run_dir=None,
-           control=None):
+           control=None, port=None):
     # `_debug_turns` imports run_judge from the judge module at call time, so
     # that module is the seam -- patching `compose` would do nothing.
     import specflow.refmodel.judge as judge_mod
@@ -99,7 +119,7 @@ def _turns(judge, debugger, *, source=BROKEN, max_turns=2, run_dir=None,
         return compose._debug_turns(
             source=source, contract=CONTRACT, contract_json=CONTRACT_JSON,
             requirements=REQS, covers={"REQ-0000": ["step"]},
-            judge_port=object(), base="step", testplan=PLAN,
+            judge_port=port or _Port(), base="step", testplan=PLAN,
             stimulus_by_tp=STIM, run_dir=run_dir, debugger=debugger,
             max_turns=max_turns, control_source=control,
         )
@@ -120,20 +140,43 @@ def test_a_turn_that_satisfies_everything_stops_judging():
     assert "self.k == 3" in source
 
 
-def test_the_debug_session_only_ever_sees_screened_oracles():
-    """The gates run BEFORE the agent, so no attempt is spent on a bad oracle."""
-    # This oracle contradicts its own author: the judge said not_met, it passes.
-    contradictory = _verdict("not_met", oracle_source='''
+CONTRADICTORY = '''
 def decide(trace):
     _ = trace[0]["outputs"]["ack"]
     return (True, 0, "passes regardless")
-''')
-    judge = _Judge([JudgeResult(verdicts=[contradictory])])
+'''
+
+
+def test_a_verdict_its_own_oracle_contradicts_is_sent_back_to_the_judge():
+    """The oracle is the verdict written executably, so the judge settles it.
+
+    Discarding instead would throw away a usable oracle over a translation bug
+    -- a quarter of them, on the run this was built for.
+    """
+    judge = _Judge([JudgeResult(verdicts=[_verdict("not_met",
+                                                   oracle_source=CONTRADICTORY)])])
+    port = _Port()          # answers with an oracle that DOES fail the model
     debugger = _Debugger([])
-    _turns(judge, debugger, max_turns=1)
+    _turns(judge, debugger, max_turns=1, port=port)
+    assert port.calls == ["reconcile_REQ-0000"], "the conflict must be re-asked"
+    assert debugger.sessions, "and the repaired oracle should reach the session"
+    assert [o.req_uid for o in debugger.sessions[0].oracles] == ["REQ-0000"]
+
+
+def test_an_unresolved_conflict_still_ends_in_a_discard():
+    """Reconciliation is one attempt, not an argument the judge always wins."""
+    judge = _Judge([JudgeResult(verdicts=[_verdict("not_met",
+                                                   oracle_source=CONTRADICTORY)])])
+    # The judge answers with the SAME contradiction: not_met, oracle passes.
+    port = _Port(json.dumps({
+        "verdict": "not_met", "reason": "still disagreeing",
+        "oracle": {"tp_uids": ["TP-0000"], "clause": "c",
+                   "source": CONTRADICTORY},
+    }))
+    debugger = _Debugger([])
+    _turns(judge, debugger, max_turns=1, port=port)
     assert not debugger.sessions, (
-        "every oracle was discarded, so there was nothing to debug against -- "
-        "the turn must not build a session with an empty oracle set"
+        "an oracle that still contradicts its verdict must not drive the loop"
     )
 
 
@@ -167,7 +210,8 @@ def test_each_turn_persists_its_own_oracles_and_screening(tmp_path: Path):
         assert (base / "verdicts.json").exists()
         assert (base / "oracles" / "REQ-0000.py").exists()
         trust_report = json.loads((base / "trust.json").read_text())
-        assert set(trust_report) == {"rates", "discarded", "sensitivity"}
+        assert set(trust_report) == {"rates", "discarded", "sensitivity",
+                                     "unresolved_conflicts"}
         assert trust_report["rates"]["trusted"] >= 1
 
 

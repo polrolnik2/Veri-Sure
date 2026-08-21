@@ -261,7 +261,13 @@ def _debug_turns(
     the session stops, which is what makes "a few attempts against one frozen
     oracle set" the unit of work.
     """
-    from .judge import oracles_of, run_judge, verdict_map, write_round
+    from .judge import (
+        oracles_of,
+        reconcile,
+        run_judge,
+        verdict_map,
+        write_round,
+    )
 
     # `max_turns + 1` passes, and the extra one is not slack. The judge must
     # have seen the model that is actually returned: satisfying every trusted
@@ -296,12 +302,46 @@ def _debug_turns(
             oracles_of(result), verdict_map(result), source, contract,
             stimulus_by_tp, testplan, base=base, control_source=control_source,
         )
+
+        # A verdict its own oracle contradicts is a TRANSLATION failure, not an
+        # untrustworthy oracle: the oracle is the verdict written executably, so
+        # the judge is the authority and the two must be made to agree. One
+        # focused call per conflict -- 18 against 77 for a full pass -- recovers
+        # oracles that would otherwise be discarded over a bad translation.
+        #
+        # The judge may resolve it either way, and the second way is the one
+        # worth having: changing the VERDICT because writing the check made the
+        # claim concrete enough to fail. Rewriting the oracle to match the
+        # verdict here instead would fabricate the agreement and lose that.
+        if screened.conflicts:
+            fixed = reconcile(
+                conflicts=screened.conflicts,
+                verdicts={v.req_uid: v for v in result.verdicts},
+                requirements=requirements, source=source,
+                contract_json=contract_json, contract=contract,
+                port=judge_port, base=base, round_=turn,
+            )
+            if fixed:
+                merged = [fixed.get(v.req_uid, v) for v in result.verdicts]
+                result = type(result)(verdicts=merged)
+                issues = result.issues
+                if not has_errors(issues):
+                    return source, issues
+                screened = trust.screen(
+                    oracles_of(result), verdict_map(result), source, contract,
+                    stimulus_by_tp, testplan, base=base,
+                    control_source=control_source,
+                )
+                if run_dir is not None:
+                    write_round(run_dir, turn, result)
+
         if run_dir is not None:
             (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
              ).write_text(
                 json.dumps({"rates": screened.rates(),
                             "discarded": screened.discarded,
-                            "sensitivity": screened.sensitivity},
+                            "sensitivity": screened.sensitivity,
+                            "unresolved_conflicts": screened.conflicts},
                            indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )

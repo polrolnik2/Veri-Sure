@@ -63,6 +63,12 @@ class Screened:
     discarded: dict[str, str] = field(default_factory=dict)
     #: req_uid -> SENSITIVE | CONVICTED | UNKNOWN, for every oracle gate 2 ran on.
     sensitivity: dict[str, str] = field(default_factory=dict)
+    #: req_uid -> what the disagreement WAS, in enough detail for the judge to
+    #: settle it. Separate from `discarded` because a disagreement is the one
+    #: failure that is worth another call: the oracle is the verdict written
+    #: executably, so the two disagreeing means the translation is wrong, not
+    #: that the oracle is untrustworthy in itself.
+    conflicts: dict[str, str] = field(default_factory=dict)
 
     def rates(self) -> dict[str, int]:
         """Four counts, each accusing something different.
@@ -188,6 +194,7 @@ def screen(
     trusted: list[RequirementOracle] = []
     discarded: dict[str, str] = {}
     sens: dict[str, str] = {}
+    conflicts: dict[str, str] = {}
 
     for oracle in oracles:
         uid = oracle.req_uid
@@ -214,8 +221,15 @@ def screen(
         # -- gate 1: does it reproduce the verdict it shipped with?
         expected_pass = verdicts.get(uid) == "met"
         if result.ok != expected_pass:
+            said = verdicts.get(uid)
+            where = f" at edge {result.edge}" if result.edge is not None else ""
+            conflicts[uid] = (
+                f"You judged this {said!r}. Your oracle "
+                f"{'PASSES' if result.ok else 'FAILS'} the same model"
+                f"{where}: {result.detail or '(no detail)'}"
+            )
             discarded[uid] = (
-                f"disagreed: its author said {verdicts.get(uid)!r} but the oracle "
+                f"disagreed: its author said {said!r} but the oracle "
                 f"{'passes' if result.ok else 'fails'} that same model"
             )
             continue
@@ -251,7 +265,8 @@ def screen(
 
         trusted.append(oracle)
 
-    return Screened(trusted=trusted, discarded=discarded, sensitivity=sens)
+    return Screened(trusted=trusted, discarded=discarded, sensitivity=sens,
+                    conflicts=conflicts)
 
 
 def failing(results: list[OracleResult]) -> list[OracleResult]:

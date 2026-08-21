@@ -126,3 +126,64 @@ def test_the_prompt_states_the_rules_an_oracle_is_screened_against():
     for phrase in ("def decide(trace)", "DECLARED PORTS", "mutation-tested",
                    "tp_uids", "edge"):
         assert phrase in SYSTEM, phrase
+
+
+# ------------------------------------------------------------- reconciliation
+
+
+def test_the_reconcile_prompt_carries_the_contradiction_and_both_sides():
+    """The judge cannot settle what it cannot see."""
+    from specflow.refmodel.judge import RECONCILE_SYSTEM, build_reconcile_prompt
+
+    v = _verdict(verdict="met")
+    prompt = build_reconcile_prompt(
+        source="class Model: pass", contract_json="{}",
+        requirement={"uid": "REQ-0000", "text": "cmd_ack pulses"},
+        verdict=v,
+        conflict="You judged this 'met'. Your oracle FAILS the same model at "
+                 "edge 3: cmd_ack never rose",
+    )
+    assert "cmd_ack pulses" in prompt          # the requirement
+    assert "your_verdict" in prompt            # what it said
+    assert v.oracle.source.strip() in prompt   # what it wrote
+    assert "FAILS the same model at edge 3" in prompt   # the contradiction
+    assert RECONCILE_SYSTEM.split("\n")[0] in prompt
+
+
+def test_reconciliation_offers_both_resolutions():
+    """Changing the VERDICT is the outcome worth having, not a fallback.
+
+    It means writing the check made the claim concrete enough to fail, which
+    reading the code did not.
+    """
+    from specflow.refmodel.judge import RECONCILE_SYSTEM
+
+    assert "Fix the oracle." in RECONCILE_SYSTEM
+    assert "Change the verdict." in RECONCILE_SYSTEM
+    assert "trivially" in RECONCILE_SYSTEM, (
+        "it must forbid ending the argument by making the oracle vacuous"
+    )
+
+
+def test_reconcile_stamps_the_req_uid_on_the_repaired_oracle():
+    """The harness owns the identifier, on a repair as on a first answer."""
+    from specflow.refmodel.judge import reconcile
+
+    class _Port:
+        def complete(self, *, stage, round_, prompt):
+            return json.dumps({
+                "verdict": "not_met", "reason": "fixed",
+                "oracle": {"tp_uids": ["TP-0007"], "clause": "c",
+                           "source": ORACLE_SRC},
+            })
+
+    out = reconcile(
+        conflicts={"REQ-0031": "they disagree"},
+        verdicts={"REQ-0031": _verdict(uid="REQ-0031")},
+        requirements=[{"uid": "REQ-0031", "text": "t"}],
+        source="class Model: pass", contract_json="{}", contract=None,
+        port=_Port(), fanout=False,
+    )
+    assert out["REQ-0031"].req_uid == "REQ-0031"
+    assert out["REQ-0031"].oracle.req_uid == "REQ-0031"
+    assert out["REQ-0031"].verdict == "not_met"
