@@ -13,10 +13,20 @@ and before any debug attempt is spent:
 Gate 2 is the one that generalises: it needs no golden RTL and no control, so it
 is the only evidence available on a design where nothing known-good exists.
 
-An oracle failing a gate is DISCARDED, never repaired. Its requirement keeps its
-blocking verdict and falls back to prose for that turn. Repairing an oracle
-would mean deciding which of the judge and the oracle was right, which is the
-judgement the loop exists to avoid making silently.
+An oracle failing a gate is discarded from THIS screening and, where the failure
+is one the judge can settle, recorded in `conflicts` for a reconcile call. It is
+never silently rewritten here: repairing an oracle in the harness would mean
+deciding which of the judge and the oracle was right, which is the judgement the
+loop exists to avoid making on its own. Asking its author is not that.
+
+Every gate produces a reconcilable conflict, because every one of them is the
+same kind of finding. The oracle is the judge's verdict written executably, so
+an oracle that contradicts that verdict (gate 1), that cannot see its own
+scenario, that no correct implementation satisfies (gate 3), or that nothing
+could ever fail (gate 2) is the judge misstating its own belief. Discarding it
+without asking leaves the requirement blocking and hands the reference model a
+prose failure caused by the check rather than by the model -- which is the
+reference model being blamed for the judge's mistake.
 """
 
 from __future__ import annotations
@@ -294,10 +304,25 @@ def screen(
                     f"{verdict.detail}"
                 )
             elif verdict.failed():
+                where = (f" at edge {verdict.edge}"
+                         if verdict.edge is not None else "")
                 discarded[uid] = (
-                    f"over-strict: the known-good control fails it"
-                    f"{' at edge ' + str(verdict.edge) if verdict.edge is not None else ''}"
+                    f"over-strict: the known-good control fails it{where}"
                     f" -- {verdict.detail}"
+                )
+                # Reconcilable, like a gate-1 disagreement and for the same
+                # reason: the oracle is this verdict written executably, so an
+                # oracle no correct implementation can satisfy is the judge
+                # misstating its own belief. Discarding it silently leaves the
+                # requirement blocking and hands the reference model a prose
+                # failure caused by the check rather than by the model.
+                conflicts[uid] = (
+                    f"Your oracle FAILS a KNOWN-GOOD reference implementation of "
+                    f"this design{where}: {verdict.detail or '(no detail)'}. A "
+                    f"correct design does not do what you are demanding, so the "
+                    f"demand is wrong -- you are testing an implementation detail, "
+                    f"an exact timing the spec does not fix, or a signal this "
+                    f"clause is not about."
                 )
                 continue
 
@@ -308,6 +333,13 @@ def screen(
             sens[uid] = level
             if level == CONVICTED:
                 discarded[uid] = f"vacuous: {detail}"
+                conflicts[uid] = (
+                    f"Your oracle is VACUOUS: {detail}. It passes models that "
+                    f"are provably wrong, so it cannot tell a correct design "
+                    f"from a broken one and proves nothing about this "
+                    f"requirement. Check the specific behaviour the clause "
+                    f"states, at the edge it states it."
+                )
                 continue
         else:
             sens[uid] = SENSITIVE

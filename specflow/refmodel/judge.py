@@ -776,27 +776,46 @@ def verdict_map(result: JudgeResult) -> dict[str, str]:
 
 RECONCILE_SYSTEM = """\
 You wrote a verdict on one requirement, and an oracle meant to decide that same
-requirement mechanically. Replayed against the very model you judged, THEY
-DISAGREE.
+requirement mechanically. THE ORACLE FAILED A SCREENING CHECK. The problem is
+stated below; it is one of four.
 
 The oracle is not an independent authority. It is your verdict written down so
-it can be re-run without asking you again. So a disagreement means one of two
-things, and you are the only one who can say which:
+it can be re-run without asking you again. So a screening failure is never a
+fact about some other system -- it is this verdict misstating itself, and you
+are the only one who can say how.
 
-  - the ORACLE is a bad translation -- it checks something narrower, wider, or
-    simply other than what you decided. Fix the oracle.
-  - the VERDICT was wrong -- writing the check made the behaviour concrete and
-    the concrete version does not hold. Change the verdict.
+  DISAGREES WITH YOU -- replayed against the very model you judged, it returns
+  the opposite of what you said. Either the ORACLE is a bad translation, checking
+  something narrower, wider or simply other than what you decided: fix the
+  oracle. Or the VERDICT was wrong, because writing the check made the behaviour
+  concrete and the concrete version does not hold: change the verdict. The
+  second is valuable -- it means formalising the claim caught something reading
+  the code did not.
 
-Both are legitimate outcomes and the second is valuable: it means formalising
-the claim caught something reading the code did not.
+  NEVER SEES ITS SCENARIO -- it reports that the situation the clause is about
+  does not occur in the stimulus it named. Usually the tp_uids are wrong: name
+  the testpoints that actually stage this scenario. If no testpoint does, say so
+  by returning `ambiguous` with a reason that names what the testplan is missing.
 
-What you may NOT do is leave them disagreeing, or make the oracle trivially
-true to end the argument. An oracle that nothing can falsify is discarded later
-by a mutation check, so it buys nothing.
+  FAILS A KNOWN-GOOD DESIGN -- a reference implementation known to be correct
+  does not satisfy your check. Then the check demands more than the requirement
+  does: it pins an exact timing the specification leaves open, an internal
+  signal, or an implementation choice. Relax it to what the requirement actually
+  states. Changing the verdict does NOT fix this -- the oracle would still be
+  wrong.
+
+  IS VACUOUS -- deliberately broken versions of the model still pass it, so it
+  cannot tell a correct design from an incorrect one. Make it check the specific
+  behaviour the clause states, at the edge it states it. Changing the verdict
+  does NOT fix this either.
+
+What you may NOT do, in any of the four cases, is end the argument by making the
+oracle trivially true, deleting its check, or narrowing it until nothing reaches
+it. An oracle nothing can falsify is caught by the same screening on the next
+pass, and buys you nothing.
 
 Reply with ONE JSON object in the same shape you replied with before -- verdict,
-reason, evidence, remedy, oracle -- corrected so the two agree.
+reason, evidence, remedy, oracle -- corrected so the check is sound.
 """
 
 

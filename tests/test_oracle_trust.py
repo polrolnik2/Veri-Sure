@@ -344,3 +344,34 @@ def test_liveness_reports_a_model_that_will_not_replay_apart_from_an_inert_one()
     live = stimulus_liveness("class NotAModel:\n    pass\n", CONTRACT, STIM, base="step")
     assert live.errors and not live.inert
     assert live.summary()["failed_to_replay"] == 1
+
+
+def test_every_gate_leaves_a_conflict_the_judge_can_settle():
+    """A discarded oracle with no conflict blames the MODEL for the judge's error.
+
+    The requirement keeps its blocking verdict, the executable evidence is
+    thrown away, and the reference model gets a prose failure it cannot fix.
+    """
+    vacuous = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="c",
+        source="def decide(trace):\n    return (bool(trace[0]['outputs']['q'] >= 0), 0, 'always')\n")
+    out = _screen([vacuous], {"REQ-0000": "met"})
+    assert out.rates()["convicted"] == 1
+    assert "REQ-0000" in out.conflicts, "convicted must be reconcilable"
+    assert "VACUOUS" in out.conflicts["REQ-0000"]
+
+    # Gate 1 must be SATISFIED before gate 3 can be reached, so the oracle has
+    # to pass the judged model and fail the control -- the same model in both
+    # roles would be caught as a disagreement first.
+    never_acks = GOOD.replace("1 if self.k == 3 else 0", "0")
+    never = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="c",
+        source=("\ndef decide(trace):\n"
+                "    for row in trace:\n"
+                "        if row['outputs']['ack'] == 1:\n"
+                "            return (False, row['edge'], 'ack pulsed')\n"
+                "    return (True, None, 'ack stayed low')\n"))
+    out2 = _screen([never], {"REQ-0000": "met"}, source=never_acks, control=GOOD)
+    assert out2.rates()["over_strict"] == 1
+    assert "REQ-0000" in out2.conflicts, "over-strict must be reconcilable"
+    assert "KNOWN-GOOD" in out2.conflicts["REQ-0000"]

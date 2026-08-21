@@ -158,11 +158,39 @@ def test_reconciliation_offers_both_resolutions():
     """
     from specflow.refmodel.judge import RECONCILE_SYSTEM
 
-    assert "Fix the oracle." in RECONCILE_SYSTEM
-    assert "Change the verdict." in RECONCILE_SYSTEM
+    flat = " ".join(RECONCILE_SYSTEM.split())
+    assert "fix the oracle" in flat
+    assert "change the verdict" in flat
     assert "trivially" in RECONCILE_SYSTEM, (
         "it must forbid ending the argument by making the oracle vacuous"
     )
+
+
+def test_reconciliation_covers_every_gate_not_only_disagreement():
+    """All four screening failures are reconcilable, so all four need saying.
+
+    Gates 2 and 3 used to discard silently, which left the requirement blocking
+    and handed the reference model a prose failure caused by the CHECK. The
+    oracle is the judge's verdict written executably, so a bad one is the judge
+    misstating itself whichever gate catches it.
+    """
+    from specflow.refmodel.judge import RECONCILE_SYSTEM
+
+    for phrase in ("DISAGREES WITH YOU", "NEVER SEES ITS SCENARIO",
+                   "FAILS A KNOWN-GOOD DESIGN", "IS VACUOUS"):
+        assert phrase in RECONCILE_SYSTEM, phrase
+
+
+def test_the_two_resolutions_a_verdict_change_cannot_reach_are_named():
+    """Over-strictness and vacuity are properties of the CHECK.
+
+    Softening the verdict leaves both in place, and a judge told only "fix it
+    or change your mind" will reach for the cheaper half.
+    """
+    from specflow.refmodel.judge import RECONCILE_SYSTEM
+
+    assert RECONCILE_SYSTEM.count("Changing the verdict does NOT fix this") == 1
+    assert "does NOT fix this either" in RECONCILE_SYSTEM
 
 
 def test_reconcile_stamps_the_req_uid_on_the_repaired_oracle():
