@@ -214,3 +214,39 @@ def test_a_regenerated_divided_s1_does_invalidate_downstream(tmp_path):
         port=_Port(), max_repairs=0, reuse=True,   # nothing on disk to reuse
     )
     assert regenerated is True
+
+
+def test_a_regenerated_model_is_judged_like_a_freshly_generated_one(tmp_path,
+                                                                    monkeypatch):
+    """The stale-artifact branch must not hold a model to a weaker standard.
+
+    `--reuse` re-gates a recorded model and regenerates it when the gate now
+    fails. That branch called `run_refmodel` with no `judge_port`, no testplan
+    and no stimulus, so the replacement was accepted on the mechanical checks
+    alone -- while an identical fresh run would have put it through ~77
+    per-requirement judgements against its own execution trace. Two standards
+    for the same artifact, chosen by whether a previous run happened to exist.
+    """
+    import specflow.integration as integration
+
+    seen: dict = {}
+    real = integration.run_refmodel
+
+    def spy(**kwargs):
+        seen.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(integration, "run_refmodel", spy)
+
+    run_dir = _certified(tmp_path)
+    # Break the recorded model so re-validation fails and the branch fires.
+    (run_dir / "specflow" / "ref_model.py").write_text(
+        "class Model:\n    pass\n", encoding="utf-8"
+    )
+    _build(run_dir, reuse=True)
+
+    assert seen, "the regeneration branch never ran; the test proves nothing"
+    assert seen.get("judge_port") is not None, (
+        "a regenerated model was accepted without the judge that a fresh one faces"
+    )
+    assert seen.get("testplan"), "regeneration lost the testplan the judge needs"

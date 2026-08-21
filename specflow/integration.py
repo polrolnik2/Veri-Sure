@@ -408,10 +408,20 @@ def build_artifacts(
         )
         if has_errors(rm_issues):
             stale = True
+            # The SAME arguments as the generative path above. This branch
+            # regenerates a model that failed re-validation, and it was doing so
+            # with no judge and no behavioural evidence -- so a `--reuse` run
+            # whose recorded model went stale produced a model held to a weaker
+            # standard than a fresh run would apply, silently.
             rm, source = run_refmodel(
                 requirements=reqs, contract_json=contract_json, port=port,
                 workdir=run_dir / "specflow" / "_refmodel_check",
-                max_repairs=max_repairs,
+                max_repairs=(max_repairs if refmodel_max_repairs is None
+                             else refmodel_max_repairs),
+                judge_port=port if judge else None,
+                run_dir=run_dir,
+                testplan=tps,
+                stimulus_by_tp=stim_by_tp or None,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:
