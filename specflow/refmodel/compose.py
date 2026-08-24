@@ -288,6 +288,7 @@ def run_refmodel(
                      if v != "TRUSTED"},
             oracle_rates=oracle_set.rates(),
             oracle_liveness=dict(oracle_set.liveness),
+            witness_notes=dict(oracle_set.witness_notes),
             oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
         )
         rendered["src"] = source
@@ -319,6 +320,7 @@ def _closed_loop(
     #: Optional so a caller predating the measurement still works; an empty map
     #: reports "not measured" downstream rather than "none dead".
     oracle_liveness: dict[str, str] | None = None,
+    witness_notes: dict[str, str] | None = None,
     oracle_set=None,
     adequacy_rounds: int = 0,
 ) -> tuple[str, list[Issue]]:
@@ -346,7 +348,7 @@ def _closed_loop(
             control_source=control_source, normalized=normalized,
             item_port=item_port, variants=variants,
             carried=carried, oracle_rates=oracle_rates,
-            oracle_liveness=oracle_liveness,
+            oracle_liveness=oracle_liveness, witness_notes=witness_notes,
         )
         if not oracles:
             break
@@ -392,6 +394,7 @@ def _closed_loop(
                    if v != "TRUSTED"}
         oracle_rates = oracle_set.rates()
         oracle_liveness = dict(oracle_set.liveness)
+        witness_notes = dict(oracle_set.witness_notes)
     return source, issues
 
 
@@ -424,6 +427,7 @@ def _debug_turns(
     carried: dict[str, str] | None = None,
     oracle_rates: dict | None = None,
     oracle_liveness: dict[str, str] | None = None,
+    witness_notes: dict[str, str] | None = None,
 ) -> tuple[str, list[Issue]]:
     """The debug loop. There is no other one, and no judge in this one.
 
@@ -454,6 +458,7 @@ def _debug_turns(
     carried = dict(carried or {})
     oracle_rates = dict(oracle_rates or {})
     oracle_liveness = dict(oracle_liveness or {})
+    witness_notes = dict(witness_notes or {})
     _, reset_names, _ = classify(contract)
 
     # The set this loop promised to measure against, recorded at entry so each
@@ -561,6 +566,26 @@ def _debug_turns(
                     # recomputing would put a gate back inside the loop.
                     "conforms_by_liveness": _conforms_by_liveness(
                         mechanical, oracle_liveness),
+                    # WHO A VIOLATES MAY BE ABOUT. A failing oracle is
+                    # evidence about the model -- unless a SECOND
+                    # implementation of the same requirement fails it too, in
+                    # which case it may be the check.
+                    #
+                    # Attribution, not suppression, and the distinction is the
+                    # whole of it: these still count as VIOLATES, still block,
+                    # and the oracle is not rejected. The witness is a second
+                    # reading by the same author and has no authority to
+                    # overrule the requirement. What it can do is say where a
+                    # turn is unlikely to be repaid.
+                    #
+                    # Measured on r-i2c: the loop drove VIOLATES 9 -> 5 and
+                    # spent its last three turns on the 5 that remained, every
+                    # one of which a known-good control also fails. The witness
+                    # had flagged exactly those five before the reference model
+                    # existed, and the note sat unread in the oracle artifact.
+                    "violates_the_witness_also_fails": sorted(
+                        u for u, v in mechanical.items()
+                        if v == "VIOLATES" and u in witness_notes),
                     "mechanical_verdicts": {
                         "counts": verdict.counts(mechanical),
                         "blocking": verdict.blocking(mechanical),
@@ -588,9 +613,20 @@ def _debug_turns(
         if not has_errors(issues):
             return source, issues
         if turn == turns:
-            stop = (f"turn budget of {turns} spent with "
-                    f"{sum(1 for r in by_uid.values() if not r.ok)} oracle(s) "
+            short = [u for u, r in by_uid.items() if not r.ok]
+            # Attribute the residue rather than reporting a bare count. On
+            # r-i2c the loop stopped "with 13 oracle(s) short of CONFORMS" and
+            # every one of the 5 still FAILING was a check a known-good design
+            # also fails -- so the turns it spent on them could not have been
+            # repaid, and the number as printed read as 13 unfixed model bugs.
+            doubted = sorted(u for u in short if u in witness_notes)
+            stop = (f"turn budget of {turns} spent with {len(short)} oracle(s) "
                     f"short of CONFORMS")
+            if doubted:
+                stop += (f"; a second implementation of the same requirement "
+                         f"also fails {len(doubted)} of them "
+                         f"({', '.join(doubted[:6])}), so those may be the "
+                         f"check rather than the model")
             break
         if not oracles:
             stop = "no trusted oracle to drive the loop"

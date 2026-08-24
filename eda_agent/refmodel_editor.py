@@ -427,16 +427,33 @@ def _opening(session: DebugSession) -> str:
             "Waiting for a scenario:",
         ]
     else:
+        doubted = [r for r in actionable
+                   if r.get("a_second_implementation_also_fails_this")]
         lines = [
             f"The reference model fails {len(actionable)} of {len(rows)} "
             f"requirement oracles.",
             "",
             "Failing:",
         ]
+        if doubted:
+            lines[0] += (
+                f" A second implementation of these same requirements, written "
+                f"from the same text and never debugged, ALSO fails "
+                f"{len(doubted)} of them (marked below). That is not a verdict "
+                f"and it does not excuse anything -- it is one more reading by "
+                f"no better authority than yours. It is a hint about where a "
+                f"turn is likely to be repaid: two independent attempts "
+                f"failing the same check more often means the check is pinning "
+                f"a detail the requirement leaves open than that both got the "
+                f"same thing wrong. Spend your edits on the unmarked ones "
+                f"first, and if you conclude a marked one is genuinely the "
+                f"model's fault, fix it and say so.")
 
     for r in actionable[:40]:
         where = f" (decided at edge {r['edge']})" if r["edge"] is not None else ""
-        lines.append(f"  {r['req_uid']}: {r['clause']}{where}")
+        mark = (" [a second implementation fails this too]"
+                if r.get("a_second_implementation_also_fails_this") else "")
+        lines.append(f"  {r['req_uid']}: {r['clause']}{where}{mark}")
         if r["detail"]:
             lines.append(f"      observed: {r['detail']}")
     if len(actionable) > 40:

@@ -111,6 +111,18 @@ class OracleSet:
     #: is what this rework removed -- and it does not need to, because the
     #: verdict does not depend on the design being debugged.
     liveness: dict[str, str] = field(default_factory=dict)
+    #: `req_uid -> what the witness observed`, for the checks it could not
+    #: satisfy. Gate 1 stays non-mandatory and none of these is rejected -- the
+    #: witness is a second reading by the same author and cannot overrule the
+    #: text. What changes is that the observation now LEAVES THE STAGE.
+    #:
+    #: Measured on r-i2c: the debug loop drove VIOLATES 9 -> 5 and then spent
+    #: its remaining three turns on the 5 that were left, every one of which a
+    #: known-good control also fails. The witness had flagged exactly those
+    #: five -- REQ-0020, 0060, 0066, 0067, 0070 -- before the reference model
+    #: existed. The information was in this artifact and nothing downstream
+    #: read it.
+    witness_notes: dict[str, str] = field(default_factory=dict)
 
     def rates(self) -> dict[str, int | None]:
         """Counts, and `None` where a check did not run.
@@ -740,7 +752,10 @@ def run_oracle_stage(
                      witness_kind=witness_kind, rounds=rounds,
                      testpoints_no_oracle_names=idle,
                      liveness={u: r.get("verdict", _L.UNKNOWN)
-                               for u, r in report.items()})
+                               for u, r in report.items()},
+                     witness_notes={u: n["witness"]
+                                    for u, n in disagreements.items()
+                                    if "witness" in n})
 
 
 def _witness(
@@ -994,4 +1009,7 @@ def load(run_dir: Path) -> OracleSet | None:
         witness_kind=str(blob.get("witness") or NO_BOUND),
         rounds=int(blob.get("rounds") or 0),
         liveness={str(u): str(v) for u, v in live.items()},
+        witness_notes={str(u): str(n.get("witness") or "")
+                       for u, n in (blob.get("instrument_notes") or {}).items()
+                       if isinstance(n, dict) and n.get("witness")},
     )

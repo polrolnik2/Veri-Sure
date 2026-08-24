@@ -102,6 +102,17 @@ class DebugSession:
         verdicts: dict[str, str] | None = None,
         reasons: dict[str, dict] | None = None,
         covers: dict[str, list[str]] | None = None,
+        #: `req_uid -> what a second implementation of the same requirement
+        #: observed`, for the checks it could not satisfy either. NOT a verdict
+        #: and never a reason to skip: the witness is a second reading by the
+        #: same author and cannot overrule the requirement. It says where a
+        #: turn is unlikely to be repaid, and the agent decides.
+        #:
+        #: Measured on r-i2c: the loop drove VIOLATES 9 -> 5 and spent its last
+        #: three turns on the 5 that remained, every one of which a known-good
+        #: control also fails. The witness had flagged exactly those five
+        #: before the reference model existed.
+        witness_notes: dict[str, str] | None = None,
         workdir: Path | None = None,
         #: `(requirement, hint) -> steps`, or None. Injected rather than
         #: imported for the same reason `compose.RefModelDebugger` is: the
@@ -135,6 +146,7 @@ class DebugSession:
         self.verdicts = dict(verdicts or {})
         self.reasons = dict(reasons or {})
         self.covers = dict(covers or {})
+        self.witness_notes = dict(witness_notes or {})
         # `validate_source` writes a scratch copy so the exec has a filename;
         # it is not optional and the session must not scribble in the run dir.
         self.workdir = Path(workdir or tempfile.mkdtemp(prefix="refmodel-debug-"))
@@ -302,6 +314,11 @@ class DebugSession:
                             "NOT EXERCISED" if r and r.unexercised() else "NOT MET"),
                 "edge": None if r is None else r.edge,
                 "detail": "" if r is None else (r.broken or r.detail),
+                # What a SECOND implementation of the same requirement made of
+                # this check, where it could not satisfy it either. Empty for
+                # most. Not a verdict: see `witness_notes`.
+                "a_second_implementation_also_fails_this": bool(
+                    self.witness_notes.get(oracle.req_uid)),
                 "checked": True,
             })
         have = {o.req_uid for o in self.oracles}
