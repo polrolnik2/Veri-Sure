@@ -62,6 +62,34 @@ from .tb.render import gate_g5, render_suite
 logger = logging.getLogger(__name__)
 
 
+def _persist_grown(
+    run_dir: Path, testplan: list[dict], stimulus: dict | None,
+    *, before: tuple[int, int],
+) -> None:
+    """Write back a testplan and stimulus a debug turn appended to.
+
+    Only on growth, and only ever growth: `add_stimulus` appends and never
+    edits, so a file that did not get longer has nothing to say. Silent when it
+    cannot write -- losing the artifact is bad, failing a run that otherwise
+    succeeded over a bookkeeping write is worse.
+    """
+    stimulus = stimulus or {}
+    if (len(testplan), len(stimulus)) == before:
+        return
+    sf = Path(run_dir) / "specflow"
+    try:
+        (sf / "testplan.json").write_text(
+            json.dumps({"elements": testplan}, indent=2, ensure_ascii=False)
+            + "\n", encoding="utf-8")
+        (sf / "stimulus.json").write_text(
+            json.dumps({"testpoints": [
+                {"tp_uid": uid, "stimulus_steps": steps}
+                for uid, steps in stimulus.items()
+            ]}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001
+        logger.warning("appended testpoints not persisted (%r)", exc)
+
+
 class _Reused(Exception):
     """A cached artifact was good; skip the generation below it.
 
@@ -524,6 +552,7 @@ def build_artifacts(
 
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
+    grown_before = (len(tps), len(stim_by_tp or {}))
     refmodel_path = run_dir / "specflow" / "ref_model.py"
     rm_issues: list[Issue] = []
     if stale or not refmodel_path.is_file():
@@ -558,6 +587,13 @@ def build_artifacts(
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
+        # A debug turn may have APPENDED testpoints, and both halves of one --
+        # the testplan element and its stimulus -- grew in the objects above.
+        # Persist them, or the artifacts on disk disagree with the suite that
+        # is about to be rendered from those same objects, and a `--reuse`
+        # re-entry silently loses the scenarios the loop paid model calls to
+        # stage. Append-only, so this can only ever grow the files.
+        _persist_grown(run_dir, tps, stim_by_tp, before=grown_before)
         if not rm.ok:
             return BuildResult(False, "refmodel", rm.issues)
     else:

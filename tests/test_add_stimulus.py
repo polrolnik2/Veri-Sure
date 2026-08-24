@@ -253,3 +253,36 @@ def test_an_appended_testpoint_reaches_the_caller_that_renders_the_suite(
     added = [t["uid"] for t in testplan if t["uid"] != "TP-0000"]
     assert added, "the caller's testplan never saw the appended testpoint"
     assert added[0] in stimulus, "and its stimulus must travel with it"
+
+
+def test_appended_testpoints_are_persisted_so_reuse_does_not_lose_them(tmp_path):
+    """The artifacts on disk must not disagree with the suite rendered from the
+    same objects. A `--reuse` re-entry reads the files, so without this it
+    silently loses every scenario the loop paid a model call to stage."""
+    import json
+
+    from specflow.integration import _persist_grown
+
+    sf = tmp_path / "specflow"
+    sf.mkdir(parents=True)
+    testplan = [{"uid": "TP-0000"}, {"uid": "TP-0200"}]
+    stimulus = {"TP-0000": [{"a": 0}], "TP-0200": [{"a": 1}]}
+
+    _persist_grown(tmp_path, testplan, stimulus, before=(1, 1))
+    plan = json.loads((sf / "testplan.json").read_text())
+    stim = json.loads((sf / "stimulus.json").read_text())
+    assert [e["uid"] for e in plan["elements"]] == ["TP-0000", "TP-0200"]
+    assert {t["tp_uid"] for t in stim["testpoints"]} == {"TP-0000", "TP-0200"}
+
+
+def test_nothing_is_rewritten_when_nothing_grew(tmp_path):
+    """A file that did not get longer has nothing to say, and rewriting it
+    would churn an artifact `--reuse` re-gates."""
+    sf = tmp_path / "specflow"
+    sf.mkdir(parents=True)
+    (sf / "testplan.json").write_text("SENTINEL", encoding="utf-8")
+
+    from specflow.integration import _persist_grown
+
+    _persist_grown(tmp_path, [{"uid": "TP-0000"}], {"TP-0000": []}, before=(1, 1))
+    assert (sf / "testplan.json").read_text() == "SENTINEL"
