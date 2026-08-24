@@ -14,6 +14,7 @@ from typing import Protocol
 import logging
 
 from ..model_io import ModelPort
+from ..ports import classify
 from ..schema import Issue, has_errors
 from ..stage import (
     StageResult,
@@ -428,6 +429,19 @@ def _debug_turns(
             # screening.
             return source, issues
 
+        # The stimulus generator, bound to the judge's port. Injected rather
+        # than imported by the session for the reason `RefModelDebugger` is:
+        # everything decidable about a debug turn must stay runnable with no
+        # model at all, and a generator is the one part that cannot be.
+        def _restimulate(req: dict, hint: str) -> list[dict]:
+            from ..testcase_agent import stimulus_for_scenario
+
+            return stimulus_for_scenario(
+                requirement=req, what_the_scenario_needs=hint,
+                contract=contract, port=judge_port,
+            )
+
+        _, reset_names, _ = classify(contract)
         session = DebugSession(
             source, contract, stimulus_by_tp, screened.trusted, base=base,
             requirements=requirements,
@@ -438,9 +452,22 @@ def _debug_turns(
             covers=covers,
             workdir=Path(run_dir) / "specflow" / "_refmodel_debug"
             if run_dir is not None else None,
+            stimulus_gen=_restimulate,
+            normalized=normalized,
+            testplan=testplan,
+            reset_ports=frozenset(reset_names),
         )
         before = source
         source, _attempts, _note = debugger.debug(session)
+        if session.added:
+            # The testpoints this turn minted outlive it. `stimulus_by_tp` is
+            # mutated in place, so the next judging pass replays the grown suite
+            # -- which is the whole point: a scenario staged once should not have
+            # to be re-staged, and the testplan grows so the rendered suite gets
+            # it too.
+            testplan = session.testplan
+            logger.info("turn %d added %d testpoint(s): %s",
+                        turn, len(session.added), ", ".join(session.added))
         if source == before:
             # The turn changed nothing, so re-judging would return the verdicts
             # already in hand. Spending ~77 model calls to rediscover them is

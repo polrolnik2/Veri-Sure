@@ -811,3 +811,57 @@ def stimulus_by_tp(spec: SuiteStimulus) -> dict[str, list[dict]]:
     return {
         tp.tp_uid: tp.stimulus_steps for tp in spec.testpoints if tp.stimulus_steps
     }
+
+def stimulus_for_scenario(
+    *,
+    requirement: dict,
+    what_the_scenario_needs: str,
+    contract: dict,
+    port: ModelPort,
+    max_steps: int = STIMULUS_MAX_STEPS,
+    max_repairs: int = 2,
+) -> list[dict]:
+    """Steps that stage ONE scenario, for a requirement nothing currently reaches.
+
+    The same generator the suite uses, pointed at a single synthetic testplan
+    element instead of an S2 one. That reuse is the point: the prompt, the
+    duration vocabulary (`hold`/`until`/reset steps), the prescaler warning and
+    `gate_suite` are all identical, so stimulus minted inside a debug turn cannot
+    drift from stimulus minted at build time -- and a step list this rejects is
+    rejected for exactly the reasons a build-time one would be.
+
+    `what_the_scenario_needs` is the DEBUG AGENT'S intent, in prose, and it goes
+    where S2's `stimulus` field goes. The agent never writes steps: it says what
+    must be staged and the generator produces vectors the gate then screens,
+    which is what keeps `add_stimulus` monotone in the same way `add_testcase`
+    is (`testcase_agent.py:1-19`).
+
+    Returns [] rather than raising when nothing gate-clean could be produced. A
+    debug turn that cannot get stimulus has learned something worth reporting;
+    it has not failed.
+    """
+    element = {
+        "uid": "TP-NEW",
+        "dimension": "D2_control_flow",
+        "stimulus": what_the_scenario_needs,
+        "expected_response": str(requirement.get("text") or ""),
+        "covers": [f"{requirement.get('uid', '')}@1"],
+    }
+    result = run_stage(
+        stage=f"restimulus_{requirement.get('uid', 'unknown')}",
+        port=port,
+        build_prompt=lambda issues, previous: build_suite_prompt_one(
+            element, contract, max_steps, issues, previous,
+            requirements=[requirement],
+        ),
+        parse=parse_suite_response,
+        gate=lambda spec: gate_suite(
+            spec, testplan=[element], contract=contract, max_steps=max_steps),
+        max_repairs=max_repairs,
+    )
+    if not result.ok:
+        return []
+    for tp in result.output.testpoints:
+        if tp.stimulus_steps:
+            return list(tp.stimulus_steps)
+    return []

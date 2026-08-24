@@ -69,9 +69,17 @@ Work like this:
      `first_change` to jump to where an output actually moves, and treat
      `inert: true` as "this testpoint cannot be satisfied by editing".
 
-A status of NOT EXERCISED is not a failure you can fix. It means the oracle's
-scenario never occurs in the stimulus, so the model is not being accused of
-anything. Leave those alone.
+A status of NOT EXERCISED is not a defect in the model, and no edit will
+discharge one -- the oracle never saw the situation its clause is about. It is
+not something to leave alone either. Call `add_stimulus(req_uid, "...")` and
+describe what has to happen; the harness generates the vectors, gates them and
+adds a new testpoint. Then the oracle either decides -- possibly against the
+model, which is a real finding you can then fix -- or reports that your scenario
+still did not stage it, which tells you the description was not concrete enough.
+
+Fix the CHECKED failures first. They have evidence behind them and cost no model
+call. Reach for `add_stimulus` when nothing is failing and the remaining
+findings are all unexercised.
 
 Some findings come back with `checked: false` and NO EXECUTABLE CHECK. The
 judge reached a verdict but no oracle survived screening for it, so nothing can
@@ -138,6 +146,7 @@ class RefModelEditor:
         toolkit.register_tool_function(self._tool_read_model)
         toolkit.register_tool_function(self._tool_replace_method)
         toolkit.register_tool_function(self._tool_run_all)
+        toolkit.register_tool_function(self._tool_add_stimulus)
 
         self._agent = SafeReActAgent(
             name="RefModelDebugger",
@@ -203,6 +212,40 @@ class RefModelEditor:
             return _no_session()
         return _text(await asyncio.to_thread(
             self._session.run_oracle, req_uid, from_edge, rows))
+
+    async def _tool_add_stimulus(
+        self, req_uid: str, what_the_scenario_needs: str
+    ) -> ToolResponse:
+        """Stage a scenario the current stimulus never reaches.
+
+        ONLY for a requirement showing NOT EXERCISED. That status means the
+        oracle never saw the situation its clause is about, so the model is not
+        being accused of anything and no edit can discharge it -- the testplan
+        is what is missing. This is how you say so.
+
+        You describe WHAT MUST HAPPEN, in prose, the way a test plan does:
+        "issue a WRITE command with ena=1 and hold it until cmd_ack", "assert
+        nReset low for several edges", "drive sda_i low while the controller has
+        released SDA". You do NOT write vectors -- the harness generates them,
+        gates them, and adds a NEW testpoint. Nothing existing is changed, so
+        this can only add evidence, never remove any.
+
+        The new testpoint is also attached to every OTHER requirement whose
+        activation it happens to stage, so one good scenario can discharge
+        several. Check the result's `attached_to`.
+
+        If the result says the requirement is still NOT EXERCISED, the scenario
+        you described did not stage it -- describe it more concretely rather
+        than repeating. The budget is small and shared across the whole turn.
+
+        Args:
+            req_uid: the requirement, e.g. "REQ-0031". Must be NOT EXERCISED.
+            what_the_scenario_needs: what has to happen, concretely, in prose.
+        """
+        if self._session is None:
+            return _no_session()
+        return _text(await asyncio.to_thread(
+            self._session.add_stimulus, req_uid, what_the_scenario_needs))
 
     async def _tool_read_model(self, method: str = "") -> ToolResponse:
         """Read the reference model, line-numbered.

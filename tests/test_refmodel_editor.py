@@ -78,6 +78,10 @@ def test_every_tool_is_registered_and_documented():
     assert set(tools) == {
         "_tool_list_oracles", "_tool_explain", "_tool_run_oracle",
         "_tool_read_model", "_tool_replace_method", "_tool_run_all",
+        # Seventh: an oracle reporting NOT EXERCISED is not a defect in the
+        # model, and until this existed the turn had no instrument to act on
+        # one -- 30 of 67 requirements on f-i2c were in exactly that state.
+        "_tool_add_stimulus",
     }
     for name in tools:
         fn = getattr(RefModelEditor, name)
