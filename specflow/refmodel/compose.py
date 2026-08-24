@@ -22,7 +22,7 @@ from ..stage import (
     previous_answer_block,
     run_stage,
 )
-from . import freeze, trust, verdict
+from . import freeze, ratchet, trust, verdict
 from . import variants as variants_mod
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .oracles import decide_all, replay, stimulus_liveness
@@ -719,10 +719,18 @@ def _oracle_driven_turns(
             had_oracle={o.req_uid for o in oracles},
             requirements=requirements,
         )
+        # I6, on the only path that can lose an activation. Appending stimulus
+        # cannot -- nothing existing is edited -- but whether a scenario occurs
+        # is a joint property of the stimulus and the design, so an edit that
+        # stops the model entering a state un-fires an activation the stimulus
+        # still drives, and the failing count DROPS.
+        regressed = (ratchet.note(
+            Path(run_dir) / "specflow" / "exercised.json", mechanical)
+            if run_dir is not None else [])
         issues = verdict.issues(
             mechanical,
             {u: (r.detail or r.broken) for u, r in by_uid.items()},
-        )
+        ) + ratchet.issues(regressed)
 
         if run_dir is not None:
             out = Path(run_dir) / "specflow" / "judge" / f"r{turn}"
@@ -751,6 +759,7 @@ def _oracle_driven_turns(
                         "variants": len(variants or []),
                         "vacuous": sorted(vacuous),
                     },
+                    "regressed": regressed,
                 }, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")
 
