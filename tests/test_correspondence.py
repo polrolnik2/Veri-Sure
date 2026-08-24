@@ -56,10 +56,41 @@ def test_the_prompt_carries_two_texts_and_no_design():
 
 
 def test_there_is_no_parameter_a_design_could_arrive_through():
+    """An exact set, so admitting a new channel is a deliberate edit here.
+
+    `spec` was added and this test is what made it visible. It is admitted
+    because it is strictly UPSTREAM of everything -- it is the document S1
+    read, so it cannot carry back any artifact the pipeline produced. The
+    others on this list are the requirement, its normalized form and the oracle
+    under review; none is an implementation, and adding one that is should fail
+    this assertion rather than pass quietly.
+    """
     import inspect
 
     taken = set(inspect.signature(C.build_prompt).parameters)
-    assert taken == {"requirement", "oracle", "normalized"}
+    assert taken == {"requirement", "oracle", "normalized", "spec"}
+
+
+def test_wider_spec_context_did_not_help_and_is_off_by_default():
+    """Measured, both arms, same 70 frozen oracles scored against `liveness`.
+
+    Arm A (no spec) rejected 3 of 70, lift +0.06. Arm B (the whole 15.7 KB
+    spec, ahead of the requirement so the prefix stays cacheable) rejected 3 of
+    70, lift -0.00. Wider context changed nothing, which is the result: the
+    reviewer's handicap is that it never sees an execution, and deadness is a
+    property of execution that no amount of prose settles.
+
+    So it defaults off -- an empty `spec` produces the arm-A prompt exactly --
+    and the parameter stays because the measurement should be repeatable on a
+    design whose spec is organised differently.
+    """
+    import inspect
+
+    assert inspect.signature(C.build_prompt).parameters["spec"].default == ""
+    assert C.build_prompt(requirement=REQ, oracle=ORACLE) == C.build_prompt(
+        requirement=REQ, oracle=ORACLE, spec="")
+    assert "specification" in C.build_prompt(
+        requirement=REQ, oracle=ORACLE, spec="the spec text")
 
 
 def test_the_reviewer_is_not_offered_a_third_answer():

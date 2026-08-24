@@ -100,14 +100,31 @@ def build_prompt(
     requirement: dict,
     oracle: RequirementOracle,
     normalized: dict | None = None,
+    spec: str = "",
 ) -> str:
-    """Two texts. There is no parameter a design could arrive through.
+    """Texts only. There is no parameter a design could arrive through.
 
     The same structural enforcement `oracle_gen.build_prompt` uses, for the same
     reason and one stage later: a named signature makes adding an implementation
     a visible change to a function rather than one more key in a dict.
+
+    `spec` is the source document the requirement was extracted FROM, and it is
+    admitted here on purpose. It is strictly upstream of every artifact in this
+    pipeline -- it is what S1 read -- so it cannot carry back anything the
+    pipeline produced. What it adds is the surround: `requirement.spec_spans`
+    already quotes the sentence, and a reviewer holding only that sentence
+    cannot tell a clause whose testable content is stated two paragraphs later
+    from one that has none. Ahead of the requirement rather than after it, so
+    the shared prefix stays cacheable across the fan-out.
+
+    It does NOT let this gate see behaviour. Whether a check can fail is decided
+    by `liveness`, mechanically, from traces -- a fact about execution that no
+    amount of prose can settle.
     """
-    parts = [json_block("requirement", requirement)]
+    parts = []
+    if spec.strip():
+        parts.append(json_block("specification", {"text": spec}))
+    parts.append(json_block("requirement", requirement))
     if normalized:
         parts.append(json_block("normalized", normalized))
     parts.append(json_block("oracle", {
@@ -129,6 +146,7 @@ def review_one(
     *,
     port: ModelPort,
     normalized: dict | None = None,
+    spec: str = "",
     round_: int = 0,
 ) -> Review:
     """One call. Never raises: a reviewer that cannot answer does not reject.
@@ -141,7 +159,7 @@ def review_one(
         reply = port.complete(
             stage=f"{STAGE}_{oracle.req_uid or 'unknown'}", round_=round_,
             prompt=build_prompt(requirement=requirement, oracle=oracle,
-                                normalized=normalized))
+                                normalized=normalized, spec=spec))
     except Exception as exc:  # noqa: BLE001
         return Review(reasoning=f"{PARSE_ERROR}{exc!r}")
     out = parse_response(reply)
@@ -156,6 +174,7 @@ def review(
     *,
     port: ModelPort,
     normalized: dict[str, dict] | None = None,
+    spec: str = "",
     round_: int = 0,
     fanout: bool = True,
 ) -> dict[str, Review]:
@@ -166,7 +185,7 @@ def review(
     def one(oracle: RequirementOracle) -> Review:
         return review_one(
             oracle, requirements[oracle.req_uid], port=port,
-            normalized=norm.get(oracle.req_uid), round_=round_)
+            normalized=norm.get(oracle.req_uid), spec=spec, round_=round_)
 
     done = run_fanout(wanted, one) if fanout else [one(o) for o in wanted]
     return {o.req_uid: r for o, r in zip(wanted, done)}
