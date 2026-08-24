@@ -87,10 +87,27 @@ class OracleSet:
     witness_kind: str = NO_BOUND
     rounds: int = 0
 
-    def rates(self) -> dict[str, int]:
+    def rates(self) -> dict[str, int | None]:
+        """Counts, and `None` where a check did not run.
+
+        `VACUOUS: 0` and `VACUOUS: None` are different claims and only one of
+        them is ever true: with no variants the vacuity leg is skipped
+        entirely, so zero convictions means "not looked at", not "none found".
+        This exact ambiguity misread a whole run once -- `over_strict: 0` was
+        taken as "no oracle is over-strict" when it meant "no control was
+        supplied" -- and 22 of 54 trusted oracles turned out to be failed by a
+        known-good model.
+        """
         counts = Counter(self.dispositions.values())
-        return {"trusted": len(self.trusted),
-                **{k: counts[k] for k in sorted(counts) if k != TRUSTED}}
+        out: dict[str, int | None] = {
+            "trusted": len(self.trusted),
+            **{k: counts[k] for k in sorted(counts) if k != TRUSTED},
+        }
+        if not self.variants:
+            out["VACUOUS"] = None
+        if self.witness_kind == NO_BOUND:
+            out["ORACLE_INVALID"] = out.get("ORACLE_INVALID")
+        return out
 
     def by_verdict(self, name: str) -> list[str]:
         return sorted(u for u, v in self.dispositions.items() if v == name)
@@ -329,7 +346,11 @@ def run_oracle_stage(
             trusted, Path(run_dir) / "specflow" / ARTIFACT, normalized,
             extra={"dispositions": dispositions, "reasons": reasons,
                    "witness": witness_kind, "rounds": rounds,
-                   "variants": len(variants)})
+                   "variants": len(variants),
+                   # Legibility, not decoration: a reader has to be able to
+                   # tell a check that found nothing from one that never ran.
+                   "vacuity_checked": bool(variants),
+                   "over_strictness_bounded_by": witness_kind})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
         if variants:

@@ -424,3 +424,28 @@ def test_the_witness_is_never_downgraded_to_the_small_model():
     settings = PortSettings(small_model="tiny", small_effort="low")
     assert settings.for_stage(WITNESS_STAGE) == (None, None)
     assert settings.for_stage("oracle_REQ-0001") == ("tiny", "low")
+
+
+def test_vacuous_is_none_not_zero_when_no_variant_check_ran():
+    """`VACUOUS: 0` and `VACUOUS: None` are different claims and only one is
+    ever true. This exact ambiguity misread a whole run: `over_strict: 0` was
+    taken as "no oracle is over-strict" when it meant "no control was supplied",
+    and 22 of 54 trusted oracles turned out to be failed by a known-good model.
+    """
+    unchecked = O.OracleSet(trusted=[_oracle(GOOD)],
+                            dispositions={"REQ-0001": O.TRUSTED}, variants=[])
+    assert unchecked.rates()["VACUOUS"] is None
+
+    checked = O.OracleSet(
+        trusted=[_oracle(GOOD)], dispositions={"REQ-0001": O.TRUSTED},
+        variants=[Variant(req_uid="REQ-0001", kind="action", clause="c",
+                          source=BROKEN)])
+    assert checked.rates().get("VACUOUS", 0) == 0
+
+
+def test_the_artifact_says_which_checks_actually_ran(tmp_path, monkeypatch):
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["vacuity_checked"] is False
+    assert blob["over_strictness_bounded_by"] == O.WITNESS
