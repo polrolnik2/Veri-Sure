@@ -31,6 +31,21 @@ The earlier version of this split guessed the second case from "does any port
 it reads vary", and that misroutes: an oracle with a threshold the stimulus
 never approaches reads a moving port and is still not the author's fault.
 
+WHY IT HAS TO EXECUTE, RATHER THAN READ. There is no source-level signature to
+look for. Comparing the 20 dead oracles against the 44 live ones on the same
+frozen set: the dead ones are LONGER (median 9 comparisons against 6, 54 lines
+against 49), all 20 have a `return None` unexercised path like the live ones,
+and 15 of the 20 contain a literal `return False` -- a rejection branch that
+simply never executes. They read as real checks, because that is what they are
+except for being unreachable.
+
+That one measurement explains three separate failures to catch this cheaply.
+The correspondence reviewer reads the requirement and the source and cannot
+see it -- it passed 21 of the 23 dead oracles as on-target. A static rule
+("assert on a port that actually varies") catches 2 of 8. And mutation needs
+the operator to land three mutants where the oracle happens to look, which it
+managed for 10 of 31. Only running the thing distinguishes them.
+
 WHAT THIS IS NOT. It is not a claim that the check is wrong, and it says
 nothing about whether the check decides the right requirement -- an oracle can
 be perfectly live and test the wrong thing entirely. It is the weaker and more
