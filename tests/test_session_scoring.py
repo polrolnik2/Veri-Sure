@@ -100,3 +100,44 @@ def test_ties_do_not_overwrite():
     s.note_best("first")
     assert s.note_best("second") is False
     assert s.best() == "first"
+
+
+# --------------------------------------------------- half-built stays inert
+#
+# `add_stimulus` lands before the generator that feeds it is wired. That is only
+# acceptable if an unwired session behaves exactly as it did before -- otherwise
+# any relaunch mid-migration runs half-finished code, which is how a previous
+# run in this project ended up measuring code that no longer existed.
+
+
+def test_a_session_built_without_the_new_arguments_is_unchanged():
+    s = _session()
+    assert s.stimulus_gen is None
+    assert s.added == []
+    assert s.best() == SOURCE
+
+
+def test_add_stimulus_refuses_rather_than_raising_when_unwired():
+    s = _session()
+    out = s.add_stimulus("REQ-0000", "issue a WRITE")
+    assert "error" in out and "no stimulus generator" in out["error"]
+
+
+def test_add_stimulus_refuses_a_requirement_that_is_not_unexercised():
+    """It only stages a scenario nothing reaches. A FAILING oracle is a finding
+    about the model, and adding stimulus cannot discharge it -- offering to
+    would hand the agent a way to answer a real defect with more vectors."""
+    s = _session(stimulus_gen=lambda req, hint: [{"a": 1}])
+    _results(s, False)
+    s._results[0] = OracleResult("REQ-0000", ok=False)
+    out = s.add_stimulus("REQ-0000", "x")
+    assert "error" in out and "failing" in out["error"]
+
+
+def test_the_stimulus_budget_is_finite():
+    """Append-only means testpoints accumulate, and each becomes its own
+    simulator process in the rendered suite."""
+    s = _session(stimulus_gen=lambda req, hint: [{"a": 1}], stimulus_budget=0)
+    s._results = [OracleResult("REQ-0000", ok=None)]
+    out = s.add_stimulus("REQ-0000", "x")
+    assert "error" in out and "budget" in out["error"]

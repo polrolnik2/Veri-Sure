@@ -28,10 +28,13 @@ requirement unverifiable would score as fixing it.
 from __future__ import annotations
 
 import ast
+import json
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..ids import PREFIX_TESTPLAN, mint, next_index
+from ..obligation import FIRED, Obligation, check_static
 from .oracles import OracleResult, RequirementOracle, decide_all, replay
 from .validate import validate_source
 
@@ -93,6 +96,20 @@ class DebugSession:
         reasons: dict[str, dict] | None = None,
         covers: dict[str, list[str]] | None = None,
         workdir: Path | None = None,
+        #: `(requirement, hint) -> steps`, or None. Injected rather than
+        #: imported for the same reason `compose.RefModelDebugger` is: the
+        #: generator needs a model port, and the decidable half of this session
+        #: must stay runnable with no model at all.
+        stimulus_gen=None,
+        #: req_uid -> normalized form, for matching a new testpoint to the
+        #: activations it fires.
+        normalized: dict[str, dict] | None = None,
+        testplan: list[dict] | None = None,
+        reset_ports: frozenset[str] = frozenset(),
+        #: Testpoints this session may add, total. Append-only means they
+        #: accumulate, and every one becomes a simulator process in the rendered
+        #: suite (`run.py:200-204`, ~0.39s each).
+        stimulus_budget: int = 12,
     ):
         self.source = source
         self.contract = contract
@@ -106,6 +123,13 @@ class DebugSession:
         # `validate_source` writes a scratch copy so the exec has a filename;
         # it is not optional and the session must not scribble in the run dir.
         self.workdir = Path(workdir or tempfile.mkdtemp(prefix="refmodel-debug-"))
+
+        self.stimulus_gen = stimulus_gen
+        self.normalized = dict(normalized or {})
+        self.testplan = list(testplan or [])
+        self.reset_ports = reset_ports
+        self.stimulus_budget = int(stimulus_budget)
+        self.added: list[str] = []
 
         self.history: list[Edit] = []
         self._results: list[OracleResult] = []
@@ -355,6 +379,115 @@ class DebugSession:
             "detail": "" if result is None else (result.broken or result.detail),
         }
         return out
+
+    def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> dict:
+        """Mint a NEW testpoint for a requirement whose oracle sees nothing.
+
+        APPENDS. Nothing existing is edited, which is the `add_testcase`
+        discipline (`testcase_agent.py:236-249`) rather than a new one, and it is
+        what makes the operation safe to hand an agent whose objective is a lower
+        failing count. The shortcut a mutable stimulus would open is real: make
+        the scenario stop occurring and a VIOLATES becomes a NOT_EXERCISED.
+        Appending cannot do that -- `_worst` (`oracles.py:373`) ranks failing
+        above everything a new testpoint could add, so a grown evidence set only
+        ever moves a verdict toward worse.
+
+        Restricted to oracles currently reporting `ok=None`, mirroring
+        `testcase_agent.gate` (`:191-198`): the target must already be reported
+        unexercised, so it cannot be invented.
+
+        The agent supplies INTENT, never steps. Vectors come from the injected
+        generator and are gated before they are kept, so the agent cannot
+        hand-write a step list the gate would reject.
+        """
+        if self.stimulus_gen is None:
+            return {"error": "no stimulus generator is wired into this session"}
+        if len(self.added) >= self.stimulus_budget:
+            return {"error": f"stimulus budget spent ({self.stimulus_budget} "
+                             f"testpoints added); the remaining unexercised "
+                             f"requirements need a testplan fix, not more steps"}
+
+        result = next((r for r in self._results if r.req_uid == req_uid), None)
+        if result is None or not result.unexercised():
+            state = "unknown" if result is None else (
+                "failing" if result.failed() else
+                "broken" if result.broken else "met")
+            return {"error": f"{req_uid} is {state}, not unexercised. This tool "
+                             f"only stages a scenario nothing currently reaches "
+                             f"-- a failing oracle is a finding about the MODEL "
+                             f"and adding stimulus cannot discharge it."}
+
+        req = self.requirements.get(req_uid, {})
+        try:
+            steps = self.stimulus_gen(req, what_the_scenario_needs)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"stimulus generation failed: {exc!r}"}
+        if not steps:
+            return {"error": "the generator produced no steps"}
+
+        # Byte-identical to something already present buys nothing and costs a
+        # simulator process. `stimulus_diagnostics` already computes this key.
+        key = json.dumps(steps, sort_keys=True)
+        if any(json.dumps(v, sort_keys=True) == key
+               for v in self.stimulus_by_tp.values()):
+            return {"error": "identical to stimulus already in the suite"}
+
+        uid = mint(PREFIX_TESTPLAN, next_index(
+            [str(t.get("uid", "")) for t in self.testplan]
+            + list(self.stimulus_by_tp), PREFIX_TESTPLAN))
+
+        self.stimulus_by_tp[uid] = steps
+        self.testplan.append({
+            "uid": uid, "covers": [f"{req_uid}@1"],
+            "stimulus": what_the_scenario_needs, "expected_response": "",
+            "dimension": "D2_control_flow",
+        })
+        self.added.append(uid)
+
+        attached = self._attach(uid, steps)
+        self.refresh()
+        after = next((r for r in self._results if r.req_uid == req_uid), None)
+        return {
+            "added": uid,
+            "steps": len(steps),
+            "attached_to": attached,
+            "now": ("still NOT EXERCISED" if after and after.unexercised() else
+                    "met" if after and after.ok else
+                    "NOT MET -- the scenario now occurs and the model fails it"
+                    if after else "unknown"),
+            "budget_left": self.stimulus_budget - len(self.added),
+        }
+
+    def _attach(self, tp_uid: str, steps: list[dict]) -> list[str]:
+        """Every requirement whose ACTIVATION this testpoint mechanically fires.
+
+        Not just the one that asked. A newly generated WRITE testpoint genuinely
+        stages WRITE, so any requirement needing WRITE is legitimately exercised
+        by it, and scoping the testpoint to its requester would waste it.
+
+        Not everything either: deciding an oracle against a scenario it was not
+        written for is what measurement rejected -- on f-i2c that traded 1 true
+        finding for 27 false ones. `check_static` draws the line without
+        judgement, by reading which input-only activations the steps fire. A
+        state-dependent activation cannot be matched this way and keeps its
+        existing attachment, which is the honest limit rather than a gap.
+        """
+        hit: list[str] = []
+        for oracle in self.oracles:
+            norm = self.normalized.get(oracle.req_uid)
+            if not norm:
+                continue
+            act = (norm.get("activation") or {})
+            if not act.get("inputs"):
+                continue
+            ob = Obligation(oracle.req_uid, act.get("text", ""),
+                            dict(act["inputs"]), tuple(norm.get("observable") or ()))
+            check = check_static(ob, steps, reset_ports=self.reset_ports)
+            if check is not None and check.status == FIRED:
+                if tp_uid not in oracle.tp_uids:
+                    oracle.tp_uids.append(tp_uid)
+                hit.append(oracle.req_uid)
+        return hit
 
     def read_model(self, method: str | None = None) -> str:
         """Line-numbered source, whole or one method."""
