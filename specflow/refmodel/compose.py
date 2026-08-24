@@ -375,6 +375,8 @@ def _debug_turns(
     # clearest practical argument for the split.
     isolated: list = []
     variant_set: list = []
+    carried: dict[str, str] = {}
+    oracle_rates: dict = {}
     frozen_path = (Path(run_dir) / "specflow" / "oracles.json"
                    if run_dir is not None else None)
     variants_path = (Path(run_dir) / "specflow" / "variants.json"
@@ -384,6 +386,9 @@ def _debug_turns(
         variant_set = list(oracle_set.variants)
         logger.info("oracles: %d trusted, from the oracle stage",
                     len(isolated))
+        carried = {u: v for u, v in oracle_set.dispositions.items()
+                   if v != "TRUSTED"}
+        oracle_rates = oracle_set.rates()
     elif compare_oracles:
         try:
             from ..oracles_stage import run_oracle_stage
@@ -416,6 +421,9 @@ def _debug_turns(
                 )
                 isolated = list(oracle_set.trusted)
                 variant_set = list(oracle_set.variants)
+                carried = {u: v for u, v in oracle_set.dispositions.items()
+                           if v != "TRUSTED"}
+                oracle_rates = oracle_set.rates()
         except Exception as exc:  # noqa: BLE001
             # Never let the reporting path fail a run. It informs a decision
             # about a future design; it does not gate this one.
@@ -429,6 +437,7 @@ def _debug_turns(
             run_dir=run_dir, debugger=debugger, max_turns=max_turns,
             control_source=control_source, normalized=normalized,
             judge_port=judge_port, variants=variant_set,
+            carried=carried, oracle_rates=oracle_rates,
         )
 
     issues: list[Issue] = []
@@ -613,6 +622,12 @@ def _oracle_driven_turns(
     normalized: dict[str, dict] | None,
     judge_port: ModelPort,
     variants: list | None = None,
+    #: What the oracle stage decided about the requirements whose oracle is NOT
+    #: in `oracles` -- ORACLE_INVALID, VACUOUS, UNOBSERVABLE, UNDECIDED. Carried
+    #: through for reporting and never recomputed here: they were settled
+    #: against a witness that does not move, before this model existed.
+    carried: dict[str, str] | None = None,
+    oracle_rates: dict | None = None,
 ) -> tuple[str, list[Issue]]:
     """The loop with no judge in it.
 
@@ -640,6 +655,8 @@ def _oracle_driven_turns(
     """
     issues: list[Issue] = []
     turns = max(1, int(max_turns))
+    carried = dict(carried or {})
+    oracle_rates = dict(oracle_rates or {})
     _, reset_names, _ = classify(contract)
 
     # The set this loop promised to measure against, recorded at entry so each
@@ -665,27 +682,6 @@ def _oracle_driven_turns(
     last_failing: int | None = None
     stalled = False
 
-    def _vacuity(subset: list) -> dict[str, str]:
-        """Step 7's must-fail leg, over the oracles named.
-
-        Runs no model. Both the oracle and the variants are frozen, so this is
-        replay-and-decide and costs milliseconds -- which is why it can be
-        re-asked for an oracle whose evidence set grew (I7) instead of being
-        computed once and trusted forever.
-        """
-        out: dict[str, str] = {}
-        for o in subset:
-            got, why = variants_mod.must_fail(
-                o, variants or [], contract, stimulus_by_tp, base=base,
-                transactional=True)
-            if got == trust.CONVICTED:
-                out[o.req_uid] = f"vacuous: {why}"
-        return out
-
-    #: `{req_uid: why}` for every oracle no variant of its own requirement can
-    #: fail. Computed once, then re-asked only where the evidence moved.
-    vacuous: dict[str, str] = _vacuity(oracles) if variants else {}
-
     def _restimulate(req: dict, hint: str) -> list[dict]:
         from ..testcase_agent import stimulus_for_scenario
 
@@ -703,76 +699,27 @@ def _oracle_driven_turns(
             raise RuntimeError(
                 "the frozen oracle set changed under the loop measuring "
                 f"against it: {sorted(moved)}")
-        # Gate 1 asks an oracle to agree with the verdict it shipped with, and
-        # an isolated oracle ships with none. A blanket `"met"` does not
-        # neutralise it -- it makes gate 1 DISCARD exactly the oracles that fail
-        # the model, which is every finding this loop exists to act on, and
-        # gates 3 and 2 then never see them. Recovering them afterwards restores
-        # the findings but not the screening: an over-strict oracle stays
-        # invisible to gate 3 for precisely as long as it is failing the model,
-        # which is precisely as long as it is being handed to the debug agent.
+        # NO SCREENING HERE. The set arrived verified by the oracle stage,
+        # against a witness and variants that do not move, so re-asking those
+        # questions each turn could only re-ask them against a design the agent
+        # is editing. Two measured failures came from exactly that: VACUOUS
+        # wandered 16 -> 18 -> 16 under a frozen oracle set, and four of five
+        # apparent closures were the agent editing the model toward checks a
+        # known-good design also fails -- invisible until turn 2 because the
+        # gates ran in an order that hid them while they were still failing.
         #
-        # Measured on h-i2c: REQ-0025, 0042, 0066 and 0073 were all recovered
-        # this way at r0, the agent duly edited the model until they passed, and
-        # only THEN did gate 3 get its first look and rule all four over-strict
-        # -- the known-good control fails them too. Three turns of repair spent
-        # contorting the model toward demands no correct design meets.
-        #
-        # So pre-decide and hand gate 1 the matching verdict. It becomes a
-        # genuine no-op, every oracle reaches gate 3 on turn 0, and an
-        # unsatisfiable check is disqualified before it costs an attempt. The
-        # extra pass is pure Python over cached replays.
-        said = {}
-        for o in oracles:
-            d = trust._decide_over(  # noqa: SLF001
-                o, source, contract, stimulus_by_tp, base=base,
-                transactional=True)
-            said[o.req_uid] = "met" if d.ok else "not_met"
-        screened = trust.screen(
-            oracles, said, source, contract,
-            stimulus_by_tp, testplan, base=base, control_source=control_source,
-            transactional=True,
-        )
-        failing_uids: set[str] = set()
-        trusted = list(screened.trusted)
-        discarded = dict(screened.discarded)
-
-        # An oracle nothing can fail contributes no information, and its
-        # CONFORMS would be the most misleading kind: a green that was never
-        # at risk. Route it to the oracle author instead of counting it.
-        #
-        # And when the frozen leg is available it REPLACES gate 2 as the source
-        # of this verdict, rather than adding to it. Measured on h-i2c r0 -> r1
-        # with the oracle set frozen: VACUOUS still moved 16 -> 18, because gate
-        # 2 derives its mutants from the CURRENT model source, so the in-scope
-        # mutant set changes as the debug agent edits and an oracle is convicted
-        # this turn for silence about a mutant that did not exist last turn.
-        # Freezing the oracles is not enough; the counterexamples have to be
-        # frozen too, and `variants` are. Gate 2 stays as the cheap per-turn
-        # re-check it was always argued to be -- its rate is still reported --
-        # but it stops being allowed to name a verdict.
-        if variants:
-            unconvicted = {u for u, why in discarded.items()
-                           if why.startswith("vacuous:")}
-            discarded = {u: why for u, why in discarded.items()
-                         if u not in unconvicted}
-            trusted = trusted + [o for o in oracles
-                                 if o.req_uid in unconvicted
-                                 and o.req_uid not in vacuous]
-        if vacuous:
-            trusted = [o for o in trusted if o.req_uid not in vacuous]
-            discarded = {**discarded, **vacuous}
-
-        results = decide_all(trusted, source, contract, stimulus_by_tp,
+        # What a turn may conclude is three things, and `of_result` is all of
+        # it: the design honoured the clause, broke it, or never met it.
+        results = decide_all(oracles, source, contract, stimulus_by_tp,
                              base=base, transactional=True)
         by_uid = {r.req_uid: r for r in results}
-        mechanical = verdict.classify(
-            discarded=discarded,
-            passing={u for u, r in by_uid.items() if r.ok is True},
-            failing={u for u, r in by_uid.items() if r.failed()},
-            had_oracle={o.req_uid for o in oracles},
-            requirements=requirements,
-        )
+        mechanical = {**carried,
+                      **{u: verdict.of_result(r) for u, r in by_uid.items()}}
+        for req in requirements:
+            uid = str(req.get("uid") or "")
+            if uid and uid not in mechanical:
+                mechanical[uid] = "UNDECIDED"
+
         # I6, on the only path that can lose an activation. Appending stimulus
         # cannot -- nothing existing is edited -- but whether a scenario occurs
         # is a joint property of the stimulus and the design, so an edit that
@@ -792,7 +739,7 @@ def _oracle_driven_turns(
             (out / "trust.json").write_text(
                 json.dumps({
                     "driver": "requirement-oracles",
-                    "rates": screened.rates(),
+                    "rates": oracle_rates,
                     "mechanical_verdicts": {
                         "counts": verdict.counts(mechanical),
                         "blocking": verdict.blocking(mechanical),
@@ -800,8 +747,7 @@ def _oracle_driven_turns(
                         "routes": {u: verdict.ROUTE[v]
                                    for u, v in sorted(mechanical.items())},
                     },
-                    "discarded": discarded,
-                    "recovered_from_gate1": sorted(failing_uids),
+                    "carried_from_the_oracle_stage": carried,
                     # What earlier turns appended. Reported per turn so a reader
                     # can tell "NOT_EXERCISED fell" from "NOT_EXERCISED fell
                     # BECAUSE stimulus was added", which are different claims.
@@ -811,7 +757,6 @@ def _oracle_driven_turns(
                         "frozen": at_entry,
                         "evidence_changed": freeze.stale_proofs(oracles, proofs),
                         "variants": len(variants or []),
-                        "vacuous": sorted(vacuous),
                     },
                     "regressed": regressed,
                 }, indent=2, ensure_ascii=False) + "\n",
@@ -819,11 +764,11 @@ def _oracle_driven_turns(
 
         if not has_errors(issues):
             return source, issues
-        if turn == turns or not trusted:
+        if turn == turns or not oracles:
             break
 
         session = DebugSession(
-            source, contract, stimulus_by_tp, trusted, base=base,
+            source, contract, stimulus_by_tp, oracles, base=base,
             requirements=requirements,
             verdicts={u: v for u, v in mechanical.items()},
             reasons={u: {"reason": r.detail, "evidence": "", "remedy": ""}
@@ -849,19 +794,18 @@ def _oracle_driven_turns(
             testplan = session.testplan
             added.extend(session.added)
             # I7, and the whole of what append-only leaves of it: an oracle
-            # that GAINED a testpoint was proved against an evidence set that
-            # no longer exists, so its must-fail leg is re-run and nothing
-            # else's is. Existing stimulus is never edited, so no other proof
-            # can have gone stale.
-            if variants:
-                moved = set(freeze.stale_proofs(oracles, proofs))
-                if moved:
-                    vacuous = {u: w for u, w in vacuous.items()
-                               if u not in moved}
-                    vacuous.update(_vacuity(
-                        [o for o in oracles if o.req_uid in moved]))
-                    proofs.update({o.req_uid: freeze.evidence_hash(o)
-                                   for o in oracles if o.req_uid in moved})
+            # that GAINED a testpoint was verified against an evidence set that
+            # no longer exists. Existing stimulus is never edited, so no other
+            # verification can have gone stale. RECORDED, not re-decided here --
+            # re-verifying belongs to the stage that owns the witness and the
+            # variants, and doing it inline would put a gate back inside the
+            # loop, which is the thing this rework removed.
+            stale_now = freeze.stale_proofs(oracles, proofs)
+            if stale_now:
+                logger.info(
+                    "turn %d: %d oracle(s) gained evidence and are due "
+                    "re-verification: %s", turn, len(stale_now),
+                    ", ".join(stale_now))
             logger.info("turn %d added %d testpoint(s): %s", turn,
                         len(session.added), ", ".join(session.added))
         elif source == before:

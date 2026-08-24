@@ -208,62 +208,30 @@ def test_variants_of_another_requirement_are_not_evidence():
     assert got == UNKNOWN
 
 
-# ------------------------------------------------------------ inside the loop
+# --------------------------------------------- where the conviction now lives
 
 
-def _loop(tmp_path, oracle_source, variant_list):
+def test_the_loop_no_longer_convicts_anything():
+    """Vacuity is decided once, by the oracle stage, against variants that do
+    not move. Deciding it per turn is what made VACUOUS wander 16, 18, 16 under
+    an oracle set that was already frozen: gate 2 re-derives its mutants from
+    the CURRENT model, so the conviction set moves as the agent edits."""
+    import inspect
+
     from specflow.refmodel import compose
 
-    class _Quiet:
-        def debug(self, session):
-            return session.source, 0, "nothing to do"
-
-    compose._oracle_driven_turns(
-        source=CONFORMING, contract=CONTRACT, contract_json="{}",
-        requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
-        covers={"step": ["REQ-0001"]}, oracles=[_oracle(oracle_source)],
-        base="step", testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
-        stimulus_by_tp={"TP-0000": STEPS}, run_dir=tmp_path,
-        debugger=_Quiet(), max_turns=1, control_source=None, normalized=None,
-        judge_port=None, variants=variant_list,
-    )
-    import json
-    return json.loads(
-        (tmp_path / "specflow" / "judge" / "r0" / "trust.json").read_text())
+    src = inspect.getsource(compose._oracle_driven_turns)
+    assert "must_fail" not in src
+    assert "vacuous" not in src
 
 
-def test_an_oracle_no_variant_can_fail_is_routed_to_its_author(tmp_path):
-    """A green that was never at risk is the most misleading kind."""
-    blob = _loop(tmp_path, VACUOUS,
-                 _variants(BROKEN_ACTION, BROKEN_ACTION, BROKEN_ACTION))
-    assert blob["oracle_set"]["vacuous"] == ["REQ-0001"]
-    verdicts = blob["mechanical_verdicts"]["by_requirement"]
-    assert verdicts["REQ-0001"] == "VACUOUS"
-    assert blob["mechanical_verdicts"]["routes"]["REQ-0001"] == \
-        "regenerate the oracle"
+def test_the_stage_is_what_convicts():
+    from specflow import oracles_stage
+
+    assert "must_fail" in inspect_source(oracles_stage.verify_one)
 
 
-def test_an_oracle_that_catches_one_keeps_its_verdict(tmp_path):
-    blob = _loop(tmp_path, WATCHFUL, _variants(BROKEN_ACTION))
-    assert blob["oracle_set"]["vacuous"] == []
-    assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == "CONFORMS"
+def inspect_source(fn) -> str:
+    import inspect
 
-
-def test_with_no_variants_the_leg_is_silent_rather_than_convicting(tmp_path):
-    """Off by default. Absence of a counterexample is not vacuity."""
-    blob = _loop(tmp_path, VACUOUS, [])
-    assert blob["oracle_set"]["variants"] == 0
-    assert blob["oracle_set"]["vacuous"] == []
-    assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == "CONFORMS"
-
-
-def test_the_frozen_leg_replaces_gate_2_rather_than_adding_to_it(tmp_path):
-    """Measured on h-i2c r0 -> r1: with the oracle set frozen, VACUOUS still
-    moved 16 -> 18, because gate 2 mutates the CURRENT model source. Freezing
-    the oracles is not enough when the counterexamples are re-derived per turn.
-    """
-    # VACUOUS is written by gate 2 for an oracle nothing can falsify. With a
-    # variant it CAN falsify in hand, the frozen leg acquits it.
-    blob = _loop(tmp_path, WATCHFUL, _variants(BROKEN_ACTION))
-    assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == "CONFORMS"
-    assert blob["rates"]["convicted"] >= 0, "gate 2's rate is still reported"
+    return inspect.getsource(fn)

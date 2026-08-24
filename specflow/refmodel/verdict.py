@@ -94,6 +94,35 @@ def of_discard(reason: str) -> str:
     return "UNDECIDED"
 
 
+def of_result(result) -> str:
+    """The verdict one decided oracle implies. Three outcomes, no more.
+
+    This is what a turn of the debug loop may conclude once the oracle set
+    arrives verified: the design honoured the clause, broke it, or never met
+    it. Everything else the enum can say -- the check is wrong, the check
+    demands nothing, the requirement has no observable -- was settled by the
+    oracle stage before the model existed, and a loop that could re-derive
+    those would be re-deriving them against a model it is itself editing. That
+    is the measured failure: VACUOUS wandered 16 -> 18 -> 16 with the oracle
+    set frozen, because a gate kept re-asking under a moving design.
+
+    A model that raised is `VIOLATES`, not a defect in the check: the oracle
+    could not decide because the design fell over, and the party that changed
+    it is the one to tell.
+    """
+    if result.model_broke:
+        return "VIOLATES"
+    if result.broken:
+        # A verified oracle that breaks anyway decided nothing, and nothing
+        # here can say why. It is not the model's to answer.
+        return "UNDECIDED"
+    if result.ok is True:
+        return "CONFORMS"
+    if result.ok is False:
+        return "VIOLATES"
+    return "NOT_EXERCISED"
+
+
 def classify(
     *,
     discarded: dict[str, str],
