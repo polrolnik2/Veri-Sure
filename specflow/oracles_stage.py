@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .model_io import ModelPort
-from .refmodel import freeze, trust
+from .refmodel import correspondence, freeze, trust
 from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
 from .refmodel.oracle_gen import run_oracle_gen
@@ -144,6 +144,11 @@ def verify_one(
     base: str,
     control: str = "",
     transactional: bool = True,
+    #: `correspondence.Review` for this oracle, when one was taken. The only
+    #: BLOCKING check that is not mechanical -- and the only one entitled to
+    #: block for a reason no design supplies: whether the oracle decides the
+    #: requirement it names at all.
+    review=None,
 ) -> tuple[str, bool, dict[str, str]]:
     """`(why, quotable, notes)`.
 
@@ -199,6 +204,9 @@ def verify_one(
     replayable = any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids)
     notes: dict[str, str] = {}
 
+    # Gate 1 first, and non-mandatory: the witness observes and never decides.
+    # Its note is recorded before anything blocks, so a rejection downstream is
+    # read beside what the witness happened to think rather than instead of it.
     for name, design in (("witness", witness), ("control", control)):
         if not design or not replayable:
             continue
@@ -218,6 +226,16 @@ def verify_one(
                 if name == "witness" else
                 f"fails it{where}; the detail is withheld so nothing can be "
                 f"tuned against a held-out grade")
+
+    if review is not None:
+        # Blocking, and it is the weaker instrument by design. It sees the
+        # requirement and the oracle source -- two texts, no implementation --
+        # so it cannot be contaminated by a design, which is exactly why it may
+        # decide where the designs may not. Authority follows independence here,
+        # not strength.
+        off = correspondence.rejects(review)
+        if off:
+            return off, True, notes
 
     if variants and replayable:
         level, detail = variants_mod.must_fail(
@@ -272,6 +290,11 @@ def run_oracle_stage(
     #: confound this stage cannot otherwise touch.
     witness_port: ModelPort | None = None,
     want_variants: bool = False,
+    #: Ask a reviewer, per oracle, whether it decides the requirement it names.
+    #: One call each. The only blocking gate that is not mechanical, and the
+    #: only check of any kind that connects an oracle to ITS requirement --
+    #: without it nothing does, on a run with no variants.
+    want_correspondence: bool = False,
     run_dir: Path | None = None,
     max_repairs: int = 2,
     #: Verify-repair-verify rounds over the whole set, on top of the per-oracle
@@ -344,6 +367,7 @@ def run_oracle_stage(
         max_repairs=max_repairs, fanout=fanout,
     )
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
+    by_uid = {str(r.get("uid") or ""): r for r in requirements}
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
@@ -358,12 +382,17 @@ def run_oracle_stage(
         rejected = {}
         disagreements = {}
         quotable: dict[str, str] = {}
+        reviews = (
+            correspondence.review(
+                list(held.values()), by_uid, port=port, normalized=normalized,
+                round_=rounds - 1, fanout=fanout)
+            if want_correspondence else {})
         for uid, oracle in held.items():
             why, may_quote, notes = verify_one(
                 oracle, contract=contract, testplan=testplan,
                 stimulus_by_tp=stimulus_by_tp, witness=witness,
                 control=control, variants=variants, base=base,
-                transactional=transactional)
+                transactional=transactional, review=reviews.get(uid))
             if notes:
                 disagreements[uid] = notes
             if why:
@@ -416,6 +445,7 @@ def run_oracle_stage(
                    # Legibility, not decoration: a reader has to be able to
                    # tell a check that found nothing from one that never ran.
                    "vacuity_checked": bool(variants),
+                   "correspondence_checked": want_correspondence,
                    "over_strictness_bounded_by": witness_kind,
                    "repairs": repairs,
                    # What the designs said without being allowed to decide.

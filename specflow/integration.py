@@ -284,6 +284,10 @@ def build_artifacts(
     #: VACUOUS stops being inferred from silence under source mutation and is
     #: earned against a design that actually violates the requirement.
     variants: bool = False,
+    #: Ask a reviewer, per oracle, whether it decides the requirement it names.
+    #: One call each -- 77 on i2c. The only check of any kind that connects an
+    #: oracle to ITS requirement rather than judging it as a check in general.
+    correspondence: bool = False,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -544,7 +548,8 @@ def build_artifacts(
             base=choose_base(contract),
             normalized=normalized_by_uid or None,
             control_source=refmodel_control,
-            want_variants=variants, run_dir=run_dir, fanout=fanout,
+            want_variants=variants, want_correspondence=correspondence,
+            run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement
             # SET, not per directory.

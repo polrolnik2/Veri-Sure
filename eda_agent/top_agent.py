@@ -264,6 +264,7 @@ class TopAgentConfig:
     #: Report a requirement-only oracle set beside the judge's. Read-only.
     #: Requirement-only oracles drive the loop; the judge stops deciding.
     specflow_variants: bool = False
+    specflow_correspondence: bool = False
     specflow_adequacy_rounds: int = 0
     contract_only: bool = True
     debug_max_trials: int = 15
@@ -613,6 +614,7 @@ class TopAgent:
             refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
             refmodel_control=self.config.specflow_refmodel_control,
             variants=self.config.specflow_variants,
+            correspondence=self.config.specflow_correspondence,
             adequacy_rounds=self.config.specflow_adequacy_rounds,
         )
 

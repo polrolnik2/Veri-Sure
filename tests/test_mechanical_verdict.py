@@ -147,3 +147,14 @@ def test_every_blocking_verdict_can_produce_an_issue():
     behaviour."""
     for v in V.BLOCKING:
         assert V.to_issue("REQ-0000", v) is not None, v
+
+
+def test_an_off_target_oracle_is_invalid_not_undecided():
+    """A well-formed, satisfiable, non-vacuous check OF THE WRONG THING still
+    cannot discharge its requirement, and the party to fix it is the author.
+    Without a mapping it fell through to UNDECIDED -- "nothing decided it" --
+    which names no party at all."""
+    from specflow.refmodel import verdict as V
+
+    assert V.of_discard("off-target: it never reads y") == "ORACLE_INVALID"
+    assert V.ROUTE["ORACLE_INVALID"] == "regenerate the oracle"

@@ -261,6 +261,7 @@ async def run_specflow_node(
     #: valid regression test of a run with it off.
     #: Requirement-only oracles drive the loop; the judge stops deciding.
     variants: bool = False,
+    correspondence: bool = False,
     adequacy_rounds: int = 0,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
@@ -306,6 +307,7 @@ async def run_specflow_node(
             if refmodel_control and Path(refmodel_control).is_file() else None
         ),
         variants=variants,
+        correspondence=correspondence,
         adequacy_rounds=adequacy_rounds,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}

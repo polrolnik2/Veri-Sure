@@ -293,6 +293,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_judge_turns=args.refmodel_judge_turns,
             specflow_refmodel_control=control_model(top),
             specflow_variants=args.variants,
+            specflow_correspondence=args.correspondence,
             specflow_adequacy_rounds=args.adequacy_rounds,
         ),
     )
@@ -425,6 +426,13 @@ def build_parser() -> argparse.ArgumentParser:
              "re-ask any oracle a mutant got past. 0 measures adequacy and "
              "acts on nothing, which is the default: the rate has to be "
              "known before it is allowed to spend calls.",
+    )
+    p.add_argument(
+        "--correspondence", action="store_true",
+        help="Ask a reviewer, per oracle, whether it decides the requirement "
+             "it names. Blocking, and the only check that connects an oracle "
+             "to ITS requirement rather than judging it as a check in general. "
+             "One call per oracle.",
     )
     p.add_argument(
         "--variants", action="store_true",

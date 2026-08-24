@@ -79,6 +79,11 @@ _DISCARD_PREFIX: tuple[tuple[str, str], ...] = (
     ("vacuous:", "VACUOUS"),
     ("over-strict:", "ORACLE_INVALID"),
     ("malformed:", "ORACLE_INVALID"),
+    # The check decides something other than the requirement it names. A
+    # perfectly well-formed, satisfiable, non-vacuous check of the wrong thing
+    # is still a check that cannot discharge this requirement, so it goes back
+    # to the party that wrote it.
+    ("off-target:", "ORACLE_INVALID"),
     # The oracle contradicts the verdict it shipped with. In the target there is
     # no opinion for it to contradict, so this case disappears; until then the
     # oracle is the thing that cannot be trusted, which is ORACLE_INVALID.
