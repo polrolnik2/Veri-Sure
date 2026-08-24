@@ -509,8 +509,23 @@ def _comparison(
     out: dict = {}
     try:
         if isolated:
+            # Gate 1 asks whether an oracle reproduces THE VERDICT IT SHIPPED
+            # WITH, and an isolated oracle ships with none. Feeding it a blanket
+            # "met" does not skip the gate -- it makes the gate DISCARD every
+            # isolated oracle that fails the model, before gates 3 and 2 ever
+            # see it, so over-strictness and vacuity would be measured over a
+            # population filtered to the passing ones. That flatters the
+            # isolated set on exactly the two columns the comparison turns on.
+            #
+            # Pre-deciding and handing gate 1 the matching verdict makes it a
+            # no-op instead, so the later gates run on all of them.
+            said = {}
+            for o in isolated:
+                d = trust._decide_over(  # noqa: SLF001
+                    o, source, contract, stimulus_by_tp, base=base)
+                said[o.req_uid] = "met" if d.ok else "not_met"
             other = trust.screen(
-                isolated, {o.req_uid: "met" for o in isolated}, source, contract,
+                isolated, said, source, contract,
                 stimulus_by_tp, testplan, base=base, control_source=control_source,
             )
             # Gate 1 is deliberately excluded from the comparison: it asks
