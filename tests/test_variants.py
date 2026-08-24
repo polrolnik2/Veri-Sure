@@ -255,3 +255,15 @@ def test_with_no_variants_the_leg_is_silent_rather_than_convicting(tmp_path):
     assert blob["oracle_set"]["variants"] == 0
     assert blob["oracle_set"]["vacuous"] == []
     assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == "CONFORMS"
+
+
+def test_the_frozen_leg_replaces_gate_2_rather_than_adding_to_it(tmp_path):
+    """Measured on h-i2c r0 -> r1: with the oracle set frozen, VACUOUS still
+    moved 16 -> 18, because gate 2 mutates the CURRENT model source. Freezing
+    the oracles is not enough when the counterexamples are re-derived per turn.
+    """
+    # VACUOUS is written by gate 2 for an oracle nothing can falsify. With a
+    # variant it CAN falsify in hand, the frozen leg acquits it.
+    blob = _loop(tmp_path, WATCHFUL, _variants(BROKEN_ACTION))
+    assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == "CONFORMS"
+    assert blob["rates"]["convicted"] >= 0, "gate 2's rate is still reported"

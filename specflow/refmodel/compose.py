@@ -705,6 +705,25 @@ def _oracle_driven_turns(
         # An oracle nothing can fail contributes no information, and its
         # CONFORMS would be the most misleading kind: a green that was never
         # at risk. Route it to the oracle author instead of counting it.
+        #
+        # And when the frozen leg is available it REPLACES gate 2 as the source
+        # of this verdict, rather than adding to it. Measured on h-i2c r0 -> r1
+        # with the oracle set frozen: VACUOUS still moved 16 -> 18, because gate
+        # 2 derives its mutants from the CURRENT model source, so the in-scope
+        # mutant set changes as the debug agent edits and an oracle is convicted
+        # this turn for silence about a mutant that did not exist last turn.
+        # Freezing the oracles is not enough; the counterexamples have to be
+        # frozen too, and `variants` are. Gate 2 stays as the cheap per-turn
+        # re-check it was always argued to be -- its rate is still reported --
+        # but it stops being allowed to name a verdict.
+        if variants:
+            unconvicted = {u for u, why in discarded.items()
+                           if why.startswith("vacuous:")}
+            discarded = {u: why for u, why in discarded.items()
+                         if u not in unconvicted}
+            trusted = trusted + [o for o in oracles
+                                 if o.req_uid in unconvicted
+                                 and o.req_uid not in vacuous]
         if vacuous:
             trusted = [o for o in trusted if o.req_uid not in vacuous]
             discarded = {**discarded, **vacuous}
