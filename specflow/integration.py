@@ -607,6 +607,7 @@ def build_artifacts(
         # it. Without it the re-gate reports every requirement as unclaimed and
         # regenerates a model that was fine, which is `--reuse` doing the exact
         # opposite of its job.
+        recorded = {}
         try:
             recorded = json.loads(
                 (run_dir / "specflow" / "refmodel_gate.json").read_text(encoding="utf-8")
@@ -621,7 +622,23 @@ def build_artifacts(
             workdir=run_dir / "specflow" / "_refmodel_check",
             coverage=covers,
         )
-        if has_errors(rm_issues):
+        # A RECORDED FAILURE IS A FAILURE. `validate_source` checks structure;
+        # the gate that actually rejected this model was the oracle loop, whose
+        # verdicts are in the recorded file and not re-derivable from the
+        # source. Re-gating on structure alone therefore holds a reused model to
+        # a WEAKER standard than the one it already failed -- and passes it.
+        #
+        # Measured: n-i2c's refmodel stage failed with 31 blocking oracle
+        # verdicts and produced no RTL. Re-running the same directory with
+        # `--reuse` took the identical model (same md5), re-gated it on
+        # structure, passed it, and generated RTL from it. A failing artifact
+        # was laundered into a passing one by re-running the command.
+        if recorded and not recorded.get("ok", True):
+            logger.info(
+                "reuse: the recorded refmodel gate failed (%d issue(s)), so the "
+                "model is re-entered rather than trusted",
+                len(recorded.get("issues") or []))
+        if has_errors(rm_issues) or (recorded and not recorded.get("ok", True)):
             stale = True
             # The SAME arguments as the generative path above. This branch
             # regenerates a model that failed re-validation, and it was doing so

@@ -272,3 +272,26 @@ def test_a_regenerated_model_is_judged_like_a_freshly_generated_one(tmp_path,
         "faces -- which is the whole verdict now"
     )
     assert seen.get("testplan"), "regeneration lost the testplan the oracles need"
+
+
+def test_a_recorded_gate_failure_is_not_laundered_by_reuse(tmp_path):
+    """`validate_source` checks structure; the gate that actually rejected a
+    reference model is the oracle loop, whose verdicts live in the recorded file
+    and are not re-derivable from the source. Re-gating on structure alone holds
+    a reused model to a WEAKER standard than the one it already failed.
+
+    Measured: n-i2c's refmodel stage failed with 31 blocking oracle verdicts and
+    produced no RTL. Re-running the same directory with `--reuse` took the
+    identical model -- same md5 -- re-gated it on structure, passed it, and
+    generated RTL. A failing artifact laundered into a passing one by re-running
+    the command.
+    """
+    import inspect
+
+    from specflow import integration
+
+    src = inspect.getsource(integration.build_artifacts)
+    assert 'recorded.get("ok", True)' in src, (
+        "reuse must consult the recorded verdict, not only re-run validate")
+    # And it must widen the regenerate condition rather than replace it.
+    assert "has_errors(rm_issues) or (recorded" in src
