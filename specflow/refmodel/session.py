@@ -38,6 +38,13 @@ from ..obligation import FIRED, Obligation, check_static
 from .oracles import OracleResult, RequirementOracle, decide_all, replay
 from .validate import validate_source
 
+#: I8's two repair routes. A turn takes exactly one, and which one is decided
+#: by the session rather than by the agent: an agent free to pick would take
+#: whichever is cheaper to look busy on, and the whole value of the rule is that
+#: a turn's outcome stays attributable to one cause.
+MODEL = "model"
+STIMULUS = "stimulus"
+
 
 @dataclass
 class Edit:
@@ -141,6 +148,16 @@ class DebugSession:
         self.best_source = source
         self.best_failing: int | None = None
         self.refresh()
+        #: I8, decided once at entry and then structural. A turn with both a
+        #: failing oracle and an unexercised one has two repair routes
+        #: available, and taking both makes the turn's outcome unattributable:
+        #: the model changed AND the evidence changed, so nothing says which
+        #: moved the count. FAILING FIRST -- a VIOLATES is evidence about the
+        #: model that already exists and costs no model call to act on, while a
+        #: NOT_EXERCISED costs a stimulus generation and may still not fire. So
+        #: the stimulus route is reached exactly when the loop would otherwise
+        #: have nothing left to do, which is today's stall condition.
+        self.route = MODEL if self.failing() else STIMULUS
 
     # ------------------------------------------------------------- state
 
@@ -406,6 +423,13 @@ class DebugSession:
         generator and are gated before they are kept, so the agent cannot
         hand-write a step list the gate would reject.
         """
+        if self.route != STIMULUS:
+            return {"error": f"this turn's route is {self.route!r}: "
+                             f"{len(self.failing())} oracle(s) are FAILING, and "
+                             f"a failing oracle is a finding about the model "
+                             f"that adding stimulus cannot discharge. Fix those "
+                             f"first; a later turn with nothing failing will "
+                             f"take the stimulus route."}
         if self.stimulus_gen is None:
             return {"error": "no stimulus generator is wired into this session"}
         if len(self.added) >= self.stimulus_budget:
@@ -520,6 +544,11 @@ class DebugSession:
         is reverted without ever being scored -- those are defects in the edit,
         not evidence about the model.
         """
+        if self.route != MODEL:
+            return {"error": f"this turn's route is {self.route!r}: nothing is "
+                             f"failing, so there is no model finding to act on "
+                             f"and an edit made now would be unattributable. "
+                             f"Stage a scenario with add_stimulus instead."}
         before = len(self.failing())
         span = _method_span(self.source, method)
         if span is None:

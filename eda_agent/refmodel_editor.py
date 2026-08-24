@@ -77,9 +77,13 @@ adds a new testpoint. Then the oracle either decides -- possibly against the
 model, which is a real finding you can then fix -- or reports that your scenario
 still did not stage it, which tells you the description was not concrete enough.
 
-Fix the CHECKED failures first. They have evidence behind them and cost no model
-call. Reach for `add_stimulus` when nothing is failing and the remaining
-findings are all unexercised.
+ONE ROUTE PER TURN, and the harness picks it, not you. A turn with anything
+failing is a MODEL turn: `add_stimulus` refuses, because a failing oracle is
+evidence about the model that adding stimulus cannot discharge. A turn with
+nothing failing is a STIMULUS turn: `replace_method` refuses, because there is
+no finding to act on and an edit made then could not be attributed to anything.
+The prompt below tells you which turn this is. It is not a suggestion you can
+argue with -- the tool returns an error.
 
 Some findings come back with `checked: false` and NO EXECUTABLE CHECK. The
 judge reached a verdict but no oracle survived screening for it, so nothing can
@@ -358,7 +362,13 @@ def _opening(session: DebugSession) -> str:
             "the first thing to fix: a model with constant outputs satisfies "
             "nothing and cannot tell any design from any other.",
         ]
-    lines += ["", "Start with `explain` on one of them."]
+    lines += ["",
+              f"This is a {session.route.upper()} turn: "
+              + ("edit the model; `add_stimulus` is closed."
+                 if session.route == "model" else
+                 "nothing is failing, so `replace_method` is closed. Stage the "
+                 "scenarios the unexercised oracles are waiting for."),
+              "Start with `explain` on one of them."]
     return "\n".join(lines)
 
 
@@ -386,7 +396,8 @@ def _continue(session: DebugSession) -> str:
             )
     else:
         lines.append(f"Your edit to `{last.method}` was REJECTED: {last.reason}")
-    lines += ["", f"{len(failing)} oracle(s) still failing:"]
+    lines += ["", f"This is a {session.route.upper()} turn.",
+              f"{len(failing)} oracle(s) still failing:"]
     for r in failing[:20]:
         lines.append(f"  {r.req_uid}: {r.detail or '(no detail)'}")
     return "\n".join(lines)

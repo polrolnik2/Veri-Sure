@@ -52,6 +52,17 @@ def decide(trace):
     return (False, None, "ack never pulsed")
 '''
 
+#: Passes on BROKEN and fails once `q` is nailed to zero -- the second oracle a
+#: "worse than it started" test needs, since a session with nothing failing has
+#: no model route to take.
+Q_MOVES = '''
+def decide(trace):
+    for row in trace:
+        if row["outputs"]["q"] != 0:
+            return (True, row["edge"], "q moved")
+    return (False, None, "q never moved")
+'''
+
 GOOD_STEP = '''def step(self, i):
     if not hasattr(self, "n"):
         self.reset()
@@ -131,11 +142,44 @@ def test_a_method_handed_back_at_column_zero_is_reindented():
 
 def test_a_turn_cannot_end_worse_than_it_started():
     """The direct answer to a repair round that built on its own worst artifact."""
-    s = _session(model=WORKING)
-    assert s.all_met()
+    s = _session(oracles=[_oracle(), _oracle(Q_MOVES, "REQ-0001")])
+    assert len(s.failing()) == 1, "ack is broken here; q is not"
     s.replace_method("step", 'def step(self, i):\n    return {"q": 0, "ack": 0}')
-    assert len(s.failing()) == 1, "the edit made it worse, and was allowed"
-    assert s.best() == WORKING, "best() must return the good version"
+    assert len(s.failing()) == 2, "the edit broke q too, and was allowed"
+    assert s.best() == BROKEN, "best() must return the version it started from"
+
+
+# -------------------------------------------------------- one route per turn
+
+
+def test_a_turn_with_a_failing_oracle_takes_the_model_route():
+    from specflow.refmodel.session import MODEL
+
+    s = _session()
+    assert s.route == MODEL
+    assert s.add_stimulus("REQ-0000", "stage it")["error"].startswith(
+        "this turn's route is 'model'")
+
+
+def test_a_turn_with_nothing_failing_takes_the_stimulus_route():
+    """I8: two routes open at once makes the turn's outcome unattributable."""
+    from specflow.refmodel.session import STIMULUS
+
+    s = _session(model=WORKING)
+    assert s.all_met() and s.route == STIMULUS
+    out = s.replace_method("step", 'def step(self, i):\n    return {"q": 0, "ack": 0}')
+    assert out["error"].startswith("this turn's route is 'stimulus'")
+    assert s.source == WORKING, "a refused edit must not land"
+
+
+def test_the_route_is_fixed_at_entry_not_recomputed_mid_turn():
+    """An agent that fixed everything mid-turn keeps editing; it does not get
+    handed the other route as a bonus."""
+    s = _session()
+    assert s.replace_method("step", GOOD_STEP)["accepted"]
+    assert s.all_met()
+    assert s.replace_method("step", GOOD_STEP)["accepted"], (
+        "the route was decided at entry and does not move under the agent")
 
 
 def test_ties_do_not_overwrite_the_best():

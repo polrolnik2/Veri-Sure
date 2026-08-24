@@ -20,8 +20,10 @@ from tests.test_refmodel_session import (
     BROKEN,
     CONTRACT,
     GOOD_STEP,
+    Q_MOVES,
     STIM,
     WORKING,
+    _oracle,
 )
 
 
@@ -145,7 +147,9 @@ def test_the_continue_prompt_restates_the_outcome_not_an_exhortation():
 
 
 def test_the_continue_prompt_calls_out_an_edit_that_made_things_worse():
-    s = _session(model=WORKING)
+    # Two oracles, one already failing, so the turn has a model route at all --
+    # a session with nothing failing takes the stimulus route (I8).
+    s = _session(oracles=[_oracle(), _oracle(Q_MOVES, "REQ-0001")])
     s.replace_method("step", 'def step(self, i):\n    return {"q": 0, "ack": 0}')
     assert "WORSE" in _continue(s)
 
