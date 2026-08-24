@@ -88,3 +88,62 @@ def test_every_verdict_has_a_route():
 def test_an_unknown_discard_prefix_is_undecided_not_silently_dropped():
     out = V.of_discard("something trust.py does not write today")
     assert out == "UNDECIDED"
+
+
+# ------------------------------------------------------- blocking on verdicts
+#
+# The one piece of wiring between an isolated oracle set and driving the loop.
+# `_debug_turns` gates on `has_errors(issues)`, and until now only the JUDGE
+# could produce those -- so mechanical verdicts could be reported and could not
+# block, which is why the judge had to stay whatever the evidence said.
+
+
+def test_mechanical_verdicts_produce_the_issues_the_gate_reads():
+    from specflow.schema import has_errors
+
+    out = V.issues({"REQ-0000": "CONFORMS", "REQ-0001": "VIOLATES"})
+    assert has_errors(out)
+    assert [i.path for i in out] == ["refmodel.REQ-0001.violates"]
+
+
+def test_conforms_produces_no_issue():
+    """Same acceptance asymmetry as `judge.to_issue` returning None for `met`:
+    nothing here certifies anything. The must-pass/must-fail gates and the suite
+    certify."""
+    assert V.to_issue("REQ-0000", "CONFORMS") is None
+    assert V.issues({f"REQ-{i:04d}": "CONFORMS" for i in range(5)}) == []
+
+
+def test_the_issue_names_the_party_that_must_act():
+    """The difference from the judge's issue, and the reason the enum exists.
+    `judge.to_issue` hands every blocking verdict to the reference-model agent
+    whatever the cause, so a thin testplan and a wrong model arrive as the same
+    instruction."""
+    stim = V.to_issue("REQ-0002", "NOT_EXERCISED", "cmd=8 never driven")
+    assert "fix the stimulus" in stim.message
+    assert "cmd=8 never driven" in stim.message
+
+    impl = V.to_issue("REQ-0001", "VIOLATES")
+    assert "fix the implementation" in impl.message
+
+    spec = V.to_issue("REQ-0003", "UNOBSERVABLE")
+    assert "return to spec authoring" in spec.message
+
+    # Three different parties, three different instructions.
+    assert len({stim.message.split(" -- ")[0], impl.message, spec.message}) == 3
+
+
+def test_issues_are_ordered_by_requirement_not_by_dict_order():
+    """A repair prompt that reorders itself between runs is a prompt whose cache
+    never warms, and a diff nobody can read."""
+    out = V.issues({"REQ-0009": "VIOLATES", "REQ-0001": "VACUOUS",
+                    "REQ-0005": "NOT_EXERCISED"})
+    assert [i.path.split(".")[1] for i in out] == ["REQ-0001", "REQ-0005", "REQ-0009"]
+
+
+def test_every_blocking_verdict_can_produce_an_issue():
+    """No verdict may be blocking-but-unreportable: that combination blocks the
+    pipeline while instructing nobody, which is exactly today's discarded-oracle
+    behaviour."""
+    for v in V.BLOCKING:
+        assert V.to_issue("REQ-0000", v) is not None, v

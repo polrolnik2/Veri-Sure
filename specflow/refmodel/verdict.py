@@ -130,6 +130,46 @@ def classify(
     return out
 
 
+def to_issue(req_uid: str, v: str, detail: str = ""):
+    """One `Issue` per blocking verdict, naming the party that must act.
+
+    This is what `judge.to_issue` (`judge.py:708`) does for an OPINION, and the
+    difference is the whole point of the enum. The judge's issue says what one
+    reader concluded and hands every one of them to the reference-model agent,
+    whatever the cause -- so a thin testplan and a wrong model arrive as the same
+    instruction. This one carries the route, so `NOT_EXERCISED` reads as "fix the
+    stimulus" and cannot be mistaken for an accusation against the model.
+
+    Returns None for `CONFORMS`, mirroring `judge.to_issue` returning None for
+    `met`: the acceptance asymmetry is unchanged, and nothing here certifies
+    anything. What certifies is the must-pass/must-fail gates and the suite.
+    """
+    from ..schema import Issue
+
+    if v not in BLOCKING:
+        return None
+    route = ROUTE.get(v, "triage manually")
+    message = f"{v}: {route}"
+    if detail.strip():
+        message += f" -- {detail.strip()}"
+    return Issue("error", f"refmodel.{req_uid}.{v.lower()}", message)
+
+
+def issues(verdicts: dict[str, str], details: dict[str, str] | None = None) -> list:
+    """Every blocking verdict as an `Issue`, in requirement order.
+
+    The list `has_errors` reads, so a caller can gate on mechanical verdicts
+    exactly as it gates on the judge's today -- which is the one piece of wiring
+    that stands between the isolated oracle set and driving the loop.
+    """
+    out = []
+    for uid in sorted(verdicts):
+        issue = to_issue(uid, verdicts[uid], (details or {}).get(uid, ""))
+        if issue is not None:
+            out.append(issue)
+    return out
+
+
 def counts(verdicts: dict[str, str]) -> dict[str, int]:
     """Every verdict counted, including the zeroes.
 
