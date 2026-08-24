@@ -330,7 +330,7 @@ def _closed_loop(
     `adequacy_rounds=0` measures and acts on nothing, which is how this ships:
     the rate has to be known before it is allowed to spend calls.
     """
-    from .adequacy import assess, inadequate, write
+    from .adequacy import assess, discrimination, inadequate, write
 
     issues: list[Issue] = []
     for round_ in range(max(0, int(adequacy_rounds)) + 1):
@@ -346,8 +346,25 @@ def _closed_loop(
         if not oracles:
             break
         report = assess(oracles, source, contract, stimulus_by_tp, base=base)
+        # The one number that says whether the set is an instrument at all.
+        # Measured on n-i2c: 70 oracles separated a model failing 138 of 168
+        # golden testpoints from one passing all 168 by THREE requirements, and
+        # neither arm produced a single VIOLATES. Every other figure about that
+        # run -- 46 CONFORMS, a converged loop, 70 verified oracles -- was true
+        # and meant nothing without this beside it. Reported, never a gate: the
+        # control is a proxy for the held-out grade.
+        apart = (discrimination(oracles, source, control_source, contract,
+                                stimulus_by_tp, base=base)
+                 if control_source else None)
+        if apart is not None:
+            logger.info(
+                "oracle set discriminates %d of %d requirement(s) between this "
+                "model and a known-good one%s", apart["discriminating"],
+                apart["oracles"],
+                f"; it FAILS the known-good design on {len(apart['control_violates'])}"
+                if apart["control_violates"] else "")
         if run_dir is not None:
-            write(Path(run_dir), report, round_)
+            write(Path(run_dir), report, round_, discrimination=apart)
         weak = inadequate(report)
         logger.info("adequacy r%d: %d of %d oracle(s) a mutant got past",
                     round_, len(weak), len(report))

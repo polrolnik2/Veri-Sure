@@ -33,6 +33,7 @@ from . import mutate_model
 from .oracles import (
     RequirementOracle,
     decide,
+    decide_all,
     ports_read,
     replay,
     transactional_view,
@@ -130,7 +131,8 @@ def inadequate(report: dict[str, tuple[str, str]]) -> dict[str, str]:
             if level == INADEQUATE}
 
 
-def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0) -> Path:
+def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0,
+          *, discrimination: dict | None = None) -> Path:
     """Reported, not gated. Its rate has to be measured before it decides anything."""
     path = Path(run_dir) / "specflow" / f"adequacy_r{round_}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,9 +141,73 @@ def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0) ->
         counts[level] = counts.get(level, 0) + 1
     path.write_text(json.dumps({
         "counts": counts,
+        # Whether the set can tell a known-good design from this one at all.
+        # `None` means no control was available to ask -- which is not zero.
+        "discrimination": discrimination,
         "by_requirement": {u: {"verdict": v, "detail": d}
                            for u, (v, d) in sorted(report.items())},
     }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 
 
+
+
+def discrimination(
+    oracles: list[RequirementOracle],
+    source: str,
+    control: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    *,
+    base: str,
+    transactional: bool = True,
+) -> dict:
+    """How many requirements the oracle set decides DIFFERENTLY for two designs.
+
+    The one number that says whether the set is an instrument at all. Not a
+    gate, and it must never become one: the control is a proxy for the held-out
+    grade, so letting it shape the run tunes the model toward its own scorer.
+    This only reports -- exactly as `golden_check` does, and for the same
+    reason.
+
+    Measured on n-i2c, and it is why this exists:
+
+        model scoring 30/168 against golden RTL : CONFORMS 46, NOT_EXERCISED 24
+        control scoring 168/168                 : CONFORMS 47, NOT_EXERCISED 23
+
+    Identical on 67 of 70. A set of oracles that separates a design failing 138
+    of 168 testpoints from one passing all 168 by ONE requirement is not
+    measuring the design; it is measuring almost nothing. Every other number the
+    pipeline reports about that run -- 46 CONFORMS, a loop that converged, a
+    stage that verified 70 oracles -- is true and means nothing without this one
+    beside it.
+
+    `VIOLATES` on the control is the harshest column and is reported apart: a
+    known-good design failing an oracle says the oracle is wrong, and no amount
+    of discrimination redeems that.
+    """
+    from . import verdict as V
+
+    mine = decide_all(oracles, source, contract, stimulus_by_tp, base=base,
+                      transactional=transactional)
+    theirs = decide_all(oracles, control, contract, stimulus_by_tp, base=base,
+                        transactional=transactional)
+    here = {r.req_uid: V.of_result(r) for r in mine}
+    there = {r.req_uid: V.of_result(r) for r in theirs}
+
+    differ = sorted(u for u in here if here.get(u) != there.get(u))
+    counts: dict[str, int] = {}
+    for uid in differ:
+        counts[f"{here[uid]} -> {there[uid]}"] = (
+            counts.get(f"{here[uid]} -> {there[uid]}", 0) + 1)
+    return {
+        "oracles": len(here),
+        "discriminating": len(differ),
+        "identical": len(here) - len(differ),
+        "requirements": differ,
+        "transitions": counts,
+        # A known-good design failing an oracle: the oracle is wrong, and this
+        # is not redeemed by any amount of discrimination.
+        "control_violates": sorted(u for u, v in there.items()
+                                   if v == "VIOLATES"),
+    }
