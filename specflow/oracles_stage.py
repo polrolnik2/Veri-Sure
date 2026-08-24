@@ -222,6 +222,12 @@ def run_oracle_stage(
     #: because the only thing that could have told us was downstream of it.
     strengthen: dict[str, str] | None = None,
     previous: OracleSet | None = None,
+    #: Something upstream regenerated, so the frozen artifacts are about
+    #: requirements that no longer exist. Written once means once PER REQUIREMENT
+    #: SET, not once per directory -- without this the stage would spend its
+    #: fan-out generating oracles and then silently keep the stale file, and the
+    #: loop would measure the new model against the old requirements' checks.
+    rewrite: bool = False,
 ) -> OracleSet:
     """Generate, verify, repair, freeze. Returns a disposition for every requirement."""
     if strengthen and previous is not None:
@@ -233,6 +239,10 @@ def run_oracle_stage(
             witness_port=witness_port, run_dir=run_dir,
             max_repairs=max_repairs, transactional=transactional,
             fanout=fanout)
+
+    if rewrite and run_dir is not None:
+        for name in (ARTIFACT, "variants.json", "witness.py"):
+            (Path(run_dir) / "specflow" / name).unlink(missing_ok=True)
 
     witness, witness_kind = _witness(
         requirements=requirements, contract_json=contract_json,
@@ -336,8 +346,22 @@ def _witness(
     Generated even where a control exists, because the two do different jobs: a
     control REJECTS and a witness REPAIRS, and collapsing them would let the
     control's behaviour reach an oracle author.
+
+    **Written once and read forever, like the oracles it bounds.** A
+    strengthening round re-enters this stage, and a freshly generated witness
+    would be a DIFFERENT reading of the same requirements -- so an oracle could
+    be accepted this round and rejected next for no reason anyone could name.
+    That is the same disease as an unfrozen oracle set, one level over: the
+    thing doing the measuring has to hold still.
     """
     from .refmodel.conform import conforming_implementation
+
+    path = (Path(run_dir) / "specflow" / "witness.py"
+            if run_dir is not None else None)
+    if path is not None and path.is_file():
+        held = path.read_text(encoding="utf-8")
+        if held.strip():
+            return held, WITNESS
 
     source, issues = conforming_implementation(
         requirements=requirements, contract_json=contract_json, port=port,
@@ -352,6 +376,9 @@ def _witness(
             "oracles: no witness produced (%d issue(s)); over-strictness is "
             "UNBOUNDED for this run", len(issues))
         return "", NO_BOUND
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
     return source, WITNESS
 
 

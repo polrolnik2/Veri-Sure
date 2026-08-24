@@ -325,3 +325,71 @@ def test_the_witness_is_recorded_apart_from_the_reference_model():
     assert "stage=WITNESS_STAGE" in inspect.getsource(
         conform.conforming_implementation)
     assert "stage" in inspect.signature(compose.generate_model).parameters
+
+
+def test_the_witness_is_written_once_and_read_forever(tmp_path):
+    """A strengthening round re-enters the stage, and a freshly generated
+    witness would be a DIFFERENT reading of the same requirements -- so an
+    oracle could be accepted this round and rejected the next for no reason
+    anyone could name. Same disease as an unfrozen oracle set, one level over.
+    """
+    calls: list[int] = []
+
+    def _gen(*, requirements, contract_json, port, workdir, max_repairs=2):
+        calls.append(1)
+        return WITNESS, []
+
+    import specflow.refmodel.conform as conform
+    real = conform.conforming_implementation
+    conform.conforming_implementation = _gen
+    try:
+        first, kind = O._witness(
+            requirements=REQS, contract_json="{}", port=None,
+            workdir=tmp_path, run_dir=tmp_path)
+        again, _ = O._witness(
+            requirements=REQS, contract_json="{}", port=None,
+            workdir=tmp_path, run_dir=tmp_path)
+    finally:
+        conform.conforming_implementation = real
+
+    assert kind == O.WITNESS
+    assert first == again == WITNESS
+    assert len(calls) == 1, "the second round must read, not regenerate"
+    assert (tmp_path / "specflow" / "witness.py").is_file()
+
+
+def test_a_stale_upstream_rebuilds_the_frozen_set(tmp_path, monkeypatch):
+    """Written once means once per REQUIREMENT SET, not once per directory.
+
+    Without this the stage spends its whole fan-out generating oracles for the
+    new requirements and then silently keeps the old file, so the loop measures
+    the new model against checks written for requirements that no longer exist.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+    before = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+
+    other = GOOD.replace("y did not follow a", "y diverged from a")
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_Port([_reply(other)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, run_dir=tmp_path, rewrite=True)
+    after = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+
+    assert before["oracles"][0]["source"] != after["oracles"][0]["source"]
+    assert got.trusted[0].hash != before["oracles"][0]["hash"]
+
+
+def test_without_rewrite_the_frozen_set_still_wins(tmp_path, monkeypatch):
+    """The default is unchanged: a re-entry that is NOT a regeneration must not
+    be able to move the measure."""
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+    other = GOOD.replace("y did not follow a", "y diverged from a")
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_Port([_reply(other)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, run_dir=tmp_path)
+    assert "y did not follow a" in got.trusted[0].source

@@ -512,6 +512,10 @@ def build_artifacts(
             normalized=normalized_by_uid or None,
             control_source=refmodel_control,
             want_variants=variants, run_dir=run_dir, fanout=fanout,
+            # Upstream regenerated, so the frozen oracles are about
+            # requirements that no longer exist. Freezing is per requirement
+            # SET, not per directory.
+            rewrite=stale,
         )
     except _Reused:
         pass
