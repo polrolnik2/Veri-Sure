@@ -253,6 +253,11 @@ def build_artifacts(
     #: verdicts come from screening them rather than from the judge's opinion.
     #: Implies `compare_oracles` and `normalize`.
     oracle_driven: bool = False,
+    #: Step 7's must-fail leg. Off by default: it costs k model calls per
+    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
+    #: VACUOUS stops being inferred from silence under source mutation and is
+    #: earned against a design that actually violates the requirement.
+    variants: bool = False,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -498,6 +503,7 @@ def build_artifacts(
             normalized=normalized_by_uid or None,
             compare_oracles=compare_oracles,
             oracle_driven=oracle_driven,
+            want_variants=variants,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -545,6 +551,7 @@ def build_artifacts(
                 normalized=normalized_by_uid or None,
                 compare_oracles=compare_oracles,
                 oracle_driven=oracle_driven,
+                want_variants=variants,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

@@ -294,6 +294,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_control=control_model(top),
             specflow_compare_oracles=args.compare_oracles,
             specflow_oracle_driven=args.oracle_driven,
+            specflow_variants=args.variants,
         ),
     )
     try:
@@ -415,6 +416,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--variants", action="store_true",
+        help="Generate k violating variants per requirement from the "
+             "requirement TEXT, and convict an oracle no variant of its own "
+             "requirement can fail. Costs k calls per requirement, once. "
+             "Implies --compare-oracles.",
     )
     p.add_argument(
         "--oracle-driven", action="store_true",

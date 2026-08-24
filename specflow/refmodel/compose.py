@@ -23,6 +23,7 @@ from ..stage import (
     run_stage,
 )
 from . import freeze, trust, verdict
+from . import variants as variants_mod
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .oracles import decide_all, replay, stimulus_liveness
 from .session import DebugSession
@@ -151,6 +152,11 @@ def run_refmodel(
     #: Requirement-only oracles drive the loop and the judge stops deciding.
     #: Implies `compare_oracles`, which is what generates them.
     oracle_driven: bool = False,
+    #: Step 7's must-fail leg. Off by default: it costs k model calls per
+    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
+    #: VACUOUS stops being inferred from silence under source mutation and is
+    #: earned against a design that actually violates the requirement.
+    want_variants: bool = False,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -248,6 +254,7 @@ def run_refmodel(
             control_source=control_source, normalized=normalized,
             compare_oracles=compare_oracles or oracle_driven,
             oracle_driven=oracle_driven,
+            want_variants=want_variants,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -277,6 +284,11 @@ def _debug_turns(
     #: runs when `compare_oracles` is on, for the record, but nothing routes off
     #: it. See `_oracle_driven_turns`.
     oracle_driven: bool = False,
+    #: Step 7's must-fail leg. Off by default: it costs k model calls per
+    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
+    #: VACUOUS stops being inferred from silence under source mutation and is
+    #: earned against a design that actually violates the requirement.
+    want_variants: bool = False,
 ) -> tuple[str, list[Issue]]:
     """Judge, screen, debug; repeat. Returns the final source and its issues.
 
@@ -308,8 +320,11 @@ def _debug_turns(
     # answer. The judge's oracles cannot do this, and that asymmetry is the
     # clearest practical argument for the split.
     isolated: list = []
+    variant_set: list = []
     frozen_path = (Path(run_dir) / "specflow" / "oracles.json"
                    if run_dir is not None else None)
+    variants_path = (Path(run_dir) / "specflow" / "variants.json"
+                     if run_dir is not None else None)
     if compare_oracles:
         try:
             from .conform import conforming_implementation
@@ -326,6 +341,8 @@ def _debug_turns(
                 if isolated:
                     logger.info("oracles: %d frozen, read from %s",
                                 len(isolated), frozen_path)
+                    if variants_path is not None:
+                        variant_set = variants_mod.load(variants_path)
 
             if not isolated:
                 # An implementation of the same requirements, generated once,
@@ -361,6 +378,26 @@ def _debug_turns(
                         logger.warning("oracle drift %s: %s", uid, why)
                 else:
                     isolated = freeze.stamp(isolated, normalized)
+
+                # Step 7's must-fail leg. Off by default: k calls per
+                # requirement is 150-230 on i2c, paid once, and the leg is only
+                # evidence AFTER the must-pass leg has shown the oracle accepts
+                # a correct reading -- which `gate_one` has just done.
+                if want_variants and conforming:
+                    from ..obligation import by_requirement
+
+                    variant_set, _ = variants_mod.run_variant_gen(
+                        requirements=requirements, contract_json=contract_json,
+                        contract=contract, conforming_source=conforming,
+                        stimulus_by_tp=stimulus_by_tp,
+                        tp_by_req=by_requirement(testplan),
+                        port=judge_port, normalized=normalized, base=base,
+                    )
+                    logger.info("variants: %d generated for %d requirement(s)",
+                                len(variant_set),
+                                len({v.req_uid for v in variant_set}))
+                    if variants_path is not None:
+                        variants_mod.save(variant_set, variants_path)
         except Exception as exc:  # noqa: BLE001
             # Never let the reporting path fail a run. It informs a decision
             # about a future design; it does not gate this one.
@@ -373,7 +410,7 @@ def _debug_turns(
             base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
             run_dir=run_dir, debugger=debugger, max_turns=max_turns,
             control_source=control_source, normalized=normalized,
-            judge_port=judge_port,
+            judge_port=judge_port, variants=variant_set,
         )
 
     issues: list[Issue] = []
@@ -557,6 +594,7 @@ def _oracle_driven_turns(
     control_source: str | None,
     normalized: dict[str, dict] | None,
     judge_port: ModelPort,
+    variants: list | None = None,
 ) -> tuple[str, list[Issue]]:
     """The loop with no judge in it.
 
@@ -605,6 +643,27 @@ def _oracle_driven_turns(
     #: in turn 2, because nothing is ever removed.
     added: list[str] = []
 
+    def _vacuity(subset: list) -> dict[str, str]:
+        """Step 7's must-fail leg, over the oracles named.
+
+        Runs no model. Both the oracle and the variants are frozen, so this is
+        replay-and-decide and costs milliseconds -- which is why it can be
+        re-asked for an oracle whose evidence set grew (I7) instead of being
+        computed once and trusted forever.
+        """
+        out: dict[str, str] = {}
+        for o in subset:
+            got, why = variants_mod.must_fail(
+                o, variants or [], contract, stimulus_by_tp, base=base,
+                transactional=True)
+            if got == trust.CONVICTED:
+                out[o.req_uid] = f"vacuous: {why}"
+        return out
+
+    #: `{req_uid: why}` for every oracle no variant of its own requirement can
+    #: fail. Computed once, then re-asked only where the evidence moved.
+    vacuous: dict[str, str] = _vacuity(oracles) if variants else {}
+
     def _restimulate(req: dict, hint: str) -> list[dict]:
         from ..testcase_agent import stimulus_for_scenario
 
@@ -642,6 +701,13 @@ def _oracle_driven_turns(
         ]
         discarded = {uid: why for uid, why in screened.discarded.items()
                      if uid not in failing_uids}
+
+        # An oracle nothing can fail contributes no information, and its
+        # CONFORMS would be the most misleading kind: a green that was never
+        # at risk. Route it to the oracle author instead of counting it.
+        if vacuous:
+            trusted = [o for o in trusted if o.req_uid not in vacuous]
+            discarded = {**discarded, **vacuous}
 
         results = decide_all(trusted, source, contract, stimulus_by_tp,
                              base=base, transactional=True)
@@ -682,6 +748,8 @@ def _oracle_driven_turns(
                         "count": len(oracles),
                         "frozen": at_entry,
                         "evidence_changed": freeze.stale_proofs(oracles, proofs),
+                        "variants": len(variants or []),
+                        "vacuous": sorted(vacuous),
                     },
                 }, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")
@@ -709,6 +777,20 @@ def _oracle_driven_turns(
         if session.added:
             testplan = session.testplan
             added.extend(session.added)
+            # I7, and the whole of what append-only leaves of it: an oracle
+            # that GAINED a testpoint was proved against an evidence set that
+            # no longer exists, so its must-fail leg is re-run and nothing
+            # else's is. Existing stimulus is never edited, so no other proof
+            # can have gone stale.
+            if variants:
+                moved = set(freeze.stale_proofs(oracles, proofs))
+                if moved:
+                    vacuous = {u: w for u, w in vacuous.items()
+                               if u not in moved}
+                    vacuous.update(_vacuity(
+                        [o for o in oracles if o.req_uid in moved]))
+                    proofs.update({o.req_uid: freeze.evidence_hash(o)
+                                   for o in oracles if o.req_uid in moved})
             logger.info("turn %d added %d testpoint(s): %s", turn,
                         len(session.added), ", ".join(session.added))
         elif source == before:
