@@ -375,3 +375,100 @@ def test_every_gate_leaves_a_conflict_the_judge_can_settle():
     assert out2.rates()["over_strict"] == 1
     assert "REQ-0000" in out2.conflicts, "over-strict must be reconcilable"
     assert "KNOWN-GOOD" in out2.conflicts["REQ-0000"]
+
+
+# --------------------------------------------------------- evidence scoping
+#
+# Screening used to decide an oracle against the FIRST testpoint it names
+# (`_steps_for`), while the debug session decides it against ALL of them
+# (`decide_all`). So gate 1 could certify "this oracle agrees with its author"
+# from one testpoint and hand the agent an oracle that contradicts its author on
+# another -- which is the one thing gate 1 exists to prevent.
+#
+# Measured on f-i2c r0: exactly one oracle was in that state. REQ-0004 names
+# TP-0013/14/15, is satisfied on the first, unexercised on the second and FAILS
+# on the third ("busy was not asserted after START"), and its author said `met`.
+# It was trusted.
+
+
+_TWO_TP_CONTRACT = {
+    "io": [
+        {"name": "clk", "dir": "input", "width": 1},
+        {"name": "a", "dir": "input", "width": 1},
+        {"name": "y", "dir": "output", "width": 1},
+    ]
+}
+
+_PASSTHROUGH = '''
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ['y']
+    LATENCY_CYCLES = 0
+
+    def step(self, i):
+        return {'y': i['a']}
+'''
+
+#: Holds on a trace where `a` is driven high, fails where it is not.
+_DEMANDS_Y_HIGH = (
+    "def decide(trace):\n"
+    "    if not any(r['inputs']['a'] for r in trace):\n"
+    "        return (None, None, 'a never driven high')\n"
+    "    for r in trace:\n"
+    "        if r['inputs']['a'] and not r['outputs']['y']:\n"
+    "            return (False, r['edge'], 'y low while a high')\n"
+    "    return (True, None, 'y tracked a')\n"
+)
+
+
+def _two_tp_testplan():
+    return [{"uid": "TP-0000", "covers": []}, {"uid": "TP-0001", "covers": []}]
+
+
+def test_gate_one_sees_every_testpoint_the_oracle_names():
+    """An oracle satisfied on its first testpoint and failing on a later one is
+    a DISAGREEMENT with an author who said `met`, not a trusted oracle."""
+    from specflow.refmodel import trust
+    from specflow.refmodel.oracles import RequirementOracle
+
+    # A model that ignores `a` on the second testpoint's longer run: emulate by
+    # giving TP-0001 stimulus the passthrough model satisfies, and TP-0000 one
+    # it does not -- ordering matters, so put the satisfied one FIRST.
+    broken_model = _PASSTHROUGH.replace("return {'y': i['a']}",
+                                        "return {'y': 0 if self._seen() else i['a']}\n\n"
+                                        "    def _seen(self):\n"
+                                        "        self._n = getattr(self, '_n', 0) + 1\n"
+                                        "        return self._n > 2")
+    oracle = RequirementOracle(req_uid="REQ-0000", tp_uids=["TP-0000", "TP-0001"],
+                               clause="y follows a", source=_DEMANDS_Y_HIGH)
+    stimulus = {"TP-0000": [{"a": 1}], "TP-0001": [{"a": 1}, {"a": 1}, {"a": 1}]}
+
+    screened = trust.screen([oracle], {"REQ-0000": "met"}, broken_model,
+                            _TWO_TP_CONTRACT, stimulus, _two_tp_testplan(),
+                            base="step")
+    assert screened.trusted == [], (
+        "an oracle that fails its second testpoint was trusted on the strength "
+        "of its first"
+    )
+    assert screened.discarded["REQ-0000"].startswith("disagreed:")
+    assert "REQ-0000" in screened.conflicts
+
+
+def test_a_testpoint_with_no_stimulus_does_not_poison_the_others():
+    """`decide_all` reports a missing stimulus as BROKEN and `_worst` ranks
+    broken first, so routing gate 1 through it unchanged would let one
+    stimulus-less testpoint discard an oracle its other testpoints decide
+    perfectly well. `_steps_for` tolerated that by skipping; the tolerance is
+    kept."""
+    from specflow.refmodel import trust
+    from specflow.refmodel.oracles import RequirementOracle
+
+    oracle = RequirementOracle(req_uid="REQ-0000", tp_uids=["TP-0000", "TP-0001"],
+                               clause="y follows a", source=_DEMANDS_Y_HIGH)
+    screened = trust.screen([oracle], {"REQ-0000": "met"}, _PASSTHROUGH,
+                            _TWO_TP_CONTRACT, {"TP-0001": [{"a": 1}]},
+                            _two_tp_testplan(), base="step")
+    assert "REQ-0000" not in screened.discarded or \
+        not screened.discarded["REQ-0000"].startswith("malformed:")

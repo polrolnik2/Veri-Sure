@@ -38,6 +38,7 @@ from .oracles import (
     OracleResult,
     RequirementOracle,
     decide,
+    decide_all,
     ports_read,
     replay,
     well_formed,
@@ -142,12 +143,56 @@ def _project(rows: list[dict], ports: set[str]) -> tuple:
 
 
 def _steps_for(oracle: RequirementOracle, stimulus_by_tp: dict) -> list[dict]:
-    """One testpoint's steps -- the first this oracle names that has any."""
+    """One testpoint's steps -- the first this oracle names that has any.
+
+    Still one, and only used where one is the right number: the sensitivity
+    sweep needs a single scenario to mutate against, and running the whole
+    mutant set once per named testpoint would multiply the most expensive gate
+    for evidence that saturates after the first.
+
+    Gate 1 and gate 3 use `_decide_over` instead. They ask whether the ORACLE
+    holds, and an oracle that names three testpoints is making a claim about all
+    three.
+    """
     for tp in oracle.tp_uids:
         steps = stimulus_by_tp.get(tp)
         if steps:
             return steps
     return []
+
+
+def _decide_over(
+    oracle: RequirementOracle,
+    source: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    *,
+    base: str,
+) -> OracleResult:
+    """Decide one oracle across EVERY testpoint it names that has stimulus.
+
+    Screening used to decide against the first named testpoint alone, so an
+    oracle unexercised on TP-A and satisfied on TP-B was discarded having never
+    been replayed on TP-B. Measured on `f-i2c` r0 that explained none of the
+    residue -- 26 of the 30 discarded oracles name exactly one testpoint, so
+    "first named" was "only named" -- but it is a real defect for the ones that
+    name more, and it is the difference between screening asking the question
+    the oracle actually poses and asking a narrower one.
+
+    Testpoints with NO recorded stimulus are skipped rather than reported as
+    broken. `decide_all` reports them, correctly for its own purpose, and
+    `_worst` ranks broken first -- so routing through it unchanged would let one
+    stimulus-less testpoint discard an oracle whose other testpoints decide it
+    perfectly well. That is the same poisoning `_steps_for` already tolerates by
+    skipping, and the tolerance is worth keeping.
+    """
+    named = [tp for tp in oracle.tp_uids if stimulus_by_tp.get(tp)]
+    if not named:
+        return OracleResult(
+            oracle.req_uid, ok=False,
+            broken="no stimulus recorded for any testpoint it names")
+    scoped = oracle.model_copy(update={"tp_uids": named})
+    return decide_all([scoped], source, contract, stimulus_by_tp, base=base)[0]
 
 
 def sensitivity(
@@ -243,16 +288,7 @@ def screen(
             discarded[uid] = f"malformed: {why}"
             continue
 
-        steps = _steps_for(oracle, stimulus_by_tp)
-        if not steps:
-            discarded[uid] = "malformed: no stimulus recorded for any testpoint it names"
-            continue
-
-        run = replay(source, contract, steps, base=base)
-        if run.error:
-            discarded[uid] = f"malformed: the model {run.error}"
-            continue
-        result = decide(oracle, run.rows)
+        result = _decide_over(oracle, source, contract, stimulus_by_tp, base=base)
         if result.broken:
             discarded[uid] = f"malformed: {result.broken}"
             continue
@@ -293,13 +329,10 @@ def screen(
 
         # -- gate 3: a known-good model must satisfy it.
         if control_source is not None:
-            ctl = replay(control_source, contract, steps, base=base)
-            if ctl.error:
-                discarded[uid] = f"malformed: the control {ctl.error}"
-                continue
-            verdict = decide(oracle, ctl.rows)
+            verdict = _decide_over(
+                oracle, control_source, contract, stimulus_by_tp, base=base)
             if verdict.broken:
-                discarded[uid] = f"malformed: {verdict.broken}"
+                discarded[uid] = f"malformed: the control -- {verdict.broken}"
                 continue
             if verdict.unexercised():
                 # The control never reaches this clause's situation either, so

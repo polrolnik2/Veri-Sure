@@ -371,12 +371,24 @@ def decide_all(
 
 
 def _worst(req_uid: str, results: list[OracleResult]) -> OracleResult:
-    """Broken beats failing beats unexercised beats passing.
+    """Broken beats failing beats passing beats unexercised.
 
     Unexercised ranks below failing because a clause shown to be violated on one
-    testpoint is violated, whatever the others could not see. It ranks above
-    passing because an oracle that passed only where its scenario never arose
-    has not actually agreed to anything.
+    testpoint is violated, whatever the others could not see.
+
+    It ranks below PASSING, which is a change from ranking above. The old rule
+    read "an oracle that passed only where its scenario never arose has not
+    actually agreed to anything" -- true when EVERY result is unexercised, and
+    wrong when one testpoint genuinely staged the scenario and the clause held.
+    Silence is not disagreement, and an oracle cannot return True without having
+    SEEN its case (`decide`'s tri-state guarantees it), so a pass among the
+    results is a real observation while the `None` beside it is the absence of
+    one.
+
+    Under the old rule a clause exercised by one of its testpoints and not by
+    another could never be reported as met, and an evidence set that GREW could
+    only make a verdict worse -- which makes adding a testpoint a hostile act
+    rather than the monotone improvement it should be.
     """
     if not results:
         return OracleResult(req_uid, ok=False, broken="the oracle names no testpoint")
@@ -387,7 +399,7 @@ def _worst(req_uid: str, results: list[OracleResult]) -> OracleResult:
         if r.failed():
             return r
     for r in results:
-        if r.unexercised():
+        if r.ok is True:
             return r
     return results[0]
 
