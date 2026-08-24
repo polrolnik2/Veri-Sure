@@ -109,8 +109,18 @@ Some things that will save you attempts:
     does not say -- say so plainly in your final message rather than contorting
     the model to satisfy it. That is a real outcome and a useful one.
 
-Stop when `list_oracles()` shows nothing failing, or when you have made your
-best attempt. Finish with a plain sentence saying what you changed and why.
+**Nothing failing is not done.** An oracle reports NOT EXERCISED when its
+scenario never occurred, and that is not a passing requirement -- it is an
+unverified one, which is worse than a failing one because nothing is even
+claiming to check it. On a STIMULUS turn there is nothing failing BY
+CONSTRUCTION, so treating that as finished would end every stimulus turn before
+it began.
+
+You are done when every oracle CONFORMS, or when the tools stop giving you
+moves: `replace_method` closed and `add_stimulus` refusing because the budget is
+spent. Until then keep going. Finish with a plain sentence saying what you
+changed and why, and if oracles are still short of conforming, say which and
+what stopped you.
 """
 
 

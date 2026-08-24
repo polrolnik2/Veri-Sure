@@ -241,3 +241,19 @@ def test_an_agent_failure_ends_the_turn_without_killing_the_stage():
     source, _, note = asyncio.run(editor.debug(s))
     assert "ended early" in note
     assert source == BROKEN, "the model is handed back unchanged, not lost"
+
+
+def test_the_stop_rule_and_the_route_rule_cannot_both_fire():
+    """The prompt used to say "stop when nothing is failing" while also saying a
+    turn with nothing failing IS the stimulus turn -- telling the agent to stop
+    at exactly the moment the stimulus route opened. Three runs, zero
+    testpoints added, by two opposite causes.
+
+    Asserted on fragments that do not cross a line wrap: a phrase spanning a
+    wrapped line has silently passed here before.
+    """
+    assert "Stop when `list_oracles()` shows nothing failing" not in SYSTEM_PROMPT
+    for phrase in ("Nothing failing is not done",
+                   "every oracle CONFORMS",
+                   "the budget is"):
+        assert phrase in SYSTEM_PROMPT, phrase
