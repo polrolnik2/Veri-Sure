@@ -44,7 +44,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .model_io import ModelPort
-from .refmodel import correspondence, freeze, trust
+from .refmodel import correspondence, freeze
+from .refmodel import liveness as _L
+from .refmodel import trust
 from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
 from .refmodel.oracle_gen import run_oracle_gen
@@ -284,6 +286,79 @@ def _advisory(req_uid: str, note: str) -> Issue:
         f"a disagreement.")
 
 
+def _liveness(held: dict, witness: str, contract: dict,
+              stimulus_by_tp: dict, *, base: str) -> dict:
+    """`req_uid -> record` over the checks still standing. `{}` if it cannot run.
+
+    Against the WITNESS, and that costs nothing: the same 70 frozen oracles gave
+    identical verdicts against a model scoring 30/168 against golden RTL and
+    against the known-good control at 168/168, on all 70. Never raises -- a
+    measurement that cannot be taken must not take the stage down with it, which
+    is the rule every other instrument here follows.
+    """
+    if not witness or not held:
+        return {}
+    try:
+        return _L.assess(list(held.values()), witness, contract,
+                         stimulus_by_tp, base=base)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("oracle liveness not measured (%r)", exc)
+        return {}
+
+
+def _is_live(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
+             *, base: str) -> bool:
+    """Whether ONE replacement can fail. Unknown counts as live.
+
+    An oracle this cannot decide about must not be discarded on that account --
+    the same asymmetry `verify_one` uses, where an instrument that could not
+    answer never convicts.
+    """
+    record = _liveness({oracle.req_uid: oracle}, witness, contract,
+                       stimulus_by_tp, base=base).get(oracle.req_uid)
+    return not record or record.get("verdict") != _L.DEAD_ORACLE
+
+
+def _dead_advisory(req_uid: str, detail: str) -> Issue:
+    """The check cannot fail. Unlike gate 1, this is not one reader's opinion.
+
+    Gate 1's note is a disagreement between two same-author readings, so
+    declining it is a real answer. This is a fact about the check itself,
+    established mechanically: every declared output it names was set to every
+    other legal value, near and far, everywhere and at single points, and the
+    verdict never moved. There is no design that this check distinguishes from
+    any other.
+
+    It is still an ADVISORY and not a rejection, and the reason is the rate
+    rather than the reasoning. Its false-positive rate is known on one design.
+    This stage has twice turned a number into a refusal before knowing what it
+    rejected -- gate 1's blanket "met" discarded 30 requirements, and the
+    correspondence gate rejected 56 of 70 on a miscalibration -- and both times
+    the damage was invisible until a later gate could not see past it. So: one
+    attempt, and the previous check stands if the attempt is not better.
+
+    What the author is NOT told is which design was used. The counterexample is
+    the perturbation, which is derived from the trace's own declared widths, not
+    from any implementation's behaviour.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.cannot_fail",
+        f"This check cannot fail. {detail}. Every declared output it names was "
+        f"driven to every other legal value -- one step away and at both ends "
+        f"of the range, across the whole trace and at single edges -- and the "
+        f"verdict did not change once.\n\n"
+        f"That usually means one of three things. The check reads a port to "
+        f"find its activation window but never ASSERTS on any port. Its "
+        f"comparison is true for every value the port can carry, so it restates "
+        f"the port's width rather than the requirement. Or its trigger cannot "
+        f"fire, so the body it guards never runs.\n\n"
+        f"Rewrite it so there is some legal output value it rejects, and name "
+        f"that value in `reasoning`. If the requirement genuinely constrains "
+        f"nothing observable at the boundary, say THAT instead and keep the "
+        f"check as it is -- a requirement with no observable is a finding about "
+        f"the specification, not something to invent an assertion for.")
+
+
 def _repair_issue(req_uid: str, why: str) -> Issue:
     """The rejection, phrased as something an author can act on.
 
@@ -419,6 +494,10 @@ def run_oracle_stage(
     #: recurs every round would spend a call per round on an author who has
     #: already answered, which is pressure by repetition.
     advised: set[str] = set()
+    #: The last liveness measurement any round took, reused for the artifact.
+    #: Recomputing it afterwards would replay every named testpoint a second
+    #: time to answer a question already answered about the same checks.
+    alive: dict = {}
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         rejected = {}
@@ -443,11 +522,23 @@ def run_oracle_stage(
                     quotable[uid] = why
         for uid, why in quotable.items():
             repairs.setdefault(uid, []).append(why)
-        # Gate 1 earns an attempt of its own -- "try to make it pass" -- but
-        # only one, and only where nothing else is already re-asking.
+        # Can each surviving check fail at all? Recomputed per round because a
+        # repaired oracle is a different check, and kept for the artifact so the
+        # stage reports what it last saw rather than a stale first look.
+        alive = _liveness(held, witness, contract, stimulus_by_tp, base=base)
+        dead_now = {
+            uid: record.get("detail", "")
+            for uid, record in alive.items()
+            if record.get("verdict") == _L.DEAD_ORACLE
+        }
+        # Gate 1 and the liveness note each earn an attempt -- "try to make it
+        # pass" -- but only one each, and only where nothing else is already
+        # re-asking. Both are advisory: see `_advisory` and `_dead_advisory`.
         advisory_only = {
             uid for uid, note in disagreements.items()
             if "witness" in note and uid not in quotable and uid not in advised
+        } | {
+            uid for uid in dead_now if uid not in quotable and uid not in advised
         }
         ask = set(quotable) | advisory_only
         if not ask or rounds == max_rounds:
@@ -471,6 +562,8 @@ def run_oracle_stage(
             feedback={
                 uid: ([_advisory(uid, disagreements[uid]["witness"])]
                       if "witness" in disagreements.get(uid, {}) else [])
+                     + ([_dead_advisory(uid, dead_now[uid])]
+                        if uid in dead_now else [])
                      + ([_repair_issue(uid, quotable[uid])]
                         if uid in quotable else [])
                 for uid in ask
@@ -493,9 +586,18 @@ def run_oracle_stage(
                     control=control, variants=variants, base=base,
                     transactional=transactional)
                 if worse:
-                    logger.info("oracles: %s declined gate 1 and its attempt "
-                                "was worse (%s); the previous check stands",
-                                o.req_uid, worse.split(":")[0])
+                    logger.info("oracles: %s declined the advisory and its "
+                                "attempt was worse (%s); the previous check "
+                                "stands", o.req_uid, worse.split(":")[0])
+                    continue
+                if o.req_uid in dead_now and not _is_live(
+                        o, witness, contract, stimulus_by_tp, base=base):
+                    # A replacement that still cannot fail is not an
+                    # improvement, and swapping one inert check for another
+                    # loses the reasoning already recorded against this uid.
+                    logger.info("oracles: %s was re-asked because it cannot "
+                                "fail and the replacement cannot either; the "
+                                "previous check stands", o.req_uid)
                     continue
             held[o.req_uid] = o
 
@@ -554,37 +656,32 @@ def run_oracle_stage(
     # DEAD_STIMULUS is the testplan's -- the check can fail, but not near
     # anything this stimulus produces, and telling the author to strengthen a
     # sound check would be the misrouting the verdict enum exists to stop.
+    keep = {o.req_uid for o in trusted}
+    report = {u: r for u, r in alive.items() if u in keep}
     dead: dict = {}
-    if witness and trusted:
-        try:
-            from .refmodel import liveness
-
-            report = liveness.assess(trusted, witness, contract,
-                                     stimulus_by_tp, base=base)
-            dead = {
-                "counts": liveness.counts(report),
-                "dead_oracle": sorted(liveness.dead(report)),
-                "dead_stimulus": sorted(
-                    u for u, r in report.items()
-                    if r.get("verdict") == liveness.DEAD_STIMULUS),
-                "asserts_on": {u: sorted(set(r.get("asserts_on") or ())
-                                         | set(r.get("asserts_on_far") or ()))
-                               for u, r in sorted(report.items())},
-            }
-            if dead["dead_oracle"]:
-                logger.warning(
-                    "%d of %d trusted oracle(s) cannot be made to fail by any "
-                    "legal value of the ports they read: %s",
-                    len(dead["dead_oracle"]), len(trusted),
-                    ", ".join(dead["dead_oracle"][:8]))
-            if dead["dead_stimulus"]:
-                logger.warning(
-                    "%d trusted oracle(s) can fail, but nothing this stimulus "
-                    "produces comes near what would fail them: %s",
-                    len(dead["dead_stimulus"]),
-                    ", ".join(dead["dead_stimulus"][:8]))
-        except Exception as exc:  # noqa: BLE001
-            logger.info("oracle liveness not measured (%r)", exc)
+    if report:
+        dead = {
+            "counts": _L.counts(report),
+            "dead_oracle": sorted(_L.dead(report)),
+            "dead_stimulus": sorted(
+                u for u, r in report.items()
+                if r.get("verdict") == _L.DEAD_STIMULUS),
+            "asserts_on": {u: sorted(set(r.get("asserts_on") or ())
+                                     | set(r.get("asserts_on_far") or ()))
+                           for u, r in sorted(report.items())},
+        }
+        if dead["dead_oracle"]:
+            logger.warning(
+                "%d of %d trusted oracle(s) cannot be made to fail by any "
+                "legal value of the ports they read, after %d repair round(s): "
+                "%s", len(dead["dead_oracle"]), len(trusted), rounds,
+                ", ".join(dead["dead_oracle"][:8]))
+        if dead["dead_stimulus"]:
+            logger.warning(
+                "%d trusted oracle(s) can fail, but nothing this stimulus "
+                "produces comes near what would fail them: %s",
+                len(dead["dead_stimulus"]),
+                ", ".join(dead["dead_stimulus"][:8]))
 
     idle = _decides_nothing(testplan, trusted)
     if idle:

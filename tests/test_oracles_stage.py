@@ -672,5 +672,71 @@ def test_liveness_is_measured_against_the_witness_not_a_reference_model(
         L, "assess",
         lambda oracles, source, *a, **kw: seen.append(source) or {})
     _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
-    assert seen == [WITNESS]
+    assert seen, "the stage must measure liveness at all"
+    assert set(seen) == {WITNESS}, "every call sees the witness and nothing else"
     assert BROKEN not in seen and CRASHES not in seen
+
+
+def test_an_oracle_that_cannot_fail_is_re_asked_with_the_counterexample(
+        tmp_path, monkeypatch):
+    """Detection with no route back is the defect this stage was built to fix.
+
+    `ORACLE_INVALID` rose 4 -> 5 -> 8 across three turns with nothing able to
+    pull it down, because the only thing that noticed could not ask again. An
+    inert check now earns one attempt, the same shape gate 1 has.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(INERT), _reply(GOOD)])
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
+        fanout=False, max_repairs=0, max_rounds=2)
+
+    asked = [p for p in port.prompts if "cannot fail" in p]
+    assert asked, "the author is never told"
+    assert "driven to every other legal value" in asked[0]
+    assert "you may decline" in asked[0].lower() or "keep the check" in asked[0].lower()
+
+    assert got.dispositions["REQ-0001"] == O.TRUSTED
+    assert "y" in got.trusted[0].source, "the working replacement was taken"
+    live = json.loads(
+        (tmp_path / "specflow" / O.ARTIFACT).read_text())["oracle_liveness"]
+    assert live["counts"]["dead-oracle"] == 0, (
+        "the artifact must report what the LAST round saw, not the first")
+
+
+def test_a_replacement_that_still_cannot_fail_does_not_displace_the_original(
+        tmp_path, monkeypatch):
+    """Advice must not become a way to lose a check.
+
+    Same rule the witness advisory follows: an attempt that is not better
+    leaves the previous one standing. Here "not better" includes "still cannot
+    fail", which `verify_one` cannot see -- every gate it runs passes an inert
+    check.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    other_inert = INERT.replace("concluded nothing", "concluded nothing again")
+    port = _Port([_reply(INERT), _reply(other_inert)])
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
+        fanout=False, max_repairs=0, max_rounds=2)
+
+    assert got.dispositions["REQ-0001"] == O.TRUSTED, "still not a rejection"
+    assert "again" not in got.trusted[0].source, (
+        "an equally inert replacement must not overwrite the original")
+
+
+def test_the_advisory_is_asked_once_and_not_repeated(tmp_path, monkeypatch):
+    """Re-asking a question already answered is pressure by repetition, which
+    is what turned the over-strictness gate into a compliance ratchet."""
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(INERT)])
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
+        fanout=False, max_repairs=0, max_rounds=3)
+    assert len([p for p in port.prompts if "cannot fail" in p]) == 1
