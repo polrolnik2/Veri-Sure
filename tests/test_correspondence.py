@@ -71,8 +71,19 @@ def test_the_reviewer_is_not_offered_a_third_answer():
 
 def test_the_reviewer_is_told_not_to_judge_strictness_or_designs():
     for phrase in ("You are not judging any design",
-                   "too strict"):
+                   "how thorough, how strict"):
         assert phrase in C.SYSTEM, phrase
+
+
+def test_partial_and_loose_checks_are_on_target():
+    """Measured: asking this reviewer about strength made it reject 56 of 70
+    real oracles, and only 3 of those were genuinely about the wrong subject.
+    26 said "it should also check X" and 15 wanted tighter timing -- both
+    answers to a question a different gate asks. As a blocking gate that pushes
+    every check toward demanding MORE, while gate 1 pushes them toward
+    demanding less."""
+    assert "decides only PART of the requirement is ON TARGET" in C.SYSTEM
+    assert '"It should also check X" is a YES' in C.SYSTEM
 
 
 # ----------------------------------------------------------------- the verdict
@@ -159,3 +170,80 @@ def test_the_witness_note_is_taken_before_anything_blocks(tmp_path, monkeypatch)
     assert blob["correspondence_checked"] is True
     assert "witness" in blob["instrument_notes"]["REQ-0001"], (
         "the witness observation must survive a downstream rejection")
+
+
+# ------------------------------------------------- gate 1 advises, never gates
+
+
+def test_gate_1_earns_one_attempt_and_only_one(tmp_path, monkeypatch):
+    """Non-mandatory means TRY, not ignore. The author is asked once to make the
+    check accept a second implementation -- and asked once only, because a
+    disagreement that recurs every round spends a call per round on an author
+    who has already answered, which is pressure by repetition."""
+    from tests.test_oracles_stage import (
+        CONTRACT, OVER_STRICT, REQS, STIM, TESTPLAN, WITNESS,
+        _Port as _GenPort, _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _GenPort([_gen_reply(OVER_STRICT)])
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", fanout=False,
+        max_repairs=0, max_rounds=3, run_dir=tmp_path)
+
+    assert len(port.prompts) == 2, (
+        f"gate 1 must earn exactly one attempt, got {len(port.prompts)}")
+    assert "witness_disagrees" in port.prompts[1]
+    # And declining costs nothing: the reply is the same over-strict oracle.
+    assert got.dispositions["REQ-0001"] == O.TRUSTED
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert "witness" in blob["instrument_notes"]["REQ-0001"]
+
+
+def test_the_advice_rides_along_when_a_round_happens_anyway(tmp_path,
+                                                            monkeypatch):
+    """Gate 1 comes first: when an oracle is re-asked for a blocking reason,
+    the witness observation is in the prompt ahead of it -- free, because the
+    call was already being spent."""
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, OVER_STRICT, REQS, STIM, TESTPLAN, WITNESS,
+        _Port as _GenPort, _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    # Off-target blocks; the witness also disagrees with OVER_STRICT.
+    seen = {"n": 0}
+
+    def _review(*_a, **_k):
+        seen["n"] += 1
+        return {"REQ-0001": C.Review(tests_the_requirement=seen["n"] == 1 and False
+                                     or seen["n"] > 1,
+                                     what_is_missing="it never reads y")}
+
+    monkeypatch.setattr(C, "review", _review)
+    port = _GenPort([_gen_reply(OVER_STRICT), _gen_reply(GOOD)])
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", fanout=False,
+        max_repairs=0, want_correspondence=True)
+
+    assert len(port.prompts) == 2, "the blocking reason must cost a round"
+    repair = port.prompts[1]
+    assert "witness_disagrees" in repair, "gate 1's advice is not in the prompt"
+    assert "off_target" in repair or "off-target" in repair
+    assert repair.index("witness_disagrees") < repair.index("off"), (
+        "gate 1 comes first")
+
+
+def test_the_advice_says_it_may_be_ignored():
+    """An author told "an independent implementation fails your check" contorts
+    a correct check. The wording has to carry non-mandatory or it is just a
+    rejection with softer punctuation."""
+    issue = O._advisory("REQ-0001", "fails it at edge 3")
+    assert issue.severity == "warning"
+    for phrase in ("TRY to make", "NOT A DEFECT AND YOU MAY DECLINE",
+                   "no better authority", "KEEP YOUR", "rejected for declining"):
+        assert phrase in issue.message, phrase

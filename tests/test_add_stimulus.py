@@ -319,3 +319,39 @@ def test_nothing_is_rewritten_when_nothing_grew(tmp_path):
 
     _persist_grown(tmp_path, [{"uid": "TP-0000"}], {"TP-0000": []}, before=(1, 1))
     assert (sf / "testplan.json").read_text() == "SENTINEL"
+
+
+def test_the_opening_brief_lists_what_the_TURN_can_act_on():
+    """It used to list failing oracles regardless of route. On a stimulus turn
+    that is zero by construction, so the brief read "fails 0 of 70", listed
+    nothing, and said "stage the scenarios the unexercised oracles are waiting
+    for -- start with `explain` on one of them", where "them" was the empty list
+    above.
+
+    Measured: across four runs the stimulus tool fired ZERO times, by three
+    separate causes. The stop rule said stop when nothing is failing; the loop
+    returned after a turn that changed nothing; and the agent was told there was
+    work and shown none. This is the third.
+    """
+    from eda_agent.refmodel_editor import _opening
+
+    s = _mixed(model_route_stalled=True)
+    assert s.route == "stimulus"
+    brief = _opening(s)
+
+    unexercised = [r.req_uid for r in s.results if r.unexercised()]
+    assert unexercised, "the fixture must have something to stage"
+    for uid in unexercised:
+        assert uid in brief, f"{uid} is actionable this turn and is not named"
+    assert "add_stimulus(" in brief
+    assert "fails 0 of" not in brief, "reads as done on a stimulus turn"
+
+
+def test_the_opening_brief_still_lists_failures_on_a_model_turn():
+    from eda_agent.refmodel_editor import _opening
+
+    s = _mixed(model_route_stalled=False)
+    assert s.route == "model"
+    brief = _opening(s)
+    assert "REQ-0003" in brief, "the failing oracle must be named"
+    assert "`add_stimulus` is closed" in brief

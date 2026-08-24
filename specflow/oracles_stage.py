@@ -246,6 +246,44 @@ def verify_one(
     return "", True, notes
 
 
+def _advisory(req_uid: str, note: str) -> Issue:
+    """Gate 1's observation: TRY to satisfy it, and declining is a real answer.
+
+    Non-mandatory does not mean ignorable. The author is asked to make the check
+    pass a second implementation of the same requirement, because a check no
+    implementation satisfies is usually pinning a detail the specification
+    leaves open -- and that is worth one attempt.
+
+    What makes it non-mandatory is the exit: if satisfying the witness is
+    impossible, or would contradict what the requirement says, KEEPING THE CHECK
+    IS THE CORRECT ANSWER and nothing is rejected for it. The witness is a
+    second reading by the same author and has no authority to overrule the text.
+
+    That exit is the whole safety property. Measured when this disagreement
+    could REJECT -- when declining meant the oracle was discarded --
+    over-strictness went 27 -> 15 and convictions 2 -> 16: oracles relaxed until
+    they stopped disagreeing, because compliance was the only way to survive.
+
+    Asked once per oracle, and a replacement is kept only if it still verifies
+    (see the repair round). An attempt that makes the check worse leaves the
+    previous one standing.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.witness_disagrees",
+        f"A second implementation of this same requirement {note}. TRY to make "
+        f"your check accept it: a check no implementation satisfies is usually "
+        f"pinning a detail the specification leaves open -- an exact edge, a "
+        f"count the text does not state, an ordering it does not fix. Relax "
+        f"that detail if you find one.\n\n"
+        f"THIS IS NOT A DEFECT AND YOU MAY DECLINE. That implementation was "
+        f"written from the same text by no better authority than you, so it "
+        f"cannot overrule the requirement. If accepting it is impossible, or "
+        f"would mean checking something the requirement does not say, KEEP YOUR "
+        f"CHECK EXACTLY AS IT IS and say why in `reasoning`. Nothing is "
+        f"rejected for declining, and a check contorted to agree is worse than "
+        f"a disagreement.")
+
+
 def _repair_issue(req_uid: str, why: str) -> Issue:
     """The rejection, phrased as something an author can act on.
 
@@ -377,6 +415,10 @@ def run_oracle_stage(
     #: agent, and the artifact must say so rather than let the attempts look
     #: unexplained.
     disagreements: dict[str, dict[str, str]] = {}
+    #: Oracles already given gate 1's note. Asked ONCE: a disagreement that
+    #: recurs every round would spend a call per round on an author who has
+    #: already answered, which is pressure by repetition.
+    advised: set[str] = set()
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         rejected = {}
@@ -401,7 +443,14 @@ def run_oracle_stage(
                     quotable[uid] = why
         for uid, why in quotable.items():
             repairs.setdefault(uid, []).append(why)
-        if not quotable or rounds == max_rounds:
+        # Gate 1 earns an attempt of its own -- "try to make it pass" -- but
+        # only one, and only where nothing else is already re-asking.
+        advisory_only = {
+            uid for uid, note in disagreements.items()
+            if "witness" in note and uid not in quotable and uid not in advised
+        }
+        ask = set(quotable) | advisory_only
+        if not ask or rounds == max_rounds:
             # Nothing left that an author could be told about. A control-only
             # rejection is terminal by design, so re-asking would spend a call
             # on a prompt carrying no information.
@@ -414,15 +463,40 @@ def run_oracle_stage(
             normalized=normalized, conforming_source=witness,
             stimulus_by_tp=stimulus_by_tp, base=base,
             max_repairs=max_repairs, fanout=fanout,
-            only=set(quotable),
-            feedback={uid: [_repair_issue(uid, why)]
-                      for uid, why in quotable.items()},
+            only=ask,
+            # Gate 1 first, as advice, then the reason this oracle is actually
+            # being re-asked. An oracle with only a witness disagreement is NOT
+            # in `quotable` and so is never re-asked at all -- the note costs no
+            # call and applies no pressure on its own.
+            feedback={
+                uid: ([_advisory(uid, disagreements[uid]["witness"])]
+                      if "witness" in disagreements.get(uid, {}) else [])
+                     + ([_repair_issue(uid, quotable[uid])]
+                        if uid in quotable else [])
+                for uid in ask
+            },
             label=f"_fix{rounds}",
         )
+        advised |= advisory_only
         # Only a replacement that actually arrived replaces anything. A round
         # that produced nothing leaves the previous oracle standing to be
         # rejected again, which is the honest outcome rather than a hole.
         for o in again:
+            if o.req_uid in advisory_only:
+                # This oracle was not rejected -- it was asked to TRY. A reply
+                # that comes back worse must not be promoted over the one that
+                # was already fine, or advice becomes a way to lose a good
+                # check. Same rule `_strengthen` applies for the same reason.
+                worse, _q, _n = verify_one(
+                    o, contract=contract, testplan=testplan,
+                    stimulus_by_tp=stimulus_by_tp, witness=witness,
+                    control=control, variants=variants, base=base,
+                    transactional=transactional)
+                if worse:
+                    logger.info("oracles: %s declined gate 1 and its attempt "
+                                "was worse (%s); the previous check stands",
+                                o.req_uid, worse.split(":")[0])
+                    continue
             held[o.req_uid] = o
 
     trusted = [o for uid, o in held.items() if uid not in rejected]

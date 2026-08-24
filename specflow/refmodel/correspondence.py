@@ -56,26 +56,30 @@ class Review(BaseModel):
 
 SYSTEM = """\
 You are given a requirement and a decision procedure written to decide it. You
-answer ONE question: does that procedure actually decide THAT requirement?
+answer ONE question: is that procedure ABOUT that requirement?
 
-You are not judging any design. No implementation appears below and none is
-relevant. You are not judging whether the check is too strict, or whether the
-requirement is a good requirement. Only whether the check and the requirement
-are about the same thing.
+Subject matter only. You are not judging any design -- none appears below. You
+are not judging how thorough, how strict, or how complete the check is.
 
-Answer NO when, for example:
+**A check that decides only PART of the requirement is ON TARGET.** A check that
+decides it loosely, without timing constraints, without every sub-condition, or
+in a way you would have written more tightly, is ON TARGET. Whether a check is
+strong enough is a different question measured by a different gate, and
+answering it here would push every check toward demanding more -- while another
+gate is simultaneously pushing them toward demanding less.
 
-  - the check reads ports the requirement is not about, or ignores the port the
-    requirement's behaviour is visible on;
-  - the check tests a condition the requirement does not state, or omits the
-    condition it does state;
-  - the check would be satisfied by a design that plainly violates the
-    requirement, or failed by one that plainly satisfies it, on the requirement's
-    own terms rather than any particular design's;
-  - the `clause` names one sentence and the code decides a different one.
+Answer NO only when the procedure is about something ELSE:
 
-Answer YES when the procedure decides the requirement, even if you would have
-written it differently. Style, structure and strictness are not your question.
+  - it reads ports the requirement is not about, and not the ones it is;
+  - it decides a different behaviour than the one the requirement names --
+    a different command, a different signal, a different phase of operation;
+  - `clause` names one sentence and the code plainly decides another;
+  - it is a placeholder: it decides nothing at all about this requirement,
+    whatever it returns.
+
+Answer YES whenever the procedure is a check of this requirement, however
+partial. "It should also check X" is a YES. "It should check X more precisely"
+is a YES. Only "it is checking something else" is a NO.
 
 There is no third answer. If you find yourself wanting to say "it depends" or
 "unclear", decide which is more nearly true and say why in `reasoning` -- a
@@ -86,7 +90,7 @@ Reply with ONE JSON object and nothing else:
 {
   "reasoning": "one or two sentences",
   "tests_the_requirement": true,
-  "what_is_missing": "on false: what the check must decide instead, concretely"
+  "what_is_missing": "on false: what the check is about instead, and what it would have to decide to be about this requirement"
 }
 """
 

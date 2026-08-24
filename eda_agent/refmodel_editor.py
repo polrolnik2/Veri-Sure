@@ -349,21 +349,54 @@ class RefModelEditor:
 
 
 def _opening(session: DebugSession) -> str:
+    """Open on what THIS turn can act on, not on what a model turn would.
+
+    It used to open with "the reference model fails N of M oracles" and list the
+    failing ones. On a stimulus turn N is zero by construction, so the brief
+    read "fails 0 of 70", listed nothing, and then said "stage the scenarios the
+    unexercised oracles are waiting for -- start with `explain` on one of them",
+    where "them" was the empty list above.
+
+    Measured: across four runs the stimulus tool fired zero times. Three
+    separate causes, and this was the last of them -- the agent was told there
+    was work and shown none. The other two were the stop rule telling it to stop
+    when nothing was failing, and the loop returning after a turn that changed
+    nothing.
+    """
     rows = session.list_oracles()
-    failing = [r for r in rows if r["status"] == "NOT MET"]
-    lines = [
-        f"The reference model fails {len(failing)} of {len(rows)} requirement "
-        f"oracles.",
-        "",
-        "Failing:",
-    ]
-    for r in failing[:40]:
+    stimulus_turn = session.route != "model"
+    wanted = "NOT EXERCISED" if stimulus_turn else "NOT MET"
+    actionable = [r for r in rows if r["status"] == wanted]
+
+    if stimulus_turn:
+        lines = [
+            f"{len(actionable)} of {len(rows)} requirement oracles have never "
+            f"seen the situation they are about. Nothing is failing, and that "
+            f"is not the same as done: an unexercised requirement is "
+            f"UNVERIFIED, which is worse than a failing one because nothing is "
+            f"even claiming to check it.",
+            "",
+            "Waiting for a scenario:",
+        ]
+    else:
+        lines = [
+            f"The reference model fails {len(actionable)} of {len(rows)} "
+            f"requirement oracles.",
+            "",
+            "Failing:",
+        ]
+
+    for r in actionable[:40]:
         where = f" (decided at edge {r['edge']})" if r["edge"] is not None else ""
         lines.append(f"  {r['req_uid']}: {r['clause']}{where}")
         if r["detail"]:
             lines.append(f"      observed: {r['detail']}")
-    if len(failing) > 40:
-        lines.append(f"  ... and {len(failing) - 40} more; list_oracles() has all.")
+    if len(actionable) > 40:
+        lines.append(f"  ... and {len(actionable) - 40} more; "
+                     f"list_oracles() has all.")
+    if not actionable:
+        lines.append("  (none)")
+
     state = session.run_all()
     if state["distinct_output_states"] == 1:
         lines += [
@@ -375,9 +408,11 @@ def _opening(session: DebugSession) -> str:
     lines += ["",
               f"This is a {session.route.upper()} turn: "
               + ("edit the model; `add_stimulus` is closed."
-                 if session.route == "model" else
-                 "nothing is failing, so `replace_method` is closed. Stage the "
-                 "scenarios the unexercised oracles are waiting for."),
+                 if not stimulus_turn else
+                 "`replace_method` is closed. Call "
+                 "`add_stimulus(req_uid, \"...\")` on the requirements above "
+                 "and describe what has to happen for their scenario to occur; "
+                 "the harness generates and gates the vectors."),
               "Start with `explain` on one of them."]
     return "\n".join(lines)
 
