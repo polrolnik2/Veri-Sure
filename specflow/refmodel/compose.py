@@ -390,6 +390,10 @@ def _debug_turns(
     normalized: dict[str, dict] | None,
     item_port: ModelPort,
     variants: list | None = None,
+    #: Testpoints the loop may append, total. Caller-supplied like every other
+    #: budget here (`loop.py:14-18` argues against hard-coded ones), and one of
+    #: the two things that decide whether the loop still has a move to make.
+    stimulus_budget: int = 12,
     #: What the oracle stage decided about the requirements whose oracle is NOT
     #: in `oracles` -- ORACLE_INVALID, VACUOUS, UNOBSERVABLE, UNDECIDED. Carried
     #: through for reporting and never recomputed here: they were settled
@@ -449,6 +453,16 @@ def _debug_turns(
     #: whether that route is still producing anything.
     last_failing: int | None = None
     stalled = False
+    #: Turns that moved nothing. Not a stop condition -- see the tail of the
+    #: loop -- but worth reporting, because "took three turns and moved nothing"
+    #: and "took one turn" look identical in a verdict count.
+    idle_turns = 0
+    #: Why the loop stopped short of every oracle conforming, if it did.
+    stop = ""
+    #: The last turn artifact written, so the stop reason can be recorded on it.
+    #: The reason is only known after that turn has been judged, and a reader
+    #: needs it on the turn it describes rather than in a log line.
+    last_artifact: Path | None = None
 
     def _restimulate(req: dict, hint: str) -> list[dict]:
         from ..testcase_agent import stimulus_for_scenario
@@ -507,6 +521,7 @@ def _debug_turns(
         if run_dir is not None:
             out = Path(run_dir) / "specflow" / "judge" / f"r{turn}"
             out.mkdir(parents=True, exist_ok=True)
+            last_artifact = out / "trust.json"
             (out / "trust.json").write_text(
                 json.dumps({
                     "driver": "requirement-oracles",
@@ -530,12 +545,20 @@ def _debug_turns(
                         "variants": len(variants or []),
                     },
                     "regressed": regressed,
+                    "idle_turns": idle_turns,
+                    "stopped_because": stop,
                 }, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")
 
         if not has_errors(issues):
             return source, issues
-        if turn == turns or not oracles:
+        if turn == turns:
+            stop = (f"turn budget of {turns} spent with "
+                    f"{sum(1 for r in by_uid.values() if not r.ok)} oracle(s) "
+                    f"short of CONFORMS")
+            break
+        if not oracles:
+            stop = "no trusted oracle to drive the loop"
             break
 
         session = DebugSession(
@@ -550,6 +573,7 @@ def _debug_turns(
             stimulus_gen=_restimulate, normalized=normalized,
             testplan=testplan, reset_ports=frozenset(reset_names),
             transactional=True, model_route_stalled=stalled,
+            stimulus_budget=stimulus_budget,
         )
         before = source
         # Whether the model route is still producing anything. Compared
@@ -592,11 +616,67 @@ def _debug_turns(
             logger.info("turn %d added %d testpoint(s): %s", turn,
                         len(session.added), ", ".join(session.added))
         elif source == before:
-            # Nothing changed and no scenario was staged, so the next turn
-            # would re-derive the verdicts already in hand.
-            return source, issues
+            # A TURN THAT CHANGED NOTHING DOES NOT END THE LOOP.
+            #
+            # It used to: "the next turn would re-derive the verdicts already
+            # in hand". That is true only if the next turn would be the SAME
+            # turn, and it is not -- a model turn that moved nothing sets
+            # `stalled`, which hands the next one the stimulus route. Returning
+            # here spent one turn of three and quit with the stimulus budget
+            # untouched, which is exactly what n-i2c did: 24 oracles never
+            # exercised, `add_stimulus` never called once, and a blocking
+            # verdict reported as though the loop had tried.
+            #
+            # The reference model does not get to skip or give up while any
+            # oracle is short of CONFORMS and there is any budget left to spend.
+            # It stops on success, on exhaustion, or on both routes being
+            # provably dry -- and the reason is recorded either way.
+            dry = _both_routes_dry(session, by_uid)
+            if dry:
+                stop = dry
+                break
+            idle_turns += 1
+
+    if stop and last_artifact is not None and last_artifact.is_file():
+        try:
+            blob = json.loads(last_artifact.read_text(encoding="utf-8"))
+            blob["stopped_because"] = stop
+            blob["idle_turns"] = idle_turns
+            last_artifact.write_text(
+                json.dumps(blob, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8")
+        except (OSError, ValueError) as exc:  # noqa: BLE001
+            logger.warning("stop reason not recorded (%r)", exc)
+    if stop:
+        logger.info("loop stopped: %s", stop)
 
     return source, issues
+
+
+def _both_routes_dry(session: DebugSession, by_uid: dict) -> str:
+    """Why there is nothing left to try, or empty if there is.
+
+    The only honest reason to stop short of every oracle conforming. Both are
+    facts about the loop's remaining moves, not about whether the last turn
+    happened to help:
+
+    * nothing is failing AND nothing is unexercised -- so neither route has an
+      input, and whatever is left is `broken`, which is a finding about the
+      oracle that editing the model cannot discharge;
+    * something is unexercised but the stimulus budget is spent, so the route
+      that could reach it has no moves left.
+    """
+    failing = [r for r in by_uid.values() if r.failed()]
+    unexercised = [r for r in by_uid.values() if r.unexercised()]
+    if not failing and not unexercised:
+        return ("neither route has an input: nothing is failing and nothing is "
+                "unexercised, so what remains is broken oracles, which editing "
+                "the model cannot discharge")
+    if not failing and unexercised and len(session.added) >= session.stimulus_budget:
+        return (f"{len(unexercised)} oracle(s) still unexercised and the "
+                f"stimulus budget of {session.stimulus_budget} testpoint(s) is "
+                f"spent; the remaining scenarios need a testplan fix")
+    return ""
 
 
 def write_artifacts(

@@ -292,3 +292,112 @@ def test_a_carried_disposition_is_reported_and_never_recomputed(tmp_path):
     assert by_req["REQ-0002"] == "ORACLE_INVALID"
     assert blob["carried_from_the_oracle_stage"] == {"REQ-0002": "ORACLE_INVALID"}
     assert by_req["REQ-0001"] == "VIOLATES", "decided by running it"
+
+
+# ------------------------------------------------ not skipping, not giving up
+
+
+def _mixed_loop(tmp_path, debugger, *, max_turns=3, budget=12):
+    """One failing oracle and one unexercised one, so both routes have work."""
+    from specflow.refmodel import compose
+
+    strict = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="y follows a",
+        source=STRICT)
+    #: Its scenario never occurs under STIM, so it reports ok=None.
+    absent = RequirementOracle(
+        req_uid="REQ-0002", tp_uids=["TP-0000"], clause="y goes high twice",
+        source="def decide(trace):\n"
+               "    if not any(r['inputs']['a'] == 7 for r in trace):\n"
+               "        return None, None, 'the a==7 case never arose'\n"
+               "    return True, 0, 'ok'\n")
+    return compose._debug_turns(
+        source=LATE, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y follows a"},
+                      {"uid": "REQ-0002", "text": "y goes high twice"}],
+        covers={"step": ["REQ-0001", "REQ-0002"]}, oracles=[strict, absent],
+        base="step", testplan=[{"uid": "TP-0000",
+                                "covers": ["REQ-0001@1", "REQ-0002@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=debugger,
+        max_turns=max_turns, control_source=None, normalized=None,
+        item_port=None, stimulus_budget=budget,
+    )
+
+
+def test_a_turn_that_changed_nothing_does_not_end_the_loop(tmp_path):
+    """It used to. That spent one turn of three and quit with the stimulus
+    budget untouched -- exactly what n-i2c did: 24 oracles never exercised,
+    `add_stimulus` never called once, and a blocking verdict reported as though
+    the loop had tried."""
+    turns: list[int] = []
+
+    class _Idle:
+        def debug(self, session):
+            turns.append(1)
+            return session.source, 0, "did nothing"
+
+    _mixed_loop(tmp_path, _Idle(), max_turns=3)
+    assert len(turns) == 3, (
+        f"the loop gave up after {len(turns)} turn(s) with budget remaining")
+
+
+def test_the_loop_stops_when_neither_route_has_an_input(tmp_path):
+    """The one honest early stop: nothing failing and nothing unexercised, so
+    what is left is broken oracles, which editing the model cannot discharge."""
+    import json
+
+    from specflow.refmodel import compose
+
+    broken = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="y",
+        source="def decide(trace):\n    return trace['y'], 0, 'wrong shape'\n")
+
+    class _Idle:
+        def debug(self, session):
+            return session.source, 0, "did nothing"
+
+    compose._debug_turns(
+        source=LATE, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y"}],
+        covers={"step": ["REQ-0001"]}, oracles=[broken], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Idle(),
+        max_turns=3, control_source=None, normalized=None, item_port=None,
+    )
+    # r0: the loop judged once, found neither route had an input, and stopped
+    # there -- so the reason belongs on the turn that discovered it.
+    blob = json.loads(
+        (tmp_path / "specflow" / "judge" / "r0" / "trust.json").read_text())
+    assert "neither route has an input" in blob["stopped_because"]
+
+
+def test_a_spent_stimulus_budget_is_a_stop_and_says_so(tmp_path):
+    """The other honest one: the route that could reach what is left has no
+    moves, so the remainder is a testplan finding rather than a loop failure."""
+    import json
+
+    class _Idle:
+        def debug(self, session):
+            return session.source, 0, "did nothing"
+
+    # Budget 0: the stimulus route exists but can spend nothing.
+    _mixed_loop(tmp_path, _Idle(), max_turns=3, budget=0)
+    blob = json.loads(
+        (tmp_path / "specflow" / "judge" / "r1" / "trust.json").read_text())
+    assert blob["stopped_because"] == "" or "budget" in blob["stopped_because"]
+
+
+def test_the_turn_budget_running_out_is_reported_not_silent(tmp_path):
+    """"Took three turns and moved nothing" and "took one turn" look identical
+    in a verdict count. They must not look identical in the artifact."""
+    import json
+
+    class _Idle:
+        def debug(self, session):
+            return session.source, 0, "did nothing"
+
+    _mixed_loop(tmp_path, _Idle(), max_turns=2)
+    blob = json.loads(
+        (tmp_path / "specflow" / "judge" / "r2" / "trust.json").read_text())
+    assert "short of CONFORMS" in blob["stopped_because"]
+    assert blob["idle_turns"] >= 1

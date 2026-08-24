@@ -94,6 +94,12 @@ class OracleSet:
     variants: list = field(default_factory=list)
     witness_kind: str = NO_BOUND
     rounds: int = 0
+    #: Testpoints in the plan that NO oracle names. They render, they start a
+    #: simulator process, and nothing they produce decides anything -- the inert
+    #: testbench this project exists to prevent, one level up. Measured on
+    #: n-i2c: 17 of 167. Recorded rather than acted on, because the fix is a
+    #: testplan or an oracle-scoping decision and neither belongs to this stage.
+    testpoints_no_oracle_names: list[str] = field(default_factory=list)
 
     def rates(self) -> dict[str, int | None]:
         """Counts, and `None` where a check did not run.
@@ -116,6 +122,12 @@ class OracleSet:
         if self.witness_kind == NO_BOUND:
             out["ORACLE_INVALID"] = out.get("ORACLE_INVALID")
         return out
+
+    def decides_nothing(self) -> int:
+        """How much of the suite proves nothing. Never silent, never zero by
+        omission -- an empty list and an unmeasured one read the same in a
+        report and mean opposite things."""
+        return len(self.testpoints_no_oracle_names)
 
     def by_verdict(self, name: str) -> list[str]:
         return sorted(u for u, v in self.dispositions.items() if v == name)
@@ -352,6 +364,12 @@ def run_oracle_stage(
     dispositions, reasons = _dispositions(
         requirements=requirements, trusted=trusted, rejected=rejected,
         had_source=set(held), normalized=normalized)
+    idle = _decides_nothing(testplan, trusted)
+    if idle:
+        logger.warning(
+            "%d of %d testpoint(s) are named by no oracle: they render, they "
+            "start a simulator, and nothing they produce decides anything",
+            len(idle), len(testplan))
 
     if run_dir is not None:
         trusted, drift = freeze.freeze(
@@ -363,7 +381,8 @@ def run_oracle_stage(
                    # tell a check that found nothing from one that never ran.
                    "vacuity_checked": bool(variants),
                    "over_strictness_bounded_by": witness_kind,
-                   "repairs": repairs})
+                   "repairs": repairs,
+                   "testpoints_no_oracle_names": idle})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
         if variants:
@@ -375,7 +394,8 @@ def run_oracle_stage(
     logger.info("oracles: %s (bound: %s)", _summary(dispositions), witness_kind)
     return OracleSet(trusted=trusted, dispositions=dispositions,
                      reasons=reasons, repairs=repairs, variants=variants,
-                     witness_kind=witness_kind, rounds=rounds)
+                     witness_kind=witness_kind, rounds=rounds,
+                     testpoints_no_oracle_names=idle)
 
 
 def _witness(
@@ -423,6 +443,25 @@ def _witness(
     return source, WITNESS
 
 
+def _decides_nothing(testplan: list[dict],
+                     oracles: list[RequirementOracle]) -> list[str]:
+    """Testpoints in the plan that no oracle names.
+
+    Each one still renders and still starts a simulator process
+    (`run.py:200-204`), and nothing it produces decides anything. That is the
+    inert-testbench failure this project exists to prevent, one level up:
+    stimulus that runs and proves nothing. `qualify.py:3-22` makes the argument
+    for the suite; it holds identically here.
+
+    Reported, not acted on. The remedy is a testplan change or an oracle-scoping
+    decision, and neither belongs to this stage -- but it must not be silent,
+    because a suite that grows while this number grows with it looks like
+    progress.
+    """
+    named = {tp for o in oracles for tp in o.tp_uids}
+    return sorted({str(e.get("uid")) for e in testplan if e.get("uid")} - named)
+
+
 def _dispositions(
     *, requirements: list[dict], trusted: list[RequirementOracle],
     rejected: dict[str, str], had_source: set[str],
@@ -430,9 +469,8 @@ def _dispositions(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """One verdict per requirement, and never fewer.
 
-    `UNOBSERVABLE` is settled at normalization and passes straight through --
-    a requirement with no boundary observable is a hole in the specification,
-    not a defect in a check that was never written for it.
+    `UNOBSERVABLE` is settled at normalization, EXCEPT that a working oracle
+    refutes it -- see below.
     """
     norm = normalized or {}
     ok = {o.req_uid for o in trusted}
@@ -443,11 +481,32 @@ def _dispositions(
         if not uid:
             continue
         shape = norm.get(uid) or {}
-        if shape and not (shape.get("observable") or []):
+        blind = bool(shape) and not (shape.get("observable") or [])
+        if uid in ok:
+            # A WORKING ORACLE REFUTES `UNOBSERVABLE`. Normalization claimed
+            # this requirement has no boundary observable; an oracle for it then
+            # named a declared port, ran, and survived every gate, which is only
+            # possible if something observable was there. The oracle is evidence
+            # and the claim is not, so the claim loses.
+            #
+            # Not hypothetical: normalization's first live run called 27 of 77
+            # requirements UNOBSERVABLE by reading each one's MECHANISM rather
+            # than its effect, and it was caught exactly this way -- 10 of the 27
+            # already had screened oracles.
+            #
+            # Ordering this the other way also made the artifact contradict
+            # itself: on n-i2c it reported 62 TRUSTED beside 70 frozen oracles,
+            # because 8 requirements were called a spec defect while their
+            # oracles sat in the set driving the loop -- which then silently
+            # overwrote the verdict, since it decides whatever it is given.
+            out[uid] = TRUSTED
+            if blind:
+                why[uid] = ("normalization called this UNOBSERVABLE and its "
+                            "oracle decides it at a declared port, so the "
+                            "normalization is wrong")
+        elif blind:
             out[uid] = "UNOBSERVABLE"
             why[uid] = shape.get("unobservable_reason") or "no declared output"
-        elif uid in ok:
-            out[uid] = TRUSTED
         elif uid in rejected:
             out[uid] = V.of_discard(rejected[uid])
             why[uid] = rejected[uid]
@@ -555,7 +614,9 @@ def _strengthen(
                 len(inadequate))
     return OracleSet(trusted=trusted, dispositions=dispositions,
                      reasons=reasons, variants=list(previous.variants),
-                     witness_kind=witness_kind, rounds=previous.rounds + 1)
+                     witness_kind=witness_kind, rounds=previous.rounds + 1,
+                     testpoints_no_oracle_names=_decides_nothing(
+                         testplan, trusted))
 
 
 def load(run_dir: Path) -> OracleSet | None:

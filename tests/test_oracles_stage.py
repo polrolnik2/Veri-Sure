@@ -501,3 +501,33 @@ def test_a_repaired_oracle_keeps_a_record_of_what_was_caught(tmp_path,
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["repairs"]["REQ-0001"] == got.repairs["REQ-0001"]
+
+
+def test_testpoints_no_oracle_names_are_counted_not_ignored(tmp_path,
+                                                            monkeypatch):
+    """Stimulus that runs and proves nothing is the inert-testbench failure
+    this project exists to prevent, one level up. Measured on n-i2c: 17 of 167
+    testpoints were named by no oracle -- each one renders, starts a simulator
+    process, and decides nothing."""
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    plan = list(TESTPLAN) + [{"uid": "TP-0900", "covers": ["REQ-0404@1"]}]
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=plan, stimulus_by_tp=STIM,
+        port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, run_dir=tmp_path)
+
+    assert got.testpoints_no_oracle_names == ["TP-0900"]
+    assert got.decides_nothing() == 1
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["testpoints_no_oracle_names"] == ["TP-0900"]
+
+
+def test_a_fully_covered_plan_reports_an_empty_list_not_a_missing_key(tmp_path,
+                                                                      monkeypatch):
+    """An empty list and an unmeasured one read the same in a report and mean
+    opposite things."""
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["testpoints_no_oracle_names"] == []
