@@ -31,6 +31,20 @@ The earlier version of this split guessed the second case from "does any port
 it reads vary", and that misroutes: an oracle with a threshold the stimulus
 never approaches reads a moving port and is still not the author's fault.
 
+AND IT IS NOT A THIN-STIMULUS PROBLEM WEARING A DISGUISE. That was the obvious
+alternative explanation and it is measured false. On the known-good control the
+stimulus IS thin -- median 5 distinct output states per testpoint across ~256
+edges, and 20 of 167 testpoints produce exactly one state, meaning nothing an
+oracle names there can decide anything. But the dead oracles are not the ones
+stuck on those: the richest testpoint a dead oracle names has a median of 6
+distinct states, exactly the same as for a live one.
+
+Two independent defects, then, and neither explains the other. The stimulus
+caps what ANY oracle can discriminate; these 20 fail to use a trace that had
+something in it. Fixing one will not fix the other, and that is why
+`DEAD_ORACLE` routes to the author while `DEAD_STIMULUS` -- the check that can
+fail but not near anything staged -- routes to the testplan.
+
 WHY IT HAS TO EXECUTE, RATHER THAN READ. There is no source-level signature to
 look for. Comparing the 20 dead oracles against the 44 live ones on the same
 frozen set: the dead ones are LONGER (median 9 comparisons against 6, 54 lines
