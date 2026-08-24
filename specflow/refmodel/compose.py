@@ -26,7 +26,7 @@ from . import freeze, ratchet, trust, verdict
 from . import variants as variants_mod
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .oracles import decide_all, replay, stimulus_liveness
-from .session import DebugSession
+from .session import MODEL, DebugSession
 from .validate import validate
 
 logger = logging.getLogger(__name__)
@@ -642,6 +642,10 @@ def _oracle_driven_turns(
     #: Cumulative across turns: a testpoint appended in turn 1 is still evidence
     #: in turn 2, because nothing is ever removed.
     added: list[str] = []
+    #: Failing count the last MODEL turn started from, so the next turn can ask
+    #: whether that route is still producing anything.
+    last_failing: int | None = None
+    stalled = False
 
     def _vacuity(subset: list) -> dict[str, str]:
         """Step 7's must-fail leg, over the oracles named.
@@ -798,9 +802,17 @@ def _oracle_driven_turns(
             if run_dir is not None else None,
             stimulus_gen=_restimulate, normalized=normalized,
             testplan=testplan, reset_ports=frozenset(reset_names),
-            transactional=True,
+            transactional=True, model_route_stalled=stalled,
         )
         before = source
+        # Whether the model route is still producing anything. Compared
+        # pre-debug against pre-debug, so it asks exactly "did the last model
+        # turn move the count", and recorded only for model turns -- a stimulus
+        # turn is not evidence about the model route either way.
+        if session.route == MODEL:
+            failing_now = sum(1 for r in by_uid.values() if r.failed())
+            stalled = (last_failing is not None and failing_now >= last_failing)
+            last_failing = failing_now
         source, _attempts, _note = debugger.debug(session)
         if session.added:
             testplan = session.testplan

@@ -121,6 +121,10 @@ class DebugSession:
         #: accumulate, and every one becomes a simulator process in the rendered
         #: suite (`run.py:200-204`, ~0.39s each).
         stimulus_budget: int = 12,
+        #: The previous turn edited the model and the failing count did not
+        #: fall. See `route` -- this is what stops failing-first from starving
+        #: the stimulus route forever.
+        model_route_stalled: bool = False,
     ):
         self.source = source
         self.contract = contract
@@ -154,10 +158,20 @@ class DebugSession:
         #: the model changed AND the evidence changed, so nothing says which
         #: moved the count. FAILING FIRST -- a VIOLATES is evidence about the
         #: model that already exists and costs no model call to act on, while a
-        #: NOT_EXERCISED costs a stimulus generation and may still not fire. So
-        #: the stimulus route is reached exactly when the loop would otherwise
-        #: have nothing left to do, which is today's stall condition.
-        self.route = MODEL if self.failing() else STIMULUS
+        #: NOT_EXERCISED costs a stimulus generation and may still not fire.
+        #:
+        #: "Nothing left to do" is NOT "nothing failing", and reading it that
+        #: way starves the stimulus route completely. Measured on h-i2c:
+        #: VIOLATES fell 9, 7, 5 over three turns and never reached zero, so
+        #: `add_stimulus` was never once reached and NOT_EXERCISED sat at 18
+        #: throughout. A turn that reduced the failing count earned another
+        #: model turn; a turn that did not has run the model route dry, whether
+        #: or not something is still failing.
+        self.route = MODEL
+        if not self.failing():
+            self.route = STIMULUS
+        elif model_route_stalled and any(r.unexercised() for r in self._results):
+            self.route = STIMULUS
 
     # ------------------------------------------------------------- state
 
