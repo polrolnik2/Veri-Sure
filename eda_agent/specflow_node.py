@@ -255,6 +255,11 @@ async def run_specflow_node(
     #: Read here rather than passed as text so the caller only has to know where
     #: its controls live. It is never shown to the debugger or the generator.
     refmodel_control: Path | str | None = None,
+    #: Generate a second oracle set from the requirements alone and screen it
+    #: beside the judge's, reporting both in `trust.json`. Read-only: the
+    #: judge's oracles still drive the loop, so a run with this on is still a
+    #: valid regression test of a run with it off.
+    compare_oracles: bool = False,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -298,6 +303,7 @@ async def run_specflow_node(
             Path(refmodel_control).read_text(encoding="utf-8")
             if refmodel_control and Path(refmodel_control).is_file() else None
         ),
+        compare_oracles=compare_oracles,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:

@@ -292,6 +292,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_debug_attempts=args.refmodel_debug_attempts,
             specflow_refmodel_judge_turns=args.refmodel_judge_turns,
             specflow_refmodel_control=control_model(top),
+            specflow_compare_oracles=args.compare_oracles,
         ),
     )
     try:
@@ -413,6 +414,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--compare-oracles", action="store_true",
+        help="Also generate an oracle set from the requirements alone, screen "
+             "it beside the judge's, and report both in trust.json. Read-only: "
+             "the judge's oracles still drive the loop, so the run stays a "
+             "valid regression test. Costs one call per requirement, once.",
     )
     p.add_argument(
         "--refmodel-judge-turns", type=int, default=3,

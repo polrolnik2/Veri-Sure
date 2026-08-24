@@ -11,6 +11,8 @@ import textwrap
 from pathlib import Path
 from typing import Protocol
 
+import logging
+
 from ..model_io import ModelPort
 from ..schema import Issue, has_errors
 from ..stage import (
@@ -21,9 +23,11 @@ from ..stage import (
 )
 from . import trust, verdict
 from .agent import SYSTEM, RefModelOutput, parse_response
-from .oracles import stimulus_liveness
+from .oracles import replay, stimulus_liveness
 from .session import DebugSession
 from .validate import validate
+
+logger = logging.getLogger(__name__)
 
 STAGE = "refmodel"
 
@@ -137,6 +141,12 @@ def run_refmodel(
     debugger: RefModelDebugger | None = None,
     max_judge_turns: int = 3,
     control_source: str | None = None,
+    normalized: dict[str, dict] | None = None,
+    #: Generate a SECOND oracle set from the requirements alone, screen it
+    #: beside the judge's, and report both. Read-only: the judge's oracles still
+    #: drive the loop, so this changes nothing about the run except what is
+    #: written down. Off by default because it costs one call per requirement.
+    compare_oracles: bool = False,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -231,7 +241,8 @@ def run_refmodel(
             judge_port=judge_port, base=base, testplan=testplan or [],
             stimulus_by_tp=stimulus_by_tp or {}, run_dir=run_dir,
             debugger=debugger, max_turns=max_judge_turns,
-            control_source=control_source,
+            control_source=control_source, normalized=normalized,
+            compare_oracles=compare_oracles,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -254,6 +265,8 @@ def _debug_turns(
     debugger: RefModelDebugger,
     max_turns: int,
     control_source: str | None,
+    normalized: dict[str, dict] | None = None,
+    compare_oracles: bool = False,
 ) -> tuple[str, list[Issue]]:
     """Judge, screen, debug; repeat. Returns the final source and its issues.
 
@@ -279,6 +292,26 @@ def _debug_turns(
     # Without the final pass the stage reports verdicts about a model that no
     # longer exists: a turn that fixed everything still looks blocked, and one
     # that broke something the oracles do not cover still looks clean.
+    # Generated ONCE, not per turn. An oracle written from the requirement
+    # alone does not depend on the model, which is the entire reason it can be
+    # frozen -- so re-asking each turn would pay 77 calls to receive the same
+    # answer. The judge's oracles cannot do this, and that asymmetry is the
+    # clearest practical argument for the split.
+    isolated: list = []
+    if compare_oracles:
+        try:
+            from .oracle_gen import run_oracle_gen
+
+            isolated, _ = run_oracle_gen(
+                requirements=requirements, contract_json=contract_json,
+                contract=contract, testplan=testplan, port=judge_port,
+                normalized=normalized,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Never let the reporting path fail a run. It informs a decision
+            # about a future design; it does not gate this one.
+            logger.warning("isolated oracles: not generated (%r)", exc)
+
     issues: list[Issue] = []
     turns = max(1, int(max_turns))
     for turn in range(turns + 1):
@@ -357,6 +390,12 @@ def _debug_turns(
             (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
              ).write_text(
                 json.dumps({"rates": screened.rates(),
+                            **_comparison(
+                                isolated=isolated, judge_rates=screened.rates(),
+                                source=source, contract=contract,
+                                stimulus_by_tp=stimulus_by_tp, testplan=testplan,
+                                base=base, control_source=control_source,
+                                normalized=normalized, live=live),
                             "mechanical_verdicts": {
                                 "counts": verdict.counts(mechanical),
                                 "blocking": verdict.blocking(mechanical),
@@ -409,6 +448,97 @@ def _debug_turns(
             return source, issues
 
     return source, issues
+
+
+def _comparison(
+    *,
+    isolated: list,
+    judge_rates: dict,
+    source: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    testplan: list[dict],
+    base: str,
+    control_source: str | None,
+    normalized: dict[str, dict] | None,
+    live,
+) -> dict:
+    """Everything measured beside the loop but not driving it.
+
+    Two questions, both read-only:
+
+    * **Does an oracle written WITHOUT the model screen better than one written
+      with it?** Same gates, same model, same stimulus, same control -- the only
+      difference is what was in context when the oracle was written. That is the
+      cleanest available test of whether the split is worth making, and it costs
+      one screening pass because both oracle sets already exist.
+    * **Did the stimulus stage each requirement's activation?** Asked of the
+      normalized requirements rather than of the oracles, so it does not inherit
+      the suspicion it is meant to check.
+
+    Never raises. This informs a decision about a future design; a defect in it
+    must not fail the run it is observing.
+    """
+    out: dict = {}
+    try:
+        if isolated:
+            other = trust.screen(
+                isolated, {o.req_uid: "met" for o in isolated}, source, contract,
+                stimulus_by_tp, testplan, base=base, control_source=control_source,
+            )
+            # Gate 1 is deliberately excluded from the comparison: it asks
+            # whether an oracle agrees with the VERDICT it shipped with, and an
+            # isolated oracle ships with no verdict. Comparing the two on it
+            # would score the isolated set against a question it was never
+            # asked. The gates that do transfer are over-strictness (does a
+            # known-good design satisfy it) and vacuity (can anything falsify
+            # it) -- which are the two that actually say whether a check is any
+            # good.
+            rates = other.rates()
+            out["isolated_oracles"] = {
+                "generated": len(isolated),
+                "rates": rates,
+                "comparable": {
+                    "over_strict": rates.get("over_strict"),
+                    "convicted": rates.get("convicted"),
+                    "unknown": rates.get("unknown"),
+                    "unexercised": rates.get("unexercised"),
+                    "malformed": rates.get("malformed"),
+                },
+                "judge_comparable": {
+                    k: judge_rates.get(k) for k in
+                    ("over_strict", "convicted", "unknown", "unexercised",
+                     "malformed")
+                },
+                "note": "gate 1 (agreement with its own verdict) is excluded: "
+                        "an isolated oracle ships with no verdict to agree with",
+            }
+    except Exception as exc:  # noqa: BLE001
+        out["isolated_oracles"] = {"error": repr(exc)}
+
+    try:
+        if normalized:
+            from ..normalize import NormalizedRequirement
+            from ..obligation import obligations, report
+            from ..ports import classify
+
+            norms = [NormalizedRequirement.model_validate(n)
+                     for n in normalized.values()]
+            _, resets, _ = classify(contract)
+            rows = {
+                tp: replay(source, contract, steps, base=base).rows
+                for tp, steps in stimulus_by_tp.items()
+            }
+            out["obligations"] = report(
+                obligations_=obligations(norms), testplan=testplan,
+                stimulus_by_tp=stimulus_by_tp, replay_rows=rows,
+                reset_ports=frozenset(resets),
+            )
+            out["obligations"]["unobservable"] = sorted(
+                n.req_uid for n in norms if n.unobservable)
+    except Exception as exc:  # noqa: BLE001
+        out["obligations"] = {"error": repr(exc)}
+    return out
 
 
 def write_artifacts(

@@ -244,6 +244,11 @@ def build_artifacts(
     #: defaulting it on would buy a whole fan-out of cost for a report. It flips
     #: on when the cover-point obligation starts reading `activation`.
     normalize: bool = False,
+    #: Generate a second oracle set from the requirements alone and screen it
+    #: beside the judge's, reporting both. Read-only -- the judge's oracles
+    #: still drive the loop. Implies `normalize`, since the isolated generator
+    #: reads the normalized form.
+    compare_oracles: bool = False,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -325,7 +330,8 @@ def build_artifacts(
     # knows the activation of, which is exactly today's situation for all of
     # them -- so failing the node over it would make the pipeline strictly worse
     # than before this stage existed.
-    if normalize:
+    normalized_by_uid: dict[str, dict] = {}
+    if normalize or compare_oracles:
         try:
             normalized, norm_results = run_normalize_fanout(
                 requirements=reqs, contract_json=contract_json, contract=contract,
@@ -335,6 +341,8 @@ def build_artifacts(
             logger.warning("normalize: not produced (%r)", exc)
         else:
             write_normalized(run_dir, normalized, norm_results)
+            normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
+                                 if n.req_uid}
 
     cached = None if stale else _reuse(
         run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
@@ -483,6 +491,8 @@ def build_artifacts(
             debugger=refmodel_debugger,
             max_judge_turns=refmodel_judge_turns,
             control_source=refmodel_control,
+            normalized=normalized_by_uid or None,
+            compare_oracles=compare_oracles,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -527,6 +537,8 @@ def build_artifacts(
                 debugger=refmodel_debugger,
                 max_judge_turns=refmodel_judge_turns,
                 control_source=refmodel_control,
+                normalized=normalized_by_uid or None,
+                compare_oracles=compare_oracles,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:
