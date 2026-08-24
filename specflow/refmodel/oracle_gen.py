@@ -250,23 +250,27 @@ def gate_one(
     this process will execute -- and if that sandbox is not good enough for one
     it is not good enough for the other.
 
-    **The must-pass leg.** With a conforming implementation supplied, the oracle
-    is RUN against it and a failure is returned as a gate issue -- which puts
-    over-strictness inside `run_stage`'s existing repair loop rather than
-    discovering it a stage later, when the only remaining option is to discard
-    the oracle and hand its requirement back as prose.
+    **Nothing here runs a design against the oracle, and that is deliberate.**
 
-    That the loop already exists is the point: `run_stage` re-prompts with
-    `gate_failures_block`, so the author is shown the exact edge and the exact
-    detail its check tripped on. Measured on g-i2c, the dominant over-strictness
-    is demanding a response at a fixed edge -- "busy low when START detected at
-    edge 13" -- and that is a defect an author can act on when told, and cannot
-    when merely discarded.
+    A must-pass leg used to live here: the oracle was replayed against the
+    witness and a failure came back as a gate issue, so `run_stage` re-prompted
+    the author with the exact edge its check tripped on. The reasoning was that
+    over-strictness is better caught where it can still be repaired than
+    discovered a stage later.
 
-    A failure here is NOT proof the oracle is wrong: the conforming
-    implementation is a second reading of the same requirement, not a golden
-    model, so a disagreement could be either. The message says so, because an
-    author told "you are wrong" will contort a correct check.
+    It is measurably the wrong trade. The witness is a second reading of the
+    same requirement by the same author, so it has no authority to say the
+    oracle is wrong -- and telling an author "an independent implementation
+    fails your check" does not make the check more correct, it makes the check
+    agree with the witness. Measured on h-i2c: over-strictness 27 -> 15,
+    convictions 2 -> 16. Oracles relaxed until they stopped disagreeing, and the
+    relaxation surfacing as vacuity. The docstring here used to concede the
+    premise -- "a disagreement could be either" -- and then act on it anyway.
+
+    So this gate is structural only: does the reply parse, does it name the
+    clause it decides, and is it a well-formed decision procedure. Whether an
+    oracle is satisfiable, and whether it can fail anything, are decided later
+    by `oracles_stage.verify_one`, where a design records rather than rejects.
     """
     if out.reasoning.startswith(PARSE_ERROR):
         return [Issue("error", f"oracle.{req_uid}.response", out.reasoning)]
@@ -281,29 +285,7 @@ def gate_one(
     if why:
         return [Issue("error", f"oracle.{req_uid}.source", why)]
 
-    if not conforming_source or not stimulus_by_tp:
-        return []
-    from . import trust
-
-    result = trust._decide_over(  # noqa: SLF001
-        oracle, conforming_source, contract, stimulus_by_tp, base=base)
-    if not result.failed():
-        # A pass, an unexercised scenario and a broken replay are all silence
-        # here. Only a definite failure carries information, and reporting the
-        # others would re-ask for reasons the author cannot act on.
-        return []
-    where = f" at edge {result.edge}" if result.edge is not None else ""
-    return [Issue(
-        "error", f"oracle.{req_uid}.over_strict",
-        f"An independent implementation of this same requirement FAILS your "
-        f"check{where}: {result.detail or '(no detail)'}. One of the two readings "
-        f"is wrong and it may be either -- but a check no reading of the "
-        f"requirement satisfies can never be discharged by anyone. If your check "
-        f"pins a detail the specification leaves open -- which edge the response "
-        f"lands on, an exact count the requirement does not state, an ordering "
-        f"the text does not fix -- relax it to what the requirement actually "
-        f"says. If you are confident the requirement does state it, keep the "
-        f"check and say so in `reasoning`.")]
+    return []
 
 
 def run_oracle_gen(
