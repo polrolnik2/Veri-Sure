@@ -152,3 +152,37 @@ def test_a_parse_failure_is_reported_as_one():
     issues = gate_one(out, req_uid="REQ-0000", tp_uids=["TP-0000"],
                       contract=CONTRACT, testplan=TESTPLAN)
     assert issues and issues[0].path.endswith(".response")
+
+
+def test_the_prompt_forbids_demanding_a_response_at_a_fixed_edge():
+    """The largest measured cause of over-strict oracles, and it was a defect in
+    this prompt rather than in the specification.
+
+    `agent.py:104-109` tells the reference MODEL that the testbench compares the
+    ordered sequence of distinct output states and ignores how long each is
+    held, so it need not be cycle-accurate -- and `trace_compare.transactional`
+    implements that. The oracle prompt never carried the rule over, so oracles
+    held designs to a stricter standard than the comparison they feed.
+
+    Measured on g-i2c: 27 of 77 isolated oracles are failed by an implementation
+    scoring 181/181 against golden, and the dominant pattern is demanding the
+    response too early -- "busy low when START detected at edge 13", when the
+    design sees the START through a synchroniser and a majority filter.
+    """
+    prompt = " ".join(build_prompt(
+        requirement=REQ, contract_json="{}", contract=CONTRACT).split())
+    assert "DO NOT DEMAND A RESPONSE AT A PARTICULAR EDGE" in prompt
+    assert "ORDERED SEQUENCE of distinct output states" in prompt
+    assert "do not index a fixed edge" in prompt
+
+
+def test_the_prompt_still_permits_a_duration_the_spec_actually_fixes():
+    """The rule must not become "never check timing". `cmd_ack is high for
+    exactly one clock` IS a duration the specification states, and an oracle
+    that declines to check it demands nothing -- which the mutation gate then
+    convicts. The two gates pull in opposite directions and the prompt has to
+    name the line between them."""
+    prompt = " ".join(build_prompt(
+        requirement=REQ, contract_json="{}", contract=CONTRACT).split())
+    assert "Demand an exact count only when the requirement itself states one" in prompt
+    assert "exactly one clock" in prompt

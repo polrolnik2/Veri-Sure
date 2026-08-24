@@ -110,6 +110,27 @@ Rules, each for a reason:
     its scenario -- which reads as a thin testplan when nothing is wrong.
   - Decide ONLY this requirement's clause. An oracle that also checks
     neighbouring behaviour is discarded for rejecting a correct design.
+  - DO NOT DEMAND A RESPONSE AT A PARTICULAR EDGE. The comparison this feeds
+    compares the ORDERED SEQUENCE of distinct output states and ignores how long
+    each is held, so a design is not required to be cycle-accurate. Real designs
+    put synchronisers, majority filters and prescaler dividers between an input
+    event and the output that answers it, and every one of those costs edges the
+    specification does not fix.
+
+    So "busy rises at the edge the START appears" is wrong even when "busy rises
+    after a START" is right, and "al is high at every edge the condition holds"
+    is wrong even when "al goes high once the condition occurs" is right. Say
+    THAT THE STATE IS REACHED, and where order matters say only that one state
+    precedes another. Search forward for the state you expect; do not index a
+    fixed edge, and do not require the response in the same row as its cause.
+
+    Demand an exact count only when the requirement itself states one AND the
+    specification text you were given says it -- "cmd_ack is high for exactly one
+    clock" is a duration the spec fixes, and checking it is correct.
+
+    Measured: 27 of 77 oracles written without this rule are failed by an
+    implementation that scores 181/181 against golden RTL, and demanding a
+    response too early is the single largest reason.
   - Return the EDGE your decision turns on, so a failure localises itself.
   - No imports, no file or network access.
   - It must FAIL a design that violates the clause and PASS one that honours it.
