@@ -145,3 +145,103 @@ def test_a_strengthening_round_is_off_by_default():
 
     sig = inspect.signature(compose.run_refmodel)
     assert sig.parameters["adequacy_rounds"].default == 0
+
+
+# ------------------------------------------------------- the loop end to end
+
+
+def _oracle_set(oracles):
+    from specflow.oracles_stage import TRUSTED, OracleSet
+
+    return OracleSet(trusted=list(oracles),
+                     dispositions={o.req_uid: TRUSTED for o in oracles},
+                     reasons={}, variants=[], witness_kind="witness", rounds=1)
+
+
+def test_the_closed_loop_measures_adequacy_after_it_converges(tmp_path):
+    """Nothing ran `_closed_loop` before this: the ordering was asserted by
+    reading its source, which cannot catch a wiring defect."""
+    import json
+
+    from specflow.refmodel import compose
+
+    oracle = _oracle(SHARP)
+
+    class _Quiet:
+        def debug(self, session):
+            return session.source, 0, "nothing to do"
+
+    source, issues = compose._closed_loop(
+        source=FINAL, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y accumulates a"}],
+        covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
+        max_turns=1, control_source=None, normalized=None, item_port=None,
+        variants=[], carried={}, oracle_rates={},
+        oracle_set=_oracle_set([oracle]), adequacy_rounds=0,
+    )
+    assert source == FINAL
+    blob = json.loads((tmp_path / "specflow" / "adequacy_r0.json").read_text())
+    assert blob["by_requirement"]["REQ-0001"]["verdict"] == adequacy.ADEQUATE
+
+
+def test_an_inadequate_oracle_sends_the_loop_back_to_the_stage(tmp_path,
+                                                               monkeypatch):
+    """The feedback edge, exercised rather than described. A mutant the oracle
+    could not catch must reach the stage that owns oracle generation, scoped to
+    that requirement, with the counterexample in hand."""
+    from specflow import oracles_stage
+    from specflow.refmodel import compose
+
+    asked: dict = {}
+
+    def _stage(**kw):
+        asked.update(kw)
+        return _oracle_set([_oracle(SHARP)])
+
+    monkeypatch.setattr(oracles_stage, "run_oracle_stage", _stage)
+
+    class _Quiet:
+        def debug(self, session):
+            return session.source, 0, "nothing to do"
+
+    compose._closed_loop(
+        source=FINAL, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y accumulates a"}],
+        covers={"step": ["REQ-0001"]}, oracles=[_oracle(BLUNT)], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
+        max_turns=1, control_source=None, normalized=None, item_port=None,
+        variants=[], carried={}, oracle_rates={},
+        oracle_set=_oracle_set([_oracle(BLUNT)]), adequacy_rounds=1,
+    )
+    assert "REQ-0001" in (asked.get("strengthen") or {}), asked.keys()
+    assert "survived" in asked["strengthen"]["REQ-0001"]
+    assert asked.get("previous") is not None, "the round must build on the set"
+
+
+def test_no_strengthening_round_is_spent_when_every_oracle_is_adequate(
+        tmp_path, monkeypatch):
+    from specflow import oracles_stage
+    from specflow.refmodel import compose
+
+    called: list[int] = []
+    monkeypatch.setattr(oracles_stage, "run_oracle_stage",
+                        lambda **_kw: called.append(1))
+
+    class _Quiet:
+        def debug(self, session):
+            return session.source, 0, "nothing to do"
+
+    compose._closed_loop(
+        source=FINAL, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y accumulates a"}],
+        covers={"step": ["REQ-0001"]}, oracles=[_oracle(SHARP)], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
+        max_turns=1, control_source=None, normalized=None, item_port=None,
+        variants=[], carried={}, oracle_rates={},
+        oracle_set=_oracle_set([_oracle(SHARP)]), adequacy_rounds=1,
+    )
+    assert called == []
