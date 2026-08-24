@@ -261,6 +261,18 @@ def run_refmodel(
     )
     rendered: dict[str, str] = {"src": source}
 
+    if debugger is not None and result.ok and oracle_set is None:
+        # Nothing to repair against. Correct -- every blocking verdict is the
+        # outcome of running an oracle, so with no oracles there is no finding
+        # to act on -- but it must be SAID. A model that was never checked and a
+        # model that passed look identical from here, and that ambiguity is the
+        # one this pipeline exists to remove.
+        result = StageResult(result.output, list(result.issues) + [Issue(
+            "warning", "refmodel.unchecked",
+            "no oracle set was produced, so this reference model was never "
+            "decided against its requirements -- it is unrepaired, not "
+            "verified")], result.rounds)
+
     if debugger is not None and result.ok and oracle_set is not None:
         source, issues = _closed_loop(
             source=rendered["src"], contract=contract,

@@ -393,3 +393,15 @@ def test_without_rewrite_the_frozen_set_still_wins(tmp_path, monkeypatch):
         port=_Port([_reply(other)]), workdir=tmp_path, base="step",
         fanout=False, max_repairs=0, run_dir=tmp_path)
     assert "y did not follow a" in got.trusted[0].source
+
+
+def test_a_model_with_no_oracles_is_reported_as_unchecked():
+    """A model that was never decided and one that passed look identical from
+    the outside, and that ambiguity is the one this pipeline exists to remove."""
+    import inspect
+
+    from specflow.refmodel import compose
+
+    src = inspect.getsource(compose.run_refmodel)
+    assert "refmodel.unchecked" in src
+    assert "unrepaired, not" in src

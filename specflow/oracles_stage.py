@@ -241,7 +241,14 @@ def run_oracle_stage(
             fanout=fanout)
 
     if rewrite and run_dir is not None:
-        for name in (ARTIFACT, "variants.json", "witness.py"):
+        for name in (ARTIFACT, "variants.json", "witness.py",
+                     # The ratchet records which REQUIREMENT UIDS have been
+                     # exercised, and uids are re-minted contiguously per run --
+                     # so against a new requirement set REQ-0005 may name a
+                     # different requirement, and a "stopped being exercised"
+                     # finding would accuse the model of losing a scenario that
+                     # was never its.
+                     "exercised.json"):
             (Path(run_dir) / "specflow" / name).unlink(missing_ok=True)
 
     witness, witness_kind = _witness(
