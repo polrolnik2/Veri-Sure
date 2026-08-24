@@ -370,17 +370,17 @@ def _debug_turns(
                    if run_dir is not None else None)
     variants_path = (Path(run_dir) / "specflow" / "variants.json"
                      if run_dir is not None else None)
+    oracle_set = None
     if compare_oracles:
         try:
-            from .conform import conforming_implementation
-            from .oracle_gen import run_oracle_gen
+            from ..oracles_stage import run_oracle_stage
 
             # Read forever. A run re-entered with `--reuse` regenerating its
             # oracles would hand the loop a different measure for the same
-            # requirements -- which is the disease measured on the judge-driven
-            # loop, where no oracle source was identical between rounds and
-            # CONFORMS random-walked 30, 33, 30. Loading also skips the
-            # conforming implementation, because nothing left needs it.
+            # requirements -- the disease measured on the judge-driven loop,
+            # where no oracle source was identical between rounds and CONFORMS
+            # random-walked 30, 33, 30. Loading also skips the witness and the
+            # variants, because nothing left needs them.
             if frozen_path is not None:
                 isolated = freeze.load(frozen_path)
                 if isolated:
@@ -390,59 +390,19 @@ def _debug_turns(
                         variant_set = variants_mod.load(variants_path)
 
             if not isolated:
-                # An implementation of the same requirements, generated once,
-                # for the must-pass leg. Never the golden control: its
-                # behaviour must not reach oracle generation (I1), and it has
-                # to stay held out to grade the result. A design where this
-                # cannot be produced still gets oracles -- the leg goes quiet
-                # rather than failing them all.
-                conforming, conform_issues = conforming_implementation(
+                oracle_set = run_oracle_stage(
                     requirements=requirements, contract_json=contract_json,
-                    port=judge_port,
-                    workdir=(Path(run_dir) / "specflow" / "_conform"
+                    contract=contract, testplan=testplan,
+                    stimulus_by_tp=stimulus_by_tp, port=judge_port,
+                    workdir=(Path(run_dir) / "specflow"
                              if run_dir is not None
-                             else Path("/tmp/specflow-conform")),
+                             else Path("/tmp/specflow-oracles")),
+                    base=base, normalized=normalized,
+                    control_source=control_source,
+                    want_variants=want_variants, run_dir=run_dir,
                 )
-                if not conforming:
-                    logger.warning(
-                        "conforming implementation: not produced (%d issue(s)); "
-                        "the must-pass leg is off for this run",
-                        len(conform_issues))
-
-                isolated, _ = run_oracle_gen(
-                    requirements=requirements, contract_json=contract_json,
-                    contract=contract, testplan=testplan, port=judge_port,
-                    normalized=normalized,
-                    conforming_source=conforming,
-                    stimulus_by_tp=stimulus_by_tp, base=base,
-                )
-                if frozen_path is not None:
-                    isolated, drifted = freeze.freeze(
-                        isolated, frozen_path, normalized)
-                    for uid, why in sorted(drifted.items()):
-                        logger.warning("oracle drift %s: %s", uid, why)
-                else:
-                    isolated = freeze.stamp(isolated, normalized)
-
-                # Step 7's must-fail leg. Off by default: k calls per
-                # requirement is 150-230 on i2c, paid once, and the leg is only
-                # evidence AFTER the must-pass leg has shown the oracle accepts
-                # a correct reading -- which `gate_one` has just done.
-                if want_variants and conforming:
-                    from ..obligation import by_requirement
-
-                    variant_set, _ = variants_mod.run_variant_gen(
-                        requirements=requirements, contract_json=contract_json,
-                        contract=contract, conforming_source=conforming,
-                        stimulus_by_tp=stimulus_by_tp,
-                        tp_by_req=by_requirement(testplan),
-                        port=judge_port, normalized=normalized, base=base,
-                    )
-                    logger.info("variants: %d generated for %d requirement(s)",
-                                len(variant_set),
-                                len({v.req_uid for v in variant_set}))
-                    if variants_path is not None:
-                        variants_mod.save(variant_set, variants_path)
+                isolated = list(oracle_set.trusted)
+                variant_set = list(oracle_set.variants)
         except Exception as exc:  # noqa: BLE001
             # Never let the reporting path fail a run. It informs a decision
             # about a future design; it does not gate this one.

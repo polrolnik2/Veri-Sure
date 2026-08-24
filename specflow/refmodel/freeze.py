@@ -116,6 +116,7 @@ def load(path: Path) -> list[RequirementOracle]:
 
 def freeze(oracles: list[RequirementOracle], path: Path,
            normalized: dict[str, dict] | None = None,
+           extra: dict | None = None,
            ) -> tuple[list[RequirementOracle], dict[str, str]]:
     """Write once and return what is frozen, plus any drift against it.
 
@@ -136,6 +137,11 @@ def freeze(oracles: list[RequirementOracle], path: Path,
                 {**o.model_dump(), "evidence": evidence_hash(o)}
                 for o in stamped
             ],
+            # The stage's own record travels in the same file, because the
+            # trusted set and the reason every other requirement is NOT in it
+            # are one artifact: reading either alone is how a silent subset gets
+            # missed.
+            **(extra or {}),
         }, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8")
     return stamped, {}

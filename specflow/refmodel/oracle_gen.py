@@ -323,18 +323,37 @@ def run_oracle_gen(
     base: str = "step",
     max_repairs: int = 2,
     fanout: bool = True,
-) -> tuple[list[RequirementOracle], list[StageResult[OracleOutput]]]:
+    #: `req_uid -> issues` seeding the FIRST prompt for that requirement, so a
+    #: rejected oracle is re-asked with the reason it was rejected for. This is
+    #: what gives the oracle stage the repair loop every other stage has: today
+    #: a rejection is terminal because nothing ever re-asks.
+    feedback: dict[str, list[Issue]] | None = None,
+    #: Regenerate only these requirements. Scoped repair costs one call each,
+    #: against 77 for a full pass.
+    only: set[str] | None = None,
+) -> tuple[list[RequirementOracle], dict[str, StageResult[OracleOutput]]]:
     """One oracle per requirement, generated before any verdict exists.
 
     `tp_uids` comes from the testplan's `covers`, never from the model. A
     requirement no testpoint covers gets no oracle: there would be nothing to
     replay it against, and an oracle naming no testpoint is discarded by
     `well_formed` anyway -- better to not spend the call.
+
+    **Every oracle that has a source is returned, including one whose gate
+    failed**, keyed results beside it. Dropping the failures here is what made 5
+    of 77 requirements vanish on h-i2c into an `UNDECIDED` that also means
+    "decided nothing" -- a silent subset, which is the failure mode the verdict
+    enum exists to remove. Deciding what a gate-failing oracle IS belongs to the
+    stage, which can record it; it does not belong to the generator, which can
+    only forget it.
     """
     from ..obligation import by_requirement
 
     attached = by_requirement(testplan)
     wanted = [r for r in requirements if attached.get(str(r.get("uid") or ""))]
+    if only is not None:
+        wanted = [r for r in wanted if str(r.get("uid") or "") in only]
+    seeds = feedback or {}
 
     def one(req: dict) -> StageResult[OracleOutput]:
         uid = str(req.get("uid") or "")
@@ -344,8 +363,8 @@ def run_oracle_gen(
             port=port,
             build_prompt=lambda issues, previous: build_prompt(
                 requirement=req, contract_json=contract_json, contract=contract,
-                normalized=(normalized or {}).get(uid), issues=issues,
-                previous=previous,
+                normalized=(normalized or {}).get(uid),
+                issues=issues or seeds.get(uid), previous=previous,
             ),
             parse=parse_response,
             gate=lambda out: gate_one(
@@ -356,14 +375,17 @@ def run_oracle_gen(
         )
 
     results = run_fanout(wanted, one) if fanout else [one(r) for r in wanted]
-    oracles = [
-        RequirementOracle(
-            req_uid=str(req.get("uid") or ""),
-            tp_uids=list(attached.get(str(req.get("uid") or ""), [])),
+    by_uid: dict[str, StageResult[OracleOutput]] = {}
+    oracles: list[RequirementOracle] = []
+    for req, result in zip(wanted, results):
+        uid = str(req.get("uid") or "")
+        by_uid[uid] = result
+        if not (result.output.source or "").strip():
+            continue
+        oracles.append(RequirementOracle(
+            req_uid=uid,
+            tp_uids=list(attached.get(uid, [])),
             clause=result.output.clause,
             source=result.output.source,
-        )
-        for req, result in zip(wanted, results)
-        if result.ok
-    ]
-    return oracles, results
+        ))
+    return oracles, by_uid
