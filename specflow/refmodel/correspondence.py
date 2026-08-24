@@ -28,6 +28,27 @@ question about designs, and the two instruments that could answer it have been
 demoted for good reasons. Not whether any implementation is correct; no
 implementation is in the prompt. Only: does this decision procedure decide the
 requirement it names.
+
+**Its yield, measured, and why a low one is the right one.** Over 70 frozen
+oracles it rejects 3, and the same 3 with or without the whole specification in
+the prompt. Live on a second run, 2 of the first 40. That is not the gate
+failing to do anything: off-target-ness is genuinely rare, and the rejections
+are precise -- a check about command lifecycle standing in for a requirement
+about the prescaler, and a placeholder that lists the ports it can see and
+concludes the requirement cannot be decided.
+
+The earlier calibration rejected 56 of 70, and only 3 of those were about the
+wrong subject; 26 said "it should also check X" and 15 wanted tighter timing,
+both answers to the question a different gate asks. So 3 is what this gate finds
+when it is asked its own question, and the recalibration made it accurate rather
+than turning it off.
+
+**What it therefore does NOT catch, by construction.** An oracle that decides
+the right requirement and cannot fail is ON TARGET and this gate passes it --
+it passed 21 of the 23 that `liveness` shows cannot be moved by any legal
+value. Those are different axes and the second one needs execution, not a
+better reader. One rejection overlaps: a placeholder that decides nothing is
+both off-target and dead, and both instruments name it independently.
 """
 
 from __future__ import annotations
