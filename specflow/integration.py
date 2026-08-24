@@ -470,6 +470,33 @@ def build_artifacts(
                     encoding="utf-8",
                 )
 
+    # [O] The requirement oracles, BEFORE the reference model exists.
+    #
+    # Their isolation from the design used to be a discipline -- a prompt
+    # builder with no parameter a design could arrive through, plus a test that
+    # reads the prompt back. Running the stage here makes it a fact about time
+    # instead: there is no reference model yet, so there is nothing to leak.
+    #
+    # Never fatal. A run whose oracles could not be produced is the run every
+    # run was before this stage existed.
+    oracle_set = None
+    if compare_oracles or oracle_driven:
+        try:
+            from .oracles_stage import run_oracle_stage
+
+            oracle_set = run_oracle_stage(
+                requirements=reqs, contract_json=contract_json,
+                contract=contract, testplan=tps,
+                stimulus_by_tp=stim_by_tp or {},
+                port=port, workdir=run_dir / "specflow",
+                base=choose_base(contract),
+                normalized=normalized_by_uid or None,
+                control_source=refmodel_control,
+                want_variants=variants, run_dir=run_dir, fanout=fanout,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("oracles: stage did not complete (%r)", exc)
+
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
     refmodel_path = run_dir / "specflow" / "ref_model.py"
@@ -504,6 +531,7 @@ def build_artifacts(
             compare_oracles=compare_oracles,
             oracle_driven=oracle_driven,
             want_variants=variants,
+            oracle_set=oracle_set,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -552,6 +580,7 @@ def build_artifacts(
                 compare_oracles=compare_oracles,
                 oracle_driven=oracle_driven,
                 want_variants=variants,
+                oracle_set=oracle_set,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

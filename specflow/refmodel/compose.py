@@ -235,6 +235,11 @@ def run_refmodel(
     #: VACUOUS stops being inferred from silence under source mutation and is
     #: earned against a design that actually violates the requirement.
     want_variants: bool = False,
+    #: The verified, frozen oracle set, produced by `oracles_stage` BEFORE this
+    #: stage ran. When supplied nothing here generates oracles -- which is the
+    #: whole point: an oracle written after the model exists is written by
+    #: something that could have read it.
+    oracle_set=None,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -300,6 +305,7 @@ def run_refmodel(
             compare_oracles=compare_oracles or oracle_driven,
             oracle_driven=oracle_driven,
             want_variants=want_variants,
+            oracle_set=oracle_set,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -329,6 +335,9 @@ def _debug_turns(
     #: runs when `compare_oracles` is on, for the record, but nothing routes off
     #: it. See `_oracle_driven_turns`.
     oracle_driven: bool = False,
+    #: Produced by `oracles_stage` before the model existed. When present the
+    #: block below generates nothing.
+    oracle_set=None,
     #: Step 7's must-fail leg. Off by default: it costs k model calls per
     #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
     #: VACUOUS stops being inferred from silence under source mutation and is
@@ -370,8 +379,12 @@ def _debug_turns(
                    if run_dir is not None else None)
     variants_path = (Path(run_dir) / "specflow" / "variants.json"
                      if run_dir is not None else None)
-    oracle_set = None
-    if compare_oracles:
+    if oracle_set is not None:
+        isolated = list(oracle_set.trusted)
+        variant_set = list(oracle_set.variants)
+        logger.info("oracles: %d trusted, from the oracle stage",
+                    len(isolated))
+    elif compare_oracles:
         try:
             from ..oracles_stage import run_oracle_stage
 

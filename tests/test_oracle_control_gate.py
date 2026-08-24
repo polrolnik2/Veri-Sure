@@ -111,6 +111,22 @@ def test_both_run_refmodel_call_sites_pass_the_control():
     passed to only one of them makes a `--reuse` run silently weaker than a
     fresh one, which is the defect that comment already records happening once.
     """
-    src = Path("specflow/integration.py").read_text()
-    assert src.count("rm, source = run_refmodel(") == 2
-    assert src.count("control_source=refmodel_control,") == 2
+    import ast
+
+    tree = ast.parse(Path("specflow/integration.py").read_text())
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call)
+             and getattr(n.func, "id", "") == "run_refmodel"]
+    assert len(calls) == 2, "generate, and re-validate-after-stale"
+    for call in calls:
+        kw = {k.arg for k in call.keywords}
+        assert "control_source" in kw
+        # And the oracle set, or the model stage would generate its own oracles
+        # after the model exists -- which is what having a stage removed.
+        assert "oracle_set" in kw
+
+    staged = [n for n in ast.walk(tree)
+              if isinstance(n, ast.Call)
+              and getattr(n.func, "id", "") == "run_oracle_stage"]
+    assert len(staged) == 1
+    assert "control_source" in {k.arg for k in staged[0].keywords}

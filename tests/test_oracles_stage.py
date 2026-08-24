@@ -242,3 +242,45 @@ def test_no_witness_is_reported_rather_than_assumed(tmp_path, monkeypatch):
     assert got.dispositions["REQ-0001"] == O.TRUSTED, (
         "with nothing to bound it, an over-strict oracle cannot be caught -- "
         "which is why the absence is reported")
+
+
+# ------------------------------------------------------------- the ordering
+
+
+def test_the_oracle_stage_runs_before_the_reference_model_exists():
+    """Isolation as a fact about time rather than a prompt discipline.
+
+    `oracle_gen.build_prompt` has no parameter a design could arrive through and
+    a test reads the prompt back -- but the model source used to be in the same
+    process, one frame up the call stack, because oracle generation ran INSIDE
+    `run_refmodel`. Nothing leaks from an artifact that has not been produced.
+    """
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path("specflow/integration.py").read_text())
+    build = next(n for n in ast.walk(tree)
+                 if isinstance(n, ast.FunctionDef) and n.name == "build_artifacts")
+
+    def first_line(name: str) -> int:
+        return min(n.lineno for n in ast.walk(build)
+                   if isinstance(n, ast.Call)
+                   and getattr(n.func, "id", "") == name)
+
+    assert first_line("run_oracle_stage") < first_line("run_refmodel")
+
+
+def test_the_model_stage_generates_no_oracles_when_it_is_given_a_set():
+    """Otherwise the stage would be advisory: the model stage could still write
+    its own oracles, after the model exists, and nothing would say which set the
+    loop actually used."""
+    import inspect
+
+    from specflow.refmodel import compose
+
+    assert "oracle_set" in inspect.signature(compose.run_refmodel).parameters
+    src = inspect.getsource(compose._debug_turns)
+    used = src.index("if oracle_set is not None:")
+    generated = src.index("run_oracle_stage(")
+    assert used < generated, (
+        "the supplied set must short-circuit generation, not follow it")
