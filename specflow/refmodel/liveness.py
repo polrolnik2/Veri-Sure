@@ -43,10 +43,25 @@ own trigger. So the instrument over-credits liveness and the dead set is a
 LOWER bound -- which is the safe direction for something whose output is an
 accusation.
 
-ISOLATION. This takes the model source as an argument and never chooses it. In
-[O] the caller passes the WITNESS, because the reference model does not exist
-yet; running it against the shipped model would make oracle acceptance depend
-on the design, which is the property the stage order exists to remove.
+ISOLATION, AND WHY IT COSTS NOTHING. This takes the model source as an argument
+and never chooses it. In [O] the caller passes the WITNESS, because the
+reference model does not exist yet; running it against the shipped model would
+make oracle acceptance depend on the design, which is the property the stage
+order exists to remove.
+
+That would be a real accuracy sacrifice if the answer depended on which design
+it ran against. Measured, it does not. The same 70 frozen oracles were assessed
+against a generated model scoring 30/168 against golden RTL and against the
+known-good control scoring 168/168:
+
+    generated (30/168)  live 44 · dead-oracle 20 · dead-stimulus 3 · unknown 3
+    control   (168/168) live 44 · dead-oracle 20 · dead-stimulus 3 · unknown 3
+
+Identical on all 70, and not because the designs are alike -- five oracles
+reach different base verdicts on them and four have different assertion port
+sets. An oracle that cannot fail cannot fail whatever it is pointed at, which
+is what "cannot fail" ought to mean, and it is what makes the witness a
+sufficient stand-in here.
 """
 
 from __future__ import annotations
@@ -214,10 +229,20 @@ def liveness_of(
     near: set[str] = set()
     far: set[str] = set()
     varying: set[str] = set()
+    violates = False
     for tp in named:
         rows = traces[tp]
         base = _signature(oracle, rows, transactional)
         record["base"][tp] = list(base)
+        if base[0] is False:
+            # ALREADY FAILING IS ALREADY LIVE, and it has to be said here
+            # rather than left to the perturbation loop. This asks whether the
+            # verdict MOVES, and an oracle failing at the first row goes on
+            # failing whatever is done to the trace after it -- so the loop
+            # would find nothing and report the strongest possible evidence of
+            # liveness as its absence. An oracle that is failing a design has
+            # demonstrated it can fail; there is no cheaper proof available.
+            violates = True
         for port in reads:
             seen = {
                 str((row.get("outputs") or {}).get(port))
@@ -242,7 +267,11 @@ def liveness_of(
     record["asserts_on"] = sorted(near)
     record["asserts_on_far"] = sorted(far)
     record["varying"] = sorted(varying)
-    if near:
+    if violates and not near:
+        record["verdict"] = LIVE
+        record["detail"] = ("it is failing this design, which is a "
+                            "demonstration that it can fail")
+    elif near:
         record["verdict"] = LIVE
         record["detail"] = f"the verdict moves when {', '.join(sorted(near))} changes"
     elif far:

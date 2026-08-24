@@ -238,3 +238,32 @@ def test_a_model_that_will_not_run_is_unknown_not_dead():
     report = liveness.assess([_oracle(SHARP)], "def nope(:\n", CONTRACT, STIM,
                              base="step")
     assert report["REQ-0001"]["verdict"] == liveness.UNKNOWN
+
+
+def test_the_verdict_does_not_depend_on_which_design_it_ran_against():
+    """What makes the witness a sufficient stand-in for [O].
+
+    Measured on the frozen 70: identical counts against a generated model
+    scoring 30/168 and against the known-good control at 168/168 -- live 44,
+    dead-oracle 20, dead-stimulus 3, unknown 3 -- while five oracles reach
+    different base verdicts on those two designs and four have different
+    assertion port sets. Pinned here on a pair that differ the same way: one
+    model satisfies the check and one violates it, and neither can make a
+    vacuous oracle able to fail or a sharp one unable to.
+    """
+    violating = MODEL.replace("'y': self.n", "'y': self.mask(self.n + 1, 8)")
+    assert violating != MODEL
+
+    for source in (MODEL, violating):
+        report = liveness.assess(
+            [_oracle(SHARP, "REQ-0001"), _oracle(VACUOUS, "REQ-0002")],
+            source, CONTRACT, STIM, base="step")
+        assert report["REQ-0001"]["verdict"] == liveness.LIVE
+        assert report["REQ-0002"]["verdict"] == liveness.DEAD_ORACLE
+
+    # and the premise: the two designs really are decided differently
+    base = liveness.assess([_oracle(SHARP)], MODEL, CONTRACT, STIM,
+                           base="step")["REQ-0001"]["base"]
+    other = liveness.assess([_oracle(SHARP)], violating, CONTRACT, STIM,
+                            base="step")["REQ-0001"]["base"]
+    assert base != other, "otherwise this pins nothing"
