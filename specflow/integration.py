@@ -78,6 +78,11 @@ def _persist_grown(
         return
     sf = Path(run_dir) / "specflow"
     try:
+        # Create rather than assume. The caller always has this directory by
+        # now, but the one failure mode this helper exists to prevent is losing
+        # the appended testpoints -- so it must not lose them to an absent
+        # parent it could simply have made.
+        sf.mkdir(parents=True, exist_ok=True)
         (sf / "testplan.json").write_text(
             json.dumps({"elements": testplan}, indent=2, ensure_ascii=False)
             + "\n", encoding="utf-8")

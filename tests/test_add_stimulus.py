@@ -275,6 +275,39 @@ def test_appended_testpoints_are_persisted_so_reuse_does_not_lose_them(tmp_path)
     assert {t["tp_uid"] for t in stim["testpoints"]} == {"TP-0000", "TP-0200"}
 
 
+def test_the_persisted_shapes_are_the_ones_reuse_re_gates(tmp_path):
+    """Writing a shape `--reuse` rejects would lose the appended stimulus
+    anyway, one step later and with no message -- the artifact would be
+    regenerated as "unusable" rather than read."""
+    import json
+
+    from specflow.integration import _persist_grown
+    from specflow.s2_testplan import TestplanOutput
+    from specflow.testcase_agent import SuiteStimulus, stimulus_by_tp
+
+    plan = [{"uid": "TP-0000", "rev": 1, "covers": ["REQ-0000@1"],
+             "dimension": "D2_control_flow", "stimulus": "drive it",
+             "expected_response": "ack", "check_method": "reference model",
+             "needs": ["bin", "check"]},
+            {"uid": "TP-0200", "rev": 1, "covers": ["REQ-0000@1"],
+             "dimension": "D2_control_flow", "stimulus": "drive it again",
+             "expected_response": "ack", "check_method": "reference model",
+             "needs": ["bin", "check"]}]
+    stim = {"TP-0000": [{"inputs": {"a": 0}, "hold": 2}],
+            "TP-0200": [{"inputs": {"a": 1}, "hold": 3}]}
+
+    _persist_grown(tmp_path, plan, stim, before=(1, 1))
+    sf = tmp_path / "specflow"
+
+    suite = SuiteStimulus.model_validate(
+        json.loads((sf / "stimulus.json").read_text()))
+    assert sorted(stimulus_by_tp(suite)) == ["TP-0000", "TP-0200"]
+
+    parsed = TestplanOutput.model_validate(
+        json.loads((sf / "testplan.json").read_text()))
+    assert [e.uid for e in parsed.elements] == ["TP-0000", "TP-0200"]
+
+
 def test_nothing_is_rewritten_when_nothing_grew(tmp_path):
     """A file that did not get longer has nothing to say, and rewriting it
     would churn an artifact `--reuse` re-gates."""
