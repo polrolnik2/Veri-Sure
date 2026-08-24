@@ -168,6 +168,7 @@ def _decide_over(
     stimulus_by_tp: dict[str, list[dict]],
     *,
     base: str,
+    transactional: bool = False,
 ) -> OracleResult:
     """Decide one oracle across EVERY testpoint it names that has stimulus.
 
@@ -192,7 +193,8 @@ def _decide_over(
             oracle.req_uid, ok=False,
             broken="no stimulus recorded for any testpoint it names")
     scoped = oracle.model_copy(update={"tp_uids": named})
-    return decide_all([scoped], source, contract, stimulus_by_tp, base=base)[0]
+    return decide_all([scoped], source, contract, stimulus_by_tp, base=base,
+                      transactional=transactional)[0]
 
 
 def sensitivity(
@@ -266,6 +268,11 @@ def screen(
     base: str,
     control_source: str | None = None,
     limit: int = MUTANT_LIMIT,
+    #: Decide over the sequence of distinct states rather than raw edges, the
+    #: way `trace_compare.transactional` compares. Screening must judge an
+    #: oracle the way the loop will run it, or a gate passes something the loop
+    #: then fails for a reason screening never saw.
+    transactional: bool = False,
 ) -> Screened:
     """Run the three gates over a whole turn's oracles.
 
@@ -288,7 +295,8 @@ def screen(
             discarded[uid] = f"malformed: {why}"
             continue
 
-        result = _decide_over(oracle, source, contract, stimulus_by_tp, base=base)
+        result = _decide_over(oracle, source, contract, stimulus_by_tp, base=base,
+                              transactional=transactional)
         if result.broken:
             discarded[uid] = f"malformed: {result.broken}"
             continue
@@ -330,7 +338,8 @@ def screen(
         # -- gate 3: a known-good model must satisfy it.
         if control_source is not None:
             verdict = _decide_over(
-                oracle, control_source, contract, stimulus_by_tp, base=base)
+                oracle, control_source, contract, stimulus_by_tp, base=base,
+                transactional=transactional)
             if verdict.broken:
                 discarded[uid] = f"malformed: the control -- {verdict.broken}"
                 continue

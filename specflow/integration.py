@@ -249,6 +249,10 @@ def build_artifacts(
     #: still drive the loop. Implies `normalize`, since the isolated generator
     #: reads the normalized form.
     compare_oracles: bool = False,
+    #: The requirement-only oracles DRIVE the refmodel repair loop, and blocking
+    #: verdicts come from screening them rather than from the judge's opinion.
+    #: Implies `compare_oracles` and `normalize`.
+    oracle_driven: bool = False,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -331,7 +335,7 @@ def build_artifacts(
     # them -- so failing the node over it would make the pipeline strictly worse
     # than before this stage existed.
     normalized_by_uid: dict[str, dict] = {}
-    if normalize or compare_oracles:
+    if normalize or compare_oracles or oracle_driven:
         try:
             normalized, norm_results = run_normalize_fanout(
                 requirements=reqs, contract_json=contract_json, contract=contract,
@@ -493,6 +497,7 @@ def build_artifacts(
             control_source=refmodel_control,
             normalized=normalized_by_uid or None,
             compare_oracles=compare_oracles,
+            oracle_driven=oracle_driven,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -539,6 +544,7 @@ def build_artifacts(
                 control_source=refmodel_control,
                 normalized=normalized_by_uid or None,
                 compare_oracles=compare_oracles,
+                oracle_driven=oracle_driven,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

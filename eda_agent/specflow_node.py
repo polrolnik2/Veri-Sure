@@ -260,6 +260,8 @@ async def run_specflow_node(
     #: judge's oracles still drive the loop, so a run with this on is still a
     #: valid regression test of a run with it off.
     compare_oracles: bool = False,
+    #: Requirement-only oracles drive the loop; the judge stops deciding.
+    oracle_driven: bool = False,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -304,6 +306,7 @@ async def run_specflow_node(
             if refmodel_control and Path(refmodel_control).is_file() else None
         ),
         compare_oracles=compare_oracles,
+        oracle_driven=oracle_driven,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:

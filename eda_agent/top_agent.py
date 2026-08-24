@@ -263,6 +263,8 @@ class TopAgentConfig:
     specflow_refmodel_control: str | None = None
     #: Report a requirement-only oracle set beside the judge's. Read-only.
     specflow_compare_oracles: bool = False
+    #: Requirement-only oracles drive the loop; the judge stops deciding.
+    specflow_oracle_driven: bool = False
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -611,6 +613,7 @@ class TopAgent:
             refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
             refmodel_control=self.config.specflow_refmodel_control,
             compare_oracles=self.config.specflow_compare_oracles,
+            oracle_driven=self.config.specflow_oracle_driven,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

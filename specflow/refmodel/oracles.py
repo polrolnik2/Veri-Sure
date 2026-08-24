@@ -232,6 +232,63 @@ def replay(
     return Replay(rows, notes, "")
 
 
+def transactional_view(rows: list[dict]) -> list[dict]:
+    """The trace as a sequence of distinct states, with how long each was held.
+
+    `trace_compare.transactional` is the accept criterion this whole pipeline
+    compares by: the ordered sequence of distinct observable states, durations
+    reported rather than enforced. It exists because cycle-exactness was being
+    enforced against a fiction -- a guessed `latency_cycles` -- and measured
+    three times WORSE at separating good RTL from bad (separation 15 vs 40).
+
+    An oracle deciding over raw edges is not held to that criterion. It indexes
+    absolute edge numbers, and the measured consequence is the dominant form of
+    over-strictness on g-i2c: "busy low when START detected at edge 13", when
+    the design sees that START through a two-stage synchroniser and a
+    three-sample majority filter and answers several edges later. 27 of 77
+    oracles are failed by an implementation scoring 181/181 against golden.
+
+    So give the oracle the same view the accept criterion uses. Consecutive
+    identical rows collapse, which makes "the next row" mean "the next distinct
+    state" rather than "the next clock" -- much closer to what a specification
+    means by "then", and latency-insensitive by construction.
+
+    Compression is over the WHOLE row, inputs included, not over outputs alone.
+    An i2c oracle detects START as an INPUT event (SDA falling while SCL is
+    high); compressing outputs only would swallow input transitions inside a
+    held output state and hide exactly the events these clauses are about.
+
+    This is not a guarantee. An oracle can still write "at the state where the
+    input event appears, require the output" and be wrong -- no trace shape
+    prevents that, which is why the must-pass gate exists. What it removes is
+    the temptation to pin an absolute edge, and it converts a large class of
+    edge-exact reasoning into state-sequence reasoning for free.
+
+    `edge` is kept, holding the FIRST edge of each state, so an oracle written
+    against the raw shape still runs and still localises. `index` and `held` are
+    what a transactional oracle should use.
+    """
+    out: list[dict] = []
+    for row in rows:
+        key = (tuple(sorted(row["inputs"].items())),
+               tuple(sorted(row["outputs"].items())))
+        if out and out[-1]["_key"] == key:
+            out[-1]["held"] += 1
+            continue
+        out.append({
+            "_key": key,
+            "index": len(out),
+            "edge": row["edge"],
+            "first_edge": row["edge"],
+            "held": 1,
+            "inputs": dict(row["inputs"]),
+            "outputs": dict(row["outputs"]),
+        })
+    for row in out:
+        del row["_key"]
+    return out
+
+
 def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
     """Run one oracle over one trace. Never raises.
 
@@ -336,6 +393,7 @@ def decide_all(
     *,
     base: str,
     edge_budget: int = EDGE_BUDGET,
+    transactional: bool = False,
 ) -> list[OracleResult]:
     """Decide every oracle, replaying each testpoint at most once.
 
@@ -365,7 +423,8 @@ def decide_all(
                     broken=f"the MODEL {rep.error}",
                 ))
                 continue
-            results.append(decide(oracle, rep.rows))
+            rows = transactional_view(rep.rows) if transactional else rep.rows
+            results.append(decide(oracle, rows))
         out.append(_worst(oracle.req_uid, results))
     return out
 

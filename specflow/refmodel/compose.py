@@ -24,7 +24,7 @@ from ..stage import (
 )
 from . import trust, verdict
 from .agent import SYSTEM, RefModelOutput, parse_response
-from .oracles import replay, stimulus_liveness
+from .oracles import decide_all, replay, stimulus_liveness
 from .session import DebugSession
 from .validate import validate
 
@@ -148,6 +148,9 @@ def run_refmodel(
     #: drive the loop, so this changes nothing about the run except what is
     #: written down. Off by default because it costs one call per requirement.
     compare_oracles: bool = False,
+    #: Requirement-only oracles drive the loop and the judge stops deciding.
+    #: Implies `compare_oracles`, which is what generates them.
+    oracle_driven: bool = False,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -243,7 +246,8 @@ def run_refmodel(
             stimulus_by_tp=stimulus_by_tp or {}, run_dir=run_dir,
             debugger=debugger, max_turns=max_judge_turns,
             control_source=control_source, normalized=normalized,
-            compare_oracles=compare_oracles,
+            compare_oracles=compare_oracles or oracle_driven,
+            oracle_driven=oracle_driven,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -268,6 +272,11 @@ def _debug_turns(
     control_source: str | None,
     normalized: dict[str, dict] | None = None,
     compare_oracles: bool = False,
+    #: Let the requirement-only oracles DRIVE, and derive the blocking verdicts
+    #: from screening them instead of from the judge's opinion. The judge still
+    #: runs when `compare_oracles` is on, for the record, but nothing routes off
+    #: it. See `_oracle_driven_turns`.
+    oracle_driven: bool = False,
 ) -> tuple[str, list[Issue]]:
     """Judge, screen, debug; repeat. Returns the final source and its issues.
 
@@ -333,6 +342,16 @@ def _debug_turns(
             # Never let the reporting path fail a run. It informs a decision
             # about a future design; it does not gate this one.
             logger.warning("isolated oracles: not generated (%r)", exc)
+
+    if oracle_driven and isolated:
+        return _oracle_driven_turns(
+            source=source, contract=contract, contract_json=contract_json,
+            requirements=requirements, covers=covers, oracles=isolated,
+            base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
+            run_dir=run_dir, debugger=debugger, max_turns=max_turns,
+            control_source=control_source, normalized=normalized,
+            judge_port=judge_port,
+        )
 
     issues: list[Issue] = []
     turns = max(1, int(max_turns))
@@ -493,6 +512,148 @@ def _debug_turns(
             # The turn changed nothing, so re-judging would return the verdicts
             # already in hand. Spending ~77 model calls to rediscover them is
             # the expensive way to learn nothing.
+            return source, issues
+
+    return source, issues
+
+
+def _oracle_driven_turns(
+    *,
+    source: str,
+    contract: dict,
+    contract_json: str,
+    requirements: list[dict],
+    covers: dict[str, list[str]],
+    oracles: list,
+    base: str,
+    testplan: list[dict],
+    stimulus_by_tp: dict[str, list[dict]],
+    run_dir: Path | None,
+    debugger: RefModelDebugger,
+    max_turns: int,
+    control_source: str | None,
+    normalized: dict[str, dict] | None,
+    judge_port: ModelPort,
+) -> tuple[str, list[Issue]]:
+    """The loop with no judge in it.
+
+    Every blocking verdict here is the outcome of RUNNING something. The judge's
+    verdict was an opinion that its oracle was then asked to justify, which is
+    the weakest available form of evidence -- a rationalisation of a conclusion
+    already reached, by something that had read the model. An oracle written
+    before any verdict exists, from the requirement alone, and then executed, is
+    not a justification at all. It IS the verdict.
+
+    What that removes, measured on f-i2c: 31 of 33 blocking findings went to the
+    reference-model agent when the fix lay elsewhere. Here a verdict carries the
+    party it accuses, so `NOT_EXERCISED` reaches the stimulus tool and
+    `ORACLE_INVALID` is not handed to the model agent at all.
+
+    The oracle set is FROZEN across turns. It does not depend on the model, so
+    re-deriving it would cost a fan-out to receive the same answer -- and it
+    would let the measure drift under the thing being measured, which is the one
+    property that makes "N failing oracles going to zero" mean anything.
+
+    Decided TRANSACTIONALLY, the way `trace_compare.transactional` compares:
+    over the sequence of distinct states rather than raw edges. Screening and
+    the session must agree on this, or a gate passes an oracle the loop then
+    fails for a reason the gate never saw.
+    """
+    issues: list[Issue] = []
+    turns = max(1, int(max_turns))
+    _, reset_names, _ = classify(contract)
+
+    def _restimulate(req: dict, hint: str) -> list[dict]:
+        from ..testcase_agent import stimulus_for_scenario
+
+        return stimulus_for_scenario(
+            requirement=req, what_the_scenario_needs=hint,
+            contract=contract, port=judge_port)
+
+    for turn in range(turns + 1):
+        screened = trust.screen(
+            oracles, {o.req_uid: "met" for o in oracles}, source, contract,
+            stimulus_by_tp, testplan, base=base, control_source=control_source,
+            transactional=True,
+        )
+        # Gate 1 asks an oracle to agree with a verdict it never had. With no
+        # judge there is none, so it is neutralised by construction: the
+        # `"met"` above makes it discard exactly the oracles that FAIL the
+        # model, which are the findings this loop exists to act on. Recover
+        # them -- a disagreement with a verdict that does not exist is not a
+        # defect in the oracle.
+        failing_uids = {
+            uid for uid, why in screened.discarded.items()
+            if why.startswith("disagreed:")
+        }
+        trusted = list(screened.trusted) + [
+            o for o in oracles if o.req_uid in failing_uids
+        ]
+        discarded = {uid: why for uid, why in screened.discarded.items()
+                     if uid not in failing_uids}
+
+        results = decide_all(trusted, source, contract, stimulus_by_tp,
+                             base=base, transactional=True)
+        by_uid = {r.req_uid: r for r in results}
+        mechanical = verdict.classify(
+            discarded=discarded,
+            passing={u for u, r in by_uid.items() if r.ok is True},
+            failing={u for u, r in by_uid.items() if r.failed()},
+            had_oracle={o.req_uid for o in oracles},
+            requirements=requirements,
+        )
+        issues = verdict.issues(
+            mechanical,
+            {u: (r.detail or r.broken) for u, r in by_uid.items()},
+        )
+
+        if run_dir is not None:
+            out = Path(run_dir) / "specflow" / "judge" / f"r{turn}"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "trust.json").write_text(
+                json.dumps({
+                    "driver": "requirement-oracles",
+                    "rates": screened.rates(),
+                    "mechanical_verdicts": {
+                        "counts": verdict.counts(mechanical),
+                        "blocking": verdict.blocking(mechanical),
+                        "by_requirement": mechanical,
+                        "routes": {u: verdict.ROUTE[v]
+                                   for u, v in sorted(mechanical.items())},
+                    },
+                    "discarded": discarded,
+                    "recovered_from_gate1": sorted(failing_uids),
+                    "stimulus_added": [],
+                }, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8")
+
+        if not has_errors(issues):
+            return source, issues
+        if turn == turns or not trusted:
+            break
+
+        session = DebugSession(
+            source, contract, stimulus_by_tp, trusted, base=base,
+            requirements=requirements,
+            verdicts={u: v for u, v in mechanical.items()},
+            reasons={u: {"reason": r.detail, "evidence": "", "remedy": ""}
+                     for u, r in by_uid.items()},
+            covers=covers,
+            workdir=Path(run_dir) / "specflow" / "_refmodel_debug"
+            if run_dir is not None else None,
+            stimulus_gen=_restimulate, normalized=normalized,
+            testplan=testplan, reset_ports=frozenset(reset_names),
+            transactional=True,
+        )
+        before = source
+        source, _attempts, _note = debugger.debug(session)
+        if session.added:
+            testplan = session.testplan
+            logger.info("turn %d added %d testpoint(s): %s", turn,
+                        len(session.added), ", ".join(session.added))
+        elif source == before:
+            # Nothing changed and no scenario was staged, so the next turn
+            # would re-derive the verdicts already in hand.
             return source, issues
 
     return source, issues

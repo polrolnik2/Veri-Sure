@@ -106,6 +106,10 @@ class DebugSession:
         normalized: dict[str, dict] | None = None,
         testplan: list[dict] | None = None,
         reset_ports: frozenset[str] = frozenset(),
+        #: Decide over distinct states rather than raw edges, matching the
+        #: accept criterion (`trace_compare.transactional`). Must match what
+        #: screening used, or the session sees verdicts the gates never did.
+        transactional: bool = False,
         #: Testpoints this session may add, total. Append-only means they
         #: accumulate, and every one becomes a simulator process in the rendered
         #: suite (`run.py:200-204`, ~0.39s each).
@@ -128,6 +132,7 @@ class DebugSession:
         self.normalized = dict(normalized or {})
         self.testplan = list(testplan or [])
         self.reset_ports = reset_ports
+        self.transactional = transactional
         self.stimulus_budget = int(stimulus_budget)
         self.added: list[str] = []
 
@@ -143,6 +148,7 @@ class DebugSession:
         self._results = decide_all(
             self.oracles, self.source, self.contract,
             self.stimulus_by_tp, base=self.base,
+            transactional=self.transactional,
         )
         self.note_best(self.source)
         return self._results
