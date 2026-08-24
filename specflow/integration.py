@@ -17,10 +17,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+import logging
+
 from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import PortSettings, make_port
+from .normalize import run_normalize_fanout
+from .normalize import write_artifacts as write_normalized
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
@@ -54,6 +58,8 @@ from .testcase_agent import (
     unrealisable_reset,
 )
 from .tb.render import gate_g5, render_suite
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_prompt_file(run_dir: Path, spec: str) -> Path:
@@ -230,6 +236,14 @@ def build_artifacts(
     #: actually meant "never looked".
     refmodel_control: str | None = None,
     stimulus_agent: bool = True,
+    #: Restate each requirement as activation / observable / expectation, and
+    #: report the ones with no boundary observable at all.
+    #:
+    #: OFF by default, deliberately. It is one model call per requirement -- 77
+    #: on i2c_master_bit_ctrl -- and nothing downstream consumes it yet, so
+    #: defaulting it on would buy a whole fan-out of cost for a report. It flips
+    #: on when the cover-point obligation starts reading `activation`.
+    normalize: bool = False,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -302,6 +316,25 @@ def build_artifacts(
             return BuildResult(False, "S1", s1.issues)
 
         reqs = [r.model_dump() for r in s1.output.requirements]
+
+    # Normalization runs on the requirements and nothing else, so it sits here
+    # rather than later: its output is about S1's artifact, and a stage that
+    # reads a requirement should be able to read the normalized form beside it.
+    #
+    # Never fatal. A requirement that could not be normalized is one nothing
+    # knows the activation of, which is exactly today's situation for all of
+    # them -- so failing the node over it would make the pipeline strictly worse
+    # than before this stage existed.
+    if normalize:
+        try:
+            normalized, norm_results = run_normalize_fanout(
+                requirements=reqs, contract_json=contract_json, contract=contract,
+                port=port, max_repairs=max_repairs, fanout=fanout,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("normalize: not produced (%r)", exc)
+        else:
+            write_normalized(run_dir, normalized, norm_results)
 
     cached = None if stale else _reuse(
         run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
