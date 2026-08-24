@@ -34,6 +34,11 @@ from pathlib import Path
 from ..model_io import ModelPort
 from ..schema import Issue
 
+#: Recorded apart from the reference model. `model_io` keys every
+#: prompt/response pair by `{stage}_r{round}`, and both are produced from the
+#: same prompt -- one name for both would have each overwrite the other.
+WITNESS_STAGE = "witness"
+
 
 def conforming_implementation(
     *,
@@ -76,5 +81,9 @@ def conforming_implementation(
         port=port,
         workdir=Path(workdir),
         max_repairs=max_repairs,
+        # Recorded apart from the reference model. Same prompt, different
+        # artifact, and `model_io` keys records by stage name -- sharing one
+        # would make each overwrite the other's prompt and response.
+        stage=WITNESS_STAGE,
     )
     return (source if result.ok else ""), list(result.issues)

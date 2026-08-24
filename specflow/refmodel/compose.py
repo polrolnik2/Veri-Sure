@@ -138,6 +138,12 @@ def generate_model(
     port: ModelPort,
     workdir: Path,
     max_repairs: int = 3,
+    #: The name this generation is RECORDED under. Two callers produce a model
+    #: from the same prompt -- the reference model and the held-out witness --
+    #: and `model_io` keys every prompt/response pair by `{stage}_r{round}`. One
+    #: name for both would have the witness overwrite the model's record, and a
+    #: cache or replay would then serve one where the other was asked for.
+    stage: str = STAGE,
     #: An extra gate, run only on a model that already passes the mechanical
     #: checks, receiving `(output, source, round_)`. The per-requirement judge
     #: is the only caller that supplies one; a witness supplies none.
@@ -196,7 +202,7 @@ def generate_model(
         return issues
 
     result = run_stage(
-        stage=STAGE,
+        stage=stage,
         port=port,
         build_prompt=build_prompt,
         parse=parse_response,

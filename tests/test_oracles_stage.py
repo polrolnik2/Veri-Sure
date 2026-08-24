@@ -309,3 +309,19 @@ def test_an_oracle_with_no_stimulus_is_still_screened_structurally():
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp={},
         witness=WITNESS, variants=[], base="step")
     assert why.startswith("malformed:")
+
+
+def test_the_witness_is_recorded_apart_from_the_reference_model():
+    """`model_io` keys every prompt/response pair by `{stage}_r{round}`. Two
+    callers produce a model from the same prompt -- the reference model and the
+    witness -- so one name for both has the witness overwrite the model's
+    record, and a cache or a replay then serves one where the other was asked
+    for. Silent, and it corrupts the run's own evidence."""
+    import inspect
+
+    from specflow.refmodel import compose, conform
+
+    assert conform.WITNESS_STAGE != compose.STAGE
+    assert "stage=WITNESS_STAGE" in inspect.getsource(
+        conform.conforming_implementation)
+    assert "stage" in inspect.signature(compose.generate_model).parameters

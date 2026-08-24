@@ -218,15 +218,15 @@ def build_artifacts(
     model_port: str = "replay",
     max_repairs: int = 3,
     #: The reference model gets its own budget, and a larger default. Its repair
-    #: round is the only one whose feedback comes from a judge reading the
-    #: artifact rather than from a script checking its shape, and that feedback
-    #: converges rather than plateauing. Measured on `i2c_master_bit_ctrl`:
-    #: blocking verdicts went 8 -> 4 -> 3 -> 2 over four rounds, monotonically,
-    #: and the node then hard-failed on exhaustion with the trajectory still
-    #: descending. The budget was the binding constraint, not the model.
+    #: round is the only one whose feedback comes from RUNNING the artifact
+    #: rather than from a script checking its shape, and that feedback converges
+    #: rather than plateauing. Measured on `i2c_master_bit_ctrl`: blocking
+    #: verdicts went 8 -> 4 -> 3 -> 2 over four rounds, monotonically, and the
+    #: node then hard-failed on exhaustion with the trajectory still descending.
+    #: The budget was the binding constraint, not the model.
     refmodel_max_repairs: int | None = None,
-    #: An agent that EDITS the reference model against the judge's oracles,
-    #: instead of the judge's prose driving a regeneration. Injected as a
+    #: An agent that EDITS the reference model against the frozen requirement
+    #: oracles, instead of prose driving a regeneration. Injected as a
     #: Protocol, like `loop.RtlRepair`, so nothing here imports AgentScope.
     #: Absent one, the stage behaves exactly as it always has.
     refmodel_debugger: object | None = None,
