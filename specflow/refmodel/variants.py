@@ -75,12 +75,35 @@ STAGE = "variant"
 
 PARSE_ERROR = "Parse Error: "
 
-#: The three ways a clause can be broken. `trigger` and `action` are present in
-#: every requirement by construction -- the normalized form has an activation
-#: and an expectation -- so only `threshold` has to be detected.
+#: The ways a clause can be broken. `trigger` and `action` are present in every
+#: requirement by construction -- the normalized form has an activation and an
+#: expectation -- so the others have to be detected from the text.
 TRIGGER = "trigger"
 THRESHOLD = "threshold"
 ACTION = "action"
+#: The right values in the wrong sequence, and the right sequence held for the
+#: wrong length. Added because the first three were not enough, and the gap was
+#: measured rather than guessed at.
+#:
+#: A generated model scoring 30/168 against golden RTL differs from a
+#: known-good control on 134 of 167 testpoints IN THE TRANSACTIONAL VIEW the
+#: oracles decide over, and 36 of 56 trusted oracles assert on a port that
+#: diverges in a testpoint they name. Two of them notice. The checks are live,
+#: on-target, non-vacuous, watching the right ports -- and satisfied by both
+#: designs, because "cmd_ack pulses" holds for a design that pulses it at the
+#: wrong time.
+#:
+#: Characterised per (testpoint, port), that divergence is 636 duration, 186
+#: value, 171 order -- `ACTION` covers only the value column.
+#:
+#: ORDER is the larger lever of the two and DURATION the smaller, which the
+#: per-port tally overstates: at TESTPOINT granularity only 14 of the 148
+#: diverging testpoints differ by duration alone, the other 134 differing in a
+#: way the state sequence already shows. Duration is added anyway because a
+#: requirement that states a length ("a one-clock pulse") is entitled to a
+#: check that enforces it, and 13 of these 77 requirements state one.
+ORDER = "order"
+DURATION = "duration"
 
 #: What a threshold looks like in prose. Deliberately generous: proposing a
 #: threshold variant for a requirement that has none costs one call and the
@@ -92,6 +115,25 @@ _THRESHOLD = re.compile(
     r"|\bone\b|\btwo\b|\bthree\b|\bfour\b|\beight\b|\bsixteen\b",
     re.IGNORECASE)
 
+#: Ordering language. Generous for the reason `_THRESHOLD` is: proposing one
+#: for a requirement that states no ordering costs a call and the variant is
+#: dropped as equivalent, while missing one that does costs the only evidence
+#: that would convict an order-blind check.
+_ORDER = re.compile(
+    r"\bthen\b|\bafter\b|\bbefore\b|\bfollowed by\b|\bwhile\b|\bduring\b"
+    r"|\bsequence\b|\border(?:ing|ed)?\b|\bfirst\b|\bnext\b|\bfinally\b"
+    r"|\buntil\b|\bonce\b|\bprior to\b|\bsubsequent\b|\bphase\b",
+    re.IGNORECASE)
+
+#: Duration language, including the shapes that state a length without a number
+#: -- "a one-clock pulse", "remains set", "single-cycle".
+_DURATION = re.compile(
+    r"\bpulse\b|\bone[- ]clock\b|\bone[- ]cycle\b|\bsingle[- ]cycle\b"
+    r"|\bfor\s+\w+\s+(?:clock|cycle|edge)s?\b|\bremains?\b|\bstays?\b"
+    r"|\bheld?\b|\bholding\b|\bcontinuous(?:ly)?\b|\bthroughout\b"
+    r"|\buntil\b|\bwidth\b|\bduration\b",
+    re.IGNORECASE)
+
 WHAT_EACH_KIND_MEANS = {
     TRIGGER: "make the behaviour happen at the wrong time -- fire when the "
              "activation does NOT hold, or stay silent when it does.",
@@ -99,6 +141,16 @@ WHAT_EACH_KIND_MEANS = {
                "the wrong count. Keep the shape of the behaviour intact.",
     ACTION: "do the wrong thing once activated -- the wrong value, the wrong "
             "port, the wrong duration.",
+    ORDER: "produce the RIGHT VALUES IN THE WRONG SEQUENCE. Every value the "
+           "requirement calls for still appears on every port it names, and "
+           "the order they appear in is wrong -- swap two phases, drive the "
+           "second before the first, release a line before pulling the other "
+           "one low. A check that only asks WHETHER each value appeared will "
+           "still pass this; that is the point of it.",
+    DURATION: "hold the right values, in the right order, FOR THE WRONG "
+              "LENGTH. Stretch a one-edge pulse across several, or collapse a "
+              "phase that should persist into a single edge. Do not change "
+              "which values appear or the order they appear in.",
 }
 
 
@@ -153,9 +205,15 @@ Reply with ONE JSON object and nothing else:
 def kinds_for(requirement: dict, normalized: dict | None = None) -> list[str]:
     """Which clause kinds this requirement actually contains.
 
-    Returns `[TRIGGER, ACTION]` for a requirement that states no bound, plus
-    `THRESHOLD` for one that does. Never empty: every requirement has something
-    that makes it apply and something it then demands.
+    Returns `[TRIGGER, ACTION]` for a requirement that states nothing else,
+    plus `THRESHOLD`, `ORDER` and `DURATION` for one whose text does. Never
+    empty: every requirement has something that makes it apply and something it
+    then demands.
+
+    Detected from the text rather than assumed, because a variant for a
+    property the requirement does not state is one an oracle is RIGHT to
+    ignore, and convicting it for that would be the over-strictness this whole
+    stage is built to avoid causing.
     """
     norm = normalized or {}
     act = (norm.get("activation") or {})
@@ -167,6 +225,10 @@ def kinds_for(requirement: dict, normalized: dict | None = None) -> list[str]:
     kinds = [TRIGGER, ACTION]
     if _THRESHOLD.search(text):
         kinds.insert(1, THRESHOLD)
+    if _ORDER.search(text):
+        kinds.append(ORDER)
+    if _DURATION.search(text):
+        kinds.append(DURATION)
     return kinds
 
 

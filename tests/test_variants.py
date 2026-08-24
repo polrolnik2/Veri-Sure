@@ -78,7 +78,35 @@ def test_k_is_the_requirement_s_own_clause_count():
 
 def test_a_stated_bound_earns_a_threshold_variant():
     bounded = V.kinds_for({"text": "cmd_ack pulses high for one clock"}, None)
-    assert bounded == [V.TRIGGER, V.THRESHOLD, V.ACTION]
+    assert bounded[:3] == [V.TRIGGER, V.THRESHOLD, V.ACTION]
+    assert V.DURATION in bounded, (
+        "'pulses high for one clock' states a length as plainly as it states "
+        "a bound")
+
+
+def test_stated_ordering_and_duration_earn_their_own_variants():
+    """The two kinds the first three did not cover, and the gap was measured.
+
+    A model scoring 30/168 against golden RTL differs from a known-good control
+    on 134 of 167 testpoints in the view the oracles decide over, and 36 of 56
+    trusted oracles assert on a diverging port in a testpoint they name. Two
+    notice. Per (testpoint, port) that divergence is 636 duration, 186 value,
+    171 order -- `ACTION` covers the value column and nothing covered the rest.
+    """
+    ordered = V.kinds_for(
+        {"text": "the controller drives SDA low, then releases SCL"}, None)
+    assert V.ORDER in ordered and V.DURATION not in ordered
+
+    held = V.kinds_for({"text": "al remains set once asserted"}, None)
+    assert V.DURATION in held
+
+
+def test_a_requirement_stating_neither_gets_neither():
+    """A variant for a property the requirement does not state is one an oracle
+    is RIGHT to ignore, and convicting it for that is the over-strictness this
+    stage exists not to cause."""
+    plain = V.kinds_for({"text": "scl_o is tied low"}, None)
+    assert plain == [V.TRIGGER, V.ACTION]
 
 
 def test_the_normalized_form_is_read_too():
