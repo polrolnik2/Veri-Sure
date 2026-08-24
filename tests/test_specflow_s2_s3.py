@@ -212,13 +212,14 @@ def test_every_stage_shows_the_artifact_before_the_defects():
 
 
 def test_the_refmodel_stage_orders_them_the_same_way():
-    """`refmodel` builds its prompt inline rather than through a module-level
-    function, which is how it drifted out of step in the first place."""
+    """`refmodel` used to build its prompt inline inside `run_refmodel`, which
+    is how it drifted out of step in the first place. It is `generate_model`
+    now -- shared with the witness -- so the pin follows it there."""
     import inspect
 
     from specflow.refmodel import compose
 
-    src = inspect.getsource(compose.run_refmodel)
+    src = inspect.getsource(compose.generate_model)
     prev = src.index("previous_answer_block(previous)")
     fail = src.index("gate_failures_block(issues)")
     assert prev < fail, "refmodel appends the defect list before the artifact"

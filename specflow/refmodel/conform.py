@@ -45,27 +45,36 @@ def conforming_implementation(
 ) -> tuple[str, list[Issue]]:
     """Generate one implementation of the design. Returns `(source, issues)`.
 
-    Reuses the reference model's own generation path with the judge and the
-    debugger switched off, which is already exactly "produce an implementation
-    from the requirements, gated on the mechanical checks alone". Sharing it is
-    what keeps this from drifting into a different kind of artifact: it is the
-    same prompt, the same contract-derived dispatch, the same `validate` gate,
-    so anything an oracle may assume about the reference model holds here too.
+    Shares `compose.generate_model` with the reference model rather than calling
+    the reference-model STAGE. The sharing is the point -- same prompt, same
+    contract-derived dispatch, same `validate` gate, so anything an oracle may
+    assume about the reference model holds here too -- but it used to be done by
+    calling `run_refmodel` from inside `_debug_turns`, which is inside
+    `run_refmodel`. A stage re-entering itself from within its own repair loop
+    is not sharing, and it is what made this impossible to lift into a stage of
+    its own.
 
     Returns `("", issues)` when nothing gate-clean could be produced. A missing
     conforming implementation weakens the promotion gate; it must not fail the
     run, because the run is still better off with unpromoted oracles than with
     no oracles.
     """
-    from .compose import run_refmodel
+    import json
 
-    result, source = run_refmodel(
+    from .compose import choose_base, generate_model
+
+    try:
+        contract = json.loads(contract_json) if contract_json.strip() else {}
+    except Exception:  # noqa: BLE001
+        contract = {}
+
+    result, source = generate_model(
         requirements=requirements,
         contract_json=contract_json,
+        contract=contract,
+        base=choose_base(contract),
         port=port,
         workdir=Path(workdir),
         max_repairs=max_repairs,
-        judge_port=None,
-        debugger=None,
     )
     return (source if result.ok else ""), list(result.issues)

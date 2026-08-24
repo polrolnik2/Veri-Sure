@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
+from collections.abc import Callable
 from typing import Protocol
 
 import logging
@@ -129,6 +130,83 @@ class RefModelDebugger(Protocol):
     def debug(self, session: DebugSession) -> tuple[str, int, str]: ...
 
 
+def generate_model(
+    *,
+    requirements: list[dict],
+    contract_json: str,
+    contract: dict,
+    base: str,
+    port: ModelPort,
+    workdir: Path,
+    max_repairs: int = 3,
+    #: An extra gate, run only on a model that already passes the mechanical
+    #: checks, receiving `(output, source, round_)`. The per-requirement judge
+    #: is the only caller that supplies one; a witness supplies none.
+    extra_gate: Callable[[RefModelOutput, str, int], list[Issue]] | None = None,
+) -> tuple[StageResult[RefModelOutput], str]:
+    """Produce ONE implementation of these requirements. Returns it and its source.
+
+    Extracted so the two callers that need an implementation -- the reference
+    model, and the held-out witness that bounds the oracles from above -- share
+    one generator rather than one of them re-entering the other.
+    `conform.conforming_implementation` used to call `run_refmodel`, from inside
+    `_debug_turns`, which is inside `run_refmodel`: a stage re-entering itself
+    from within its own repair loop. Nothing about that was deliberate, and it
+    is what made the witness impossible to lift into a stage of its own.
+
+    Knows nothing about oracles, judges or debugging. Its whole contract is
+    "requirements in, gate-clean model out", which is what makes it safe to call
+    twice for two different purposes.
+    """
+    rendered: dict[str, str] = {"src": ""}
+    rounds = {"n": 0}
+
+    def build_prompt(issues: list[Issue] | None, previous: str | None = None) -> str:
+        parts = [
+            SYSTEM,
+            "<requirements>\n"
+            + json.dumps(requirements, indent=2, ensure_ascii=False)
+            + "\n</requirements>",
+            "<contract_json>\n" + contract_json.rstrip() + "\n</contract_json>",
+            f"The dispatch method for this design is `{base}` "
+            f"(chosen from the contract, not negotiable). "
+            f"Output ports that must all be written: {output_ports(contract)}.",
+        ]
+        if issues:
+            # The artifact first: the defect list refers to it, so a reader
+            # (or a model) meets what is being repaired before what is wrong
+            # with it. S1-S3 order it the same way.
+            if previous:
+                parts.append(previous_answer_block(previous))
+            parts.append(gate_failures_block(issues))
+        return "\n\n".join(parts)
+
+    def gate(out: RefModelOutput) -> list[Issue]:
+        rendered["src"] = render(out, contract)
+        issues = validate(
+            out=out,
+            source=rendered["src"],
+            requirements=requirements,
+            contract=contract,
+            expected_base=base,
+            workdir=workdir,
+        )
+        if extra_gate is not None and not has_errors(issues):
+            issues = issues + extra_gate(out, rendered["src"], rounds["n"])
+        rounds["n"] += 1
+        return issues
+
+    result = run_stage(
+        stage=STAGE,
+        port=port,
+        build_prompt=build_prompt,
+        parse=parse_response,
+        gate=gate,
+        max_repairs=max_repairs,
+    )
+    return result, rendered["src"]
+
+
 def run_refmodel(
     *,
     requirements: list[dict],
@@ -173,76 +251,43 @@ def run_refmodel(
         contract = {}
 
     base = choose_base(contract)
-    rendered: dict[str, str] = {"src": ""}
-
-    def build_prompt(issues: list[Issue] | None, previous: str | None = None) -> str:
-        parts = [
-            SYSTEM,
-            "<requirements>\n"
-            + json.dumps(requirements, indent=2, ensure_ascii=False)
-            + "\n</requirements>",
-            "<contract_json>\n" + contract_json.rstrip() + "\n</contract_json>",
-            f"The dispatch method for this design is `{base}` "
-            f"(chosen from the contract, not negotiable). "
-            f"Output ports that must all be written: {output_ports(contract)}.",
-        ]
-        if issues:
-            # The artifact first: the defect list refers to it, so a reader
-            # (or a model) meets what is being repaired before what is wrong
-            # with it. S1-S3 order it the same way.
-            if previous:
-                parts.append(previous_answer_block(previous))
-            parts.append(gate_failures_block(issues))
-        return "\n\n".join(parts)
-
-    rounds = {"n": 0}
     judged: dict[str, object] = {"result": None}
 
-    def gate(out: RefModelOutput) -> list[Issue]:
-        rendered["src"] = render(out, contract)
-        issues = validate(
-            out=out,
-            source=rendered["src"],
-            requirements=requirements,
-            contract=contract,
-            expected_base=base,
-            workdir=workdir,
+    def judge_gate(out: RefModelOutput, source: str, round_: int) -> list[Issue]:
+        """The per-requirement judge, run only on a model already past G4.
+
+        Asking ~70 questions about a model that does not import, or leaves an
+        output undetermined, spends a fan-out to rediscover what a script
+        already said -- and the verdicts would be about code that is going to be
+        regenerated anyway.
+        """
+        from .judge import run_judge, write_report
+
+        result = run_judge(
+            source=source, contract_json=contract_json,
+            requirements=requirements, covers=out.covers,
+            port=judge_port, round_=round_,
+            contract=contract, base=base, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp,
         )
-        # The judge runs only on a model that already passes the mechanical
-        # checks. Asking ~70 questions about a model that does not import, or
-        # leaves an output undetermined, spends a fan-out to rediscover what a
-        # script already said -- and the verdicts would be about code that is
-        # going to be regenerated anyway.
-        # With a debugger, the judge does NOT run inside the gate. Generation
-        # is gated on the mechanical checks alone and repaired by regenerating,
-        # which is the right tool for a missing quote or an unwritten output --
-        # a whole round was lost to exactly that. Behavioural failures go to the
-        # debug turns below, which EDIT rather than regenerate.
-        if judge_port is not None and debugger is None and not has_errors(issues):
-            from .judge import run_judge, write_report
+        judged["result"] = result
+        if run_dir is not None:
+            write_report(run_dir, result)
+        return list(result.issues)
 
-            result = run_judge(
-                source=rendered["src"], contract_json=contract_json,
-                requirements=requirements, covers=out.covers,
-                port=judge_port, round_=rounds["n"],
-                contract=contract, base=base, testplan=testplan,
-                stimulus_by_tp=stimulus_by_tp,
-            )
-            judged["result"] = result
-            if run_dir is not None:
-                write_report(run_dir, result)
-            issues = issues + result.issues
-        rounds["n"] += 1
-        return issues
-
-    result = run_stage(
-        stage=STAGE,
-        port=port,
-        build_prompt=build_prompt,
-        parse=parse_response,
-        gate=gate,
+    # With a debugger the judge does NOT run inside the gate. Generation is
+    # gated on the mechanical checks alone and repaired by REGENERATING, which
+    # is the right tool for a missing quote or an unwritten output -- a whole
+    # round was lost to exactly that. Behavioural failures go to the debug turns
+    # below, which EDIT instead.
+    result, source = generate_model(
+        requirements=requirements, contract_json=contract_json,
+        contract=contract, base=base, port=port, workdir=workdir,
         max_repairs=max_repairs,
+        extra_gate=(judge_gate
+                    if judge_port is not None and debugger is None else None),
     )
+    rendered: dict[str, str] = {"src": source}
 
     if debugger is not None and judge_port is not None and result.ok:
         source, issues = _debug_turns(
