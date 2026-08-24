@@ -83,6 +83,14 @@ class OracleSet:
     #: requirements: a requirement missing from here would be a silent subset.
     dispositions: dict[str, str] = field(default_factory=dict)
     reasons: dict[str, str] = field(default_factory=dict)
+    #: `req_uid -> [what each round complained about]`, for the oracles that
+    #: were rejected and then repaired. Their final `reasons` entry is empty --
+    #: they are TRUSTED -- so without this the only trace of what the gate
+    #: caught is in `agent_io`, and a repair pass is exactly what overwrites
+    #: that. "What does the must-pass leg actually catch?" is a question this
+    #: project has already had to answer once by reconstructing it from a
+    #: transcript directory.
+    repairs: dict[str, list[str]] = field(default_factory=dict)
     variants: list = field(default_factory=list)
     witness_kind: str = NO_BOUND
     rounds: int = 0
@@ -299,6 +307,7 @@ def run_oracle_stage(
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
 
     rejected: dict[str, str] = {}
+    repairs: dict[str, list[str]] = {}
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         rejected = {}
@@ -313,6 +322,8 @@ def run_oracle_stage(
                 rejected[uid] = why
                 if may_quote:
                     quotable[uid] = why
+        for uid, why in quotable.items():
+            repairs.setdefault(uid, []).append(why)
         if not quotable or rounds == max_rounds:
             # Nothing left that an author could be told about. A control-only
             # rejection is terminal by design, so re-asking would spend a call
@@ -351,7 +362,8 @@ def run_oracle_stage(
                    # Legibility, not decoration: a reader has to be able to
                    # tell a check that found nothing from one that never ran.
                    "vacuity_checked": bool(variants),
-                   "over_strictness_bounded_by": witness_kind})
+                   "over_strictness_bounded_by": witness_kind,
+                   "repairs": repairs})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
         if variants:
@@ -362,7 +374,7 @@ def run_oracle_stage(
 
     logger.info("oracles: %s (bound: %s)", _summary(dispositions), witness_kind)
     return OracleSet(trusted=trusted, dispositions=dispositions,
-                     reasons=reasons, variants=variants,
+                     reasons=reasons, repairs=repairs, variants=variants,
                      witness_kind=witness_kind, rounds=rounds)
 
 

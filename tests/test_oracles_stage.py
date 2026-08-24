@@ -482,3 +482,22 @@ def test_the_repair_label_does_not_escape_the_small_model():
     for stage in ("oracle_REQ-0001", "oracle_REQ-0001_fix1",
                   "oracle_REQ-0001_strengthen1"):
         assert s.for_stage(stage) == ("small", "low"), stage
+
+
+def test_a_repaired_oracle_keeps_a_record_of_what_was_caught(tmp_path,
+                                                            monkeypatch):
+    """A repaired oracle ends TRUSTED with an empty `reasons` entry, so without
+    this the only trace of what the gate caught is in `agent_io` -- and a repair
+    pass is exactly what overwrites that. "What does the must-pass leg actually
+    catch" is a question this project has already had to answer once by
+    reconstructing it from a transcript directory."""
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    got = _run(_Port([_reply(OVER_STRICT), _reply(GOOD)]), workdir=tmp_path,
+               run_dir=tmp_path)
+
+    assert got.dispositions["REQ-0001"] == O.TRUSTED
+    assert got.repairs["REQ-0001"], "the complaint that was acted on is gone"
+    assert got.repairs["REQ-0001"][0].startswith("over-strict:")
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["repairs"]["REQ-0001"] == got.repairs["REQ-0001"]
