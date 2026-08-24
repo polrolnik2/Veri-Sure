@@ -202,3 +202,54 @@ def test_a_stalled_route_with_nothing_unexercised_stays_on_the_model():
         stimulus_gen=_write_steps, requirements={}, model_route_stalled=True)
     assert not any(r.unexercised() for r in s.results)
     assert s.route == MODEL
+
+
+def test_an_appended_testpoint_reaches_the_caller_that_renders_the_suite(
+        monkeypatch):
+    """Both halves of an appended testpoint must travel together.
+
+    `stimulus_by_tp` already reaches the caller -- the session never copies that
+    dict -- but the testplan was copied, so `render_suite` would get stimulus
+    for a testpoint it was not rendering and the scenario the loop paid a model
+    call to stage would be dropped from the suite in silence.
+    """
+    from specflow.refmodel import compose
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1},
+        {"name": "cmd", "dir": "input", "width": 4},
+        {"name": "ena", "dir": "input", "width": 1},
+        {"name": "ack", "dir": "output", "width": 1},
+    ]}
+    oracle = RequirementOracle(req_uid="REQ-0000", tp_uids=["TP-0000"],
+                               clause="ack on WRITE", source=WRITE_ORACLE)
+    #: The caller's objects, exactly as `integration` holds them.
+    testplan = [{"uid": "TP-0000", "covers": ["REQ-0000@1"]}]
+    stimulus = {"TP-0000": [{"cmd": 0, "ena": 1}]}
+
+    # The loop builds its own generator from `item_port`; substitute the
+    # vectors it would have asked a model for.
+    import specflow.testcase_agent as tca
+    monkeypatch.setattr(tca, "stimulus_for_scenario",
+                        lambda **_kw: [{"cmd": 8, "ena": 1}, {"cmd": 8, "ena": 1}])
+
+    staged: dict = {}
+
+    class _Stages:
+        def debug(self, session):
+            staged["out"] = session.add_stimulus(
+                "REQ-0000", "issue a WRITE with ena high")
+            return session.source, 1, ""
+
+    compose._debug_turns(
+        source=SOURCE, contract=contract, contract_json="{}",
+        requirements=[{"uid": "REQ-0000", "text": "ack on WRITE"}],
+        covers={"step": ["REQ-0000"]}, oracles=[oracle], base="step",
+        testplan=testplan, stimulus_by_tp=stimulus, run_dir=None,
+        debugger=_Stages(), max_turns=1, control_source=None,
+        normalized=NORMALIZED, item_port=None,
+    )
+    assert "error" not in staged.get("out", {}), staged
+    added = [t["uid"] for t in testplan if t["uid"] != "TP-0000"]
+    assert added, "the caller's testplan never saw the appended testpoint"
+    assert added[0] in stimulus, "and its stimulus must travel with it"

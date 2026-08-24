@@ -559,7 +559,19 @@ def _debug_turns(
             last_failing = failing_now
         source, _attempts, _note = debugger.debug(session)
         if session.added:
-            testplan = session.testplan
+            # Write the grown testplan back into the CALLER's list, in place.
+            #
+            # `stimulus_by_tp` already reaches the caller, because the session
+            # never copies that dict -- so without this the two halves of one
+            # appended testpoint separate: `render_suite` gets stimulus for a
+            # testpoint it is not rendering, and the scenario the loop paid a
+            # model call to stage is silently dropped from the suite. The plan
+            # claimed this flowed through "with no special plumbing, because
+            # nothing was edited"; the session copies the list, so it did not.
+            #
+            # One explicit line at the boundary where growth leaves the loop,
+            # rather than aliasing the caller's list deep inside the session.
+            testplan[:] = session.testplan
             added.extend(session.added)
             # I7, and the whole of what append-only leaves of it: an oracle
             # that GAINED a testpoint was verified against an evidence set that
