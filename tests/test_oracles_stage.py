@@ -573,3 +573,40 @@ def test_a_fully_covered_plan_reports_an_empty_list_not_a_missing_key(tmp_path,
     _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["testpoints_no_oracle_names"] == []
+
+
+def test_an_inert_stimulus_is_measured_and_named(tmp_path, monkeypatch):
+    """A testpoint that moves nothing makes every oracle naming it unjudgeable,
+    however well written -- so a thin stimulus caps oracle quality before oracle
+    quality is in question.
+
+    `stimulus_liveness` has existed for months and nothing called it: its one
+    caller went with the judge. What it says about n-i2c's stimulus, replayed on
+    the KNOWN-GOOD control -- 11% of testpoints show ONE output state across
+    ~256 edges, the median shows five, two of eight outputs never move -- was
+    therefore never in any artifact.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    dead = {"TP-0000": [{"a": 0}, {"a": 0}, {"a": 0}]}
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=dead,
+        port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, max_rounds=1, run_dir=tmp_path)
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    live = blob["stimulus_liveness"]
+    assert live is not None, "measured, not omitted"
+    assert live["inert_count"] == 1
+    assert live["inert"] == ["TP-0000"]
+
+
+def test_a_live_stimulus_reports_zero_rather_than_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, max_rounds=1, run_dir=tmp_path)
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["stimulus_liveness"]["inert_count"] == 0

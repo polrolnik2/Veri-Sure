@@ -503,6 +503,37 @@ def run_oracle_stage(
     dispositions, reasons = _dispositions(
         requirements=requirements, trusted=trusted, rejected=rejected,
         had_source=set(held), normalized=normalized)
+    # How much the stimulus gives ANY oracle to work with. Measured on the
+    # witness -- a design, but this is not a judgement about correctness, it is
+    # the question "does this stimulus make a design do anything".
+    #
+    # Unmeasured until now: `stimulus_liveness` existed and nothing called it,
+    # because its one caller went with the judge. What it says about n-i2c's
+    # stimulus, replayed on the KNOWN-GOOD control: 11% of testpoints show ONE
+    # output state across ~256 edges, the median testpoint shows five, and two
+    # of the eight declared outputs never move anywhere. Five distinct states is
+    # the ceiling on what any oracle naming that testpoint can discriminate,
+    # however well it is written -- so a thin stimulus caps oracle quality
+    # before oracle quality is even in question.
+    live = None
+    if witness:
+        try:
+            from .refmodel.oracles import stimulus_liveness
+
+            report = stimulus_liveness(witness, contract, stimulus_by_tp,
+                                       base=base)
+            live = {"testpoints": len(stimulus_by_tp),
+                    "inert": sorted(report.inert),
+                    "inert_count": len(report.inert)}
+            if report.inert:
+                logger.warning(
+                    "%d of %d testpoint(s) move nothing at all on an "
+                    "implementation of these requirements: every oracle naming "
+                    "one is unjudgeable however well written",
+                    len(report.inert), len(stimulus_by_tp))
+        except Exception as exc:  # noqa: BLE001
+            logger.info("stimulus liveness not measured (%r)", exc)
+
     idle = _decides_nothing(testplan, trusted)
     if idle:
         logger.warning(
@@ -526,7 +557,8 @@ def run_oracle_stage(
                    "instrument_notes": disagreements,
                    "unsatisfiable_by_the_control": sorted(
                        u for u, d in disagreements.items() if "control" in d),
-                   "testpoints_no_oracle_names": idle})
+                   "testpoints_no_oracle_names": idle,
+                   "stimulus_liveness": live})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
         if variants:
