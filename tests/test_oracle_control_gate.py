@@ -17,60 +17,14 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from specflow.refmodel import trust
-from specflow.refmodel.oracles import RequirementOracle
-from tests.test_refmodel_session import ACK, BROKEN, CONTRACT, STIM, WORKING
-
-TESTPLAN = [{"uid": "TP-0000", "covers": ["REQ-0000"]}]
 
 
-def _oracle(source=ACK, uid="REQ-0000"):
-    return RequirementOracle(req_uid=uid, tp_uids=["TP-0000"],
-                             clause="ack pulses once", source=source)
-
-
-# ------------------------------------------------- a skipped gate is legible
-
-
-def test_over_strict_is_none_not_zero_when_no_control_was_supplied():
-    """The exact ambiguity that misread the a-i2c run.
-
-    0 and None are both falsy, so anything summing or formatting these has to
-    opt in to the distinction -- but nothing can opt in to a distinction the
-    data does not carry.
-    """
-    screened = trust.screen([_oracle()], {"REQ-0000": "not_met"}, BROKEN,
-                            CONTRACT, STIM, TESTPLAN, base="step")
-    assert screened.rates()["over_strict"] is None
-    assert screened.control_available is False
-
-
-def test_over_strict_is_a_number_once_a_control_is_supplied():
-    screened = trust.screen([_oracle()], {"REQ-0000": "not_met"}, BROKEN,
-                            CONTRACT, STIM, TESTPLAN, base="step",
-                            control_source=WORKING)
-    assert screened.rates()["over_strict"] == 0
-    assert screened.control_available is True
-
-
-def test_a_control_that_fails_an_oracle_discards_it():
-    """The oracle demands something the known-good model does not do.
-
-    `WORKING` pulses ack; an oracle demanding ack NEVER pulse is satisfied by
-    the broken model and rejected by the good one -- which is exactly the shape
-    of the 22 over-strict oracles found on a-i2c.
-    """
-    never = ('\ndef decide(trace):\n'
-             '    for row in trace:\n'
-             '        if row["outputs"]["ack"] == 1:\n'
-             '            return (False, row["edge"], "ack pulsed")\n'
-             '    return (True, None, "ack stayed low")\n')
-    screened = trust.screen([_oracle(source=never)], {"REQ-0000": "met"},
-                            BROKEN, CONTRACT, STIM, TESTPLAN, base="step",
-                            control_source=WORKING)
-    assert screened.trusted == []
-    assert "over-strict" in screened.discarded["REQ-0000"]
-    assert screened.rates()["over_strict"] == 1
+# The three tests that lived here screened the judge's oracles. Screening is
+# `specflow/oracles_stage.py` now, and the property they protected -- that a
+# gate which did not run is DISTINGUISHABLE from one that found nothing -- is
+# `test_no_witness_is_reported_rather_than_assumed` in `test_oracles_stage.py`.
+# What stays is the wiring, because a control on disk that nothing loads is the
+# state this file was born in.
 
 
 # --------------------------------------------------------- the gate is wired
@@ -87,7 +41,7 @@ def test_the_benchmark_runner_resolves_the_control_it_ships():
 
 
 def test_the_control_is_threaded_through_every_layer_between_them():
-    """Four signatures separate the runner from `trust.screen`.
+    """Four signatures separate the runner from the gate that uses it.
 
     Each was individually reasonable and the parameter was dropped at the first
     of them, so the gate silently never ran. Asserting on the signatures keeps
@@ -96,11 +50,11 @@ def test_the_control_is_threaded_through_every_layer_between_them():
     from eda_agent.specflow_node import run_specflow_node
     from eda_agent.top_agent import TopAgentConfig
     from specflow.integration import build_artifacts
-    from specflow.refmodel.compose import run_refmodel
+    from specflow.oracles_stage import run_oracle_stage
 
     assert "refmodel_control" in inspect.signature(run_specflow_node).parameters
     assert "refmodel_control" in inspect.signature(build_artifacts).parameters
-    assert "control_source" in inspect.signature(run_refmodel).parameters
+    assert "control_source" in inspect.signature(run_oracle_stage).parameters
     assert "specflow_refmodel_control" in TopAgentConfig.__dataclass_fields__
 
 

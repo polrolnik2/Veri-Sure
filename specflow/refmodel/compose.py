@@ -23,10 +23,9 @@ from ..stage import (
     previous_answer_block,
     run_stage,
 )
-from . import freeze, ratchet, trust, verdict
-from . import variants as variants_mod
+from . import freeze, ratchet, verdict
 from .agent import SYSTEM, RefModelOutput, parse_response
-from .oracles import decide_all, replay, stimulus_liveness
+from .oracles import decide_all
 from .session import MODEL, DebugSession
 from .validate import validate
 
@@ -214,7 +213,7 @@ def run_refmodel(
     port: ModelPort,
     workdir: Path,
     max_repairs: int = 3,
-    judge_port: ModelPort | None = None,
+    item_port: ModelPort | None = None,
     run_dir: Path | None = None,
     testplan: list[dict] | None = None,
     stimulus_by_tp: dict[str, list[dict]] | None = None,
@@ -222,19 +221,6 @@ def run_refmodel(
     max_judge_turns: int = 3,
     control_source: str | None = None,
     normalized: dict[str, dict] | None = None,
-    #: Generate a SECOND oracle set from the requirements alone, screen it
-    #: beside the judge's, and report both. Read-only: the judge's oracles still
-    #: drive the loop, so this changes nothing about the run except what is
-    #: written down. Off by default because it costs one call per requirement.
-    compare_oracles: bool = False,
-    #: Requirement-only oracles drive the loop and the judge stops deciding.
-    #: Implies `compare_oracles`, which is what generates them.
-    oracle_driven: bool = False,
-    #: Step 7's must-fail leg. Off by default: it costs k model calls per
-    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
-    #: VACUOUS stops being inferred from silence under source mutation and is
-    #: earned against a design that actually violates the requirement.
-    want_variants: bool = False,
     #: The verified, frozen oracle set, produced by `oracles_stage` BEFORE this
     #: stage ran. When supplied nothing here generates oracles -- which is the
     #: whole point: an oracle written after the model exists is written by
@@ -245,7 +231,7 @@ def run_refmodel(
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
-    `judge_port`, when supplied, adds the per-requirement judge to the gate: one
+    `item_port`, when supplied, adds the per-requirement judge to the gate: one
     small call per requirement over the composed model, whose blocking verdicts
     join the script issues and drive the same bounded repair round. It is a
     separate port because the judge runs a small model while the generator runs
@@ -258,359 +244,37 @@ def run_refmodel(
         contract = {}
 
     base = choose_base(contract)
-    judged: dict[str, object] = {"result": None}
-
-    def judge_gate(out: RefModelOutput, source: str, round_: int) -> list[Issue]:
-        """The per-requirement judge, run only on a model already past G4.
-
-        Asking ~70 questions about a model that does not import, or leaves an
-        output undetermined, spends a fan-out to rediscover what a script
-        already said -- and the verdicts would be about code that is going to be
-        regenerated anyway.
-        """
-        from .judge import run_judge, write_report
-
-        result = run_judge(
-            source=source, contract_json=contract_json,
-            requirements=requirements, covers=out.covers,
-            port=judge_port, round_=round_,
-            contract=contract, base=base, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp,
-        )
-        judged["result"] = result
-        if run_dir is not None:
-            write_report(run_dir, result)
-        return list(result.issues)
-
-    # With a debugger the judge does NOT run inside the gate. Generation is
-    # gated on the mechanical checks alone and repaired by REGENERATING, which
-    # is the right tool for a missing quote or an unwritten output -- a whole
-    # round was lost to exactly that. Behavioural failures go to the debug turns
-    # below, which EDIT instead.
+    # Generation is gated on the MECHANICAL checks alone and repaired by
+    # REGENERATING, which is the right tool for a missing quote or an unwritten
+    # output -- a whole round was once lost to exactly that. Behavioural
+    # failures go to the debug turns below, which EDIT instead.
     result, source = generate_model(
         requirements=requirements, contract_json=contract_json,
         contract=contract, base=base, port=port, workdir=workdir,
         max_repairs=max_repairs,
-        extra_gate=(judge_gate
-                    if judge_port is not None and debugger is None else None),
     )
     rendered: dict[str, str] = {"src": source}
 
-    if debugger is not None and judge_port is not None and result.ok:
-        source, issues = _debug_turns(
-            source=rendered["src"], contract=contract, contract_json=contract_json,
-            requirements=requirements, covers=result.output.covers,
-            judge_port=judge_port, base=base, testplan=testplan or [],
+    if debugger is not None and result.ok and oracle_set is not None:
+        source, issues = _closed_loop(
+            source=rendered["src"], contract=contract,
+            contract_json=contract_json, requirements=requirements,
+            covers=result.output.covers, oracles=list(oracle_set.trusted),
+            base=base, testplan=testplan or [],
             stimulus_by_tp=stimulus_by_tp or {}, run_dir=run_dir,
             debugger=debugger, max_turns=max_judge_turns,
             control_source=control_source, normalized=normalized,
-            compare_oracles=compare_oracles or oracle_driven,
-            oracle_driven=oracle_driven,
-            want_variants=want_variants,
-            oracle_set=oracle_set,
-            adequacy_rounds=adequacy_rounds,
+            item_port=item_port,
+            variants=list(oracle_set.variants),
+            carried={u: v for u, v in oracle_set.dispositions.items()
+                     if v != "TRUSTED"},
+            oracle_rates=oracle_set.rates(),
+            oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
 
     return result, rendered["src"]
-
-
-def _debug_turns(
-    *,
-    source: str,
-    contract: dict,
-    contract_json: str,
-    requirements: list[dict],
-    covers: dict[str, list[str]],
-    judge_port: ModelPort,
-    base: str,
-    testplan: list[dict],
-    stimulus_by_tp: dict[str, list[dict]],
-    run_dir: Path | None,
-    debugger: RefModelDebugger,
-    max_turns: int,
-    control_source: str | None,
-    normalized: dict[str, dict] | None = None,
-    compare_oracles: bool = False,
-    #: Let the requirement-only oracles DRIVE, and derive the blocking verdicts
-    #: from screening them instead of from the judge's opinion. The judge still
-    #: runs when `compare_oracles` is on, for the record, but nothing routes off
-    #: it. See `_oracle_driven_turns`.
-    oracle_driven: bool = False,
-    #: Produced by `oracles_stage` before the model existed. When present the
-    #: block below generates nothing.
-    oracle_set=None,
-    #: Strengthening rounds after the debug loop converges: mutate the shipped
-    #: model, and re-ask any oracle a mutant got past. 0 measures adequacy and
-    #: acts on nothing, which is how it ships first.
-    adequacy_rounds: int = 0,
-    #: Step 7's must-fail leg. Off by default: it costs k model calls per
-    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
-    #: VACUOUS stops being inferred from silence under source mutation and is
-    #: earned against a design that actually violates the requirement.
-    want_variants: bool = False,
-) -> tuple[str, list[Issue]]:
-    """Judge, screen, debug; repeat. Returns the final source and its issues.
-
-    One turn is one expensive judging pass (~77 model calls) and several cheap
-    debug attempts (milliseconds each, pure Python). The judge re-runs only when
-    the session stops, which is what makes "a few attempts against one frozen
-    oracle set" the unit of work.
-    """
-    from .judge import (
-        oracles_of,
-        reconcile,
-        run_judge,
-        verdict_map,
-        write_round,
-    )
-
-    # `max_turns + 1` passes, and the extra one is not slack. The judge must
-    # have seen the model that is actually returned: satisfying every trusted
-    # oracle is NOT the same as the requirements being met -- oracles are a
-    # subset (screening discards some) and each is a necessary condition the
-    # judge wrote down, never its whole verdict. Only the judge closes that gap.
-    #
-    # Without the final pass the stage reports verdicts about a model that no
-    # longer exists: a turn that fixed everything still looks blocked, and one
-    # that broke something the oracles do not cover still looks clean.
-    # Generated ONCE, not per turn. An oracle written from the requirement
-    # alone does not depend on the model, which is the entire reason it can be
-    # frozen -- so re-asking each turn would pay 77 calls to receive the same
-    # answer. The judge's oracles cannot do this, and that asymmetry is the
-    # clearest practical argument for the split.
-    isolated: list = []
-    variant_set: list = []
-    carried: dict[str, str] = {}
-    oracle_rates: dict = {}
-    frozen_path = (Path(run_dir) / "specflow" / "oracles.json"
-                   if run_dir is not None else None)
-    variants_path = (Path(run_dir) / "specflow" / "variants.json"
-                     if run_dir is not None else None)
-    if oracle_set is not None:
-        isolated = list(oracle_set.trusted)
-        variant_set = list(oracle_set.variants)
-        logger.info("oracles: %d trusted, from the oracle stage",
-                    len(isolated))
-        carried = {u: v for u, v in oracle_set.dispositions.items()
-                   if v != "TRUSTED"}
-        oracle_rates = oracle_set.rates()
-    elif compare_oracles:
-        try:
-            from ..oracles_stage import run_oracle_stage
-
-            # Read forever. A run re-entered with `--reuse` regenerating its
-            # oracles would hand the loop a different measure for the same
-            # requirements -- the disease measured on the judge-driven loop,
-            # where no oracle source was identical between rounds and CONFORMS
-            # random-walked 30, 33, 30. Loading also skips the witness and the
-            # variants, because nothing left needs them.
-            if frozen_path is not None:
-                isolated = freeze.load(frozen_path)
-                if isolated:
-                    logger.info("oracles: %d frozen, read from %s",
-                                len(isolated), frozen_path)
-                    if variants_path is not None:
-                        variant_set = variants_mod.load(variants_path)
-
-            if not isolated:
-                oracle_set = run_oracle_stage(
-                    requirements=requirements, contract_json=contract_json,
-                    contract=contract, testplan=testplan,
-                    stimulus_by_tp=stimulus_by_tp, port=judge_port,
-                    workdir=(Path(run_dir) / "specflow"
-                             if run_dir is not None
-                             else Path("/tmp/specflow-oracles")),
-                    base=base, normalized=normalized,
-                    control_source=control_source,
-                    want_variants=want_variants, run_dir=run_dir,
-                )
-                isolated = list(oracle_set.trusted)
-                variant_set = list(oracle_set.variants)
-                carried = {u: v for u, v in oracle_set.dispositions.items()
-                           if v != "TRUSTED"}
-                oracle_rates = oracle_set.rates()
-        except Exception as exc:  # noqa: BLE001
-            # Never let the reporting path fail a run. It informs a decision
-            # about a future design; it does not gate this one.
-            logger.warning("isolated oracles: not generated (%r)", exc)
-
-    if oracle_driven and isolated:
-        return _closed_loop(
-            source=source, contract=contract, contract_json=contract_json,
-            requirements=requirements, covers=covers, oracles=isolated,
-            base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
-            run_dir=run_dir, debugger=debugger, max_turns=max_turns,
-            control_source=control_source, normalized=normalized,
-            judge_port=judge_port, variants=variant_set,
-            carried=carried, oracle_rates=oracle_rates,
-            oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
-        )
-
-
-    issues: list[Issue] = []
-    turns = max(1, int(max_turns))
-    for turn in range(turns + 1):
-        result = run_judge(
-            source=source, contract_json=contract_json,
-            requirements=requirements, covers=covers,
-            port=judge_port, round_=turn,
-            contract=contract, base=base, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp,
-        )
-        issues = result.issues
-        if run_dir is not None:
-            write_round(run_dir, turn, result)
-        if not has_errors(issues):
-            return source, issues
-        if turn == turns:
-            # Budget spent. `issues` describes `source`, which is the invariant
-            # this loop owes its caller.
-            break
-
-        screened = trust.screen(
-            oracles_of(result), verdict_map(result), source, contract,
-            stimulus_by_tp, testplan, base=base, control_source=control_source,
-        )
-
-        # A verdict its own oracle contradicts is a TRANSLATION failure, not an
-        # untrustworthy oracle: the oracle is the verdict written executably, so
-        # the judge is the authority and the two must be made to agree. One
-        # focused call per conflict -- 18 against 77 for a full pass -- recovers
-        # oracles that would otherwise be discarded over a bad translation.
-        #
-        # The judge may resolve it either way, and the second way is the one
-        # worth having: changing the VERDICT because writing the check made the
-        # claim concrete enough to fail. Rewriting the oracle to match the
-        # verdict here instead would fabricate the agreement and lose that.
-        if screened.conflicts:
-            fixed = reconcile(
-                conflicts=screened.conflicts,
-                verdicts={v.req_uid: v for v in result.verdicts},
-                requirements=requirements, source=source,
-                contract_json=contract_json, contract=contract,
-                port=judge_port, base=base, round_=turn,
-                known_tps={str(t.get("uid")) for t in (testplan or [])
-                           if t.get("uid")},
-            )
-            if fixed:
-                merged = [fixed.get(v.req_uid, v) for v in result.verdicts]
-                result = type(result)(verdicts=merged)
-                issues = result.issues
-                if not has_errors(issues):
-                    return source, issues
-                screened = trust.screen(
-                    oracles_of(result), verdict_map(result), source, contract,
-                    stimulus_by_tp, testplan, base=base,
-                    control_source=control_source,
-                )
-                if run_dir is not None:
-                    write_round(run_dir, turn, result)
-
-        if run_dir is not None:
-            # Measured beside the trust rates because it is what most often
-            # explains them. An inert testpoint makes every oracle naming it
-            # unjudgeable, and the resulting UNKNOWNs and "never observed"
-            # failures otherwise read as findings about the judge.
-            live = stimulus_liveness(source, contract, stimulus_by_tp, base=base)
-            # The MECHANICAL verdict, beside the judge's opinion rather than
-            # instead of it. Nothing routes off this yet -- it is written so the
-            # two can be compared on real runs before anything depends on it.
-            mechanical = verdict.classify(
-                discarded=screened.discarded,
-                passing={u for u, ok in screened.decisions.items() if ok},
-                failing={u for u, ok in screened.decisions.items() if not ok},
-                had_oracle={o.req_uid for o in oracles_of(result)},
-                requirements=requirements,
-            )
-            (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
-             ).write_text(
-                json.dumps({"rates": screened.rates(),
-                            **_comparison(
-                                isolated=isolated, judge_rates=screened.rates(),
-                                source=source, contract=contract,
-                                stimulus_by_tp=stimulus_by_tp, testplan=testplan,
-                                base=base, control_source=control_source,
-                                normalized=normalized, live=live),
-                            "mechanical_verdicts": {
-                                "counts": verdict.counts(mechanical),
-                                "blocking": verdict.blocking(mechanical),
-                                "by_requirement": mechanical,
-                                "routes": {
-                                    uid: verdict.ROUTE[v]
-                                    for uid, v in sorted(mechanical.items())
-                                },
-                            },
-                            "discarded": screened.discarded,
-                            "sensitivity": screened.sensitivity,
-                            "unresolved_conflicts": screened.conflicts,
-                            "control_unexercised": screened.unexercised,
-                            "stimulus": {
-                                **live.summary(),
-                                "inert_testpoints": live.inert,
-                                "requirements_left_unjudgeable": sorted(
-                                    o.req_uid for o in oracles_of(result)
-                                    if o.tp_uids
-                                    and all(t in live.inert for t in o.tp_uids)
-                                ),
-                            }},
-                           indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
-        if not screened.trusted:
-            # Nothing usable this turn. The verdicts still block, and the
-            # caller sees them as prose -- which is exactly today's behaviour,
-            # so a judge that cannot write oracles costs nothing beyond the
-            # screening.
-            return source, issues
-
-        # The stimulus generator, bound to the judge's port. Injected rather
-        # than imported by the session for the reason `RefModelDebugger` is:
-        # everything decidable about a debug turn must stay runnable with no
-        # model at all, and a generator is the one part that cannot be.
-        def _restimulate(req: dict, hint: str) -> list[dict]:
-            from ..testcase_agent import stimulus_for_scenario
-
-            return stimulus_for_scenario(
-                requirement=req, what_the_scenario_needs=hint,
-                contract=contract, port=judge_port,
-            )
-
-        _, reset_names, _ = classify(contract)
-        session = DebugSession(
-            source, contract, stimulus_by_tp, screened.trusted, base=base,
-            requirements=requirements,
-            verdicts=verdict_map(result),
-            reasons={v.req_uid: {"reason": v.reason, "evidence": v.evidence,
-                                 "remedy": v.remedy}
-                     for v in result.verdicts},
-            covers=covers,
-            workdir=Path(run_dir) / "specflow" / "_refmodel_debug"
-            if run_dir is not None else None,
-            stimulus_gen=_restimulate,
-            normalized=normalized,
-            testplan=testplan,
-            reset_ports=frozenset(reset_names),
-        )
-        before = source
-        source, _attempts, _note = debugger.debug(session)
-        if session.added:
-            # The testpoints this turn minted outlive it. `stimulus_by_tp` is
-            # mutated in place, so the next judging pass replays the grown suite
-            # -- which is the whole point: a scenario staged once should not have
-            # to be re-staged, and the testplan grows so the rendered suite gets
-            # it too.
-            testplan = session.testplan
-            logger.info("turn %d added %d testpoint(s): %s",
-                        turn, len(session.added), ", ".join(session.added))
-        if source == before:
-            # The turn changed nothing, so re-judging would return the verdicts
-            # already in hand. Spending ~77 model calls to rediscover them is
-            # the expensive way to learn nothing.
-            return source, issues
-
-    return source, issues
 
 
 def _closed_loop(
@@ -629,7 +293,7 @@ def _closed_loop(
     max_turns: int,
     control_source: str | None,
     normalized: dict[str, dict] | None,
-    judge_port: ModelPort,
+    item_port: ModelPort,
     variants: list | None,
     carried: dict[str, str],
     oracle_rates: dict,
@@ -652,13 +316,13 @@ def _closed_loop(
 
     issues: list[Issue] = []
     for round_ in range(max(0, int(adequacy_rounds)) + 1):
-        source, issues = _oracle_driven_turns(
+        source, issues = _debug_turns(
             source=source, contract=contract, contract_json=contract_json,
             requirements=requirements, covers=covers, oracles=oracles,
             base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
             run_dir=run_dir, debugger=debugger, max_turns=max_turns,
             control_source=control_source, normalized=normalized,
-            judge_port=judge_port, variants=variants,
+            item_port=item_port, variants=variants,
             carried=carried, oracle_rates=oracle_rates,
         )
         if not oracles:
@@ -677,7 +341,7 @@ def _closed_loop(
         oracle_set = run_oracle_stage(
             requirements=requirements, contract_json=contract_json,
             contract=contract, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp, port=judge_port,
+            stimulus_by_tp=stimulus_by_tp, port=item_port,
             workdir=(Path(run_dir) / "specflow" if run_dir is not None
                      else Path("/tmp/specflow-oracles")),
             base=base, normalized=normalized, control_source=control_source,
@@ -690,7 +354,7 @@ def _closed_loop(
     return source, issues
 
 
-def _oracle_driven_turns(
+def _debug_turns(
     *,
     source: str,
     contract: dict,
@@ -706,7 +370,7 @@ def _oracle_driven_turns(
     max_turns: int,
     control_source: str | None,
     normalized: dict[str, dict] | None,
-    judge_port: ModelPort,
+    item_port: ModelPort,
     variants: list | None = None,
     #: What the oracle stage decided about the requirements whose oracle is NOT
     #: in `oracles` -- ORACLE_INVALID, VACUOUS, UNOBSERVABLE, UNDECIDED. Carried
@@ -715,7 +379,7 @@ def _oracle_driven_turns(
     carried: dict[str, str] | None = None,
     oracle_rates: dict | None = None,
 ) -> tuple[str, list[Issue]]:
-    """The loop with no judge in it.
+    """The debug loop. There is no other one, and no judge in this one.
 
     Every blocking verdict here is the outcome of RUNNING something. The judge's
     verdict was an opinion that its oracle was then asked to justify, which is
@@ -773,7 +437,7 @@ def _oracle_driven_turns(
 
         return stimulus_for_scenario(
             requirement=req, what_the_scenario_needs=hint,
-            contract=contract, port=judge_port)
+            contract=contract, port=item_port)
 
     for turn in range(turns + 1):
         moved = freeze.drift(oracles, [
@@ -900,112 +564,6 @@ def _oracle_driven_turns(
             return source, issues
 
     return source, issues
-
-
-def _comparison(
-    *,
-    isolated: list,
-    judge_rates: dict,
-    source: str,
-    contract: dict,
-    stimulus_by_tp: dict[str, list[dict]],
-    testplan: list[dict],
-    base: str,
-    control_source: str | None,
-    normalized: dict[str, dict] | None,
-    live,
-) -> dict:
-    """Everything measured beside the loop but not driving it.
-
-    Two questions, both read-only:
-
-    * **Does an oracle written WITHOUT the model screen better than one written
-      with it?** Same gates, same model, same stimulus, same control -- the only
-      difference is what was in context when the oracle was written. That is the
-      cleanest available test of whether the split is worth making, and it costs
-      one screening pass because both oracle sets already exist.
-    * **Did the stimulus stage each requirement's activation?** Asked of the
-      normalized requirements rather than of the oracles, so it does not inherit
-      the suspicion it is meant to check.
-
-    Never raises. This informs a decision about a future design; a defect in it
-    must not fail the run it is observing.
-    """
-    out: dict = {}
-    try:
-        if isolated:
-            # Gate 1 asks whether an oracle reproduces THE VERDICT IT SHIPPED
-            # WITH, and an isolated oracle ships with none. Feeding it a blanket
-            # "met" does not skip the gate -- it makes the gate DISCARD every
-            # isolated oracle that fails the model, before gates 3 and 2 ever
-            # see it, so over-strictness and vacuity would be measured over a
-            # population filtered to the passing ones. That flatters the
-            # isolated set on exactly the two columns the comparison turns on.
-            #
-            # Pre-deciding and handing gate 1 the matching verdict makes it a
-            # no-op instead, so the later gates run on all of them.
-            said = {}
-            for o in isolated:
-                d = trust._decide_over(  # noqa: SLF001
-                    o, source, contract, stimulus_by_tp, base=base)
-                said[o.req_uid] = "met" if d.ok else "not_met"
-            other = trust.screen(
-                isolated, said, source, contract,
-                stimulus_by_tp, testplan, base=base, control_source=control_source,
-            )
-            # Gate 1 is deliberately excluded from the comparison: it asks
-            # whether an oracle agrees with the VERDICT it shipped with, and an
-            # isolated oracle ships with no verdict. Comparing the two on it
-            # would score the isolated set against a question it was never
-            # asked. The gates that do transfer are over-strictness (does a
-            # known-good design satisfy it) and vacuity (can anything falsify
-            # it) -- which are the two that actually say whether a check is any
-            # good.
-            rates = other.rates()
-            out["isolated_oracles"] = {
-                "generated": len(isolated),
-                "rates": rates,
-                "comparable": {
-                    "over_strict": rates.get("over_strict"),
-                    "convicted": rates.get("convicted"),
-                    "unknown": rates.get("unknown"),
-                    "unexercised": rates.get("unexercised"),
-                    "malformed": rates.get("malformed"),
-                },
-                "judge_comparable": {
-                    k: judge_rates.get(k) for k in
-                    ("over_strict", "convicted", "unknown", "unexercised",
-                     "malformed")
-                },
-                "note": "gate 1 (agreement with its own verdict) is excluded: "
-                        "an isolated oracle ships with no verdict to agree with",
-            }
-    except Exception as exc:  # noqa: BLE001
-        out["isolated_oracles"] = {"error": repr(exc)}
-
-    try:
-        if normalized:
-            from ..normalize import NormalizedRequirement
-            from ..obligation import obligations, report
-            from ..ports import classify
-
-            norms = [NormalizedRequirement.model_validate(n)
-                     for n in normalized.values()]
-            _, resets, _ = classify(contract)
-            rows = {
-                tp: replay(source, contract, steps, base=base).rows
-                for tp, steps in stimulus_by_tp.items()
-            }
-            out["obligations"] = report(
-                obligations_=obligations(norms), testplan=testplan,
-                stimulus_by_tp=stimulus_by_tp, replay_rows=rows,
-                reset_ports=frozenset(resets),
-            )
-            out["obligations"]["unobservable"] = sorted(
-                n.req_uid for n in norms if n.unobservable)
-    except Exception as exc:  # noqa: BLE001
-        out["obligations"] = {"error": repr(exc)}
-    return out
 
 
 def write_artifacts(

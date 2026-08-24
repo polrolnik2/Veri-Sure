@@ -1,0 +1,17 @@
+{
+  "reasoning": "one clause, visible on one output port",
+  "normalized": [
+    {
+      "req_uid": "REQ-0001",
+      "activation": {
+        "text": "always, on every evaluation",
+        "inputs": {}
+      },
+      "observable": [
+        "cout"
+      ],
+      "unobservable_reason": "",
+      "expectation": "cout is the logical AND of a and b"
+    }
+  ]
+}

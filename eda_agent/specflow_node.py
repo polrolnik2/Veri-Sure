@@ -259,9 +259,7 @@ async def run_specflow_node(
     #: beside the judge's, reporting both in `trust.json`. Read-only: the
     #: judge's oracles still drive the loop, so a run with this on is still a
     #: valid regression test of a run with it off.
-    compare_oracles: bool = False,
     #: Requirement-only oracles drive the loop; the judge stops deciding.
-    oracle_driven: bool = False,
     variants: bool = False,
     adequacy_rounds: int = 0,
     extra_sources: Sequence[Path | str] = (),
@@ -307,8 +305,6 @@ async def run_specflow_node(
             Path(refmodel_control).read_text(encoding="utf-8")
             if refmodel_control and Path(refmodel_control).is_file() else None
         ),
-        compare_oracles=compare_oracles,
-        oracle_driven=oracle_driven,
         variants=variants,
         adequacy_rounds=adequacy_rounds,
     )

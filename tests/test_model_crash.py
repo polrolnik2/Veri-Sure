@@ -15,7 +15,7 @@ they are opposite errors:
 
 from __future__ import annotations
 
-from specflow.refmodel import trust, verdict as V
+from specflow.refmodel import verdict as V
 from specflow.refmodel.oracles import RequirementOracle, decide_all
 from specflow.refmodel.session import DebugSession
 
@@ -71,19 +71,19 @@ def test_an_oracle_defect_is_not_marked_as_the_model_s():
     assert not r.model_defect(), "chasing this by editing the model is the bug"
 
 
-def test_screening_routes_a_crash_to_the_model_not_the_oracle_author():
-    scr = trust.screen([ORACLE], {"REQ-0001": "met"}, CRASHES, CONTRACT,
-                       STIM, TESTPLAN, base="step")
-    assert scr.discarded["REQ-0001"].startswith("model-broke:")
-    assert V.of_discard(scr.discarded["REQ-0001"]) == "VIOLATES"
+def test_a_crash_is_routed_to_the_model_not_the_oracle_author():
+    r = _results(CRASHES)[0]
+    assert V.of_result(r) == "VIOLATES"
     assert V.ROUTE["VIOLATES"] == "fix the implementation"
 
 
-def test_the_rate_is_reported_apart_from_every_gate():
-    scr = trust.screen([ORACLE], {"REQ-0001": "met"}, CRASHES, CONTRACT,
-                       STIM, TESTPLAN, base="step")
-    assert scr.rates()["model_broke"] == 1
-    assert scr.rates()["malformed"] == 0
+def test_a_verified_oracle_that_breaks_anyway_decides_nothing():
+    """Not the model's to answer: the oracle passed verification against a
+    witness, so a break here is neither party's known fault."""
+    bad = ORACLE.model_copy(update={
+        "source": "def decide(trace):\n    return trace['y']\n"})
+    r = decide_all([bad], WORKS, CONTRACT, STIM, base="step")[0]
+    assert V.of_result(r) == "UNDECIDED"
 
 
 def _session(source):

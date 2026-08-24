@@ -105,14 +105,14 @@ def test_the_loop_blocks_a_turn_that_lost_an_activation(tmp_path):
         def debug(self, session):
             return inert, 1, "nailed y low"
 
-    _src, issues = compose._oracle_driven_turns(
+    _src, issues = compose._debug_turns(
         source=reaches, contract=contract, contract_json="{}",
         requirements=[{"uid": "REQ-0001", "text": "y rises"}],
         covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
         testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
         stimulus_by_tp={"TP-0000": [{"a": 0}, {"a": 1}, {"a": 1}]},
         run_dir=tmp_path, debugger=_Inert(), max_turns=1,
-        control_source=None, normalized=None, judge_port=None,
+        control_source=None, normalized=None, item_port=None,
     )
     blob = json.loads(
         (tmp_path / "specflow" / "judge" / "r1" / "trust.json").read_text())

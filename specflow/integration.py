@@ -62,6 +62,15 @@ from .tb.render import gate_g5, render_suite
 logger = logging.getLogger(__name__)
 
 
+class _Reused(Exception):
+    """A cached artifact was good; skip the generation below it.
+
+    An exception rather than a flag because both blocks it guards are `try`
+    bodies already, and threading a boolean through them would put the cache
+    check and the thing it guards in different places.
+    """
+
+
 def ensure_prompt_file(run_dir: Path, spec: str) -> Path:
     """Persist the spec so specflow (and any offline replay) can read it.
 
@@ -237,22 +246,6 @@ def build_artifacts(
     refmodel_control: str | None = None,
     stimulus_agent: bool = True,
     #: Restate each requirement as activation / observable / expectation, and
-    #: report the ones with no boundary observable at all.
-    #:
-    #: OFF by default, deliberately. It is one model call per requirement -- 77
-    #: on i2c_master_bit_ctrl -- and nothing downstream consumes it yet, so
-    #: defaulting it on would buy a whole fan-out of cost for a report. It flips
-    #: on when the cover-point obligation starts reading `activation`.
-    normalize: bool = False,
-    #: Generate a second oracle set from the requirements alone and screen it
-    #: beside the judge's, reporting both. Read-only -- the judge's oracles
-    #: still drive the loop. Implies `normalize`, since the isolated generator
-    #: reads the normalized form.
-    compare_oracles: bool = False,
-    #: The requirement-only oracles DRIVE the refmodel repair loop, and blocking
-    #: verdicts come from screening them rather than from the judge's opinion.
-    #: Implies `compare_oracles` and `normalize`.
-    oracle_driven: bool = False,
     #: Step 7's must-fail leg. Off by default: it costs k model calls per
     #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
     #: VACUOUS stops being inferred from silence under source mutation and is
@@ -344,18 +337,33 @@ def build_artifacts(
     # them -- so failing the node over it would make the pipeline strictly worse
     # than before this stage existed.
     normalized_by_uid: dict[str, dict] = {}
-    if normalize or compare_oracles or oracle_driven:
+    normalized_path = run_dir / "specflow" / "normalized.json"
+    if not stale and normalized_path.is_file():
         try:
-            normalized, norm_results = run_normalize_fanout(
-                requirements=reqs, contract_json=contract_json, contract=contract,
-                port=port, max_repairs=max_repairs, fanout=fanout,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("normalize: not produced (%r)", exc)
-        else:
-            write_normalized(run_dir, normalized, norm_results)
-            normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
-                                 if n.req_uid}
+            normalized_by_uid = {
+                n["req_uid"]: n
+                for n in json.loads(normalized_path.read_text(encoding="utf-8"))
+                .get("normalized", []) if n.get("req_uid")
+            }
+        except (OSError, ValueError, TypeError):
+            normalized_by_uid = {}
+    # Not optional any more: the oracle stage reads the normalized form, and
+    # the oracle stage is the only thing that produces a verdict at all now.
+    try:
+        if normalized_by_uid:
+            raise _Reused
+        normalized, norm_results = run_normalize_fanout(
+            requirements=reqs, contract_json=contract_json, contract=contract,
+            port=port, max_repairs=max_repairs, fanout=fanout,
+        )
+    except _Reused:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("normalize: not produced (%r)", exc)
+    else:
+        write_normalized(run_dir, normalized, norm_results)
+        normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
+                             if n.req_uid}
 
     cached = None if stale else _reuse(
         run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
@@ -484,22 +492,31 @@ def build_artifacts(
     # Never fatal. A run whose oracles could not be produced is the run every
     # run was before this stage existed.
     oracle_set = None
-    if compare_oracles or oracle_driven:
-        try:
-            from .oracles_stage import run_oracle_stage
+    try:
+        from .oracles_stage import load as load_oracles
+        from .oracles_stage import run_oracle_stage
 
-            oracle_set = run_oracle_stage(
-                requirements=reqs, contract_json=contract_json,
-                contract=contract, testplan=tps,
-                stimulus_by_tp=stim_by_tp or {},
-                port=port, workdir=run_dir / "specflow",
-                base=choose_base(contract),
-                normalized=normalized_by_uid or None,
-                control_source=refmodel_control,
-                want_variants=variants, run_dir=run_dir, fanout=fanout,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("oracles: stage did not complete (%r)", exc)
+        if not stale:
+            oracle_set = load_oracles(run_dir)
+            if oracle_set is not None:
+                logger.info("oracles: %d trusted, reused",
+                            len(oracle_set.trusted))
+                raise _Reused
+
+        oracle_set = run_oracle_stage(
+            requirements=reqs, contract_json=contract_json,
+            contract=contract, testplan=tps,
+            stimulus_by_tp=stim_by_tp or {},
+            port=port, workdir=run_dir / "specflow",
+            base=choose_base(contract),
+            normalized=normalized_by_uid or None,
+            control_source=refmodel_control,
+            want_variants=variants, run_dir=run_dir, fanout=fanout,
+        )
+    except _Reused:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("oracles: stage did not complete (%r)", exc)
 
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
@@ -522,7 +539,7 @@ def build_artifacts(
             # override -- because it is a fanned-out per-item stage like the
             # others. The generator above is the same port but a whole-artifact
             # call; the model split is by `SPECFLOW_SMALL_MODEL`, not by port.
-            judge_port=port if judge else None,
+            item_port=port,
             run_dir=run_dir,
             # S2 ran before this, so every testpoint -- and the requirement each
             # one covers -- already exists by the time the judge is asked.
@@ -532,9 +549,6 @@ def build_artifacts(
             max_judge_turns=refmodel_judge_turns,
             control_source=refmodel_control,
             normalized=normalized_by_uid or None,
-            compare_oracles=compare_oracles,
-            oracle_driven=oracle_driven,
-            want_variants=variants,
             oracle_set=oracle_set,
             adequacy_rounds=adequacy_rounds,
         )
@@ -574,7 +588,7 @@ def build_artifacts(
                 workdir=run_dir / "specflow" / "_refmodel_check",
                 max_repairs=(max_repairs if refmodel_max_repairs is None
                              else refmodel_max_repairs),
-                judge_port=port if judge else None,
+                item_port=port,
                 run_dir=run_dir,
                 testplan=tps,
                 stimulus_by_tp=stim_by_tp or None,
@@ -582,9 +596,6 @@ def build_artifacts(
                 max_judge_turns=refmodel_judge_turns,
                 control_source=refmodel_control,
                 normalized=normalized_by_uid or None,
-                compare_oracles=compare_oracles,
-                oracle_driven=oracle_driven,
-                want_variants=variants,
                 oracle_set=oracle_set,
                 adequacy_rounds=adequacy_rounds,
             )

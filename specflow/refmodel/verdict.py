@@ -1,6 +1,6 @@
 """The mechanical verdict for one requirement, and the party it accuses.
 
-`RequirementVerdict.verdict` (`judge.py:58`) is an OPINION -- what one judge
+The judge's `verdict` field was an OPINION -- what one reader
 concluded from reading the model. This is a different object: the outcome of
 screening, computed from evidence, with a remediation route attached. The two
 coexist for now; only this one is derived from something that ran.

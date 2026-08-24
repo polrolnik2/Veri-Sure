@@ -262,9 +262,7 @@ class TopAgentConfig:
     #: path they set rather than something discovered here.
     specflow_refmodel_control: str | None = None
     #: Report a requirement-only oracle set beside the judge's. Read-only.
-    specflow_compare_oracles: bool = False
     #: Requirement-only oracles drive the loop; the judge stops deciding.
-    specflow_oracle_driven: bool = False
     specflow_variants: bool = False
     specflow_adequacy_rounds: int = 0
     contract_only: bool = True
@@ -614,8 +612,6 @@ class TopAgent:
             refmodel_debug_attempts=self.config.specflow_refmodel_debug_attempts,
             refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
             refmodel_control=self.config.specflow_refmodel_control,
-            compare_oracles=self.config.specflow_compare_oracles,
-            oracle_driven=self.config.specflow_oracle_driven,
             variants=self.config.specflow_variants,
             adequacy_rounds=self.config.specflow_adequacy_rounds,
         )

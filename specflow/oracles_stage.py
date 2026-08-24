@@ -37,6 +37,7 @@ lets them run once and stay decided.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
@@ -121,7 +122,13 @@ def verify_one(
     if why:
         return f"malformed: {why}", True
 
-    if witness:
+    # A testpoint with no recorded stimulus cannot run the oracle, and that is a
+    # fact about the STIMULUS. Letting the leg reject on it would call an oracle
+    # malformed for a reason it has no way to fix -- the same mistake as
+    # rejecting an unexercised one, which the docstring above rules out.
+    replayable = any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids)
+
+    if witness and replayable:
         held = trust._decide_over(  # noqa: SLF001
             oracle, witness, contract, stimulus_by_tp, base=base,
             transactional=transactional)
@@ -136,14 +143,14 @@ def verify_one(
         # `held.unexercised()` is deliberately NOT a rejection -- see the module
         # docstring. The scenario not being staged is the stimulus's business.
 
-    if variants:
+    if variants and replayable:
         level, detail = variants_mod.must_fail(
             oracle, variants, contract, stimulus_by_tp, base=base,
             transactional=transactional)
         if level == trust.CONVICTED:
             return f"vacuous: {detail}", True
 
-    if control:
+    if control and replayable:
         # Last, because it is the only check whose finding cannot be acted on.
         # Running it earlier would spend the strongest instrument producing the
         # least usable answer.
@@ -480,3 +487,31 @@ def _strengthen(
     return OracleSet(trusted=trusted, dispositions=dispositions,
                      reasons=reasons, variants=list(previous.variants),
                      witness_kind=witness_kind, rounds=previous.rounds + 1)
+
+
+def load(run_dir: Path) -> OracleSet | None:
+    """The frozen set from a previous run, or None.
+
+    Reuse skips the MODEL CALLS, never the meaning: everything here was already
+    verified against a witness and variants that do not move, so re-verifying
+    would ask the same questions of the same artifacts and get the same answers.
+    That is different from `_reuse` elsewhere, which re-gates because its gates
+    can have been tightened since -- these gates cannot have been, because the
+    inputs they ran against are frozen beside the output.
+    """
+    path = Path(run_dir) / "specflow" / ARTIFACT
+    oracles = freeze.load(path)
+    if not oracles:
+        return None
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return OracleSet(
+        trusted=oracles,
+        dispositions=dict(blob.get("dispositions") or {}),
+        reasons=dict(blob.get("reasons") or {}),
+        variants=variants_mod.load(Path(run_dir) / "specflow" / "variants.json"),
+        witness_kind=str(blob.get("witness") or NO_BOUND),
+        rounds=int(blob.get("rounds") or 0),
+    )

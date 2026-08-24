@@ -1,0 +1,17 @@
+{
+  "reasoning": "one clause, visible on one output port",
+  "normalized": [
+    {
+      "req_uid": "REQ-0000",
+      "activation": {
+        "text": "always, on every evaluation",
+        "inputs": {}
+      },
+      "observable": [
+        "sum"
+      ],
+      "unobservable_reason": "",
+      "expectation": "sum is the exclusive-OR of a and b"
+    }
+  ]
+}

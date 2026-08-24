@@ -44,8 +44,7 @@ EDGE_BUDGET = 4000
 class RequirementOracle(BaseModel):
     """A decision procedure for one requirement, written by the judge."""
 
-    #: Stamped by the harness, never trusted from the model -- the same
-    #: treatment `run_judge` already gives `RequirementVerdict.req_uid`.
+    #: Stamped by the harness, never trusted from the model.
     req_uid: str = ""
     #: The testpoints whose stimulus exercises this clause.
     tp_uids: list[str] = Field(default_factory=list)

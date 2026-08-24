@@ -133,7 +133,7 @@ def test_it_runs_after_the_debug_loop_not_inside_it():
     from specflow.refmodel import compose
 
     src = inspect.getsource(compose._closed_loop)
-    converged = src.index("_oracle_driven_turns(")
+    converged = src.index("_debug_turns(")
     measured = src.index("assess(")
     assert converged < measured
 

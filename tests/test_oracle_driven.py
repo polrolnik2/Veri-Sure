@@ -195,13 +195,13 @@ def test_the_loop_refuses_to_run_against_a_set_that_moved(monkeypatch, tmp_path)
             return LATE + "\n# edited\n", 1, ""
 
     with pytest.raises(RuntimeError, match="changed under the loop"):
-        compose._oracle_driven_turns(
+        compose._debug_turns(
             source=LATE, contract=CONTRACT, contract_json="{}",
             requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
             covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
             testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
             stimulus_by_tp=dict(STIM), run_dir=None, debugger=_Debugger(),
-            max_turns=2, control_source=None, normalized=None, judge_port=None,
+            max_turns=2, control_source=None, normalized=None, item_port=None,
         )
 
 
@@ -220,13 +220,13 @@ def test_the_turn_artifact_names_the_frozen_set_and_what_was_appended(tmp_path):
         def debug(self, session):
             return session.source, 0, "nothing to do"
 
-    compose._oracle_driven_turns(
+    compose._debug_turns(
         source=LATE, contract=CONTRACT, contract_json="{}",
         requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
         covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
         testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
         stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
-        max_turns=1, control_source=None, normalized=None, judge_port=None,
+        max_turns=1, control_source=None, normalized=None, item_port=None,
     )
     blob = json.loads(
         (tmp_path / "specflow" / "judge" / "r0" / "trust.json").read_text())
@@ -255,7 +255,7 @@ def test_the_loop_does_not_screen(tmp_path):
 
     from specflow.refmodel import compose
 
-    src = inspect.getsource(compose._oracle_driven_turns)
+    src = inspect.getsource(compose._debug_turns)
     assert "trust.screen" not in src
     assert "of_result" in src, "three outcomes, derived from running the oracle"
 
@@ -276,14 +276,14 @@ def test_a_carried_disposition_is_reported_and_never_recomputed(tmp_path):
         def debug(self, session):
             return session.source, 0, "nothing to do"
 
-    compose._oracle_driven_turns(
+    compose._debug_turns(
         source=LATE, contract=CONTRACT, contract_json="{}",
         requirements=[{"uid": "REQ-0001", "text": "y follows a"},
                       {"uid": "REQ-0002", "text": "its oracle was rejected"}],
         covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
         testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
         stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
-        max_turns=1, control_source=None, normalized=None, judge_port=None,
+        max_turns=1, control_source=None, normalized=None, item_port=None,
         carried={"REQ-0002": "ORACLE_INVALID"},
     )
     blob = json.loads(

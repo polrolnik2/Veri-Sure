@@ -220,7 +220,7 @@ def test_the_loop_no_longer_convicts_anything():
 
     from specflow.refmodel import compose
 
-    src = inspect.getsource(compose._oracle_driven_turns)
+    src = inspect.getsource(compose._debug_turns)
     assert "must_fail" not in src
     assert "vacuous" not in src
 

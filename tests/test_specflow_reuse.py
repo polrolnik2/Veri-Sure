@@ -19,7 +19,11 @@ from pathlib import Path
 
 from specflow.integration import build_artifacts
 from specflow.model_io import ReplayPort
-from specflow.refmodel.compose import run_refmodel, write_artifacts as write_refmodel
+from specflow.normalize import run_normalize_fanout
+from specflow.normalize import write_artifacts as write_normalized
+from specflow.oracles_stage import run_oracle_stage
+from specflow.refmodel.compose import choose_base, run_refmodel
+from specflow.refmodel.compose import write_artifacts as write_refmodel
 from specflow.s1_requirements import run_s1, write_artifacts as write_s1
 from specflow.s2_testplan import run_s2, write_artifacts as write_s2
 from specflow.s3_coverage import run_s3, write_artifacts as write_s3
@@ -56,6 +60,23 @@ def _certified(tmp_path: Path) -> Path:
     tps = [e.model_dump() for e in s2.output.elements]
     s3 = run_s3(testplan=tps, contract_json=contract_json, port=port)
     write_s3(run_dir, s3)
+    # Normalization and the oracle stage are not optional any more -- the
+    # oracles are the only thing that produces a verdict -- so a "certified run
+    # directory" has to contain their artifacts too, or reuse has nothing to
+    # reuse and the test measures the fixture rather than the cache.
+    normalized, norm_results = run_normalize_fanout(
+        requirements=reqs, contract_json=contract_json,
+        contract=json.loads(contract_json), port=port, fanout=False,
+    )
+    write_normalized(run_dir, normalized, norm_results)
+    run_oracle_stage(
+        requirements=reqs, contract_json=contract_json,
+        contract=json.loads(contract_json), testplan=tps,
+        stimulus_by_tp={}, port=port, workdir=run_dir / "specflow",
+        base=choose_base(json.loads(contract_json)),
+        normalized={n.req_uid: n.model_dump() for n in normalized},
+        run_dir=run_dir, fanout=False,
+    )
     rm, source = run_refmodel(
         requirements=reqs, contract_json=contract_json, port=port,
         workdir=run_dir / "specflow" / "_refmodel_check",
@@ -246,7 +267,8 @@ def test_a_regenerated_model_is_judged_like_a_freshly_generated_one(tmp_path,
     _build(run_dir, reuse=True)
 
     assert seen, "the regeneration branch never ran; the test proves nothing"
-    assert seen.get("judge_port") is not None, (
-        "a regenerated model was accepted without the judge that a fresh one faces"
+    assert seen.get("oracle_set") is not None, (
+        "a regenerated model was accepted without the oracle set a fresh one "
+        "faces -- which is the whole verdict now"
     )
-    assert seen.get("testplan"), "regeneration lost the testplan the judge needs"
+    assert seen.get("testplan"), "regeneration lost the testplan the oracles need"

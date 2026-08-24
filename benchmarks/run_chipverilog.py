@@ -292,8 +292,6 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_debug_attempts=args.refmodel_debug_attempts,
             specflow_refmodel_judge_turns=args.refmodel_judge_turns,
             specflow_refmodel_control=control_model(top),
-            specflow_compare_oracles=args.compare_oracles,
-            specflow_oracle_driven=args.oracle_driven,
             specflow_variants=args.variants,
             specflow_adequacy_rounds=args.adequacy_rounds,
         ),
@@ -431,20 +429,6 @@ def build_parser() -> argparse.ArgumentParser:
              "requirement TEXT, and convict an oracle no variant of its own "
              "requirement can fail. Costs k calls per requirement, once. "
              "Implies --compare-oracles.",
-    )
-    p.add_argument(
-        "--oracle-driven", action="store_true",
-        help="Let the requirement-only oracles DRIVE the refmodel repair loop. "
-             "Blocking verdicts become the outcome of running them, decided "
-             "transactionally, and the judge stops deciding. Implies "
-             "--compare-oracles.",
-    )
-    p.add_argument(
-        "--compare-oracles", action="store_true",
-        help="Also generate an oracle set from the requirements alone, screen "
-             "it beside the judge's, and report both in trust.json. Read-only: "
-             "the judge's oracles still drive the loop, so the run stays a "
-             "valid regression test. Costs one call per requirement, once.",
     )
     p.add_argument(
         "--refmodel-judge-turns", type=int, default=3,

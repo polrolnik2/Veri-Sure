@@ -270,17 +270,42 @@ def test_the_oracle_stage_runs_before_the_reference_model_exists():
     assert first_line("run_oracle_stage") < first_line("run_refmodel")
 
 
-def test_the_model_stage_generates_no_oracles_when_it_is_given_a_set():
-    """Otherwise the stage would be advisory: the model stage could still write
-    its own oracles, after the model exists, and nothing would say which set the
-    loop actually used."""
+def test_the_model_stage_generates_no_oracles_at_all():
+    """Not "prefers the supplied set" -- cannot produce one. An oracle written
+    after the model exists is written by something that could have read it, and
+    the only way to be sure is for the code that writes oracles not to be
+    reachable from the code that writes models."""
+    import ast
     import inspect
 
     from specflow.refmodel import compose
 
+    tree = ast.parse(inspect.getsource(compose))
+    called = {
+        node.func.id if isinstance(node.func, ast.Name)
+        else getattr(node.func, "attr", "")
+        for node in ast.walk(tree) if isinstance(node, ast.Call)
+    }
+    assert "run_oracle_gen" not in called
     assert "oracle_set" in inspect.signature(compose.run_refmodel).parameters
-    src = inspect.getsource(compose._debug_turns)
-    used = src.index("if oracle_set is not None:")
-    generated = src.index("run_oracle_stage(")
-    assert used < generated, (
-        "the supplied set must short-circuit generation, not follow it")
+
+
+
+def test_an_oracle_with_no_stimulus_to_run_on_is_not_malformed():
+    """It cannot be replayed, so no leg can rule on it -- and that is a fact
+    about the STIMULUS. Rejecting it would call a check malformed for a reason
+    it has no way to fix, which is the same mistake as rejecting an unexercised
+    one."""
+    why, quotable = O.verify_one(
+        _oracle(GOOD), contract=CONTRACT, testplan=TESTPLAN,
+        stimulus_by_tp={}, witness=WITNESS, variants=[], base="step")
+    assert (why, quotable) == ("", True)
+
+
+def test_an_oracle_with_no_stimulus_is_still_screened_structurally():
+    """The checks that need nothing to replay against still run."""
+    why, _ = O.verify_one(
+        _oracle("def decide(trace):\n    return True, 0, 'ok'\n"),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp={},
+        witness=WITNESS, variants=[], base="step")
+    assert why.startswith("malformed:")

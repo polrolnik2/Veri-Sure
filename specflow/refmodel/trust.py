@@ -1,47 +1,25 @@
-"""Whether a requirement oracle has earned the right to drive a repair loop.
+"""What an oracle is decided and projected with.
 
-An oracle is generated code and gets no more benefit of the doubt than the model
-does. Three gates, all offline, all cheap, all run the moment the judge returns
-and before any debug attempt is spent:
+This was the screening module -- three gates run over the judge's oracles the
+moment it returned, before any debug attempt was spent on them. Screening now
+belongs to `specflow/oracles_stage.py`, which runs before the reference model
+exists rather than inside the loop repairing it, and mutation adequacy belongs
+to `refmodel/adequacy.py`, which runs after that loop converges rather than
+during it. Both moved for the same measured reason: a gate that re-runs against
+a design being edited gives an answer that moves with the design.
 
-1. **Agreement** -- the oracle reproduces its own author's verdict on the very
-   model that verdict was about.
-2. **Sensitivity** -- mutate the model and check the oracle fires. An oracle
-   that passes everything demands nothing.
-3. **Not over-strict** -- a known-good control model must satisfy it.
-
-Gate 2 is the one that generalises: it needs no golden RTL and no control, so it
-is the only evidence available on a design where nothing known-good exists.
-
-An oracle failing a gate is discarded from THIS screening and, where the failure
-is one the judge can settle, recorded in `conflicts` for a reconcile call. It is
-never silently rewritten here: repairing an oracle in the harness would mean
-deciding which of the judge and the oracle was right, which is the judgement the
-loop exists to avoid making on its own. Asking its author is not that.
-
-Every gate produces a reconcilable conflict, because every one of them is the
-same kind of finding. The oracle is the judge's verdict written executably, so
-an oracle that contradicts that verdict (gate 1), that cannot see its own
-scenario, that no correct implementation satisfies (gate 3), or that nothing
-could ever fail (gate 2) is the judge misstating its own belief. Discarding it
-without asking leaves the requirement blocking and hands the reference model a
-prose failure caused by the check rather than by the model -- which is the
-reference model being blamed for the judge's mistake.
+What is left here is the shared machinery neither of them should re-derive --
+deciding one oracle across every testpoint it names, and projecting a trace onto
+the ports one clause is about.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 
-from . import mutate_model
 from .oracles import (
     OracleResult,
     RequirementOracle,
-    decide,
     decide_all,
-    ports_read,
-    replay,
-    well_formed,
 )
 
 #: Mutants tried per oracle. Bounded because this runs per oracle per turn -- 77
@@ -63,71 +41,6 @@ MIN_IN_SCOPE = 3
 SENSITIVE = "sensitive"
 CONVICTED = "convicted"
 UNKNOWN = "unknown"
-
-
-@dataclass(frozen=True)
-class Screened:
-    """What survived, and an accusation for everything that did not."""
-
-    trusted: list[RequirementOracle] = field(default_factory=list)
-    #: req_uid -> why it was discarded.
-    discarded: dict[str, str] = field(default_factory=dict)
-    #: req_uid -> SENSITIVE | CONVICTED | UNKNOWN, for every oracle gate 2 ran on.
-    sensitivity: dict[str, str] = field(default_factory=dict)
-    #: req_uid -> what the disagreement WAS, in enough detail for the judge to
-    #: settle it. Separate from `discarded` because a disagreement is the one
-    #: failure that is worth another call: the oracle is the verdict written
-    #: executably, so the two disagreeing means the translation is wrong, not
-    #: that the oracle is untrustworthy in itself.
-    conflicts: dict[str, str] = field(default_factory=dict)
-    #: req_uid -> why gate 3 had nothing to say: the control never reaches this
-    #: clause's scenario either. NOT a discard and NOT over-strictness -- it is
-    #: the stimulus that is thin, and saying otherwise blames the oracle for it.
-    unexercised: dict[str, str] = field(default_factory=dict)
-    #: req_uid -> whether the oracle PASSED the model, for every oracle that
-    #: reached the end of screening. `screen` already computes this at gate 1
-    #: and used to throw it away, so a caller wanting to know which trusted
-    #: oracles currently fail had to replay everything a second time.
-    decisions: dict[str, bool] = field(default_factory=dict)
-    #: Whether gate 3 ran at all -- i.e. whether a control model was supplied.
-    #: Recorded because without it `over_strict: 0` is unreadable, and reads as
-    #: the reassuring half of an ambiguity it has no right to.
-    control_available: bool = False
-
-    def rates(self) -> dict[str, int | None]:
-        """Five counts, each accusing something different.
-
-        `malformed`/`disagreed` say the judge does not mean what it says;
-        `convicted` says it demands nothing; `over_strict` says it demands too
-        much; a high `unknown` says the STIMULUS is too thin to qualify oracles
-        at all -- a finding about the testplan, not about the judge.
-
-        `over_strict` is None, never 0, when no control was supplied. The
-        distinction is not pedantic: on the a-i2c run it reported 0 with the
-        gate switched off, and the true figure measured afterwards was 22 of 54.
-        Ten of the eighteen oracles that run's debug agent failed to discharge
-        were ones no correct model could satisfy, and a 0 in this field is what
-        made that look like the agent's failure rather than the gate's absence.
-        """
-        reasons = list(self.discarded.values())
-        return {
-            "trusted": len(self.trusted),
-            "malformed": sum(1 for r in reasons if r.startswith("malformed:")),
-            #: The MODEL raised mid-replay. Counted apart from every gate: no
-            #: gate ran, the design fell over before one could.
-            "model_broke": sum(1 for r in reasons if r.startswith("model-broke:")),
-            "disagreed": sum(1 for r in reasons if r.startswith("disagreed:")),
-            "convicted": sum(1 for r in reasons if r.startswith("vacuous:")),
-            "over_strict": (
-                sum(1 for r in reasons if r.startswith("over-strict:"))
-                if self.control_available else None
-            ),
-            "unknown": sum(1 for v in self.sensitivity.values() if v == UNKNOWN),
-            #: The oracle's own scenario never occurred in the stimulus it
-            #: named -- a testplan finding, counted apart from every gate.
-            "unexercised": sum(1 for r in reasons if r.startswith("unexercised:")),
-            "control_unexercised": len(self.unexercised),
-        }
 
 
 def _project(rows: list[dict], ports: set[str]) -> tuple:
@@ -198,216 +111,6 @@ def _decide_over(
     scoped = oracle.model_copy(update={"tp_uids": named})
     return decide_all([scoped], source, contract, stimulus_by_tp, base=base,
                       transactional=transactional)[0]
-
-
-def sensitivity(
-    oracle: RequirementOracle,
-    source: str,
-    contract: dict,
-    stimulus_by_tp: dict[str, list[dict]],
-    *,
-    base: str,
-    limit: int = MUTANT_LIMIT,
-) -> tuple[str, str]:
-    """`(verdict, detail)` -- does this oracle fire when the model goes wrong?
-
-    Only meaningful for an oracle that currently PASSES. One that already fails
-    the model has demonstrated it fires, so it is sensitive by construction and
-    no mutant needs to be built to prove it.
-
-    Two filters keep the gate honest, and they exclude different things:
-
-    * sites are restricted to lines this stimulus actually EXECUTES, so a mutant
-      the scenario could never reach is never proposed;
-    * a mutant counts only if it changes the trace PROJECTED onto the ports this
-      oracle reads, so one that changes behaviour this clause is not about is
-      dropped.
-
-    The second subsumes the equivalent-mutant problem `qualify.py` names for G8
-    -- an equivalent mutant changes no projection at all.
-    """
-    steps = _steps_for(oracle, stimulus_by_tp)
-    if not steps:
-        return UNKNOWN, "no stimulus to mutate against"
-
-    ports = ports_read(oracle, contract)
-    if not ports:
-        return UNKNOWN, "the oracle reads no declared port"
-
-    baseline = replay(source, contract, steps, base=base)
-    if baseline.error:
-        return UNKNOWN, f"the model {baseline.error}"
-    reference = _project(baseline.rows, ports)
-
-    lines = mutate_model.executed_lines(source, contract, steps, base=base)
-    in_scope = 0
-    for mutant in mutate_model.mutants(source, lines=lines, limit=limit):
-        run = replay(mutant.source, contract, steps, base=base)
-        if run.error:
-            # A mutant that breaks the model outright tests nothing about the
-            # oracle -- every oracle "fails" a model that will not run.
-            continue
-        if _project(run.rows, ports) == reference:
-            continue                      # invisible to this clause: not evidence
-        in_scope += 1
-        if decide(oracle, run.rows).failed():
-            return SENSITIVE, f"killed by {mutant.description}"
-    if in_scope < MIN_IN_SCOPE:
-        return UNKNOWN, (
-            f"only {in_scope} mutant(s) changed anything this oracle can see; "
-            f"{MIN_IN_SCOPE} are needed before silence means vacuity"
-        )
-    return CONVICTED, f"passed all {in_scope} mutants it could observe"
-
-
-def screen(
-    oracles: list[RequirementOracle],
-    verdicts: dict[str, str],
-    source: str,
-    contract: dict,
-    stimulus_by_tp: dict[str, list[dict]],
-    testplan: list[dict],
-    *,
-    base: str,
-    control_source: str | None = None,
-    limit: int = MUTANT_LIMIT,
-    #: Decide over the sequence of distinct states rather than raw edges, the
-    #: way `trace_compare.transactional` compares. Screening must judge an
-    #: oracle the way the loop will run it, or a gate passes something the loop
-    #: then fails for a reason screening never saw.
-    transactional: bool = False,
-) -> Screened:
-    """Run the three gates over a whole turn's oracles.
-
-    Ordered by cost, cheapest first, so an oracle rejected on book-keeping never
-    pays for a mutation sweep: well-formedness is static, agreement and
-    over-strictness are one replay each, sensitivity is up to `limit` replays.
-    """
-    trusted: list[RequirementOracle] = []
-    discarded: dict[str, str] = {}
-    sens: dict[str, str] = {}
-    conflicts: dict[str, str] = {}
-    unexercised: dict[str, str] = {}
-    decisions: dict[str, bool] = {}
-
-    for oracle in oracles:
-        uid = oracle.req_uid
-
-        why = well_formed(oracle, contract, testplan)
-        if why:
-            discarded[uid] = f"malformed: {why}"
-            continue
-
-        result = _decide_over(oracle, source, contract, stimulus_by_tp, base=base,
-                              transactional=transactional)
-        if result.broken:
-            # A crash in the MODEL is not a defect in the CHECK, and collapsing
-            # the two sends the repair loop at the oracle author while the
-            # design is what is broken. Measured on h-i2c r3: one edit raised
-            # `AttributeError('Model' object has no attribute 'COMPLETE')` and
-            # 54 of 77 oracles were reported ORACLE_INVALID at once.
-            discarded[uid] = (f"model-broke: {result.broken}"
-                              if result.model_broke
-                              else f"malformed: {result.broken}")
-            continue
-
-        # -- gate 1: does it reproduce the verdict it shipped with?
-        #
-        # An oracle that cannot SEE its scenario is a third outcome, and it
-        # disagrees with any verdict at all: a judge that called a requirement
-        # met or not_met claimed to have observed something its own check then
-        # could not find. That is worth a reconcile call, not a discard -- most
-        # often the tp_uids are wrong, which the judge can fix.
-        said = verdicts.get(uid)
-        expected_pass = said == "met"
-        if result.unexercised():
-            conflicts[uid] = (
-                f"You judged this {said!r}, but your oracle reports that its "
-                f"scenario never occurs in the stimulus for {oracle.tp_uids}: "
-                f"{result.detail or '(no detail)'}. Either it names the wrong "
-                f"testpoints, or the verdict was not based on this trace."
-            )
-            discarded[uid] = (
-                f"unexercised: its author said {said!r} but the oracle's "
-                f"scenario never occurs in the stimulus it named"
-            )
-            continue
-        if result.ok != expected_pass:
-            where = f" at edge {result.edge}" if result.edge is not None else ""
-            conflicts[uid] = (
-                f"You judged this {said!r}. Your oracle "
-                f"{'PASSES' if result.ok else 'FAILS'} the same model"
-                f"{where}: {result.detail or '(no detail)'}"
-            )
-            discarded[uid] = (
-                f"disagreed: its author said {said!r} but the oracle "
-                f"{'passes' if result.ok else 'fails'} that same model"
-            )
-            continue
-
-        # -- gate 3: a known-good model must satisfy it.
-        if control_source is not None:
-            verdict = _decide_over(
-                oracle, control_source, contract, stimulus_by_tp, base=base,
-                transactional=transactional)
-            if verdict.broken:
-                discarded[uid] = f"malformed: the control -- {verdict.broken}"
-                continue
-            if verdict.unexercised():
-                # The control never reaches this clause's situation either, so
-                # the gate has nothing to say. Reported, not discarded -- the
-                # same call gate 2 makes with UNKNOWN, and for the same reason.
-                unexercised[uid] = (
-                    f"the control never reaches this clause's scenario: "
-                    f"{verdict.detail}"
-                )
-            elif verdict.failed():
-                where = (f" at edge {verdict.edge}"
-                         if verdict.edge is not None else "")
-                discarded[uid] = (
-                    f"over-strict: the known-good control fails it{where}"
-                    f" -- {verdict.detail}"
-                )
-                # Reconcilable, like a gate-1 disagreement and for the same
-                # reason: the oracle is this verdict written executably, so an
-                # oracle no correct implementation can satisfy is the judge
-                # misstating its own belief. Discarding it silently leaves the
-                # requirement blocking and hands the reference model a prose
-                # failure caused by the check rather than by the model.
-                conflicts[uid] = (
-                    f"Your oracle FAILS a KNOWN-GOOD reference implementation of "
-                    f"this design{where}: {verdict.detail or '(no detail)'}. A "
-                    f"correct design does not do what you are demanding, so the "
-                    f"demand is wrong -- you are testing an implementation detail, "
-                    f"an exact timing the spec does not fix, or a signal this "
-                    f"clause is not about."
-                )
-                continue
-
-        # -- gate 2: an oracle that already fails is firing; only test passers.
-        if result.ok:
-            level, detail = sensitivity(
-                oracle, source, contract, stimulus_by_tp, base=base, limit=limit)
-            sens[uid] = level
-            if level == CONVICTED:
-                discarded[uid] = f"vacuous: {detail}"
-                conflicts[uid] = (
-                    f"Your oracle is VACUOUS: {detail}. It passes models that "
-                    f"are provably wrong, so it cannot tell a correct design "
-                    f"from a broken one and proves nothing about this "
-                    f"requirement. Check the specific behaviour the clause "
-                    f"states, at the edge it states it."
-                )
-                continue
-        else:
-            sens[uid] = SENSITIVE
-
-        decisions[uid] = bool(result.ok)
-        trusted.append(oracle)
-
-    return Screened(trusted=trusted, discarded=discarded, sensitivity=sens,
-                    conflicts=conflicts, unexercised=unexercised,
-                    decisions=decisions, control_available=control_source is not None)
 
 
 def failing(results: list[OracleResult]) -> list[OracleResult]:
