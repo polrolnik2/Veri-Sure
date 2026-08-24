@@ -133,3 +133,28 @@ def test_the_prompt_shows_the_port_lists_the_gate_validates_against():
     assert "ONLY names `observable` may contain" in prefix
     # Inputs listed too, because `activation.inputs` is gated the same way.
     assert "activation.inputs" in prefix
+
+
+def test_the_prompt_separates_the_mechanism_from_the_effect():
+    """The measured failure mode, and the more expensive of the two mistakes.
+
+    Most requirements describe internal machinery on the way to a result: "the
+    filter suppresses a glitch so no START is detected", "the FSM leaves idle
+    and runs the command". Reading the MECHANISM and calling the requirement
+    unobservable writes off behaviour that is perfectly checkable.
+
+    Measured on f-i2c: 27 of 77 requirements came back UNOBSERVABLE, and 10 of
+    those had oracles that had already passed screening -- well-formedness alone
+    requires naming a declared port, so something observable was plainly there.
+    After this rule, 7 of those 10 flip to observable while 4 of 4 genuinely
+    internal controls (div_cnt, clk_en, scl_sync, cnt) stay unobservable.
+    """
+    prefix = " ".join(shared_prefix("{}", CONTRACT).split())
+    assert "ASK ABOUT THE EFFECT, NOT THE MECHANISM" in prefix
+    # The completable-sentence test is what makes the rule applicable rather
+    # than a sentiment.
+    assert "no boundary effect AT ALL" in prefix
+    # Both mistakes must stay named. Dropping either half is how this swings
+    # back the other way into reaching for the nearest output port.
+    assert "produces a check that fails correct designs" in prefix
+    assert "writes off behaviour that is perfectly checkable" in prefix

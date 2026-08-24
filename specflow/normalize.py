@@ -123,15 +123,33 @@ OBSERVABLE. List the declared OUTPUT ports whose values the requirement
 constrains. Outputs only -- an input is what a test drives, never what it
 observes. Use the port names exactly as the contract declares them.
 
-If the requirement is about something that is NOT visible on any output port --
-an internal counter, an internal enable, a synchroniser stage, a state register
--- then give `observable: []` and say so in `unobservable_reason`. That is a
-real and useful answer: it means the specification asks for behaviour nobody can
-verify at the interface, which is a defect in the specification and gets
-returned to whoever wrote it. Do NOT reach for the nearest output port to avoid
-an empty list. A requirement about `div_cnt` reloading is not a requirement
-about `scl_o`, and pretending otherwise produces a check that fails correct
-designs.
+ASK ABOUT THE EFFECT, NOT THE MECHANISM. Most requirements describe internal
+machinery on the way to describing a result -- "the filter suppresses a glitch
+so no START is detected", "the FSM leaves idle and runs the command", "the
+counter reloads and the tick advances the sequence". The filter, the FSM state
+and the counter are internal. The RESULT is usually not: no START detected means
+`busy` does not rise, running the command means `cmd_ack` eventually pulses.
+Name the ports the EFFECT appears on.
+
+A requirement is only unobservable when it has no boundary effect AT ALL -- when
+you cannot complete the sentence "...and therefore, at the interface, <port>
+does <thing>". "The divider counter reloads from clk_cnt" on its own has no such
+ending: nothing at the interface distinguishes a reload from no reload except
+through timing the specification does not pin down. That one is unobservable.
+"The filter suppresses a glitch" does have an ending, and it is `busy`.
+
+When it genuinely has none, give `observable: []` and say so in
+`unobservable_reason`. That is a real and useful answer: the specification asks
+for behaviour nobody can verify at the interface, which is a defect in the
+specification and gets returned to whoever wrote it.
+
+Both mistakes cost something, and they cost different things. Reaching for the
+nearest output port to avoid an empty list produces a check that fails correct
+designs -- a requirement about `div_cnt` reloading is not a requirement about
+`scl_o`. But calling a requirement unobservable because its SENTENCE mentions an
+internal signal writes off behaviour that is perfectly checkable, and stops
+anyone ever verifying it. Measured on one design: 10 requirements called
+unobservable this way already had working checks against real output ports.
 
 Naming a signal that is not a declared output is a different thing entirely and
 will be rejected: either the name is wrong, or there is no observable and you
