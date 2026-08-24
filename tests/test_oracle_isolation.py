@@ -186,3 +186,24 @@ def test_the_prompt_still_permits_a_duration_the_spec_actually_fixes():
         requirement=REQ, contract_json="{}", contract=CONTRACT).split())
     assert "Demand an exact count only when the requirement itself states one" in prompt
     assert "exactly one clock" in prompt
+
+
+def test_the_prompt_describes_the_transactional_trace_it_actually_receives():
+    """The oracle is handed `transactional_view` output, not raw edges. A prompt
+    describing the wrong shape is worse than no description: the author writes
+    against `edge` arithmetic that no longer means what it says."""
+    prompt = " ".join(build_prompt(
+        requirement=REQ, contract_json="{}", contract=CONTRACT).split())
+    assert "trace is a list of STATES, not of clock edges" in prompt
+    assert "THE NEXT DISTINCT STATE, not the next clock" in prompt
+    # `held` is how a duration claim is checked once repetition is collapsed.
+    assert '"held": int' in prompt or "held\": int" in prompt or "held" in prompt
+    assert "Do not compute with `edge`" in prompt
+
+
+def test_the_worked_example_uses_the_shape_the_prompt_describes():
+    """An example contradicting its own instructions is the instruction that
+    wins. The cmd_ack example must check `held`, not count consecutive rows."""
+    prompt = build_prompt(requirement=REQ, contract_json="{}", contract=CONTRACT)
+    assert "r['held'] != 1" in prompt
+    assert "for row in trace:\\n        if row['outputs']['cmd_ack']:" not in prompt

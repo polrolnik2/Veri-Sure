@@ -86,8 +86,21 @@ Your oracle decides the `expectation` over the `observable`, at the moments the
 `activation` holds.
 
     def decide(trace):
-        # trace is a list of {"edge": int, "inputs": {...}, "outputs": {...}},
-        # one entry per clock edge, from replaying one testpoint's stimulus.
+        # trace is a list of STATES, not of clock edges:
+        #   {"index": int,      position in the sequence, 0, 1, 2, ...
+        #    "held":  int,      how many clock edges this state lasted
+        #    "inputs": {...}, "outputs": {...},
+        #    "edge":  int}      the first clock edge of this state
+        #
+        # Consecutive edges with identical inputs AND outputs are one entry, so
+        # trace[i+1] is THE NEXT DISTINCT STATE, not the next clock. That is
+        # what a specification means by "then": the design may take any number
+        # of edges to get there -- synchronisers, filters and prescaler dividers
+        # all cost edges the spec does not fix -- and it is still correct.
+        #
+        # Walk the sequence. Use `index` to talk about order and `held` when the
+        # requirement states a duration. Do not compute with `edge`; it is there
+        # so a failure can be pointed at, not reasoned from.
         # Return (ok: bool | None, edge: int | None, detail: str).
         #
         # Return ok=None when THE ACTIVATION NEVER OCCURS in this trace -- no
@@ -146,7 +159,7 @@ Reply with ONE JSON object and nothing else:
 {
   "reasoning": "...",
   "clause": "cmd_ack is high for exactly one clock when the command completes",
-  "source": "def decide(trace):\\n    runs = []\\n    n = 0\\n    for row in trace:\\n        if row['outputs']['cmd_ack']:\\n            n += 1\\n        elif n:\\n            runs.append(n)\\n            n = 0\\n    if n:\\n        runs.append(n)\\n    if not runs:\\n        return (None, None, 'cmd_ack never rose; the command never completed in this trace')\\n    bad = [r for r in runs if r != 1]\\n    if bad:\\n        return (False, None, f'cmd_ack held for {bad} edges, expected 1')\\n    return (True, None, f'{len(runs)} single-edge pulse(s)')"
+  "source": "def decide(trace):\\n    pulses = [r for r in trace if r['outputs']['cmd_ack']]\\n    if not pulses:\\n        return (None, None, 'cmd_ack never rose; the command never completed in this trace')\\n    bad = [r['held'] for r in pulses if r['held'] != 1]\\n    if bad:\\n        return (False, pulses[0]['edge'], f'cmd_ack held for {bad} edges, expected 1')\\n    return (True, None, f'{len(pulses)} single-edge pulse(s)')"
 }
 """
 
