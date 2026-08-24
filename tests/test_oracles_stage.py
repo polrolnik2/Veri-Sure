@@ -157,9 +157,11 @@ class _Port:
     def __init__(self, replies: list[str]):
         self.replies = replies
         self.prompts: list[str] = []
+        self.stages: list[str] = []
 
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
         self.prompts.append(prompt)
+        self.stages.append(stage)
         return self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
 
 
@@ -449,3 +451,34 @@ def test_the_artifact_says_which_checks_actually_ran(tmp_path, monkeypatch):
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["vacuity_checked"] is False
     assert blob["over_strictness_bounded_by"] == O.WITNESS
+
+
+def test_a_repair_pass_is_recorded_beside_the_attempt_it_repairs(tmp_path,
+                                                                 monkeypatch):
+    """`model_io` keys every prompt/response pair by `{stage}_r{round}`, and
+    each `run_stage` call starts its rounds at zero -- so a repair pass over the
+    same requirement silently REWRITES the record of the attempt it is
+    repairing. Both the rejected oracle and the prompt showing why it was
+    rejected vanish, and that is the evidence every measurement in this project
+    is reconstructed from.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(OVER_STRICT), _reply(GOOD)])
+    _run(port, workdir=tmp_path)
+
+    stages = [p for p in port.stages]
+    assert stages[0] == "oracle_REQ-0001", stages
+    assert stages[1] != stages[0], (
+        f"the repair pass reused the first pass's record key: {stages}")
+    assert stages[1].startswith("oracle_REQ-0001_fix"), stages
+
+
+def test_the_repair_label_does_not_escape_the_small_model():
+    """`for_stage` matches on the first `_`-separated token, so a label must not
+    change which model serves the call."""
+    from specflow.model_io import PortSettings
+
+    s = PortSettings(small_model="small", small_effort="low")
+    for stage in ("oracle_REQ-0001", "oracle_REQ-0001_fix1",
+                  "oracle_REQ-0001_strengthen1"):
+        assert s.for_stage(stage) == ("small", "low"), stage

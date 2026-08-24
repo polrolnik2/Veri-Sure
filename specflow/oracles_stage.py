@@ -329,6 +329,7 @@ def run_oracle_stage(
             only=set(quotable),
             feedback={uid: [_repair_issue(uid, why)]
                       for uid, why in quotable.items()},
+            label=f"_fix{rounds}",
         )
         # Only a replacement that actually arrived replaces anything. A round
         # that produced nothing leaves the previous oracle standing to be
@@ -495,6 +496,7 @@ def _strengthen(
         stimulus_by_tp=stimulus_by_tp, base=base,
         max_repairs=max_repairs, fanout=fanout,
         only=set(inadequate),
+        label=f"_strengthen{previous.rounds}",
         feedback={uid: [Issue(
             "error", f"oracle.{uid}.inadequate",
             f"A design that VIOLATES this requirement passes your check: it "

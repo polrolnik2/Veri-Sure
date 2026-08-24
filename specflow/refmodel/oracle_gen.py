@@ -331,6 +331,14 @@ def run_oracle_gen(
     #: Regenerate only these requirements. Scoped repair costs one call each,
     #: against 77 for a full pass.
     only: set[str] | None = None,
+    #: Appended to the stage name so a LATER pass over the same requirement is
+    #: recorded beside the first rather than on top of it. `model_io` keys every
+    #: prompt/response pair by `{stage}_r{round}` and each `run_stage` call
+    #: starts its rounds at zero, so a repair pass silently rewrites the record
+    #: of the attempt it is repairing -- destroying both the oracle that was
+    #: rejected and the prompt showing why, which is the evidence every
+    #: measurement in this project is reconstructed from.
+    label: str = "",
 ) -> tuple[list[RequirementOracle], dict[str, StageResult[OracleOutput]]]:
     """One oracle per requirement, generated before any verdict exists.
 
@@ -359,7 +367,7 @@ def run_oracle_gen(
         uid = str(req.get("uid") or "")
         tps = attached.get(uid, [])
         return run_stage(
-            stage=f"{STAGE}_{uid or 'unknown'}",
+            stage=f"{STAGE}_{uid or 'unknown'}{label}",
             port=port,
             build_prompt=lambda issues, previous: build_prompt(
                 requirement=req, contract_json=contract_json, contract=contract,
