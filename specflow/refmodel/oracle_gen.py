@@ -226,6 +226,9 @@ def gate_one(
     tp_uids: list[str],
     contract: dict,
     testplan: list[dict],
+    conforming_source: str = "",
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
 ) -> list[Issue]:
     """Screen the oracle before it costs anything downstream.
 
@@ -233,6 +236,24 @@ def gate_one(
     oracle is the same trust class as the reference model -- generated Python
     this process will execute -- and if that sandbox is not good enough for one
     it is not good enough for the other.
+
+    **The must-pass leg.** With a conforming implementation supplied, the oracle
+    is RUN against it and a failure is returned as a gate issue -- which puts
+    over-strictness inside `run_stage`'s existing repair loop rather than
+    discovering it a stage later, when the only remaining option is to discard
+    the oracle and hand its requirement back as prose.
+
+    That the loop already exists is the point: `run_stage` re-prompts with
+    `gate_failures_block`, so the author is shown the exact edge and the exact
+    detail its check tripped on. Measured on g-i2c, the dominant over-strictness
+    is demanding a response at a fixed edge -- "busy low when START detected at
+    edge 13" -- and that is a defect an author can act on when told, and cannot
+    when merely discarded.
+
+    A failure here is NOT proof the oracle is wrong: the conforming
+    implementation is a second reading of the same requirement, not a golden
+    model, so a disagreement could be either. The message says so, because an
+    author told "you are wrong" will contort a correct check.
     """
     if out.reasoning.startswith(PARSE_ERROR):
         return [Issue("error", f"oracle.{req_uid}.response", out.reasoning)]
@@ -241,12 +262,35 @@ def gate_one(
                       "no clause; say which sentence of the requirement this "
                       "decides, so a reader can tell an over-strict oracle from "
                       "a real defect")]
-    why = well_formed(
-        RequirementOracle(req_uid=req_uid, tp_uids=list(tp_uids),
-                          clause=out.clause, source=out.source),
-        contract, testplan,
-    )
-    return [Issue("error", f"oracle.{req_uid}.source", why)] if why else []
+    oracle = RequirementOracle(req_uid=req_uid, tp_uids=list(tp_uids),
+                               clause=out.clause, source=out.source)
+    why = well_formed(oracle, contract, testplan)
+    if why:
+        return [Issue("error", f"oracle.{req_uid}.source", why)]
+
+    if not conforming_source or not stimulus_by_tp:
+        return []
+    from . import trust
+
+    result = trust._decide_over(  # noqa: SLF001
+        oracle, conforming_source, contract, stimulus_by_tp, base=base)
+    if not result.failed():
+        # A pass, an unexercised scenario and a broken replay are all silence
+        # here. Only a definite failure carries information, and reporting the
+        # others would re-ask for reasons the author cannot act on.
+        return []
+    where = f" at edge {result.edge}" if result.edge is not None else ""
+    return [Issue(
+        "error", f"oracle.{req_uid}.over_strict",
+        f"An independent implementation of this same requirement FAILS your "
+        f"check{where}: {result.detail or '(no detail)'}. One of the two readings "
+        f"is wrong and it may be either -- but a check no reading of the "
+        f"requirement satisfies can never be discharged by anyone. If your check "
+        f"pins a detail the specification leaves open -- which edge the response "
+        f"lands on, an exact count the requirement does not state, an ordering "
+        f"the text does not fix -- relax it to what the requirement actually "
+        f"says. If you are confident the requirement does state it, keep the "
+        f"check and say so in `reasoning`.")]
 
 
 def run_oracle_gen(
@@ -257,6 +301,13 @@ def run_oracle_gen(
     testplan: list[dict],
     port: ModelPort,
     normalized: dict[str, dict] | None = None,
+    #: An implementation built from these same requirements, for the must-pass
+    #: leg. NEVER the golden control: feeding a known-good design's behaviour
+    #: back into oracle generation is the contamination I1 exists to prevent,
+    #: and it would destroy `golden_check` as a held-out measure.
+    conforming_source: str = "",
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
     max_repairs: int = 2,
     fanout: bool = True,
 ) -> tuple[list[RequirementOracle], list[StageResult[OracleOutput]]]:
@@ -284,8 +335,10 @@ def run_oracle_gen(
                 previous=previous,
             ),
             parse=parse_response,
-            gate=lambda out: gate_one(out, req_uid=uid, tp_uids=tps,
-                                      contract=contract, testplan=testplan),
+            gate=lambda out: gate_one(
+                out, req_uid=uid, tp_uids=tps, contract=contract,
+                testplan=testplan, conforming_source=conforming_source,
+                stimulus_by_tp=stimulus_by_tp, base=base),
             max_repairs=max_repairs,
         )
 
