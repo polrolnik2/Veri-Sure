@@ -22,7 +22,7 @@ from ..stage import (
     previous_answer_block,
     run_stage,
 )
-from . import trust, verdict
+from . import freeze, trust, verdict
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .oracles import decide_all, replay, stimulus_liveness
 from .session import DebugSession
@@ -308,36 +308,59 @@ def _debug_turns(
     # answer. The judge's oracles cannot do this, and that asymmetry is the
     # clearest practical argument for the split.
     isolated: list = []
+    frozen_path = (Path(run_dir) / "specflow" / "oracles.json"
+                   if run_dir is not None else None)
     if compare_oracles:
         try:
             from .conform import conforming_implementation
             from .oracle_gen import run_oracle_gen
 
-            # An implementation of the same requirements, generated once, for
-            # the must-pass leg. Never the golden control: its behaviour must
-            # not reach oracle generation (I1), and it has to stay held out to
-            # grade the result. A design where this cannot be produced still
-            # gets oracles -- the leg goes quiet rather than failing them all.
-            conforming, conform_issues = conforming_implementation(
-                requirements=requirements, contract_json=contract_json,
-                port=judge_port,
-                workdir=(Path(run_dir) / "specflow" / "_conform"
-                         if run_dir is not None
-                         else Path("/tmp/specflow-conform")),
-            )
-            if not conforming:
-                logger.warning(
-                    "conforming implementation: not produced (%d issue(s)); "
-                    "the must-pass leg is off for this run",
-                    len(conform_issues))
+            # Read forever. A run re-entered with `--reuse` regenerating its
+            # oracles would hand the loop a different measure for the same
+            # requirements -- which is the disease measured on the judge-driven
+            # loop, where no oracle source was identical between rounds and
+            # CONFORMS random-walked 30, 33, 30. Loading also skips the
+            # conforming implementation, because nothing left needs it.
+            if frozen_path is not None:
+                isolated = freeze.load(frozen_path)
+                if isolated:
+                    logger.info("oracles: %d frozen, read from %s",
+                                len(isolated), frozen_path)
 
-            isolated, _ = run_oracle_gen(
-                requirements=requirements, contract_json=contract_json,
-                contract=contract, testplan=testplan, port=judge_port,
-                normalized=normalized,
-                conforming_source=conforming,
-                stimulus_by_tp=stimulus_by_tp, base=base,
-            )
+            if not isolated:
+                # An implementation of the same requirements, generated once,
+                # for the must-pass leg. Never the golden control: its
+                # behaviour must not reach oracle generation (I1), and it has
+                # to stay held out to grade the result. A design where this
+                # cannot be produced still gets oracles -- the leg goes quiet
+                # rather than failing them all.
+                conforming, conform_issues = conforming_implementation(
+                    requirements=requirements, contract_json=contract_json,
+                    port=judge_port,
+                    workdir=(Path(run_dir) / "specflow" / "_conform"
+                             if run_dir is not None
+                             else Path("/tmp/specflow-conform")),
+                )
+                if not conforming:
+                    logger.warning(
+                        "conforming implementation: not produced (%d issue(s)); "
+                        "the must-pass leg is off for this run",
+                        len(conform_issues))
+
+                isolated, _ = run_oracle_gen(
+                    requirements=requirements, contract_json=contract_json,
+                    contract=contract, testplan=testplan, port=judge_port,
+                    normalized=normalized,
+                    conforming_source=conforming,
+                    stimulus_by_tp=stimulus_by_tp, base=base,
+                )
+                if frozen_path is not None:
+                    isolated, drifted = freeze.freeze(
+                        isolated, frozen_path, normalized)
+                    for uid, why in sorted(drifted.items()):
+                        logger.warning("oracle drift %s: %s", uid, why)
+                else:
+                    isolated = freeze.stamp(isolated, normalized)
         except Exception as exc:  # noqa: BLE001
             # Never let the reporting path fail a run. It informs a decision
             # about a future design; it does not gate this one.
@@ -563,6 +586,25 @@ def _oracle_driven_turns(
     turns = max(1, int(max_turns))
     _, reset_names, _ = classify(contract)
 
+    # The set this loop promised to measure against, recorded at entry so each
+    # turn can PROVE it is still deciding with it. Nothing here reassigns
+    # `oracles`, so a mismatch is not a drift the loop tolerates -- it is a
+    # defect in the loop, and reporting "N failing went to zero" against a set
+    # that moved is the exact failure freezing exists to stop.
+    at_entry = {
+        o.req_uid: o.hash or freeze.content_hash(
+            o, (normalized or {}).get(o.req_uid))
+        for o in oracles
+    }
+    #: What each oracle was PROVED against, recorded at entry. `add_stimulus`
+    #: appends to an oracle's evidence set on purpose, so this changing is not
+    #: drift -- it is I7's trigger: what the must-pass and must-fail legs ran
+    #: against is no longer what the oracle is decided against.
+    proofs = {o.req_uid: freeze.evidence_hash(o) for o in oracles}
+    #: Cumulative across turns: a testpoint appended in turn 1 is still evidence
+    #: in turn 2, because nothing is ever removed.
+    added: list[str] = []
+
     def _restimulate(req: dict, hint: str) -> list[dict]:
         from ..testcase_agent import stimulus_for_scenario
 
@@ -571,6 +613,15 @@ def _oracle_driven_turns(
             contract=contract, port=judge_port)
 
     for turn in range(turns + 1):
+        moved = freeze.drift(oracles, [
+            type(o)(req_uid=o.req_uid, clause=o.clause, source=o.source,
+                    tp_uids=o.tp_uids, hash=at_entry[o.req_uid])
+            for o in oracles
+        ], normalized)
+        if moved:
+            raise RuntimeError(
+                "the frozen oracle set changed under the loop measuring "
+                f"against it: {sorted(moved)}")
         screened = trust.screen(
             oracles, {o.req_uid: "met" for o in oracles}, source, contract,
             stimulus_by_tp, testplan, base=base, control_source=control_source,
@@ -623,7 +674,15 @@ def _oracle_driven_turns(
                     },
                     "discarded": discarded,
                     "recovered_from_gate1": sorted(failing_uids),
-                    "stimulus_added": [],
+                    # What earlier turns appended. Reported per turn so a reader
+                    # can tell "NOT_EXERCISED fell" from "NOT_EXERCISED fell
+                    # BECAUSE stimulus was added", which are different claims.
+                    "stimulus_added": list(added),
+                    "oracle_set": {
+                        "count": len(oracles),
+                        "frozen": at_entry,
+                        "evidence_changed": freeze.stale_proofs(oracles, proofs),
+                    },
                 }, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")
 
@@ -649,6 +708,7 @@ def _oracle_driven_turns(
         source, _attempts, _note = debugger.debug(session)
         if session.added:
             testplan = session.testplan
+            added.extend(session.added)
             logger.info("turn %d added %d testpoint(s): %s", turn,
                         len(session.added), ", ".join(session.added))
         elif source == before:

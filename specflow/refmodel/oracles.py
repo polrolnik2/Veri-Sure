@@ -55,6 +55,11 @@ class RequirementOracle(BaseModel):
     #: Python defining `def decide(trace)` and returning
     #: `(ok: bool | None, edge: int | None, detail: str)`.
     source: str = ""
+    #: Content hash over the question asked and the answer given -- see
+    #: `freeze.content_hash`. Stamped when the set is frozen, so that a later
+    #: turn can prove it is deciding with the same oracles it started with.
+    #: Empty means "never frozen", which is what a judge-written oracle is.
+    hash: str = ""
 
 
 @dataclass(frozen=True)

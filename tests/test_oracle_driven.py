@@ -145,3 +145,93 @@ def test_an_unexercised_oracle_routes_to_the_stimulus_not_the_model():
                       requirements=[{"uid": "REQ-0001"}])
     assert mech["REQ-0001"] == "NOT_EXERCISED"
     assert V.ROUTE[mech["REQ-0001"]] == "fix the stimulus"
+
+
+# ------------------------------------------------------------------- freezing
+
+#: Demands `y` this edge, which `LATE` never manages. A real failing oracle,
+#: not a stub: `well_formed` discards one that names no declared port.
+STRICT = """\
+def decide(trace):
+    for row in trace:
+        if row['outputs']['y'] != row['inputs']['a']:
+            return False, row['edge'], 'y did not follow a'
+    return True, 0, 'y followed a throughout'
+"""
+
+#: The same clause, rewritten to agree with whatever it is shown.
+LENIENT = """\
+def decide(trace):
+    for row in trace:
+        if row['outputs']['y'] not in (0, 1):
+            return False, row['edge'], 'y is not a bit'
+    return True, 0, 'ok'
+"""
+
+
+def test_the_loop_refuses_to_run_against_a_set_that_moved(monkeypatch, tmp_path):
+    """Step 6's whole point, asserted where it matters rather than in the hash.
+
+    The judge-driven loop was measured re-randomising its own metric: 100% of
+    the requirements that changed verdict between turns had a rewritten oracle,
+    and CONFORMS walked 30, 33, 30. Freezing is what makes "N failing going to
+    zero" a claim about the model.
+    """
+    import pytest
+
+    from specflow.refmodel import compose
+
+    oracle = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="y follows a",
+        source=STRICT)
+
+    class _Debugger:
+        def debug(self, session):
+            # A debug turn must not be able to rewrite the measure. This one
+            # does, which is the defect the guard exists to catch -- and it
+            # edits the model too, so the loop genuinely reaches another turn
+            # rather than stopping for want of progress.
+            session.oracles[0].source = LENIENT
+            return LATE + "\n# edited\n", 1, ""
+
+    with pytest.raises(RuntimeError, match="changed under the loop"):
+        compose._oracle_driven_turns(
+            source=LATE, contract=CONTRACT, contract_json="{}",
+            requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
+            covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
+            testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+            stimulus_by_tp=dict(STIM), run_dir=None, debugger=_Debugger(),
+            max_turns=2, control_source=None, normalized=None, judge_port=None,
+        )
+
+
+def test_the_turn_artifact_names_the_frozen_set_and_what_was_appended(tmp_path):
+    """A reader must be able to tell "NOT_EXERCISED fell" from "NOT_EXERCISED
+    fell BECAUSE stimulus was added". Those are different claims."""
+    import json
+
+    from specflow.refmodel import compose
+
+    oracle = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="y follows a",
+        source=STRICT)
+
+    class _Quiet:
+        def debug(self, session):
+            return session.source, 0, "nothing to do"
+
+    compose._oracle_driven_turns(
+        source=LATE, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
+        covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Quiet(),
+        max_turns=1, control_source=None, normalized=None, judge_port=None,
+    )
+    blob = json.loads(
+        (tmp_path / "specflow" / "judge" / "r0" / "trust.json").read_text())
+    assert blob["driver"] == "requirement-oracles"
+    assert blob["oracle_set"]["count"] == 1
+    assert blob["oracle_set"]["frozen"]["REQ-0001"]
+    assert blob["oracle_set"]["evidence_changed"] == []
+    assert blob["stimulus_added"] == []
