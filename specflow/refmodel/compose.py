@@ -685,26 +685,39 @@ def _oracle_driven_turns(
             raise RuntimeError(
                 "the frozen oracle set changed under the loop measuring "
                 f"against it: {sorted(moved)}")
+        # Gate 1 asks an oracle to agree with the verdict it shipped with, and
+        # an isolated oracle ships with none. A blanket `"met"` does not
+        # neutralise it -- it makes gate 1 DISCARD exactly the oracles that fail
+        # the model, which is every finding this loop exists to act on, and
+        # gates 3 and 2 then never see them. Recovering them afterwards restores
+        # the findings but not the screening: an over-strict oracle stays
+        # invisible to gate 3 for precisely as long as it is failing the model,
+        # which is precisely as long as it is being handed to the debug agent.
+        #
+        # Measured on h-i2c: REQ-0025, 0042, 0066 and 0073 were all recovered
+        # this way at r0, the agent duly edited the model until they passed, and
+        # only THEN did gate 3 get its first look and rule all four over-strict
+        # -- the known-good control fails them too. Three turns of repair spent
+        # contorting the model toward demands no correct design meets.
+        #
+        # So pre-decide and hand gate 1 the matching verdict. It becomes a
+        # genuine no-op, every oracle reaches gate 3 on turn 0, and an
+        # unsatisfiable check is disqualified before it costs an attempt. The
+        # extra pass is pure Python over cached replays.
+        said = {}
+        for o in oracles:
+            d = trust._decide_over(  # noqa: SLF001
+                o, source, contract, stimulus_by_tp, base=base,
+                transactional=True)
+            said[o.req_uid] = "met" if d.ok else "not_met"
         screened = trust.screen(
-            oracles, {o.req_uid: "met" for o in oracles}, source, contract,
+            oracles, said, source, contract,
             stimulus_by_tp, testplan, base=base, control_source=control_source,
             transactional=True,
         )
-        # Gate 1 asks an oracle to agree with a verdict it never had. With no
-        # judge there is none, so it is neutralised by construction: the
-        # `"met"` above makes it discard exactly the oracles that FAIL the
-        # model, which are the findings this loop exists to act on. Recover
-        # them -- a disagreement with a verdict that does not exist is not a
-        # defect in the oracle.
-        failing_uids = {
-            uid for uid, why in screened.discarded.items()
-            if why.startswith("disagreed:")
-        }
-        trusted = list(screened.trusted) + [
-            o for o in oracles if o.req_uid in failing_uids
-        ]
-        discarded = {uid: why for uid, why in screened.discarded.items()
-                     if uid not in failing_uids}
+        failing_uids: set[str] = set()
+        trusted = list(screened.trusted)
+        discarded = dict(screened.discarded)
 
         # An oracle nothing can fail contributes no information, and its
         # CONFORMS would be the most misleading kind: a green that was never

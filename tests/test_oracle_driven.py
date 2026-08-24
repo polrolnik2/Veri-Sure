@@ -235,3 +235,56 @@ def test_the_turn_artifact_names_the_frozen_set_and_what_was_appended(tmp_path):
     assert blob["oracle_set"]["frozen"]["REQ-0001"]
     assert blob["oracle_set"]["evidence_changed"] == []
     assert blob["stimulus_added"] == []
+
+
+def test_an_over_strict_oracle_never_reaches_the_debug_agent(tmp_path):
+    """The gate-ordering defect, measured on h-i2c and pinned here.
+
+    Gate 1 asks an oracle to agree with the verdict it shipped with, and an
+    isolated one ships with none. Feeding it a blanket "met" made it discard
+    every oracle that FAILS the model -- before gate 3 could rule on it -- so an
+    unsatisfiable check stayed invisible for exactly as long as it was being
+    handed to the debug agent. REQ-0025, 0042, 0066 and 0073 all went that way:
+    recovered at r0, edited toward until they passed, then ruled over-strict.
+    """
+    import json
+
+    from specflow.refmodel import compose
+
+    #: Demands `y` one edge earlier than any implementation can manage, so both
+    #: the model under test and the known-good control fail it.
+    IMPOSSIBLE = """\
+def decide(trace):
+    for row in trace:
+        if row['outputs']['y'] != 1:
+            return False, row['edge'], 'y was not already high'
+    return True, 0, 'ok'
+"""
+    oracle = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="y is always high",
+        source=IMPOSSIBLE)
+
+    seen: list[int] = []
+
+    class _Watch:
+        def debug(self, session):
+            seen.append(len(session.oracles))
+            return session.source, 0, ""
+
+    compose._oracle_driven_turns(
+        source=LATE, contract=CONTRACT, contract_json="{}",
+        requirements=[{"uid": "REQ-0001", "text": "y is always high"}],
+        covers={"step": ["REQ-0001"]}, oracles=[oracle], base="step",
+        testplan=[{"uid": "TP-0000", "covers": ["REQ-0001@1"]}],
+        stimulus_by_tp=dict(STIM), run_dir=tmp_path, debugger=_Watch(),
+        max_turns=1, control_source=LATE, normalized=None, judge_port=None,
+    )
+    blob = json.loads(
+        (tmp_path / "specflow" / "judge" / "r0" / "trust.json").read_text())
+    assert blob["mechanical_verdicts"]["by_requirement"]["REQ-0001"] == \
+        "ORACLE_INVALID"
+    assert blob["mechanical_verdicts"]["routes"]["REQ-0001"] == \
+        "regenerate the oracle"
+    assert seen == [] or seen == [0], (
+        "an oracle a known-good design cannot satisfy must not cost the debug "
+        f"agent an attempt; it was handed {seen}")
