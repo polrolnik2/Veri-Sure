@@ -458,10 +458,13 @@ def _debug_turns(
             contract=contract, port=item_port)
 
     for turn in range(turns + 1):
+        # `model_copy` rather than reconstructing field by field: a
+        # reconstruction is a list of fields that has to be kept in step with
+        # the model, and the first field added without a default would break the
+        # guard at runtime, inside the loop, on the path that exists to catch
+        # things breaking quietly.
         moved = freeze.drift(oracles, [
-            type(o)(req_uid=o.req_uid, clause=o.clause, source=o.source,
-                    tp_uids=o.tp_uids, hash=at_entry[o.req_uid])
-            for o in oracles
+            o.model_copy(update={"hash": at_entry[o.req_uid]}) for o in oracles
         ], normalized)
         if moved:
             raise RuntimeError(

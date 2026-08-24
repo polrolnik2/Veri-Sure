@@ -207,3 +207,51 @@ def test_the_worked_example_uses_the_shape_the_prompt_describes():
     prompt = build_prompt(requirement=REQ, contract_json="{}", contract=CONTRACT)
     assert "r['held'] != 1" in prompt
     assert "for row in trace:\\n        if row['outputs']['cmd_ack']:" not in prompt
+
+
+def test_the_witness_source_never_reaches_the_oracle_author():
+    """The must-pass leg tells an author its check failed an independent
+    implementation, at which edge and on what detail. It must not tell it what
+    that implementation DOES.
+
+    The whole reason oracle generation moved before the reference model is that
+    an oracle written with a design in context encodes that design's choices.
+    Handing over the witness's source in a repair round would reintroduce
+    exactly that, one round later and harder to see -- and the witness is a
+    generated implementation, so the oracle would be fitted to a guess.
+    """
+    from specflow.refmodel.oracle_gen import build_prompt, gate_one, OracleOutput
+
+    contract = {"io": [
+        {"name": "clk", "dir": "input", "width": 1},
+        {"name": "a", "dir": "input", "width": 1},
+        {"name": "y", "dir": "output", "width": 1},
+    ]}
+    witness = (
+        "from specflow.refmodel.base import RefModel\n\n\n"
+        "class Model(RefModel):\n"
+        "    OUTPUT_PORTS = ['y']\n\n"
+        "    def step(self, i):\n"
+        "        return {'y': i['a']}  # THE_WITNESS_SECRET\n")
+    #: Demands something the witness never does, so the leg fires.
+    impossible = OracleOutput(
+        reasoning="r", clause="y is always high",
+        source="def decide(trace):\n"
+               "    for row in trace:\n"
+               "        if row['outputs']['y'] != 1:\n"
+               "            return False, row['edge'], 'y was not high'\n"
+               "    return True, 0, 'ok'\n")
+
+    issues = gate_one(
+        impossible, req_uid="REQ-0001", tp_uids=["TP-0000"], contract=contract,
+        testplan=[{"uid": "TP-0000"}], conforming_source=witness,
+        stimulus_by_tp={"TP-0000": [{"a": 0}, {"a": 1}]}, base="step")
+    assert issues, "the leg must fire, or this test proves nothing"
+
+    prompt = build_prompt(
+        requirement={"uid": "REQ-0001", "text": "y is always high"},
+        contract_json="{}", contract=contract, issues=issues,
+        previous=None)
+    assert "THE_WITNESS_SECRET" not in prompt
+    for leaked in ("class Model", "RefModel", "def step", "OUTPUT_PORTS"):
+        assert leaked not in prompt, leaked
