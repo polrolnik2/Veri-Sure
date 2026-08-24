@@ -161,3 +161,40 @@ def test_naming_one_fanned_out_stage_does_not_promote_the_others():
     assert s.for_stage("s2") == ("mini", "low")
     # A stage merely sharing a prefix substring is not the named stage.
     assert s.for_stage("judgement") == ("mini", "low")
+
+
+def test_no_fanned_out_stage_is_full_strength_by_default():
+    """The expensive model runs whole-artifact calls, never per-item ones.
+
+    A fan-out is 77 calls on i2c; the two stages that must not be downgraded --
+    the reference model and the witness -- are ONE call each. Putting a fan-out
+    prefix in `full_strength_stages` multiplies the strong model's cost by the
+    requirement count silently, and `for_stage` matches by PREFIX, so a single
+    careless entry captures every item of that stage. That has happened here
+    before, in the other direction: `--full-strength-stages judge` silently
+    matched and the whole judging pass stopped being downgraded.
+    """
+    from specflow.model_io import ApiPort, PortSettings
+
+    FANNED_OUT = {"s2", "s3", "stimulus", "normalize", "oracle", "variant"}
+    for default in (PortSettings.full_strength_stages,
+                    ApiPort.__dataclass_fields__["full_strength_stages"].default):
+        assert not (FANNED_OUT & set(default)), default
+
+    settings = PortSettings(small_model="small", small_effort="low")
+    for stage in ("normalize_REQ-0001", "oracle_REQ-0001",
+                  "variant_REQ-0001_action", "s2_REQ-0001", "s3_TP-0001",
+                  "stimulus_TP-0001"):
+        assert settings.for_stage(stage) == ("small", "low"), stage
+    for stage in ("refmodel", "witness"):
+        assert settings.for_stage(stage) == (None, None), stage
+
+
+def test_the_benchmark_runner_default_keeps_the_fanouts_small():
+    """The switch the runs actually use, not just the library default."""
+    from benchmarks.run_chipverilog import build_parser
+
+    action = next(a for a in build_parser()._actions
+                  if "--full-strength-stages" in (a.option_strings or []))
+    named = {s.strip() for s in str(action.default).split(",") if s.strip()}
+    assert named == {"refmodel", "witness"}
