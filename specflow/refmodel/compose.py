@@ -19,7 +19,7 @@ from ..stage import (
     previous_answer_block,
     run_stage,
 )
-from . import trust
+from . import trust, verdict
 from .agent import SYSTEM, RefModelOutput, parse_response
 from .oracles import stimulus_liveness
 from .session import DebugSession
@@ -344,9 +344,28 @@ def _debug_turns(
             # unjudgeable, and the resulting UNKNOWNs and "never observed"
             # failures otherwise read as findings about the judge.
             live = stimulus_liveness(source, contract, stimulus_by_tp, base=base)
+            # The MECHANICAL verdict, beside the judge's opinion rather than
+            # instead of it. Nothing routes off this yet -- it is written so the
+            # two can be compared on real runs before anything depends on it.
+            mechanical = verdict.classify(
+                discarded=screened.discarded,
+                passing={u for u, ok in screened.decisions.items() if ok},
+                failing={u for u, ok in screened.decisions.items() if not ok},
+                had_oracle={o.req_uid for o in oracles_of(result)},
+                requirements=requirements,
+            )
             (Path(run_dir) / "specflow" / "judge" / f"r{turn}" / "trust.json"
              ).write_text(
                 json.dumps({"rates": screened.rates(),
+                            "mechanical_verdicts": {
+                                "counts": verdict.counts(mechanical),
+                                "blocking": verdict.blocking(mechanical),
+                                "by_requirement": mechanical,
+                                "routes": {
+                                    uid: verdict.ROUTE[v]
+                                    for uid, v in sorted(mechanical.items())
+                                },
+                            },
                             "discarded": screened.discarded,
                             "sensitivity": screened.sensitivity,
                             "unresolved_conflicts": screened.conflicts,

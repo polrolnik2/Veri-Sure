@@ -83,6 +83,11 @@ class Screened:
     #: clause's scenario either. NOT a discard and NOT over-strictness -- it is
     #: the stimulus that is thin, and saying otherwise blames the oracle for it.
     unexercised: dict[str, str] = field(default_factory=dict)
+    #: req_uid -> whether the oracle PASSED the model, for every oracle that
+    #: reached the end of screening. `screen` already computes this at gate 1
+    #: and used to throw it away, so a caller wanting to know which trusted
+    #: oracles currently fail had to replay everything a second time.
+    decisions: dict[str, bool] = field(default_factory=dict)
     #: Whether gate 3 ran at all -- i.e. whether a control model was supplied.
     #: Recorded because without it `over_strict: 0` is unreadable, and reads as
     #: the reassuring half of an ambiguity it has no right to.
@@ -228,6 +233,7 @@ def screen(
     sens: dict[str, str] = {}
     conflicts: dict[str, str] = {}
     unexercised: dict[str, str] = {}
+    decisions: dict[str, bool] = {}
 
     for oracle in oracles:
         uid = oracle.req_uid
@@ -344,11 +350,12 @@ def screen(
         else:
             sens[uid] = SENSITIVE
 
+        decisions[uid] = bool(result.ok)
         trusted.append(oracle)
 
     return Screened(trusted=trusted, discarded=discarded, sensitivity=sens,
                     conflicts=conflicts, unexercised=unexercised,
-                    control_available=control_source is not None)
+                    decisions=decisions, control_available=control_source is not None)
 
 
 def failing(results: list[OracleResult]) -> list[OracleResult]:

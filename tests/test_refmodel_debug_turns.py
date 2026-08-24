@@ -210,10 +210,20 @@ def test_each_turn_persists_its_own_oracles_and_screening(tmp_path: Path):
         assert (base / "verdicts.json").exists()
         assert (base / "oracles" / "REQ-0000.py").exists()
         trust_report = json.loads((base / "trust.json").read_text())
-        assert set(trust_report) == {"rates", "discarded", "sensitivity",
+        assert set(trust_report) == {"rates", "mechanical_verdicts",
+                                     "discarded", "sensitivity",
                                      "unresolved_conflicts",
                                      "control_unexercised", "stimulus"}
         assert trust_report["rates"]["trusted"] >= 1
+
+        # The MECHANICAL verdict, beside the judge's opinion. Every requirement
+        # is present and every one carries a route: a requirement missing from
+        # this map would be one nothing decided AND nothing reported, which is
+        # the silent subset the enum exists to remove.
+        mech = trust_report["mechanical_verdicts"]
+        assert set(mech["by_requirement"]) == {"REQ-0000"}
+        assert set(mech["routes"]) == set(mech["by_requirement"])
+        assert sum(mech["counts"].values()) == len(mech["by_requirement"])
         # The stimulus is measured every turn, beside the rates it explains:
         # an inert testpoint makes every oracle naming it unjudgeable, and the
         # resulting UNKNOWNs read as findings about the judge if nothing says
