@@ -32,7 +32,7 @@ from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.tool import ToolResponse
 
-from specflow.refmodel.session import DebugSession
+from specflow.refmodel.session import MODEL, DebugSession
 
 from .agents import GuidingToolkit, SafeReActAgent, clear_memory_safely
 from .config import OpenAIConfig
@@ -77,13 +77,20 @@ adds a new testpoint. Then the oracle either decides -- possibly against the
 model, which is a real finding you can then fix -- or reports that your scenario
 still did not stage it, which tells you the description was not concrete enough.
 
-ONE ROUTE PER TURN, and the harness picks it, not you. A turn with anything
-failing is a MODEL turn: `add_stimulus` refuses, because a failing oracle is
-evidence about the model that adding stimulus cannot discharge. A turn with
-nothing failing is a STIMULUS turn: `replace_method` refuses, because there is
-no finding to act on and an edit made then could not be attributed to anything.
-The prompt below tells you which turn this is. It is not a suggestion you can
-argue with -- the tool returns an error.
+THE TWO TOOLS ARE NOT SYMMETRIC, and the difference is worth understanding.
+
+`add_stimulus` is ALWAYS available. Staging a scenario only ever ADDS evidence
+-- nothing existing is edited -- so it cannot make a finding disappear, and a
+requirement that gains a testpoint can only move toward a worse verdict, never
+a better one. Do failing oracles FIRST when there are any, because a VIOLATES
+is evidence you already have and costs no generation to act on. That is an
+order to work in, not a door that is locked.
+
+`replace_method` refuses on a turn with nothing failing, and that one IS a
+locked door. With no oracle accusing the model, the only thing an edit can
+achieve is to make some unexercised oracle's activation start occurring -- which
+is editing the design so a check fires, rather than staging the scenario the
+check is about. The prompt below tells you which turn this is.
 
 Some findings come back with `checked: false` and NO EXECUTABLE CHECK. The
 judge reached a verdict but no oracle survived screening for it, so nothing can
@@ -117,8 +124,8 @@ CONSTRUCTION, so treating that as finished would end every stimulus turn before
 it began.
 
 You are done when every oracle CONFORMS, or when the tools stop giving you
-moves: `replace_method` closed and `add_stimulus` refusing because the budget is
-spent. Until then keep going. Finish with a plain sentence saying what you
+moves: nothing failing for `replace_method` to act on AND the `add_stimulus`
+budget spent. Until then keep going. Finish with a plain sentence saying what you
 changed and why, and if oracles are still short of conforming, say which and
 what stopped you.
 """
@@ -310,18 +317,59 @@ class RefModelEditor:
         self.reset()
         self._session = session
 
+        # NOTHING FAILING IS NOT NOTHING TO DO, AND THIS GUARD IS WHERE THAT
+        # READING SURVIVED LONGEST.
+        #
+        # It used to be `if not failing: return` -- and a turn with nothing
+        # failing IS the stimulus turn, so the agent was never invoked on one.
+        # `add_stimulus` could therefore only ever be called from a MODEL turn,
+        # where it refuses by design. Five runs, zero testpoints staged, and
+        # three earlier fixes -- the prompt's stop rule, `_debug_turns`
+        # returning on an idle turn, and `_opening` showing an empty list --
+        # could none of them matter, because control never reached them.
+        #
+        # Measured on q-i2c: turns 2 and 3 are ONE SECOND apart in the artifact
+        # timestamps. No model call happens in a second; those turns returned
+        # here.
+        #
+        # The question is whether the turn has ANY input, and it no longer
+        # depends on the route: `add_stimulus` stopped refusing off-route, so a
+        # turn with something unexercised and budget left has work whichever
+        # way the brief leads.
         failing = [r.req_uid for r in session.failing()]
-        if not failing:
-            return session.best(), 0, "nothing was failing when the turn began"
+        stageable = [r.req_uid for r in session.undecided()]
+        budget_left = session.stimulus_budget - len(session.added)
+        if not failing and not (stageable and budget_left > 0):
+            why = ("nothing is failing and nothing is unexercised" if not stageable
+                   else f"{len(stageable)} oracle(s) are unexercised and the "
+                        f"stimulus budget is spent")
+            return session.best(), 0, why
 
         note = ""
-        best_seen = len(failing)
+        # What counts as progress depends on the route, for the same reason the
+        # guard does. On a stimulus turn `failing()` is zero at entry and stays
+        # zero however well the turn goes, so scoring by it would mark every
+        # attempt as stalled and cut the turn off after `_stall_rounds`.
+        # `distance` counts failing, unexercised and a crashed model together,
+        # for the reason its own docstring gives -- scoring by `failing()` alone
+        # rewards an edit that makes a requirement unverifiable. It is also the
+        # only key that moves on a turn whose work is staging stimulus, where
+        # the failing count is zero at entry and stays zero however well the
+        # turn goes.
+        best_seen = session.distance()
         stalled = 0
         try:
             response = await self._agent(Msg("user", _opening(session), role="user"))
             note = str(getattr(response, "content", "") or "")
             for _ in range(self.max_attempts):
-                if session.all_met():
+                # `all_met` asks only about FAILING oracles, so it is true at
+                # entry on a turn whose work is staging stimulus and would end
+                # that turn before its first attempt -- the same mistake as the
+                # guard above, one loop deeper.
+                if not session.undecided() and session.all_met():
+                    break
+                if (session.all_met()
+                        and session.stimulus_budget <= len(session.added)):
                     break
                 edits = len(session.history)
                 if edits >= self.max_attempts:
@@ -331,7 +379,7 @@ class RefModelEditor:
                 response = await self._agent(
                     Msg("user", _continue(session), role="user"))
                 note = str(getattr(response, "content", "") or "")
-                current = len(session.failing())
+                current = session.distance()
                 if current < best_seen:
                     best_seen = current
                     stalled = 0
@@ -364,7 +412,7 @@ def _opening(session: DebugSession) -> str:
     nothing.
     """
     rows = session.list_oracles()
-    stimulus_turn = session.route != "model"
+    stimulus_turn = session.route != MODEL
     wanted = "NOT EXERCISED" if stimulus_turn else "NOT MET"
     actionable = [r for r in rows if r["status"] == wanted]
 

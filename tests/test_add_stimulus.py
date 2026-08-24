@@ -355,3 +355,62 @@ def test_the_opening_brief_still_lists_failures_on_a_model_turn():
     brief = _opening(s)
     assert "REQ-0003" in brief, "the failing oracle must be named"
     assert "`add_stimulus` is closed" in brief
+
+
+# --------------------------------------------------------------- the guard
+
+
+def test_a_stimulus_turn_reaches_the_agent_at_all():
+    """The bug that made every earlier fix to this route unreachable.
+
+    `RefModelEditor.debug` opened with `if not failing: return`, and a turn with
+    nothing failing IS the stimulus turn -- so the agent was never invoked on
+    one, and `add_stimulus` could only be called from a MODEL turn, where it
+    refuses by design. Five runs staged zero testpoints while three other fixes
+    to this route were made and could not matter, because control never got to
+    them.
+
+    Asserted on the predicate rather than through an agent, so it needs no model
+    call: a session with nothing failing, something unexercised and budget left
+    has work, and `debug` must not return before its first attempt.
+    """
+    from specflow.refmodel.session import MODEL
+
+    session = _session(gen=_write_steps)
+    assert session.failing() == [], "the premise: nothing is failing"
+    assert session.route != MODEL, "so this is the stimulus route"
+    assert session.undecided(), "and there is something to stage"
+    assert session.stimulus_budget - len(session.added) > 0
+
+    has_work = bool(session.failing()) or bool(
+        session.undecided() and session.stimulus_budget > len(session.added))
+    assert has_work, "a stimulus turn with budget is not an idle turn"
+
+
+def test_a_spent_stimulus_budget_is_a_turn_with_nothing_to_do():
+    """The counter-case, so the guard is not simply removed.
+
+    Nothing failing and no budget left means neither route has an input, and
+    invoking the agent would spend a model call to be told so.
+    """
+    session = _session(gen=_write_steps, stimulus_budget=0)
+    has_work = bool(session.failing()) or bool(
+        session.undecided() and session.stimulus_budget > len(session.added))
+    assert not has_work
+
+
+def test_the_editor_guard_matches_that_predicate():
+    """Pins the real call site, not a restatement of it.
+
+    Reads the source of `debug` rather than running it, because running it needs
+    an agent. What matters is that the early return is conditioned on the
+    stimulus route too, and a plain `if not failing: return` is not.
+    """
+    import inspect
+
+    from eda_agent.refmodel_editor import RefModelEditor
+
+    body = inspect.getsource(RefModelEditor.debug)
+    assert "if not failing:\n            return" not in body, (
+        "the guard is back to reading 'nothing failing' as 'nothing to do'")
+    assert "stageable" in body and "budget_left" in body

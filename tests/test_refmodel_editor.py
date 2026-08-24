@@ -66,6 +66,23 @@ def _drive(session, script, **kw) -> tuple[str, int, str]:
     return asyncio.run(editor.debug(session))
 
 
+def _drive_counting(session, script, **kw):
+    """`(result, calls)` -- how many times the AGENT was actually invoked.
+
+    Needed because "the turn did no work" and "the turn did work that changed
+    nothing" produce the same `(source, attempts, note)`, and the bug being
+    pinned below is precisely that the agent was never called.
+    """
+    editor = RefModelEditor.__new__(RefModelEditor)
+    editor.max_attempts = kw.get("max_attempts", 6)
+    editor._stall_rounds = kw.get("stall_rounds", 2)
+    editor._session = None
+    agent = _StubAgent(session, script)
+    editor._agent = agent
+    editor.reset = lambda: None
+    return asyncio.run(editor.debug(session)), agent.calls
+
+
 # ------------------------------------------------------------- tool surface
 
 
@@ -210,10 +227,59 @@ def decide(trace):
     assert source != inert
 
 
-def test_a_turn_with_nothing_failing_does_no_work():
+def test_a_turn_with_neither_route_open_does_no_work():
+    """Nothing failing AND nothing unexercised: there is genuinely no input.
+
+    This used to assert only the first half, and that reading is what made the
+    stimulus route unreachable -- the guard it pinned returned before the agent
+    ran on every turn with nothing failing, which is exactly the turn
+    `add_stimulus` is for. The counter-case is the test below.
+    """
     s = _session(model=WORKING)
-    source, attempts, note = _drive(s, [("step", GOOD_STEP)])
-    assert attempts == 0 and "nothing was failing" in note
+    assert not s.failing() and not s.undecided(), "the premise for this one"
+    _source, attempts, note = _drive(s, [("step", GOOD_STEP)])
+    assert attempts == 0
+    assert "nothing is failing and nothing is unexercised" in note
+
+
+def test_a_turn_with_nothing_failing_but_work_to_stage_runs_the_agent():
+    """The case the old assertion swallowed, asserted on AGENT INVOCATIONS.
+
+    Measured on q-i2c: turns 2 and 3 are one second apart in their artifact
+    timestamps -- no model call happens in a second. Five runs staged zero
+    testpoints because control returned here before the agent existed, so what
+    has to be pinned is that the agent is reached, not what it then produced.
+    """
+    s = _session(model=WORKING)
+    s._results = [
+        type(r)(req_uid=r.req_uid, ok=None, edge=None, detail="not staged")
+        for r in s.results]
+    assert not s.failing(), "nothing is failing"
+    assert s.undecided(), "and something is unexercised"
+    assert s.stimulus_budget > len(s.added), "with budget to stage it"
+
+    (_source, _attempts, _note), calls = _drive_counting(s, [])
+    assert calls >= 1, "the agent must be invoked when there is stimulus to stage"
+
+
+def test_a_turn_with_no_input_at_all_still_costs_no_model_call():
+    """The counter-case, so the guard is narrowed rather than deleted."""
+    s = _session(model=WORKING)
+    assert not s.failing() and not s.undecided()
+    (_source, attempts, note), calls = _drive_counting(s, [])
+    assert calls == 0 and attempts == 0
+    assert "nothing is failing and nothing is unexercised" in note
+
+
+def test_a_spent_stimulus_budget_with_nothing_failing_is_also_no_input():
+    s = _session(model=WORKING)
+    s._results = [
+        type(r)(req_uid=r.req_uid, ok=None, edge=None, detail="not staged")
+        for r in s.results]
+    s.stimulus_budget = 0
+    (_source, _attempts, note), calls = _drive_counting(s, [])
+    assert calls == 0
+    assert "stimulus budget is spent" in note
 
 
 def test_a_stalling_turn_gives_up_rather_than_grinding():
@@ -255,5 +321,18 @@ def test_the_stop_rule_and_the_route_rule_cannot_both_fire():
     assert "Stop when `list_oracles()` shows nothing failing" not in SYSTEM_PROMPT
     for phrase in ("Nothing failing is not done",
                    "every oracle CONFORMS",
-                   "the budget is"):
+                   "budget spent"):
         assert phrase in SYSTEM_PROMPT, phrase
+
+
+def test_the_prompt_does_not_claim_add_stimulus_refuses():
+    """It no longer does, and a prompt saying so trains the agent not to try.
+
+    On q-i2c the agent called `add_stimulus` twice, was refused both times, and
+    closed the turn reporting "stimulus staging was unavailable because this
+    turn was the model-repair route" -- it believed the prose. The refusal is
+    gone; the prose has to go with it or the belief outlives the code.
+    """
+    assert "`add_stimulus` is ALWAYS available" in SYSTEM_PROMPT
+    assert "`add_stimulus` refuses" not in SYSTEM_PROMPT
+    assert "`replace_method` refuses on a turn with nothing failing" in SYSTEM_PROMPT

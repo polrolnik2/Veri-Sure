@@ -152,13 +152,23 @@ class DebugSession:
         self.best_source = source
         self.best_failing: int | None = None
         self.refresh()
-        #: I8, decided once at entry and then structural. A turn with both a
-        #: failing oracle and an unexercised one has two repair routes
-        #: available, and taking both makes the turn's outcome unattributable:
-        #: the model changed AND the evidence changed, so nothing says which
-        #: moved the count. FAILING FIRST -- a VIOLATES is evidence about the
-        #: model that already exists and costs no model call to act on, while a
-        #: NOT_EXERCISED costs a stimulus generation and may still not fire.
+        #: I8, decided once at entry. ADVISORY as of the measurement below:
+        #: it chooses what the brief leads with and feeds the stalled signal,
+        #: and it no longer refuses a tool. A turn with both a failing oracle
+        #: and an unexercised one has two repair routes available, and taking
+        #: both makes the turn's outcome harder to attribute -- the model
+        #: changed AND the evidence changed. That is a reason to ORDER them,
+        #: which the brief does, and `trust.json` records `stimulus_added` per
+        #: turn separately from the verdict counts so the two are still
+        #: tellable apart after the fact. FAILING FIRST -- a VIOLATES is
+        #: evidence about the model that already exists and costs no model call
+        #: to act on, while a NOT_EXERCISED costs a stimulus generation and may
+        #: still not fire.
+        #:
+        #: As a REFUSAL it cost the whole route: `add_stimulus` permitted only
+        #: when nothing was failing, and `RefModelEditor.debug` invoking the
+        #: agent only when something was. Mutually exclusive, and the tool went
+        #: uncalled in five consecutive runs.
         #:
         #: "Nothing left to do" is NOT "nothing failing", and reading it that
         #: way starves the stimulus route completely. Measured on h-i2c:
@@ -446,13 +456,30 @@ class DebugSession:
         generator and are gated before they are kept, so the agent cannot
         hand-write a step list the gate would reject.
         """
-        if self.route != STIMULUS:
-            return {"error": f"this turn's route is {self.route!r}: "
-                             f"{len(self.failing())} oracle(s) are FAILING, and "
-                             f"a failing oracle is a finding about the model "
-                             f"that adding stimulus cannot discharge. Fix those "
-                             f"first; a later turn with nothing failing will "
-                             f"take the stimulus route."}
+        # NO ROUTE CHECK. It used to refuse whenever `route != STIMULUS`, and
+        # that was a SCHEDULING PREFERENCE implemented as a prohibition. The
+        # preference is real and stays -- failing first, because a VIOLATES is
+        # evidence that already exists and costs no model call to act on -- but
+        # it belongs in the brief, which is where the turn is steered, not in a
+        # refusal, which is where invariants live.
+        #
+        # The safety property the refusal looked like it was buying is already
+        # structural and does not depend on it. This APPENDS: nothing existing
+        # is edited, `_worst` ranks failing above everything a new testpoint
+        # could add, and `distance` counts unexercised alongside failing -- so
+        # a grown evidence set can only move a verdict toward WORSE. There is
+        # no edit here that turns a VIOLATES into a NOT_EXERCISED.
+        #
+        # What it cost was measured: paired with `RefModelEditor.debug`
+        # returning before the agent ran whenever nothing was failing, the two
+        # conditions were mutually exclusive and this tool was unreachable in
+        # five consecutive runs. The guard there is fixed too; this removes the
+        # other half rather than leaving a route that opens only on the exact
+        # turn the other half closes.
+        #
+        # Everything below stays, because all of it IS an invariant: a budget,
+        # a target that must currently be unexercised so it cannot be invented,
+        # a generator that must produce steps, and no byte-identical duplicate.
         if self.stimulus_gen is None:
             return {"error": "no stimulus generator is wired into this session"}
         if len(self.added) >= self.stimulus_budget:

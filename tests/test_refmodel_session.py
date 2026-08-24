@@ -157,12 +157,37 @@ def test_a_turn_with_a_failing_oracle_takes_the_model_route():
 
     s = _session()
     assert s.route == MODEL
-    assert s.add_stimulus("REQ-0000", "stage it")["error"].startswith(
-        "this turn's route is 'model'")
 
 
-def test_a_turn_with_nothing_failing_takes_the_stimulus_route():
-    """I8: two routes open at once makes the turn's outcome unattributable."""
+def test_add_stimulus_is_not_refused_off_route():
+    """The refusal was a SCHEDULING PREFERENCE wearing an invariant's clothes.
+
+    Paired with `RefModelEditor.debug` invoking the agent only when something
+    was failing, the two conditions were mutually exclusive and this tool went
+    uncalled in five consecutive runs. The preference -- failing first -- is
+    real and now lives in the brief.
+
+    What makes the refusal unnecessary rather than merely costly: this APPENDS.
+    `_worst` ranks failing above anything a new testpoint can add and
+    `distance` counts unexercised alongside failing, so a grown evidence set
+    moves a verdict only toward worse. There is no shortcut here to close.
+    """
+    from specflow.refmodel.session import MODEL
+
+    s = _session()
+    assert s.route == MODEL and s.failing(), "the premise: an off-route turn"
+    out = s.add_stimulus("REQ-0000", "stage it")
+    assert "route" not in str(out.get("error", "")), out
+
+
+def test_replace_method_IS_still_refused_with_nothing_failing():
+    """The asymmetry, and why only one of the two refusals survives.
+
+    With no oracle accusing the model, the only thing an edit can achieve is to
+    make some unexercised oracle's activation start occurring -- editing the
+    design so a check fires, rather than staging the scenario the check is
+    about. `add_stimulus` has no equivalent move available to it.
+    """
     from specflow.refmodel.session import STIMULUS
 
     s = _session(model=WORKING)
