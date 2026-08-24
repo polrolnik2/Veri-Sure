@@ -534,6 +534,58 @@ def run_oracle_stage(
         except Exception as exc:  # noqa: BLE001
             logger.info("stimulus liveness not measured (%r)", exc)
 
+    # CAN EACH TRUSTED ORACLE FAIL AT ALL? Asked here, against the witness,
+    # because the answer does not depend on which design it is asked about.
+    # Measured: the same 70 frozen oracles gave identical verdicts against a
+    # model scoring 30/168 against golden RTL and against the known-good
+    # control at 168/168 -- live 44, dead-oracle 20, dead-stimulus 3, unknown 3,
+    # on all 70 -- while five of them reach different base verdicts on those two
+    # designs. So the witness is not a compromise here, it is sufficient.
+    #
+    # REPORTED, NOT GATED. Its rate is known on exactly one design, and the
+    # thing this stage has repeatedly got wrong is turning a number into a
+    # refusal before knowing what it rejects: gate 1's blanket "met" discarded
+    # 30 requirements before another gate could look at them, and the
+    # correspondence gate rejected 56 of 70 on a miscalibration. A verdict that
+    # blocks needs a measured false-positive rate first.
+    #
+    # The split is what makes it actionable when it does gate. DEAD_ORACLE is
+    # the author's -- the ports it watches move and the verdict will not.
+    # DEAD_STIMULUS is the testplan's -- the check can fail, but not near
+    # anything this stimulus produces, and telling the author to strengthen a
+    # sound check would be the misrouting the verdict enum exists to stop.
+    dead: dict = {}
+    if witness and trusted:
+        try:
+            from .refmodel import liveness
+
+            report = liveness.assess(trusted, witness, contract,
+                                     stimulus_by_tp, base=base)
+            dead = {
+                "counts": liveness.counts(report),
+                "dead_oracle": sorted(liveness.dead(report)),
+                "dead_stimulus": sorted(
+                    u for u, r in report.items()
+                    if r.get("verdict") == liveness.DEAD_STIMULUS),
+                "asserts_on": {u: sorted(set(r.get("asserts_on") or ())
+                                         | set(r.get("asserts_on_far") or ()))
+                               for u, r in sorted(report.items())},
+            }
+            if dead["dead_oracle"]:
+                logger.warning(
+                    "%d of %d trusted oracle(s) cannot be made to fail by any "
+                    "legal value of the ports they read: %s",
+                    len(dead["dead_oracle"]), len(trusted),
+                    ", ".join(dead["dead_oracle"][:8]))
+            if dead["dead_stimulus"]:
+                logger.warning(
+                    "%d trusted oracle(s) can fail, but nothing this stimulus "
+                    "produces comes near what would fail them: %s",
+                    len(dead["dead_stimulus"]),
+                    ", ".join(dead["dead_stimulus"][:8]))
+        except Exception as exc:  # noqa: BLE001
+            logger.info("oracle liveness not measured (%r)", exc)
+
     idle = _decides_nothing(testplan, trusted)
     if idle:
         logger.warning(
@@ -558,7 +610,8 @@ def run_oracle_stage(
                    "unsatisfiable_by_the_control": sorted(
                        u for u, d in disagreements.items() if "control" in d),
                    "testpoints_no_oracle_names": idle,
-                   "stimulus_liveness": live})
+                   "stimulus_liveness": live,
+                   "oracle_liveness": dead})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
         if variants:

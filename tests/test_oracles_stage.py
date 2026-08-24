@@ -610,3 +610,67 @@ def test_a_live_stimulus_reports_zero_rather_than_nothing(tmp_path, monkeypatch)
         fanout=False, max_repairs=0, max_rounds=1, run_dir=tmp_path)
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["stimulus_liveness"]["inert_count"] == 0
+
+
+# ------------------------------------------------------- oracle liveness
+
+
+#: Reads the declared output and decides nothing about it. Trusted by every
+#: gate the stage has -- well-formed, executable, on-target, non-vacuous --
+#: and unable to fail any design.
+INERT = """\
+def decide(trace):
+    for row in trace:
+        _ = row['outputs']['y']
+    return True, 0, 'looked at y and concluded nothing'
+"""
+
+
+def test_an_oracle_that_cannot_fail_is_reported(tmp_path, monkeypatch):
+    """The gap every other gate in this stage leaves open.
+
+    Measured on the frozen 70: 20 trusted oracles could not be moved by any
+    legal value of the ports they read, and 11 of them had reported CONFORMS
+    against the shipped model. Nothing in the stage asked.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    got = _run(_Port([_reply(INERT)]), workdir=tmp_path, run_dir=tmp_path)
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    live = blob["oracle_liveness"]
+    assert live["counts"]["dead-oracle"] == 1
+    assert live["dead_oracle"] == ["REQ-0001"]
+    assert got.dispositions["REQ-0001"] == O.TRUSTED, (
+        "reported, not gated -- this stage has twice turned a number into a "
+        "refusal before knowing what it rejects")
+
+
+def test_a_live_oracle_records_the_ports_it_decides_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+
+    live = json.loads(
+        (tmp_path / "specflow" / O.ARTIFACT).read_text())["oracle_liveness"]
+    assert live["counts"]["dead-oracle"] == 0
+    assert live["asserts_on"]["REQ-0001"] == ["y"]
+
+
+def test_liveness_is_measured_against_the_witness_not_a_reference_model(
+        tmp_path, monkeypatch):
+    """Isolation, and it costs nothing -- see `liveness`'s own docstring.
+
+    The same 70 oracles gave identical verdicts against a model scoring 30/168
+    and the known-good control at 168/168. What is pinned here is the weaker
+    structural fact: the source handed to it is the witness, and the reference
+    model does not exist when this stage runs.
+    """
+    from specflow.refmodel import liveness as L
+
+    seen: list[str] = []
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(
+        L, "assess",
+        lambda oracles, source, *a, **kw: seen.append(source) or {})
+    _run(_Port([_reply(GOOD)]), workdir=tmp_path, run_dir=tmp_path)
+    assert seen == [WITNESS]
+    assert BROKEN not in seen and CRASHES not in seen
