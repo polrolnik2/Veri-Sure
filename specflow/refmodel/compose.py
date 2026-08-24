@@ -301,12 +301,33 @@ def _debug_turns(
     isolated: list = []
     if compare_oracles:
         try:
+            from .conform import conforming_implementation
             from .oracle_gen import run_oracle_gen
+
+            # An implementation of the same requirements, generated once, for
+            # the must-pass leg. Never the golden control: its behaviour must
+            # not reach oracle generation (I1), and it has to stay held out to
+            # grade the result. A design where this cannot be produced still
+            # gets oracles -- the leg goes quiet rather than failing them all.
+            conforming, conform_issues = conforming_implementation(
+                requirements=requirements, contract_json=contract_json,
+                port=judge_port,
+                workdir=(Path(run_dir) / "specflow" / "_conform"
+                         if run_dir is not None
+                         else Path("/tmp/specflow-conform")),
+            )
+            if not conforming:
+                logger.warning(
+                    "conforming implementation: not produced (%d issue(s)); "
+                    "the must-pass leg is off for this run",
+                    len(conform_issues))
 
             isolated, _ = run_oracle_gen(
                 requirements=requirements, contract_json=contract_json,
                 contract=contract, testplan=testplan, port=judge_port,
                 normalized=normalized,
+                conforming_source=conforming,
+                stimulus_by_tp=stimulus_by_tp, base=base,
             )
         except Exception as exc:  # noqa: BLE001
             # Never let the reporting path fail a run. It informs a decision
