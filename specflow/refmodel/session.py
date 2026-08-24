@@ -13,9 +13,16 @@ measures it will do that, because it is the cheapest path to green -- the same
 shortcut as an inert reference model, one level up.
 
 **A turn cannot end worse than it started.** `best()` returns the lowest
-failing-oracle count seen, with `note_best`'s tie rule: the EARLIEST source
-reaching a given count wins, so a run wandering across a plateau returns where
-it first arrived rather than wherever it happened to stop.
+`distance()` seen, with `note_best`'s tie rule: the EARLIEST source reaching a
+given score wins, so a run wandering across a plateau returns where it first
+arrived rather than wherever it happened to stop.
+
+**The scoring key counts unexercised oracles as well as failing ones.** It has
+to. An oracle reports `ok is False` for a case the model got wrong and
+`ok is None` for a case that never arose, and only the first is "failing" -- so
+scoring on failing alone means an edit that stops the design ever reaching a
+scenario reduces the count and is recorded as an improvement. Making a
+requirement unverifiable would score as fixing it.
 """
 
 from __future__ import annotations
@@ -132,13 +139,43 @@ class DebugSession:
     def all_met(self) -> bool:
         return not self.failing()
 
+    def undecided(self) -> list[OracleResult]:
+        """Oracles whose scenario the stimulus never staged, under this model.
+
+        Not the agent's to fix -- but very much its to AVOID CAUSING, which is
+        why the scoring key below counts them.
+        """
+        return [r for r in self._results if r.unexercised()]
+
+    def distance(self) -> int:
+        """How far this model is from satisfying the oracle set.
+
+        `failing()` alone is the wrong key, and the way it is wrong rewards the
+        worst available edit. An oracle reports `ok is False` when the model got
+        the case wrong and `ok is None` when the case never arose
+        (`oracles.py:80-89`), and only the first counts as failing -- so an edit
+        that stops the design ever reaching a scenario turns a VIOLATES into a
+        NOT_EXERCISED, REDUCES the failing count, and is recorded as a new best.
+        Making a requirement unverifiable scored as fixing it.
+
+        Counting both closes that: the conversion is now neutral rather than
+        rewarded, while genuinely satisfying a clause still improves the score.
+
+        Broken oracles stay out, exactly as `failing()` leaves them out. One
+        decides nothing, so chasing it means editing the model to fix a defect
+        in the check -- the confusion this whole design exists to prevent.
+        """
+        return len(self.failing()) + len(self.undecided())
+
     def note_best(self, source: str) -> bool:
         """Record `source` if it is the best seen. Ties do NOT overwrite.
 
-        Semantics taken unchanged from `rtl_editor._EditSession.note_best`,
-        whose tie rule is pinned by `tests/test_rollback_guard.py`.
+        Tie semantics taken unchanged from `rtl_editor._EditSession.note_best`,
+        whose rule is pinned by `tests/test_rollback_guard.py`: the EARLIEST
+        source reaching a given score wins, so a run wandering across a plateau
+        returns where it first arrived rather than wherever it stopped.
         """
-        count = len(self.failing())
+        count = self.distance()
         if self.best_failing is None or count < self.best_failing:
             self.best_failing = count
             self.best_source = source
