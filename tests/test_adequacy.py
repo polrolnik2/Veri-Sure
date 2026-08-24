@@ -245,3 +245,31 @@ def test_no_strengthening_round_is_spent_when_every_oracle_is_adequate(
         oracle_set=_oracle_set([_oracle(SHARP)]), adequacy_rounds=1,
     )
     assert called == []
+
+
+def test_narrowing_the_scope_cannot_resolve_an_unknown():
+    """Why the assertion-port scope is an override and not the default.
+
+    Measured on the frozen 70: `ports_read` gave adequate 6 / inadequate 20 /
+    unknown 44, and scoping on assertion ports gave 6 / 18 / 46 -- two verdicts
+    moved and both went inadequate -> unknown. The mechanism forces that
+    direction, so it is pinned rather than re-measured: a narrower projection
+    admits a subset of the mutants, so `in_scope` can only fall, and falling is
+    what pushes an oracle under `MIN_IN_SCOPE`.
+    """
+    oracle = _oracle(SHARP)
+    wide, _ = adequacy.adequacy_of(oracle, FINAL, CONTRACT, STIM, base="step")
+    narrow, detail = adequacy.adequacy_of(
+        oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"})
+    assert wide == adequacy.ADEQUATE
+    assert narrow == adequacy.UNKNOWN, (
+        f"a scope the oracle does not decide on starves the evidence: {detail}")
+
+
+def test_an_empty_scope_is_reported_as_asserting_on_nothing():
+    """Distinct from "reads no declared port" -- a different finding, and the
+    routing depends on telling them apart."""
+    level, detail = adequacy.adequacy_of(
+        _oracle(SHARP), FINAL, CONTRACT, STIM, base="step", scope=set())
+    assert level == adequacy.UNKNOWN
+    assert "asserts on no declared port" in detail

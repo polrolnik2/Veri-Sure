@@ -59,6 +59,7 @@ def adequacy_of(
     base: str,
     limit: int = MUTANT_LIMIT,
     transactional: bool = True,
+    scope: set[str] | frozenset[str] | None = None,
 ) -> tuple[str, str]:
     """`(verdict, detail)` for one oracle against the final model.
 
@@ -68,14 +69,47 @@ def adequacy_of(
     PROJECTED onto the ports this oracle reads, so one that changes behaviour
     this clause is not about is dropped. The second subsumes the
     equivalent-mutant problem `qualify.py:67` names for G8.
+
+    `scope` overrides the ports that second filter projects onto. The default is
+    `ports_read`, which is a STRING SCAN and therefore counts a port the oracle
+    only triggers on -- measured on the frozen 70, 39% of the ports it projects
+    through carry no assertion at all (`liveness.assertion_ports` computes the
+    real set). A mutant visible only in a trigger port is one this oracle could
+    never have caught, and counting it toward `MIN_IN_SCOPE` spends the evidence
+    budget on questions the oracle was not asked.
+
+    MEASURED, AND IT DOES NOT HELP -- the default stays `ports_read`. On the
+    frozen 70:
+
+        ports_read        adequate 6 · inadequate 20 · unknown 44
+        assertion ports   adequate 6 · inadequate 18 · unknown 46
+
+    Two verdicts moved and both went `inadequate` -> `unknown`. The mechanism is
+    the one stated above and it forces this direction: narrowing the filter can
+    only REDUCE `in_scope`, so it pushes oracles below `MIN_IN_SCOPE` rather
+    than resolving them. The premise was right -- 39% of the ports projected
+    through carry no assertion -- and the expected consequence was backwards.
+
+    What that says is where the real limit is. Adequacy's 44 UNKNOWNs are a
+    MUTANT SUPPLY problem, not a scoping one: too few mutants land where the
+    oracle looks, and no choice of projection creates evidence that was never
+    generated. The question "could this oracle fail at all" is answered without
+    any mutants by `liveness`, which needs no supply and abstained on none of
+    the 70. Adequacy's remaining job is the narrower one it is good at -- would
+    this oracle catch a realistic defect of THIS model -- asked of the oracles
+    liveness has already shown can fail.
+
+    Kept as an override because it is correct and cheap, and because a design
+    with a richer mutant supply may invert the result.
     """
     steps = _steps_for(oracle, stimulus_by_tp)
     if not steps:
         return UNKNOWN, "no stimulus to mutate against"
 
-    ports = ports_read(oracle, contract)
+    ports = set(scope) if scope is not None else ports_read(oracle, contract)
     if not ports:
-        return UNKNOWN, "the oracle reads no declared port"
+        return UNKNOWN, ("the oracle asserts on no declared port" if scope
+                         is not None else "the oracle reads no declared port")
 
     baseline = replay(source, contract, steps, base=base)
     if baseline.error:
@@ -115,12 +149,19 @@ def assess(
     base: str,
     limit: int = MUTANT_LIMIT,
     transactional: bool = True,
+    scope: dict[str, set[str]] | None = None,
 ) -> dict[str, tuple[str, str]]:
-    """`{req_uid: (verdict, detail)}` over the whole trusted set."""
+    """`{req_uid: (verdict, detail)}` over the whole trusted set.
+
+    `scope` is per-oracle, keyed by `req_uid` -- `liveness.assertion_ports`
+    returns exactly that shape. An oracle absent from it falls back to
+    `ports_read`, so a partial map is usable.
+    """
     return {
         o.req_uid: adequacy_of(o, source, contract, stimulus_by_tp,
                                base=base, limit=limit,
-                               transactional=transactional)
+                               transactional=transactional,
+                               scope=(scope or {}).get(o.req_uid))
         for o in oracles
     }
 
