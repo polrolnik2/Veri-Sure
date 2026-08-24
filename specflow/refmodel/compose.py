@@ -287,6 +287,7 @@ def run_refmodel(
             carried={u: v for u, v in oracle_set.dispositions.items()
                      if v != "TRUSTED"},
             oracle_rates=oracle_set.rates(),
+            oracle_liveness=dict(oracle_set.liveness),
             oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
         )
         rendered["src"] = source
@@ -315,6 +316,9 @@ def _closed_loop(
     variants: list | None,
     carried: dict[str, str],
     oracle_rates: dict,
+    #: Optional so a caller predating the measurement still works; an empty map
+    #: reports "not measured" downstream rather than "none dead".
+    oracle_liveness: dict[str, str] | None = None,
     oracle_set=None,
     adequacy_rounds: int = 0,
 ) -> tuple[str, list[Issue]]:
@@ -342,6 +346,7 @@ def _closed_loop(
             control_source=control_source, normalized=normalized,
             item_port=item_port, variants=variants,
             carried=carried, oracle_rates=oracle_rates,
+            oracle_liveness=oracle_liveness,
         )
         if not oracles:
             break
@@ -386,6 +391,7 @@ def _closed_loop(
         carried = {u: v for u, v in oracle_set.dispositions.items()
                    if v != "TRUSTED"}
         oracle_rates = oracle_set.rates()
+        oracle_liveness = dict(oracle_set.liveness)
     return source, issues
 
 
@@ -417,6 +423,7 @@ def _debug_turns(
     #: against a witness that does not move, before this model existed.
     carried: dict[str, str] | None = None,
     oracle_rates: dict | None = None,
+    oracle_liveness: dict[str, str] | None = None,
 ) -> tuple[str, list[Issue]]:
     """The debug loop. There is no other one, and no judge in this one.
 
@@ -446,6 +453,7 @@ def _debug_turns(
     turns = max(1, int(max_turns))
     carried = dict(carried or {})
     oracle_rates = dict(oracle_rates or {})
+    oracle_liveness = dict(oracle_liveness or {})
     _, reset_names, _ = classify(contract)
 
     # The set this loop promised to measure against, recorded at entry so each
@@ -543,6 +551,16 @@ def _debug_turns(
                 json.dumps({
                     "driver": "requirement-oracles",
                     "rates": oracle_rates,
+                    # WHAT A CONFORMS IS WORTH. "46 CONFORMS" was reported as
+                    # the loop converging on a model that fails 138 of 168
+                    # testpoints against golden RTL; 11 of those 46 came from
+                    # checks no legal value of any port they read could move.
+                    # Carried in from [O] rather than recomputed -- the verdict
+                    # does not depend on the design being debugged (identical on
+                    # all 70 against a 30/168 model and a 168/168 control), and
+                    # recomputing would put a gate back inside the loop.
+                    "conforms_by_liveness": _conforms_by_liveness(
+                        mechanical, oracle_liveness),
                     "mechanical_verdicts": {
                         "counts": verdict.counts(mechanical),
                         "blocking": verdict.blocking(mechanical),
@@ -668,6 +686,39 @@ def _debug_turns(
         logger.info("loop stopped: %s", stop)
 
     return source, issues
+
+
+def _conforms_by_liveness(
+    mechanical: dict[str, str], liveness: dict[str, str],
+) -> dict[str, int | None]:
+    """How many CONFORMS came from a check that could have said otherwise.
+
+    `None` where the measurement did not run, never 0: a set frozen before
+    liveness existed reports "not measured" rather than "none dead", which is
+    the same distinction `OracleSet.rates` keeps and the same one whose absence
+    once read `over_strict: 0` as "no oracle is over-strict" when it meant "no
+    control was supplied".
+    """
+    conforming = [u for u, v in mechanical.items() if v == "CONFORMS"]
+    if not liveness:
+        return {"conforms": len(conforming), "from_a_check_that_can_fail": None,
+                "from_a_check_that_cannot": None,
+                "from_a_check_undecided": None, "not_measured": None}
+    counted = [u for u in conforming if u in liveness]
+    dead = [u for u in counted if liveness[u].startswith("dead")]
+    # `unknown` gets its own bucket rather than joining "can fail". It means the
+    # instrument could not decide -- no replayable testpoint, no declared output
+    # port, a model that would not run -- and folding that into the reassuring
+    # side makes the reassuring side the default for everything unmeasurable.
+    undecided = [u for u in counted
+                 if not liveness[u].startswith("dead") and liveness[u] != "live"]
+    return {
+        "conforms": len(conforming),
+        "from_a_check_that_can_fail": len(counted) - len(dead) - len(undecided),
+        "from_a_check_that_cannot": len(dead),
+        "from_a_check_undecided": len(undecided),
+        "not_measured": len(conforming) - len(counted),
+    }
 
 
 def _both_routes_dry(session: DebugSession, by_uid: dict) -> str:

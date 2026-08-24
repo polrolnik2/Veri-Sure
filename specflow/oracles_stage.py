@@ -102,6 +102,15 @@ class OracleSet:
     #: n-i2c: 17 of 167. Recorded rather than acted on, because the fix is a
     #: testplan or an oracle-scoping decision and neither belongs to this stage.
     testpoints_no_oracle_names: list[str] = field(default_factory=list)
+    #: `req_uid -> liveness verdict` for the checks that survived. Carried out
+    #: of the stage rather than left in the artifact because the DEBUG LOOP is
+    #: where it changes how a number reads: "46 CONFORMS" was reported as
+    #: convergence on a model that fails 138 of 168 testpoints against golden
+    #: RTL, and 11 of those 46 came from checks nothing could move. The loop
+    #: cannot recompute it -- that would put a gate back inside the loop, which
+    #: is what this rework removed -- and it does not need to, because the
+    #: verdict does not depend on the design being debugged.
+    liveness: dict[str, str] = field(default_factory=dict)
 
     def rates(self) -> dict[str, int | None]:
         """Counts, and `None` where a check did not run.
@@ -662,6 +671,14 @@ def run_oracle_stage(
     if report:
         dead = {
             "counts": _L.counts(report),
+            # The per-requirement verdict, stored rather than reconstructed
+            # from the lists below. Rebuilding it from `dead_oracle` +
+            # `dead_stimulus` + "everything else is live" silently promotes the
+            # UNKNOWNs -- the checks this could not decide about -- into the
+            # count of ones that demonstrably can fail, which is the exact
+            # conflation `rates()` keeps a `None` for.
+            "verdicts": {u: r.get("verdict", _L.UNKNOWN)
+                         for u, r in sorted(report.items())},
             "dead_oracle": sorted(_L.dead(report)),
             "dead_stimulus": sorted(
                 u for u, r in report.items()
@@ -721,7 +738,9 @@ def run_oracle_stage(
     return OracleSet(trusted=trusted, dispositions=dispositions,
                      reasons=reasons, repairs=repairs, variants=variants,
                      witness_kind=witness_kind, rounds=rounds,
-                     testpoints_no_oracle_names=idle)
+                     testpoints_no_oracle_names=idle,
+                     liveness={u: r.get("verdict", _L.UNKNOWN)
+                               for u, r in report.items()})
 
 
 def _witness(
@@ -963,6 +982,10 @@ def load(run_dir: Path) -> OracleSet | None:
         blob = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    # A set frozen before this measurement existed restores an empty map, and
+    # every consumer treats missing as "not measured" rather than "all live" --
+    # the distinction `rates()` keeps a `None` for.
+    live = (blob.get("oracle_liveness") or {}).get("verdicts") or {}
     return OracleSet(
         trusted=oracles,
         dispositions=dict(blob.get("dispositions") or {}),
@@ -970,4 +993,5 @@ def load(run_dir: Path) -> OracleSet | None:
         variants=variants_mod.load(Path(run_dir) / "specflow" / "variants.json"),
         witness_kind=str(blob.get("witness") or NO_BOUND),
         rounds=int(blob.get("rounds") or 0),
+        liveness={str(u): str(v) for u, v in live.items()},
     )
