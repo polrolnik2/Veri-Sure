@@ -10,6 +10,7 @@ import json
 
 from specflow import oracles_stage as O
 from specflow.refmodel.oracles import RequirementOracle
+from specflow.refmodel import variants as variants_mod
 from specflow.refmodel.variants import Variant
 
 CONTRACT = {"io": [
@@ -84,19 +85,56 @@ def _verify(source, **kw):
 
 
 def test_a_sound_oracle_passes():
-    assert _verify(GOOD) == ("", True)
+    assert _verify(GOOD) == ("", True, {})
 
 
-def test_an_over_strict_oracle_is_rejected_and_quotable():
-    why, quotable = _verify(OVER_STRICT)
-    assert why.startswith("over-strict:") and quotable
-    assert "edge" in why, "the author needs to know where it tripped"
+def test_no_implementation_gates_an_oracle():
+    """The rule the whole stage now turns on.
+
+    An oracle that fails BOTH designs is still usable. Only two things reject,
+    and neither is an implementation: structure, and vacuity from variants,
+    which come from the requirement text.
+    """
+    control = WITNESS.replace("i['a']", "0")
+    why, quotable, notes = O.verify_one(
+        _oracle(OVER_STRICT), contract=CONTRACT, testplan=TESTPLAN,
+        stimulus_by_tp=STIM, witness=WITNESS, control=control,
+        variants=[], base="step")
+    assert why == "", f"a design rejected an oracle: {why}"
+    assert quotable
+    assert set(notes) == {"witness", "control"}
+
+
+def test_the_witness_records_a_disagreement_rather_than_a_verdict():
+    """It is a second reading of the same requirements by the same author, so
+    an oracle failing it means two same-author readings disagree and either
+    could be wrong. Measured: rejecting on it moved over-strictness 27 -> 15 and
+    convictions 2 -> 16 -- oracles relaxed until they stopped disagreeing."""
+    why, _quotable, notes = _verify(OVER_STRICT)
+    assert why == ""
+    assert "edge" in notes["witness"], "the observation still says where"
+
+
+def test_the_control_records_without_saying_where():
+    """It is known-good because it scores 168/168 against the golden RTL, so it
+    is a proxy for the held-out grade. Its detail must not reach a prompt, and
+    its keep/reject bit must not shape the run either."""
+    control = WITNESS.replace("i['a']", "0")
+    _why, _q, notes = O.verify_one(
+        _oracle(GOOD), contract=CONTRACT, testplan=TESTPLAN,
+        stimulus_by_tp=STIM, witness=WITNESS, control=control,
+        variants=[], base="step")
+    assert "control" in notes
+    assert "withheld" in notes["control"]
+    assert "-- " not in notes["control"], "no trace detail may appear"
 
 
 def test_a_vacuous_oracle_is_rejected():
+    """Variants come from the requirement text, so this gate involves no
+    design and keeps its authority."""
     variants = [Variant(req_uid="REQ-0001", kind=k, clause="c", source=BROKEN)
                 for k in ("trigger", "action")]
-    why, quotable = _verify(VACUOUS, variants=variants)
+    why, quotable, _notes = _verify(VACUOUS, variants=variants)
     assert why.startswith("vacuous:") and quotable
 
 
@@ -104,48 +142,26 @@ def test_an_unexercised_oracle_is_NOT_rejected():
     """`NOT_EXERCISED` is a joint property of stimulus and model and belongs to
     the debug loop. Rejecting it here deletes the findings the stimulus tool
     exists to act on."""
-    assert _verify(UNEXERCISED) == ("", True)
+    assert _verify(UNEXERCISED) == ("", True, {})
 
 
 def test_a_witness_that_crashes_does_not_convict_the_oracle():
     """Blaming the check for the reference's crash is the confusion this whole
     design exists to prevent, one level over."""
-    assert _verify(GOOD, witness=CRASHES) == ("", True)
+    assert _verify(GOOD, witness=CRASHES) == ("", True, {})
 
 
-def test_a_malformed_oracle_is_rejected_before_anything_is_replayed():
-    why, _ = _verify("def decide(trace):\n    return True, 0, 'ok'\n")
+def test_an_oracle_that_breaks_on_replay_is_still_malformed():
+    """The ORACLE breaking is structural and rejects; the DESIGN breaking does
+    not. The distinction is the one the module exists to keep."""
+    why, _q, _n = _verify("def decide(trace):\n"
+                          "    return trace['y'], 0, 'wrong shape'\n")
     assert why.startswith("malformed:"), why
 
 
-# ----------------------------------------------- the control rejects, never repairs
-
-
-def test_a_control_rejection_is_not_quotable():
-    """Feeding a known-good design's trace back to the oracle author tunes the
-    oracle against it -- and the model is then tuned against the oracle, so the
-    model ends up tuned against the grade. `golden_check` stops being held out.
-    """
-    # Passes the witness, fails the control.
-    control = WITNESS.replace("i['a']", "0")
-    why, quotable = O.verify_one(
-        _oracle(GOOD), contract=CONTRACT, testplan=TESTPLAN,
-        stimulus_by_tp=STIM, witness=WITNESS, control=control,
-        variants=[], base="step")
-    assert why.startswith("over-strict:")
-    assert not quotable
-    assert "withheld" in why
-
-
-def test_the_control_runs_last():
-    """It is the only check whose finding cannot be acted on, so spending it
-    before the ones that can would waste the strongest instrument."""
-    control = WITNESS.replace("i['a']", "0")
-    why, quotable = O.verify_one(
-        _oracle(OVER_STRICT), contract=CONTRACT, testplan=TESTPLAN,
-        stimulus_by_tp=STIM, witness=WITNESS, control=control,
-        variants=[], base="step")
-    assert quotable, "the witness caught it first, so the author can be told"
+def test_a_malformed_oracle_is_rejected_before_anything_is_replayed():
+    why, _q, _n = _verify("def decide(trace):\n    return True, 0, 'ok'\n")
+    assert why.startswith("malformed:"), why
 
 
 # --------------------------------------------------------------- the stage
@@ -168,6 +184,25 @@ class _Port:
 def _reply(source: str) -> str:
     return json.dumps({"reasoning": "r", "clause": "y follows a",
                        "source": source})
+
+
+#: Variants for a requirement, so the vacuity gate -- the only quotable
+#: rejection left, and the only one derived from the requirement rather than
+#: from a design -- can fire in the repair-loop tests.
+def _variants():
+    return [Variant(req_uid="REQ-0001", kind=k, clause="c", source=BROKEN)
+            for k in ("trigger", "action")]
+
+
+def _with_variants(monkeypatch):
+    """Make the stage's variant fan-out return a fixed pair.
+
+    Vacuity is the only quotable rejection left -- the only gate derived from
+    the requirement rather than from a design -- so it is what drives the repair
+    loop now.
+    """
+    monkeypatch.setattr(variants_mod, "run_variant_gen",
+                        lambda **_kw: (_variants(), []))
 
 
 def _run(port, **kw):
@@ -199,31 +234,36 @@ def test_a_rejected_oracle_is_re_asked_with_the_reason(tmp_path, monkeypatch):
     """ORACLE_INVALID rose 4 -> 5 -> 8 monotonically because nothing ever
     re-asked. This is the loop every other stage already has."""
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
-    port = _Port([_reply(OVER_STRICT), _reply(GOOD)])
-    got = _run(port, workdir=tmp_path)
+    _with_variants(monkeypatch)
+    port = _Port([_reply(VACUOUS), _reply(GOOD)])
+    got = _run(port, workdir=tmp_path, want_variants=True)
     assert len(port.prompts) == 2, "the rejection must cost a second call"
-    assert "over_strict" in port.prompts[1] or "over-strict" in port.prompts[1]
+    assert "vacuous" in port.prompts[1]
     assert got.dispositions["REQ-0001"] == O.TRUSTED
     assert got.rounds == 2
 
 
 def test_an_unrepairable_oracle_lands_on_a_verdict_not_a_hole(tmp_path, monkeypatch):
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
-    got = _run(_Port([_reply(OVER_STRICT)]), workdir=tmp_path)
-    assert got.dispositions["REQ-0001"] == "ORACLE_INVALID"
-    assert got.reasons["REQ-0001"].startswith("over-strict:")
+    _with_variants(monkeypatch)
+    got = _run(_Port([_reply(VACUOUS)]), workdir=tmp_path, want_variants=True)
+    assert got.dispositions["REQ-0001"] == "VACUOUS"
+    assert got.reasons["REQ-0001"].startswith("vacuous:")
     assert got.trusted == []
 
 
-def test_a_control_only_rejection_does_not_cost_a_repair_call(tmp_path, monkeypatch):
-    """Its reason cannot reach a prompt, so re-asking would spend a call on a
-    prompt carrying no information."""
+def test_a_control_disagreement_costs_no_call_and_no_verdict(tmp_path,
+                                                             monkeypatch):
+    """The control is a proxy for the held-out grade, so it may neither spend a
+    repair call nor decide a disposition. It is recorded and nothing else."""
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
     port = _Port([_reply(GOOD)])
-    got = _run(port, workdir=tmp_path,
+    got = _run(port, workdir=tmp_path, run_dir=tmp_path,
                control_source=WITNESS.replace("i['a']", "0"))
     assert len(port.prompts) == 1
-    assert got.dispositions["REQ-0001"] == "ORACLE_INVALID"
+    assert got.dispositions["REQ-0001"] == O.TRUSTED
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["unsatisfiable_by_the_control"] == ["REQ-0001"]
 
 
 def test_the_artifact_carries_the_trusted_set_and_the_reasons(tmp_path, monkeypatch):
@@ -298,7 +338,7 @@ def test_an_oracle_with_no_stimulus_to_run_on_is_not_malformed():
     about the STIMULUS. Rejecting it would call a check malformed for a reason
     it has no way to fix, which is the same mistake as rejecting an unexercised
     one."""
-    why, quotable = O.verify_one(
+    why, quotable, _differs = O.verify_one(
         _oracle(GOOD), contract=CONTRACT, testplan=TESTPLAN,
         stimulus_by_tp={}, witness=WITNESS, variants=[], base="step")
     assert (why, quotable) == ("", True)
@@ -306,7 +346,7 @@ def test_an_oracle_with_no_stimulus_to_run_on_is_not_malformed():
 
 def test_an_oracle_with_no_stimulus_is_still_screened_structurally():
     """The checks that need nothing to replay against still run."""
-    why, _ = O.verify_one(
+    why, _q, _differs = O.verify_one(
         _oracle("def decide(trace):\n    return True, 0, 'ok'\n"),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp={},
         witness=WITNESS, variants=[], base="step")
@@ -463,8 +503,9 @@ def test_a_repair_pass_is_recorded_beside_the_attempt_it_repairs(tmp_path,
     is reconstructed from.
     """
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
-    port = _Port([_reply(OVER_STRICT), _reply(GOOD)])
-    _run(port, workdir=tmp_path)
+    _with_variants(monkeypatch)
+    port = _Port([_reply(VACUOUS), _reply(GOOD)])
+    _run(port, workdir=tmp_path, want_variants=True)
 
     stages = [p for p in port.stages]
     assert stages[0] == "oracle_REQ-0001", stages
@@ -492,12 +533,13 @@ def test_a_repaired_oracle_keeps_a_record_of_what_was_caught(tmp_path,
     catch" is a question this project has already had to answer once by
     reconstructing it from a transcript directory."""
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
-    got = _run(_Port([_reply(OVER_STRICT), _reply(GOOD)]), workdir=tmp_path,
-               run_dir=tmp_path)
+    _with_variants(monkeypatch)
+    got = _run(_Port([_reply(VACUOUS), _reply(GOOD)]), workdir=tmp_path,
+               run_dir=tmp_path, want_variants=True)
 
     assert got.dispositions["REQ-0001"] == O.TRUSTED
     assert got.repairs["REQ-0001"], "the complaint that was acted on is gone"
-    assert got.repairs["REQ-0001"][0].startswith("over-strict:")
+    assert got.repairs["REQ-0001"][0].startswith("vacuous:")
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["repairs"]["REQ-0001"] == got.repairs["REQ-0001"]

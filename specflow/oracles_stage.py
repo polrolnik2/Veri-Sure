@@ -144,61 +144,88 @@ def verify_one(
     base: str,
     control: str = "",
     transactional: bool = True,
-) -> tuple[str, bool]:
-    """`(why, quotable)` -- why this oracle is unusable, and whether an author
-    may be told the details.
+) -> tuple[str, bool, dict[str, str]]:
+    """`(why, quotable, notes)`.
 
-    `quotable` is False for anything the CONTROL decided. The rejection stands
-    and is recorded, but its reason never reaches a prompt: see the note on
-    `CONTROL` above. A witness-derived rejection is quotable and drives repair.
+    `why` is why this oracle is UNUSABLE -- empty when it is fine. `quotable`
+    says whether an author may be told the details. `notes` is what the
+    instruments observed without rejecting: `{"witness": ...}`,
+    `{"control": ...}`.
 
-    Cheapest first, and every check here is independent of the design under
-    repair -- which is what makes one pass enough.
+    **NO IMPLEMENTATION GATES AN ORACLE HERE.** Only two things reject, and
+    neither involves a design:
+
+    * `well_formed` -- structural, and a replay that breaks the oracle itself;
+    * vacuity, from VARIANTS, which are derived from the requirement text.
+
+    The two designs are instruments, and each is disqualified from gating for
+    its own reason.
+
+    **The witness is a tuning target, not a correctness authority.** It is a
+    second reading of the same requirements by the same author, so an oracle
+    failing it means two same-author readings disagree and either could be
+    wrong. Rejecting on that does not make the oracle more correct, it tunes the
+    oracle toward one arbitrary reading -- measured: putting the witness in the
+    author's repair loop moved over-strictness 27 -> 15 and convictions 2 -> 16,
+    which is oracles being relaxed until they stop disagreeing, the relaxation
+    surfacing as vacuity.
+
+    **The control is an authority, and that is exactly why it may not gate.** It
+    is known-good because it scores 168/168 against the golden RTL, so it is a
+    PROXY FOR THE HELD-OUT GRADE. Withholding its detail from prompts stops its
+    behaviour leaking into oracle text, but it does not stop the one bit that
+    matters: kept or rejected. That bit selects which oracles survive, the
+    surviving oracles are what the model is repaired against, and the model is
+    what `golden_check` then scores -- so gating on the control tunes the model
+    toward the grade transitively. An instrument that shapes the run is no
+    longer independent of it.
+
+    What this costs, stated rather than hidden: an oracle no correct design can
+    satisfy now reaches the debug agent, which will spend attempts on a demand
+    nothing can discharge. Measured on a-i2c: 22 of 54 trusted oracles were
+    failed by the control, and 10 of the 18 findings the agent could not
+    discharge were among them. That cost is now VISIBLE and ATTRIBUTED -- the
+    control scores the frozen set afterwards, the way `golden_check` scores the
+    model -- instead of being paid silently as a filter.
     """
     why = well_formed(oracle, contract, testplan)
     if why:
-        return f"malformed: {why}", True
+        return f"malformed: {why}", True, {}
 
     # A testpoint with no recorded stimulus cannot run the oracle, and that is a
-    # fact about the STIMULUS. Letting the leg reject on it would call an oracle
+    # fact about the STIMULUS. Letting a leg reject on it would call an oracle
     # malformed for a reason it has no way to fix -- the same mistake as
-    # rejecting an unexercised one, which the docstring above rules out.
+    # rejecting an unexercised one, which the module docstring rules out.
     replayable = any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids)
+    notes: dict[str, str] = {}
 
-    if witness and replayable:
+    for name, design in (("witness", witness), ("control", control)):
+        if not design or not replayable:
+            continue
         held = trust._decide_over(  # noqa: SLF001
-            oracle, witness, contract, stimulus_by_tp, base=base,
+            oracle, design, contract, stimulus_by_tp, base=base,
             transactional=transactional)
         if held.broken and not held.model_broke:
-            return f"malformed: {held.broken}", True
-        # A witness that raises says nothing about the oracle. Quiet, not guilty.
+            # The ORACLE broke, not the design. That is structural and rejects.
+            return f"malformed: {held.broken}", True, notes
+        # A design that raises says nothing about the oracle. Quiet, not guilty.
+        # `held.unexercised()` is not a finding either: the scenario not being
+        # staged is the stimulus's business.
         if held.failed():
             where = f" at edge {held.edge}" if held.edge is not None else ""
-            return (f"over-strict: an independent implementation of this same "
-                    f"requirement fails it{where} -- "
-                    f"{held.detail or '(no detail)'}"), True
-        # `held.unexercised()` is deliberately NOT a rejection -- see the module
-        # docstring. The scenario not being staged is the stimulus's business.
+            notes[name] = (
+                f"fails it{where} -- {held.detail or '(no detail)'}"
+                if name == "witness" else
+                f"fails it{where}; the detail is withheld so nothing can be "
+                f"tuned against a held-out grade")
 
     if variants and replayable:
         level, detail = variants_mod.must_fail(
             oracle, variants, contract, stimulus_by_tp, base=base,
             transactional=transactional)
         if level == trust.CONVICTED:
-            return f"vacuous: {detail}", True
-
-    if control and replayable:
-        # Last, because it is the only check whose finding cannot be acted on.
-        # Running it earlier would spend the strongest instrument producing the
-        # least usable answer.
-        known = trust._decide_over(  # noqa: SLF001
-            oracle, control, contract, stimulus_by_tp, base=base,
-            transactional=transactional)
-        if known.failed():
-            return ("over-strict: a known-good design fails it; the detail is "
-                    "withheld from the author on purpose so the oracle cannot "
-                    "be tuned against a held-out grade"), False
-    return "", True
+            return f"vacuous: {detail}", True, notes
+    return "", True, notes
 
 
 def _repair_issue(req_uid: str, why: str) -> Issue:
@@ -320,16 +347,25 @@ def run_oracle_stage(
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
+    #: `req_uid -> {instrument: what it observed}`. Never rejections: no
+    #: implementation gates an oracle here. Recorded so the cost of not gating
+    #: is visible -- an oracle a known-good design fails still reaches the debug
+    #: agent, and the artifact must say so rather than let the attempts look
+    #: unexplained.
+    disagreements: dict[str, dict[str, str]] = {}
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         rejected = {}
+        disagreements = {}
         quotable: dict[str, str] = {}
         for uid, oracle in held.items():
-            why, may_quote = verify_one(
+            why, may_quote, notes = verify_one(
                 oracle, contract=contract, testplan=testplan,
                 stimulus_by_tp=stimulus_by_tp, witness=witness,
                 control=control, variants=variants, base=base,
                 transactional=transactional)
+            if notes:
+                disagreements[uid] = notes
             if why:
                 rejected[uid] = why
                 if may_quote:
@@ -382,6 +418,10 @@ def run_oracle_stage(
                    "vacuity_checked": bool(variants),
                    "over_strictness_bounded_by": witness_kind,
                    "repairs": repairs,
+                   # What the designs said without being allowed to decide.
+                   "instrument_notes": disagreements,
+                   "unsatisfiable_by_the_control": sorted(
+                       u for u, d in disagreements.items() if "control" in d),
                    "testpoints_no_oracle_names": idle})
         for uid, what in sorted(drift.items()):
             logger.warning("oracle drift %s: %s", uid, what)
@@ -582,7 +622,7 @@ def _strengthen(
     dispositions = dict(previous.dispositions)
     reasons = dict(previous.reasons)
     for oracle in again:
-        why, _quotable = verify_one(
+        why, _quotable, _notes = verify_one(
             oracle, contract=contract, testplan=testplan,
             stimulus_by_tp=stimulus_by_tp, witness=witness, control=control,
             variants=previous.variants, base=base, transactional=transactional)
