@@ -222,11 +222,20 @@ class DebugSession:
         Counting both closes that: the conversion is now neutral rather than
         rewarded, while genuinely satisfying a clause still improves the score.
 
-        Broken oracles stay out, exactly as `failing()` leaves them out. One
+        Broken ORACLES stay out, exactly as `failing()` leaves them out. One
         decides nothing, so chasing it means editing the model to fix a defect
         in the check -- the confusion this whole design exists to prevent.
+
+        A broken MODEL is the opposite case and must be counted, for the same
+        reason unexercised is. When the model raises mid-replay every result
+        goes `broken` at once, which is neither failing nor unexercised -- so
+        without this the score COLLAPSES TO ZERO and the crashing model is
+        recorded as the best one seen. Measured on h-i2c r3: an edit raised
+        `AttributeError('Model' object has no attribute 'COMPLETE')` and 54 of
+        77 oracles stopped deciding in one step.
         """
-        return len(self.failing()) + len(self.undecided())
+        return (len(self.failing()) + len(self.undecided())
+                + sum(1 for r in self._results if r.model_broke))
 
     def note_best(self, source: str) -> bool:
         """Record `source` if it is the best seen. Ties do NOT overwrite.

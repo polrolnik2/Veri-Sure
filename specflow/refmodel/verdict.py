@@ -72,6 +72,10 @@ BLOCKING: frozenset[str] = frozenset(set(ROUTE) - {"CONFORMS"})
 #: that is the shape `trust.py` already writes; the prefixes are its own.
 _DISCARD_PREFIX: tuple[tuple[str, str], ...] = (
     ("unexercised:", "NOT_EXERCISED"),
+    # The MODEL raised mid-replay. The check never got to be wrong, and the
+    # design falling over is the cheapest way to make every oracle stop
+    # complaining -- so this must reach the party that edited it.
+    ("model-broke:", "VIOLATES"),
     ("vacuous:", "VACUOUS"),
     ("over-strict:", "ORACLE_INVALID"),
     ("malformed:", "ORACLE_INVALID"),

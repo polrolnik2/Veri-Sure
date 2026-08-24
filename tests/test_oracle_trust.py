@@ -207,7 +207,8 @@ def test_the_rates_separate_unknown_from_convicted():
         source="def decide(trace):\n    return (True, 0, str(trace[0]['outputs']['q']))\n")
     out = _screen([_oracle(), always], {"REQ-0000": "met", "REQ-0001": "met"})
     rates = out.rates()
-    assert set(rates) == {"trusted", "malformed", "disagreed", "convicted",
+    assert set(rates) == {"trusted", "malformed", "model_broke",
+                          "disagreed", "convicted",
                           "over_strict", "unknown", "unexercised",
                           "control_unexercised"}
     assert rates["trusted"] + rates["convicted"] == 2

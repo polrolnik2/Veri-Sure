@@ -79,12 +79,25 @@ class OracleResult:
     edge: int | None = None
     detail: str = ""
     broken: str = ""
+    #: True when what raised was the MODEL, not the oracle. `broken` alone
+    #: cannot be routed: an oracle that returns the wrong shape is a defect in
+    #: the check and chasing it means editing code that may be correct, while a
+    #: model that crashes mid-replay is a defect in the MODEL and the cheapest
+    #: way to make every oracle stop complaining. Measured on h-i2c r3: one edit
+    #: raised `AttributeError('Model' object has no attribute 'COMPLETE')` and
+    #: 54 of 77 oracles went `broken` at once, which scored as near-perfect
+    #: because `distance()` counts neither failing nor unexercised there.
+    model_broke: bool = False
     #: The trace it judged, so a caller never re-runs to find out why.
     rows: list[dict] = field(default_factory=list)
 
     def failed(self) -> bool:
         """The model is wrong here. The only state a repair loop should chase."""
         return self.ok is False and not self.broken
+
+    def model_defect(self) -> bool:
+        """A finding about the MODEL, whether it answered wrongly or crashed."""
+        return self.failed() or self.model_broke
 
     def unexercised(self) -> bool:
         """The stimulus never created the situation the clause is about.
@@ -426,6 +439,7 @@ def decide_all(
                 results.append(OracleResult(
                     oracle.req_uid, ok=False, rows=rep.rows,
                     broken=f"the MODEL {rep.error}",
+                    model_broke=True,
                 ))
                 continue
             rows = transactional_view(rep.rows) if transactional else rep.rows

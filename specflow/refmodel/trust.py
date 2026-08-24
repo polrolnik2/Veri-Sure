@@ -113,6 +113,9 @@ class Screened:
         return {
             "trusted": len(self.trusted),
             "malformed": sum(1 for r in reasons if r.startswith("malformed:")),
+            #: The MODEL raised mid-replay. Counted apart from every gate: no
+            #: gate ran, the design fell over before one could.
+            "model_broke": sum(1 for r in reasons if r.startswith("model-broke:")),
             "disagreed": sum(1 for r in reasons if r.startswith("disagreed:")),
             "convicted": sum(1 for r in reasons if r.startswith("vacuous:")),
             "over_strict": (
@@ -298,7 +301,14 @@ def screen(
         result = _decide_over(oracle, source, contract, stimulus_by_tp, base=base,
                               transactional=transactional)
         if result.broken:
-            discarded[uid] = f"malformed: {result.broken}"
+            # A crash in the MODEL is not a defect in the CHECK, and collapsing
+            # the two sends the repair loop at the oracle author while the
+            # design is what is broken. Measured on h-i2c r3: one edit raised
+            # `AttributeError('Model' object has no attribute 'COMPLETE')` and
+            # 54 of 77 oracles were reported ORACLE_INVALID at once.
+            discarded[uid] = (f"model-broke: {result.broken}"
+                              if result.model_broke
+                              else f"malformed: {result.broken}")
             continue
 
         # -- gate 1: does it reproduce the verdict it shipped with?
