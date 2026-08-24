@@ -263,6 +263,7 @@ async def run_specflow_node(
     #: Requirement-only oracles drive the loop; the judge stops deciding.
     oracle_driven: bool = False,
     variants: bool = False,
+    adequacy_rounds: int = 0,
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -309,6 +310,7 @@ async def run_specflow_node(
         compare_oracles=compare_oracles,
         oracle_driven=oracle_driven,
         variants=variants,
+        adequacy_rounds=adequacy_rounds,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:

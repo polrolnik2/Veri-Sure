@@ -117,17 +117,24 @@ def load(path: Path) -> list[RequirementOracle]:
 def freeze(oracles: list[RequirementOracle], path: Path,
            normalized: dict[str, dict] | None = None,
            extra: dict | None = None,
+           rewrite: bool = False,
            ) -> tuple[list[RequirementOracle], dict[str, str]]:
     """Write once and return what is frozen, plus any drift against it.
 
     The FROZEN set wins. Returning the regenerated one on a mismatch would make
     the file a log rather than a freeze, and the loop would go back to measuring
     against something that moves.
+
+    `rewrite` is the one deliberate exception: a strengthening round asked for a
+    replacement oracle ON PURPOSE, having been shown a design the old one could
+    not catch. That is a new version, not drift, and it re-freezes under a new
+    hash so the loop measuring against it can still prove which one it holds.
+    Callers must not reach for this to get past a mismatch they did not intend.
     """
     path = Path(path)
     stamped = stamp(oracles, normalized)
     prior = load(path)
-    if prior:
+    if prior and not rewrite:
         return prior, drift(stamped, prior, normalized)
 
     path.parent.mkdir(parents=True, exist_ok=True)

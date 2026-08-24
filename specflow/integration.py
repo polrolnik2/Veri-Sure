@@ -258,6 +258,10 @@ def build_artifacts(
     #: VACUOUS stops being inferred from silence under source mutation and is
     #: earned against a design that actually violates the requirement.
     variants: bool = False,
+    #: Strengthening rounds after the debug loop converges: mutate the shipped
+    #: model and re-ask any oracle a mutant got past. 0 measures and acts on
+    #: nothing, which is how it ships -- the rate has to be known first.
+    adequacy_rounds: int = 0,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -532,6 +536,7 @@ def build_artifacts(
             oracle_driven=oracle_driven,
             want_variants=variants,
             oracle_set=oracle_set,
+            adequacy_rounds=adequacy_rounds,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -581,6 +586,7 @@ def build_artifacts(
                 oracle_driven=oracle_driven,
                 want_variants=variants,
                 oracle_set=oracle_set,
+                adequacy_rounds=adequacy_rounds,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

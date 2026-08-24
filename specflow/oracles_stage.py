@@ -208,8 +208,25 @@ def run_oracle_stage(
     max_rounds: int = 2,
     transactional: bool = True,
     fanout: bool = True,
+    #: `{req_uid: why}` for oracles a LATER stage found inadequate -- a mutation
+    #: of the shipped model they could not catch. Only these are regenerated,
+    #: and `previous` supplies everything else unchanged. This is the feedback
+    #: edge: without it an oracle that proves nothing stays in the set forever,
+    #: because the only thing that could have told us was downstream of it.
+    strengthen: dict[str, str] | None = None,
+    previous: OracleSet | None = None,
 ) -> OracleSet:
     """Generate, verify, repair, freeze. Returns a disposition for every requirement."""
+    if strengthen and previous is not None:
+        return _strengthen(
+            strengthen, previous, requirements=requirements,
+            contract_json=contract_json, contract=contract, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp, port=port, workdir=workdir,
+            base=base, normalized=normalized, control_source=control_source,
+            witness_port=witness_port, run_dir=run_dir,
+            max_repairs=max_repairs, transactional=transactional,
+            fanout=fanout)
+
     witness, witness_kind = _witness(
         requirements=requirements, contract_json=contract_json,
         port=witness_port or port, workdir=workdir, run_dir=run_dir)
@@ -372,3 +389,94 @@ def _dispositions(
 def _summary(dispositions: dict[str, str]) -> str:
     counts = Counter(dispositions.values())
     return ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+
+
+def _strengthen(
+    inadequate: dict[str, str],
+    previous: OracleSet,
+    *,
+    requirements: list[dict],
+    contract_json: str,
+    contract: dict,
+    testplan: list[dict],
+    stimulus_by_tp: dict[str, list[dict]],
+    port: ModelPort,
+    workdir: Path,
+    base: str,
+    normalized: dict[str, dict] | None,
+    control_source: str | None,
+    witness_port: ModelPort | None,
+    run_dir: Path | None,
+    max_repairs: int,
+    transactional: bool,
+    fanout: bool,
+) -> OracleSet:
+    """Re-ask only the oracles a mutant got past, and verify the replacements.
+
+    A replacement is kept only if it VERIFIES. An oracle strengthened to catch a
+    mutant very easily becomes over-strict -- that is the oscillation the plan
+    names -- and the honest handling is that the round simply fails to improve
+    it, not that a check no correct design satisfies gets promoted because it
+    was eager.
+    """
+    witness, witness_kind = _witness(
+        requirements=requirements, contract_json=contract_json,
+        port=witness_port or port, workdir=workdir, run_dir=run_dir)
+    control = control_source or ""
+    if control:
+        witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
+
+    again, _ = run_oracle_gen(
+        requirements=requirements, contract_json=contract_json,
+        contract=contract, testplan=testplan, port=port,
+        normalized=normalized, conforming_source=witness,
+        stimulus_by_tp=stimulus_by_tp, base=base,
+        max_repairs=max_repairs, fanout=fanout,
+        only=set(inadequate),
+        feedback={uid: [Issue(
+            "error", f"oracle.{uid}.inadequate",
+            f"A design that VIOLATES this requirement passes your check: it "
+            f"{why}. The check is therefore satisfied by something provably "
+            f"wrong, so a design agreeing with it proves nothing. Tighten it to "
+            f"the behaviour the clause actually states -- and only to that: a "
+            f"check no correct design satisfies is rejected outright.")]
+            for uid, why in inadequate.items()},
+    )
+
+    kept = {o.req_uid: o for o in previous.trusted}
+    dispositions = dict(previous.dispositions)
+    reasons = dict(previous.reasons)
+    for oracle in again:
+        why, _quotable = verify_one(
+            oracle, contract=contract, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp, witness=witness, control=control,
+            variants=previous.variants, base=base, transactional=transactional)
+        if why:
+            # The replacement is worse than what it replaced. Keep the old one
+            # and record that the round did not help: reporting an oscillation
+            # is worth more than promoting whichever attempt happened to be last.
+            reasons[oracle.req_uid] = (
+                f"strengthening rejected -- {why}; the previous oracle stands")
+            continue
+        kept[oracle.req_uid] = oracle
+        dispositions[oracle.req_uid] = TRUSTED
+        reasons[oracle.req_uid] = "strengthened after a mutant got past it"
+
+    trusted = list(kept.values())
+    if run_dir is not None:
+        trusted, _drift = freeze.freeze(
+            trusted, Path(run_dir) / "specflow" / ARTIFACT, normalized,
+            extra={"dispositions": dispositions, "reasons": reasons,
+                   "witness": witness_kind, "rounds": previous.rounds + 1,
+                   "variants": len(previous.variants)},
+            rewrite=True)
+    else:
+        trusted = freeze.stamp(trusted, normalized)
+
+    logger.info("oracles: strengthened %d of %d inadequate",
+                sum(1 for u in inadequate if dispositions.get(u) == TRUSTED
+                    and reasons.get(u, "").startswith("strengthened")),
+                len(inadequate))
+    return OracleSet(trusted=trusted, dispositions=dispositions,
+                     reasons=reasons, variants=list(previous.variants),
+                     witness_kind=witness_kind, rounds=previous.rounds + 1)

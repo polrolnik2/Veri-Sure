@@ -295,6 +295,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_compare_oracles=args.compare_oracles,
             specflow_oracle_driven=args.oracle_driven,
             specflow_variants=args.variants,
+            specflow_adequacy_rounds=args.adequacy_rounds,
         ),
     )
     try:
@@ -416,6 +417,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--adequacy-rounds", type=int, default=0,
+        help="After the debug loop converges, mutate the SHIPPED model and "
+             "re-ask any oracle a mutant got past. 0 measures adequacy and "
+             "acts on nothing, which is the default: the rate has to be "
+             "known before it is allowed to spend calls.",
     )
     p.add_argument(
         "--variants", action="store_true",

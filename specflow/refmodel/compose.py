@@ -240,6 +240,8 @@ def run_refmodel(
     #: whole point: an oracle written after the model exists is written by
     #: something that could have read it.
     oracle_set=None,
+    #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
+    adequacy_rounds: int = 0,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -306,6 +308,7 @@ def run_refmodel(
             oracle_driven=oracle_driven,
             want_variants=want_variants,
             oracle_set=oracle_set,
+            adequacy_rounds=adequacy_rounds,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -338,6 +341,10 @@ def _debug_turns(
     #: Produced by `oracles_stage` before the model existed. When present the
     #: block below generates nothing.
     oracle_set=None,
+    #: Strengthening rounds after the debug loop converges: mutate the shipped
+    #: model, and re-ask any oracle a mutant got past. 0 measures adequacy and
+    #: acts on nothing, which is how it ships first.
+    adequacy_rounds: int = 0,
     #: Step 7's must-fail leg. Off by default: it costs k model calls per
     #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
     #: VACUOUS stops being inferred from silence under source mutation and is
@@ -430,7 +437,7 @@ def _debug_turns(
             logger.warning("isolated oracles: not generated (%r)", exc)
 
     if oracle_driven and isolated:
-        return _oracle_driven_turns(
+        return _closed_loop(
             source=source, contract=contract, contract_json=contract_json,
             requirements=requirements, covers=covers, oracles=isolated,
             base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
@@ -438,7 +445,9 @@ def _debug_turns(
             control_source=control_source, normalized=normalized,
             judge_port=judge_port, variants=variant_set,
             carried=carried, oracle_rates=oracle_rates,
+            oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
         )
+
 
     issues: list[Issue] = []
     turns = max(1, int(max_turns))
@@ -601,6 +610,83 @@ def _debug_turns(
             # the expensive way to learn nothing.
             return source, issues
 
+    return source, issues
+
+
+def _closed_loop(
+    *,
+    source: str,
+    contract: dict,
+    contract_json: str,
+    requirements: list[dict],
+    covers: dict[str, list[str]],
+    oracles: list,
+    base: str,
+    testplan: list[dict],
+    stimulus_by_tp: dict[str, list[dict]],
+    run_dir: Path | None,
+    debugger: RefModelDebugger,
+    max_turns: int,
+    control_source: str | None,
+    normalized: dict[str, dict] | None,
+    judge_port: ModelPort,
+    variants: list | None,
+    carried: dict[str, str],
+    oracle_rates: dict,
+    oracle_set=None,
+    adequacy_rounds: int = 0,
+) -> tuple[str, list[Issue]]:
+    """Debug until the oracles are satisfied, then ask whether that meant anything.
+
+    Satisfying every oracle is only evidence if the oracles could have failed
+    the design they just passed -- `qualify.py:3-22`'s argument, one level down.
+    So once the loop converges, the SHIPPED model is mutated and every trusted
+    oracle is asked whether it would have noticed. A survivor is a finding about
+    the ORACLE, and the counterexample is in hand, so it goes back to the stage
+    that owns oracle generation.
+
+    `adequacy_rounds=0` measures and acts on nothing, which is how this ships:
+    the rate has to be known before it is allowed to spend calls.
+    """
+    from .adequacy import assess, inadequate, write
+
+    issues: list[Issue] = []
+    for round_ in range(max(0, int(adequacy_rounds)) + 1):
+        source, issues = _oracle_driven_turns(
+            source=source, contract=contract, contract_json=contract_json,
+            requirements=requirements, covers=covers, oracles=oracles,
+            base=base, testplan=testplan, stimulus_by_tp=stimulus_by_tp,
+            run_dir=run_dir, debugger=debugger, max_turns=max_turns,
+            control_source=control_source, normalized=normalized,
+            judge_port=judge_port, variants=variants,
+            carried=carried, oracle_rates=oracle_rates,
+        )
+        if not oracles:
+            break
+        report = assess(oracles, source, contract, stimulus_by_tp, base=base)
+        if run_dir is not None:
+            write(Path(run_dir), report, round_)
+        weak = inadequate(report)
+        logger.info("adequacy r%d: %d of %d oracle(s) a mutant got past",
+                    round_, len(weak), len(report))
+        if not weak or round_ == adequacy_rounds or oracle_set is None:
+            break
+
+        from ..oracles_stage import run_oracle_stage
+
+        oracle_set = run_oracle_stage(
+            requirements=requirements, contract_json=contract_json,
+            contract=contract, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp, port=judge_port,
+            workdir=(Path(run_dir) / "specflow" if run_dir is not None
+                     else Path("/tmp/specflow-oracles")),
+            base=base, normalized=normalized, control_source=control_source,
+            run_dir=run_dir, strengthen=weak, previous=oracle_set,
+        )
+        oracles = list(oracle_set.trusted)
+        carried = {u: v for u, v in oracle_set.dispositions.items()
+                   if v != "TRUSTED"}
+        oracle_rates = oracle_set.rates()
     return source, issues
 
 
