@@ -405,3 +405,22 @@ def test_a_model_with_no_oracles_is_reported_as_unchecked():
     src = inspect.getsource(compose.run_refmodel)
     assert "refmodel.unchecked" in src
     assert "unrepaired, not" in src
+
+
+def test_the_witness_is_never_downgraded_to_the_small_model():
+    """It is a whole implementation, the same artifact class as the reference
+    model, and it answers "can a design built from this requirement satisfy
+    this check?". A weaker one answers no too often -- and a witness failure is
+    read as over-strictness, so every false no RELAXES an oracle. Downgrading it
+    trades over-strict oracles for vacuous ones, which is the trade this
+    pipeline has already measured going the wrong way."""
+    from specflow.model_io import ApiPort, PortSettings
+    from specflow.refmodel.conform import WITNESS_STAGE
+
+    assert WITNESS_STAGE in PortSettings.full_strength_stages
+    assert WITNESS_STAGE in ApiPort.__dataclass_fields__[
+        "full_strength_stages"].default
+
+    settings = PortSettings(small_model="tiny", small_effort="low")
+    assert settings.for_stage(WITNESS_STAGE) == (None, None)
+    assert settings.for_stage("oracle_REQ-0001") == ("tiny", "low")

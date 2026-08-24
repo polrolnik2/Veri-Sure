@@ -375,10 +375,13 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--no-stream", dest="stream", action="store_false")
     g.add_argument("--small-model", help="model for the narrow fanned-out stages")
     g.add_argument("--small-effort")
-    g.add_argument("--full-strength-stages", default="refmodel",
+    g.add_argument("--full-strength-stages", default="refmodel,witness",
                    help="comma-separated stages the small model must NOT touch. "
                         "`refmodel` above all: every check compares the design "
-                        "against it.")
+                        "against it. `witness` for a less obvious reason -- it "
+                        "is a whole implementation too, and a weaker one fails "
+                        "sound oracles, which is read as over-strictness and "
+                        "RELAXES them.")
     g.add_argument("--max-output-tokens", type=int, default=48000)
     g.add_argument("--responses-chunk", type=int, default=9000,
                    help="per-continuation output slice. One long call goes "

@@ -170,9 +170,17 @@ class PortSettings:
     #: `full_strength_stages` names the ones that must NOT be downgraded --
     #: the reference model above all, since every check in the suite compares
     #: the design against it.
+    #:
+    #: `witness` is in here for a reason that is not obvious. It is a whole
+    #: implementation, the same artifact class as `refmodel`, and its job is to
+    #: answer "can a design built from this requirement satisfy this check?".
+    #: A WEAKER implementation answers no too often -- and a witness failure is
+    #: read as over-strictness, so every false no RELAXES an oracle. Downgrading
+    #: it does not save a check, it trades over-strict oracles for vacuous ones,
+    #: which is the trade this pipeline has already measured going the wrong way.
     small_model: str | None = None
     small_effort: str | None = None
-    full_strength_stages: frozenset[str] = frozenset({"refmodel"})
+    full_strength_stages: frozenset[str] = frozenset({"refmodel", "witness"})
 
     #: Total output budget for one stage call, and the per-continuation slice of
     #: it. The slice exists because a single long call goes silent long enough
@@ -370,8 +378,9 @@ class ApiPort:
     #: so it is the one that must never be quietly downgraded.
     #:
     #: Kept for callers that construct an ApiPort directly; `settings` is the
-    #: supported route and wins when it names anything.
-    full_strength_stages: frozenset = frozenset({"refmodel"})
+    #: supported route and wins when it names anything. `witness` is here for
+    #: the same reason as `refmodel` -- see `PortSettings`.
+    full_strength_stages: frozenset = frozenset({"refmodel", "witness"})
     #: Where prompt-cache accounting goes. Optional, because the single-call
     #: stages have nothing to cache across; supplied by every fanned-out stage,
     #: because there a silent cache loss is a ~30x cost regression that no gate,
