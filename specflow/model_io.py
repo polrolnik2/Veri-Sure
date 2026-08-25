@@ -212,6 +212,21 @@ class PortSettings:
     max_output_tokens: int = 48000
     responses_chunk: int = 9000
 
+    #: The slice is a budget for REASONING AND CONTENT TOGETHER, so it has to
+    #: scale with effort. A slice smaller than the reasoning budget yields no
+    #: content at all, the continuation makes no progress, and the stream is
+    #: eventually reaped -- which is the same trap the continuation mechanism
+    #: was built to escape, entered from the other side.
+    #:
+    #: Not hypothetical, and found by shipping `deep_effort="high"` beside the
+    #: 9000 default: the very first call died with
+    #: `RemoteProtocolError ... continuation 1/6, 0 chars so far` on an 18 KB
+    #: prompt. The fix that raised oracle effort would have taken every oracle
+    #: call with it.
+    effort_chunk: dict[str, int] = field(default_factory=lambda: {
+        "low": 9000, "medium": 9000, "high": 24000, "xhigh": 32000,
+    })
+
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
     #: applies before a response starts.
     stream_retries: int = 2
@@ -224,6 +239,15 @@ class PortSettings:
     #: lesson lives in the default instead. Genuine rate limits still get two.
     max_retries: int = 2
     timeout_s: float = 600.0
+
+    def chunk_for(self, effort: str | None) -> int:
+        """The per-continuation slice for one effort level.
+
+        Never below `responses_chunk`: the table raises a slice for a deeper
+        effort and must not quietly shrink one a caller set on purpose.
+        """
+        base = int(self.responses_chunk)
+        return max(base, int(self.effort_chunk.get(str(effort or "medium"), base)))
 
     def for_stage(self, stage: str | None) -> tuple[str | None, str | None]:
         """`(model, effort)` overrides for one stage, or `(None, None)`.
@@ -619,7 +643,7 @@ class ApiPort:
         effort = cfg.reasoning_effort or "medium"
         body = _responses_body(cfg, prompt, self.settings.max_output_tokens)
         total = int(body.pop("max_output_tokens"))
-        chunk = int(self.settings.responses_chunk)
+        chunk = self.settings.chunk_for(effort)
         body["include"] = ["reasoning.encrypted_content"]
         body["store"] = False
         body["max_output_tokens"] = min(chunk, total)

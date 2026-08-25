@@ -34,3 +34,44 @@ def test_oracles_get_more_reasoning_on_the_same_model():
     for stage in ("correspond_REQ-0001", "variant_REQ-0001_trigger",
                   "stimulus_TP-0007"):
         assert settings.for_stage(stage) == ("small", "medium"), stage
+
+
+def test_the_continuation_slice_scales_with_effort():
+    """A slice is a budget for REASONING AND CONTENT TOGETHER.
+
+    Below the reasoning budget it yields no content, the continuation makes no
+    progress, and the stream is reaped -- the trap the continuation mechanism
+    exists to escape, entered from the other side.
+
+    Found by shipping `deep_effort="high"` beside the 9000 default: the first
+    call died with `RemoteProtocolError ... continuation 1/6, 0 chars so far` on
+    an 18 KB prompt. Raising oracle effort would have taken every oracle call
+    with it.
+    """
+    from specflow.model_io import PortSettings
+
+    s = PortSettings()
+    assert s.chunk_for("high") > s.chunk_for("medium")
+    assert s.chunk_for("xhigh") >= s.chunk_for("high")
+    # An unknown or absent effort falls back rather than raising.
+    assert s.chunk_for(None) == s.chunk_for("medium")
+    assert s.chunk_for("nonsense") == s.responses_chunk
+
+
+def test_a_slice_a_caller_set_is_never_shrunk():
+    """The table RAISES for deeper effort; it must not override a deliberate
+    caller value downward."""
+    from specflow.model_io import PortSettings
+
+    s = PortSettings(responses_chunk=30000)
+    assert s.chunk_for("medium") == 30000
+    assert s.chunk_for("xhigh") >= 30000
+
+
+def test_the_shipped_deep_effort_gets_a_slice_that_fits_it():
+    """The two defaults have to agree, which is the bug this pins."""
+    from specflow.model_io import PortSettings
+
+    s = PortSettings()
+    assert s.deep_effort == "high"
+    assert s.chunk_for(s.deep_effort) > PortSettings.responses_chunk
