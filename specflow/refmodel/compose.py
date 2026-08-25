@@ -128,6 +128,16 @@ class RefModelDebugger(Protocol):
 
     def debug(self, session: DebugSession) -> tuple[str, int, str]: ...
 
+    #: `(input, output)` tokens this debugger has spent, cumulative. Optional:
+    #: a debugger without it reports nothing rather than breaking, and the
+    #: ledger then shows a hole where a hole exists.
+    #:
+    #: It is here because the loop's spend was invisible. Every other stage
+    #: writes a `usage` block to `agent_io`; this one calls the model directly
+    #: and wrote nothing, so a run's recorded cost was the fan-outs only --
+    #: and a user's actual bill did not resemble it.
+    def usage(self) -> tuple[int, int]: ...
+
 
 def generate_model(
     *,
@@ -610,6 +620,12 @@ def _debug_turns(
         # is a joint property of the stimulus and the design, so an edit that
         # stops the model entering a state un-fires an activation the stimulus
         # still drives, and the failing count DROPS.
+        spent = (0, 0)
+        try:
+            spent = tuple(debugger.usage())          # type: ignore[attr-defined]
+        except Exception:                            # noqa: BLE001
+            spent = (0, 0)                           # a debugger without it
+
         regressed = (ratchet.note(
             Path(run_dir) / "specflow" / "exercised.json", mechanical)
             if run_dir is not None else [])
@@ -626,6 +642,10 @@ def _debug_turns(
             (out / "trust.json").write_text(
                 json.dumps({
                     "driver": "requirement-oracles",
+                    # Cumulative across turns, so the last turn's file carries
+                    # the loop's whole spend -- which is the number a cost
+                    # ledger needs and the one nothing used to record.
+                    "debug_tokens": {"input": spent[0], "output": spent[1]},
                     "rates": oracle_rates,
                     # WHAT A CONFORMS IS WORTH. "46 CONFORMS" was reported as
                     # the loop converging on a model that fails 138 of 168
@@ -792,11 +812,22 @@ def _debug_turns(
                 break
             idle_turns += 1
 
-    if stop and last_artifact is not None and last_artifact.is_file():
+    if last_artifact is not None and last_artifact.is_file():
         try:
             blob = json.loads(last_artifact.read_text(encoding="utf-8"))
-            blob["stopped_because"] = stop
-            blob["idle_turns"] = idle_turns
+            if stop:
+                blob["stopped_because"] = stop
+                blob["idle_turns"] = idle_turns
+            # Read AFTER the loop, not during it: a turn's trust.json is
+            # written before that turn's debug call runs, so an in-loop read
+            # only ever saw the previous turns and a single-turn run recorded
+            # zero. The last artifact carries the cumulative total, which is
+            # the number a cost ledger actually needs.
+            try:
+                final = tuple(debugger.usage())   # type: ignore[attr-defined]
+            except Exception:                     # noqa: BLE001
+                final = (0, 0)                    # a debugger without a counter
+            blob["debug_tokens"] = {"input": final[0], "output": final[1]}
             last_artifact.write_text(
                 json.dumps(blob, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")

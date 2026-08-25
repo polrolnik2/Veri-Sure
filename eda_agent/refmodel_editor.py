@@ -169,10 +169,16 @@ class RefModelEditor:
         toolkit.register_tool_function(self._tool_run_all)
         toolkit.register_tool_function(self._tool_add_stimulus)
 
+        # Held so the turn's token usage can be read back. The wrapper counts
+        # it either way; without a reference nothing ever asks, and this loop's
+        # spend then never appears in any ledger -- which is exactly what
+        # happened: `get_model_usage` exists and only the verilog-eval harness
+        # calls it, so every debug turn on the specflow path was invisible.
+        self._model = make_openai_model(cfg)
         self._agent = SafeReActAgent(
             name="RefModelDebugger",
             sys_prompt=SYSTEM_PROMPT,
-            model=make_openai_model(cfg),
+            model=self._model,
             formatter=make_formatter(cfg.model),
             toolkit=toolkit,
             memory=InMemoryMemory(),
@@ -267,6 +273,17 @@ class RefModelEditor:
             return _no_session()
         return _text(await asyncio.to_thread(
             self._session.add_stimulus, req_uid, what_the_scenario_needs))
+
+    def usage(self) -> tuple[int, int]:
+        """`(input_tokens, output_tokens)` for this turn, or `(0, 0)`.
+
+        Zero when the wrapper does not expose counters, never an estimate: a
+        guessed number in a cost ledger is worse than a hole, because a hole
+        is visibly a hole.
+        """
+        from .model import get_model_usage
+
+        return get_model_usage(getattr(self, "_model", None))
 
     async def _tool_read_model(self, method: str = "") -> ToolResponse:
         """Read the reference model, line-numbered.
@@ -526,6 +543,13 @@ class SyncRefModelDebugger:
     def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 6):
         self._cfg = cfg
         self._max_attempts = max_attempts
+        self._usage: tuple[int, int] = (0, 0)
+
+    #: `(input, output)` summed over every turn this debugger has run. Read by
+    #: the stage so the loop's spend lands in the run's ledger instead of being
+    #: counted in memory and dropped.
+    def usage(self) -> tuple[int, int]:
+        return self._usage
 
     def debug(self, session: DebugSession) -> tuple[str, int, str]:
         import concurrent.futures
@@ -535,7 +559,15 @@ class SyncRefModelDebugger:
             # and carrying that conversation into the next turn would have the
             # agent reasoning about findings that no longer hold.
             editor = RefModelEditor(self._cfg, max_attempts=self._max_attempts)
-            return asyncio.run(editor.debug(session))
+            try:
+                return asyncio.run(editor.debug(session))
+            finally:
+                # In `finally` because a turn that raised still spent tokens,
+                # and a ledger that only counts successful turns understates
+                # exactly the runs worth investigating.
+                got_in, got_out = editor.usage()
+                self._usage = (self._usage[0] + got_in,
+                               self._usage[1] + got_out)
 
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
