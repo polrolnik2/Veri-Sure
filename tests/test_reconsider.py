@@ -202,3 +202,50 @@ def test_the_switch_reaches_the_command_line():
     assert "specflow_reconsider_rounds" in open(top).read()
     assert "--reconsider-rounds" in open(
         "benchmarks/run_chipverilog.py").read()
+
+
+# ------------------------------------------ the tighten edge, end to end
+
+
+def test_a_strengthened_check_that_catches_the_mutant_is_taken_and_is_adequate(
+        tmp_path, monkeypatch):
+    """The whole tighten edge on one oracle, with no model call.
+
+    The edge has run live twice and never once moved an oracle from inadequate
+    to adequate -- t-i2c 51 calls, w-i2c 21 -- so before spending more on it,
+    the PLUMBING is worth proving separately from the author: given a
+    replacement that does catch what got past, does the round accept it, and
+    does adequacy then agree?
+
+    Scripting the reply is what isolates that. A live round tests the author
+    AND the plumbing at once, and a null result cannot be attributed to either.
+    """
+    from specflow.refmodel import adequacy
+    from tests.test_adequacy import CONTRACT as A_CONTRACT
+    from tests.test_adequacy import FINAL, SHARP, STIM as A_STIM, WEAK, _oracle
+
+    before = adequacy.assess([_oracle(WEAK)], FINAL, A_CONTRACT, A_STIM,
+                             base="step")["REQ-0001"]
+    assert before.verdict == adequacy.INADEQUATE, before
+    assert "edge" in before.counterexample, before.counterexample
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(GOOD)])
+    got = _run(_previous(IMPOSSIBLE), port, tmp_path,
+               strengthen={"REQ-0001": before.counterexample})
+
+    sent = [p for p in port.prompts if "tighten the check" in p]
+    assert sent, "the tighten prompt never went out"
+    assert "edge" in sent[0], "the trace counterexample has to reach the author"
+    assert got.trusted[0].source != IMPOSSIBLE, (
+        "a verifying replacement has to be taken, or the edge cannot ever work")
+    assert "strengthened" in got.reasons["REQ-0001"], got.reasons
+
+    # And the instrument agrees about the replacement, which is the half the
+    # live runs never reached: SHARP reproduces the design's rule exactly, so
+    # every mutant that changes y is caught.
+    after = adequacy.assess([_oracle(SHARP)], FINAL, A_CONTRACT, A_STIM,
+                            base="step")["REQ-0001"]
+    assert after.verdict == adequacy.ADEQUATE, after
+    assert after.counterexample == "", (
+        "an adequate oracle has nothing to send a strengthening round")
