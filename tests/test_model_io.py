@@ -87,3 +87,33 @@ def test_deep_effort_is_off_by_default():
     # that came first, and which switching the default off would otherwise hide.
     assert PortSettings(deep_effort="high").chunk_for("high") > \
         PortSettings.responses_chunk
+
+
+def test_deep_effort_never_overrides_an_explicit_caller_effort():
+    """`deep_effort` raises the SMALL tier. With no small tier, it is a no-op.
+
+    Found by it silently ruining an experiment. A script launched with
+    `PortSettings(model="gpt-5-mini", effort="medium")` ran every oracle call at
+    `high`, because the deep-effort branch answered before the caller's own
+    effort was consulted — and the run was then reported as a medium-effort arm
+    on the strength of the label on the command line.
+
+    That is the exact failure `PortSettings`' own docstring names: a switch a
+    caller sets and a callee silently overrides is worse than no switch.
+    """
+    from specflow.model_io import PortSettings
+
+    caller = PortSettings(model="gpt-5-mini", effort="medium",
+                          deep_effort="high")
+    assert caller.for_stage("oracle_REQ-0001") == (None, None), (
+        "deep_effort overrode an effort the caller set explicitly")
+
+    # With a small tier present it does its job.
+    tiered = PortSettings(model="big", effort="xhigh", small_model="mini",
+                          small_effort="medium", deep_effort="high")
+    assert tiered.for_stage("oracle_REQ-0001") == ("mini", "high")
+    assert tiered.for_stage("variant_REQ-0001_trigger") == ("mini", "medium")
+
+    # `small_effort` alone is enough of a tier to raise.
+    effort_only = PortSettings(small_effort="low", deep_effort="high")
+    assert effort_only.for_stage("oracle_REQ-0001") == (None, "high")

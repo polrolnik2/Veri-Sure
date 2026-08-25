@@ -287,9 +287,24 @@ class PortSettings:
             # segment for the reason the full-strength set is -- these stages
             # are named per requirement (`oracle_REQ-0001`, `_fix1` on a repair
             # pass), so exact membership could never name one of them.
-            if self.deep_effort and (
-                    stage in self.deep_effort_stages
-                    or stage.split("_", 1)[0] in self.deep_effort_stages):
+            #
+            # ONLY WHERE A SMALL TIER EXISTS TO RAISE. `deep_effort` lifts the
+            # fanned-out stages off `small_effort`; with no small model and no
+            # small effort configured there is nothing to lift, and returning
+            # it anyway OVERRIDES the effort the caller asked for.
+            #
+            # That is not hypothetical. An experiment launched with
+            # `PortSettings(model="gpt-5-mini", effort="medium")` ran every
+            # oracle call at `high`, because this branch answered before the
+            # caller's own effort was ever consulted -- and the run was
+            # reported as a medium-effort arm on the strength of the label.
+            # It is the exact failure this class's docstring names: a switch a
+            # caller sets and a callee silently overrides is worse than no
+            # switch.
+            if (self.deep_effort
+                    and (self.small_model or self.small_effort)
+                    and (stage in self.deep_effort_stages
+                         or stage.split("_", 1)[0] in self.deep_effort_stages)):
                 return self.small_model, self.deep_effort
         return self.small_model, self.small_effort
 
