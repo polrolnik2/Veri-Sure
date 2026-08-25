@@ -109,15 +109,34 @@ You are not judging the requirement, rewriting it, or deciding whether a design
 meets it. You are saying what it is about, in a form a script can check.
 
 ACTIVATION. Give `text` always: the precondition in one clause. Additionally
-give `inputs` -- a map of input port name to the value that must hold -- WHEN
-AND ONLY WHEN the condition can be stated that way. "cmd is WRITE and ena is 1"
-can; "while the state machine is idle" and "after arbitration has been lost"
-cannot, because they are about internal state rather than about what is driven.
-Leave `inputs` empty in those cases. An empty `inputs` is not a worse answer, it
-is a different and equally correct one -- inventing input values that do not
-actually determine the precondition is far worse, because a later stage will
-drive them and conclude the scenario was staged when it was not. Reset ports may
-appear in `inputs`: "while reset is asserted" is a genuine precondition.
+give `inputs` -- a map of input port name to the value that must hold.
+
+`inputs` is a NECESSARY condition, not a sufficient one. The question is not
+"do these values guarantee the precondition" but "must these values be driven
+for the precondition to be reachable at all". Those are different questions and
+only the second is being asked here.
+
+So a precondition phrased in terms of internal state STILL gets `inputs`,
+whenever some input must have been driven to reach that state:
+
+  "during the READ data-bit phase"     -> {"cmd": 8}   the phase is unreachable
+                                                        without READ issued
+  "when the WRITE sequence completes"  -> {"cmd": 4}   likewise
+  "while the core is enabled and idle" -> {"ena": 1}   idle is state, ena is not
+
+Give `inputs` empty ONLY when no input value whatsoever is required to reach the
+condition -- "after arbitration has been lost" is the real case, because
+arbitration loss is caused by the bus, not by anything a test drives. Reset
+ports may appear in `inputs`: "while reset is asserted" is a genuine
+precondition.
+
+Why necessary is the right bar: a later stage uses `inputs` to decide whether a
+testpoint is WORTH CHECKING against this requirement, and then runs the actual
+check, which reports the scenario as unexercised if it did not occur. A value
+that is necessary-but-not-sufficient therefore costs one wasted replay when it
+is wrong, and an empty `inputs` costs the requirement every chance of ever being
+exercised. Measured: leaving them empty put 57 of 77 requirements out of reach
+of new stimulus, and a run that added 48 testpoints moved nothing at all.
 
 OBSERVABLE. List the declared OUTPUT ports whose values the requirement
 constrains. Outputs only -- an input is what a test drives, never what it

@@ -158,3 +158,56 @@ def test_the_prompt_separates_the_mechanism_from_the_effect():
     # back the other way into reaching for the nearest output port.
     assert "produces a check that fails correct designs" in prefix
     assert "writes off behaviour that is perfectly checkable" in prefix
+
+
+# ------------------------------------------- activation inputs are NECESSARY
+
+
+def test_the_prompt_asks_for_necessary_not_sufficient_inputs():
+    """The bar `check_static` actually needs, pinned against reverting.
+
+    The clause this replaces told the model to leave `inputs` empty whenever the
+    precondition read as internal state. The model followed it, and 57 of 77
+    requirements came back with no input activation -- 32 of them naming a
+    command or reset in their own activation text, several with the literal
+    encoding (`"A START (cmd = 0001) ... is issued"` normalized to `{}`).
+
+    That capped `_attach` at 26% of the suite, which is why a run that added 48
+    testpoints moved `NOT_EXERCISED` by zero.
+
+    Necessary is the right bar because `inputs` gates ATTACHMENT, not truth: the
+    oracle still runs afterwards and reports the scenario unexercised if it did
+    not occur. Measured on the requirements that already had inputs, a static
+    match predicts the oracle really fires with precision 0.81, against 0.40 for
+    attaching everything -- and 0.40 is the regime the f-i2c result (one true
+    finding for 27 false) came out of.
+    """
+    from specflow.normalize import SYSTEM
+
+    assert "NECESSARY condition, not a sufficient one" in SYSTEM
+    assert "must these values be driven" in SYSTEM
+    # The state-phrased cases now get inputs rather than being excluded.
+    assert "during the READ data-bit phase" in SYSTEM
+    # And the genuine exclusion survives: nothing a test drives reaches it.
+    assert "after arbitration has been lost" in SYSTEM
+
+    stale = ('"while the state machine is idle" and "after arbitration has '
+             'been lost"\ncannot')
+    assert stale not in SYSTEM, (
+        "the sufficiency reading is back; it empties `inputs` for any "
+        "precondition phrased as internal state")
+
+
+def test_reset_stays_a_legitimate_activation_input():
+    """Unchanged by the rewrite, and easy to lose in it.
+
+    Matched across collapsed whitespace: the rewrite reflowed the paragraph and
+    put a newline inside "Reset ports", so the obvious assertion failed on text
+    that was present and correct. That trap has cost this repo before.
+    """
+    import re
+
+    from specflow.normalize import SYSTEM
+
+    flat = re.sub(r"\s+", " ", SYSTEM)
+    assert "Reset ports may appear in `inputs`" in flat
