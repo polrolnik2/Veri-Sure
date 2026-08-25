@@ -395,3 +395,70 @@ def assertion_ports(report: dict[str, dict]) -> dict[str, set[str]]:
         uid: set(record.get("asserts_on") or ())
         for uid, record in report.items()
     }
+
+
+def judged_before_the_scenario(
+    oracle: RequirementOracle,
+    rows: list[dict],
+    contract: dict,
+    *,
+    at_edge: int | None,
+) -> str:
+    """Did this oracle decide before anything it watches had moved?
+
+    The second half of the over-strictness triage, and the half that is NOT
+    truncation. Open-drain makes a protocol's idle state and its deasserted
+    state the same value -- the control resets to `scl_oen = 1, sda_oen = 1`,
+    which is exactly the value every "release the line" requirement tells an
+    oracle to look for. A check that scans for `port == value` and never
+    compares consecutive rows therefore matches edge 0 and reports that the
+    action preceding it never happened.
+
+    Worked example, REQ-0070. It demands SDA driven low before SCL is released,
+    and the control does exactly that -- `sda_oen` 0 at edge 4, `scl_oen` 1 at
+    edge 5. The oracle takes the first `scl_oen == 1` at or after activation,
+    finds edge 0, and fails. Its sibling REQ-0042 states the same ordering, so
+    this is not a disagreement about the protocol; it is a level read where a
+    transition was meant.
+
+    TWO conditions, and the second is what stops this accusing a real
+    reset-behaviour defect:
+
+    * at the failing edge, no port the oracle reads has moved off its value at
+      edge 0 -- nothing it watches has happened yet;
+    * at least one of those ports DOES move later in the same trace -- so the
+      scenario is in there, and the oracle simply decided before reaching it.
+
+    Without the second, a requirement genuinely about the reset state, failing
+    because the reset state is wrong, would be waved away as an idle match.
+    Measured across the five: all five fail at edges 0-6 with every read port
+    still at its reset value.
+
+    Returns a reason, or empty. Deliberately not a verdict: this accuses the
+    ORACLE, and `verdict.ROUTE` already knows where that goes.
+    """
+    if at_edge is None or not rows:
+        return ""
+    widths = _widths(contract)
+    ports = sorted(ports_read(oracle, contract) & set(widths))
+    if not ports:
+        return ""
+    first = (rows[0].get("outputs") or {})
+    at = next((r.get("outputs") or {} for r in rows
+               if r.get("edge") == at_edge), None)
+    if at is None:
+        return ""
+    moved_by_then = [p for p in ports
+                     if p in at and p in first and at[p] != first[p]]
+    if moved_by_then:
+        return ""
+    moves_later = [
+        p for p in ports
+        if any((r.get("outputs") or {}).get(p) != first.get(p)
+               for r in rows if (r.get("edge") or 0) > at_edge)
+    ]
+    if not moves_later:
+        return ""
+    return (f"judged at edge {at_edge}, before any of {', '.join(ports)} had "
+            f"moved off its reset value -- and {', '.join(moves_later)} moves "
+            f"later in this same trace, so the scenario had not happened yet")

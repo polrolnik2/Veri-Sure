@@ -267,3 +267,90 @@ def test_the_verdict_does_not_depend_on_which_design_it_ran_against():
     other = liveness.assess([_oracle(SHARP)], violating, CONTRACT, STIM,
                             base="step")["REQ-0001"]["base"]
     assert base != other, "otherwise this pins nothing"
+
+
+# ------------------------------------------- judged before anything happened
+
+
+CONTRACT_OD = {"io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "cmd", "dir": "input", "width": 4},
+    {"name": "scl_oen", "dir": "output", "width": 1},
+    {"name": "sda_oen", "dir": "output", "width": 1},
+]}
+
+#: Reads both enables, so `ports_read` picks them up.
+WATCHES = ("def decide(trace):\n"
+           "    for r in trace:\n"
+           "        if r['outputs']['scl_oen'] == 1 and r['outputs']['sda_oen']:\n"
+           "            return False, r['edge'], 'no prior drive'\n"
+           "    return True, 0, 'ok'\n")
+
+
+def _od(*states):
+    return [{"edge": i, "inputs": {}, "outputs": {"scl_oen": a, "sda_oen": b}}
+            for i, (a, b) in enumerate(states)]
+
+
+def _od_oracle():
+    from specflow.refmodel.oracles import RequirementOracle
+
+    return RequirementOracle(req_uid="REQ-0070", tp_uids=["TP-0000"],
+                             clause="SDA low before SCL released",
+                             source=WATCHES)
+
+
+def test_deciding_at_idle_when_the_scenario_comes_later_accuses_the_od_oracle():
+    """Open-drain makes idle and deasserted the same value.
+
+    The control resets to `scl_oen = 1, sda_oen = 1` -- exactly what "release
+    the line" tells an oracle to look for -- so a level scan matches edge 0.
+    REQ-0070 demands SDA low before SCL release and the control does it at edges
+    4 and 5; the oracle finds `scl_oen == 1` at edge 0 and fails.
+    """
+    from specflow.refmodel.liveness import judged_before_the_scenario
+
+    rows = _od((1, 1), (1, 1), (0, 0), (1, 0))
+    why = judged_before_the_scenario(_od_oracle(), rows, CONTRACT_OD, at_edge=0)
+    assert why, "an idle match should be accused"
+    assert "reset value" in why and "moves" in why
+
+
+def test_a_reset_defect_is_not_waved_away():
+    """The second condition, and the reason it exists.
+
+    A requirement genuinely about the reset state, failing because the reset
+    state is wrong, must NOT be excused. Here nothing the oracle reads ever
+    moves, so the scenario is not "later in the trace" -- it is absent, and that
+    is a different finding with a different owner.
+    """
+    from specflow.refmodel.liveness import judged_before_the_scenario
+
+    rows = _od((1, 1), (1, 1), (1, 1))
+    assert not judged_before_the_scenario(
+        _od_oracle(), rows, CONTRACT_OD, at_edge=0)
+
+
+def test_a_failure_after_things_moved_is_left_alone():
+    """Once what it watches has moved, the oracle was judging the scenario."""
+    from specflow.refmodel.liveness import judged_before_the_scenario
+
+    rows = _od((1, 1), (0, 0), (1, 0), (1, 1))
+    assert not judged_before_the_scenario(
+        _od_oracle(), rows, CONTRACT_OD, at_edge=3)
+
+
+def test_it_is_incomplete_and_that_is_recorded():
+    """Measured on w-i2c: it catches 3 of the 15 the control fails, not 5.
+
+    REQ-0003, REQ-0020 and REQ-0065 fail at edges where SOME port they read has
+    already moved, so "nothing has moved yet" is too strict for them. Pinned so
+    the shortfall is a known property rather than a surprise -- an unknown edge
+    is never guessed at either.
+    """
+    from specflow.refmodel.liveness import judged_before_the_scenario
+
+    rows = _od((1, 1), (0, 0), (1, 0))
+    assert not judged_before_the_scenario(
+        _od_oracle(), rows, CONTRACT_OD, at_edge=None)
+    assert not judged_before_the_scenario(_od_oracle(), [], CONTRACT_OD, at_edge=0)
