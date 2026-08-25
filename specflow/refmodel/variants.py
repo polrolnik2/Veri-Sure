@@ -63,12 +63,11 @@ from ..schema import Issue
 from ..stage import StageResult, run_fanout, run_stage
 from .oracles import (
     RequirementOracle,
-    decide,
     ports_read,
     replay,
-    transactional_view,
 )
-from .trust import CONVICTED, MIN_IN_SCOPE, SENSITIVE, UNKNOWN, _project
+from .trust import (CONVICTED, MIN_IN_SCOPE, SENSITIVE, UNKNOWN,
+                    _decide_over, _project)
 from .validate import _static_checks
 
 STAGE = "variant"
@@ -433,14 +432,39 @@ def must_fail(
     Same three outcomes as gate 2 and the same reason for the third: silence
     from an oracle that was shown too little is not vacuity. `MIN_IN_SCOPE`
     transfers unchanged -- one observation is not evidence.
+
+    **AN ORACLE THAT WAS NEVER TRIGGERED DID NOT PASS ANYTHING.** This used to
+    convict on it, twice over, and both were the same conflation:
+
+    * `decide(...).failed()` is False when the oracle PASSED the variant and
+      equally False when the variant's trace never reached the clause's
+      scenario. Only the first is vacuity; the second is a fact about the
+      stimulus, and this module's siblings already refuse to reject on it --
+      `verify_one` because "the scenario not being staged is the stimulus's
+      business", `_decide_over` by keeping `unexercised()` distinct from
+      `failed()`. Here `ok is None` was read as "did not catch it".
+    * worse, the unexercised replay also counted toward `in_scope`, and
+      `in_scope` is what satisfies `min(MIN_IN_SCOPE, len(mine))`. So the
+      never-triggered replays were not merely miscounted, they were the
+      evidence that licensed the conviction.
+
+    Measured on the 11 `VACUOUS` requirements of w-i2c: of 22 variant replays,
+    10 never triggered the oracle at all, and for the 6 that stayed vacuous
+    through three re-authoring rounds the split was 6 genuinely passed, 6 never
+    triggered, 0 caught. Roughly half the evidence behind those convictions was
+    the stimulus, not the check.
+
+    And it decides across EVERY testpoint the oracle names, via `_decide_over`,
+    rather than replaying against `next(tp for tp in tp_uids if stimulus)`. The
+    first named testpoint is not the only one, and `_decide_over` carries the
+    measurement for why that matters -- an oracle unexercised on TP-A and
+    decided on TP-B was being judged on TP-A alone.
     """
     mine = [v for v in variants if v.req_uid == oracle.req_uid and v.source]
     if not mine:
         return UNKNOWN, "no variant was generated for this requirement"
 
-    steps = next((stimulus_by_tp[tp] for tp in oracle.tp_uids
-                  if stimulus_by_tp.get(tp)), None)
-    if not steps:
+    if not any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids):
         return UNKNOWN, "no stimulus to run a variant against"
 
     ports = ports_read(oracle, contract)
@@ -448,15 +472,29 @@ def must_fail(
         return UNKNOWN, "the oracle reads no declared port"
 
     in_scope = 0
+    never = 0
     for variant in mine:
-        run = replay(variant.source, contract, steps, base=base)
-        if run.error:
+        held = _decide_over(oracle, variant.source, contract, stimulus_by_tp,
+                            base=base, transactional=transactional)
+        if held.broken:
+            # The replay produced no usable verdict. Silence from a variant that
+            # did not run says nothing either way, exactly as `run.error` did.
+            continue
+        if held.failed():
+            return SENSITIVE, f"caught the {variant.kind} variant"
+        if held.unexercised():
+            never += 1
             continue
         in_scope += 1
-        rows = transactional_view(run.rows) if transactional else run.rows
-        if decide(oracle, rows).failed():
-            return SENSITIVE, f"caught the {variant.kind} variant"
     if in_scope < min(MIN_IN_SCOPE, len(mine)):
+        # Say WHICH kind of thin evidence it was: "the variants did not run" and
+        # "the variants ran and never reached the scenario" route to different
+        # owners, and reporting them identically is what hid this for so long.
+        if never:
+            return UNKNOWN, (
+                f"{never} of {len(mine)} variant(s) never reached the scenario "
+                f"this oracle decides, leaving {in_scope} real observation(s) "
+                f"-- a stimulus finding, not vacuity")
         return UNKNOWN, (f"only {in_scope} variant(s) ran; silence over fewer "
                          f"than the requirement's own clauses is not vacuity")
     return CONVICTED, (f"passed all {in_scope} variant(s) of its own "

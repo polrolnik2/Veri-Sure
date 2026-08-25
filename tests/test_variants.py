@@ -263,3 +263,86 @@ def inspect_source(fn) -> str:
     import inspect
 
     return inspect.getsource(fn)
+
+
+# ------------------------------------------- an unexercised variant is not a pass
+
+#: Decides only once `a` has gone high; otherwise the clause's scenario never
+#: occurred and it returns None. That is the third state `decide` exists to
+#: keep separate from False, and the state `must_fail` used to lose.
+CONDITIONAL = """\
+def decide(trace):
+    seen = False
+    for row in trace:
+        if row['inputs']['a'] == 1:
+            seen = True
+            if row['outputs']['y'] != 1:
+                return False, row['edge'], 'y did not follow a'
+    if not seen:
+        return None, 0, 'a was never high; the scenario never occurred'
+    return True, 0, 'y followed a whenever a was high'
+"""
+
+#: `a` never goes high, so CONDITIONAL is never triggered here.
+QUIET_STEPS = [{"a": 0}, {"a": 0}, {"a": 0}, {"a": 0}]
+
+
+def _oracle_over(source: str, *tps: str) -> RequirementOracle:
+    return RequirementOracle(req_uid="REQ-0001", tp_uids=list(tps),
+                             clause="y follows a", source=source)
+
+
+def test_a_variant_that_never_triggered_the_oracle_is_not_a_pass():
+    """The regression. `decide(...).failed()` is False both when the oracle
+    passed the variant and when the variant's trace never reached the clause's
+    scenario, and only the first is vacuity -- the second is a fact about the
+    stimulus. Convicting on it is the same mistake `verify_one` refuses to make
+    about unexercised oracles."""
+    got, why = V.must_fail(
+        _oracle_over(CONDITIONAL, "TP-QUIET"),
+        _variants(BROKEN_ACTION, BROKEN_ACTION, BROKEN_ACTION),
+        CONTRACT, {"TP-QUIET": QUIET_STEPS})
+
+    assert got == UNKNOWN, "never triggered is not 'passed all three'"
+    assert "never reached the scenario" in why
+    assert "stimulus finding" in why
+
+
+def test_unexercised_replays_do_not_count_toward_the_evidence_bar():
+    """Worse than a miscount: `in_scope` is what satisfies
+    `min(MIN_IN_SCOPE, len(mine))`, so the never-triggered replays were the
+    evidence that licensed the conviction."""
+    got, why = V.must_fail(
+        _oracle_over(CONDITIONAL, "TP-QUIET"),
+        _variants(BROKEN_ACTION, BROKEN_ACTION, BROKEN_ACTION),
+        CONTRACT, {"TP-QUIET": QUIET_STEPS})
+
+    assert got != CONVICTED
+    assert "0 real observation" in why or "leaving 0" in why
+
+
+def test_every_named_testpoint_decides_not_only_the_first():
+    """`must_fail` replayed against `next(tp for tp in tp_uids if stimulus)`.
+    Here the first named testpoint never triggers the oracle and the second
+    catches the variant outright, so first-named-only reports the exact opposite
+    of the truth. `_decide_over` carries the same measurement for screening."""
+    got, why = V.must_fail(
+        _oracle_over(CONDITIONAL, "TP-QUIET", "TP-0000"),
+        _variants(BROKEN_ACTION),
+        CONTRACT, {"TP-QUIET": QUIET_STEPS, "TP-0000": STEPS})
+
+    assert got == SENSITIVE, "the second named testpoint catches it"
+    assert "variant" in why
+
+
+def test_an_oracle_that_is_triggered_and_still_silent_is_still_convicted():
+    """The fix must not become an escape hatch. A check that RUNS, reaches its
+    scenario, and passes a design breaking its own clause is vacuous, and
+    nothing here changes that."""
+    got, why = V.must_fail(
+        _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION,
+                                    BROKEN_ACTION),
+        CONTRACT, {"TP-0000": STEPS})
+
+    assert got == CONVICTED
+    assert "passed all 3" in why
