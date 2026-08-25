@@ -307,10 +307,32 @@ already records two occasions where I generalised too fast.
     check covers, so this is a cost/keep decision to take deliberately, not a
     silent cut. It is the largest saving available in the oracle stage, which is
     66 of a 105-minute run.
-28. **If the VACUOUS author experiment says SENSITIVE**, the remedy is authoring
-    oracles at full strength, and the price is measured: ~23k output tokens and
-    6 continuations per oracle, against ~150 oracles a run. Report the price
-    with the finding; do not recommend it without one.
+28. **Author oracles at full strength. The VACUOUS experiment settled it.**
+
+    Of the first 5 re-authored on `gpt-5.6-luna`/xhigh, **1 cleared** a check
+    that `gpt-5-mini`/medium could not write.
+
+    The comparison is deliberately unfair, and it runs TOWARD the conclusion:
+    the originals had **three attempts with the counterexample fed back** --
+    `oracles_stage.verify_one` returns `"vacuous: passed all N variants"` as a
+    quotable rejection that seeds the next prompt -- while this arm got **one
+    shot with no feedback at all**, because `run_oracle_gen`'s repair loop gates
+    on `gate_one`, which is structural only. So 20% is a FLOOR: the small model
+    with help lost to the large model without it.
+
+    Price, measured: ~23k output tokens and 6 continuations per oracle, against
+    ~150 oracles a run. That is the number to weigh, not whether the effect is
+    real.
+
+    A second arm (full strength WITH feedback) was considered and dropped. It
+    could only widen a gap the asymmetry already demonstrates.
+
+31. **Two entry points, one capability.** The repair loop that carries vacuity
+    feedback lives in `oracles_stage`, not in `run_oracle_gen`, so any caller
+    invoking oracle generation directly silently gets the weaker loop -- as this
+    experiment did. Same shape as the switch-threading gap that killed a run:
+    two paths, one carrying something the other does not, with nothing marking
+    the difference.
 29. **x-i2c is confounded and its successor should not be.** `--reuse` correctly
     regenerates the testplan and stimulus when `normalized.json` changes, so a
     "controlled" re-run of a normalization change is not controlled. Any future
