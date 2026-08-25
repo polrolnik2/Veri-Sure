@@ -62,13 +62,31 @@ def test_conforms_is_still_not_an_issue_either_way():
 
 
 def test_the_switch_reaches_the_command_line():
+    """EVERY link, not the two ends.
+
+    Checking `build_artifacts` and the argparse flag left a hole in the middle:
+    `top_agent` calls `run_specflow_node`, which did not take the argument, and
+    the run died at startup with `unexpected keyword argument`. The signature
+    chain has to be walked, because a switch is only as threaded as its weakest
+    link and both ends looked right.
+    """
     import inspect
 
+    from eda_agent.specflow_node import run_specflow_node
     from eda_agent.top_agent import __file__ as top
     from specflow import integration
+    from specflow.refmodel import compose
 
-    assert "advisory_verdicts" in inspect.signature(
-        integration.build_artifacts).parameters
+    chain = (run_specflow_node, integration.build_artifacts,
+             compose.run_refmodel, compose._closed_loop, compose._debug_turns)
+    for fn in chain:
+        assert "advisory_verdicts" in inspect.signature(fn).parameters, fn
+
+    # `reconsider_rounds` stops at `_closed_loop`, which is the only place that
+    # counts rounds -- `_debug_turns` runs one turn set and has no use for it.
+    for fn in chain[:-1]:
+        assert "reconsider_rounds" in inspect.signature(fn).parameters, fn
+
     assert "specflow_advisory_verdicts" in open(top).read()
     assert "--advisory-unobservable" in open(
         "benchmarks/run_chipverilog.py").read()

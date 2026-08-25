@@ -263,6 +263,8 @@ async def run_specflow_node(
     variants: bool = False,
     correspondence: bool = False,
     adequacy_rounds: int = 0,
+    reconsider_rounds: int = 0,
+    advisory_verdicts: frozenset[str] = frozenset(),
     extra_sources: Sequence[Path | str] = (),
     include_dirs: Sequence[Path | str] = (),
     reuse: bool = False,
@@ -309,6 +311,8 @@ async def run_specflow_node(
         variants=variants,
         correspondence=correspondence,
         adequacy_rounds=adequacy_rounds,
+        reconsider_rounds=reconsider_rounds,
+        advisory_verdicts=advisory_verdicts,
     )
     detail["artifacts"] = {"ok": built.ok, "stage": built.stage, "reason": built.reason}
     if getattr(built, "cache", None) is not None:
