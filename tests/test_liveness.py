@@ -354,3 +354,186 @@ def test_it_is_incomplete_and_that_is_recorded():
     assert not judged_before_the_scenario(
         _od_oracle(), rows, CONTRACT_OD, at_edge=None)
     assert not judged_before_the_scenario(_od_oracle(), [], CONTRACT_OD, at_edge=0)
+
+
+# ----------------------------------------------- the detector reaches the author
+
+def test_the_idle_match_note_reaches_verify_one(monkeypatch):
+    """`judged_before_the_scenario` was built, tested, and had NO CALLERS.
+
+    That is the same shape as `stimulus_liveness`, which existed for months
+    while nothing invoked it: an instrument that measures correctly and decides
+    nothing. This pins the wiring rather than the arithmetic -- the arithmetic
+    is pinned above.
+    """
+    from specflow import oracles_stage as S
+
+    seen = {}
+
+    def _fake(oracle, rows, contract, *, at_edge):
+        seen["called"] = True
+        return "judged at edge 0, before any of scl_oen had moved"
+
+    monkeypatch.setattr(S._L, "judged_before_the_scenario", _fake)
+
+    notes = {"witness": "fails it at edge 0 -- scl_oen never released",
+             "idle_match": _fake(None, [], {}, at_edge=0)}
+    issues = S._witness_note("REQ-0070", notes)
+
+    assert len(issues) == 1
+    assert issues[0].path.endswith("judged_at_idle")
+
+
+def test_the_specific_note_replaces_the_relaxation_request():
+    """Both messages ask for an edit and they pull in opposite directions.
+
+    `_advisory` asks the author to TRY to accept a second implementation, which
+    measured as pressure toward relaxation -- over-strictness 27 -> 15 and
+    convictions 2 -> 16 when declining meant the oracle was discarded. The idle
+    note names an exact defect whose repair makes the check MORE precise.
+    Sending both would invite weakening for a defect that has a specific fix.
+    """
+    from specflow import oracles_stage as S
+
+    both = S._witness_note("REQ-0070", {
+        "witness": "fails it at edge 0 -- scl_oen never released",
+        "idle_match": "judged at edge 0, before any of scl_oen had moved"})
+    assert len(both) == 1, "the specific note replaces the generic one"
+    assert "judged_at_idle" in both[0].path
+
+    generic = S._witness_note("REQ-0070", {
+        "witness": "fails it at edge 4 -- scl_oen released too early"})
+    assert len(generic) == 1
+    assert "witness_disagrees" in generic[0].path
+
+    assert S._witness_note("REQ-0070", {}) == []
+
+
+def test_the_idle_advisory_does_not_ask_for_a_weaker_check():
+    """The safety property. A note that says 'accept this' where the defect is
+    over-strictness is fine; one that says it where the defect is a level read
+    would trade a wrong check for an emptier one."""
+    from specflow import oracles_stage as S
+
+    body = S._idle_advisory("REQ-0070", "judged at edge 0").message.lower()
+    body = " ".join(body.split())          # line wraps have cost this repo before
+
+    assert "transition" in body and "level" in body
+    assert "compare consecutive rows" in body
+    assert "keep your check as it is" in body, "declining must stay available"
+    assert "relax" not in body
+
+
+# --------------------------------------- 22: an oracle that disagrees with itself
+
+_SPLIT_MODEL = """\
+from specflow.refmodel.base import RefModel
+
+
+class Model(RefModel):
+    OUTPUT_PORTS = ['y']
+    LATENCY_CYCLES = 0
+
+    def step(self, i):
+        return {'y': i['a']}
+"""
+
+#: Holds wherever `a` is 0 and breaks wherever `a` is 1, so which testpoints an
+#: oracle names decides how often it fails.
+_SPLIT_ORACLE = """\
+def decide(trace):
+    for row in trace:
+        if row['inputs']['a'] == 1:
+            return False, row['edge'], 'a went high'
+    return True, 0, 'a stayed low'
+"""
+
+_QUIET = [{"a": 0}, {"a": 0}]
+_LOUD = [{"a": 0}, {"a": 1}]
+_SPLIT_CONTRACT = {"io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "a", "dir": "input", "width": 1},
+    {"name": "y", "dir": "output", "width": 1},
+]}
+
+
+def _split_oracle(*tps: str):
+    from specflow.refmodel.oracles import RequirementOracle
+    return RequirementOracle(req_uid="REQ-0066", tp_uids=list(tps),
+                             clause="a stays low", source=_SPLIT_ORACLE)
+
+
+def test_a_check_that_holds_on_most_of_its_testpoints_is_reported():
+    """REQ-0066 passes 4 of its testpoints and fails 1; REQ-0060 passes 3 and
+    fails 1. `decide_all` reports the single failure as the whole verdict --
+    the first failure is the answer -- so four agreements vanish behind one
+    mismatch."""
+    note = liveness.disagrees_with_itself(
+        _split_oracle("TP-A", "TP-B", "TP-C", "TP-D"), _SPLIT_MODEL,
+        _SPLIT_CONTRACT,
+        {"TP-A": _QUIET, "TP-B": _QUIET, "TP-C": _QUIET, "TP-D": _LOUD},
+        base="step")
+
+    assert "holds on 3" in note
+    assert "TP-D" in note
+
+
+def test_a_bare_majority_is_not_a_split():
+    """The dangerous twin: 'passes some, fails one' is also what a CORRECT
+    oracle looks like catching a defect visible in one scenario. Two passes and
+    strictly more passes than failures is where the two separate, so 1-of-2 and
+    2-of-4 both stay silent."""
+    two_two = liveness.disagrees_with_itself(
+        _split_oracle("TP-A", "TP-B", "TP-C", "TP-D"), _SPLIT_MODEL,
+        _SPLIT_CONTRACT,
+        {"TP-A": _QUIET, "TP-B": _QUIET, "TP-C": _LOUD, "TP-D": _LOUD},
+        base="step")
+    assert two_two == "", "two failures is not one mismatched scenario"
+
+    one_one = liveness.disagrees_with_itself(
+        _split_oracle("TP-A", "TP-B"), _SPLIT_MODEL, _SPLIT_CONTRACT,
+        {"TP-A": _QUIET, "TP-B": _LOUD}, base="step")
+    assert one_one == "", "fewer than three testpoints has no majority to read"
+
+
+def test_an_oracle_failing_everywhere_is_not_a_split():
+    """Uniformly too strict is the case this detector must NOT claim."""
+    note = liveness.disagrees_with_itself(
+        _split_oracle("TP-A", "TP-B", "TP-C"), _SPLIT_MODEL, _SPLIT_CONTRACT,
+        {"TP-A": _LOUD, "TP-B": _LOUD, "TP-C": _LOUD}, base="step")
+    assert note == ""
+
+
+def test_it_needs_no_control_and_convicts_nothing():
+    """It asks about the ORACLE'S OWN testpoints against a SINGLE design, so no
+    implementation has to be believed correct -- and it returns a reason, never
+    a verdict."""
+    from specflow import oracles_stage as S
+
+    note = liveness.disagrees_with_itself(
+        _split_oracle("TP-A", "TP-B", "TP-C", "TP-D"), _SPLIT_MODEL,
+        _SPLIT_CONTRACT,
+        {"TP-A": _QUIET, "TP-B": _QUIET, "TP-C": _QUIET, "TP-D": _LOUD},
+        base="step")
+
+    issues = S._witness_note("REQ-0066", {"witness": "fails it", "self_split": note})
+    assert len(issues) == 1
+    assert issues[0].path.endswith("disagrees_with_itself")
+    assert issues[0].severity == "warning", "nothing rejects on this"
+
+    body = " ".join(issues[0].message.split())
+    assert "KEEP YOUR CHECK EXACTLY AS IT IS" in body, "declining must stay open"
+    assert "real defect visible only there" in body.lower()
+
+
+def test_the_sharper_note_wins_when_both_could_speak():
+    """Two competing diagnoses for one disagreement is worse than the sharper
+    one alone, and the idle read is the sharper -- it names an exact repair."""
+    from specflow import oracles_stage as S
+
+    issues = S._witness_note("REQ-0070", {
+        "witness": "fails it at edge 0",
+        "idle_match": "judged at edge 0, before any of scl_oen had moved",
+        "self_split": "holds on 3 of the testpoints it names"})
+    assert len(issues) == 1
+    assert issues[0].path.endswith("judged_at_idle")

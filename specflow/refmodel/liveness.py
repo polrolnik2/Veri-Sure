@@ -98,6 +98,7 @@ from __future__ import annotations
 from .oracles import (
     RequirementOracle,
     decide,
+    decide_all,
     ports_read,
     replay,
     transactional_view,
@@ -395,6 +396,60 @@ def assertion_ports(report: dict[str, dict]) -> dict[str, set[str]]:
         uid: set(record.get("asserts_on") or ())
         for uid, record in report.items()
     }
+
+
+def disagrees_with_itself(
+    oracle: RequirementOracle,
+    source: str,
+    contract: dict,
+    stimulus_by_tp: dict[str, list[dict]],
+    *,
+    base: str,
+    transactional: bool = True,
+) -> str:
+    """One design, several named testpoints, and the oracle only fails on one.
+
+    The third detector of the over-strictness triage, and the one that needs no
+    control at all -- it asks a question about the ORACLE'S OWN testpoints,
+    against a single design, so no implementation has to be believed correct.
+
+    Measured on the h-i2c residue: REQ-0066 passes 4 of its testpoints and fails
+    1; REQ-0060 passes 3 and fails 1. A check that holds in most of the
+    scenarios its own testplan entry named, and breaks in one, is more likely
+    naming a scenario its clause is not about than being uniformly too strict --
+    `decide_all` then reports the single failure as the oracle's verdict,
+    because the first failure is the answer.
+
+    **THIS ONE HAS A DANGEROUS TWIN AND THE THRESHOLD IS WHERE THEY SEPARATE.**
+    "Passes four, fails one" is also exactly what a GOOD oracle looks like when
+    it catches a real defect visible in one scenario only -- which is the whole
+    point of having several testpoints. So this returns a reason, never a
+    verdict, and the reason says plainly that keeping the check is a correct
+    answer. Nothing here rejects, and `verify_one`'s rule is unchanged: no
+    implementation gates an oracle.
+
+    Requires at least two passes and strictly more passes than failures, so a
+    1-of-2 split -- where there is no majority to speak of -- says nothing.
+    """
+    named = [tp for tp in oracle.tp_uids if stimulus_by_tp.get(tp)]
+    if len(named) < 3:
+        return ""
+    passed: list[str] = []
+    failed: list[str] = []
+    for tp in named:
+        scoped = oracle.model_copy(update={"tp_uids": [tp]})
+        held = decide_all([scoped], source, contract, stimulus_by_tp,
+                          base=base, transactional=transactional)[0]
+        if held.broken:
+            continue
+        if held.ok is True:
+            passed.append(tp)
+        elif held.ok is False:
+            failed.append(tp)
+    if len(passed) < 2 or len(failed) != 1 or len(failed) >= len(passed):
+        return ""
+    return (f"holds on {len(passed)} of the testpoints it names "
+            f"({', '.join(passed)}) and fails only on {failed[0]}")
 
 
 def judged_before_the_scenario(

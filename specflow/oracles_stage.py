@@ -244,6 +244,26 @@ def verify_one(
         # staged is the stimulus's business.
         if held.failed():
             where = f" at edge {held.edge}" if held.edge is not None else ""
+            if name == "witness":
+                # Computable from the trace, so it does not borrow the witness's
+                # authority -- the witness is only where the trace came from,
+                # the same standing `_liveness` already has. What it decides is
+                # a property of the CHECK: did it answer before anything it
+                # watches had moved?
+                idle = _L.judged_before_the_scenario(
+                    oracle, held.rows, contract, at_edge=held.edge)
+                if idle:
+                    notes["idle_match"] = idle
+                else:
+                    # Only when the idle read does not already explain it: both
+                    # notes replace the generic ask, and sending two competing
+                    # diagnoses for one disagreement is worse than sending the
+                    # sharper one alone.
+                    split = _L.disagrees_with_itself(
+                        oracle, design, contract, stimulus_by_tp, base=base,
+                        transactional=transactional)
+                    if split:
+                        notes["self_split"] = split
             notes[name] = (
                 f"fails it{where} -- {held.detail or '(no detail)'}"
                 if name == "witness" else
@@ -267,6 +287,97 @@ def verify_one(
         if level == trust.CONVICTED:
             return f"vacuous: {detail}", True, notes
     return "", True, notes
+
+
+def _witness_note(req_uid: str, notes: dict[str, str]) -> list[Issue]:
+    """The witness disagreement, said as precisely as the trace allows.
+
+    Two different messages, and which one goes out matters more than it looks.
+
+    `_advisory` asks the author to TRY to accept a second implementation. That
+    is the right thing to say when nobody knows which reading is right -- and it
+    is pressure toward relaxation, measured: when this disagreement could
+    reject, over-strictness went 27 -> 15 and convictions 2 -> 16, oracles
+    relaxed until they stopped disagreeing.
+
+    When `judged_before_the_scenario` fires, nobody has to guess. The check
+    answered at an edge where nothing it reads had moved off its reset value,
+    and something it reads moves later in the same trace. That is a level read
+    where a transition was meant, it is computable from the trace, and the fix
+    is specific. Sending the generic "try to accept it" alongside would invite
+    relaxation for a defect that has an exact repair, so the specific note
+    REPLACES the generic one rather than joining it.
+    """
+    if "idle_match" in notes:
+        return [_idle_advisory(req_uid, notes["idle_match"])]
+    if "self_split" in notes:
+        return [_split_advisory(req_uid, notes["self_split"])]
+    if "witness" in notes:
+        return [_advisory(req_uid, notes["witness"])]
+    return []
+
+
+def _split_advisory(req_uid: str, note: str) -> Issue:
+    """The check holds on most of its own testpoints and breaks on one.
+
+    That is more often a testpoint the clause is not about than a check that is
+    uniformly too strict -- `decide_all` reports the single failure as the
+    oracle's whole verdict, because the first failure is the answer, so one
+    mismatched scenario hides four agreements.
+
+    **It is also exactly what a CORRECT oracle looks like when it catches a
+    defect visible in one scenario only**, which is the reason for having
+    several testpoints at all. So this asks rather than tells, and says outright
+    that keeping the check is a correct answer. Nothing is rejected either way;
+    `disagrees_with_itself` needs two passes and strictly more passes than
+    failures before it will speak at all.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.disagrees_with_itself",
+        f"Against ONE implementation, your check {note}.\n\n"
+        f"Check whether that one testpoint stages a scenario your clause is "
+        f"actually about. A check that holds in most of the situations its own "
+        f"testplan entry named, and breaks in one, is often reading that one "
+        f"situation as in scope when the requirement does not cover it -- and "
+        f"a single failure becomes the whole verdict, hiding the agreements.\n\n"
+        f"IF IT IS A REAL DEFECT VISIBLE ONLY THERE, KEEP YOUR CHECK EXACTLY AS "
+        f"IT IS and say so in `reasoning`. Catching something that shows up in "
+        f"one scenario is what several testpoints are for, and nothing is "
+        f"rejected for declining.")
+
+
+def _idle_advisory(req_uid: str, note: str) -> Issue:
+    """A level read where a transition was meant.
+
+    Open-drain makes a protocol's idle state and its deasserted state the same
+    value: the control resets to `scl_oen = 1, sda_oen = 1`, which is exactly
+    the value every "release the line" requirement tells an oracle to look for.
+    A check that scans for `port == value` without comparing consecutive rows
+    matches edge 0 and reports that the action preceding it never happened.
+
+    Worked example, REQ-0070: it demands SDA driven low before SCL is released,
+    and the control does exactly that -- `sda_oen` 0 at edge 4, `scl_oen` 1 at
+    edge 5. The oracle takes the first `scl_oen == 1` at or after activation,
+    finds edge 0, and fails. Its sibling REQ-0042 states the same ordering, so
+    this is not a disagreement about the protocol.
+
+    Unlike `_advisory` this names a defect rather than asking a question, so it
+    does not invite the check to be weakened -- the repair makes it MORE
+    precise, not less.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.judged_at_idle",
+        f"Your check {note}.\n\n"
+        f"That is almost always a LEVEL read where a TRANSITION was meant. On "
+        f"an open-drain bus the idle state and the released state are the same "
+        f"value, so 'the line is released' is true at edge 0 -- before anything "
+        f"happened -- and a scan for `port == value` finds it there and "
+        f"concludes the action never occurred.\n\n"
+        f"Look for the CHANGE instead: compare consecutive rows and find where "
+        f"the port moves INTO the value, not where it merely sits at it. If the "
+        f"requirement really is about the state at reset and not about an "
+        f"action, keep your check as it is and say so in `reasoning` -- nothing "
+        f"is rejected for declining.")
 
 
 def _advisory(req_uid: str, note: str) -> Issue:
@@ -641,8 +752,7 @@ def run_oracle_stage(
             # in `quotable` and so is never re-asked at all -- the note costs no
             # call and applies no pressure on its own.
             feedback={
-                uid: ([_advisory(uid, disagreements[uid]["witness"])]
-                      if "witness" in disagreements.get(uid, {}) else [])
+                uid: _witness_note(uid, disagreements.get(uid, {}))
                      + ([_dead_advisory(uid, dead_now[uid])]
                         if uid in dead_now else [])
                      + ([_repair_issue(uid, quotable[uid])]

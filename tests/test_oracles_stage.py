@@ -102,7 +102,11 @@ def test_no_implementation_gates_an_oracle():
         variants=[], base="step")
     assert why == "", f"a design rejected an oracle: {why}"
     assert quotable
-    assert set(notes) == {"witness", "control"}
+    # Both designs observed, neither decided. The set is not pinned exactly:
+    # `verify_one` may add a note from an instrument that reads the TRACE rather
+    # than the design -- `idle_match` does -- and adding one must not read as a
+    # regression in the rule this test protects, which is `why == ""`.
+    assert {"witness", "control"} <= set(notes)
 
 
 def test_the_witness_records_a_disagreement_rather_than_a_verdict():

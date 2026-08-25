@@ -226,7 +226,11 @@ def test_gate_1_earns_one_attempt_and_only_one(tmp_path, monkeypatch):
 
     assert len(port.prompts) == 2, (
         f"gate 1 must earn exactly one attempt, got {len(port.prompts)}")
-    assert "witness_disagrees" in port.prompts[1]
+    # Either spelling of gate 1's advice: the generic ask, or the specific
+    # `judged_at_idle` note that replaces it when the trace shows the check
+    # answered before anything it reads had moved.
+    assert ("witness_disagrees" in port.prompts[1]
+            or "judged_at_idle" in port.prompts[1])
     # And declining costs nothing: the reply is the same over-strict oracle.
     assert got.dispositions["REQ-0001"] == O.TRUSTED
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
@@ -263,10 +267,16 @@ def test_the_advice_rides_along_when_a_round_happens_anyway(tmp_path,
 
     assert len(port.prompts) == 2, "the blocking reason must cost a round"
     repair = port.prompts[1]
-    assert "witness_disagrees" in repair, "gate 1's advice is not in the prompt"
+    # Gate 1's advice has TWO spellings. The generic ask -- "a second
+    # implementation fails your check, TRY to accept it" -- and the specific
+    # `judged_at_idle` note that REPLACES it when the trace shows the check
+    # answered before anything it reads had moved. Either is gate 1 speaking;
+    # pinning only the first would fail the moment the sharper note applies.
+    gate1 = next((m for m in ("witness_disagrees", "judged_at_idle")
+                  if m in repair), None)
+    assert gate1, "gate 1's advice is not in the prompt under either spelling"
     assert "off_target" in repair or "off-target" in repair
-    assert repair.index("witness_disagrees") < repair.index("off"), (
-        "gate 1 comes first")
+    assert repair.index(gate1) < repair.index("off"), "gate 1 comes first"
 
 
 def test_the_advice_says_it_may_be_ignored():
