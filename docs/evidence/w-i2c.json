@@ -5,9 +5,15 @@
   "unknown": 16
  },
  "gate": {
-  "present": false
+  "by_severity": {
+   "error": 25,
+   "warning": 7
+  },
+  "issues": 32,
+  "ok": false,
+  "present": true
  },
- "model_present": false,
+ "model_present": true,
  "oracles": {
   "by_requirement": {
    "REQ-0000": "TRUSTED",
@@ -243,34 +249,26 @@
   },
   {
    "conforms_by_liveness": {
-    "conforms": 44,
-    "from_a_check_that_can_fail": 38,
-    "from_a_check_that_cannot": 6,
-    "from_a_check_undecided": 0,
-    "not_measured": 0
+    "conforms": 45,
+    "from_a_check_that_can_fail": null,
+    "from_a_check_that_cannot": null,
+    "from_a_check_undecided": null,
+    "not_measured": null
    },
    "counts": {
-    "CONFORMS": 44,
+    "CONFORMS": 45,
     "NOT_EXERCISED": 4,
     "ORACLE_INVALID": 1,
     "UNDECIDED": 0,
     "UNOBSERVABLE": 7,
     "VACUOUS": 11,
-    "VIOLATES": 10
+    "VIOLATES": 9
    },
-   "idle_turns": 3,
+   "idle_turns": 5,
    "stimulus_added": 12,
-   "stopped_because": "turn budget of 6 spent with 14 oracle(s) short of CONFORMS; a second implementation of the same requirement also fails 7 of them (REQ-0001, REQ-0014, REQ-0020, REQ-0037, REQ-0040, REQ-0065), so those may be the check rather than the model",
+   "stopped_because": "turn budget of 6 spent with 13 oracle(s) short of CONFORMS",
    "turn": "r6",
-   "violates_the_witness_also_fails": [
-    "REQ-0001",
-    "REQ-0014",
-    "REQ-0020",
-    "REQ-0037",
-    "REQ-0040",
-    "REQ-0065",
-    "REQ-0066"
-   ]
+   "violates_the_witness_also_fails": []
   }
  ]
 }
