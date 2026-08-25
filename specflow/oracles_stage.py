@@ -380,6 +380,48 @@ def _dead_advisory(req_uid: str, detail: str) -> Issue:
         f"the specification, not something to invent an assertion for.")
 
 
+def _reconsider_issue(req_uid: str, why: str) -> Issue:
+    """Evidence that has been earned, unlike gate 1's, and still not authority.
+
+    Gate 1 asks this question once, before any reference model exists, on the
+    strength of one second reading. This asks it again after a debug loop has
+    spent its whole budget failing to satisfy the check -- so the claim is no
+    longer "another author disagrees" but "two independent implementations and
+    every edit a repair loop could think of, and none of them satisfied it".
+
+    That is a much stronger case and it is still not a verdict, because the
+    thing it cannot distinguish is the one that matters: a check pinning a
+    detail the specification leaves open looks exactly like a check pinning a
+    detail two implementations both got wrong. Only the requirement decides,
+    and the author is the one reading it.
+
+    So the exit stays open, for the reason it stayed open in `_advisory`: when
+    this disagreement could REJECT, over-strictness fell 27 -> 15 and
+    convictions rose 2 -> 16 -- checks relaxed until they stopped disagreeing,
+    because compliance was the only way to survive. A relaxation that goes too
+    far fails `verify_one` as vacuous and the previous check stands.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.unsatisfied_by_two_implementations",
+        f"Nothing has been able to satisfy this check. A second implementation "
+        f"of this same requirement {why}, and a repair loop then spent its "
+        f"entire turn budget editing a third and still could not make it "
+        f"pass.\n\n"
+        f"The usual cause is a detail the requirement does not actually state: "
+        f"an exact edge, a count the text leaves open, an ordering it does not "
+        f"fix, a value it does not name. Read the clause again and check "
+        f"whether your check demands more than it says. If it does, decide "
+        f"only what the clause decides.\n\n"
+        f"THE OTHER POSSIBILITY IS REAL AND YOU MAY CHOOSE IT. Two "
+        f"implementations can be wrong in the same way, especially where the "
+        f"requirement is subtle -- that is exactly the case a check like yours "
+        f"exists to catch, and relaxing it would delete the finding. If you "
+        f"read the clause and your check decides what it says, KEEP IT AS IT "
+        f"IS and say why in `reasoning`. Nothing is rejected for that, and a "
+        f"check contorted until it stops disagreeing is worth less than a "
+        f"disagreement.")
+
+
 def _repair_issue(req_uid: str, why: str) -> Issue:
     """The rejection, phrased as something an author can act on.
 
@@ -442,6 +484,23 @@ def run_oracle_stage(
     #: edge: without it an oracle that proves nothing stays in the set forever,
     #: because the only thing that could have told us was downstream of it.
     strengthen: dict[str, str] | None = None,
+    #: The OTHER feedback edge, pointing the opposite way. `strengthen` handles
+    #: a check something provably wrong got past; this handles one that a debug
+    #: loop spent its whole budget on and could not satisfy, while a second
+    #: implementation of the same requirement fails it too.
+    #:
+    #: Measured on s-i2c: the loop drove VIOLATES 15 -> 9, and 7 of the 9 left
+    #: are checks the known-good control also fails. Those 7 block the gate,
+    #: which is why no RTL is produced from a reference model that scores its
+    #: best separation yet -- the residue is the checks, not the design. The
+    #: witness had flagged 8 of the 9, catching 7 of 7 with one false alarm and
+    #: no misses.
+    #:
+    #: Regeneration, never rejection, and the prompt says so: two
+    #: implementations failing the same check usually means it pins a detail
+    #: the text leaves open, and sometimes means both got the same thing wrong.
+    #: Only the author can tell, and keeping the check is a valid answer.
+    reconsider: dict[str, str] | None = None,
     previous: OracleSet | None = None,
     #: Something upstream regenerated, so the frozen artifacts are about
     #: requirements that no longer exist. Written once means once PER REQUIREMENT
@@ -451,9 +510,10 @@ def run_oracle_stage(
     rewrite: bool = False,
 ) -> OracleSet:
     """Generate, verify, repair, freeze. Returns a disposition for every requirement."""
-    if strengthen and previous is not None:
+    if (strengthen or reconsider) and previous is not None:
         return _strengthen(
-            strengthen, previous, requirements=requirements,
+            strengthen or {}, previous, reconsider=reconsider or {},
+            requirements=requirements,
             contract_json=contract_json, contract=contract, testplan=testplan,
             stimulus_by_tp=stimulus_by_tp, port=port, workdir=workdir,
             base=base, normalized=normalized, control_source=control_source,
@@ -889,6 +949,7 @@ def _strengthen(
     inadequate: dict[str, str],
     previous: OracleSet,
     *,
+    reconsider: dict[str, str] | None = None,
     requirements: list[dict],
     contract_json: str,
     contract: dict,
@@ -905,14 +966,24 @@ def _strengthen(
     transactional: bool,
     fanout: bool,
 ) -> OracleSet:
-    """Re-ask only the oracles a mutant got past, and verify the replacements.
+    """Re-ask the oracles a round of evidence has something to say about.
+
+    Two reasons, pointing opposite ways, and the same machinery serves both
+    because the discipline is identical. `inadequate` is a check something
+    provably wrong got past -- tighten it. `reconsider` is a check two
+    implementations and a whole debug budget could not satisfy -- it may be
+    pinning a detail the requirement leaves open.
 
     A replacement is kept only if it VERIFIES. An oracle strengthened to catch a
     mutant very easily becomes over-strict -- that is the oscillation the plan
     names -- and the honest handling is that the round simply fails to improve
     it, not that a check no correct design satisfies gets promoted because it
-    was eager.
+    was eager. The same guard covers the other direction: a check relaxed until
+    it stops disagreeing is the compliance ratchet gate 1 measured at
+    over-strict 27 -> 15 with convictions 2 -> 16, and a relaxation that goes
+    vacuous fails `verify_one` and leaves the previous check standing.
     """
+    reconsider = dict(reconsider or {})
     witness, witness_kind = _witness(
         requirements=requirements, contract_json=contract_json,
         port=witness_port or port, workdir=workdir, run_dir=run_dir)
@@ -926,16 +997,18 @@ def _strengthen(
         normalized=normalized, conforming_source=witness,
         stimulus_by_tp=stimulus_by_tp, base=base,
         max_repairs=max_repairs, fanout=fanout,
-        only=set(inadequate),
+        only=set(inadequate) | set(reconsider),
         label=f"_strengthen{previous.rounds}",
-        feedback={uid: [Issue(
+        feedback={**{uid: [_reconsider_issue(uid, why)]
+                     for uid, why in reconsider.items()},
+                  **{uid: [Issue(
             "error", f"oracle.{uid}.inadequate",
             f"A design that VIOLATES this requirement passes your check: it "
             f"{why}. The check is therefore satisfied by something provably "
             f"wrong, so a design agreeing with it proves nothing. Tighten it to "
             f"the behaviour the clause actually states -- and only to that: a "
             f"check no correct design satisfies is rejected outright.")]
-            for uid, why in inadequate.items()},
+            for uid, why in inadequate.items()}},
     )
 
     kept = {o.req_uid: o for o in previous.trusted}
@@ -955,7 +1028,11 @@ def _strengthen(
             continue
         kept[oracle.req_uid] = oracle
         dispositions[oracle.req_uid] = TRUSTED
-        reasons[oracle.req_uid] = "strengthened after a mutant got past it"
+        reasons[oracle.req_uid] = (
+            "reconsidered after a debug loop and a second implementation both "
+            "failed to satisfy it"
+            if oracle.req_uid in reconsider
+            else "strengthened after a mutant got past it")
 
     trusted = list(kept.values())
     if run_dir is not None:

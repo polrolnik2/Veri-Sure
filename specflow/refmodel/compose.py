@@ -338,6 +338,11 @@ def _closed_loop(
     """
     from .adequacy import assess, discrimination, inadequate, write
 
+    # Normalised once. Both are optional so a caller predating the measurement
+    # still works, and both are read below in set operations where None is not
+    # an empty map but a TypeError.
+    oracle_liveness = dict(oracle_liveness or {})
+    witness_notes = dict(witness_notes or {})
     issues: list[Issue] = []
     for round_ in range(max(0, int(adequacy_rounds)) + 1):
         source, issues = _debug_turns(
@@ -375,7 +380,38 @@ def _closed_loop(
         weak = inadequate(report)
         logger.info("adequacy r%d: %d of %d oracle(s) a mutant got past",
                     round_, len(weak), len(report))
-        if not weak or round_ == adequacy_rounds or oracle_set is None:
+
+        # THE OTHER FEEDBACK EDGE. `weak` is a check something provably wrong
+        # got past. This is a check nothing could satisfy: the loop above just
+        # spent its whole turn budget on it and a second implementation of the
+        # same requirement fails it too.
+        #
+        # Measured on s-i2c: the loop drove VIOLATES 15 -> 9 and 7 of the 9 it
+        # could not clear are checks the known-good control ALSO fails. Those 7
+        # block G4, which is why a reference model scoring its best separation
+        # of the series -- 57/168 at +24, the first positive one -- still
+        # produced no RTL. The residue was the checks, not the design, and
+        # nothing sent them anywhere.
+        #
+        # Only oracles the loop actually failed to satisfy qualify. A check the
+        # witness merely disagreed with, and the model then satisfied, has
+        # answered the question and is left alone.
+        # `Issue.path` is "refmodel.<uid>.<verdict>" -- see `verdict.to_issue`.
+        # Only VIOLATES qualifies: a NOT_EXERCISED is the stimulus's and an
+        # ORACLE_INVALID already went back through the stage's own repair loop.
+        still_violating = {
+            i.path.split(".")[1] for i in issues
+            if i.path.startswith("refmodel.") and i.path.endswith(".violates")
+        }
+        stuck = {uid: witness_notes[uid]
+                 for uid in sorted(still_violating & set(witness_notes))}
+        if stuck:
+            logger.info(
+                "%d oracle(s) survived the turn budget and a second "
+                "implementation fails them too: %s", len(stuck),
+                ", ".join(sorted(stuck)))
+
+        if (not weak and not stuck) or round_ == adequacy_rounds or oracle_set is None:
             break
 
         from ..oracles_stage import run_oracle_stage
@@ -387,7 +423,8 @@ def _closed_loop(
             workdir=(Path(run_dir) / "specflow" if run_dir is not None
                      else Path("/tmp/specflow-oracles")),
             base=base, normalized=normalized, control_source=control_source,
-            run_dir=run_dir, strengthen=weak, previous=oracle_set,
+            run_dir=run_dir, strengthen=weak, reconsider=stuck,
+            previous=oracle_set,
         )
         oracles = list(oracle_set.trusted)
         carried = {u: v for u, v in oracle_set.dispositions.items()
