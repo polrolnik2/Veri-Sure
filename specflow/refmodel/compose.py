@@ -681,7 +681,20 @@ def _debug_turns(
             stimulus_gen=_restimulate, normalized=normalized,
             testplan=testplan, reset_ports=frozenset(reset_names),
             transactional=True, model_route_stalled=stalled,
-            stimulus_budget=stimulus_budget,
+            # WHAT IS LEFT OF THE BUDGET, not the whole of it again.
+            #
+            # A fresh `DebugSession` is built every turn and counts its own
+            # `added` from zero, so passing the full figure made the budget
+            # PER TURN. Measured on t-i2c, the first run in which the tool was
+            # reachable at all: exactly 12 testpoints added on each of four
+            # turns, 48 against a stated budget of 12, and not one of them
+            # changed a single verdict -- CONFORMS held at 45 and VIOLATES at 9
+            # from the first turn to the last.
+            #
+            # The defect predates the fix that exposed it. `add_stimulus` had
+            # never once fired in six runs, so nothing had ever spent this
+            # budget twice.
+            stimulus_budget=max(0, stimulus_budget - len(added)),
         )
         before = source
         # Whether the model route is still producing anything. Compared
