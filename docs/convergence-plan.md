@@ -345,7 +345,50 @@ already records two occasions where I generalised too fast.
 
 ## Phase 3 — the populations that block the gate
 
-12. **VACUOUS (11) — MEASURED: 5 of 11 clear, and it is DRAWS, not feedback.**
+12. **VACUOUS — THE CHECK ITSELF WAS CONVICTING ON NON-EVIDENCE (commit
+    `cb2a551`). Every `VACUOUS` count in this document predates the fix and
+    none of them is a count of vacuous oracles.**
+
+    `must_fail` decided with `if decide(oracle, rows).failed()`. That is False
+    when the oracle PASSED the variant and equally False when the variant's
+    trace never reached the clause's scenario — and only the first is vacuity.
+    The second is a fact about the stimulus, which `verify_one` already refuses
+    to reject on ("the scenario not being staged is the stimulus's business")
+    and which `_decide_over` keeps distinct via `unexercised()`.
+
+    Worse: the unexercised replay also incremented `in_scope`, and `in_scope` is
+    what satisfies `min(MIN_IN_SCOPE, len(mine))`. The never-triggered replays
+    were not merely miscounted — **they were the evidence that licensed the
+    conviction.** And it replayed against the FIRST named testpoint only, where
+    `_decide_over` decides across all of them.
+
+    Re-scored on w-i2c's 11, pure replay:
+
+    | | sensitive | convicted | unknown |
+    |---|---|---|---|
+    | old check | 5 | 6 | 0 |
+    | **new check** | **6** | **3** | **2** |
+
+    **Four of the six "still vacuous" were misattributed.** REQ-0062 and
+    REQ-0073 catch a variant on a testpoint the first-named-only replay never
+    looked at. REQ-0061 and REQ-0072 have nothing behind them but
+    never-triggered replays — a testplan finding, not an oracle one.
+    `verify_one` rejects only on `CONVICTED`, so `SENSITIVE` and `UNKNOWN` both
+    survive.
+
+    The direction is one-way: `CONVICTED` is strictly harder to reach and no
+    surviving oracle can become rejected. This is not a downgrade of `VACUOUS` —
+    the gate still blocks on it — and the property now respected (`ok is None`)
+    is computable from the run, the same standard the `NOT_EXERCISED`
+    reclassification was held to.
+
+    **What this invalidates.** The blocker table's `VACUOUS 11`, and the
+    re-authoring measurement below. Both were taken with the broken check on
+    both sides, so the comparison between arms survives and the absolute counts
+    do not. A re-run of `[O]` is needed before any `VACUOUS` figure here is
+    quotable again.
+
+12b. **The re-authoring measurement, taken under the old check.**
 
     "Regeneration from the same requirement text does not produce a non-vacuous
     check" is refuted. It does, about a third of the time.
