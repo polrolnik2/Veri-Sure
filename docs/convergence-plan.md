@@ -1,6 +1,8 @@
 # Getting each stage to converge, and RTL out the other side
 
-**Status:** plan. Phase 0 is in flight; nothing in Phases 1–5 is built.
+**Status:** plan. Phase 0 and Phase 1 are DONE and their results are recorded
+inline; Phase 2 steps 8-10 are landed (commits 9ffe2a8, 268ad11); step 11 is
+running. Phase 2b is triaged and unbuilt. Phases 3-5 are unbuilt.
 **Supersedes nothing.** `oracle-stage-rework.md` describes the architecture this
 plan runs on; every measurement below was taken after that rework landed.
 
@@ -51,9 +53,19 @@ number in this document is allowed to carry.
 
 ---
 
-## Phase 0 — land what is in flight
+## Phase 0 — DONE, and mostly negative
 
-No new work; w-i2c is running.
+1. **`reconsider` alone: REFUTED.** `control_violates` 15 -> 15, discriminating
+   10 -> 10. It rewrote 3 oracles, fixed REQ-0014, broke REQ-0003. Attributing
+   t-i2c's net zero to `strengthen` fighting it was WRONG -- the relax edge does
+   not work on its own either. **Do not retry it; it needs a different idea.**
+2. **`--advisory-unobservable`: WORKS.** w-i2c's gate reads `error 25 /
+   warning 7`. The 7 UNOBSERVABLE stop being errors.
+3. **`golden_check` on w-i2c: 30/168, separation -29.** Which, with s-i2c at
+   +24 and t-i2c at -24 from the SAME 58 oracles, is what overturned the +24
+   headline. s-i2c was the outlier.
+
+The original questions, kept for what they were asking:
 
 1. **`reconsider` alone.** t-i2c ran it beside `strengthen` and netted zero — 2
    over-strict oracles fixed, 2 created, `control_violates` 15 before and 15
@@ -170,7 +182,8 @@ control fails on w-i2c and asking *where* each one fails:
 |---|---|---|---|
 | liveness / truncation | **7** | asserts "eventually X"; the trace ends first | the stimulus |
 | level-not-transition | **5** | matches the idle state instead of the scenario | the oracle author |
-| genuine disagreement | **2** | a real claim about behaviour | triage |
+| oracle: missing activation guard | **1** | asserts WRITE semantics on a READ trace | regenerate — *Phase 2 prevents it* |
+| requirement over-reads the spec | **1** | the design is right and the requirement is wrong | spec authoring |
 | ambiguous | 1 | fails one testpoint, passes three | the testpoint |
 
 ### The liveness class (7)
@@ -236,14 +249,75 @@ gives the control or the witness any authority.
     machine-checkable premise rather than a caution -- and the premise is
     currently absent from the artifact.
 
-**What this changes.** Over-strictness stops being the blocker with no path. 13
-of 15 are attributable without any new authority for a design, and the 2 that
-remain (REQ-0074, REQ-0038) are the only ones that fail mid-trace with room to
-spare and pass nothing else -- a triage list, not a class.
+### The two mid-trace cases, triaged
+
+Both are done, and neither is an over-strict check.
+
+**REQ-0074 -- oracle defect, and Phase 2 already prevents it.** The requirement
+is about WRITE. Its failing testpoint TP-0158 drives `cmd = 8`, and the spec's
+assumed encoding is `WRITE = 0100 (4)`, `READ = 1000 (8)` -- so the trace issues
+a READ, during which the controller releases SDA regardless of `din`, which is
+exactly what the control does. The oracle asserts `sda_oen == din` without first
+checking that a WRITE occurred.
+
+Its normalized `inputs` is `{}`, which is the Phase 2 defect precisely: with
+`{cmd: 4}` present, `check_static` would never have attached TP-0158 to it. So
+this needs no new mechanism -- it needs the fix already committed, and a
+verification that the attachment stops happening.
+
+24. After the Phase 2 re-run, assert TP-0158 is no longer attached to REQ-0074.
+    Offline, no model calls.
+
+**REQ-0038 -- the requirement is wrong, not the oracle and not the model.** The
+control advances a phase and completes a command while `ena = 0`:
+
+```
+edge 26   ena=0   scl_oen=0  sda_oen=0
+edge 29   ena=0   scl_oen=1              <- phase advanced
+edge 31   ena=0   cmd_ack=1              <- command completed
+```
+
+The requirement claims the FSM advances only on a timing tick and the oracle
+checks that faithfully. But the spec says only that `ena` low *"reloads the
+clock divider and resets the input filter counter, preventing normal bit-timing
+progression"* -- it never says a phase already in flight cannot finish. The
+control matches golden RTL at 168/168, so the design is right and the
+requirement over-reads its source.
+
+25. Route REQ-0038 to spec authoring. This is the ONLY one of the 15 that lands
+    there, and like the 6 genuine spec holes it is not fixable from inside the
+    pipeline.
+
+**What this changes.** Over-strictness stops being the blocker with no path, and
+stops being a phenomenon at all: **zero of the 15 are over-strict checks of
+correct requirements.** It was five different things sharing one symptom, and it
+looked mechanism-less because the symptom was what was being counted.
 
 **Verify before building:** confirm the level-not-transition reading on each of
 the 5 individually. The diagnosis generalised from REQ-0070, and this document
 already records two occasions where I generalised too fast.
+
+### Gaps this agenda did not have until they were audited for
+
+26. **`ORACLE_INVALID` (1).** Named in the blocker table and given no item. Same
+    route as `VACUOUS` -- `[O]` regeneration -- and it should be measured with
+    it rather than discovered again later.
+27. **Correspondence costs 154 calls for 3 rejections.** Measured precise but
+    very low yield at the shipping calibration. It closes a real gap no other
+    check covers, so this is a cost/keep decision to take deliberately, not a
+    silent cut. It is the largest saving available in the oracle stage, which is
+    66 of a 105-minute run.
+28. **If the VACUOUS author experiment says SENSITIVE**, the remedy is authoring
+    oracles at full strength, and the price is measured: ~23k output tokens and
+    6 continuations per oracle, against ~150 oracles a run. Report the price
+    with the finding; do not recommend it without one.
+29. **x-i2c is confounded and its successor should not be.** `--reuse` correctly
+    regenerates the testplan and stimulus when `normalized.json` changes, so a
+    "controlled" re-run of a normalization change is not controlled. Any future
+    single-variable test has to freeze downstream artifacts deliberately or
+    accept that it is measuring a new draw as well.
+30. **The 6 dead-oracle requirements** liveness finds. Item 15 wires the
+    instrument in; nothing yet says what happens to what it accuses.
 
 ---
 
