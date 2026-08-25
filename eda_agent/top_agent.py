@@ -269,6 +269,9 @@ class TopAgentConfig:
     #: The relax-side feedback edge, counted apart from adequacy because the
     #: two pull opposite ways -- see `compose._closed_loop`.
     specflow_reconsider_rounds: int = 0
+    #: Blocking verdicts reported as `warning` rather than `error`, so a build
+    #: proceeds with them itemised. Only `verdict.DOWNGRADABLE` is honoured.
+    specflow_advisory_verdicts: frozenset[str] = frozenset()
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -620,6 +623,7 @@ class TopAgent:
             correspondence=self.config.specflow_correspondence,
             adequacy_rounds=self.config.specflow_adequacy_rounds,
             reconsider_rounds=self.config.specflow_reconsider_rounds,
+            advisory_verdicts=self.config.specflow_advisory_verdicts,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

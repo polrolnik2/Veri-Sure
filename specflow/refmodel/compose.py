@@ -235,6 +235,7 @@ def run_refmodel(
     #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
     adequacy_rounds: int = 0,
     reconsider_rounds: int = 0,
+    advisory_verdicts: frozenset[str] = frozenset(),
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -292,6 +293,7 @@ def run_refmodel(
             witness_notes=dict(oracle_set.witness_notes),
             oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
             reconsider_rounds=reconsider_rounds,
+            advisory_verdicts=advisory_verdicts,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -342,6 +344,11 @@ def _closed_loop(
     #: unblock a gate, and it cannot be tested while something else is
     #: tightening underneath it.
     reconsider_rounds: int = 0,
+    #: Blocking verdicts to report as `warning` rather than `error`, so the
+    #: build proceeds with them itemised instead of halting. Only
+    #: `verdict.DOWNGRADABLE` is honoured -- see there for why that is
+    #: `UNOBSERVABLE` alone.
+    advisory_verdicts: frozenset[str] = frozenset(),
 ) -> tuple[str, list[Issue]]:
     """Debug until the oracles are satisfied, then ask whether that meant anything.
 
@@ -374,6 +381,7 @@ def _closed_loop(
             item_port=item_port, variants=variants,
             carried=carried, oracle_rates=oracle_rates,
             oracle_liveness=oracle_liveness, witness_notes=witness_notes,
+            advisory_verdicts=advisory_verdicts,
         )
         if not oracles:
             break
@@ -481,6 +489,7 @@ def _debug_turns(
     #: budget here (`loop.py:14-18` argues against hard-coded ones), and one of
     #: the two things that decide whether the loop still has a move to make.
     stimulus_budget: int = 12,
+    advisory_verdicts: frozenset[str] = frozenset(),
     #: What the oracle stage decided about the requirements whose oracle is NOT
     #: in `oracles` -- ORACLE_INVALID, VACUOUS, UNOBSERVABLE, UNDECIDED. Carried
     #: through for reporting and never recomputed here: they were settled
@@ -607,6 +616,7 @@ def _debug_turns(
         issues = verdict.issues(
             mechanical,
             {u: (r.detail or r.broken) for u, r in by_uid.items()},
+            advisory=advisory_verdicts,
         ) + ratchet.issues(regressed)
 
         if run_dir is not None:

@@ -168,7 +168,30 @@ def classify(
     return out
 
 
-def to_issue(req_uid: str, v: str, detail: str = ""):
+#: Verdicts a caller may downgrade from `error` to `warning`.
+#:
+#: ONLY `UNOBSERVABLE`, and the restriction is the point. Every other blocking
+#: verdict accuses someone who can act -- the model, the stimulus, the oracle
+#: author -- so downgrading it would let a build pass with work outstanding that
+#: something in this pipeline was about to do. `UNOBSERVABLE` is the one whose
+#: route leaves the pipeline entirely: `ROUTE` sends it to spec authoring, and
+#: no further turn of any loop will ever clear it.
+#:
+#: Measured, which is why this exists at all: on s-i2c the reference-model gate
+#: failed with 34 issues of which only 9 were the loop's. Seven were
+#: UNOBSERVABLE and could not be cleared by any amount of debugging, so the
+#: build halted permanently on a spec defect -- and a spec containing one
+#: internal-mechanism sentence is not a rare thing. This one has 8 of 77.
+#:
+#: What a downgrade does NOT do is hide it. The requirement stays in
+#: `dispositions`, stays undischarged, and still renders as an issue on the
+#: gate. The plan's objection is to SILENT omission; an itemised warning that
+#: names the requirement and the reason is the opposite of silent.
+DOWNGRADABLE: frozenset[str] = frozenset({"UNOBSERVABLE"})
+
+
+def to_issue(req_uid: str, v: str, detail: str = "", *,
+             advisory: frozenset[str] | set[str] = frozenset()):
     """One `Issue` per blocking verdict, naming the party that must act.
 
     This is what `judge.to_issue` (`judge.py:708`) does for an OPINION, and the
@@ -190,10 +213,12 @@ def to_issue(req_uid: str, v: str, detail: str = ""):
     message = f"{v}: {route}"
     if detail.strip():
         message += f" -- {detail.strip()}"
-    return Issue("error", f"refmodel.{req_uid}.{v.lower()}", message)
+    severity = "warning" if v in (set(advisory) & DOWNGRADABLE) else "error"
+    return Issue(severity, f"refmodel.{req_uid}.{v.lower()}", message)
 
 
-def issues(verdicts: dict[str, str], details: dict[str, str] | None = None) -> list:
+def issues(verdicts: dict[str, str], details: dict[str, str] | None = None,
+           *, advisory: frozenset[str] | set[str] = frozenset()) -> list:
     """Every blocking verdict as an `Issue`, in requirement order.
 
     The list `has_errors` reads, so a caller can gate on mechanical verdicts
@@ -202,7 +227,8 @@ def issues(verdicts: dict[str, str], details: dict[str, str] | None = None) -> l
     """
     out = []
     for uid in sorted(verdicts):
-        issue = to_issue(uid, verdicts[uid], (details or {}).get(uid, ""))
+        issue = to_issue(uid, verdicts[uid], (details or {}).get(uid, ""),
+                         advisory=advisory)
         if issue is not None:
             out.append(issue)
     return out

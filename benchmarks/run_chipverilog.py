@@ -296,6 +296,9 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_correspondence=args.correspondence,
             specflow_adequacy_rounds=args.adequacy_rounds,
             specflow_reconsider_rounds=args.reconsider_rounds,
+            specflow_advisory_verdicts=(
+                frozenset({"UNOBSERVABLE"}) if args.advisory_unobservable
+                else frozenset()),
         ),
     )
     try:
@@ -420,6 +423,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--advisory-unobservable", action="store_true",
+        help="Report UNOBSERVABLE as a warning rather than an error, so the "
+             "build proceeds with those requirements itemised and "
+             "undischarged instead of halting. Measured on s-i2c: the "
+             "reference-model gate failed with 34 issues of which only 9 were "
+             "the debug loop's, and 7 were UNOBSERVABLE -- which no turn of "
+             "any loop clears, because the route leaves the pipeline. Off by "
+             "default: halting on a spec defect is the current contract and "
+             "this has to be measured before it changes.",
     )
     p.add_argument(
         "--reconsider-rounds", type=int, default=0,

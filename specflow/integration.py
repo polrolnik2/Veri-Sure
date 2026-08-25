@@ -295,6 +295,9 @@ def build_artifacts(
     #: Rounds of the relax-side feedback edge, separate from `adequacy_rounds`
     #: because the two pull opposite ways -- see `compose._closed_loop`.
     reconsider_rounds: int = 0,
+    #: Blocking verdicts reported as `warning` rather than `error`. Only
+    #: `verdict.DOWNGRADABLE` is honoured.
+    advisory_verdicts: frozenset[str] = frozenset(),
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -598,6 +601,7 @@ def build_artifacts(
             oracle_set=oracle_set,
             adequacy_rounds=adequacy_rounds,
             reconsider_rounds=reconsider_rounds,
+            advisory_verdicts=advisory_verdicts,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -670,6 +674,7 @@ def build_artifacts(
                 oracle_set=oracle_set,
                 adequacy_rounds=adequacy_rounds,
             reconsider_rounds=reconsider_rounds,
+            advisory_verdicts=advisory_verdicts,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:
