@@ -385,6 +385,32 @@ already records two occasions where I generalised too fast.
     On this evidence a second independent draw is worth more per call than a
     better-argued repair, and the two are the same cost. That wants confirming
     against the high-effort arm before it becomes a default.
+
+    **Two ways of confirming it cheaply that DO NOT WORK, both checked, so they
+    are not attempted again:**
+
+    * *The seven runs are not seven draws.* n and q share one oracle set and
+      carry **zero variants**, so their 0 `VACUOUS` means the check never ran.
+      s/t/v/w look like four independent draws — four distinct whole-set
+      fingerprints — and are not: 45 of their 58 oracles are **byte-identical
+      across all four**, pairwise 45–55 of 58. They are one stage output plus a
+      handful of in-loop rewrites. The "four independent draws produce the
+      identical 11, Jaccard 1.00" that this first appeared to show is one draw
+      counted four times, and is void.
+    * *The vacuous oracles' sources cannot be diffed across runs at all.* A
+      rejected oracle is not in `oracles.json`'s `oracles` list, so every one of
+      the 11 hashes to `da39a3ee` — SHA-1 of the empty string — in every run. A
+      cross-run source comparison over rejected oracles compares absent with
+      absent and returns perfect agreement whatever the truth is.
+
+    **And the mechanism I expected is refuted.** `verify_one`'s docstring records
+    that putting the witness in the author's repair loop relaxed oracles until
+    they stopped disagreeing, "the relaxation surfacing as vacuity" — so the
+    witness advisory was the natural suspect for why `[O]` produces vacuous
+    checks where a bare resample does not. It is not: **0 of the 11 carry a
+    witness disagreement at all** (`scratchpad/vac_advisory.py`, pure replay, no
+    model calls). A vacuous check passes everything, the witness included, so
+    that advisory never fires on them.
 13. **A structural disposition.** A requirement about the interface should never
     reach an oracle at all. This removes REQ-0019-class blockers legitimately,
     rather than by downgrading anything.
