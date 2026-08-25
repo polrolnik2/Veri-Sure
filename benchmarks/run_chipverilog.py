@@ -399,7 +399,18 @@ def build_parser() -> argparse.ArgumentParser:
                         "is a whole implementation too, and a weaker one fails "
                         "sound oracles, which is read as over-strictness and "
                         "RELAXES them.")
-    g.add_argument("--max-output-tokens", type=int, default=48000)
+    g.add_argument("--max-output-tokens", type=int, default=192000,
+                   help="TOTAL output budget for one stage call -- a ceiling, "
+                        "not a spend: the loop stops the moment the model says "
+                        "it is done. It must stay a few multiples of the widest "
+                        "slice in `effort_chunk`, because `rounds` is "
+                        "`ceil(total / slice)`. THE DEFAULT WAS 48000, which "
+                        "equals `xhigh`'s slice -- so rounds was 1, there was "
+                        "no continuation, and `_complete_responses` could not "
+                        "widen either (widening needs slice < total). Measured: "
+                        "y-i2c's witness call, 77 KB of prompt at xhigh, died "
+                        "on a mid-stream drop with no recovery available and "
+                        "took the whole oracle stage with it after two hours.")
     g.add_argument("--responses-chunk", type=int, default=9000,
                    help="per-continuation output slice. One long call goes "
                         "silent long enough to be reaped; this bounds it.")

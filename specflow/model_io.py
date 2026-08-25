@@ -716,6 +716,37 @@ class ApiPort:
         body = _responses_body(cfg, prompt, self.settings.max_output_tokens)
         total = int(body.pop("max_output_tokens"))
         chunk = self.settings.chunk_for(effort)
+
+        # A SLICE EQUAL TO THE CEILING HAS NO RECOVERY PATH AT ALL, and that is
+        # a configuration rather than a failure -- so it is caught here rather
+        # than discovered when a call dies.
+        #
+        # `rounds` is `ceil(total / chunk)`: at slice == total it is 1, so there
+        # is no continuation. And the widening branch below requires
+        # `call["max_output_tokens"] < total`, so there is no widening either.
+        # Both halves of the mid-stream-drop recovery are silently off.
+        #
+        # Measured, and it cost a two-hour run: `run_chipverilog` defaulted
+        # `--max-output-tokens` to 48000 while `effort_chunk` gives `xhigh`
+        # 64000, so the body cap became `min(64000, 48000)` = 48000 = total. The
+        # witness call -- 77 KB of prompt, the largest in the run -- took a
+        # mid-stream drop with neither mechanism available, and the oracle stage
+        # never ran. The gate then passed with zero errors because it had
+        # nothing to decide against.
+        #
+        # The operator's ceiling is a COST control and is respected: the slice
+        # comes down to fit rather than the ceiling going up. A narrower slice
+        # risks the reasoning budget eating it, which is what `effort_chunk`
+        # exists to prevent -- but that failure is recoverable by widening, and
+        # this one is not recoverable by anything.
+        if total <= chunk:
+            chunk = max(int(self.settings.responses_chunk), total // 3) or total
+            logger.warning(
+                "%s r%s: max_output_tokens=%s is not above the %s slice for "
+                "effort=%r, which would leave no continuation and no widening; "
+                "narrowing the slice to %s. Raise --max-output-tokens to at "
+                "least 3x the slice instead.",
+                stage, round_, total, self.settings.chunk_for(effort), effort, chunk)
         body["include"] = ["reasoning.encrypted_content"]
         body["store"] = False
         body["max_output_tokens"] = min(chunk, total)

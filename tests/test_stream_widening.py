@@ -23,6 +23,8 @@ reading was wrong. These pin the correction.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -170,3 +172,66 @@ class TestWidening:
 
         assert text == "oracle body"
         assert gw.slices == [9000]
+
+
+# ------------------------------------- the ceiling the RUNNER actually passes
+
+def test_the_runner_default_leaves_room_to_continue_at_every_effort():
+    """`TestTheSliceTable` above asserts on `PortSettings()` and passed happily
+    while the live configuration had no continuation at all.
+
+    `run_chipverilog` passes `--max-output-tokens` unconditionally into
+    `PortSettings`, so the dataclass default is never what runs. Its default was
+    48000, `effort_chunk` gives `xhigh` 64000, and the body cap became
+    `min(64000, 48000)` = 48000 = total: `rounds` 1, no continuation, and the
+    widening branch disabled because it needs `slice < total`.
+
+    Cost of the gap: y-i2c's witness call, 77 KB of prompt at xhigh, took a
+    mid-stream drop with neither recovery mechanism available. The oracle stage
+    never ran, and the reference-model gate then passed with zero errors because
+    it had nothing to decide against.
+
+    So this pins the RUNNER's number, not the dataclass's.
+    """
+    import re
+
+    # Read the DECLARED default rather than invoking argparse: the parser
+    # requires --task and --out, and mocking those up would test the mock. The
+    # literal in the source is exactly what shipped.
+    src = Path("benchmarks/run_chipverilog.py").read_text()
+    m = re.search(r'"--max-output-tokens", type=int, default=(\d+)', src)
+    assert m, "could not find the --max-output-tokens default"
+    default = int(m.group(1))
+
+    settings = PortSettings()
+    for effort in ("low", "medium", "high", "xhigh"):
+        slice_ = settings.chunk_for(effort)
+        assert default > slice_, (
+            f"the runner's --max-output-tokens default ({default}) is not above "
+            f"{effort}'s slice ({slice_}); rounds would be 1 and widening off")
+        assert default // slice_ >= 3, (
+            f"{effort}: only {default // slice_} continuation(s) at the runner's "
+            f"default")
+
+
+def test_a_ceiling_at_or_below_the_slice_narrows_the_slice_rather_than_dying(
+        tmp_path, monkeypatch):
+    """An operator may still pass a small ceiling, and it must not be fatal.
+
+    The ceiling is a COST control, so it is respected -- the slice comes down to
+    fit rather than the ceiling going up. What must not survive is the state
+    where neither continuation nor widening exists.
+    """
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    gw = _NeedsSlice(enough=30000)
+    port = _port(tmp_path, type("C", (), {"responses": gw})(),
+                 responses_chunk=3000, max_output_tokens=48000,
+                 effort_chunk={"xhigh": 48000})
+
+    text = _run(port, tmp_path, effort="xhigh")
+
+    assert text == "oracle body"
+    assert gw.slices[0] < 48000, (
+        "slice == ceiling leaves no continuation and no widening; it must be "
+        f"narrowed, got {gw.slices[0]}")
+    assert len(gw.slices) > 1, "and the widening path must therefore be reachable"
