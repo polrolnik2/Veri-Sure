@@ -203,8 +203,20 @@ class PortSettings:
     #: Whether it buys ENOUGH is unmeasured. It is the cheap arm of the same
     #: experiment, and it ships first for that reason.
     deep_effort_stages: frozenset[str] = frozenset({"oracle"})
-    #: `None` leaves those stages at `small_effort`, which is the off switch.
-    deep_effort: str | None = "high"
+    #: OFF BY DEFAULT, and that is a measured retreat rather than caution.
+    #:
+    #: It shipped as `"high"`. Against a real ~19 KB oracle prompt through this
+    #: gateway that setting killed the stream SIX times running --
+    #: `RemoteProtocolError ... 0 chars so far` -- at chunk 9000 and again at
+    #: 24000, so a wider slice does not rescue it. The same model answers in
+    #: 3.5s at `high` on a one-line prompt, so it is effort INTERACTING with
+    #: prompt size, not effort alone.
+    #:
+    #: Left on, it would have broken every oracle call in every run. The lever
+    #: is real -- re-authoring at greater depth cleared a check the small model
+    #: could not write -- so the switch stays and the default does not.
+    #: Turn it on with `--deep-effort high` once a run proves it survives.
+    deep_effort: str | None = None
 
     #: Total output budget for one stage call, and the per-continuation slice of
     #: it. The slice exists because a single long call goes silent long enough

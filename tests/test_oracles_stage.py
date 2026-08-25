@@ -525,13 +525,20 @@ def test_the_repair_label_does_not_change_which_model_serves_the_call():
     """
     from specflow.model_io import PortSettings
 
-    s = PortSettings(small_model="small", small_effort="low")
+    # Asserted with deep_effort ON, because that is the configuration where a
+    # label could change the answer -- the whole point of the invariant.
+    s = PortSettings(small_model="small", small_effort="low", deep_effort="high")
     served = {s.for_stage(stage) for stage in
               ("oracle_REQ-0001", "oracle_REQ-0001_fix1",
                "oracle_REQ-0001_strengthen1")}
     assert len(served) == 1, f"a label changed the model: {served}"
     assert served == {("small", "high")}, (
         "oracles keep the small model and get deep_effort on it")
+
+    # And with it off, they sit at small_effort -- still all the same.
+    off = PortSettings(small_model="small", small_effort="low")
+    assert {off.for_stage(x) for x in
+            ("oracle_REQ-0001", "oracle_REQ-0001_fix1")} == {("small", "low")}
 
 
 def test_a_repaired_oracle_keeps_a_record_of_what_was_caught(tmp_path,

@@ -382,14 +382,16 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--small-model", help="model for the narrow fanned-out stages")
     g.add_argument("--small-effort")
     g.add_argument(
-        "--deep-effort", default="high",
+        "--deep-effort", default="",
         help="Reasoning effort for the stages in deep_effort_stages -- today "
              "just oracle authoring, which keeps the SMALL model and gets more "
              "thinking on it. Pass an empty string to switch it off. Measured: "
              "of 11 oracles [O] could not make non-vacuous, re-authoring at "
              "full strength cleared 1 of the first 5, so authoring quality is "
              "a real lever; this pulls it without changing which model serves "
-             "a 77-call fan-out.")
+             "a 77-call fan-out. OFF by default: at 'high' a ~19 KB oracle "
+             "prompt killed the stream six times running through this gateway, "
+             "at two different chunk sizes.")
     g.add_argument("--full-strength-stages", default="refmodel,witness",
                    help="comma-separated stages the small model must NOT touch. "
                         "`refmodel` above all: every check compares the design "

@@ -21,7 +21,8 @@ def test_oracles_get_more_reasoning_on_the_same_model():
     from specflow.model_io import PortSettings
 
     settings = PortSettings(model="big", effort="xhigh",
-                            small_model="small", small_effort="medium")
+                            small_model="small", small_effort="medium",
+                            deep_effort="high")
     for stage in ("oracle_REQ-0001", "oracle_REQ-0001_fix1"):
         assert settings.for_stage(stage) == ("small", "high"), stage
 
@@ -68,10 +69,21 @@ def test_a_slice_a_caller_set_is_never_shrunk():
     assert s.chunk_for("xhigh") >= 30000
 
 
-def test_the_shipped_deep_effort_gets_a_slice_that_fits_it():
-    """The two defaults have to agree, which is the bug this pins."""
+def test_deep_effort_is_off_by_default():
+    """A measured retreat, not caution.
+
+    It shipped as "high". Against a real ~19 KB oracle prompt through this
+    gateway that killed the stream SIX times running -- RemoteProtocolError,
+    "0 chars so far" -- at chunk 9000 and again at 24000, so a wider slice does
+    not rescue it. The same model answers in 3.5s at "high" on a one-line
+    prompt, so it is effort interacting with prompt size.
+
+    Left on, it would have broken every oracle call in every run.
+    """
     from specflow.model_io import PortSettings
 
-    s = PortSettings()
-    assert s.deep_effort == "high"
-    assert s.chunk_for(s.deep_effort) > PortSettings.responses_chunk
+    assert PortSettings().deep_effort is None
+    # But when it IS turned on, the slice must still fit it -- the pairing bug
+    # that came first, and which switching the default off would otherwise hide.
+    assert PortSettings(deep_effort="high").chunk_for("high") > \
+        PortSettings.responses_chunk
