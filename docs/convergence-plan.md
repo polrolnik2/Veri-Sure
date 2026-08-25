@@ -620,17 +620,61 @@ already records two occasions where I generalised too fast.
     What remains true from the original item: `adequacy_rounds` defaults to 0
     and has never run live, so the feedback edge is still unmeasured. What is no
     longer true is that a filter must land first.
-17. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
+17. **`idle_turns` counts "the agent did something", not "anything changed" —
+    and deliberately NOT fixed yet.** Per-turn verdicts across the three runs
+    that spent a full budget:
+
+    | | r0 | r1 | r2 | r3 | r4 | r5 | r6 |
+    |---|---|---|---|---|---|---|---|
+    | s-i2c CONFORMS | 36 | 39 | 42 | 43 | | | |
+    | t-i2c CONFORMS | 45 | 45 | 45 | 45 | 45 | 45 | 45 |
+    | t-i2c `idle_turns` | 0 | 1 | 2 | **2** | **2** | **2** | **2** |
+    | t-i2c `stimulus_added` | 0 | 0 | 0 | 12 | 24 | 36 | 48 |
+    | w-i2c `idle_turns` | 0 | 1 | 2 | 2 | 3 | 4 | **5** |
+
+    s-i2c is the only loop that worked: 36 → 43 over four turns, real repair.
+    t-i2c and w-i2c held at exactly 45/9/4 for seven consecutive turns.
+
+    **t-i2c's counter froze at 2 while four more turns changed nothing**,
+    because a turn that calls `add_stimulus` is not counted idle — so adding 12
+    testpoints per turn that discharged no verdict read as progress. w-i2c's
+    counter was honest (5) and equally inert: it is incremented at
+    `compose.py:813`, written to the artifact at `:820`, and decides nothing.
+    The loop stops on `_both_routes_dry` or on budget, never on this. Ninth
+    instance of the pattern, and this one is in the counter used to diagnose the
+    other eight.
+
+    **Not fixed in this pass, on purpose.** Both halves are entangled with the
+    `_attach` fix (`4c55e3f`) that z-i2c is currently testing: if `add_stimulus`
+    now discharges `NOT_EXERCISED`, those turns stop being idle for real and the
+    counter's definition stops mattering. Changing it first would move a
+    variable mid-experiment, on evidence from runs whose known bug is the exact
+    cause. And the stop rule must not move at all until then — a loop that gives
+    up early is the defect §4b item 2 exists to fix, and `budget exhausted` is
+    one of its three legitimate stops, so w-i2c's five idle turns are waste
+    rather than a rule violation.
+
+    Nothing is lost by waiting: every turn's `trust.json` already carries its
+    own verdict counts, so honest idleness is computable from the artifacts
+    after the fact — which is how the table above was built, without touching
+    the field.
+
+18. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
     **only if** step 5 shows the false-attach rate is low.
 
 ---
 
 ## Phase 5 — making any of the above trustworthy
 
-18. **Three draws at the final configuration.** Every claim about separation
+19. **Three draws at the final configuration.** Every claim about separation
     rests on a single run, and the s-i2c/t-i2c pair — 57/168 and 30/168 from one
     oracle set — shows that is not enough to distinguish a result from a draw.
-19. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
+
+    **And S1 itself is a draw.** Three decompositions of the same spec at the
+    same settings gave **77 / 116 / 128** requirements, so absolute counts are
+    not comparable between runs and every claim here has to be a per-requirement
+    rate. This is a harder replication problem than the item was written for.
+20. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
     one design. The rework doc already names this as the weakest joint in the
     architecture; nothing since has strengthened it.
 
