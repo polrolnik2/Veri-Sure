@@ -21,11 +21,14 @@ recorded fixture, so a stage driven once by hand replays forever. Given that
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class PendingResponse(Exception):
@@ -203,40 +206,67 @@ class PortSettings:
     #: Whether it buys ENOUGH is unmeasured. It is the cheap arm of the same
     #: experiment, and it ships first for that reason.
     deep_effort_stages: frozenset[str] = frozenset({"oracle"})
-    #: OFF BY DEFAULT, and that is a measured retreat rather than caution.
+    #: OFF BY DEFAULT -- but no longer because `high` is unsafe. It is not.
     #:
-    #: It shipped as `"high"`. Against a real ~19 KB oracle prompt through this
-    #: gateway that setting killed the stream SIX times running --
-    #: `RemoteProtocolError ... 0 chars so far` -- at chunk 9000 and again at
-    #: 24000, so a wider slice does not rescue it. The same model answers in
-    #: 3.5s at `high` on a one-line prompt, so it is effort INTERACTING with
-    #: prompt size, not effort alone.
+    #: It shipped as `"high"` and killed the stream six times running on real
+    #: ~19 KB oracle prompts, at slice 9000 and again at 24000. That was read as
+    #: "effort interacting with prompt size" and the switch was retreated from.
+    #: THAT READING WAS WRONG, and the correction is `effort_chunk` below: the
+    #: slice was too small for the reasoning `high` wanted, and the gateway does
+    #: not terminate a response it truncates inside the reasoning phase.
     #:
-    #: Left on, it would have broken every oracle call in every run. The lever
-    #: is real -- re-authoring at greater depth cleared a check the small model
-    #: could not write -- so the switch stays and the default does not.
-    #: Turn it on with `--deep-effort high` once a run proves it survives.
+    #: Measured on the same 21.7 KB oracle prompt, one stream each, every event
+    #: timestamped (`scratchpad/stream_probe.py`):
+    #:
+    #:   * medium, slice 9000  -- completed in 38.4s, 4535 chars.
+    #:   * high,   slice 9000  -- 7545 events, EVERY ONE a reasoning summary and
+    #:     not one content delta; the last arrived at t=206.0s and then exactly
+    #:     300.3s of silence, then the drop. 506s to produce nothing.
+    #:   * high,   slice 48000 -- completed in 96.5s, 4408 chars, largest gap
+    #:     between events 10.2s.
+    #:
+    #: So the default stays off only because the experiment it belongs to --
+    #: does re-authoring at greater depth write better oracles -- has not been
+    #: run to a conclusion. Turn it on with `--deep-effort high`; it survives.
     deep_effort: str | None = None
 
     #: Total output budget for one stage call, and the per-continuation slice of
     #: it. The slice exists because a single long call goes silent long enough
     #: to be reaped; see `_complete_responses`.
-    max_output_tokens: int = 48000
+    #:
+    #: A CEILING, NOT A SPEND -- the loop stops the moment the model says it is
+    #: done, and no run has ever approached this. It has to stay a few multiples
+    #: of the WIDEST slice in `effort_chunk`, because `rounds` is
+    #: `ceil(total / slice)`: at 48000 with `high`'s 48000 slice it is 1, and
+    #: continuation would silently disappear at exactly the effort whose
+    #: generations are longest. Three rounds at every effort is the intent.
+    max_output_tokens: int = 192000
     responses_chunk: int = 9000
 
     #: The slice is a budget for REASONING AND CONTENT TOGETHER, so it has to
     #: scale with effort. A slice smaller than the reasoning budget yields no
-    #: content at all, the continuation makes no progress, and the stream is
-    #: eventually reaped -- which is the same trap the continuation mechanism
-    #: was built to escape, entered from the other side.
+    #: content at all -- and on this gateway that is not merely unproductive,
+    #: it is FATAL, which is the part the first version of this table missed.
     #:
-    #: Not hypothetical, and found by shipping `deep_effort="high"` beside the
-    #: 9000 default: the very first call died with
-    #: `RemoteProtocolError ... continuation 1/6, 0 chars so far` on an 18 KB
-    #: prompt. The fix that raised oracle effort would have taken every oracle
-    #: call with it.
+    #: When a response hits `max_output_tokens` while still reasoning, this
+    #: gateway sends no `response.incomplete` and no `response.failed`. It sends
+    #: nothing. The stream simply stops, and 300s later the idle reaper closes
+    #: it. The continuation mechanism below is built entirely around receiving
+    #: that `incomplete` event, so the one failure it exists to handle is the
+    #: one failure it never hears about -- and `_stream_chunk` then resends the
+    #: identical doomed request twice more, 25 minutes for nothing.
+    #:
+    #: Measured, same 21.7 KB oracle prompt, one stream each: `high` at 9000
+    #: emitted 7545 events without a single content delta, went quiet at
+    #: t=206.0s, and dropped at t=506.3s after 300.3s of silence. `high` at
+    #: 48000 completed in 96.5s with a 10.2s worst-case gap. The numbers here
+    #: are that measurement doubled, so a run whose reasoning is longer than the
+    #: probe's still lands inside the slice.
+    #:
+    #: `_complete_responses` widens on a drop as well, because a table cannot
+    #: cover every prompt. This is the cheap prevention, that is the recovery.
     effort_chunk: dict[str, int] = field(default_factory=lambda: {
-        "low": 9000, "medium": 9000, "high": 24000, "xhigh": 32000,
+        "low": 9000, "medium": 9000, "high": 48000, "xhigh": 64000,
     })
 
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
@@ -365,6 +395,14 @@ def _responses_body(cfg, prompt: str, default_cap: int = 48000) -> dict:
         body["reasoning"].setdefault("summary", "auto")
     return body
 
+
+#: A stream that ended without a terminal event. Named once, because the
+#: widening branch in `_complete_responses` and the message that reports the
+#: failure when widening is spent must agree on what "dropped" means -- they
+#: were two copies of the same tuple, and a name added to one of them would
+#: have changed the report without changing the recovery.
+_MIDSTREAM_DROP = ("RemoteProtocolError", "ReadTimeout", "ConnectError",
+                   "ReadError", "APIConnectionError", "APITimeoutError")
 
 #: Exceptions that will fail identically however many times we resend.
 #:
@@ -572,8 +610,14 @@ class ApiPort:
         return OpenAI(**kwargs)
 
     # -------------------------------------------------------------- responses
-    def _stream_chunk(self, client, call: dict):
+    def _stream_chunk(self, client, call: dict, *, retries: int | None = None):
         """One streamed chunk, resent on any failure that a resend could fix.
+
+        `retries` overrides `stream_retries` for one call. The caller uses it to
+        say "a resend is not the right repair for this one" -- see the widening
+        branch in `_complete_responses`, where the repair is a wider slice and
+        resending the identical request first would cost 8 minutes per attempt
+        to reproduce a failure already understood.
 
         Two things this gets right that the obvious version does not.
 
@@ -594,7 +638,8 @@ class ApiPort:
         errors by name, which let a gateway 500 arriving as a bare `APIError`
         through as fatal and cost a 30-minute i2c generation at `xhigh`.
         """
-        attempts = max(0, self.settings.stream_retries) + 1
+        attempts = (max(0, self.settings.stream_retries) if retries is None
+                    else max(0, retries)) + 1
         last: Exception | None = None
         for attempt in range(attempts):
             if attempt:
@@ -681,14 +726,52 @@ class ApiPort:
         final = None
         spent = 0
         rounds = max(1, -(-total // max(1, chunk)))
+        # Widening budget: how many times a mid-stream drop may double the slice
+        # instead of being reported. Two, because doubling twice covers a 4x
+        # under-estimate of the reasoning budget and anything past that is not a
+        # slice problem.
+        widenings = 2
 
-        for attempt in range(rounds):
+        attempt = 0
+        while attempt < rounds:
             call = dict(body)
             call["input"] = conversation
             got: list[str] = []
             try:
-                got, final = self._stream_chunk(client, call)
+                got, final = self._stream_chunk(
+                    client, call,
+                    # A drop we can still widen out of must not be resent
+                    # identically first: the resend reproduces it, and at high
+                    # effort each reproduction is ~500s of reasoning followed by
+                    # 300s of silence. Resend normally once widening is spent.
+                    retries=0 if widenings and call["max_output_tokens"] < total
+                    else None)
             except Exception as exc:  # noqa: BLE001
+                # A stream that dropped WITHOUT ever completing is the signature
+                # of a response truncated inside the reasoning phase, which this
+                # gateway does not signal: no `response.incomplete`, no terminal
+                # event, just silence until the 300s reaper. The continuation
+                # machinery below cannot help, because it is driven by the event
+                # that never arrives. A wider slice can, and it is the only
+                # thing that can -- measured in `PortSettings.effort_chunk`.
+                #
+                # Widen rather than report, while there is room under `total`.
+                # The conversation is unchanged: the slice was lost whole, so
+                # this re-issues the same continuation, not a new one.
+                if (widenings and call["max_output_tokens"] < total
+                        and type(exc).__name__ in _MIDSTREAM_DROP):
+                    widenings -= 1
+                    body["max_output_tokens"] = min(
+                        total, call["max_output_tokens"] * 2)
+                    rounds = max(attempt + 1,
+                                 -(-total // max(1, body["max_output_tokens"])))
+                    logger.info(
+                        "%s r%s: stream dropped with no terminal event at "
+                        "slice=%s -- widening to %s and re-issuing "
+                        "continuation %s",
+                        stage, round_, call["max_output_tokens"],
+                        body["max_output_tokens"], attempt + 1)
+                    continue
                 # Distinct failures used to read identically here, and this
                 # message is the only record of which one ended the run -- the
                 # exception has already been retried to exhaustion by
@@ -700,8 +783,7 @@ class ApiPort:
                 # an SDK parse bug. Three buckets, and the middle one is the one
                 # that was missing.
                 name = type(exc).__name__
-                if name in ("RemoteProtocolError", "ReadTimeout", "ConnectError",
-                            "ReadError", "APIConnectionError", "APITimeoutError"):
+                if name in _MIDSTREAM_DROP:
                     what = "the connection dropped mid-stream"
                 elif name in ("TypeError", "KeyError", "IndexError"):
                     what = "the SDK could not parse an event the gateway sent"
@@ -715,6 +797,7 @@ class ApiPort:
                     f"{len(''.join(parts + got))} chars so far."
                 ) from exc
 
+            attempt += 1
             parts.extend(got)
             usage = getattr(final, "usage", None)
             spent += int(getattr(usage, "output_tokens", 0) or 0)

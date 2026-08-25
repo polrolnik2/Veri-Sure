@@ -345,14 +345,40 @@ already records two occasions where I generalised too fast.
 
 ## Phase 3 — the populations that block the gate
 
-12. **VACUOUS (11).** All 11 went through both `[O]` repair rounds and came back
-    vacuous; the repair loop is not skipping them, regeneration from the same
-    requirement text does not produce a non-vacuous check. First test whether
-    Phase 2 resolves any *for free* — a sharper trigger may be a less vacuous
-    check. 9 of the 11 also lack input activations, but against a 74% base rate
-    that is **barely above chance and is not claimed as a cause.** If Phase 2
-    does not move it, VACUOUS needs its own mechanism and that decision should
-    be taken deliberately rather than folded into this plan.
+12. **VACUOUS (11) — MEASURED: 5 of 11 clear, and iteration is the lever.**
+
+    The framing was wrong. "All 11 went through both `[O]` repair rounds and
+    came back vacuous" was true and misleading: `[O]`'s repair loop gates on
+    `gate_one`, which is **structural only**. Vacuity is decided later, in
+    `oracles_stage.verify_one`, and a vacuity conviction was never fed back to
+    the author. The 11 had three attempts at a gate that cannot see the defect.
+
+    Given the real loop — generate, score with `must_fail`, re-prompt with
+    `_repair_issue`'s own text on a conviction — `gpt-5-mini` at **medium**
+    cleared **5 of 11** (`scratchpad/vac_loop.py`, 26 calls, every one verified
+    `gpt-5-mini`/`medium` from its own `_meta.json`):
+
+    | | cleared |
+    |---|---|
+    | mini/medium, real feedback loop, 3 rounds | **5 of 11** |
+    | luna/xhigh, blind, one shot, no loop | 1 of 5 |
+
+    **The cheap model told what it missed beat the expensive model told
+    nothing.** 4 cleared at round 0 — from the counterexample alone, before any
+    feedback — and 1 more at round 1. Round 2 cleared nobody, so iteration
+    helps once and then stops: the remaining 6 are not a budget problem.
+
+    The variant-supply confound does not explain the split. Of the 8 convicted
+    on fewer than `MIN_IN_SCOPE` variants, 4 cleared; of the 3 with a full 3,
+    1 cleared. Thin evidence did not predict clearing, in either direction, at
+    n=11.
+
+    **What this makes actionable:** the vacuity verdict has to reach the oracle
+    author. Today it is computed after the author's loop has closed, which is
+    the same shape as the `ORACLE_INVALID` defect the stage rework fixed — a
+    rejection with no route back. Wiring `must_fail` into `[O]`'s repair loop
+    is worth 5 of the 11 blockers on the measurement above, and needs no new
+    mechanism.
 13. **A structural disposition.** A requirement about the interface should never
     reach an oracle at all. This removes REQ-0019-class blockers legitimately,
     rather than by downgrading anything.
@@ -366,11 +392,13 @@ already records two occasions where I generalised too fast.
 
 ## Phase 4 — instruments that exist but are not load-bearing
 
-15. **Wire `liveness` as a gate in `[O]`.** Built, validated against an ad-hoc
-    probe (31 → 26 dead, 5 rescued by extra sample points, none newly accused,
-    so it is the strictly more conservative instrument), and currently advisory
-    only. It splits by owner: dead-oracle → the author, dead-stimulus → the
-    testplan.
+15. **Wire `liveness` as a gate in `[O]` — DONE, this item was stale.**
+    `oracles_stage.py:609` measures it per repair round and `:615` gives the
+    liveness note its own repair attempt beside gate 1; `compose.py:302`
+    carries the verdicts into `[D]`. Validated against an ad-hoc probe
+    (31 → 26 dead, 5 rescued by extra sample points, none newly accused, so it
+    is the strictly more conservative instrument). It splits by owner:
+    dead-oracle → the author, dead-stimulus → the testplan.
 16. **Mutant supply for adequacy.** 44 of 70 oracles came back `UNKNOWN` because
     fewer than `MIN_IN_SCOPE = 3` mutants reached what they read. Scoping was
     already refuted as the cause — supply is what remains. Raise `MUTANT_LIMIT`,
