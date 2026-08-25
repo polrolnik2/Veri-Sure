@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 from . import mutate_model
 from .oracles import (
@@ -75,6 +76,115 @@ SURVIVORS_NAMED = 3
 
 #: How many the count itself is worth reporting over -- see `_survived`.
 _SURVIVED = "survived {n} of {m} mutant(s) it could see: {sample}"
+
+
+#: Disagreeing edges quoted to the oracle author. Three is what fits in an
+#: instruction; the count says how many more there were.
+DIFFS_QUOTED = 3
+
+
+class Finding(NamedTuple):
+    """One oracle's adequacy: what the artifact records, and what the author gets.
+
+    `detail` and `counterexample` are separate ON PURPOSE and describe the same
+    event in two vocabularies, because their readers are allowed to see
+    different things. `detail` names the mutation -- "line 21: True becomes
+    False" -- which is what a person debugging this pipeline needs. That string
+    is useless to the oracle author and was what the strengthening edge used to
+    send it: `oracle_gen.build_prompt` "has no parameter that could carry a
+    design", so the author was being asked to aim at a line number in a file
+    invariant I1 forbids it from ever seeing.
+
+    Measured across the two runs that spent the edge -- t-i2c 51 calls, w-i2c 21
+    -- NOT ONE ORACLE MOVED FROM INADEQUATE TO ADEQUATE. And the rejections were
+    not the over-strictness the plan predicted; every one reads `vacuous: passed
+    all N variant(s) of its own requirement`. Asked to tighten against a
+    counterexample it could not locate, the author wrote something WEAKER.
+
+    `counterexample` is the same finding in ports and edges -- `row['edge']` and
+    `row['outputs'][port]`, exactly the vocabulary the oracle's own `decide`
+    already reads, and observable behaviour rather than a design.
+    """
+
+    verdict: str
+    detail: str
+    counterexample: str = ""
+
+
+def _difference(
+    base_rows: list[dict], mutant_rows: list[dict], ports: set[str],
+    limit: int = DIFFS_QUOTED,
+) -> list[str]:
+    """Where two traces the oracle could not tell apart actually disagree.
+
+    NEITHER SIDE IS LABELLED, and that is the whole discipline of this function.
+    Naming which trace is the conforming one hands the author the reference
+    model's behaviour to write its check against -- and the reference model is
+    the artifact this oracle exists to judge. The plan already records the
+    weaker form of this: a *control* may reject an oracle but never repair one,
+    because quoting a known-good trace tunes the oracle to it and the model is
+    then tuned to the oracle, so `golden_check` stops being held out. Quoting
+    the model's OWN trace is that failure with the loop closed tighter.
+
+    So the author is told only that two designs differ here and its check passed
+    both. Which of them violates the requirement has to come from the
+    requirement, which is the one source of truth it is allowed.
+    """
+    out: list[str] = []
+    if len(base_rows) != len(mutant_rows):
+        # LENGTH IS A DIFFERENCE, and on this design it is the commonest one.
+        # Measured on w-i2c REQ-0000: the surviving mutant ran 204 edges where
+        # the design it was compared against ran 30, because it never leaves
+        # reset, so the transaction never completes and the replay runs to its
+        # edge budget. `_project` already counts that -- tuples of different
+        # length are unequal -- but zipping the rows positionally finds no
+        # disagreeing port in the first 30 and reports nothing.
+        #
+        # It is also the counterexample most worth sending. A check that cannot
+        # notice the run never finished is vacuous in the plainest way there is.
+        out.append(f"one runs {len(base_rows)} edges and the other "
+                   f"{len(mutant_rows)}, so one of them never finishes")
+    for i, base in enumerate(base_rows):
+        if len(out) >= limit:
+            return out
+        if i >= len(mutant_rows):
+            break
+        edge = base.get("edge", i)
+        b_out = base.get("outputs") or {}
+        m_out = mutant_rows[i].get("outputs") or {}
+        for port in sorted(ports):
+            if port not in b_out and port not in m_out:
+                continue
+            if b_out.get(port) == m_out.get(port) and (
+                    port in b_out) == (port in m_out):
+                continue
+            # `.get` on both sides deliberately: a port PRESENT in one row and
+            # ABSENT in the other is a difference `_project` counts, and
+            # requiring it in both was the second way this returned nothing.
+            out.append(
+                f"edge {edge}: {port} is {b_out.get(port)} in one and "
+                f"{m_out.get(port)} in the other")
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def _instruct(diffs: list[str], missed: int, in_scope: int) -> str:
+    """What the strengthening round sends the oracle author.
+
+    Phrased as the discrimination it failed rather than as a defect to chase,
+    because that is the thing it can actually act on: two traces, both accepted,
+    differing at ports this requirement is about. Which one is wrong is a
+    question about the requirement, and the requirement is what the author has.
+    """
+    if not diffs:
+        return (f"{missed} of {in_scope} designs that differ at the ports this "
+                f"requirement is about all pass your check, but the difference "
+                f"is not at an edge this check reads.")
+    return ("cannot tell two designs apart. Both pass it, and they differ:\n"
+            + "\n".join(f"    {d}" for d in diffs)
+            + f"\n  One of them violates this requirement. {missed} of "
+            f"{in_scope} such pairs got past this check.")
 
 
 def _survived(survivors: list[str], in_scope: int) -> str:
@@ -176,21 +286,23 @@ def adequacy_of(
     """
     steps = _steps_for(oracle, stimulus_by_tp)
     if not steps:
-        return UNKNOWN, "no stimulus to mutate against"
+        return Finding(UNKNOWN, "no stimulus to mutate against")
 
     ports = set(scope) if scope is not None else ports_read(oracle, contract)
     if not ports:
-        return UNKNOWN, ("the oracle asserts on no declared port" if scope
-                         is not None else "the oracle reads no declared port")
+        return Finding(UNKNOWN, "the oracle asserts on no declared port"
+                       if scope is not None
+                       else "the oracle reads no declared port")
 
     baseline = replay(source, contract, steps, base=base)
     if baseline.error:
-        return UNKNOWN, f"the model {baseline.error}"
+        return Finding(UNKNOWN, f"the model {baseline.error}")
     reference = _project(baseline.rows, ports)
 
     lines = mutate_model.executed_lines(source, contract, steps, base=base)
     in_scope = 0
     survivors: list[str] = []
+    diffs: list[str] = []
     for mutant in mutate_model.mutants(source, lines=lines, limit=propose):
         if in_scope >= limit:
             break                        # the evidence has saturated
@@ -205,13 +317,21 @@ def adequacy_of(
         rows = transactional_view(run.rows) if transactional else run.rows
         if not decide(oracle, rows).failed():
             survivors.append(mutant.description)
+            # The REPLAY is the counterexample, not the mutation. Taken from the
+            # first survivor only: the author is being asked to make one
+            # discrimination it failed to make, and three edges of one pair is
+            # an instruction where thirty edges of eight pairs is a haystack.
+            if not diffs:
+                diffs = _difference(baseline.rows, run.rows, ports)
     if in_scope < MIN_IN_SCOPE:
-        return UNKNOWN, (
+        return Finding(UNKNOWN, (
             f"only {in_scope} mutant(s) changed anything this oracle can see; "
-            f"{MIN_IN_SCOPE} are needed before silence means inadequacy")
+            f"{MIN_IN_SCOPE} are needed before silence means inadequacy"))
     if survivors:
-        return INADEQUATE, _survived(survivors, in_scope)
-    return ADEQUATE, f"caught every one of {in_scope} mutants it could observe"
+        return Finding(INADEQUATE, _survived(survivors, in_scope),
+                       _instruct(diffs, len(survivors), in_scope))
+    return Finding(
+        ADEQUATE, f"caught every one of {in_scope} mutants it could observe")
 
 
 def assess(
@@ -262,7 +382,8 @@ def assess(
         cannot_fail = _L.dead(report)
     return {
         o.req_uid: (
-            (INADEQUATE, cannot_fail[o.req_uid])
+            Finding(INADEQUATE, cannot_fail[o.req_uid],
+                    cannot_fail[o.req_uid])
             if o.req_uid in cannot_fail
             else adequacy_of(o, source, contract, stimulus_by_tp,
                              base=base, limit=limit, propose=propose,
@@ -275,8 +396,8 @@ def assess(
 
 def inadequate(report: dict[str, tuple[str, str]]) -> dict[str, str]:
     """The oracles a strengthening round should be spent on, and why."""
-    return {uid: detail for uid, (level, detail) in report.items()
-            if level == INADEQUATE}
+    return {uid: (rec[2] if len(rec) > 2 and rec[2] else rec[1])
+            for uid, rec in report.items() if rec[0] == INADEQUATE}
 
 
 def strength(report: dict[str, tuple[str, str]]) -> dict[str, int]:
@@ -295,7 +416,8 @@ def strength(report: dict[str, tuple[str, str]]) -> dict[str, int]:
     count.
     """
     shown = missed = 0
-    for level, detail in report.values():
+    for rec in report.values():
+        level, detail = rec[0], rec[1]
         if level == INADEQUATE:
             m = re.match(r"survived (\d+) of (\d+) ", detail)
             if m:
@@ -315,16 +437,18 @@ def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0,
     path = Path(run_dir) / "specflow" / f"adequacy_r{round_}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     counts: dict[str, int] = {}
-    for level, _ in report.values():
-        counts[level] = counts.get(level, 0) + 1
+    for rec in report.values():
+        counts[rec[0]] = counts.get(rec[0], 0) + 1
     path.write_text(json.dumps({
         "counts": counts,
         "strength": strength(report),
         # Whether the set can tell a known-good design from this one at all.
         # `None` means no control was available to ask -- which is not zero.
         "discrimination": discrimination,
-        "by_requirement": {u: {"verdict": v, "detail": d}
-                           for u, (v, d) in sorted(report.items())},
+        "by_requirement": {
+            u: {"verdict": r[0], "detail": r[1],
+                **({"counterexample": r[2]} if len(r) > 2 and r[2] else {})}
+            for u, r in sorted(report.items())},
     }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 

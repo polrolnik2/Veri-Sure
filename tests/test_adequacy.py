@@ -60,6 +60,21 @@ def decide(trace):
     return True, 0, 'y followed the rule'
 """
 
+#: Live but weak: it pins y at the FIRST edge only, so a near perturbation
+#: there moves the verdict -- `liveness` calls it live -- while every mutant
+#: that only changes later edges walks past it. Neither of the other fixtures
+#: can test the two-vocabulary split: SHARP is adequate, and BLUNT is a DEAD
+#: oracle, which is relayed from liveness rather than convicted by a mutant. A
+#: band check is no good either -- only a FAR perturbation moves it, so liveness
+#: calls it dead-stimulus and adequacy abstains.
+WEAK = """\
+def decide(trace):
+    row = trace[0]
+    if row['outputs']['y'] != row['inputs']['a']:
+        return False, row['edge'], 'the first sum is not a'
+    return True, 0, 'the first sum is a'
+"""
+
 #: Reads y and cannot be made to fail by any edit that keeps it in range.
 BLUNT = """\
 def decide(trace):
@@ -81,12 +96,12 @@ def _assess(source: str):
 
 
 def test_a_sharp_oracle_is_adequate():
-    level, detail = _assess(SHARP)
+    level, detail, _ = _assess(SHARP)
     assert level == adequacy.ADEQUATE, detail
 
 
 def test_an_oracle_no_mutant_can_fail_is_inadequate():
-    level, detail = _assess(BLUNT)
+    level, detail, _ = _assess(BLUNT)
     assert level == adequacy.INADEQUATE
     assert "survived" in detail, "the counterexample has to be nameable"
 
@@ -94,14 +109,14 @@ def test_an_oracle_no_mutant_can_fail_is_inadequate():
 def test_too_few_in_scope_mutants_is_unknown_not_inadequate():
     """One observation is not evidence. `MIN_IN_SCOPE` transfers unchanged."""
     unreachable = _oracle(BLUNT).model_copy(update={"tp_uids": ["TP-NONE"]})
-    level, detail = adequacy.adequacy_of(unreachable, FINAL, CONTRACT, STIM,
-                                         base="step")
+    level, detail, _ = adequacy.adequacy_of(unreachable, FINAL, CONTRACT, STIM,
+                                            base="step")
     assert level == adequacy.UNKNOWN
     assert "stimulus" in detail
 
 
 def test_an_oracle_reading_no_declared_port_is_unknown():
-    level, _ = _assess("def decide(trace):\n    return True, 0, 'ok'\n")
+    level = _assess("def decide(trace):\n    return True, 0, 'ok'\n").verdict
     assert level == adequacy.UNKNOWN
 
 
@@ -262,14 +277,14 @@ def test_narrowing_the_scope_cannot_resolve_an_unknown():
     """
     oracle = _oracle(SHARP)
     few = dict(base="step", propose=adequacy.MUTANT_LIMIT)
-    wide, _ = adequacy.adequacy_of(oracle, FINAL, CONTRACT, STIM, **few)
-    narrow, detail = adequacy.adequacy_of(
+    wide = adequacy.adequacy_of(oracle, FINAL, CONTRACT, STIM, **few).verdict
+    narrow, detail, _ = adequacy.adequacy_of(
         oracle, FINAL, CONTRACT, STIM, scope={"hit"}, **few)
     assert wide == adequacy.ADEQUATE
     assert narrow == adequacy.UNKNOWN, (
         f"a scope the oracle does not decide on starves the evidence: {detail}")
 
-    paired, why = adequacy.adequacy_of(
+    paired, why, _ = adequacy.adequacy_of(
         oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"},
         propose=adequacy.PROPOSAL_LIMIT)
     assert paired != adequacy.UNKNOWN, (
@@ -280,7 +295,7 @@ def test_narrowing_the_scope_cannot_resolve_an_unknown():
 def test_an_empty_scope_is_reported_as_asserting_on_nothing():
     """Distinct from "reads no declared port" -- a different finding, and the
     routing depends on telling them apart."""
-    level, detail = adequacy.adequacy_of(
+    level, detail, _ = adequacy.adequacy_of(
         _oracle(SHARP), FINAL, CONTRACT, STIM, base="step", scope=set())
     assert level == adequacy.UNKNOWN
     assert "asserts on no declared port" in detail
@@ -295,7 +310,7 @@ def test_the_candidate_budget_is_not_the_in_scope_budget():
     "nothing to say" rather than "not allowed to look".
     """
     oracle = _oracle(BLUNT).model_copy(update={"clause": "y stays in range"})
-    starved, why = adequacy.adequacy_of(
+    starved, why, _ = adequacy.adequacy_of(
         oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"}, propose=2)
     assert starved == adequacy.UNKNOWN, why
     assert "0 mutant(s)" in why, why
@@ -367,7 +382,7 @@ def test_an_oracle_asserting_on_nothing_is_left_to_liveness():
     """
     inert = _oracle("def decide(trace):\n    return True, 0, 'ok'\n")
     report = adequacy.assess([inert], FINAL, CONTRACT, STIM, base="step")
-    level, detail = report[inert.req_uid]
+    level, detail = report[inert.req_uid][:2]
     assert level == adequacy.UNKNOWN
     assert "asserts on no declared port" in detail, detail
 
@@ -384,7 +399,7 @@ def test_a_dead_oracle_still_reaches_the_strengthening_edge():
     """
     report = adequacy.assess([_oracle(BLUNT)], FINAL, CONTRACT, STIM,
                              base="step")
-    level, detail = report["REQ-0001"]
+    level, detail = report["REQ-0001"][:2]
     assert level == adequacy.INADEQUATE, (level, detail)
     assert "REQ-0001" in adequacy.inadequate(report), (
         "a check that cannot fail is the clearest case for strengthening")
@@ -419,7 +434,7 @@ def test_the_reason_counts_the_survivors_it_does_not_name_the_first():
     The rework plan read the first form as evidence -- "every one cites survived
     line 27" -- and built a filter on it that fired on 0 of 70.
     """
-    level, detail = _assess(BLUNT)
+    level, detail, _ = _assess(BLUNT)
     assert level == adequacy.INADEQUATE
     assert detail.startswith("survived "), detail
     n, m = map(int, __import__("re").match(r"survived (\d+) of (\d+) ", detail).groups())
@@ -448,3 +463,63 @@ def test_the_artifact_carries_how_much_the_set_demands(tmp_path):
         "mutants_shown": 12, "mutants_missed": 2, "missed_pct": 16}
     written = json.loads(adequacy.write(tmp_path, report, 0).read_text())
     assert written["strength"]["mutants_missed"] == 2
+
+
+def test_a_trace_that_never_finishes_is_the_counterexample():
+    """Length is a difference, and on i2c it is the commonest one.
+
+    Measured on w-i2c REQ-0000: the surviving mutant ran 204 edges where the
+    design it was compared against ran 30, because it never leaves reset, so the
+    transaction never completes and the replay runs to its edge budget.
+    `_project` counts that -- tuples of different length are unequal, which is
+    why the mutant was in scope at all -- but zipping the rows positionally
+    finds no disagreeing port in the first 30 and reported nothing, so the
+    author was handed the empty fallback for the single clearest defect there is.
+    """
+    diffs = adequacy._difference(
+        [{"edge": i, "outputs": {"y": 0}} for i in range(3)],
+        [{"edge": i, "outputs": {"y": 0}} for i in range(9)],
+        {"y"})
+    assert diffs, "a run that never finishes has to reach the author"
+    assert "3 edges and the other 9" in diffs[0], diffs
+    assert "never finishes" in diffs[0]
+
+
+def test_a_port_present_on_one_side_only_is_a_difference():
+    """The second way `_difference` returned nothing: requiring the port in BOTH
+    rows skips exactly the case `_project` counts via `.get` returning None."""
+    diffs = adequacy._difference(
+        [{"edge": 0, "outputs": {"y": 1}}], [{"edge": 0, "outputs": {}}], {"y"})
+    assert diffs and "y is 1 in one and None in the other" in diffs[0], diffs
+
+
+def test_the_counterexample_never_says_which_trace_is_correct():
+    """Naming it hands the author the reference model's behaviour to write
+    against, and the reference model is the artifact this oracle exists to
+    judge. The plan already records the weaker form: a control may reject an
+    oracle but never repair one, because quoting a known-good trace tunes the
+    oracle to it and the model is then tuned to the oracle, so `golden_check`
+    stops being held out. This is that with the loop closed tighter.
+    """
+    diffs = adequacy._difference(
+        [{"edge": 2, "outputs": {"y": 5}}], [{"edge": 2, "outputs": {"y": 6}}],
+        {"y"})
+    text = adequacy._instruct(diffs, 1, 4)
+    assert "in one and 6 in the other" in text
+    for banned in ("correct", "conforming", "expected", "should be", "base"):
+        assert banned not in text.lower(), (banned, text)
+
+
+def test_the_author_gets_the_counterexample_and_the_artifact_gets_the_mutation():
+    """Two vocabularies for one event, because their readers may see different
+    things. `inadequate()` feeds the strengthening prompt and must carry traces;
+    the artifact keeps the mutation, which is what a person debugging this
+    pipeline needs and what the author must never be sent."""
+    import re as _re
+    report = adequacy.assess([_oracle(WEAK)], FINAL, CONTRACT, STIM,
+                             base="step")
+    rec = report["REQ-0001"]
+    assert rec.verdict == adequacy.INADEQUATE, rec
+    assert _re.search(r"line \d+", rec.detail), rec.detail
+    author = adequacy.inadequate(report)["REQ-0001"]
+    assert not _re.search(r"line \d+", author), author

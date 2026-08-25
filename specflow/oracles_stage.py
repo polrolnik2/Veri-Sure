@@ -1071,6 +1071,37 @@ def _summary(dispositions: dict[str, str]) -> str:
     return ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
 
 
+def _inadequate_issue(uid: str, why: str) -> Issue:
+    """Ask for the discrimination the check failed, not for a defect to chase.
+
+    `why` is `adequacy.Finding.counterexample` -- two traces the check accepted
+    and the edges where they differ, in ports and edges. It used to be
+    `Finding.detail`, which names the MUTATION: "survived line 21: True becomes
+    False". That is a line number in the reference model, and
+    `oracle_gen.build_prompt` "has no parameter that could carry a design", so
+    the author was being asked to aim at a file invariant I1 forbids it from
+    seeing.
+
+    Measured over the two runs that spent this edge -- t-i2c 51 calls, w-i2c 21
+    -- it never once moved an oracle from inadequate to adequate, and the
+    failure was not the over-strictness the plan predicted. Every rejection
+    reads `vacuous: passed all N variant(s) of its own requirement`: asked to
+    tighten against something it could not locate, the author wrote a WEAKER
+    check.
+
+    WHICH TRACE IS CORRECT IS DELIBERATELY NOT STATED, and `_difference` carries
+    the reasoning: naming it hands the author the reference model's behaviour to
+    write against, and the reference model is what this oracle exists to judge.
+    """
+    return Issue(
+        "error", f"oracle.{uid}.inadequate",
+        f"Your check {why}\n"
+        f"  Decide from the requirement which of the two is wrong, and tighten "
+        f"the check so it FAILS that one -- and only to what the clause states: "
+        f"a check no correct design satisfies is rejected outright. Do not "
+        f"assume either trace is the correct one.")
+
+
 def _strengthen(
     inadequate: dict[str, str],
     previous: OracleSet,
@@ -1127,14 +1158,8 @@ def _strengthen(
         label=f"_strengthen{previous.rounds}",
         feedback={**{uid: [_reconsider_issue(uid, why)]
                      for uid, why in reconsider.items()},
-                  **{uid: [Issue(
-            "error", f"oracle.{uid}.inadequate",
-            f"A design that VIOLATES this requirement passes your check: it "
-            f"{why}. The check is therefore satisfied by something provably "
-            f"wrong, so a design agreeing with it proves nothing. Tighten it to "
-            f"the behaviour the clause actually states -- and only to that: a "
-            f"check no correct design satisfies is rejected outright.")]
-            for uid, why in inadequate.items()}},
+                  **{uid: [_inadequate_issue(uid, why)]
+                     for uid, why in inadequate.items()}},
     )
 
     kept = {o.req_uid: o for o in previous.trusted}

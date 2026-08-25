@@ -617,10 +617,124 @@ already records two occasions where I generalised too fast.
     decides nothing, which is the pattern this document has now caught three
     times.
 
-    What remains true from the original item: `adequacy_rounds` defaults to 0
-    and has never run live, so the feedback edge is still unmeasured. What is no
-    longer true is that a filter must land first.
-17. **`idle_turns` counts "the agent did something", not "anything changed" —
+    What is no longer true is that a filter must land first.
+
+    ~~What remains true from the original item: `adequacy_rounds` defaults to 0
+    and has never run live, so the feedback edge is still unmeasured.~~
+    **ALSO WRONG, see item 17.** It has run live twice — t-i2c spent 51 model
+    calls on it and w-i2c 21 — and the default being 0 says nothing about what
+    a run was launched with. Reading a default as evidence about a run is the
+    same mistake as the test that pinned `PortSettings()` while the runner
+    overrode it, and it is on the list of corrections for the same reason.
+17. **THE FALSE GREEN HAS TWO CAUSES, AND FIXING THE FIRST DID NOTHING ABOUT
+    THE SECOND.** Found live on z-i2c at 20:50, which is the only reason it is
+    known at all.
+
+    | | how the oracle stage died | what the gate said |
+    |---|---|---|
+    | y-i2c | mid-stream drop: the runner's `--max-output-tokens default=48000` made the body cap equal the ceiling, turning off continuation *and* widening | `ok: true, errors: 0` |
+    | z-i2c | **one gateway 500**, on `variant_REQ-0028_trigger`, one of ~600 variant calls, 1h40m in | would have been the same |
+
+    Identical presentation from unrelated causes, because the presentation is
+    not about either cause: **an empty oracle set has no failures in it.** The
+    run builds a reference model, decides it against nothing, and reports zero
+    errors.
+
+    `run_fanout` raising an item's exception to its caller is correct and stays
+    — *"a stage that silently dropped an item would produce an artifact with a
+    hole in it and a gate that reports the hole as the model's fault"*. The
+    defect was one line in `integration.build_artifacts`:
+
+        except Exception as exc:
+            logger.warning("oracles: stage did not complete (%r)", exc)
+
+    with a comment above it reading *"Never fatal"* — written when the stage was
+    new and optional, and false since the stage became what the gate decides
+    against.
+
+    Fixed by `_oracle_stage_issues`: the failure is carried to the gate as a
+    blocking error naming the call that killed it, and an oracle set that
+    completes but is *empty* is blocked the same way. The process still finishes
+    and still writes its artifacts, because a failure you cannot inspect is
+    worse. **This changes nothing about what the gate accepts from a model** —
+    it says the gate was never in a position to accept anything.
+
+    Two things this cost, worth recording because they set the retry policy:
+    z-i2c spent **1h40m and 584 variant calls** and persisted none of them,
+    since `variants.json` is written at the end of the stage; and the call died
+    with `--api-max-retries 2`, a default I lowered from 8 earlier today on
+    measurement of a 40-minute retry storm. Two retries is right for a stuck
+    call and wrong for a transient 500 at the end of a 600-call stage. **Not
+    changed here**, because the fix is a per-item retry policy or a stage that
+    checkpoints, not a bigger number — and either is a separate decision.
+
+18. **The strengthening edge HAS run live, and it never worked — because it
+    aimed the author at a file invariant I1 forbids it from seeing.**
+
+    This document said the edge "has never run live, so the feedback edge is
+    still unmeasured". Wrong twice: t-i2c spent 51 calls on it and w-i2c 21.
+
+    | | strengthened | rejected | adequacy r0 → r1 |
+    |---|---|---|---|
+    | t-i2c | 5 | 3 | 49/6/3 → 48/**7**/3 |
+    | w-i2c | **0** | 4 | 16/37/5 → 16/**38**/4 |
+
+    **Not one oracle in either run moved inadequate → adequate.** All five of
+    t-i2c's accepted rewrites were inadequate before and still inadequate after.
+    Both runs came out one worse.
+
+    **And the failure is the opposite of the one §6 predicted.** §6 says an
+    oracle strengthened to catch a mutant becomes over-strict and is rejected.
+    Every rejection reads:
+
+        strengthening rejected -- vacuous: passed all 5 variant(s) of its own
+        requirement, including one that breaks the clause it names
+
+    Asked to *tighten*, the author wrote something **weaker** — four of four in
+    w-i2c, three of three in t-i2c.
+
+    The cause is structural. The counterexample it was handed was
+    `survived line 21: True becomes False` — a line number in the reference
+    model, which `oracle_gen.build_prompt` "has no parameter that could carry a
+    design" is designed to make unreachable. The edge asked the author to aim at
+    a defect described in a vocabulary I1 denies it. It could not aim, so it
+    rewrote roughly at random, and a randomly rewritten check demands less more
+    often than more.
+
+    **Fixed by making the counterexample a pair of traces** (`adequacy._difference`
+    → `oracles_stage._inadequate_issue`): the edges where two designs the check
+    accepted actually disagree, in `row['edge']` and `row['outputs'][port]` —
+    the vocabulary the oracle's own `decide` already reads, and observable
+    behaviour rather than a design. On w-i2c's 48 inadequate, 42 now carry a
+    concrete counterexample and none leaks a source line.
+
+    **NEITHER TRACE IS LABELLED CORRECT, and that is not a detail.** Naming the
+    conforming one hands the author the reference model's behaviour to write its
+    check against — and the reference model is the artifact the oracle exists to
+    judge. §4 already records the weaker form: *a control may reject an oracle
+    but never repair one*, because quoting a known-good trace tunes the oracle
+    to it and the model is then tuned to the oracle, so `golden_check` stops
+    being held out. Quoting the model's own trace is that with the loop closed
+    tighter. The author is told two designs differ here and its check passed
+    both; which one violates the requirement has to come from the requirement.
+
+    **Two defects found while building it, both by running it on real data
+    rather than on the fixture.** `_difference` compared rows positionally, so a
+    mutant whose trace has a *different length* produced no counterexample at
+    all — and on w-i2c REQ-0000 that is the commonest case: the surviving mutant
+    runs **204 edges against the base's 30**, because it never leaves reset, so
+    the transaction never completes. `_project` counts that (unequal-length
+    tuples differ, which is why the mutant was in scope), and the zip missed it.
+    A check that cannot notice the run never finished is vacuous in the plainest
+    way there is, so that is now the counterexample it sends. The second: a port
+    present in one row and absent in the other is a difference `_project` counts
+    via `.get`, and requiring the port in both rows skipped it.
+
+    **Still unmeasured: whether the edge now works.** Nothing here shows an
+    oracle moving to adequate — only that the instruction is now one the author
+    can act on. That needs a live round.
+
+19. **`idle_turns` counts "the agent did something", not "anything changed" —
     and deliberately NOT fixed yet.** Per-turn verdicts across the three runs
     that spent a full budget:
 
@@ -659,14 +773,14 @@ already records two occasions where I generalised too fast.
     after the fact — which is how the table above was built, without touching
     the field.
 
-18. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
+20. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
     **only if** step 5 shows the false-attach rate is low.
 
 ---
 
 ## Phase 5 — making any of the above trustworthy
 
-19. **Three draws at the final configuration.** Every claim about separation
+21. **Three draws at the final configuration.** Every claim about separation
     rests on a single run, and the s-i2c/t-i2c pair — 57/168 and 30/168 from one
     oracle set — shows that is not enough to distinguish a result from a draw.
 
@@ -674,7 +788,7 @@ already records two occasions where I generalised too fast.
     same settings gave **77 / 116 / 128** requirements, so absolute counts are
     not comparable between runs and every claim here has to be a per-requirement
     rate. This is a harder replication problem than the item was written for.
-20. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
+22. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
     one design. The rework doc already names this as the weakest joint in the
     architecture; nothing since has strengthened it.
 

@@ -13,6 +13,8 @@ checks, not the design, and nothing sent them anywhere.
 
 from __future__ import annotations
 
+import re
+
 import json
 
 from specflow import oracles_stage as O
@@ -113,9 +115,47 @@ def test_the_two_edges_carry_different_reasons(tmp_path, monkeypatch):
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
     port = _Port([_reply(GOOD)])
     _run(_previous(IMPOSSIBLE), port, tmp_path,
-         strengthen={"REQ-0001": "survived line 12: + -> -"})
-    tighten = [p for p in port.prompts if "Tighten it" in p]
+         strengthen={"REQ-0001": "cannot tell two designs apart. Both pass it, "
+                     "and they differ:\n    edge 3: y is 1 in one and 0 in the "
+                     "other\n  One of them violates this requirement."})
+    tighten = [p for p in port.prompts if "tighten the check" in p]
     assert tighten and "Nothing has been able to satisfy" not in tighten[0]
+
+
+def test_the_tighten_edge_never_quotes_a_design(tmp_path, monkeypatch):
+    """Invariant I1, on the one path that had been quietly breaking it.
+
+    `oracle_gen.build_prompt` "has no parameter that could carry a design", but
+    the inadequacy edge was passing `Finding.detail` -- "survived line 21: True
+    becomes False" -- which is a line number in the reference model. The author
+    cannot see that file, so it could not aim, and measured over t-i2c's 51
+    calls and w-i2c's 21 it never moved one oracle to adequate; every rejection
+    read `vacuous`, meaning it answered by writing a WEAKER check.
+
+    The counterexample has to be traces: ports and edges, which is what the
+    oracle's own `decide` reads. And NEITHER TRACE MAY BE LABELLED CORRECT --
+    naming it hands the author the reference model's behaviour to write
+    against, which is the same defect as repairing an oracle from a control,
+    with the loop closed tighter.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(GOOD)])
+    _run(_previous(IMPOSSIBLE), port, tmp_path,
+         strengthen={"REQ-0001": "cannot tell two designs apart. Both pass it, "
+                     "and they differ:\n    edge 3: y is 1 in one and 0 in the "
+                     "other\n  One of them violates this requirement."})
+    tighten = [p for p in port.prompts if "tighten the check" in p]
+    assert tighten, "the strengthening prompt was never sent"
+    sent = tighten[0]
+    assert "edge 3" in sent, "the counterexample must reach the author"
+    # The feedback block only. "line" is an ordinary word in the base prompt --
+    # "active-low line", "a flat line" -- and asserting on the bare word pins
+    # prose instead of the property.
+    block = sent.split("<gate_failures>")[1].split("</gate_failures>")[0]
+    assert not re.search(r"line \d+", block), (
+        f"a source line reference points into a file I1 forbids the author "
+        f"from seeing: {block!r}")
+    assert "Do not assume either trace is the correct one." in sent
 
 
 # ------------------------------------------------- the two edges are separate
