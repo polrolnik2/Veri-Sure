@@ -416,3 +416,65 @@ def test_an_uncheckable_finding_is_not_counted_as_failing():
     """Nothing decided it, so it cannot score -- but it is still listed."""
     s = _mixed_session()
     assert [r.req_uid for r in s.failing()] == ["REQ-0000"]
+
+
+# ------------------------------- the requester always sees what was staged for it
+
+def test_the_minted_testpoint_reaches_the_requirement_it_was_minted_for():
+    """The reason the stimulus route has never discharged anything.
+
+    `_attach` runs `check_static` over every oracle, and `check_static` needs
+    `activation.inputs`. A requirement without them was skipped -- INCLUDING the
+    one this testpoint was minted for, whose `covers` entry names it. So
+    `add_stimulus` generated a scenario for a requirement and then declined to
+    let that requirement see it.
+
+    Measured across three runs: t-i2c added 48 testpoints and `NOT_EXERCISED`
+    stayed at exactly 4 through all seven turns; w-i2c and v-i2c spent the full
+    12-testpoint budget for the same nothing. Three of w-i2c's four unexercised
+    requirements carry no `activation.inputs` at all.
+    """
+    unexercised = """\
+def decide(trace):
+    for row in trace:
+        if row['inputs'].get('a') == 7:
+            return row['outputs']['ack'] == 1, row['edge'], 'checked'
+    return None, 0, 'the scenario never occurred'
+"""
+    oracle = _oracle(unexercised)
+    s = _session(
+        oracles=[oracle],
+        normalized={},                       # no activation.inputs anywhere
+        stimulus_gen=lambda _req, _what: [{"a": 7}],
+    )
+    assert s.undecided(), "the premise: an oracle nothing reaches"
+    before = list(oracle.tp_uids)
+
+    out = s.add_stimulus("REQ-0000", "drive a to 7")
+
+    assert "error" not in out, out
+    assert "REQ-0000" in out["attached_to"], (
+        "the requester must be attached to the testpoint minted FOR it, with or "
+        "without activation.inputs -- inferring the attachment is what failed")
+    assert len(oracle.tp_uids) == len(before) + 1
+    assert out["now"] != "still NOT EXERCISED", (
+        "the scenario is staged and the oracle can now see it")
+
+
+def test_the_requester_is_attached_once_not_twice():
+    """It is also matched by `check_static` when it does have inputs, and a
+    duplicate in `attached_to` would misreport how wide the testpoint reached."""
+    oracle = _oracle()
+    s = _session(
+        oracles=[oracle],
+        normalized={"REQ-0000": {"activation": {"text": "when a is 7",
+                                                "inputs": {"a": 7}},
+                                 "observable": ["ack"]}},
+        stimulus_gen=lambda _req, _what: [{"a": 7}],
+    )
+    s._results = [r for r in s._results]
+    out = s.add_stimulus("REQ-0000", "drive a to 7")
+    if "error" in out:
+        return                               # not unexercised here; nothing to check
+    assert out["attached_to"].count("REQ-0000") == 1
+    assert oracle.tp_uids.count(out["added"]) == 1

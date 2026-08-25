@@ -541,7 +541,7 @@ class DebugSession:
         })
         self.added.append(uid)
 
-        attached = self._attach(uid, steps)
+        attached = self._attach(uid, steps, requester=req_uid)
         self.refresh()
         after = next((r for r in self._results if r.req_uid == req_uid), None)
         return {
@@ -555,7 +555,8 @@ class DebugSession:
             "budget_left": self.stimulus_budget - len(self.added),
         }
 
-    def _attach(self, tp_uid: str, steps: list[dict]) -> list[str]:
+    def _attach(self, tp_uid: str, steps: list[dict],
+                requester: str = "") -> list[str]:
         """Every requirement whose ACTIVATION this testpoint mechanically fires.
 
         Not just the one that asked. A newly generated WRITE testpoint genuinely
@@ -568,8 +569,33 @@ class DebugSession:
         judgement, by reading which input-only activations the steps fire. A
         state-dependent activation cannot be matched this way and keeps its
         existing attachment, which is the honest limit rather than a gap.
+
+        **THE REQUESTER IS ALWAYS ATTACHED, AND WITHOUT IT THE WHOLE ROUTE WAS
+        INERT.** The loop above needs `activation.inputs` to run `check_static`
+        at all, and a requirement without them was skipped -- including the one
+        this testpoint was minted for, whose `covers` entry names it. So
+        `add_stimulus` generated a scenario for a requirement and then declined
+        to let that requirement see it.
+
+        Measured, and it is the reason the stimulus route has never discharged
+        anything: t-i2c added 48 testpoints across its turns and `NOT_EXERCISED`
+        stayed at exactly 4; w-i2c and v-i2c spent the full 12-testpoint budget
+        for the same nothing. Three of w-i2c's four unexercised requirements
+        (`REQ-0005`, `REQ-0043`, `REQ-0050`) have no `activation.inputs`, so no
+        new testpoint could ever reach them.
+
+        The requester is the one attachment that needs no inference: the
+        testpoint exists BECAUSE that oracle sees nothing, the generator was
+        given that requirement's own text, and `add_stimulus` already refuses
+        unless the target is currently unexercised. Appending is still safe --
+        `_worst` ranks failing above anything a new testpoint can add.
         """
         hit: list[str] = []
+        if requester:
+            oracle = next((o for o in self.oracles if o.req_uid == requester), None)
+            if oracle is not None and tp_uid not in oracle.tp_uids:
+                oracle.tp_uids.append(tp_uid)
+                hit.append(requester)
         for oracle in self.oracles:
             norm = self.normalized.get(oracle.req_uid)
             if not norm:
@@ -583,7 +609,8 @@ class DebugSession:
             if check is not None and check.status == FIRED:
                 if tp_uid not in oracle.tp_uids:
                     oracle.tp_uids.append(tp_uid)
-                hit.append(oracle.req_uid)
+                if oracle.req_uid not in hit:
+                    hit.append(oracle.req_uid)
         return hit
 
     def read_model(self, method: str | None = None) -> str:
