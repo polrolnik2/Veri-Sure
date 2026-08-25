@@ -18,7 +18,7 @@
   "rounds": null,
   "vacuity_checked": null
  },
- "rtl_produced": false,
+ "rtl_produced": true,
  "run": "y-i2c",
  "turns": []
 }
