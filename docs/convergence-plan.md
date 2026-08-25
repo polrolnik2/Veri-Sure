@@ -160,6 +160,93 @@ moved `NOT_EXERCISED` by zero, and v-i2c added 12 and did the same.
 
 ---
 
+## Phase 2b — over-strictness is three phenomena, and 13 of 15 are mechanical
+
+The blocker recorded above as having no mechanism. It had none because 15
+oracles were being treated as one thing. Taking every oracle the KNOWN-GOOD
+control fails on w-i2c and asking *where* each one fails:
+
+| class | n | what it actually is | owner |
+|---|---|---|---|
+| liveness / truncation | **7** | asserts "eventually X"; the trace ends first | the stimulus |
+| level-not-transition | **5** | matches the idle state instead of the scenario | the oracle author |
+| genuine disagreement | **2** | a real claim about behaviour | triage |
+| ambiguous | 1 | fails one testpoint, passes three | the testpoint |
+
+### The liveness class (7)
+
+`"al never asserted before end of trace"`, `"never returned both lines to
+released idle afterwards"`. REQ-0066 fails on **the last edge of its trace**
+(edge 210 of 210) and REQ-0025 three edges from the end. These are not
+over-strict about behaviour; the stimulus ends before the scenario completes.
+
+**They are `NOT_EXERCISED`, not `VIOLATES`** -- which is why the debug loop
+could never discharge them. Routed to the model agent, they ask for an edit that
+cannot exist.
+
+### The level-not-transition class (5)
+
+Open-drain makes the idle state and the deasserted state the same value. The
+control's reset state is `scl_oen = 1, sda_oen = 1` -- exactly the value every
+"release the line" requirement tells an oracle to look for. Five of seven early
+failures scan for `port == value` and never compare consecutive rows, so they
+match edge 0 and report that the prior action never happened.
+
+Worked example, REQ-0070. It demands SDA driven low before SCL is released, and
+the control does exactly that:
+
+```
+edge 4   sda_oen=0  scl_oen=0     <- SDA driven low
+edge 5   sda_oen=0  scl_oen=1     <- SCL released, SDA still low
+```
+
+The oracle searches for the first `scl_oen == 1` at or after activation, finds
+edge 0, and fails. Not a disagreement about the protocol: REQ-0042 states the
+same ordering, so the sibling requirement agrees. The check reads a level where
+the requirement means a transition.
+
+The contract does **not** declare `idle_value` for any output -- only for
+inputs -- so the author has the polarity in a notes field and no
+machine-readable statement that the value it is hunting for is also the resting
+one.
+
+### Three detectors, none needing a design
+
+Each is computable from the trace the oracle already ran on, so none of them
+gives the control or the witness any authority.
+
+20. **Truncation detector.** An oracle that fails only by reaching the end of
+    the trace is making a liveness claim the stimulus cannot decide. Reclassify
+    `VIOLATES` -> `NOT_EXERCISED`, which routes it to the stimulus instead of the
+    model. Removes 7 of the 15 and stops the debug loop spending its budget on
+    them.
+21. **Idle-match detector.** An oracle that fails at an edge before its
+    activation could have occurred, on a port sitting at its reset value, is
+    matching idle. Removes 5.
+22. **Disagreement-with-itself detector.** An oracle a single design PASSES on
+    several named testpoints and fails on one has a testpoint problem, not a
+    strictness problem -- REQ-0066 passes 4 and fails 1, REQ-0060 passes 3 and
+    fails 1. Works against the witness, so it needs no control at all.
+
+### And one generation fix
+
+23. Populate `idle_value` for OUTPUT ports in the contract, then tell the oracle
+    author: where a requirement's target value equals a port's declared idle
+    value, assert on the transition into it, not the level. A rule with a
+    machine-checkable premise rather than a caution -- and the premise is
+    currently absent from the artifact.
+
+**What this changes.** Over-strictness stops being the blocker with no path. 13
+of 15 are attributable without any new authority for a design, and the 2 that
+remain (REQ-0074, REQ-0038) are the only ones that fail mid-trace with room to
+spare and pass nothing else -- a triage list, not a class.
+
+**Verify before building:** confirm the level-not-transition reading on each of
+the 5 individually. The diagnosis generalised from REQ-0070, and this document
+already records two occasions where I generalised too fast.
+
+---
+
 ## Phase 3 — the populations that block the gate
 
 12. **VACUOUS (11).** All 11 went through both `[O]` repair rounds and came back
@@ -213,6 +300,11 @@ moved `NOT_EXERCISED` by zero, and v-i2c added 12 and did the same.
 * **Downgrading `VACUOUS` or `ORACLE_INVALID` to warnings.** Passing a build on a
   check that demands nothing is the exact failure this pipeline exists to
   prevent.
+* **Reclassifying a verdict to make a number look better.** Phase 2b moves 7
+  oracles from `VIOLATES` to `NOT_EXERCISED`, and that is legitimate ONLY
+  because "failed by reaching the end of the trace" is a computable property of
+  the run, not a judgement. Any reclassification that cannot be computed from
+  the trace is the same failure as downgrading the gate.
 * **Changing what the gate accepts in order to make RTL appear.**
 * **Touching the 6 genuine spec holes.**
 
@@ -226,7 +318,13 @@ about to change. Phase 5 is the only phase that makes any earlier number
 trustworthy, and it is last only because it is pointless to replicate a
 configuration still being changed.
 
-**Honest expectation.** This plausibly clears `NOT_EXERCISED` and the ~7
-over-strict `VIOLATES`, leaving roughly 3 real model defects and whatever
-`VACUOUS` survives. That is real progress on convergence and **may still not
-produce RTL**, because `VACUOUS` and `ORACLE_INVALID` block correctly.
+**Honest expectation, revised after Phase 2b.** Phase 2 addresses the stimulus
+cap; Phase 2b addresses 13 of the 15 over-strict oracles, 7 of them by routing
+a liveness claim to the stimulus where it belongs rather than to the model. What
+remains after both is roughly 2 genuine behavioural disagreements, whatever
+`VACUOUS` survives, and 1 `ORACLE_INVALID`.
+
+That is real progress on convergence and **may still not produce RTL**, because
+`VACUOUS` and `ORACLE_INVALID` block correctly and nothing here is permitted to
+change that. The honest ceiling on this benchmark is set by the 6 genuine spec
+holes, which route to a human by design.
