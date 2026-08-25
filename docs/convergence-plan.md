@@ -476,8 +476,42 @@ already records two occasions where I generalised too fast.
     dead-oracle → the author, dead-stimulus → the testplan.
 16. **Mutant supply for adequacy.** 44 of 70 oracles came back `UNKNOWN` because
     fewer than `MIN_IN_SCOPE = 3` mutants reached what they read. Scoping was
-    already refuted as the cause — supply is what remains. Raise `MUTANT_LIMIT`,
-    or target mutation at the ports each oracle asserts on.
+    already refuted as the cause — supply is what remains. Raise `MUTANT_LIMIT`
+    (currently 8), or target mutation at the ports each oracle asserts on.
+
+    **And the 20 `INADEQUATE` verdicts are REAL. The rework plan's reading of
+    them was wrong, and this lifts the block it placed on `adequacy_rounds`.**
+
+    That plan recorded them as noise: all 20 cite `survived line 27: 1 becomes
+    2`, line 27 is `self.scl_oen = 1`, `scl_oen` is one bit wide, and `replay`
+    was said not to mask outputs — so the mutant supposedly put a literal `2` on
+    a one-bit port, a value no implementation could produce. It concluded that
+    an illegal-mutant filter was a prerequisite and that strengthening must not
+    run until it existed, or 20 oracles would be rewritten to catch something no
+    hardware can do.
+
+    Measured instead of assumed, by diffing the mutant's trace against the
+    baseline on the model n-i2c shipped:
+
+        rows: 10   differing (edge, port, base, mutant):
+            (0, 'scl_oen', 1, 0)
+            (1, 'scl_oen', 1, 0)
+
+    **The trace carries 0, not 2.** `1 becomes 2` describes the SOURCE LITERAL
+    the mutation operator rewrote, not the value that reaches a port. Every
+    output in the mutant trace is 0 or 1. So the mutant is representable,
+    observable, and means *SCL is driven low at reset instead of released* —
+    a real defect, and 20 oracles failing to notice it is a real finding.
+
+    A filter for unrepresentable values was written and then reverted: it fired
+    on **0 of 70** oracles, because the case it guards against does not occur.
+    Shipping it would have been one more instrument that measures correctly and
+    decides nothing, which is the pattern this document has now caught three
+    times.
+
+    What remains true from the original item: `adequacy_rounds` defaults to 0
+    and has never run live, so the feedback edge is still unmeasured. What is no
+    longer true is that a filter must land first.
 17. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
     **only if** step 5 shows the false-attach rate is low.
 
