@@ -295,6 +295,7 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_variants=args.variants,
             specflow_correspondence=args.correspondence,
             specflow_adequacy_rounds=args.adequacy_rounds,
+            specflow_reconsider_rounds=args.reconsider_rounds,
         ),
     )
     try:
@@ -419,6 +420,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
+    )
+    p.add_argument(
+        "--reconsider-rounds", type=int, default=0,
+        help="Rounds of the relax-side oracle feedback edge: re-ask a check "
+             "the debug loop could not satisfy that a second implementation "
+             "also fails. Separate from --adequacy-rounds because the two pull "
+             "opposite ways; running both measured a net zero.",
     )
     p.add_argument(
         "--adequacy-rounds", type=int, default=0,

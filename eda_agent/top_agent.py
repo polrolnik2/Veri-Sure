@@ -266,6 +266,9 @@ class TopAgentConfig:
     specflow_variants: bool = False
     specflow_correspondence: bool = False
     specflow_adequacy_rounds: int = 0
+    #: The relax-side feedback edge, counted apart from adequacy because the
+    #: two pull opposite ways -- see `compose._closed_loop`.
+    specflow_reconsider_rounds: int = 0
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -616,6 +619,7 @@ class TopAgent:
             variants=self.config.specflow_variants,
             correspondence=self.config.specflow_correspondence,
             adequacy_rounds=self.config.specflow_adequacy_rounds,
+            reconsider_rounds=self.config.specflow_reconsider_rounds,
         )
 
         (output_dir_per_run / "specflow_node.json").write_text(

@@ -116,3 +116,49 @@ def test_the_two_edges_carry_different_reasons(tmp_path, monkeypatch):
          strengthen={"REQ-0001": "survived line 12: + -> -"})
     tighten = [p for p in port.prompts if "Tighten it" in p]
     assert tighten and "Nothing has been able to satisfy" not in tighten[0]
+
+
+# ------------------------------------------------- the two edges are separate
+
+
+def test_the_two_edges_are_gated_apart():
+    """Running both in one round makes them fight, and the net is zero.
+
+    Measured on t-i2c, which ran both: `strengthen` tightened 5 oracles and
+    `reconsider` relaxed 7, and the set's over-strictness did not move -- 15
+    checks failed a known-good control before the round and 15 after, two fixed
+    (REQ-0014, REQ-0024) and two newly created (REQ-0003, REQ-0005).
+
+    `strengthen` is what MANUFACTURES over-strictness: tighten until you catch
+    this mutant, and a check tightened past what the requirement states is
+    exactly a check no correct design satisfies. Relaxing alone is the move
+    that can unblock a gate, and it cannot be tested while something else is
+    tightening underneath it.
+    """
+    import inspect
+
+    from specflow.refmodel import compose
+
+    sig = inspect.signature(compose._closed_loop).parameters
+    assert "adequacy_rounds" in sig and "reconsider_rounds" in sig
+    assert sig["reconsider_rounds"].default == 0, "off until measured alone"
+
+    body = inspect.getsource(compose._closed_loop)
+    # Each edge is silenced by its OWN counter, not by the other's.
+    assert "if not int(reconsider_rounds) or round_ >= int(reconsider_rounds)" in body
+    assert "if not int(adequacy_rounds) or round_ >= int(adequacy_rounds)" in body
+    assert "feedback_rounds = max(0, int(adequacy_rounds), int(reconsider_rounds))" in body
+
+
+def test_the_switch_reaches_the_command_line():
+    """A switch that stops at an internal function cannot be measured."""
+    import inspect
+
+    from eda_agent.top_agent import __file__ as top
+    from specflow import integration
+
+    assert "reconsider_rounds" in inspect.signature(
+        integration.build_artifacts).parameters
+    assert "specflow_reconsider_rounds" in open(top).read()
+    assert "--reconsider-rounds" in open(
+        "benchmarks/run_chipverilog.py").read()

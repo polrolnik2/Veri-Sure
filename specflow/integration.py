@@ -292,6 +292,9 @@ def build_artifacts(
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
     adequacy_rounds: int = 0,
+    #: Rounds of the relax-side feedback edge, separate from `adequacy_rounds`
+    #: because the two pull opposite ways -- see `compose._closed_loop`.
+    reconsider_rounds: int = 0,
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
@@ -594,6 +597,7 @@ def build_artifacts(
             normalized=normalized_by_uid or None,
             oracle_set=oracle_set,
             adequacy_rounds=adequacy_rounds,
+            reconsider_rounds=reconsider_rounds,
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
@@ -665,6 +669,7 @@ def build_artifacts(
                 normalized=normalized_by_uid or None,
                 oracle_set=oracle_set,
                 adequacy_rounds=adequacy_rounds,
+            reconsider_rounds=reconsider_rounds,
             )
             refmodel_path = write_refmodel(run_dir, rm, source)
             if not rm.ok:

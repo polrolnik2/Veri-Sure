@@ -234,6 +234,7 @@ def run_refmodel(
     oracle_set=None,
     #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
     adequacy_rounds: int = 0,
+    reconsider_rounds: int = 0,
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -290,6 +291,7 @@ def run_refmodel(
             oracle_liveness=dict(oracle_set.liveness),
             witness_notes=dict(oracle_set.witness_notes),
             oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
+            reconsider_rounds=reconsider_rounds,
         )
         rendered["src"] = source
         result = StageResult(result.output, issues, result.rounds)
@@ -323,6 +325,23 @@ def _closed_loop(
     witness_notes: dict[str, str] | None = None,
     oracle_set=None,
     adequacy_rounds: int = 0,
+    #: Rounds of the OTHER edge, counted separately from `adequacy_rounds` --
+    #: and separate because running both in one round makes them fight.
+    #:
+    #: Measured on t-i2c, which ran both: `strengthen` tightened 5 oracles and
+    #: `reconsider` relaxed 7, and the set's over-strictness did not move --
+    #: 15 checks failed a known-good control before the round and 15 after,
+    #: two fixed and two newly created. That is the oscillation the plan
+    #: predicted, arriving as a net zero rather than a wobble, because both
+    #: directions were applied to one set at once.
+    #:
+    #: `strengthen` is what MANUFACTURES over-strictness: it says tighten until
+    #: you catch this mutant, and a check tightened past what the requirement
+    #: states is exactly a check no correct design satisfies. So the two are
+    #: separable and worth separating -- relaxing alone is the move that can
+    #: unblock a gate, and it cannot be tested while something else is
+    #: tightening underneath it.
+    reconsider_rounds: int = 0,
 ) -> tuple[str, list[Issue]]:
     """Debug until the oracles are satisfied, then ask whether that meant anything.
 
@@ -344,7 +363,8 @@ def _closed_loop(
     oracle_liveness = dict(oracle_liveness or {})
     witness_notes = dict(witness_notes or {})
     issues: list[Issue] = []
-    for round_ in range(max(0, int(adequacy_rounds)) + 1):
+    feedback_rounds = max(0, int(adequacy_rounds), int(reconsider_rounds))
+    for round_ in range(feedback_rounds + 1):
         source, issues = _debug_turns(
             source=source, contract=contract, contract_json=contract_json,
             requirements=requirements, covers=covers, oracles=oracles,
@@ -405,13 +425,17 @@ def _closed_loop(
         }
         stuck = {uid: witness_notes[uid]
                  for uid in sorted(still_violating & set(witness_notes))}
+        if not int(reconsider_rounds) or round_ >= int(reconsider_rounds):
+            stuck = {}
+        if not int(adequacy_rounds) or round_ >= int(adequacy_rounds):
+            weak = {}
         if stuck:
             logger.info(
                 "%d oracle(s) survived the turn budget and a second "
                 "implementation fails them too: %s", len(stuck),
                 ", ".join(sorted(stuck)))
 
-        if (not weak and not stuck) or round_ == adequacy_rounds or oracle_set is None:
+        if (not weak and not stuck) or oracle_set is None:
             break
 
         from ..oracles_stage import run_oracle_stage
