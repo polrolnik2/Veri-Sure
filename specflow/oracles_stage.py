@@ -925,8 +925,24 @@ def _dispositions(
                             "oracle decides it at a declared port, so the "
                             "normalization is wrong")
         elif blind:
+            # UNOBSERVABLE stays the verdict -- a requirement with no boundary
+            # observable routes to spec authoring whatever else is wrong with
+            # it, and that is the more fundamental of the two claims.
+            #
+            # But an oracle WAS attempted for it (generation filters on
+            # testpoint attachment, not on observability), and until now its
+            # rejection reason was thrown away here. That cost real time: seven
+            # requirements on s-i2c reported nothing but normalization's prose,
+            # so establishing why their oracles had failed meant going back to
+            # `agent_io` -- where all seven turned out to have had between two
+            # and five rounds spent on them. Both reasons are true and the
+            # second is the one that says whether the first is repairable.
             out[uid] = "UNOBSERVABLE"
-            why[uid] = shape.get("unobservable_reason") or "no declared output"
+            claim = shape.get("unobservable_reason") or "no declared output"
+            tried = rejected.get(uid, "")
+            why[uid] = (
+                f"{claim} -- and its oracle was rejected: {tried}"
+                if tried else claim)
         elif uid in rejected:
             out[uid] = V.of_discard(rejected[uid])
             why[uid] = rejected[uid]

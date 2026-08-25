@@ -740,3 +740,39 @@ def test_the_advisory_is_asked_once_and_not_repeated(tmp_path, monkeypatch):
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
         fanout=False, max_repairs=0, max_rounds=3)
     assert len([p for p in port.prompts if "cannot fail" in p]) == 1
+
+
+def test_unobservable_keeps_the_reason_its_oracle_was_rejected_for():
+    """Both claims are true, and the second says whether the first is repairable.
+
+    Generation filters on testpoint attachment, not on observability, so an
+    oracle IS attempted for a requirement normalization called blind. Until this
+    the rejection reason was discarded here, and seven requirements on s-i2c
+    reported nothing but normalization's prose -- establishing why their oracles
+    had failed meant going back to `agent_io`, where all seven turned out to
+    have had between two and five rounds spent on them.
+    """
+    dispositions, why = O._dispositions(
+        requirements=[{"uid": "REQ-0001"}],
+        trusted=[],
+        rejected={"REQ-0001": "vacuous: passed all 3 variant(s)"},
+        had_source={"REQ-0001"},
+        normalized={"REQ-0001": {"observable": [],
+                                 "unobservable_reason": "counter is internal"}},
+    )
+    assert dispositions["REQ-0001"] == "UNOBSERVABLE", (
+        "no boundary observable is the more fundamental claim and still routes "
+        "to spec authoring")
+    assert "counter is internal" in why["REQ-0001"]
+    assert "vacuous" in why["REQ-0001"], "the rejection reason survives too"
+
+
+def test_unobservable_with_no_oracle_attempt_reads_cleanly():
+    """No rejection to report means no dangling 'and its oracle was rejected:'."""
+    _, why = O._dispositions(
+        requirements=[{"uid": "REQ-0002"}],
+        trusted=[], rejected={}, had_source=set(),
+        normalized={"REQ-0002": {"observable": [],
+                                 "unobservable_reason": "purely internal"}},
+    )
+    assert why["REQ-0002"] == "purely internal"
