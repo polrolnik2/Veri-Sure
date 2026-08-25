@@ -307,7 +307,33 @@ already records two occasions where I generalised too fast.
     check covers, so this is a cost/keep decision to take deliberately, not a
     silent cut. It is the largest saving available in the oracle stage, which is
     66 of a 105-minute run.
-28. **Author oracles at full strength. The VACUOUS experiment settled it.**
+28. **Author oracles at full strength — REFUTED by the controlled version of its
+    own experiment.** Same 11 requirements, same loop, same scoring, only the
+    effort differs:
+
+    | | r0 | r1 | r2 | cleared |
+    |---|---|---|---|---|
+    | `gpt-5-mini`/medium | 4 | 1 | 0 | **5 of 11** |
+    | `gpt-5-mini`/high | 2 | 1 | 0 | **3 of 11** |
+
+    **High's clears are a STRICT SUBSET of medium's** — `{REQ-0002, 0044, 0047}`
+    against `{REQ-0002, 0008, 0044, 0047, 0064}`. It found nothing medium did
+    not, at 2.8x the tokens per call (10,744 against 3,813), 35 calls against
+    26, and 12 of its 35 needing a slice widening. Effort verified 35/35 at
+    `gpt-5-mini`/high from the call records, in a directory cleared before the
+    run so no stale metadata could contaminate it.
+
+    Both arms cleared round 2 with zero. Round 0 carries no feedback and does
+    all the work. **So the lever is DRAWS — not depth, not argument.**
+
+    The original item's evidence is below and is superseded: it was 1-of-5 from
+    a blind luna/xhigh arm against a small-model arm that had three attempts
+    with feedback, which was called a FLOOR. The controlled comparison runs the
+    other way.
+
+    ---
+
+    *Superseded, kept for the reasoning:*
 
     Of the first 5 re-authored on `gpt-5.6-luna`/xhigh, **1 cleared** a check
     that `gpt-5-mini`/medium could not write.
