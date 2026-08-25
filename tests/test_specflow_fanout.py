@@ -250,6 +250,37 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
                 "evidence": "evaluate",
                 "remedy": "",
             })
+        if stage == "witness":
+            # [W] A SECOND IMPLEMENTATION, and this test used not to serve it.
+            #
+            # Without it the oracle stage raised, `build_artifacts` logged a
+            # warning and carried on, and this test asserted `res.ok` on a run
+            # that had been decided against NO oracles at all. It passed
+            # because of the defect it should have caught -- the same shape as
+            # the test that pinned `PortSettings()` while the runner overrode
+            # it, and the reason a scripted port has to serve every stage the
+            # build actually reaches.
+            return json.dumps({
+                "base": "evaluate",
+                "source": "def evaluate(self, i):\n"
+                          "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+                          "    o['sum'] = (i['a'] ^ i['b']) & 1\n"
+                          "    o['cout'] = (i['a'] & i['b']) & 1\n"
+                          "    return o\n",
+                "covers": {"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]}})
+        if stage.startswith("oracle_"):
+            port = "sum" if stage.endswith("REQ-0000") else "cout"
+            op = "^" if port == "sum" else "&"
+            return json.dumps({
+                "reasoning": f"{port} follows a {op} b at every edge",
+                "clause": f"the {port} output is driven as specified",
+                "source": "def decide(trace):\n"
+                          "    for row in trace:\n"
+                          f"        want = (row['inputs']['a'] {op} "
+                          "row['inputs']['b']) & 1\n"
+                          f"        if row['outputs']['{port}'] != want:\n"
+                          "            return False, row['edge'], 'wrong'\n"
+                          f"    return True, 0, '{port} followed the rule'\n"})
         raise AssertionError(f"unexpected stage {stage}")
 
     import specflow.integration as integration
@@ -265,6 +296,12 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
         integration.make_port = real
 
     assert res.ok, f"{res.stage}: {[i.message for i in (res.issues or [])]}"
+
+    # AND IT PASSED WITH AN ORACLE SET, not past a stage that failed silently.
+    # `oracles.json` existing is the check that distinguishes the two, and its
+    # absence is exactly how y-i2c and z-i2c both presented as green.
+    assert (run_dir / "specflow" / "oracles.json").is_file(), (
+        "the build reported ok with no oracle set, which is the false green")
 
     # Same artifact shape as the generative arm.
     reqs = json.loads((run_dir / "specflow" / "requirements.json").read_text())

@@ -243,6 +243,35 @@ def _run_divided_s1(
     return reqs, issues, True
 
 
+def _oracle_stage_issues(failed: str, oracle_set) -> list[Issue]:
+    """A model checked against nothing has not been checked.
+
+    THE FALSE GREEN HAS TWO CAUSES AND THIS IS THE SECOND. y-i2c lost its
+    oracle stage to a mid-stream drop; z-i2c lost its to one gateway 500 on
+    `variant_REQ-0028_trigger`, one of ~600 variant calls, after 1h40m. Both
+    runs then built a reference model and both reported `ok: true, errors: 0` --
+    not because the model was good but because an EMPTY ORACLE SET HAS NO
+    FAILURES IN IT. Fixing the transport cause did nothing about this one.
+
+    So the absence is reported as the error it is. This does not change what the
+    gate accepts about a model: it says the gate was never in a position to
+    accept anything.
+    """
+    if failed:
+        return [Issue("error", "oracles.stage.incomplete",
+                      f"The oracle stage did not complete ({failed}), so this "
+                      f"reference model was compared against NO requirement "
+                      f"checks. A gate with no oracle set reports zero failures "
+                      f"because it has nothing to fail, which is not the same "
+                      f"as a model that passed.")]
+    if oracle_set is not None and not list(oracle_set.trusted):
+        return [Issue("error", "oracles.stage.empty",
+                      "The oracle stage completed and produced no trusted "
+                      "check, so this reference model was decided against an "
+                      "empty set. Zero failures here means nothing was asked.")]
+    return []
+
+
 def build_artifacts(
     *,
     run_dir: Path,
@@ -532,9 +561,12 @@ def build_artifacts(
     # reads the prompt back. Running the stage here makes it a fact about time
     # instead: there is no reference model yet, so there is nothing to leak.
     #
-    # Never fatal. A run whose oracles could not be produced is the run every
-    # run was before this stage existed.
+    # Never fatal, AND NEVER SILENT -- see `oracle_stage_failed` below. A run
+    # whose oracles could not be produced is the run every run was before this
+    # stage existed, which is a reason not to abort the process and not a
+    # reason to let the gate report success.
     oracle_set = None
+    oracle_stage_failed = ""
     try:
         from .oracles_stage import load as load_oracles
         from .oracles_stage import run_oracle_stage
@@ -564,7 +596,30 @@ def build_artifacts(
     except _Reused:
         pass
     except Exception as exc:  # noqa: BLE001
-        logger.warning("oracles: stage did not complete (%r)", exc)
+        # THE SECOND ROUTE TO A FALSE GREEN, and the one that fired. `run_fanout`
+        # raises an item's exception to its caller deliberately -- "a stage that
+        # silently dropped an item would produce an artifact with a hole in it
+        # and a gate that reports the hole as the model's fault" -- and this
+        # handler then swallowed it as a WARNING and let the run continue.
+        #
+        # Measured on z-i2c: one gateway 500 on `variant_REQ-0028_trigger`, one
+        # of ~600 variant calls, ended the stage after 1h40m. No `oracles.json`,
+        # no `variants.json`, and the run went on to build a reference model
+        # with NOTHING TO DECIDE IT AGAINST -- which is how `refmodel_gate`
+        # comes back `ok: true, errors: 0`. That is exactly the presentation
+        # y-i2c had, reached by a completely different cause: there the oracle
+        # stage died on a mid-stream drop, here it died on a 500, and both times
+        # the run reported success because an empty oracle set has no failures
+        # in it.
+        #
+        # So the log line was the whole defect. Carried to the gate as an error
+        # instead: the process still finishes and still writes its artifacts,
+        # which is what makes a failure diagnosable, but `ok` is false and the
+        # reason names the call that killed it.
+        oracle_stage_failed = repr(exc)
+        logger.error("oracles: stage did not complete (%r) -- the refmodel gate "
+                     "will FAIL, because a model with no oracle set has not "
+                     "been checked against anything", exc)
 
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
@@ -605,6 +660,7 @@ def build_artifacts(
         )
         refmodel_path = write_refmodel(run_dir, rm, source)
         rm_issues = list(rm.issues)
+        rm_issues.extend(_oracle_stage_issues(oracle_stage_failed, oracle_set))
         # A debug turn may have APPENDED testpoints, and both halves of one --
         # the testplan element and its stimulus -- grew in the objects above.
         # Persist them, or the artifacts on disk disagree with the suite that
@@ -612,8 +668,12 @@ def build_artifacts(
         # re-entry silently loses the scenarios the loop paid model calls to
         # stage. Append-only, so this can only ever grow the files.
         _persist_grown(run_dir, tps, stim_by_tp, before=grown_before)
-        if not rm.ok:
-            return BuildResult(False, "refmodel", rm.issues)
+        if not rm.ok or has_errors(rm_issues):
+            # `rm.ok` is the model's own verdict and knows nothing about whether
+            # an oracle set existed to produce it, so the oracle-stage issues
+            # have to be consulted here too or a run with no oracles walks past
+            # a gate that never looked.
+            return BuildResult(False, "refmodel", rm_issues)
     else:
         # The coverage map lives in the recorded gate file, not in the model
         # source -- it is the generator's claim about the source, not part of
