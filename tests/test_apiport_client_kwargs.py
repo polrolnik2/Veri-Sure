@@ -92,3 +92,30 @@ def test_client_kwargs_are_read_from_the_port_not_the_environment(_env, monkeypa
         "_client() must use the kwargs resolved inside config()'s override "
         "window; reading os.environ here is the bug this test exists for"
     )
+
+
+def test_the_runner_does_not_reinstate_the_retry_storm():
+    """`PortSettings.max_retries = 2` fixed a measured incident: a request this
+    gateway cannot complete costs `max_retries` x ~300s of silence, and the SDK's
+    8 is ~40 minutes with nothing written.
+
+    `run_chipverilog` passes `--api-max-retries` unconditionally, so its CLI
+    default is what actually runs -- and it said 8, restoring precisely the
+    behaviour the dataclass had removed. Found by auditing every PortSettings
+    field the runner overrides, after `max_output_tokens` turned out to be dead
+    the same way and cost a two-hour run.
+
+    Pins the RUNNER's number against the dataclass's, which is the comparison
+    that matters.
+    """
+    import re
+    from pathlib import Path
+
+    from specflow.model_io import PortSettings
+
+    src = Path("benchmarks/run_chipverilog.py").read_text()
+    m = re.search(r'"--api-max-retries", type=int, default=(\d+)', src)
+    assert m, "could not find the --api-max-retries default"
+    assert int(m.group(1)) == PortSettings().max_retries, (
+        "the runner's retry default must not disagree with PortSettings -- a "
+        "disagreement means the dataclass value is dead in every real run")

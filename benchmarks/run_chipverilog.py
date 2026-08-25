@@ -417,7 +417,15 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--stream-retries", type=int, default=2,
                    help="retries for a DROPPED stream, which is intermittent "
                         "on some gateways. Cheap because work is chunked.")
-    g.add_argument("--api-max-retries", type=int, default=8)
+    g.add_argument("--api-max-retries", type=int, default=2,
+                   help="SDK retries BEFORE a response starts. 2, not the SDK's "
+                        "8: a request this gateway structurally cannot complete "
+                        "costs this many x ~300s of silence, and eight is ~40 "
+                        "minutes with nothing written -- the incident that first "
+                        "made it configurable. `PortSettings` has said 2 since "
+                        "then; this default said 8 and won, because the runner "
+                        "passes it unconditionally. Genuine rate limits still "
+                        "get two.")
     g.add_argument("--api-timeout", type=float, default=600.0)
     p.add_argument(
         "--max-repairs", type=int, default=3,
