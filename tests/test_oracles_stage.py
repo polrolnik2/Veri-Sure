@@ -465,7 +465,7 @@ def test_the_witness_is_never_downgraded_to_the_small_model():
 
     settings = PortSettings(small_model="tiny", small_effort="low")
     assert settings.for_stage(WITNESS_STAGE) == (None, None)
-    assert settings.for_stage("oracle_REQ-0001") == ("tiny", "low")
+    assert settings.for_stage("oracle_REQ-0001")[0] == "tiny"
 
 
 def test_vacuous_is_none_not_zero_when_no_variant_check_ran():
@@ -514,15 +514,24 @@ def test_a_repair_pass_is_recorded_beside_the_attempt_it_repairs(tmp_path,
     assert stages[1].startswith("oracle_REQ-0001_fix"), stages
 
 
-def test_the_repair_label_does_not_escape_the_small_model():
+def test_the_repair_label_does_not_change_which_model_serves_the_call():
     """`for_stage` matches on the first `_`-separated token, so a label must not
-    change which model serves the call."""
+    change which model serves the call.
+
+    The invariant is SAMENESS, not smallness. It held when oracles ran on the
+    small model and it has to hold now they author at full strength, because a
+    repair pass answered by a different model than the attempt it repairs makes
+    the two incomparable.
+    """
     from specflow.model_io import PortSettings
 
     s = PortSettings(small_model="small", small_effort="low")
-    for stage in ("oracle_REQ-0001", "oracle_REQ-0001_fix1",
-                  "oracle_REQ-0001_strengthen1"):
-        assert s.for_stage(stage) == ("small", "low"), stage
+    served = {s.for_stage(stage) for stage in
+              ("oracle_REQ-0001", "oracle_REQ-0001_fix1",
+               "oracle_REQ-0001_strengthen1")}
+    assert len(served) == 1, f"a label changed the model: {served}"
+    assert served == {("small", "high")}, (
+        "oracles keep the small model and get deep_effort on it")
 
 
 def test_a_repaired_oracle_keeps_a_record_of_what_was_caught(tmp_path,

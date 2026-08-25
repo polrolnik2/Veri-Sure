@@ -178,9 +178,33 @@ class PortSettings:
     #: read as over-strictness, so every false no RELAXES an oracle. Downgrading
     #: it does not save a check, it trades over-strict oracles for vacuous ones,
     #: which is the trade this pipeline has already measured going the wrong way.
+    #:
     small_model: str | None = None
     small_effort: str | None = None
     full_strength_stages: frozenset[str] = frozenset({"refmodel", "witness"})
+
+    #: Stages that keep the SMALL MODEL and get more reasoning on it.
+    #:
+    #: A middle setting, and it exists because the two the pipeline had are too
+    #: far apart. Eleven oracles `[O]` could not make non-vacuous were
+    #: re-authored at full strength and one of the first five produced a check
+    #: `gpt-5-mini`/medium could not write -- with the arms unequal in the
+    #: direction that strengthens it, since the originals had three attempts
+    #: WITH the counterexample fed back and the re-author had one shot with
+    #: none. So authoring quality is a real lever.
+    #:
+    #: Promoting the model is the expensive way to pull it: measured at ~23k
+    #: output tokens and 6 continuations per oracle, times the requirement
+    #: count, and `test_no_fanned_out_stage_is_full_strength_by_default` exists
+    #: precisely because a prefix in `full_strength_stages` multiplies silently.
+    #: Raising effort on the same model buys some of the same depth without
+    #: changing which model serves a 77-call fan-out.
+    #:
+    #: Whether it buys ENOUGH is unmeasured. It is the cheap arm of the same
+    #: experiment, and it ships first for that reason.
+    deep_effort_stages: frozenset[str] = frozenset({"oracle"})
+    #: `None` leaves those stages at `small_effort`, which is the off switch.
+    deep_effort: str | None = "high"
 
     #: Total output budget for one stage call, and the per-continuation slice of
     #: it. The slice exists because a single long call goes silent long enough
@@ -223,6 +247,14 @@ class PortSettings:
                 return None, None
             if stage.split("_", 1)[0] in self.full_strength_stages:
                 return None, None
+            # The middle tier: same model, more reasoning. Matched by leading
+            # segment for the reason the full-strength set is -- these stages
+            # are named per requirement (`oracle_REQ-0001`, `_fix1` on a repair
+            # pass), so exact membership could never name one of them.
+            if self.deep_effort and (
+                    stage in self.deep_effort_stages
+                    or stage.split("_", 1)[0] in self.deep_effort_stages):
+                return self.small_model, self.deep_effort
         return self.small_model, self.small_effort
 
 

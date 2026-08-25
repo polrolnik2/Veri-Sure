@@ -99,6 +99,56 @@ def of_discard(reason: str) -> str:
     return "UNDECIDED"
 
 
+#: Wording an oracle uses when it fails by running out of trace rather than by
+#: seeing something wrong. Matched on the DETAIL because the oracle's own
+#: `decide` is the only thing that knows it was waiting -- there is no separate
+#: signal for "I was still expecting something".
+#:
+#: Prefix-free substrings, deliberately: an oracle writes this sentence itself
+#: and no format is imposed on it, so anchoring would miss most of them.
+_TRUNCATED: tuple[str, ...] = (
+    "end of trace",
+    "before the end of the trace",
+    "never asserted",
+    "never settled",
+    "never returned",
+    "no later ",
+    "did not complete",
+)
+
+
+def truncated(detail: str) -> bool:
+    """Did this oracle fail by REACHING THE END rather than by seeing a defect?
+
+    An oracle asserting "eventually X" against a finite trace has two ways to
+    come back False, and they belong to different parties. If X happened and was
+    wrong, that is the design. If the trace simply stopped first, that is the
+    STIMULUS, and reporting it as `VIOLATES` sends the model agent after an edit
+    that cannot exist.
+
+    Measured on w-i2c: of the 15 oracles a KNOWN-GOOD control fails, **seven**
+    fail this way -- `"al never asserted before end of trace"`, `"never returned
+    both lines to released idle"`. REQ-0066 fails on the LAST EDGE of its trace
+    (210 of 210) and REQ-0025 three edges from the end. Those seven are the
+    single largest reason the debug loop spent its whole budget without
+    converging.
+
+    WORDING ONLY, and an "it failed on the last edge" heuristic was TRIED AND
+    REMOVED. It cannot distinguish "the trace ran out while I waited" from "the
+    defect happened to be at the end", and it silently reclassified a real
+    violation: a fixture whose model drives `y` high on the final row, which the
+    oracle correctly failed, came back `NOT_EXERCISED`. That is exactly the
+    reclassification-to-flatter-the-numbers this must not do, so the weaker
+    signal loses even though it costs two of the seven -- REQ-0066 and REQ-0025
+    are no longer caught here.
+
+    What survives is the only evidence that actually separates the two cases:
+    absence versus observation. An oracle that ran out of trace says so, because
+    it has to describe what it never saw.
+    """
+    return any(mark in (detail or "").lower() for mark in _TRUNCATED)
+
+
 def of_result(result) -> str:
     """The verdict one decided oracle implies. Three outcomes, no more.
 
@@ -124,6 +174,12 @@ def of_result(result) -> str:
     if result.ok is True:
         return "CONFORMS"
     if result.ok is False:
+        # A failure that is really the trace running out is a fact about the
+        # STIMULUS, and `NOT_EXERCISED` is the verdict that routes there. This
+        # is a reclassification, so it is allowed only because the property is
+        # computable from the run -- see `truncated`.
+        if truncated(getattr(result, "detail", "") or ""):
+            return "NOT_EXERCISED"
         return "VIOLATES"
     return "NOT_EXERCISED"
 

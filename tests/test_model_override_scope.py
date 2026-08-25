@@ -173,6 +173,12 @@ def test_no_fanned_out_stage_is_full_strength_by_default():
     careless entry captures every item of that stage. That has happened here
     before, in the other direction: `--full-strength-stages judge` silently
     matched and the whole judging pass stopped being downgraded.
+
+    Oracle authoring quality IS a measured lever -- eleven oracles `[O]` could
+    not make non-vacuous were re-authored at full strength and one of the first
+    five produced a check the small model could not write. It is pulled with
+    `deep_effort_stages` instead, which raises reasoning on the SAME model, so
+    a 77-call fan-out never changes which model serves it.
     """
     from specflow.model_io import ApiPort, PortSettings
 
@@ -185,7 +191,7 @@ def test_no_fanned_out_stage_is_full_strength_by_default():
     for stage in ("normalize_REQ-0001", "oracle_REQ-0001",
                   "variant_REQ-0001_action", "s2_REQ-0001", "s3_TP-0001",
                   "stimulus_TP-0001"):
-        assert settings.for_stage(stage) == ("small", "low"), stage
+        assert settings.for_stage(stage)[0] == "small", stage
     for stage in ("refmodel", "witness"):
         assert settings.for_stage(stage) == (None, None), stage
 

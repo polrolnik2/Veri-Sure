@@ -238,6 +238,7 @@ async def run(args: argparse.Namespace) -> dict:
         stream=args.stream,
         small_model=args.small_model,
         small_effort=args.small_effort,
+        deep_effort=args.deep_effort,
         full_strength_stages=frozenset(
             x.strip() for x in (args.full_strength_stages or "").split(",") if x.strip()
         ),
@@ -380,6 +381,15 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--no-stream", dest="stream", action="store_false")
     g.add_argument("--small-model", help="model for the narrow fanned-out stages")
     g.add_argument("--small-effort")
+    g.add_argument(
+        "--deep-effort", default="high",
+        help="Reasoning effort for the stages in deep_effort_stages -- today "
+             "just oracle authoring, which keeps the SMALL model and gets more "
+             "thinking on it. Pass an empty string to switch it off. Measured: "
+             "of 11 oracles [O] could not make non-vacuous, re-authoring at "
+             "full strength cleared 1 of the first 5, so authoring quality is "
+             "a real lever; this pulls it without changing which model serves "
+             "a 77-call fan-out.")
     g.add_argument("--full-strength-stages", default="refmodel,witness",
                    help="comma-separated stages the small model must NOT touch. "
                         "`refmodel` above all: every check compares the design "
