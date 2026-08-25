@@ -232,3 +232,34 @@ def test_no_design_can_reach_the_oracle_author_at_all():
     assert not (taken & {"source", "model", "conforming_source", "witness",
                          "control", "observed_behaviour"}), taken
 
+
+
+def test_the_author_is_told_to_check_transitions_not_levels():
+    """The generation-side half of the idle-match finding.
+
+    On an open-drain line the resting value and the "released" value are the
+    same number, so `outputs[p] == released` matches index 0 before anything has
+    happened. Measured: a check demanding SDA low before SCL release failed a
+    design that did exactly that -- `sda_oen` 0 at edge 4, `scl_oen` 1 at edge 5
+    -- because it took the first `scl_oen == 1`, which was idle. A sibling
+    requirement stated the same ordering, so it was not a protocol disagreement.
+
+    The detector (`liveness.judged_before_the_scenario`) catches this after the
+    fact and only 3 of the 5 cases. This is the half that stops them being
+    written, and it costs nothing per call.
+    """
+    import re
+
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    # Strip the comment markers before collapsing: the rule lives inside a
+    # `#` block in the prompt, so a phrase that wraps a line comes back as
+    # "TRANSITION, # NOT THE LEVEL". Asserting on the raw text has cost this
+    # repo three times today alone.
+    flat = re.sub(r"\s+", " ", SYSTEM.replace("#", " "))
+    assert "LOOK FOR THE TRANSITION, NOT THE LEVEL" in flat
+    # It must say WHY, not just what: the rule is unmemorable without the
+    # open-drain fact that makes a level check match idle.
+    assert "RESTING value" in flat and "SAME NUMBER" in flat
+    # And point at where the polarity actually is, rather than assuming it.
+    assert "notes" in flat

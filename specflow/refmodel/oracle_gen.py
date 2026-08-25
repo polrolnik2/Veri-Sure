@@ -103,6 +103,24 @@ Your oracle decides the `expectation` over the `observable`, at the moments the
         # so a failure can be pointed at, not reasoned from.
         # Return (ok: bool | None, edge: int | None, detail: str).
         #
+        # WHEN THE REQUIREMENT DESCRIBES AN ACTION, LOOK FOR THE TRANSITION,
+        # NOT THE LEVEL. On an open-drain or active-low line the RESTING value
+        # and the "released"/"inactive" value are the SAME NUMBER, so a scan for
+        # `outputs[p] == released` matches the very first state, before anything
+        # has happened, and every prior step you meant to require looks absent.
+        #
+        # Measured: a check demanding SDA pulled low before SCL is released
+        # failed a design that did exactly that -- sda_oen 0, then scl_oen 1 --
+        # because it took the first `scl_oen == 1` in the trace, which was the
+        # idle state at index 0. Compare `trace[i]` against `trace[i-1]` and
+        # require the CHANGE, or anchor your search after the activation you
+        # already located. A sibling requirement stated the same ordering, so
+        # this was not a disagreement about the protocol; it was a level read
+        # where a transition was meant.
+        #
+        # Each port's `notes` in the contract say which value drives and which
+        # releases. Read them before deciding what "asserted" means for it.
+        #
         # Return ok=None when THE ACTIVATION NEVER OCCURS in this trace -- no
         # START was issued, reset was never asserted, the arbitration case never
         # arose. Do NOT return False for that. False means you SAW the situation
