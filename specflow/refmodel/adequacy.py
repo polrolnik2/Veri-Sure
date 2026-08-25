@@ -27,6 +27,7 @@ is a reason to strengthen the check, and the counterexample is in hand.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from . import mutate_model
@@ -66,6 +67,48 @@ PROPOSAL_LIMIT = 60
 ADEQUATE = "adequate"
 INADEQUATE = "inadequate"
 UNKNOWN = "unknown"
+
+#: Surviving mutants NAMED in the detail. All of them are counted; this bounds
+#: how many are quoted, because the detail is embedded verbatim in the
+#: strengthening prompt and a list of eight is a worse instruction than three.
+SURVIVORS_NAMED = 3
+
+#: How many the count itself is worth reporting over -- see `_survived`.
+_SURVIVED = "survived {n} of {m} mutant(s) it could see: {sample}"
+
+
+def _survived(survivors: list[str], in_scope: int) -> str:
+    """The reason an inadequate oracle is handed to a strengthening round.
+
+    IT REPORTS THE COUNT, and that is the point. `adequacy_of` used to keep
+    `survivor = survivor or mutant.description` -- the FIRST survivor in
+    deterministic SITE order -- and site order starts at the top of the file,
+    which is where a model's reset and initialisation block lives. So a broad
+    failure and a single shared blind spot produced the same report.
+
+    They are not the same, measured on w-i2c's 43 oracles with enough evidence
+    to decide. Naming only the first, the population looks concentrated:
+
+        25 oracles  "survived line 21: True becomes False"
+
+    Counting every survivor, it is not concentrated at all -- 253 of 330
+    in-scope mutants got past, 24 distinct mutants survived somewhere, and the
+    distribution of survivors per oracle is 14 oracles missing all 8 and 11
+    missing 7. Exactly one oracle in the set caught everything shown to it.
+
+    This is the artifact the rework plan's §4b item 3 read as evidence: "every
+    one cites `survived line 27: 1 becomes 2`". That was true and it was a
+    property of the REPORT, not of the population, and it led to a filter that
+    fired on 0 of 70.
+
+    It also changes the repair. `_strengthen` embeds this string verbatim --
+    "A design that VIOLATES this requirement passes your check: it {why}" -- so
+    an oracle that missed seven of eight wrong designs was being told about one.
+    """
+    sample = "; ".join(survivors[:SURVIVORS_NAMED])
+    if len(survivors) > SURVIVORS_NAMED:
+        sample += f"; and {len(survivors) - SURVIVORS_NAMED} more"
+    return _SURVIVED.format(n=len(survivors), m=in_scope, sample=sample)
 
 
 def adequacy_of(
@@ -147,7 +190,7 @@ def adequacy_of(
 
     lines = mutate_model.executed_lines(source, contract, steps, base=base)
     in_scope = 0
-    survivor = ""
+    survivors: list[str] = []
     for mutant in mutate_model.mutants(source, lines=lines, limit=propose):
         if in_scope >= limit:
             break                        # the evidence has saturated
@@ -161,13 +204,13 @@ def adequacy_of(
         in_scope += 1
         rows = transactional_view(run.rows) if transactional else run.rows
         if not decide(oracle, rows).failed():
-            survivor = survivor or mutant.description
+            survivors.append(mutant.description)
     if in_scope < MIN_IN_SCOPE:
         return UNKNOWN, (
             f"only {in_scope} mutant(s) changed anything this oracle can see; "
             f"{MIN_IN_SCOPE} are needed before silence means inadequacy")
-    if survivor:
-        return INADEQUATE, f"survived {survivor}"
+    if survivors:
+        return INADEQUATE, _survived(survivors, in_scope)
     return ADEQUATE, f"caught every one of {in_scope} mutants it could observe"
 
 
@@ -236,6 +279,36 @@ def inadequate(report: dict[str, tuple[str, str]]) -> dict[str, str]:
             if level == INADEQUATE}
 
 
+def strength(report: dict[str, tuple[str, str]]) -> dict[str, int]:
+    """One number for how much this oracle set actually demands.
+
+    The verdict counts do not carry it. "48 inadequate" says 48 oracles let
+    SOMETHING past and nothing about how much: an oracle that missed one of
+    eight and one that missed eight of eight are the same row. Summing the
+    survivors gives the rate, and on w-i2c that rate is 253 of 330 -- 76% of
+    the wrong designs each oracle was shown went by unnoticed.
+
+    Parsed back out of the detail rather than threaded through the return type,
+    which is a narrow thing to do and stays honest only because `_survived` in
+    this same module is the one writer of the string being read. Nothing
+    outside decides on it, and a detail that does not match simply does not
+    count.
+    """
+    shown = missed = 0
+    for level, detail in report.values():
+        if level == INADEQUATE:
+            m = re.match(r"survived (\d+) of (\d+) ", detail)
+            if m:
+                missed += int(m.group(1))
+                shown += int(m.group(2))
+        elif level == ADEQUATE:
+            m = re.search(r"every one of (\d+) ", detail)
+            if m:
+                shown += int(m.group(1))
+    return {"mutants_shown": shown, "mutants_missed": missed,
+            "missed_pct": (100 * missed // shown) if shown else 0}
+
+
 def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0,
           *, discrimination: dict | None = None) -> Path:
     """Reported, not gated. Its rate has to be measured before it decides anything."""
@@ -246,6 +319,7 @@ def write(run_dir: Path, report: dict[str, tuple[str, str]], round_: int = 0,
         counts[level] = counts.get(level, 0) + 1
     path.write_text(json.dumps({
         "counts": counts,
+        "strength": strength(report),
         # Whether the set can tell a known-good design from this one at all.
         # `None` means no control was available to ask -- which is not zero.
         "discrimination": discrimination,

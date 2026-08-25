@@ -553,6 +553,40 @@ already records two occasions where I generalised too fast.
     artifact to match, since the file on disk is the model the loop finished
     with.
 
+    **And the report was naming the first survivor, which is why the inadequate
+    population always looked like copies of one mutant.** `adequacy_of` kept
+    `survivor = survivor or mutant.description` — the earliest in deterministic
+    *site* order, and site order starts at the top of the file, where a model's
+    reset and initialisation block lives. So a broad failure and a single shared
+    blind spot produced an identical report.
+
+    Counting every survivor separates them, on w-i2c's 43 oracles with enough
+    evidence to decide:
+
+    | naming only the first | counting all |
+    |---|---|
+    | 25 oracles cite `line 21: True becomes False` | 24 distinct mutants survive somewhere |
+    | reads as one shared blind spot | **253 of 330 in-scope mutants got past — 76%** |
+    | | 14 oracles missed all 8, 11 missed 7, **exactly 1 caught everything** |
+
+    n-i2c reads the same: 222 of 281, 79%.
+
+    **This retracts the evidence §4b item 3 rested on.** That item observed
+    "every one cites `survived line 27: 1 becomes 2`" and concluded the
+    population was 19 copies of one illegal mutant. The observation was true and
+    was a property of the *report*, not of the population — which is why the
+    filter built on it fired on 0 of 70. The item was already corrected once, on
+    the narrower ground that the trace carries 0 rather than 2; the concentration
+    it read as a duplicate population was the same artifact seen from the other
+    side.
+
+    Two consequences, both landed. The detail now reads `survived 7 of 8
+    mutant(s) it could see: …` and `_strengthen` embeds it verbatim, so an
+    oracle that missed seven of eight wrong designs is no longer told about one.
+    And `adequacy_r*.json` carries a `strength` block, because "48 inadequate"
+    cannot distinguish an oracle that missed one of eight from one that missed
+    eight of eight — measured, that set holds both.
+
     **And the 20 `INADEQUATE` verdicts are REAL. The rework plan's reading of
     them was wrong, and this lifts the block it placed on `adequacy_rounds`.**
 

@@ -403,3 +403,48 @@ def test_a_dead_stimulus_is_not_sent_to_the_oracle_author():
     report = {"REQ-0001": {"verdict": liveness.DEAD_STIMULUS, "detail": "d"},
               "REQ-0002": {"verdict": liveness.DEAD_ORACLE, "detail": "o"}}
     assert liveness.dead(report) == {"REQ-0002": "o"}
+
+
+def test_the_reason_counts_the_survivors_it_does_not_name_the_first():
+    """A broad failure and a single shared blind spot used to report identically.
+
+    `survivor = survivor or mutant.description` kept the FIRST survivor in
+    deterministic SITE order, and site order starts at the top of the file where
+    the reset and initialisation block lives. Measured on w-i2c's 43 decidable
+    oracles: naming only the first, 25 of them read "survived line 21: True
+    becomes False" and the population looks concentrated on one mutant. Counting
+    every survivor, 253 of 330 in-scope mutants got past, 24 distinct mutants
+    survived somewhere, and 14 oracles missed all 8 shown to them.
+
+    The rework plan read the first form as evidence -- "every one cites survived
+    line 27" -- and built a filter on it that fired on 0 of 70.
+    """
+    level, detail = _assess(BLUNT)
+    assert level == adequacy.INADEQUATE
+    assert detail.startswith("survived "), detail
+    n, m = map(int, __import__("re").match(r"survived (\d+) of (\d+) ", detail).groups())
+    assert 0 < n <= m, detail
+    assert n > 1, (
+        "the fixture's blunt oracle misses more than one mutant, and the report "
+        f"has to say so rather than naming the earliest: {detail}")
+
+
+def test_the_reason_does_not_grow_without_bound():
+    """The detail is embedded verbatim in the strengthening prompt, so a list of
+    every survivor is a worse instruction than a count and a sample."""
+    named = adequacy._survived([f"line {i}: a becomes b" for i in range(9)], 9)
+    assert named.count(";") <= adequacy.SURVIVORS_NAMED
+    assert "and 6 more" in named, named
+    assert named.startswith("survived 9 of 9 "), named
+
+
+def test_the_artifact_carries_how_much_the_set_demands(tmp_path):
+    """"48 inadequate" says nothing about how much got past. An oracle that
+    missed one of eight and one that missed eight of eight are the same row."""
+    report = {"REQ-0001": (adequacy.INADEQUATE, adequacy._survived(["a", "b"], 8)),
+              "REQ-0002": (adequacy.ADEQUATE, "caught every one of 4 mutants it could observe"),
+              "REQ-0003": (adequacy.UNKNOWN, "only 1 mutant(s) changed anything")}
+    assert adequacy.strength(report) == {
+        "mutants_shown": 12, "mutants_missed": 2, "missed_pct": 16}
+    written = json.loads(adequacy.write(tmp_path, report, 0).read_text())
+    assert written["strength"]["mutants_missed"] == 2
