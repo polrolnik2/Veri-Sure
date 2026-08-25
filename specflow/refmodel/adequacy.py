@@ -40,10 +40,28 @@ from .oracles import (
 )
 from .trust import MIN_IN_SCOPE, _project, _steps_for
 
-#: Mutants tried per oracle. Bounded for the same reason gate 2 bounds it: the
-#: evidence saturates, and an oracle that survives eight in-scope mutants is not
-#: going to be convicted by a ninth.
+#: IN-SCOPE mutants per oracle -- ones that changed something the oracle asserts
+#: on. Bounded for the same reason gate 2 bounds it: the evidence saturates, and
+#: an oracle that survives eight of them is not going to be convicted by a ninth.
 MUTANT_LIMIT = 8
+
+#: CANDIDATES that may be tried to reach `MUTANT_LIMIT`, and a separate number
+#: because `mutants()` proposes in deterministic SITE order while the visibility
+#: filter runs after. One budget spent before the filter starves whichever
+#: oracle the first few executed sites happen not to touch, and it starves it
+#: silently -- as UNKNOWN, which reads as "the instrument had nothing to say"
+#: rather than "the instrument was not allowed to look".
+#:
+#: Measured on w-i2c's frozen 58, in-scope budget held at 8:
+#:
+#:     candidates   adequate  inadequate  unknown   replays   wall
+#:              8          3          29       26       384     6s
+#:             60          1          42       15      2100    41s
+#:
+#: 26 -> 15 undecided for 41 seconds of CPU and no model calls. Of the 15 that
+#: remain, 11 assert on no declared port -- `liveness`'s finding, not this
+#: one's -- so the residue this instrument genuinely cannot decide is 4.
+PROPOSAL_LIMIT = 60
 
 ADEQUATE = "adequate"
 INADEQUATE = "inadequate"
@@ -58,6 +76,7 @@ def adequacy_of(
     *,
     base: str,
     limit: int = MUTANT_LIMIT,
+    propose: int = PROPOSAL_LIMIT,
     transactional: bool = True,
     scope: set[str] | frozenset[str] | None = None,
 ) -> tuple[str, str]:
@@ -78,29 +97,39 @@ def adequacy_of(
     never have caught, and counting it toward `MIN_IN_SCOPE` spends the evidence
     budget on questions the oracle was not asked.
 
-    MEASURED, AND IT DOES NOT HELP -- the default stays `ports_read`. On the
-    frozen 70:
+    SCOPING AND SUPPLY ARE ONE FIX, and that is why each measured badly alone.
+    Narrowing the projection can only REDUCE `in_scope`, so against a proposal
+    budget of 8 it pushes oracles under `MIN_IN_SCOPE` instead of resolving
+    them -- measured, and recorded here for a while as "it does not help":
 
-        ports_read        adequate 6 · inadequate 20 · unknown 44
-        assertion ports   adequate 6 · inadequate 18 · unknown 46
+        frozen 70, 8 candidates    ports_read   6 adequate · 20 inadequate · 44 unknown
+                                   asserts_on   6           · 18            · 46
 
-    Two verdicts moved and both went `inadequate` -> `unknown`. The mechanism is
-    the one stated above and it forces this direction: narrowing the filter can
-    only REDUCE `in_scope`, so it pushes oracles below `MIN_IN_SCOPE` rather
-    than resolving them. The premise was right -- 39% of the ports projected
-    through carry no assertion -- and the expected consequence was backwards.
+    Raising the candidate budget alone has the opposite defect. It resolves
+    almost everything and manufactures convictions doing it, because a mutant
+    visible only in a port the oracle TRIGGERS on is one it could never have
+    caught. On w-i2c's 58, `ports_read` at 60 candidates reads 2 / 54 / 2 --
+    and 9 of those 54 are oracles the paired configuration withdraws, one in
+    four of the shipped instrument's convictions.
 
-    What that says is where the real limit is. Adequacy's 44 UNKNOWNs are a
-    MUTANT SUPPLY problem, not a scoping one: too few mutants land where the
-    oracle looks, and no choice of projection creates evidence that was never
-    generated. The question "could this oracle fail at all" is answered without
-    any mutants by `liveness`, which needs no supply and abstained on none of
-    the 70. Adequacy's remaining job is the narrower one it is good at -- would
-    this oracle catch a realistic defect of THIS model -- asked of the oracles
-    liveness has already shown can fail.
+    Together they behave. w-i2c's 58, shipped (`ports_read`, 8) against paired
+    (`asserts_on`, 60):
 
-    Kept as an override because it is correct and cheap, and because a design
-    with a richer mutant supply may invert the result.
+        inadequate -> inadequate  29        unknown  -> inadequate  11
+        inadequate -> unknown      9        adequate -> inadequate   2
+
+    The 11 are supply the old budget never spent; the 9 are convictions on
+    mutants the oracle was never asked about. Both directions matter, because
+    `adequacy_rounds` sends an inadequate oracle back to be STRENGTHENED, and
+    strengthening a check against a defect it does not cover is exactly the
+    over-strictness that §6's oscillation risk is made of.
+
+    The two instruments then partition cleanly rather than overlapping. Every
+    one of the 42 paired convictions lands on an oracle `liveness` independently
+    calls live; of the 15 it leaves undecided, 6 are dead-oracle and 3
+    dead-stimulus -- already convicted, harder, by an instrument that needs no
+    mutants at all -- and 11 assert on no declared port. Adequacy abstaining
+    there is correct: it must not re-report a finding liveness owns.
     """
     steps = _steps_for(oracle, stimulus_by_tp)
     if not steps:
@@ -119,7 +148,9 @@ def adequacy_of(
     lines = mutate_model.executed_lines(source, contract, steps, base=base)
     in_scope = 0
     survivor = ""
-    for mutant in mutate_model.mutants(source, lines=lines, limit=limit):
+    for mutant in mutate_model.mutants(source, lines=lines, limit=propose):
+        if in_scope >= limit:
+            break                        # the evidence has saturated
         run = replay(mutant.source, contract, steps, base=base)
         if run.error:
             # A mutant that breaks the model outright tests nothing about the
@@ -148,20 +179,53 @@ def assess(
     *,
     base: str,
     limit: int = MUTANT_LIMIT,
+    propose: int = PROPOSAL_LIMIT,
     transactional: bool = True,
     scope: dict[str, set[str]] | None = None,
 ) -> dict[str, tuple[str, str]]:
     """`{req_uid: (verdict, detail)}` over the whole trusted set.
 
-    `scope` is per-oracle, keyed by `req_uid` -- `liveness.assertion_ports`
-    returns exactly that shape. An oracle absent from it falls back to
-    `ports_read`, so a partial map is usable.
+    `scope` is per-oracle, keyed by `req_uid`. Passing one keeps the old
+    behaviour that an oracle absent from it falls back to `ports_read`, so a
+    partial map stays usable.
+
+    **The default derives it**, from `liveness` against the same design being
+    mutated -- not from the oracle stage's report, which was taken against the
+    witness, and which ports a check decides on is a property of the trace it
+    sees. `adequacy_of` says why the pairing is load-bearing; the short version
+    is that `ports_read` is a string scan, 59% of the ports it projects through
+    carry no assertion on w-i2c, and every mutant visible only in one of those
+    is a conviction the oracle could not have earned.
     """
+    cannot_fail: dict[str, str] = {}
+    if scope is None:
+        from . import liveness as _L
+        report = _L.assess(oracles, source, contract, stimulus_by_tp,
+                           base=base, transactional=transactional)
+        scope = _L.assertion_ports(report)
+        # AND THE DEAD ONES STILL HAVE TO BE ROUTED. Deriving the scope is what
+        # makes them fall out: an oracle that asserts on nothing projects onto
+        # nothing, so the mutant sweep has no evidence and answers UNKNOWN --
+        # and `inadequate()` is what feeds the strengthening edge, so under the
+        # old `ports_read` default these were convicted and repaired, and under
+        # the new one they would silently stop being. A check that cannot fail
+        # is not an absence of evidence about strength; it is the strongest
+        # evidence of weakness there is.
+        #
+        # `liveness.dead` is relayed rather than re-derived, including its
+        # deliberate exclusion of DEAD_STIMULUS -- that check demonstrably CAN
+        # fail, so it is a testplan finding and sending it to the oracle author
+        # would have them strengthen what was never the problem.
+        cannot_fail = _L.dead(report)
     return {
-        o.req_uid: adequacy_of(o, source, contract, stimulus_by_tp,
-                               base=base, limit=limit,
-                               transactional=transactional,
-                               scope=(scope or {}).get(o.req_uid))
+        o.req_uid: (
+            (INADEQUATE, cannot_fail[o.req_uid])
+            if o.req_uid in cannot_fail
+            else adequacy_of(o, source, contract, stimulus_by_tp,
+                             base=base, limit=limit, propose=propose,
+                             transactional=transactional,
+                             scope=scope.get(o.req_uid))
+        )
         for o in oracles
     }
 

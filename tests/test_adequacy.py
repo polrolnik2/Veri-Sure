@@ -217,7 +217,6 @@ def test_an_inadequate_oracle_sends_the_loop_back_to_the_stage(tmp_path,
         oracle_set=_oracle_set([_oracle(BLUNT)]), adequacy_rounds=1,
     )
     assert "REQ-0001" in (asked.get("strengthen") or {}), asked.keys()
-    assert "survived" in asked["strengthen"]["REQ-0001"]
     assert asked.get("previous") is not None, "the round must build on the set"
 
 
@@ -248,22 +247,34 @@ def test_no_strengthening_round_is_spent_when_every_oracle_is_adequate(
 
 
 def test_narrowing_the_scope_cannot_resolve_an_unknown():
-    """Why the assertion-port scope is an override and not the default.
+    """Narrowing alone can only starve. Half of why the pairing is needed.
 
-    Measured on the frozen 70: `ports_read` gave adequate 6 / inadequate 20 /
-    unknown 44, and scoping on assertion ports gave 6 / 18 / 46 -- two verdicts
+    Measured on the frozen 70 at 8 candidates: `ports_read` gave adequate 6 /
+    inadequate 20 / unknown 44, assertion ports gave 6 / 18 / 46 -- two verdicts
     moved and both went inadequate -> unknown. The mechanism forces that
     direction, so it is pinned rather than re-measured: a narrower projection
-    admits a subset of the mutants, so `in_scope` can only fall, and falling is
+    admits a SUBSET of the mutants, so `in_scope` can only fall, and falling is
     what pushes an oracle under `MIN_IN_SCOPE`.
+
+    This is still true and is no longer an argument against the narrow scope.
+    It says the scope cannot travel without the candidate budget, which is what
+    `PROPOSAL_LIMIT` supplies -- see the paired test below.
     """
     oracle = _oracle(SHARP)
-    wide, _ = adequacy.adequacy_of(oracle, FINAL, CONTRACT, STIM, base="step")
+    few = dict(base="step", propose=adequacy.MUTANT_LIMIT)
+    wide, _ = adequacy.adequacy_of(oracle, FINAL, CONTRACT, STIM, **few)
     narrow, detail = adequacy.adequacy_of(
-        oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"})
+        oracle, FINAL, CONTRACT, STIM, scope={"hit"}, **few)
     assert wide == adequacy.ADEQUATE
     assert narrow == adequacy.UNKNOWN, (
         f"a scope the oracle does not decide on starves the evidence: {detail}")
+
+    paired, why = adequacy.adequacy_of(
+        oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"},
+        propose=adequacy.PROPOSAL_LIMIT)
+    assert paired != adequacy.UNKNOWN, (
+        "the same narrow scope decides once the candidate budget travels with "
+        f"it -- that is the pairing, and without it the scope starves: {why}")
 
 
 def test_an_empty_scope_is_reported_as_asserting_on_nothing():
@@ -273,3 +284,117 @@ def test_an_empty_scope_is_reported_as_asserting_on_nothing():
         _oracle(SHARP), FINAL, CONTRACT, STIM, base="step", scope=set())
     assert level == adequacy.UNKNOWN
     assert "asserts on no declared port" in detail
+
+
+def test_the_candidate_budget_is_not_the_in_scope_budget():
+    """The bound that starved the instrument, and it starved it silently.
+
+    `mutants()` proposes in deterministic SITE order and the visibility filter
+    runs after, so one budget spent before the filter is spent on candidates
+    that may all be invisible to this oracle. The oracle then reads UNKNOWN --
+    "nothing to say" rather than "not allowed to look".
+    """
+    oracle = _oracle(BLUNT).model_copy(update={"clause": "y stays in range"})
+    starved, why = adequacy.adequacy_of(
+        oracle, FINAL, CONTRACT, STIM, base="step", scope={"hit"}, propose=2)
+    assert starved == adequacy.UNKNOWN, why
+    assert "0 mutant(s)" in why, why
+    assert adequacy.PROPOSAL_LIMIT > adequacy.MUTANT_LIMIT, (
+        "candidates must outnumber the in-scope evidence they are spent to find")
+
+
+def test_the_in_scope_budget_still_stops_the_search():
+    """Raising the candidates must not turn a bounded sweep into an unbounded one.
+
+    `MUTANT_LIMIT` keeps its meaning -- the evidence saturates -- so the loop
+    has to stop at eight VISIBLE mutants however many candidates remain.
+    """
+    seen = []
+    real = adequacy.replay
+
+    def counting(source, contract, steps, *, base):
+        seen.append(source)
+        return real(source, contract, steps, base=base)
+
+    adequacy.replay = counting
+    try:
+        adequacy.adequacy_of(_oracle(SHARP), FINAL, CONTRACT, STIM,
+                             base="step", limit=2, propose=60)
+    finally:
+        adequacy.replay = real
+    assert len(seen) <= 1 + 60, "the candidate budget still bounds the sweep"
+    wide = list(seen)
+    seen.clear()
+    adequacy.replay = counting
+    try:
+        adequacy.adequacy_of(_oracle(SHARP), FINAL, CONTRACT, STIM,
+                             base="step", limit=8, propose=60)
+    finally:
+        adequacy.replay = real
+    assert len(wide) < len(seen), (
+        "a smaller in-scope budget has to stop the search sooner")
+
+
+def test_the_default_scope_is_derived_from_liveness_not_from_reads():
+    """`ports_read` is a string scan and counts ports the oracle only TRIGGERS
+    on -- 59% of them on w-i2c. A mutant visible only in one of those is a
+    conviction the oracle could not have earned, and `adequacy_rounds` would
+    send it to be strengthened against a defect it does not cover.
+    """
+    from specflow.refmodel import liveness
+
+    oracles = [_oracle(SHARP)]
+    derived = adequacy.assess(oracles, FINAL, CONTRACT, STIM, base="step")
+    explicit = adequacy.assess(
+        oracles, FINAL, CONTRACT, STIM, base="step",
+        scope=liveness.assertion_ports(
+            liveness.assess(oracles, FINAL, CONTRACT, STIM, base="step")))
+    assert derived == explicit, "the default must be the derived map, not ports_read"
+
+
+def test_an_oracle_asserting_on_nothing_is_left_to_liveness():
+    """Adequacy must not re-report a finding liveness owns.
+
+    On w-i2c's 58, 11 of the 15 the paired instrument leaves undecided assert on
+    no declared port, and 9 of those liveness has already convicted as
+    dead-oracle or dead-stimulus -- a harder verdict, reached without mutants.
+    Abstaining is the correct behaviour, not a gap.
+    """
+    inert = _oracle("def decide(trace):\n    return True, 0, 'ok'\n")
+    report = adequacy.assess([inert], FINAL, CONTRACT, STIM, base="step")
+    level, detail = report[inert.req_uid]
+    assert level == adequacy.UNKNOWN
+    assert "asserts on no declared port" in detail, detail
+
+
+def test_a_dead_oracle_still_reaches_the_strengthening_edge():
+    """The routing the derived scope would otherwise have dropped.
+
+    An oracle that asserts on nothing projects onto nothing, so the mutant sweep
+    has no evidence and `adequacy_of` answers UNKNOWN -- correctly, as a
+    primitive told to look at no ports. But `inadequate()` is what feeds the
+    strengthening edge, so at the SET level that silence would stop a check that
+    cannot fail from ever being repaired. `assess` relays `liveness.dead`
+    instead, which is the harder verdict and was reached without mutants.
+    """
+    report = adequacy.assess([_oracle(BLUNT)], FINAL, CONTRACT, STIM,
+                             base="step")
+    level, detail = report["REQ-0001"]
+    assert level == adequacy.INADEQUATE, (level, detail)
+    assert "REQ-0001" in adequacy.inadequate(report), (
+        "a check that cannot fail is the clearest case for strengthening")
+    assert "survived" not in detail, (
+        "the reason has to be liveness's, not a mutant that was never run")
+
+
+def test_a_dead_stimulus_is_not_sent_to_the_oracle_author():
+    """`liveness.dead` excludes DEAD_STIMULUS deliberately and the relay keeps
+    that exclusion: the check demonstrably CAN fail, so it is a finding about
+    the testplan, and strengthening it would tighten what was never wrong."""
+    from specflow.refmodel import liveness
+
+    assert liveness.DEAD_STIMULUS not in {
+        v for v in (liveness.DEAD_ORACLE,)}, "distinct verdicts"
+    report = {"REQ-0001": {"verdict": liveness.DEAD_STIMULUS, "detail": "d"},
+              "REQ-0002": {"verdict": liveness.DEAD_ORACLE, "detail": "o"}}
+    assert liveness.dead(report) == {"REQ-0002": "o"}
