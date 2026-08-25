@@ -1,9 +1,14 @@
 {
  "adequacy": null,
  "gate": {
-  "present": false
+  "by_severity": {
+   "warning": 1
+  },
+  "issues": 1,
+  "ok": true,
+  "present": true
  },
- "model_present": false,
+ "model_present": true,
  "oracles": {
   "by_requirement": {},
   "correspondence_checked": null,
