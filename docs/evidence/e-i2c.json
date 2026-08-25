@@ -1,0 +1,19 @@
+{
+ "adequacy": null,
+ "gate": {
+  "present": false
+ },
+ "model_present": false,
+ "oracles": {
+  "by_requirement": {},
+  "correspondence_checked": null,
+  "dispositions": {},
+  "frozen": 0,
+  "repaired": 0,
+  "rounds": null,
+  "vacuity_checked": null
+ },
+ "rtl_produced": false,
+ "run": "e-i2c",
+ "turns": []
+}
