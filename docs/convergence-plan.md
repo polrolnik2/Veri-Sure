@@ -345,40 +345,46 @@ already records two occasions where I generalised too fast.
 
 ## Phase 3 — the populations that block the gate
 
-12. **VACUOUS (11) — MEASURED: 5 of 11 clear, and iteration is the lever.**
+12. **VACUOUS (11) — MEASURED: 5 of 11 clear, and it is DRAWS, not feedback.**
 
-    The framing was wrong. "All 11 went through both `[O]` repair rounds and
-    came back vacuous" was true and misleading: `[O]`'s repair loop gates on
-    `gate_one`, which is **structural only**. Vacuity is decided later, in
-    `oracles_stage.verify_one`, and a vacuity conviction was never fed back to
-    the author. The 11 had three attempts at a gate that cannot see the defect.
+    "Regeneration from the same requirement text does not produce a non-vacuous
+    check" is refuted. It does, about a third of the time.
 
-    Given the real loop — generate, score with `must_fail`, re-prompt with
-    `_repair_issue`'s own text on a conviction — `gpt-5-mini` at **medium**
-    cleared **5 of 11** (`scratchpad/vac_loop.py`, 26 calls, every one verified
-    `gpt-5-mini`/`medium` from its own `_meta.json`):
+    Re-ran the 11 through `scratchpad/vac_loop.py` — 26 calls, every one
+    verified `gpt-5-mini`/`medium` from its own `_meta.json`. Three rounds:
+    round 0 regenerates with **no feedback at all**, rounds 1-2 re-prompt each
+    survivor with `_repair_issue`'s own text quoting its `must_fail` detail.
 
-    | | cleared |
-    |---|---|
-    | mini/medium, real feedback loop, 3 rounds | **5 of 11** |
-    | luna/xhigh, blind, one shot, no loop | 1 of 5 |
+    | round | what it is | convicted going in | cleared |
+    |---|---|---|---|
+    | 0 | a plain resample, no feedback | 11 | **4** |
+    | 1 | vacuity detail fed back | 7 | 1 |
+    | 2 | vacuity detail fed back | 6 | 0 |
 
-    **The cheap model told what it missed beat the expensive model told
-    nothing.** 4 cleared at round 0 — from the counterexample alone, before any
-    feedback — and 1 more at round 1. Round 2 cleared nobody, so iteration
-    helps once and then stops: the remaining 6 are not a budget problem.
+    **The resample cleared 4 of 11; the two feedback rounds cleared 1 between
+    them.** So the lever is DRAWS. And these 11 had already survived a fresh
+    generation plus one vacuity-fed re-ask inside `[O]` — a third draw still
+    cleared a third of them, which makes `VACUOUS` substantially a property of
+    the sample rather than of the requirement.
 
-    The variant-supply confound does not explain the split. Of the 8 convicted
-    on fewer than `MIN_IN_SCOPE` variants, 4 cleared; of the 3 with a full 3,
-    1 cleared. Thin evidence did not predict clearing, in either direction, at
-    n=11.
+    I first read this as "iteration is the lever, and the cheap model told what
+    it missed beat the expensive model told nothing" (mini/medium 5 of 11
+    against luna/xhigh blind 1 of 5). That comparison is not clean: the blind
+    arm got ONE draw and this one got three, so it compares draws with draws
+    confounded by model and effort, and the round table above is the part that
+    actually separates the two mechanisms.
 
-    **What this makes actionable:** the vacuity verdict has to reach the oracle
-    author. Today it is computed after the author's loop has closed, which is
-    the same shape as the `ORACLE_INVALID` defect the stage rework fixed — a
-    rejection with no route back. Wiring `must_fail` into `[O]`'s repair loop
-    is worth 5 of the 11 blockers on the measurement above, and needs no new
-    mechanism.
+    Variant supply does not explain the split either: 4 of the 8 convicted on
+    fewer than `MIN_IN_SCOPE` variants cleared, against 1 of the 3 with a full
+    3. Thin evidence did not predict clearing in either direction at n=11.
+
+    **What this makes actionable, and it is not what I first wrote.** The
+    feedback route already exists — `verify_one` returns vacuity `quotable`,
+    and `oracles_stage`'s outer loop feeds it back through `_repair_issue`.
+    What `[O]` does not have is draws: `max_rounds=2` buys exactly one re-ask.
+    On this evidence a second independent draw is worth more per call than a
+    better-argued repair, and the two are the same cost. That wants confirming
+    against the high-effort arm before it becomes a default.
 13. **A structural disposition.** A requirement about the interface should never
     reach an oracle at all. This removes REQ-0019-class blockers legitimately,
     rather than by downgrading anything.
