@@ -350,6 +350,11 @@ def test_the_default_scope_is_derived_from_liveness_not_from_reads():
         scope=liveness.assertion_ports(
             liveness.assess(oracles, FINAL, CONTRACT, STIM, base="step")))
     assert derived == explicit, "the default must be the derived map, not ports_read"
+    assert derived["REQ-0001"][0] == adequacy.ADEQUATE, (
+        "and the derived scope must still be able to say ADEQUATE. An instrument "
+        "that only ever convicts is the same defect as one that never does -- "
+        "measured on n-i2c's 70, the paired configuration returns 0 adequate, "
+        "and that reading is only worth anything if a sharp oracle can reach it")
 
 
 def test_an_oracle_asserting_on_nothing_is_left_to_liveness():

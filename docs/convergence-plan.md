@@ -500,10 +500,58 @@ already records two occasions where I generalised too fast.
     (31 → 26 dead, 5 rescued by extra sample points, none newly accused, so it
     is the strictly more conservative instrument). It splits by owner:
     dead-oracle → the author, dead-stimulus → the testplan.
-16. **Mutant supply for adequacy.** 44 of 70 oracles came back `UNKNOWN` because
-    fewer than `MIN_IN_SCOPE = 3` mutants reached what they read. Scoping was
-    already refuted as the cause — supply is what remains. Raise `MUTANT_LIMIT`
-    (currently 8), or target mutation at the ports each oracle asserts on.
+16. **DONE (`65c5702`) — mutant supply for adequacy, and scoping was never the
+    alternative to it.** 44 of 70 oracles came back `UNKNOWN` because fewer
+    than `MIN_IN_SCOPE = 3` mutants reached what they read. This item read that
+    as a choice between two fixes: raise `MUTANT_LIMIT`, *or* target the ports
+    each oracle asserts on. It is one fix, and the "or" is why each half sat
+    here refuted.
+
+    `MUTANT_LIMIT = 8` capped mutants **proposed**, `mutants()` proposes in
+    deterministic site order, and the visibility filter runs after — so the
+    budget was spent before the filter and starved whichever oracle the first
+    few executed sites happened not to touch. Split into `MUTANT_LIMIT` (the
+    in-scope evidence, still 8, and the loop still stops there) and
+    `PROPOSAL_LIMIT = 60` (candidates tried to find it).
+
+    Alone, each half measures worse. Narrowing the projection can only *reduce*
+    `in_scope`, so at 8 candidates it pushes oracles under `MIN_IN_SCOPE`
+    instead of resolving them — 6/20/44 became 6/18/46, which is what got
+    scoping recorded as "refuted". Raising the candidates alone has the
+    opposite defect: `ports_read` is a string scan, 59% of the ports it projects
+    through carry no assertion, and a mutant visible only in a **trigger** port
+    is one the oracle could never have caught.
+
+    w-i2c's frozen 58, shipped (`ports_read`, 8) against paired (`asserts_on`,
+    60) — pure replay, no model calls, 41s:
+
+        inadequate → inadequate  29        unknown  → inadequate  11
+        inadequate → unknown      9        adequate → inadequate   2
+
+    The 11 are supply the old budget never spent. **The 9 are convictions on
+    mutants the oracle was never asked about — one in four of the shipped
+    instrument's convictions** — and since `adequacy_rounds` sends an inadequate
+    oracle back to be *strengthened*, every one of those would have tightened a
+    check against a defect it does not cover. That is the oscillation risk the
+    rework plan's §6 names, with a cause now attached to it.
+
+    The two instruments then partition rather than overlap: all 42 paired
+    convictions land on oracles `liveness` independently calls live, and of the
+    15 it leaves undecided, 6 are dead-oracle, 3 dead-stimulus, 11 assert on no
+    declared port.
+
+    **One consequence had to be handled, not just noticed.** Deriving the scope
+    is exactly what drops a dead oracle out of `inadequate()`, and
+    `inadequate()` is what feeds strengthening — so checks that cannot fail
+    would have silently stopped being repaired. `assess` relays `liveness.dead`
+    instead, keeping its deliberate exclusion of `DEAD_STIMULUS`, which is a
+    testplan finding. Shipped w-i2c now reads **adequate 1 · inadequate 48 ·
+    unknown 9**, from 4 / 38 / 16.
+
+    Determinism held: re-running the shipped path over `ref_model.py`
+    reproduces w-i2c's `adequacy_r1` verdict-for-verdict, which is the right
+    artifact to match, since the file on disk is the model the loop finished
+    with.
 
     **And the 20 `INADEQUATE` verdicts are REAL. The rework plan's reading of
     them was wrong, and this lifts the block it placed on `adequacy_rounds`.**
