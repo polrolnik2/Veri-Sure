@@ -37,13 +37,43 @@ from typing import Literal
 Verdict = Literal[
     "CONFORMS",        # activation fired, oracle passed
     "VIOLATES",        # activation fired, oracle failed
-    "NOT_EXERCISED",   # activation never fired
-    "UNOBSERVABLE",    # no boundary observable exists -- a spec defect
+    "NOT_EXERCISED",   # the stimulus loop DID NOT RUN -- see ABANDONED
+    "UNOBSERVABLE",    # the resolution pass DID NOT RUN -- see ABANDONED
     "ORACLE_INVALID",  # the check is wrong: over-strict, malformed, or self-contradicting
     "VACUOUS",         # the check demands nothing
     "UNDECIDED",       # nothing decided it, or the retry budget ran out
+    "ABANDONED",       # WE could not interpret this requirement -- see below
     "AMBIGUOUS",       # TRANSITIONAL -- the judge could not determine
 ]
+
+#: WHAT `ABANDONED` CLAIMS, and why it is phrased about us.
+#:
+#: `UNOBSERVABLE` and `NOT_EXERCISED` are claims about the REQUIREMENT -- that no
+#: port shows it, that no stimulus reaches it. Both can be false, and one of them
+#: has been measured false at scale: normalisation called 27 of 77 requirements
+#: unobservable by reading each one's MECHANISM rather than its effect, and 10 of
+#: the 27 already had working checks against real output ports.
+#:
+#: What is actually known after a bounded attempt is narrower and is about the
+#: pipeline: WE COULD NOT TURN THIS REQUIREMENT INTO A CHECK WE CAN EXERCISE.
+#: That is what this verdict says, and `abandoned_reason` says which attempt ran
+#: out. A disposition that blames the specification for our failure to read it is
+#: a claim the evidence does not support.
+#:
+#: An abandoned requirement LEAVES THE SYSTEM: it is not frozen into the driving
+#: set, so the debug loop cannot decide it, `run_all` cannot count it, and the
+#: board cannot show it. That is what separates it from a downgraded verdict,
+#: which stays in the way while no longer blocking.
+#:
+#: Two rules stop it becoming a lie, both enforced by the stage that emits it:
+#: it leaves the DENOMINATOR of every reported rate, counted beside that rate;
+#: and coverage stops claiming it, or the suite reports a requirement covered
+#: while nothing checks it.
+ABANDONED_REASONS: frozenset[str] = frozenset({
+    "no observation route found",      # the indirect-resolution pass came back empty
+    "never reached",                   # the stimulus loop exhausted its attempts
+    "no check survived repair",        # the oracle repair loop exhausted its rounds
+})
 
 #: Who each verdict accuses, and therefore where a repair round should go. This
 #: is the whole point of the enum: today every blocking verdict routes to the
@@ -57,6 +87,9 @@ ROUTE: dict[str, str] = {
     "ORACLE_INVALID": "regenerate the oracle",
     "VACUOUS": "regenerate the oracle",
     "UNDECIDED": "triage manually",
+    # Nobody. That is the point: the attempt ran and ran out, so there is no
+    # party left with a move. It is reported, counted, and not handed to anyone.
+    "ABANDONED": "none -- reported, not routed",
     "AMBIGUOUS": "triage manually",
 }
 
@@ -226,24 +259,44 @@ def classify(
 
 #: Verdicts a caller may downgrade from `error` to `warning`.
 #:
-#: ONLY `UNOBSERVABLE`, and the restriction is the point. Every other blocking
+#: ONLY `ABANDONED`, and the restriction is the point. Every other blocking
 #: verdict accuses someone who can act -- the model, the stimulus, the oracle
 #: author -- so downgrading it would let a build pass with work outstanding that
-#: something in this pipeline was about to do. `UNOBSERVABLE` is the one whose
-#: route leaves the pipeline entirely: `ROUTE` sends it to spec authoring, and
-#: no further turn of any loop will ever clear it.
+#: something in this pipeline was about to do. `ABANDONED` is the one where the
+#: work was done: a bounded attempt ran, exhausted itself, and recorded what it
+#: tried. `ROUTE` sends it nowhere because there is nowhere left to send it.
+#:
+#: THE SOFTENING MUST BE EARNED. `ABANDONED` is emitted only by a stage that ran
+#: an attempt and carries the record proving it, so it cannot be reached by
+#: skipping the work. That is why `UNOBSERVABLE` and `NOT_EXERCISED` are NOT
+#: here any more: reaching either now means the resolution pass or the stimulus
+#: loop did not run, which is a harness defect and exactly what should halt a
+#: build. Without that split the gate rewards not trying -- measured on z-i2c,
+#: which reported `stimulus_added: 0` on all three turns while 33 oracles sat at
+#: `NOT_EXERCISED`, with nothing in the artifact distinguishing "staged four
+#: times, never reached" from "nobody tried".
 #:
 #: Measured, which is why this exists at all: on s-i2c the reference-model gate
-#: failed with 34 issues of which only 9 were the loop's. Seven were
-#: UNOBSERVABLE and could not be cleared by any amount of debugging, so the
-#: build halted permanently on a spec defect -- and a spec containing one
-#: internal-mechanism sentence is not a rare thing. This one has 8 of 77.
+#: failed with 34 issues of which only 9 were the loop's. Seven could not be
+#: cleared by any amount of debugging, so the build halted permanently on
+#: something no turn of any loop would ever fix.
 #:
 #: What a downgrade does NOT do is hide it. The requirement stays in
-#: `dispositions`, stays undischarged, and still renders as an issue on the
-#: gate. The plan's objection is to SILENT omission; an itemised warning that
-#: names the requirement and the reason is the opposite of silent.
-DOWNGRADABLE: frozenset[str] = frozenset({"UNOBSERVABLE"})
+#: `dispositions` with its reason, is counted on the face of the gate, and
+#: leaves the denominator of every rate rather than quietly passing. The
+#: objection is to SILENT omission; an itemised warning that names the
+#: requirement and what was attempted is the opposite of silent.
+#:
+#: `UNOBSERVABLE` IS HERE TRANSITIONALLY AND COMES OUT WITH THE RESOLUTION PASS.
+#: The rule above says it should block, because reaching it means no attempt was
+#: made -- but the attempt does not exist yet. Removing it before the pass lands
+#: would not enforce a principle, it would only halt builds on requirements
+#: nothing is yet able to resolve, which is the exact s-i2c failure the
+#: downgrade was added to fix: 34 gate issues, 9 of them clearable, 7
+#: UNOBSERVABLE and permanent. It comes out in the same change that gives those
+#: requirements a route to try, and `test_advisory_verdicts` pins the pairing so
+#: the two cannot drift apart.
+DOWNGRADABLE: frozenset[str] = frozenset({"ABANDONED", "UNOBSERVABLE"})
 
 
 def to_issue(req_uid: str, v: str, detail: str = "", *,

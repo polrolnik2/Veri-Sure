@@ -919,3 +919,81 @@ def test_the_refutation_still_works_when_liveness_was_not_measured():
         requirements=reqs, trusted=[o], rejected={},
         had_source={"REQ-0001"}, normalized={"REQ-0001": {"observable": []}})
     assert disp["REQ-0001"] == O.TRUSTED
+
+
+# --------------------------------------------------------------- ABANDONED
+#
+# What DISCARD means: we failed to interpret this requirement, and stop counting
+# it. Not "advisory" -- a downgraded verdict is still in the way. These pin the
+# difference, and the rule that stops the softening being free.
+
+
+def test_an_abandoned_requirement_leaves_the_driving_set():
+    """The half that makes discard mean discard.
+
+    Excluded from `trusted`, so the debug loop cannot decide it, `run_all`
+    cannot count it and the board cannot show it.
+    """
+    from specflow.oracles_stage import OracleSet
+
+    o = _oracle("def decide(t): return True", uid="REQ-0000")
+    s = OracleSet(trusted=[o],
+                  dispositions={"REQ-0000": "TRUSTED", "REQ-0001": "ABANDONED"},
+                  abandoned={"REQ-0001": "never reached"})
+    assert [x.req_uid for x in s.trusted] == ["REQ-0000"]
+    assert "REQ-0001" not in {x.req_uid for x in s.trusted}
+
+
+def test_an_abandoned_requirement_leaves_the_denominator_and_is_counted():
+    """"46 of 70 CONFORM" with 10 abandoned is THREE numbers -- 46, 60 and 10.
+
+    Reporting the first two without the third is the class of number this
+    project has already had to retract twice.
+    """
+    from specflow.oracles_stage import OracleSet
+
+    s = OracleSet(dispositions={f"REQ-000{i}": "TRUSTED" for i in range(6)}
+                  | {"REQ-0006": "ABANDONED", "REQ-0007": "ABANDONED"},
+                  abandoned={"REQ-0006": "never reached",
+                             "REQ-0007": "no observation route found"})
+    assert s.considered() == 6
+    rates = s.rates()
+    assert rates["considered"] == 6 and rates["abandoned"] == 2
+
+
+def test_abandoning_outranks_the_claim_it_would_otherwise_report():
+    """`UNOBSERVABLE` is a claim about the REQUIREMENT and can be false --
+    measured: 27 of 77 called unobservable by reading the mechanism, 10 of which
+    had working checks. What a bounded attempt knows is narrower and about us.
+    """
+    from specflow.oracles_stage import _dispositions
+
+    reqs = [{"uid": "REQ-0000"}]
+    norm = {"REQ-0000": {"observable": [], "unobservable_reason": "internal"}}
+    plain, _ = _dispositions(requirements=reqs, trusted=[], rejected={},
+                             had_source=set(), normalized=norm)
+    assert plain["REQ-0000"] == "UNOBSERVABLE"
+
+    out, why = _dispositions(
+        requirements=reqs, trusted=[], rejected={}, had_source=set(),
+        normalized=norm, abandoned={"REQ-0000": "no observation route found"})
+    assert out["REQ-0000"] == "ABANDONED"
+    assert why["REQ-0000"] == "no observation route found"
+
+
+def test_nothing_is_abandoned_without_an_attempt():
+    """THE ANTI-SHORTCUT PIN, and the load-bearing one.
+
+    `abandoned` is populated only by a stage that ran a bounded attempt. Empty
+    means nothing was tried, and nothing may be discarded on that basis --
+    otherwise the gate rewards not trying, which is what z-i2c did:
+    `stimulus_added: 0` on three turns with 33 oracles at NOT_EXERCISED.
+    """
+    from specflow.oracles_stage import _dispositions
+
+    out, _ = _dispositions(
+        requirements=[{"uid": "REQ-0000"}], trusted=[], rejected={},
+        had_source=set(),
+        normalized={"REQ-0000": {"observable": [], "unobservable_reason": "x"}},
+        abandoned={})
+    assert out["REQ-0000"] == "UNOBSERVABLE", "blocking, because nobody tried"

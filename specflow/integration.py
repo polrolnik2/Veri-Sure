@@ -13,6 +13,7 @@ entry points supply it, but only `cli.py:74` writes it to disk. specflow reads
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -269,6 +270,26 @@ def _oracle_stage_issues(failed: str, oracle_set) -> list[Issue]:
                       "The oracle stage completed and produced no trusted "
                       "check, so this reference model was decided against an "
                       "empty set. Zero failures here means nothing was asked.")]
+    # WHAT WAS DISCARDED, ON THE FACE OF THE GATE.
+    #
+    # An abandoned requirement leaves the driving set, so nothing downstream can
+    # report it and this is the last place it can be said. A warning rather than
+    # an error: the attempt ran and ran out, so there is no party left with a
+    # move -- but a build that passes with N requirements carrying no live check
+    # has to say N, beside the denominator they left, or one misleading number
+    # has been traded for another.
+    gave_up = dict(getattr(oracle_set, "abandoned", {}) or {})
+    if gave_up:
+        by_reason = Counter(gave_up.values())
+        considered = oracle_set.considered()
+        return [Issue(
+            "warning", "oracles.stage.abandoned",
+            f"{len(gave_up)} requirement(s) were ABANDONED after a bounded "
+            f"attempt and are not in the driving set: "
+            f"{', '.join(f'{n} {r}' for r, n in sorted(by_reason.items()))}. "
+            f"Every rate below is against {considered} requirement(s), not "
+            f"{considered + len(gave_up)}. Named: "
+            f"{', '.join(sorted(gave_up))}.")]
     return []
 
 

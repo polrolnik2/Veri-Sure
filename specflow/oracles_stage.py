@@ -123,6 +123,27 @@ class OracleSet:
     #: existed. The information was in this artifact and nothing downstream
     #: read it.
     witness_notes: dict[str, str] = field(default_factory=dict)
+    #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`.
+    #:
+    #: These requirements LEAVE THE SYSTEM. They are not in `trusted`, so the
+    #: debug loop cannot decide them, `run_all` cannot count them and the board
+    #: cannot show them -- which is what makes this a discard rather than a
+    #: verdict that no longer blocks but is still in the way.
+    #:
+    #: What they must not do is disappear. They stay in `dispositions` with the
+    #: reason here, they are counted on the face of the gate, and they leave the
+    #: DENOMINATOR of every rate rather than quietly passing -- see `rates`.
+    abandoned: dict[str, str] = field(default_factory=dict)
+
+    def considered(self) -> int:
+        """Requirements still in the system: the denominator for every rate.
+
+        An abandoned requirement leaves the numerator AND the denominator. "46
+        of 70 CONFORM" with 10 abandoned is three numbers -- 46, 60 and 10 --
+        and reporting the first two without the third is precisely the class of
+        number this project has already had to retract twice.
+        """
+        return len(self.dispositions) - len(self.abandoned)
 
     def rates(self) -> dict[str, int | None]:
         """Counts, and `None` where a check did not run.
@@ -138,6 +159,10 @@ class OracleSet:
         counts = Counter(self.dispositions.values())
         out: dict[str, int | None] = {
             "trusted": len(self.trusted),
+            # The denominator, beside the counts, always. A rate read against
+            # the wrong total is worse than no rate.
+            "considered": self.considered(),
+            "abandoned": len(self.abandoned),
             **{k: counts[k] for k in sorted(counts) if k != TRUSTED},
         }
         if not self.variants:
@@ -730,6 +755,12 @@ def run_oracle_stage(
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
+    #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`. These
+    #: leave the frozen set entirely -- see the exclusion below. Populated only
+    #: by a stage that RAN a bounded attempt and exhausted it; empty here means
+    #: nothing has been attempted yet, and nothing may be discarded on that
+    #: basis. Step 2 of the plan fills it from the stimulus loop.
+    abandoned: dict[str, str] = {}
     #: Oracles a repair round made newly unsatisfiable to the known-good
     #: control. REPORTED, never acted on -- see the round body for why the
     #: control may not select which oracles survive.
@@ -895,10 +926,22 @@ def run_oracle_stage(
                 continue
             held[o.req_uid] = o
 
-    trusted = [o for uid, o in held.items() if uid not in rejected]
+    # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
+    # that can be true. Excluding them from `trusted` is what stops the debug
+    # loop deciding them, `run_all` counting them and the board showing them --
+    # the difference between a discard and a verdict that no longer blocks but
+    # is still in the way. Nothing downstream has to know about them, because
+    # nothing downstream is given them.
+    #
+    # `abandoned` is populated by the stages that ran the attempt (the stimulus
+    # loop, the resolution pass, the repair loop) and is empty otherwise, so the
+    # exclusion cannot fire on a requirement nobody tried.
+    trusted = [o for uid, o in held.items()
+               if uid not in rejected and uid not in abandoned]
     dispositions, reasons = _dispositions(
         requirements=requirements, trusted=trusted, rejected=rejected,
         had_source=set(held), normalized=normalized,
+        abandoned=abandoned,
         never_decides=_L.never_decides(alive))
     # How much the stimulus gives ANY oracle to work with. Measured on the
     # witness -- a design, but this is not a judgement about correctness, it is
@@ -1020,6 +1063,12 @@ def run_oracle_stage(
                    "over_strict_after_repair": sorted(
                        u for u in newly_over_strict if u in dispositions
                        and dispositions[u] == TRUSTED),
+                   # DISCARDED, NEVER SILENT. Named with the reason we gave
+                   # up, and beside the denominator they left, so a rate is
+                   # never read against the wrong total.
+                   "abandoned": dict(sorted(abandoned.items())),
+                   "abandoned_count": len(abandoned),
+                   "considered": len(dispositions) - len(abandoned),
                    "testpoints_no_oracle_names": idle,
                    "stimulus_liveness": live,
                    "oracle_liveness": dead})
@@ -1033,6 +1082,7 @@ def run_oracle_stage(
 
     logger.info("oracles: %s (bound: %s)", _summary(dispositions), witness_kind)
     return OracleSet(trusted=trusted, dispositions=dispositions,
+                     abandoned=abandoned,
                      reasons=reasons, repairs=repairs, variants=variants,
                      witness_kind=witness_kind, rounds=rounds,
                      testpoints_no_oracle_names=idle,
@@ -1111,6 +1161,10 @@ def _dispositions(
     *, requirements: list[dict], trusted: list[RequirementOracle],
     rejected: dict[str, str], had_source: set[str],
     normalized: dict[str, dict] | None,
+    #: `req_uid -> why we gave up`. Wins over every other disposition: a stage
+    #: that ran a bounded attempt and exhausted it knows more than any claim
+    #: derived from the text, and its reason is the one worth reporting.
+    abandoned: dict[str, str] | None = None,
     #: `liveness.never_decides` -- oracles that returned no decision on any
     #: testpoint they name. A check that cannot fire is not evidence.
     never_decides: dict[str, str] | None = None,
@@ -1123,6 +1177,7 @@ def _dispositions(
     norm = normalized or {}
     ok = {o.req_uid for o in trusted}
     inert = set(never_decides or {})
+    gave_up = dict(abandoned or {})
     out: dict[str, str] = {}
     why: dict[str, str] = {}
     for req in requirements:
@@ -1131,7 +1186,20 @@ def _dispositions(
             continue
         shape = norm.get(uid) or {}
         blind = bool(shape) and not (shape.get("observable") or [])
-        if uid in ok and not (blind and uid in inert):
+        if uid in gave_up:
+            # ATTEMPTED AND EXHAUSTED, and that outranks everything below.
+            #
+            # `UNOBSERVABLE` and `NOT_EXERCISED` are claims about the
+            # REQUIREMENT -- no port shows it, no stimulus reaches it -- and
+            # both can be false. What is known after a bounded attempt is
+            # narrower and about us: we could not turn this requirement into a
+            # check we can exercise. Reporting the broader claim when the
+            # narrower one is what was measured is the mistake normalisation
+            # already made at scale, calling 27 of 77 requirements unobservable
+            # by reading each one's mechanism, 10 of which had working checks.
+            out[uid] = "ABANDONED"
+            why[uid] = gave_up[uid]
+        elif uid in ok and not (blind and uid in inert):
             # A WORKING ORACLE REFUTES `UNOBSERVABLE`. Normalization claimed
             # this requirement has no boundary observable; an oracle for it then
             # named a declared port, ran, and survived every gate, which is only

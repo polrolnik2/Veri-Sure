@@ -74,3 +74,60 @@ def test_conforms_and_broken_are_untouched():
     assert of_result(_R(None, "", rows=_trace(9))) == "NOT_EXERCISED"
     assert of_result(_R(False, "x", broken="raised")) == "UNDECIDED"
     assert of_result(_R(False, "x", model_broke=True)) == "VIOLATES"
+
+
+# --------------------------------------------------------------- ABANDONED
+
+
+def test_only_an_earned_verdict_may_be_downgraded():
+    """THE SOFTENING MUST BE EARNED, and this is where that is enforced.
+
+    `UNOBSERVABLE` and `NOT_EXERCISED` used to be downgradable. They now mean
+    "the resolution pass / the stimulus loop did not run" -- a harness defect,
+    which is what should halt a build. Only `ABANDONED`, which no stage can emit
+    without an attempt record, may soften.
+
+    Without the split the gate rewards not trying: z-i2c reported
+    `stimulus_added: 0` on all three turns with 33 oracles at NOT_EXERCISED.
+    """
+    from specflow.refmodel import verdict
+
+    assert "ABANDONED" in verdict.DOWNGRADABLE
+    # `NOT_EXERCISED` is out already: the stimulus loop is what earns the
+    # softening and reaching the verdict means it did not run. `UNOBSERVABLE`
+    # follows when the resolution pass exists -- see
+    # `test_advisory_verdicts.test_unobservable_leaves_this_set_when_it_gains_a_route`,
+    # which pins the pairing so the two cannot drift apart.
+    assert "NOT_EXERCISED" not in verdict.DOWNGRADABLE
+    issue = verdict.to_issue("REQ-0000", "NOT_EXERCISED",
+                             advisory={"NOT_EXERCISED"})
+    assert issue.severity == "error", "a skipped loop must not soften"
+
+
+def test_an_abandoned_verdict_softens_only_when_the_caller_asks():
+    from specflow.refmodel import verdict
+
+    assert verdict.to_issue("REQ-0000", "ABANDONED").severity == "error"
+    soft = verdict.to_issue("REQ-0000", "ABANDONED", advisory={"ABANDONED"})
+    assert soft.severity == "warning"
+
+
+def test_abandoned_blocks_and_routes_nowhere():
+    """It still blocks by default -- softening is the caller's choice. And it
+    routes to nobody, because the attempt ran and ran out: there is no party
+    left with a move, which is exactly what distinguishes it from the verdicts
+    that accuse someone."""
+    from specflow.refmodel import verdict
+
+    assert "ABANDONED" in verdict.BLOCKING
+    assert verdict.ROUTE["ABANDONED"].startswith("none")
+
+
+def test_the_reasons_are_a_closed_set():
+    """A free-text reason would let one stage report "gave up" without saying
+    which bounded attempt ran out, which is the evidence the discard rests on."""
+    from specflow.refmodel import verdict
+
+    assert verdict.ABANDONED_REASONS == frozenset({
+        "no observation route found", "never reached",
+        "no check survived repair"})

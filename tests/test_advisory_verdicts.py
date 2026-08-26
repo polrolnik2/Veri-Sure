@@ -48,13 +48,43 @@ def test_nothing_else_can_be_downgraded_even_if_asked():
     issues = V.issues(every, advisory=frozenset(V.BLOCKING))
     downgraded = {i.path.rsplit(".", 1)[-1] for i in issues
                   if i.severity == "warning"}
-    assert downgraded == {"unobservable"}
+    assert downgraded == {"unobservable", "abandoned"}
     assert has_errors(issues), "everything else still fails the gate"
 
 
 def test_off_by_default():
     assert [i.severity for i in V.issues({"R": "UNOBSERVABLE"})] == ["error"]
-    assert V.DOWNGRADABLE == frozenset({"UNOBSERVABLE"})
+    assert V.DOWNGRADABLE == frozenset({"ABANDONED", "UNOBSERVABLE"})
+
+
+def test_an_earned_give_up_is_the_other_downgradable_verdict():
+    """`ABANDONED` says a bounded attempt RAN and ran out, and carries the
+    record proving it, so it cannot be reached by skipping the work."""
+    issues = V.issues({"REQ-0001": "ABANDONED"},
+                      {"REQ-0001": "never reached"},
+                      advisory=frozenset({"ABANDONED"}))
+    assert [i.severity for i in issues] == ["warning"]
+    assert not has_errors(issues)
+    assert "never reached" in issues[0].message
+
+
+def test_unobservable_leaves_this_set_when_it_gains_a_route():
+    """THE PAIRING, pinned so the two halves cannot drift apart.
+
+    `UNOBSERVABLE` should mean "the resolution pass did not run" -- a harness
+    defect, and blocking. It is downgradable only because that pass does not
+    exist yet: removing it first would enforce no principle and merely halt
+    builds on requirements nothing can yet resolve, which is the s-i2c failure
+    this downgrade was added to fix.
+
+    When `NormalizedRequirement` gains `observed_via`, this test fails, and the
+    fix is to drop UNOBSERVABLE from DOWNGRADABLE in the same change.
+    """
+    from specflow.normalize import NormalizedRequirement
+
+    has_route = "observed_via" in NormalizedRequirement.model_fields
+    assert has_route == ("UNOBSERVABLE" not in V.DOWNGRADABLE), (
+        "a requirement may only be blocked for skipping a pass that exists")
 
 
 def test_conforms_is_still_not_an_issue_either_way():
