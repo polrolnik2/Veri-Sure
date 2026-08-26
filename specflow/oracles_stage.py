@@ -709,6 +709,10 @@ def run_oracle_stage(
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
+    #: Oracles a repair round made newly unsatisfiable to the known-good
+    #: control. REPORTED, never acted on -- see the round body for why the
+    #: control may not select which oracles survive.
+    newly_over_strict: set[str] = set()
     #: `req_uid -> {instrument: what it observed}`. Never rejections: no
     #: implementation gates an oracle here. Recorded so the cost of not gating
     #: is visible -- an oracle a known-good design fails still reaches the debug
@@ -747,6 +751,11 @@ def run_oracle_stage(
                     quotable[uid] = why
         for uid, why in quotable.items():
             repairs.setdefault(uid, []).append(why)
+        # Who the control ALREADY could not satisfy, before this round rewrote
+        # anything. Without the before-picture a repair inherits the blame for
+        # over-strictness it did not create.
+        was_over_strict = {uid for uid, n in disagreements.items()
+                           if "control" in n}
         # Can each surviving check fail at all? Recomputed per round because a
         # repaired oracle is a different check, and kept for the artifact so the
         # stage reports what it last saw rather than a stale first look.
@@ -802,30 +811,64 @@ def run_oracle_stage(
         # that produced nothing leaves the previous oracle standing to be
         # rejected again, which is the honest outcome rather than a hole.
         for o in again:
-            if o.req_uid in advisory_only:
-                # This oracle was not rejected -- it was asked to TRY. A reply
-                # that comes back worse must not be promoted over the one that
-                # was already fine, or advice becomes a way to lose a good
-                # check. Same rule `_strengthen` applies for the same reason.
-                worse, _q, _n = verify_one(
-                    o, contract=contract, testplan=testplan,
-                    stimulus_by_tp=stimulus_by_tp, witness=witness,
-                    control=control, variants=variants, base=base,
-                    transactional=transactional)
-                if worse:
-                    logger.info("oracles: %s declined the advisory and its "
-                                "attempt was worse (%s); the previous check "
-                                "stands", o.req_uid, worse.split(":")[0])
-                    continue
-                if o.req_uid in dead_now and not _is_live(
-                        o, witness, contract, stimulus_by_tp, base=base):
-                    # A replacement that still cannot fail is not an
-                    # improvement, and swapping one inert check for another
-                    # loses the reasoning already recorded against this uid.
-                    logger.info("oracles: %s was re-asked because it cannot "
-                                "fail and the replacement cannot either; the "
-                                "previous check stands", o.req_uid)
-                    continue
+            # RE-VERIFY EVERY REPLACEMENT, not only the advisory ones.
+            #
+            # This branch used to run for `advisory_only` alone, so a reply to
+            # an actual REJECTION went straight into `held` unchecked and was
+            # only re-examined at the top of the next round. `_strengthen` has
+            # never worked that way -- "a replacement is kept only if it
+            # VERIFIES" -- and the asymmetry mattered because both paths push
+            # the SAME direction: vacuity says the check passes something wrong,
+            # so make it stricter.
+            #
+            # Measured on s-i2c, the only run whose `_fix` rounds ran, against
+            # the known-good control:
+            #
+            #     repaired and kept (28)   13 failed by the control   46%
+            #     never repaired    (30)    2 failed by the control    6%
+            #
+            # Nearly eight times the rate, and 13 of the run's 15 over-strict
+            # oracles came out of the tightening loop.
+            #
+            # WHAT THIS DOES NOT FIX, stated plainly: `verify_one` cannot reject
+            # for strictness -- nothing in this package ever produces an
+            # "over-strict:" reason, and the control is barred from gating
+            # because it is a proxy for the held-out grade. So this catches a
+            # replacement that went VACUOUS or MALFORMED under a tightening
+            # instruction; it does not catch one that went too strict. That is
+            # what `newly_over_strict` below reports rather than blocks.
+            # This oracle was not rejected -- it was asked to TRY. A reply
+            # that comes back worse must not be promoted over the one that
+            # was already fine, or advice becomes a way to lose a good
+            # check. Same rule `_strengthen` applies for the same reason.
+            worse, _q, fresh = verify_one(
+                o, contract=contract, testplan=testplan,
+                stimulus_by_tp=stimulus_by_tp, witness=witness,
+                control=control, variants=variants, base=base,
+                transactional=transactional)
+            if worse:
+                logger.info("oracles: %s: the replacement is worse (%s); "
+                            "the previous check stands",
+                            o.req_uid, worse.split(":")[0])
+                repairs.setdefault(o.req_uid, []).append(
+                    f"repair rejected -- {worse}; the previous oracle stands")
+                continue
+            # A NEW disagreement with the control is REPORTED, never acted
+            # on. It is the over-strictness this loop demonstrably creates,
+            # and the control may not gate: kept-or-rejected is the one bit
+            # that leaks, and letting it select oracles tunes the model
+            # toward the grade transitively.
+            if "control" in fresh and o.req_uid not in was_over_strict:
+                newly_over_strict.add(o.req_uid)
+            if o.req_uid in advisory_only and o.req_uid in dead_now and not _is_live(
+                    o, witness, contract, stimulus_by_tp, base=base):
+                # A replacement that still cannot fail is not an
+                # improvement, and swapping one inert check for another
+                # loses the reasoning already recorded against this uid.
+                logger.info("oracles: %s was re-asked because it cannot "
+                            "fail and the replacement cannot either; the "
+                            "previous check stands", o.req_uid)
+                continue
             held[o.req_uid] = o
 
     trusted = [o for uid, o in held.items() if uid not in rejected]
@@ -941,6 +984,17 @@ def run_oracle_stage(
                    "instrument_notes": disagreements,
                    "unsatisfiable_by_the_control": sorted(
                        u for u, d in disagreements.items() if "control" in d),
+                   # HOW MUCH OF THAT THE TIGHTENING LOOP CREATED. Measured
+                   # offline on s-i2c, the only run whose `_fix` rounds ran:
+                   # 13 of 28 repaired-and-kept oracles were failed by the
+                   # control (46%) against 2 of 30 never repaired (6%), and 13
+                   # of the run's 15 over-strict checks came out of the loop.
+                   # Reported per run now rather than reconstructed after the
+                   # fact -- and reported only: the control may not select
+                   # which oracles survive.
+                   "over_strict_after_repair": sorted(
+                       u for u in newly_over_strict if u in dispositions
+                       and dispositions[u] == TRUSTED),
                    "testpoints_no_oracle_names": idle,
                    "stimulus_liveness": live,
                    "oracle_liveness": dead})

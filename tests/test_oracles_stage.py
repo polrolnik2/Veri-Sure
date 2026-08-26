@@ -796,3 +796,52 @@ def test_unobservable_with_no_oracle_attempt_reads_cleanly():
                                  "unobservable_reason": "purely internal"}},
     )
     assert why["REQ-0002"] == "purely internal"
+
+
+# ------------------------------------- the tightening loop's own by-product
+
+
+def test_every_replacement_is_re_verified_not_only_the_advisory_ones():
+    """A reply to a REJECTION used to go into the set unchecked.
+
+    `_strengthen` has never worked that way -- "a replacement is kept only if it
+    VERIFIES" -- and the asymmetry mattered because both repair paths push the
+    SAME direction: vacuity says the check passes something wrong, so tighten it.
+
+    Measured on s-i2c, the only run whose `_fix` rounds ran, against the
+    known-good control: 13 of 28 repaired-and-kept oracles are failed by it
+    (46%) against 2 of 30 never repaired (6%). 13 of that run's 15 over-strict
+    checks came out of the tightening loop.
+    """
+    import inspect
+
+    from specflow import oracles_stage as OS
+
+    src = inspect.getsource(OS.run_oracle_stage)
+    body = src[src.index("for o in again:"):src.index("held[o.req_uid] = o")]
+    assert "if o.req_uid in advisory_only:" not in body, (
+        "re-verification must not be gated on the reply being advisory")
+    assert body.count("verify_one(") == 1, (
+        "the replacement is re-verified exactly once, on every path")
+
+
+def test_over_strictness_the_repair_created_is_reported_never_acted_on():
+    """The control may not select which oracles survive.
+
+    Withholding its detail from prompts stops its behaviour leaking into oracle
+    text, but kept-or-rejected is the bit that matters: it decides which oracles
+    the model is repaired against, and the model is what `golden_check` then
+    scores. So this is an artifact field, not a verdict.
+    """
+    import inspect
+
+    from specflow import oracles_stage as OS
+
+    src = inspect.getsource(OS.run_oracle_stage)
+    where = src.index("newly_over_strict.add")
+    after = src[where:where + 400]
+    assert "rejected[" not in after and "continue" not in after.split("\n")[1], (
+        "a control disagreement must not remove an oracle from the set")
+    assert '"over_strict_after_repair"' in src, (
+        "and it has to reach the artifact, or it decides nothing and reports "
+        "nothing -- the pattern this repo has now caught nine times")
