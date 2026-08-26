@@ -63,6 +63,7 @@ from ..schema import Issue
 from ..stage import StageResult, run_fanout, run_stage
 from .oracles import (
     RequirementOracle,
+    decide,
     ports_read,
     replay,
 )
@@ -598,10 +599,124 @@ def must_fail(
                 f"-- a stimulus finding, not vacuity"), ""
         return UNKNOWN, (f"only {in_scope} variant(s) ran; silence over fewer "
                          f"than the requirement's own clauses is not vacuity"), ""
-    return CONVICTED, (f"passed all {in_scope} variant(s) of its own "
-                       f"requirement, including one that breaks the clause "
-                       f"it names"), _apart(oracle, passed, conforming, contract,
-                                            stimulus_by_tp, ports, base=base)
+    # WHY it passed, not just that it did. The three causes want different
+    # owners, and "passed all N variant(s)" named none of them.
+    label, why = why_passed(oracle, passed, conforming, contract,
+                            stimulus_by_tp, ports, base=base)
+    if label == "no-discrimination":
+        # Not vacuity. No check over these ports could have told the designs
+        # apart, so convicting this one blames the author for the requirement.
+        return UNKNOWN, why, ""
+    detail = (f"passed all {in_scope} variant(s) of its own requirement, "
+              f"including one that breaks the clause it names")
+    if why:
+        detail = f"{detail} -- {why}"
+    return CONVICTED, detail, _apart(oracle, passed, conforming, contract,
+                                     stimulus_by_tp, ports, base=base)
+
+
+class _Watched(dict):
+    """One trace row that records having been read.
+
+    The oracle is free-form Python and returns a single deciding `edge`, which
+    is `None` exactly when it abstained -- so nothing in the artifact says which
+    rows it LOOKED AT. Handing `decide` a list of these recovers that: any read
+    of a row marks its index, and the set of marks is the window the check
+    actually examined.
+    """
+
+    __slots__ = ("_seen", "_idx")
+
+    def __init__(self, data: dict, seen: set, idx: int) -> None:
+        super().__init__(data)
+        self._seen, self._idx = seen, idx
+
+    def __getitem__(self, key):
+        self._seen.add(self._idx)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._seen.add(self._idx)
+        return super().get(key, default)
+
+
+def _examined(oracle: RequirementOracle, rows: list[dict]) -> set[int]:
+    """Row indices this oracle read while deciding. Never raises."""
+    seen: set[int] = set()
+    try:
+        decide(oracle, [_Watched(r, seen, i) for i, r in enumerate(rows)])
+    except Exception:  # noqa: BLE001
+        return seen
+    return seen
+
+
+def _diverging(a: list[dict], b: list[dict], ports: set[str]) -> list[int]:
+    """Row indices where two traces disagree on the ports this oracle reads."""
+    out: list[int] = []
+    for i in range(min(len(a), len(b))):
+        pa = (a[i].get("outputs") or {})
+        pb = (b[i].get("outputs") or {})
+        if any(pa.get(p) != pb.get(p) for p in ports):
+            out.append(i)
+    out.extend(range(min(len(a), len(b)), max(len(a), len(b))))
+    return out
+
+
+def _span(idx: list[int] | set[int]) -> str:
+    idx = sorted(idx)
+    return f"{idx[0]}-{idx[-1]}" if idx else "none"
+
+
+def why_passed(oracle: RequirementOracle, variant: Variant, conforming: str,
+               contract: dict, stimulus_by_tp: dict, ports: set[str], *,
+               base: str = "step") -> tuple[str, str]:
+    """`(label, detail)` -- WHY did this oracle pass a design built to break it?
+
+    "Passed all N variants" stops at the symptom, and the three causes want
+    different owners. Comparing where the variant DIFFERS on the ports this
+    oracle reads against the rows the oracle actually READ separates them:
+
+      differs inside the window   the check looked and did not care -- vacuous
+      differs outside the window  it looked in the wrong place -- REPAIRABLE,
+                                  and the author is told both ranges
+      differs nowhere             no check over these ports could discriminate;
+                                  a specification finding, not an oracle defect
+
+    Measured on a2-i2c, where 14 oracles all reported "passed all N variant(s)"
+    and the artifact could not tell REQ-0092 -- which checks `sda_oen` against
+    `din` during the `cmd==8` command-issue window while the FSM drives SDA tens
+    of edges later -- from REQ-0063, "the two-stage capture reduces metastability
+    risk", which no functional replay can observe at any port ever.
+
+    EDGES OBSERVED, NEVER A CYCLE COUNT. Phases 3-6 stopped `latency_cycles`
+    gating because the specification does not pin cycle counts, and this reports
+    where two traces were seen to differ rather than asserting when anything
+    ought to happen.
+    """
+    steps = _steps_for(oracle, stimulus_by_tp)
+    if not steps or not conforming or variant is None:
+        return "", ""
+    good = replay(conforming, contract, steps, base=base)
+    bad = replay(variant.source, contract, steps, base=base)
+    if good.error or bad.error:
+        return "", ""
+    diverged = _diverging(good.rows, bad.rows, ports)
+    if not diverged:
+        return "no-discrimination", (
+            f"no variant differs from the conforming design at any port this "
+            f"oracle reads ({', '.join(sorted(ports))}), so no check over those "
+            f"ports could tell them apart -- a specification finding rather "
+            f"than a defect in this check")
+    looked = _examined(oracle, bad.rows)
+    if looked & set(diverged):
+        return "vacuous", (
+            f"the designs differ at edge(s) {_span(diverged)}, which this check "
+            f"read, and it passed both anyway")
+    return "window-missed", (
+        f"the designs differ at edge(s) {_span(diverged)}; this check only read "
+        f"edge(s) {_span(looked)}. It is looking in the right trace at the wrong "
+        f"time -- widen it from the instant the activation holds to the window "
+        f"its consequence falls in, closing on a CONDITION rather than a count")
 
 
 def _apart(oracle, variant, conforming: str, contract: dict,
