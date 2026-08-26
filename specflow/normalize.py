@@ -379,6 +379,35 @@ IF THERE IS NO ROUTE, SAY SO. Return empty lists and leave
 more than a route that does not discriminate -- that route would produce a check
 that passes everything, which is the failure this whole pipeline exists to
 prevent.
+
+Reply with ONE JSON object and nothing else:
+
+{
+  "reasoning": "...",
+  "normalized": [
+    {
+      "req_uid": "REQ-0031",
+      "observed_via": [
+        {
+          "port": "busy",
+          "through_req": "REQ-0007",
+          "when": "after a START-shaped edge on sda_i while scl_i is high",
+          "shows": "busy stays low for a glitch narrower than the filter depth, and rises for one at or above it"
+        }
+      ],
+      "activated_via": [
+        {
+          "through_req": "REQ-0012",
+          "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}}
+        }
+      ]
+    }
+  ]
+}
+
+With no route, that is:
+
+{"reasoning": "...", "normalized": [{"req_uid": "REQ-0031", "observed_via": [], "activated_via": []}]}
 """
 
 

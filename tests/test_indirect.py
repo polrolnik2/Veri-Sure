@@ -344,3 +344,48 @@ def test_the_second_pass_is_shown_what_the_first_one_claimed():
     prompt = build_indirect_prompt({"uid": "REQ-0031"}, shape, [shape],
                                    "{}", CONTRACT)
     assert "not visible on any port this requirement names" in prompt
+
+
+def test_the_indirect_prompt_shows_the_shape_it_will_be_parsed_for():
+    """CAUGHT LIVE, AFTER 63 WASTED CALLS.
+
+    The prompt described the two fields well enough that the model answered
+    correctly -- it named a port, a `through_req`, a `when` and both sides of
+    `shows` -- IN PROSE. `parse_response` wants JSON, so every one of those
+    answers parsed to nothing, the gate said "no answer returned", and the
+    repair loop spent its whole budget re-asking a question that was already
+    being answered: 18 requirements, 63 calls, r0=18 r1=18 r2=17 r3=14.
+
+    The first-pass `SYSTEM` ends with "Reply with ONE JSON object and nothing
+    else" and an example. This one did not, because it was written as a
+    description of a new question rather than as a sibling of the prompt it
+    shares a parser with.
+
+    Both halves are pinned: the shape, and the SHAPE OF "NO" -- an empty answer
+    is the honest outcome here and a model shown only the populated example
+    tends to populate it.
+    """
+    from specflow.normalize import INDIRECT_SYSTEM
+
+    assert "Reply with ONE JSON object" in INDIRECT_SYSTEM
+    assert '"observed_via"' in INDIRECT_SYSTEM
+    assert '"activated_via"' in INDIRECT_SYSTEM
+    assert '"observed_via": []' in INDIRECT_SYSTEM, "the empty answer too"
+
+
+def test_every_prompt_parsed_as_json_says_so():
+    """The general form of the same defect, across the stages that share the
+    discipline. A system prompt is the only place the output contract is
+    stated, and a parser is silent about what it wanted."""
+    from specflow import normalize, s2_testplan, s3_coverage
+    from specflow.refmodel import oracle_gen
+
+    for name, text in (
+        ("normalize.SYSTEM", normalize.SYSTEM),
+        ("normalize.INDIRECT_SYSTEM", normalize.INDIRECT_SYSTEM),
+        ("s2.SYSTEM", s2_testplan.SYSTEM),
+        ("s3.SYSTEM", s3_coverage.SYSTEM),
+        ("oracle_gen.SYSTEM", oracle_gen.SYSTEM),
+    ):
+        assert "JSON" in text, f"{name} never asks for JSON"
+        assert "{" in text and "}" in text, f"{name} never shows the shape"
