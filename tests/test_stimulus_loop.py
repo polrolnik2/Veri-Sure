@@ -237,3 +237,55 @@ def test_abandonment_from_the_resolution_pass_survives_staging():
     src = inspect.getsource(oracles_stage.run_oracle_stage)
     assert "abandoned.update(gone)" in src
     assert "abandoned, staging = stage_unexercised(" not in src
+
+
+def test_staging_is_actually_CALLED_during_round_one(tmp_path, monkeypatch):
+    """Executed, not read.
+
+    The three tests above assert the SOURCE looks right, which proves nothing
+    about whether the branch runs -- and the live run reached round 2 with no
+    stimulus minted, which is exactly the observation a source-text test cannot
+    explain. This one drives `run_oracle_stage` and records the call.
+    """
+    import json as _json
+
+    from specflow import oracles_stage as _O
+    from tests.test_oracles_stage import (CONTRACT, GOOD, REQS, STIM, TESTPLAN,
+                                          WITNESS, _Port, _reply)
+
+    seen = {}
+
+    def _spy(**kw):
+        seen["round"] = True
+        seen["held"] = sorted(kw["held"])
+        seen["unexercised"] = dict(kw["unexercised"])
+        return {}, {}
+
+    monkeypatch.setattr(_O, "_witness", lambda **_kw: (WITNESS, _O.WITNESS))
+    monkeypatch.setattr(_O, "stage_unexercised", _spy)
+    _O.run_oracle_stage(
+        requirements=REQS, contract_json=_json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, want_staging=True)
+    assert seen.get("round"), "stage_unexercised was never called"
+    assert "REQ-0001" in seen["held"]
+
+
+def test_staging_is_skipped_when_the_switch_is_off(tmp_path, monkeypatch):
+    import json as _json
+
+    from specflow import oracles_stage as _O
+    from tests.test_oracles_stage import (CONTRACT, GOOD, REQS, STIM, TESTPLAN,
+                                          WITNESS, _Port, _reply)
+
+    called = []
+    monkeypatch.setattr(_O, "_witness", lambda **_kw: (WITNESS, _O.WITNESS))
+    monkeypatch.setattr(_O, "stage_unexercised",
+                        lambda **kw: (called.append(1), ({}, {}))[1])
+    _O.run_oracle_stage(
+        requirements=REQS, contract_json=_json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, want_staging=False)
+    assert called == []
