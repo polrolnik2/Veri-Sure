@@ -1024,6 +1024,20 @@ def run_oracle_stage(
     # What survives unstaged is ABANDONED rather than NOT_EXERCISED -- attempted
     # and exhausted, with the record to prove it. What was never attempted stays
     # NOT_EXERCISED and blocks, which is what stops the softening being free.
+    # A REQUIREMENT THE RESOLUTION PASS COULD NOT ROUTE HAS BEEN ASKED, so it is
+    # abandoned rather than left as a claim that no port shows it. Detected here
+    # because this is where the normalized form and the dispositions meet; the
+    # asking happened at normalisation, which is why this is not "nobody tried".
+    #
+    # Only when the pass actually ran: a normalized form predating it has no
+    # `observed_via` key at all, and treating its absence as a failed attempt
+    # would abandon requirements nothing ever asked about.
+    for uid, shape in (normalized or {}).items():
+        if "observed_via" not in shape:
+            continue
+        if not (shape.get("observable") or []) and not shape.get("observed_via"):
+            abandoned.setdefault(uid, "no observation route found")
+
     staging: dict[str, dict] = {}
     if want_staging and witness:
         abandoned, staging = stage_unexercised(

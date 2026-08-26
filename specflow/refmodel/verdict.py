@@ -287,16 +287,15 @@ def classify(
 #: objection is to SILENT omission; an itemised warning that names the
 #: requirement and what was attempted is the opposite of silent.
 #:
-#: `UNOBSERVABLE` IS HERE TRANSITIONALLY AND COMES OUT WITH THE RESOLUTION PASS.
-#: The rule above says it should block, because reaching it means no attempt was
-#: made -- but the attempt does not exist yet. Removing it before the pass lands
-#: would not enforce a principle, it would only halt builds on requirements
-#: nothing is yet able to resolve, which is the exact s-i2c failure the
-#: downgrade was added to fix: 34 gate issues, 9 of them clearable, 7
-#: UNOBSERVABLE and permanent. It comes out in the same change that gives those
-#: requirements a route to try, and `test_advisory_verdicts` pins the pairing so
-#: the two cannot drift apart.
-DOWNGRADABLE: frozenset[str] = frozenset({"ABANDONED", "UNOBSERVABLE"})
+#: `UNOBSERVABLE` CAME OUT WHEN THE RESOLUTION PASS LANDED. It was here while
+#: nothing could give a blind requirement a route to try, because removing it
+#: then would have enforced no principle and merely halted builds on
+#: requirements nothing could resolve -- the exact s-i2c failure the downgrade
+#: was added to fix. `normalize.resolve_indirect` now asks every one of them
+#: whether the behaviour is visible through another requirement's port, so a
+#: requirement that still has none has been ASKED, and the honest disposition
+#: for it is `ABANDONED`, not a softened claim that no port shows it.
+DOWNGRADABLE: frozenset[str] = frozenset({"ABANDONED"})
 
 
 def to_issue(req_uid: str, v: str, detail: str = "", *,

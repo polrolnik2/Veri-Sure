@@ -1,15 +1,27 @@
-"""A build may proceed with UNOBSERVABLE itemised, and with nothing else.
+"""A build may proceed with ABANDONED itemised, and with nothing else.
 
 Measured on s-i2c: the reference-model gate failed with 34 issues of which only
-9 (VIOLATES) were anything the debug loop could clear. Seven were UNOBSERVABLE,
-and no turn of any loop ever clears one -- `ROUTE` sends it to spec authoring,
-which is outside the pipeline. So a spec containing one internal-mechanism
-sentence halts the build permanently, and that is not a rare spec: this one has
-8 of 77.
+9 (VIOLATES) were anything the debug loop could clear. Seven could not be
+cleared by any turn of any loop, so a spec containing one internal-mechanism
+sentence halted the build permanently -- and that is not a rare spec: this one
+has 8 of 77.
 
-The downgrade does not hide anything. The requirement stays in `dispositions`,
-stays undischarged, and still renders on the gate. The plan objects to SILENT
-omission; an itemised warning naming the requirement and the reason is the
+WHAT CHANGED, and it is the whole point of the split. `UNOBSERVABLE` used to be
+the downgradable one. It is a claim about the REQUIREMENT -- that no port shows
+the behaviour -- and this pipeline measured that claim wrong at scale, so
+softening it let a build pass on an assertion the evidence did not support.
+`normalize.resolve_indirect` now asks every blind requirement whether the
+behaviour is visible through another requirement's port. One that still has no
+route has been ASKED, and `ABANDONED` says the narrower thing that is actually
+known: we could not turn this requirement into a check we can exercise.
+
+Reaching `UNOBSERVABLE` or `NOT_EXERCISED` now means a stage did not run, which
+is a harness defect and blocks.
+
+The downgrade does not hide anything. The requirement stays in `dispositions`
+with its reason, is counted on the face of the gate, and leaves the denominator
+of every rate rather than quietly passing. The objection is to SILENT omission;
+an itemised warning naming the requirement and what was attempted is the
 opposite of silent.
 """
 
@@ -18,23 +30,33 @@ from __future__ import annotations
 from specflow.refmodel import verdict as V
 from specflow.schema import has_errors
 
-ADVISORY = frozenset({"UNOBSERVABLE"})
+ADVISORY = frozenset({"ABANDONED"})
 
 
-def test_unobservable_downgrades_and_the_build_proceeds():
-    issues = V.issues({"REQ-0001": "UNOBSERVABLE"}, advisory=ADVISORY)
+def test_an_abandoned_requirement_downgrades_and_the_build_proceeds():
+    issues = V.issues({"REQ-0001": "ABANDONED"}, advisory=ADVISORY)
     assert [i.severity for i in issues] == ["warning"]
     assert not has_errors(issues), "the gate stops failing on it"
 
 
+def test_unobservable_no_longer_downgrades_because_it_now_means_a_skipped_stage():
+    """It was softenable while nothing could give a blind requirement a route.
+    Now `resolve_indirect` asks every one of them, so reaching this verdict
+    means the pass did not run -- and a skipped stage should halt a build."""
+    issues = V.issues({"REQ-0001": "UNOBSERVABLE"},
+                      advisory=frozenset({"UNOBSERVABLE"}))
+    assert [i.severity for i in issues] == ["error"]
+    assert has_errors(issues)
+
+
 def test_the_requirement_is_still_reported():
     """Downgraded is not dropped -- that is the whole distinction."""
-    issues = V.issues({"REQ-0001": "UNOBSERVABLE"},
-                      {"REQ-0001": "counter is internal"}, advisory=ADVISORY)
+    issues = V.issues({"REQ-0001": "ABANDONED"},
+                      {"REQ-0001": "no observation route found"},
+                      advisory=ADVISORY)
     assert len(issues) == 1
     assert "REQ-0001" in issues[0].path
-    assert "return to spec authoring" in issues[0].message, "the route survives"
-    assert "counter is internal" in issues[0].message
+    assert "no observation route found" in issues[0].message
 
 
 def test_nothing_else_can_be_downgraded_even_if_asked():
@@ -48,13 +70,13 @@ def test_nothing_else_can_be_downgraded_even_if_asked():
     issues = V.issues(every, advisory=frozenset(V.BLOCKING))
     downgraded = {i.path.rsplit(".", 1)[-1] for i in issues
                   if i.severity == "warning"}
-    assert downgraded == {"unobservable", "abandoned"}
+    assert downgraded == {"abandoned"}
     assert has_errors(issues), "everything else still fails the gate"
 
 
 def test_off_by_default():
-    assert [i.severity for i in V.issues({"R": "UNOBSERVABLE"})] == ["error"]
-    assert V.DOWNGRADABLE == frozenset({"ABANDONED", "UNOBSERVABLE"})
+    assert [i.severity for i in V.issues({"R": "ABANDONED"})] == ["error"]
+    assert V.DOWNGRADABLE == frozenset({"ABANDONED"})
 
 
 def test_an_earned_give_up_is_the_other_downgradable_verdict():

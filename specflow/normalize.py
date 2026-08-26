@@ -35,6 +35,7 @@ be the same event.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -45,6 +46,8 @@ from .fanout import compose, json_block, shared_block
 from .model_io import ModelPort
 from .schema import Issue
 from .stage import StageResult, run_fanout, run_stage
+
+logger = logging.getLogger(__name__)
 
 STAGE = "normalize"
 
@@ -75,6 +78,50 @@ class Activation(BaseModel):
         return bool(self.inputs)
 
 
+class Route(BaseModel):
+    """How a requirement is observed at a port it does not itself name.
+
+    ONE OF SEVERAL ALTERNATIVES. Each route independently suffices, and more
+    routes mean a more robust check -- which is the opposite of `Reach` below,
+    where every hop is required. Conflating the two would let a requirement look
+    reachable on one of three necessary steps.
+
+    A POINTER IS NOT A ROUTE. `{port, through_req}` tells the oracle author
+    where to look and nothing about what to expect there, which is how an
+    indirect check becomes a restatement of the requirement it borrowed from.
+    `shows` carries the DISCRIMINATION: "busy is observable" is useless, "busy
+    stays low for a glitch narrower than the filter depth and rises for one at
+    or above it" is an oracle.
+    """
+
+    #: A declared OUTPUT port the behaviour reaches.
+    port: str = ""
+    #: The requirement whose own text names that port.
+    through_req: str = ""
+    #: When that port carries THIS requirement's effect rather than the other's.
+    when: str = ""
+    #: What the port does when this requirement holds, AND when it does not.
+    #: Two cases, or there is nothing for a check to discriminate between.
+    shows: str = ""
+
+
+class Reach(BaseModel):
+    """One hop toward the state a requirement's activation needs.
+
+    ONE HOP, NOT A CHAIN. Normalisation sees one requirement against the merged
+    set and can answer "to be in START_B, REQ-0012 must have just fired"
+    reliably; asking it for the whole chain back to reset asks it to hold the
+    design's state machine in its head, and one wrong link invalidates the rest.
+    The transitive walk is mechanical -- see `reaching`.
+
+    `activation` reuses `Activation` verbatim rather than inventing a second
+    vocabulary for "what must be driven".
+    """
+
+    through_req: str = ""
+    activation: Activation = Field(default_factory=Activation)
+
+
 class NormalizedRequirement(BaseModel):
     req_uid: str = ""
     activation: Activation = Field(default_factory=Activation)
@@ -86,10 +133,22 @@ class NormalizedRequirement(BaseModel):
     #: UNOBSERVABLE from a mistyped port name.
     unobservable_reason: str = ""
     expectation: str = ""
+    #: Alternatives, any one sufficient. Empty for a directly observable
+    #: requirement. `observable` then holds the ports it is decidable at by ANY
+    #: route, so every downstream stage keeps reading one field.
+    observed_via: list[Route] = Field(default_factory=list)
+    #: Prerequisites, ALL required, one hop each. Empty when the activation is
+    #: `input_only` -- there is nothing to reach, the values are simply driven.
+    activated_via: list[Reach] = Field(default_factory=list)
 
     @property
     def unobservable(self) -> bool:
         return not self.observable
+
+    @property
+    def indirect(self) -> bool:
+        """Observed at a port its own text does not name."""
+        return bool(self.observed_via)
 
 
 class NormalizeOutput(BaseModel):
@@ -197,8 +256,15 @@ Reply with ONE JSON object and nothing else:
 """
 
 
-def shared_prefix(contract_json: str, contract: dict) -> str:
+def shared_prefix(contract_json: str, contract: dict, *,
+                  system: str = "", note: str = "") -> str:
     """Byte-identical across every requirement of one node.
+
+    `system` and `note` let the INDIRECT pass reuse the port lists under a
+    different question. It needs its own prefix rather than a different item
+    block: the default note ends "if the requirement is about one of those,
+    `observable` is empty", which is the first pass's instruction and the
+    exact opposite of what the second pass is asking.
 
     The OUTPUT ports are listed here rather than left to be inferred from the
     contract JSON, for the reason `suite_shared_prefix` (`testcase_agent.py:665`)
@@ -217,13 +283,13 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
         if p.get("dir") == "input" and p.get("name")
     ]
     return shared_block(
-        ("system", SYSTEM),
+        ("system", system or SYSTEM),
         ("contract_json", contract_json),
-        ("output_ports",
-         json.dumps(outputs, indent=2)
-         + "\n\nThese are the ONLY names `observable` may contain. Anything else "
-           "named in the requirement is internal to the design; if the "
-           "requirement is about one of those, `observable` is empty."),
+        ("output_ports", json.dumps(outputs, indent=2) + "\n\n" + (
+            note or
+            "These are the ONLY names `observable` may contain. Anything else "
+            "named in the requirement is internal to the design; if the "
+            "requirement is about one of those, `observable` is empty.")),
         ("input_ports", json.dumps(inputs, indent=2)
          + "\n\nThese are the only names `activation.inputs` may contain."),
     )
@@ -242,6 +308,144 @@ def build_prompt_one(
         issues=issues,
         previous=previous,
     )
+
+
+
+INDIRECT_SYSTEM = """\
+A requirement has come back with NO declared output port its behaviour is
+directly visible on. Before that is accepted as a hole in the specification,
+you are asked the narrower question the first pass could not: is the behaviour
+visible INDIRECTLY, through what it makes some OTHER requirement do?
+
+This is not a second chance to reach for the nearest port. It is a different
+question, and it has a real answer more often than the first pass suggests: an
+FSM state is not a port, but the requirements describing behaviour IN each state
+name real ports, so the state is observable through what it makes those
+requirements do.
+
+TWO INDEPENDENT QUESTIONS. Answer both, or say plainly that you cannot.
+
+OBSERVATION -- `observed_via`, a list of ALTERNATIVES, any one sufficient.
+  port         a declared OUTPUT port, named by the OTHER requirement
+  through_req  that requirement's uid
+  when         the condition under which that port carries THIS requirement's
+               effect rather than the other requirement's own
+  shows        what the port does when this requirement HOLDS, **and what it
+               does when it does not**
+
+  `shows` MUST NAME TWO CASES. "busy is observable" is useless. "busy stays low
+  for a glitch narrower than the filter depth, and rises for one at or above it"
+  is something a check can be written on. A route with one case will be
+  rejected: a check over it would pass any design, including one with no such
+  behaviour at all.
+
+ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
+  Give this only when the activation cannot be stated as input values. "cmd is
+  WRITE and ena is 1" is drivable and needs nothing here. "while the FSM is in
+  START_B" is not: something has to have put it there.
+
+  through_req  the requirement whose behaviour puts the design in this state
+  activation   what that requirement's own activation prescribes -- text, and
+               inputs where they can be stated
+
+  ONE HOP ONLY. Say what must have just happened, not the whole sequence back
+  to reset. The chain is followed mechanically from the hops every requirement
+  gives; a whole chain guessed here would invalidate everything after its first
+  wrong link.
+
+IF THERE IS NO ROUTE, SAY SO. Return empty lists and leave
+`unobservable_reason` as it stands. An honest "nothing observes this" is worth
+more than a route that does not discriminate -- that route would produce a check
+that passes everything, which is the failure this whole pipeline exists to
+prevent.
+"""
+
+
+def build_indirect_prompt(
+    requirement: dict,
+    shape: NormalizedRequirement,
+    others: list[NormalizedRequirement],
+    contract_json: str,
+    contract: dict,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    """The blind requirement, its own first-pass reading, and the others'.
+
+    `others` carries `req_uid`, `observable`, `activation` and `expectation`
+    only -- the vocabulary needed to name a route, and nothing that would let
+    this become a second attempt at the first pass's job.
+    """
+    return compose(
+        shared_prefix(
+            contract_json, contract, system=INDIRECT_SYSTEM,
+            note="A route may name ANY of these ports -- the point of this pass "
+                 "is that the port belongs to another requirement, not to this "
+                 "one. `observed_via[].port` must be one of them."),
+        "\n\n".join([
+            json_block("requirement", requirement),
+            json_block("its_first_pass_reading", shape.model_dump()),
+            json_block("the_other_requirements", [
+                {"req_uid": o.req_uid, "observable": o.observable,
+                 "activation": o.activation.model_dump(),
+                 "expectation": o.expectation}
+                for o in others if o.req_uid != shape.req_uid
+            ]),
+        ]),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def gate_indirect(out: NormalizeOutput, *, uid: str,
+                  contract: dict, known: set[str]) -> list[Issue]:
+    """A route has to be usable, or it is worse than no route at all.
+
+    The one rejection that matters is `shows` naming a single case. A check
+    written over "the port shows X" with nothing to contrast against passes any
+    design that ever shows X, including one with none of the behaviour -- which
+    is the vacuity failure, arriving one stage earlier than usual and harder to
+    see because the route looks like progress.
+    """
+    issues: list[Issue] = []
+    outputs = _ports(contract, "output")
+    if not out.normalized:
+        return [Issue("error", f"normalize.{uid}.indirect",
+                      "no answer returned; give empty lists if there is no route")]
+    norm = out.normalized[0]
+    for i, route in enumerate(norm.observed_via):
+        path = f"normalize.{uid}.observed_via[{i}]"
+        if route.port not in outputs:
+            issues.append(Issue("error", path,
+                                f"{route.port!r} is not a declared output port "
+                                f"(declared: {sorted(outputs)})"))
+        if route.through_req and route.through_req not in known:
+            issues.append(Issue("error", path,
+                                f"{route.through_req!r} is not a requirement uid"))
+        if route.through_req == uid:
+            issues.append(Issue("error", path,
+                                "a requirement cannot be observed through "
+                                "itself -- that is the direct case, and the "
+                                "first pass already said there is none"))
+        if len(route.shows.strip()) < 2 or " not " not in f" {route.shows} " \
+                and "otherwise" not in route.shows.lower() \
+                and "does not" not in route.shows.lower() \
+                and " and " not in route.shows.lower():
+            issues.append(Issue(
+                "error", path,
+                "`shows` must name what the port does when the requirement "
+                "HOLDS and what it does when it does NOT. One case is not a "
+                "discrimination, and a check written over it would pass a "
+                "design with none of this behaviour"))
+    for i, hop in enumerate(norm.activated_via):
+        path = f"normalize.{uid}.activated_via[{i}]"
+        if hop.through_req not in known:
+            issues.append(Issue("error", path,
+                                f"{hop.through_req!r} is not a requirement uid"))
+        if hop.through_req == uid:
+            issues.append(Issue("error", path,
+                                "a requirement cannot be its own prerequisite"))
+    return issues
 
 
 def parse_response(text: str) -> NormalizeOutput:
@@ -376,6 +580,133 @@ def run_normalize_fanout(
             merged.append(norm.model_copy(
                 update={"req_uid": str(req.get("uid") or "")}))
     return merged, results
+
+
+
+#: How far to follow `activated_via` hops before giving up. A reference model's
+#: state machine is shallow; a chain longer than this is more likely a cycle or
+#: a misreading than a real prerequisite sequence.
+REACH_DEPTH = 6
+
+
+def reaching(uid: str, by_uid: dict[str, NormalizedRequirement],
+             *, depth: int = REACH_DEPTH) -> tuple[list[Reach], str]:
+    """The full prerequisite chain for one requirement. `(chain, why_not)`.
+
+    NORMALISATION EMITS LOCAL EDGES; THIS COMPUTES THE CLOSURE. Each requirement
+    answers only "what must have just happened", which is a judgement it can
+    make against the merged set. Following those hops until every prerequisite
+    is `input_only` is a graph walk, and a graph walk is not a thing to ask a
+    model for -- one wrong link would invalidate everything after it.
+
+    Ordered nearest-first, then reversed so the caller reads it as a SEQUENCE to
+    drive: the deepest prerequisite happens first.
+
+    A CYCLE IS A SPECIFICATION FINDING, not a hang. REQ-A reachable only via
+    REQ-B reachable only via REQ-A says the two describe each other and neither
+    says how to get in, which is exactly the kind of hole this pipeline exists
+    to surface rather than iterate on.
+    """
+    chain: list[Reach] = []
+    seen = {uid}
+    # `(hop, who named it)`, so a cycle can name the EDGE that closes it rather
+    # than the requirement the walk happened to start from.
+    frontier = [(h, uid) for h in
+                (by_uid[uid].activated_via if uid in by_uid else [])]
+    for _ in range(max(1, depth)):
+        if not frontier:
+            return list(reversed(chain)), ""
+        nxt: list[tuple[Reach, str]] = []
+        for hop, came_from in frontier:
+            if hop.through_req in seen:
+                return [], (
+                    f"the prerequisite chain closes on itself: {came_from} is "
+                    f"reachable only through {hop.through_req}, which is "
+                    f"already in the chain from {uid}. The requirements "
+                    f"describe each other and neither says how to enter the "
+                    f"state")
+            seen.add(hop.through_req)
+            chain.append(hop)
+            nxt += [(h, hop.through_req) for h in
+                    (by_uid[hop.through_req].activated_via
+                     if hop.through_req in by_uid else [])]
+        frontier = nxt
+    return [], (f"{uid} needs more than {depth} prerequisite hops, which is "
+                f"more likely a misreading than a real sequence")
+
+
+
+def resolve_indirect(
+    *,
+    normalized: list[NormalizedRequirement],
+    requirements: list[dict],
+    contract_json: str,
+    contract: dict,
+    port: ModelPort,
+    max_repairs: int = 2,
+    fanout: bool = True,
+) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
+    """Ask the blind requirements the second question. Returns the merged set.
+
+    EVERY UNOBSERVABLE REQUIREMENT COMES THROUGH HERE. Not a subset, and not
+    only the ones that look promising: `UNOBSERVABLE` is a claim that no port
+    shows the behaviour, and this pipeline has already measured that claim wrong
+    at scale -- normalisation called 27 of 77 requirements unobservable by
+    reading each one's MECHANISM rather than its effect, and 10 of the 27
+    already had working checks against real output ports.
+
+    A SECOND PASS, NOT A CHANGE TO THE FAN-OUT. `run_normalize_fanout` rests on
+    an assumption it states -- "Requirements do not constrain each other... Each
+    requirement's activation and observable are independent of every other's" --
+    which is true for the direct case and false for exactly this one. So the
+    fan-out keeps its assumption where it holds, and this runs after the merge,
+    over the blind subset only, with the merged set as its evidence.
+
+    AND THIS IS WHY IT BELONGS AT NORMALISATION rather than at the oracle stage.
+    A corrected `observable` propagates to S2, S3, stimulus and [O]: every
+    downstream stage plans against the route. Repairing it later would leave the
+    testplan built from the claim that was wrong.
+    """
+    blind = [n for n in normalized if n.unobservable]
+    if not blind:
+        return list(normalized), []
+    by_uid = {str(r.get("uid") or ""): r for r in requirements}
+    known = {n.req_uid for n in normalized}
+
+    def one(shape: NormalizedRequirement) -> StageResult[NormalizeOutput]:
+        return run_stage(
+            stage=f"{STAGE}_indirect_{shape.req_uid}",
+            port=port,
+            build_prompt=lambda issues, previous: build_indirect_prompt(
+                by_uid.get(shape.req_uid, {}), shape, normalized,
+                contract_json, contract, issues, previous),
+            parse=parse_response,
+            gate=lambda out: gate_indirect(
+                out, uid=shape.req_uid, contract=contract, known=known),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(blind, one) if fanout else [one(b) for b in blind]
+    routed: dict[str, NormalizedRequirement] = {}
+    for shape, result in zip(blind, results):
+        if not result.ok or not result.output.normalized:
+            continue
+        answer = result.output.normalized[0]
+        if not answer.observed_via:
+            continue          # an honest "no route" -- see INDIRECT_SYSTEM
+        # `observable` now holds the ports it is decidable at BY ANY ROUTE, so
+        # every downstream consumer keeps reading one field. The reason goes,
+        # because it is no longer true.
+        routed[shape.req_uid] = shape.model_copy(update={
+            "observable": sorted({r.port for r in answer.observed_via if r.port}),
+            "unobservable_reason": "",
+            "observed_via": list(answer.observed_via),
+            "activated_via": list(answer.activated_via),
+        })
+    merged = [routed.get(n.req_uid, n) for n in normalized]
+    logger.info("normalize: %d of %d unobservable requirement(s) resolved "
+                "indirectly", len(routed), len(blind))
+    return merged, list(results)
 
 
 def unobservable(normalized: list[NormalizedRequirement]) -> dict[str, str]:

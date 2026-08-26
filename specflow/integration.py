@@ -24,7 +24,7 @@ from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
 from .model_io import PortSettings, make_port
-from .normalize import run_normalize_fanout
+from .normalize import resolve_indirect, run_normalize_fanout
 from .normalize import write_artifacts as write_normalized
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
@@ -464,6 +464,16 @@ def build_artifacts(
             requirements=reqs, contract_json=contract_json, contract=contract,
             port=port, max_repairs=max_repairs, fanout=fanout,
         )
+        # EVERY UNOBSERVABLE REQUIREMENT IS ASKED THE SECOND QUESTION, before
+        # anything downstream is planned from the first answer. A corrected
+        # `observable` reaches S2, S3, stimulus and [O]; a correction made later
+        # would leave the testplan built from the claim that was wrong.
+        normalized, indirect_results = resolve_indirect(
+            normalized=normalized, requirements=reqs,
+            contract_json=contract_json, contract=contract,
+            port=port, max_repairs=max_repairs, fanout=fanout,
+        )
+        norm_results = list(norm_results) + list(indirect_results)
     except _Reused:
         pass
     except Exception as exc:  # noqa: BLE001

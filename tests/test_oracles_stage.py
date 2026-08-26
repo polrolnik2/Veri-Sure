@@ -997,3 +997,35 @@ def test_nothing_is_abandoned_without_an_attempt():
         normalized={"REQ-0000": {"observable": [], "unobservable_reason": "x"}},
         abandoned={})
     assert out["REQ-0000"] == "UNOBSERVABLE", "blocking, because nobody tried"
+
+
+def test_a_requirement_the_resolution_pass_could_not_route_is_abandoned():
+    """It has been ASKED, so the honest disposition is about us, not about it.
+
+    `UNOBSERVABLE` claims no port shows the behaviour. After `resolve_indirect`
+    has offered every blind requirement the indirect route and come back empty,
+    what is known is narrower: we could not turn this into a check we can
+    exercise.
+    """
+    from specflow.oracles_stage import _dispositions
+
+    asked = {"REQ-0000": {"observable": [], "unobservable_reason": "internal",
+                          "observed_via": []}}
+    out, why = _dispositions(
+        requirements=[{"uid": "REQ-0000"}], trusted=[], rejected={},
+        had_source=set(), normalized=asked,
+        abandoned={"REQ-0000": "no observation route found"})
+    assert out["REQ-0000"] == "ABANDONED"
+    assert why["REQ-0000"] == "no observation route found"
+
+
+def test_a_normalized_form_predating_the_pass_is_not_treated_as_asked():
+    """Absence of `observed_via` is absence of an attempt, not a failed one --
+    abandoning on it would discard requirements nothing ever asked about."""
+    from specflow.oracles_stage import _dispositions
+
+    never_asked = {"REQ-0000": {"observable": [], "unobservable_reason": "x"}}
+    out, _ = _dispositions(
+        requirements=[{"uid": "REQ-0000"}], trusted=[], rejected={},
+        had_source=set(), normalized=never_asked, abandoned={})
+    assert out["REQ-0000"] == "UNOBSERVABLE", "blocking: the pass did not run"
