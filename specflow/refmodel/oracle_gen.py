@@ -206,6 +206,45 @@ Rules, each for a reason:
 Do NOT name testpoints. Which testpoints exercise this requirement was decided
 by the test plan and is filled in for you.
 
+WHEN THE EFFECT IS NOT AT THE ACTIVATION INSTANT, USE THE TEMPORAL OPERATORS.
+Most requirements here are "when A, then B" where B lands LATER -- a command is
+accepted, and the bus activity it causes runs for many states afterwards. A
+check that reads the output on the same row the activation held reads it before
+anything has happened, passes every broken design, and is convicted vacuous.
+Six of the last run's fourteen vacuous checks were exactly this.
+
+    from specflow.refmodel.temporal import (after, eventually, throughout,
+                                            stable, pulse, worst)
+
+    def decide(trace):
+        windows = after(trace,
+                        lambda r: r['inputs']['cmd'] == 8,          # applies when
+                        until=lambda r: r['outputs']['cmd_ack'] == 1)  # closes on
+        return worst([eventually(w, lambda r: r['outputs']['sda_oen'] == w.value('din'))
+                      for w in windows])
+
+  after(trace, applies, until=closes)   the windows the requirement governs
+  eventually(w, holds)                  true at some row before the window shuts
+  throughout(w, holds)                  true at EVERY row of the window
+  stable(w, port)                       that port never changes in the window
+  pulse(w, port, width=1)               active for exactly `width` EDGES, once
+  worst(verdicts)                       fold many windows, failure first
+  w.value(port)                         the value AT the activation, for
+                                        expectations written against it
+
+`until` CLOSES ON A CONDITION, NEVER A COUNT. "wait until cmd_ack" is
+expressible; "wait 12 edges" is a guess, and a check that asserts a cycle count
+this specification does not state will either fail correct designs or assert
+nothing.
+
+A window that runs off the end of the trace returns UNKNOWN, not False --
+nothing was seen to be wrong, we stopped looking -- and these operators do that
+for you. Hand-written scanning gets it wrong in the direction that blames a
+correct design.
+
+Use plain Python where the requirement really is about one instant. These are
+for when it is not.
+
 Reply with ONE JSON object and nothing else:
 
 {
