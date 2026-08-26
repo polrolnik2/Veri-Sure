@@ -243,7 +243,7 @@ def run_refmodel(
     #: something that could have read it.
     oracle_set=None,
     #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
-    adequacy_rounds: int = 0,
+    adequacy_rounds: int = 1,
     reconsider_rounds: int = 0,
     advisory_verdicts: frozenset[str] = frozenset(),
 ) -> tuple[StageResult[RefModelOutput], str]:
@@ -336,7 +336,7 @@ def _closed_loop(
     oracle_liveness: dict[str, str] | None = None,
     witness_notes: dict[str, str] | None = None,
     oracle_set=None,
-    adequacy_rounds: int = 0,
+    adequacy_rounds: int = 1,
     #: Rounds of the OTHER edge, counted separately from `adequacy_rounds` --
     #: and separate because running both in one round makes them fight.
     #:

@@ -240,7 +240,9 @@ def adequacy_of(
     reference = _project(baseline.rows, ports)
 
     lines = mutate_model.executed_lines(source, contract, steps, base=base)
+    widths = _declared_widths(contract)
     in_scope = 0
+    unbuildable = 0
     survivors: list[str] = []
     diffs: list[str] = []
     for mutant in mutate_model.mutants(source, lines=lines, limit=propose):
@@ -250,6 +252,11 @@ def adequacy_of(
         if run.error:
             # A mutant that breaks the model outright tests nothing about the
             # oracle -- every oracle "fails" a model that will not run.
+            continue
+        if _unbuildable(run.rows, widths):
+            # Nothing can BE this design, so nothing is learned from an oracle
+            # not catching it. See `_unbuildable`.
+            unbuildable += 1
             continue
         if _project(run.rows, ports) == reference:
             continue                     # invisible to this clause: not evidence
@@ -263,15 +270,61 @@ def adequacy_of(
             # an instruction where thirty edges of eight pairs is a haystack.
             if not diffs:
                 diffs = _difference(baseline.rows, run.rows, ports)
+    # NO SILENT DISCARDS. Dropping the illegal mutants without saying how many
+    # trades one misleading number for another: "3 mutants in scope" reads very
+    # differently when 19 were thrown away to get there.
+    dropped = (f"; {unbuildable} illegal mutant(s) discarded -- no design can "
+               f"produce the value they put on a declared port"
+               if unbuildable else "")
     if in_scope < MIN_IN_SCOPE:
         return Finding(UNKNOWN, (
             f"only {in_scope} mutant(s) changed anything this oracle can see; "
-            f"{MIN_IN_SCOPE} are needed before silence means inadequacy"))
+            f"{MIN_IN_SCOPE} are needed before silence means inadequacy"
+            f"{dropped}"))
     if survivors:
-        return Finding(INADEQUATE, _survived(survivors, in_scope),
+        return Finding(INADEQUATE, _survived(survivors, in_scope) + dropped,
                        _instruct(diffs, len(survivors), in_scope))
     return Finding(
-        ADEQUATE, f"caught every one of {in_scope} mutants it could observe")
+        ADEQUATE,
+        f"caught every one of {in_scope} mutants it could observe{dropped}")
+
+
+
+def _declared_widths(contract: dict) -> dict[str, int]:
+    return {str(p.get("name")): int(p.get("width") or 1)
+            for p in (contract.get("io") or []) if p.get("name")}
+
+
+def _unbuildable(rows: list[dict], widths: dict[str, int]) -> str:
+    """The port and value that no implementation could ever produce, or "".
+
+    THE SIBLING OF THE EQUIVALENT-MUTANT FILTER. `_project` already drops a
+    mutant nothing can SEE; this drops one nothing can BE. `replay` does not
+    mask outputs to declared width, and deliberately -- `mask()` exists so an
+    unbounded-int model bug stays visible -- so a mutation of `self.scl_oen = 1`
+    to `= 2` puts the literal 2 on a one-bit port. No design can do that, so an
+    oracle "failing" to catch it is being convicted for treating the port as a
+    boolean, which is a style difference and not a correctness one.
+
+    Measured on n-i2c: 20 inadequate verdicts, of which 19 cited the same
+    illegal mutant (`survived line 27: 1 becomes 2`, `scl_oen` one bit wide).
+    Acting on them would have sent 20 oracles to be rewritten until they caught
+    a value no hardware can produce, and they would have come back over-strict.
+
+    Only MUTANT traces are screened. The baseline is not: a base model emitting
+    an out-of-width value is a real defect and hiding it here would be the
+    opposite of what `mask()` is for.
+    """
+    for row in rows:
+        for name, value in (row.get("outputs") or {}).items():
+            width = widths.get(name)
+            if width is None:
+                continue
+            if not isinstance(value, int) or isinstance(value, bool):
+                continue
+            if value < 0 or value >= (1 << width):
+                return f"{name}={value} on a {width}-bit port"
+    return ""
 
 
 def assess(

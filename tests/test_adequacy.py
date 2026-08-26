@@ -153,13 +153,29 @@ def test_it_runs_after_the_debug_loop_not_inside_it():
     assert converged < measured
 
 
-def test_a_strengthening_round_is_off_by_default():
+def test_one_strengthening_round_runs_by_default():
+    """One retry: debug, mutate the shipped model, strengthen what caught
+    nothing, debug once more -- TWO reference models in total.
+
+    It shipped at 0 while adequacy could only be trusted to measure. n-i2c
+    reported 46 CONFORMS of which 6 could be shown to discriminate, and nothing
+    was done about the other 40, which is measuring a set and acting on none
+    of it.
+
+    The default is only safe alongside `_unbuildable`: 19 of n-i2c's 20
+    inadequacy findings cited one mutant putting the literal 2 on a one-bit
+    port, and strengthening against those would have returned 20 oracles
+    over-strict. The two are pinned together here so the default cannot outlive
+    the filter that justifies it.
+    """
     import inspect
 
-    from specflow.refmodel import compose
+    from specflow.refmodel import adequacy, compose
 
     sig = inspect.signature(compose.run_refmodel)
-    assert sig.parameters["adequacy_rounds"].default == 0
+    assert sig.parameters["adequacy_rounds"].default == 1
+    assert hasattr(adequacy, "_unbuildable"), (
+        "a strengthening round must not run without the illegal-mutant filter")
 
 
 # ------------------------------------------------------- the loop end to end
@@ -523,3 +539,41 @@ def test_the_author_gets_the_counterexample_and_the_artifact_gets_the_mutation()
     assert _re.search(r"line \d+", rec.detail), rec.detail
     author = adequacy.inadequate(report)["REQ-0001"]
     assert not _re.search(r"line \d+", author), author
+
+
+# ------------------------------------------------- mutants nothing can BE
+#
+# The sibling of the equivalent-mutant filter. `_project` drops a mutant nothing
+# can SEE; this drops one nothing can BE.
+
+
+def test_a_mutant_putting_an_illegal_value_on_a_port_is_discarded():
+    """Measured on n-i2c: 20 inadequate verdicts, 19 citing the SAME illegal
+    mutant -- `survived line 27: 1 becomes 2` on a one-bit port. Acting on them
+    would have sent 20 oracles to be rewritten until they caught a value no
+    hardware can produce, and they would have come back over-strict."""
+    from specflow.refmodel.adequacy import _unbuildable
+
+    widths = {"q": 1, "wide": 8}
+    assert _unbuildable([{"outputs": {"q": 2}}], widths) == "q=2 on a 1-bit port"
+    assert _unbuildable([{"outputs": {"q": 1}}], widths) == ""
+    assert _unbuildable([{"outputs": {"wide": 255}}], widths) == ""
+    assert _unbuildable([{"outputs": {"wide": 256}}], widths)
+    assert _unbuildable([{"outputs": {"q": -1}}], widths)
+
+
+def test_an_undeclared_port_is_not_screened():
+    """Over-approximating here would drop real evidence, and the declared set
+    is the only thing this can be checked against."""
+    from specflow.refmodel.adequacy import _unbuildable
+
+    assert _unbuildable([{"outputs": {"internal": 999}}], {"q": 1}) == ""
+
+
+def test_the_widths_come_from_the_contract():
+    from specflow.refmodel.adequacy import _declared_widths
+
+    assert _declared_widths({"io": [
+        {"name": "q", "dir": "output", "width": 4},
+        {"name": "f", "dir": "output"},
+    ]}) == {"q": 4, "f": 1}

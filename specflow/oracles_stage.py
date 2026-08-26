@@ -75,6 +75,15 @@ NO_BOUND = "none"
 
 TRUSTED = "TRUSTED"
 
+#: Staging attempts per requirement. Small: each is a model call plus a gate,
+#: and the evidence below either sharpens the hint quickly or is not going to.
+STAGING_ATTEMPTS = 3
+
+#: Testpoints this stage may mint in total, separate from the debug loop's. A
+#: scenario found before the model exists is not competing with one found after
+#: it, and both end up in `stimulus_by_tp` where [D] can see what [O] added.
+STAGING_BUDGET = 12
+
 
 @dataclass(frozen=True)
 class OracleSet:
@@ -640,6 +649,14 @@ def run_oracle_stage(
     #: only check of any kind that connects an oracle to ITS requirement --
     #: without it nothing does, on a run with no variants.
     want_correspondence: bool = False,
+    #: Stage the scenarios nothing reaches, before anything is frozen. Off by
+    #: default because it costs a model call per attempt; the measurement it
+    #: replaces is z-i2c's 33 unexercised oracles and `stimulus_added: 0`.
+    want_staging: bool = False,
+    staging_attempts: int = STAGING_ATTEMPTS,
+    #: [O]'s own budget, separate from the debug loop's. A scenario found before
+    #: the model exists is not competing with one found after it.
+    staging_budget: int = STAGING_BUDGET,
     run_dir: Path | None = None,
     max_repairs: int = 2,
     #: Verify-repair-verify rounds over the whole set, on top of the per-oracle
@@ -926,6 +943,30 @@ def run_oracle_stage(
                 continue
             held[o.req_uid] = o
 
+    # EVERY UNEXERCISED ORACLE GETS STAGING ATTEMPTS, before anything is frozen
+    # and before the reference model exists. `never_decides` is exactly the set:
+    # checks that returned no decision on any testpoint they name. z-i2c ended
+    # with 33 of these and `stimulus_added: 0`, because the only route to stage
+    # one was a debug-turn tool that was never called.
+    #
+    # What survives unstaged is ABANDONED rather than NOT_EXERCISED -- attempted
+    # and exhausted, with the record to prove it. What was never attempted stays
+    # NOT_EXERCISED and blocks, which is what stops the softening being free.
+    staging: dict[str, dict] = {}
+    if want_staging and witness:
+        abandoned, staging = stage_unexercised(
+            held={u: o for u, o in held.items() if u not in rejected},
+            unexercised=_L.never_decides(alive),
+            requirements=requirements, normalized=normalized or {},
+            contract=contract, testplan=testplan,
+            stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
+            base=base, attempts=staging_attempts, budget=staging_budget)
+        if abandoned:
+            # The set moved, so everything measured against it is stale.
+            alive = _liveness(
+                {u: o for u, o in held.items() if u not in rejected},
+                witness, contract, stimulus_by_tp, base=base)
+
     # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
     # that can be true. Excluding them from `trusted` is what stops the debug
     # loop deciding them, `run_all` counting them and the board showing them --
@@ -1067,6 +1108,12 @@ def run_oracle_stage(
                    # up, and beside the denominator they left, so a rate is
                    # never read against the wrong total.
                    "abandoned": dict(sorted(abandoned.items())),
+                   # STAGED N TIMES, NEVER REACHED vs NEVER ATTEMPTED. Two
+                   # different findings that were the same verdict until now.
+                   "staging": staging,
+                   "stimulus_added": {
+                       u: [t["staged"] for t in r["attempts"] if t.get("staged")]
+                       for u, r in staging.items()},
                    "abandoned_count": len(abandoned),
                    "considered": len(dispositions) - len(abandoned),
                    "testpoints_no_oracle_names": idle,
@@ -1136,6 +1183,234 @@ def _witness(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source, encoding="utf-8")
     return source, WITNESS
+
+
+
+# ----------------------------------------------------- the stimulus loop
+#
+# ALL UNEXERCISED ORACLES COME THROUGH HERE, and that is the point. z-i2c ended
+# with 33 of them and `stimulus_added: 0` on all three debug turns, because the
+# only route to stage one was a tool inside a turn that never called it.
+#
+# Detection and repair both belong at [O]. `build_artifacts` orders
+# normalize -> S2 -> S3 -> stimulus -> [O] -> [R], so the stimulus exists when
+# this runs, `stimulus_for_scenario` is a standalone generator, and liveness is
+# already measured against the WITNESS with no reference model in existence.
+
+def _evidence(ob, steps: list[dict], rep, result,
+              *, route_ports: set[str], reset_ports: frozenset[str]) -> dict:
+    """What one failed staging attempt actually established.
+
+    Five sources, none of them a model call, each answering a different
+    question -- because a retry that only rephrases is a retry that learns
+    nothing. `obligation.py` already draws the distinction this rests on: an
+    input-only activation "can be decided outright, by reading the stimulus
+    steps. No model, no replay, no doubt", while a state-dependent one "cannot
+    be confirmed. It CAN be refuted".
+    """
+    from .obligation import check_static
+
+    out: dict = {}
+    fired = check_static(ob, steps, reset_ports=reset_ports)
+    if fired is not None:
+        out["activation"] = f"{fired.status}: {fired.detail}"
+    rows = list(getattr(rep, "error", "") and [] or rep.rows)
+    if rows:
+        first = dict(rows[0]["outputs"])
+        moved: dict[str, int | None] = dict.fromkeys(first)
+        for row in rows:
+            for name, value in row["outputs"].items():
+                if moved.get(name) is None and value != first.get(name):
+                    moved[name] = row["edge"]
+        out["edges"] = len(rows)
+        out["inert"] = all(v is None for v in moved.values())
+        out["first_change"] = moved
+        if route_ports:
+            out["route_never_moved"] = sorted(
+                p for p in route_ports if moved.get(p) is None)
+    if getattr(rep, "error", ""):
+        out["replay_error"] = rep.error
+    if result is not None and result.detail:
+        out["the_check_says"] = result.detail
+    if getattr(rep, "notes", None):
+        out["notes"] = list(rep.notes)
+    return out
+
+
+def _diagnose(ev: dict) -> str:
+    """Which of the four failures this was. Each wants a DIFFERENT retry.
+
+    Ordered by how much is known: a mechanically certain miss first, a refuted
+    observation route last -- that one is a finding against normalisation and
+    NOT a reason to spend another attempt on the stimulus.
+    """
+    activation = str(ev.get("activation") or "")
+    if activation.startswith("not_fired"):
+        return "a required input value was never driven"
+    if ev.get("replay_error"):
+        return "the replay did not run"
+    if ev.get("inert"):
+        return "nothing in the design moved -- a pacing problem, not a values one"
+    if ev.get("route_never_moved"):
+        return ("the ports this requirement is observed on never moved, so the "
+                "observation route is what is wrong, not the stimulus")
+    return "the activation was driven and the check still saw nothing"
+
+
+def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
+    """What to stage, in the vocabulary S2 uses. Never a repeat.
+
+    `what_the_scenario_needs` goes where S2's `stimulus` field goes, so this is
+    prose about what must happen -- the harness generates the vectors and gates
+    them, which is what keeps a testpoint minted here indistinguishable from one
+    minted at build time.
+    """
+    act = (shape.get("activation") or {})
+    parts = [
+        f"Stage the situation this requirement is about: {act.get('text') or req.get('text', '')}",
+    ]
+    if act.get("inputs"):
+        parts.append("It applies when these inputs hold: "
+                     + ", ".join(f"{k}={v}" for k, v in sorted(act["inputs"].items())))
+    if shape.get("expectation"):
+        parts.append(f"What must then be true: {shape['expectation']}")
+    if ev:
+        parts += [
+            "",
+            f"Attempt {attempt} did not stage it. {_diagnose(ev)}.",
+            f"What that attempt actually produced: {json.dumps(ev, default=str)}",
+            "Change the steps in the light of that rather than restating them.",
+        ]
+    return "\n".join(parts)
+
+
+
+def stage_unexercised(
+    *,
+    held: dict,
+    unexercised: dict[str, str],
+    requirements: list[dict],
+    normalized: dict[str, dict],
+    contract: dict,
+    testplan: list[dict],
+    stimulus_by_tp: dict[str, list[dict]],
+    witness: str,
+    port,
+    base: str = "step",
+    attempts: int = STAGING_ATTEMPTS,
+    budget: int = STAGING_BUDGET,
+) -> tuple[dict[str, str], dict[str, dict]]:
+    """Stage the scenarios nothing reaches. `(abandoned, record)`.
+
+    THE TEST AT THE CENTRE IS `decide` RETURNING A VERDICT AT ALL. An oracle
+    abstains (`ok is None`) exactly when its activation never occurred
+    (`oracles.py:314-317`), so a non-`None` result IS the proof that the
+    scenario is now staged -- computed from the run, not claimed by the
+    generator.
+
+    THE LOOP IS BLIND TO WHICH VERDICT, AND MUST BE. `True` and `False` both
+    end it, identically. Gating on `True` would be the vacuity failure moved
+    down a level: stimulus tuned until the implementation passes is stimulus
+    selected to avoid finding bugs, and it would do so silently under a green
+    artifact. The loop is not allowed a preference because it is not allowed an
+    opinion about the design -- it asks "is this scenario staged", which is
+    settled the moment the check stops abstaining. `_worst` (`oracles.py:373`)
+    enforces the same discipline one level up, so that "a grown evidence set
+    only ever moves a verdict toward worse".
+
+    That blindness is also what makes running against the WITNESS sound. Whether
+    the scenario occurs is a property of stimulus and activation, not of the
+    design; whether the requirement HOLDS is the debug loop's question and is
+    not asked here. A loop that optimised for `True` against the witness would
+    be tuning the suite to one implementation's behaviour.
+
+    Appends only. Nothing existing is edited, so a grown stimulus set cannot
+    make a scenario stop occurring -- the `add_testcase` discipline.
+    """
+    from .ids import PREFIX_TESTPLAN, mint, next_index
+    from .obligation import Obligation
+    from .ports import classify
+    from .refmodel.oracles import decide, replay
+    from .testcase_agent import stimulus_for_scenario
+
+    abandoned: dict[str, str] = {}
+    record: dict[str, dict] = {}
+    if not unexercised or not witness:
+        return abandoned, record
+
+    _, resets, _ = classify(contract)
+    reset_ports = frozenset(resets)
+    by_uid = {str(r.get("uid") or ""): r for r in requirements}
+    added: list[str] = []
+
+    for uid in sorted(unexercised):
+        oracle = held.get(uid)
+        req = by_uid.get(uid)
+        if oracle is None or req is None:
+            continue
+        shape = normalized.get(uid) or {}
+        act = shape.get("activation") or {}
+        ob = Obligation(uid, str(act.get("text") or ""),
+                        dict(act.get("inputs") or {}),
+                        tuple(shape.get("observable") or ()))
+        route_ports = set(shape.get("observable") or ())
+        tries: list[dict] = []
+        evidence: dict | None = None
+        reached: int | None = None
+
+        for attempt in range(1, max(1, attempts) + 1):
+            if len(added) >= budget:
+                tries.append({"attempt": attempt, "outcome": "budget spent"})
+                break
+            steps = stimulus_for_scenario(
+                requirement=req, contract=contract, port=port,
+                what_the_scenario_needs=_hint(req, shape, evidence, attempt - 1),
+            )
+            if not steps:
+                tries.append({"attempt": attempt,
+                              "outcome": "nothing gate-clean was produced"})
+                continue
+            tp_uid = mint(PREFIX_TESTPLAN, next_index(
+                [str(t.get("uid", "")) for t in testplan]
+                + list(stimulus_by_tp), PREFIX_TESTPLAN))
+            stimulus_by_tp[tp_uid] = steps
+            testplan.append({
+                "uid": tp_uid, "covers": [f"{uid}@1"],
+                "stimulus": _hint(req, shape, None, 0),
+                "expected_response": "", "dimension": "D2_control_flow",
+            })
+            added.append(tp_uid)
+            if tp_uid not in oracle.tp_uids:
+                oracle.tp_uids.append(tp_uid)
+
+            rep = replay(witness, contract, steps, base=base)
+            result = None if rep.error else decide(oracle, rep.rows)
+            # THE TEST. Both True and False end the loop -- see the docstring.
+            if result is not None and result.ok is not None:
+                reached = attempt
+                tries.append({"attempt": attempt, "staged": tp_uid,
+                              "outcome": f"the check decided ({result.ok})"})
+                break
+            evidence = _evidence(ob, steps, rep, result,
+                                 route_ports=route_ports,
+                                 reset_ports=reset_ports)
+            tries.append({"attempt": attempt, "staged": tp_uid,
+                          "outcome": "the check still abstained",
+                          "diagnosis": _diagnose(evidence),
+                          "evidence": evidence})
+
+        record[uid] = {"attempts": tries, "reached_at_attempt": reached}
+        if reached is None:
+            # ATTEMPTED AND EXHAUSTED. What is known is that we could not stage
+            # it in N tries -- not that no stimulus could, which is a claim
+            # about the requirement this has no evidence for.
+            abandoned[uid] = "never reached"
+            logger.info("oracles: %s staged %d time(s), never reached", uid,
+                        sum(1 for t in tries if t.get("staged")))
+    if added:
+        logger.info("oracles: staged %d new testpoint(s) for %d requirement(s); "
+                    "%d still unreached", len(added), len(record), len(abandoned))
+    return abandoned, record
 
 
 def _decides_nothing(testplan: list[dict],

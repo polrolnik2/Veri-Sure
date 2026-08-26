@@ -262,7 +262,22 @@ async def run_specflow_node(
     #: Requirement-only oracles drive the loop; the judge stops deciding.
     variants: bool = False,
     correspondence: bool = False,
-    adequacy_rounds: int = 0,
+    #: Adequacy feedback rounds. 1 means: debug, mutate the shipped model, send
+    #: the oracles that caught nothing back to be strengthened, then debug ONCE
+    #: MORE against the strengthened set -- two reference models in total.
+    #:
+    #: Shipped at 1 rather than 0 because the alternative is measuring a set
+    #: and acting on none of it: n-i2c reported 46 CONFORMS of which only 6
+    #: could be shown to discriminate, and nothing was done about the other 40.
+    #:
+    #: Safe to default only now the illegal-mutant filter exists
+    #: (`adequacy._unbuildable`). Before it, 19 of n-i2c's 20 inadequacy
+    #: findings cited the same mutant putting the literal 2 on a one-bit port,
+    #: and a strengthening round would have rewritten 20 oracles to catch a
+    #: value no hardware can produce -- returning them over-strict, which the
+    #: over-strictness gate then rejects. Enabling this before that filter would
+    #: have realised the oscillation risk on the first round.
+    adequacy_rounds: int = 1,
     reconsider_rounds: int = 0,
     advisory_verdicts: frozenset[str] = frozenset(),
     extra_sources: Sequence[Path | str] = (),

@@ -474,11 +474,13 @@ def build_parser() -> argparse.ArgumentParser:
              "opposite ways; running both measured a net zero.",
     )
     p.add_argument(
-        "--adequacy-rounds", type=int, default=0,
-        help="After the debug loop converges, mutate the SHIPPED model and "
-             "re-ask any oracle a mutant got past. 0 measures adequacy and "
-             "acts on nothing, which is the default: the rate has to be "
-             "known before it is allowed to spend calls.",
+        "--adequacy-rounds", type=int, default=1,
+        help="After the debug loop converges, mutate the SHIPPED model, send "
+             "any oracle a mutant got past back to be strengthened, and debug "
+             "once more against the strengthened set. 1 is two reference "
+             "models in total. 0 measures adequacy and acts on nothing, which "
+             "was the default until the illegal-mutant filter made acting on "
+             "it safe.",
     )
     p.add_argument(
         "--correspondence", action="store_true",
