@@ -53,7 +53,7 @@ from __future__ import annotations
 import re
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import json
 
@@ -66,6 +66,7 @@ from .oracles import (
     ports_read,
     replay,
 )
+from .slicer import splice_methods
 from .trust import (CONVICTED, MIN_IN_SCOPE, SENSITIVE, UNKNOWN, _difference,
                     _steps_for,
                     _decide_over, _project)
@@ -158,8 +159,23 @@ class VariantOutput(BaseModel):
     reasoning: str = ""
     #: The sentence of the requirement this variant breaks, verbatim.
     clause: str = ""
-    #: A complete `Model`, correct in every other respect.
+    #: The CHANGED METHODS only, `name -> the whole def`. Spliced onto the
+    #: conforming implementation to produce `source`.
+    #:
+    #: Emitting the whole module cost 32% of a2-i2c's output tokens -- 948k over
+    #: 185 calls -- to re-type a median 283 of 289 unchanged code lines. And the
+    #: saving is the smaller half: naming the methods BOUNDS THE BLAST RADIUS.
+    #: A variant that rewrites five methods now has to say so, where before it
+    #: was visible only by diffing against the witness after the fact.
+    methods: dict[str, str] = Field(default_factory=dict)
+    #: A complete `Model`, correct in every other respect. Built by splicing
+    #: `methods`; still accepted verbatim, because a variant that genuinely has
+    #: to restructure the model should not be forced to lie about it in patches.
     source: str = ""
+    #: Why the splice failed, if it did. Carried rather than raised so the
+    #: repair loop gets it as an Issue -- a failed splice is the most actionable
+    #: feedback this stage produces: mechanical, exact, and not a judgement.
+    splice_error: str = ""
 
 
 class Variant(BaseModel):
@@ -184,9 +200,13 @@ Rules.
 2. The violation must be OBSERVABLE at the ports. A model that differs only in
    internal state is not a variant -- nothing can see it, so nothing can be
    asked to catch it.
-3. Produce a complete, runnable model with the same class name, the same
-   OUTPUT_PORTS, and the same method the conforming implementation defines.
-   Start from that implementation and change what the clause requires changing.
+3. SEND ONLY THE METHODS YOU CHANGE, not the whole model. Each one is the
+   complete `def name(self, ...)` including its body, and it is spliced onto
+   the conforming implementation by NAME -- so everything you do not send stays
+   exactly as it is, which is what rule 1 asks for. A method the conforming
+   implementation does not define is ADDED, so a helper or a new piece of state
+   is available to you; put new instance attributes in the method that already
+   initialises the others.
 4. Do not comment on the fact that it is wrong, do not add a `# BUG` marker, and
    do not leave the correct behaviour behind a flag. A variant that announces
    itself tests nothing.
@@ -197,8 +217,15 @@ Reply with ONE JSON object and nothing else:
 {
   "reasoning": "one or two sentences on what you changed and why it violates the clause",
   "clause": "the sentence of the requirement this variant breaks, verbatim",
-  "source": "the complete Python source of the violating model"
+  "methods": {
+    "_tick": "def _tick(self, i):\n    ...the whole method, changed...",
+    "step":  "def step(self, i):\n    ...only if you changed this one too..."
+  }
 }
+
+Fewer methods is better, and the smallest change that breaks the clause
+observably is the right one. If -- and only if -- the change genuinely cannot be
+expressed as whole methods, send `"source"` with the complete model instead.
 """
 
 
@@ -293,6 +320,22 @@ def build_prompt(
     )
 
 
+def parse_and_splice(text: str, conforming_source: str) -> VariantOutput:
+    """Parse, then build `source` from `methods` against the conforming model.
+
+    Done at PARSE time rather than in the gate so the gate keeps receiving one
+    thing -- a complete model -- and every check after it is unchanged. The
+    splice is how the model's answer is READ, not a judgement about it.
+    """
+    out = parse_response(text)
+    if out.source or not out.methods:
+        return out              # emitted whole, or emitted nothing to splice
+    spliced, errors = splice_methods(conforming_source, out.methods)
+    if errors:
+        return out.model_copy(update={"splice_error": "; ".join(errors)})
+    return out.model_copy(update={"source": spliced})
+
+
 def parse_response(text: str) -> VariantOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
@@ -323,6 +366,13 @@ def gate_one(
     """
     if out.reasoning.startswith(PARSE_ERROR):
         return [Issue("error", f"variant.{req_uid}.{kind}.response", out.reasoning)]
+    if out.splice_error:
+        return [Issue("error", f"variant.{req_uid}.{kind}.methods",
+                      f"the changed methods could not be spliced onto the "
+                      f"conforming model -- {out.splice_error}")]
+    if not out.source:
+        return [Issue("error", f"variant.{req_uid}.{kind}.methods",
+                      "no `methods` and no `source`: there is no design here")]
     # The same sandbox screen the reference model gets: a variant is generated
     # Python this process will execute. `requirements=[]` because a variant
     # carries no coverage map -- it is one design, not an answer to a fan-out.
@@ -401,7 +451,7 @@ def run_variant_gen(
                 contract=contract, conforming_source=conforming_source,
                 normalized=norm.get(uid), issues=issues, previous=previous,
             ),
-            parse=parse_response,
+            parse=lambda t: parse_and_splice(t, conforming_source),
             gate=lambda out: gate_one(
                 out, req_uid=uid, kind=kind, contract=contract,
                 conforming_source=conforming_source, steps=steps,

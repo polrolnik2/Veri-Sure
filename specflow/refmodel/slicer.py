@@ -249,3 +249,118 @@ def backward_slice(
         if not frontier and not pending:
             break
     return sorted(seen.values(), key=lambda b: b.start_line) or list(blocks)
+
+
+# --------------------------------------------------------------- splicing
+#
+# A METHOD IS THE UNIT OF CHANGE for a Python reference model, and it is the
+# unit both editors already use: `session.replace_method` splices by name and
+# `rtl_editor.replace_block` slices blocks only because Verilog offers no such
+# handle. Addressing by name rather than by line range is what makes it immune
+# to the context drift a unified diff has to fuzz around.
+
+
+def methods_of(source: str) -> list[str]:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    return [
+        n.name
+        for cls in ast.walk(tree)
+        if isinstance(cls, ast.ClassDef)
+        for n in cls.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+
+def method_span(source: str, method: str) -> tuple[int, int] | None:
+    """1-based inclusive line span of `method`, decorators included."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for cls in ast.walk(tree):
+        if not isinstance(cls, ast.ClassDef):
+            continue
+        for node in cls.body:
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == method):
+                start = min([node.lineno] + [d.lineno for d in node.decorator_list])
+                return start, int(node.end_lineno or node.lineno)
+    return None
+
+
+def indent_of(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
+def reindent(code: str, indent: str) -> str:
+    """Put `code` at `indent`, whatever indentation it arrived with.
+
+    A model handing back a method at column 0 is the common case and must not
+    become a syntax error inside a class body.
+    """
+    lines = list(code.strip("\n").splitlines())
+    if not lines:
+        return indent
+    base = min((len(ln) - len(ln.lstrip()) for ln in lines if ln.strip()), default=0)
+    return "\n".join((indent + ln[base:]) if ln.strip() else "" for ln in lines)
+
+
+def splice_methods(source: str, methods: dict[str, str]) -> tuple[str, list[str]]:
+    """Replace (or add) named methods in `source`. Returns `(result, errors)`.
+
+    Every error is phrased for a REPAIR LOOP rather than a log: a splice that
+    fails names the method and what the model defines, which is the most
+    actionable Issue this stage can produce -- mechanical, exact, and not a
+    judgement. `run_stage` already loops on Issues, so a bad patch costs one
+    round rather than a lost counterexample.
+
+    A method the base does not define is APPENDED to the class. A variant that
+    needs new state -- an edge detector, a saved previous value -- otherwise has
+    nowhere to put its helper, and forcing it back to whole-module emission for
+    that one case would give up the bound this exists to create.
+    """
+    errors: list[str] = []
+    if not methods:
+        return source, ["no methods given"]
+    out = source
+    for name, code in methods.items():
+        if not str(code or "").strip():
+            errors.append(f"{name}: empty replacement")
+            continue
+        span = method_span(out, name)
+        lines = out.splitlines()
+        if span is None:
+            # New method: append at the end of the class body, at the
+            # indentation the existing methods use.
+            existing = methods_of(out)
+            if not existing:
+                errors.append(f"{name}: the base source defines no methods to "
+                              f"splice into")
+                continue
+            last = method_span(out, existing[-1])
+            if last is None:            # unreachable in practice
+                errors.append(f"{name}: cannot locate {existing[-1]!r}")
+                continue
+            indent = indent_of(lines[last[0] - 1])
+            body = reindent(str(code), indent)
+            lines = lines[:last[1]] + [""] + body.splitlines() + lines[last[1]:]
+        else:
+            start, end = span
+            indent = indent_of(lines[start - 1])
+            body = reindent(str(code), indent)
+            lines = lines[:start - 1] + body.splitlines() + lines[end:]
+        candidate = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+        try:
+            ast.parse(candidate)
+        except SyntaxError as exc:
+            errors.append(f"{name}: the result does not parse: {exc}")
+            continue
+        if method_span(candidate, name) is None:
+            errors.append(f"{name}: after the splice there is no method named "
+                          f"{name!r} -- send the whole `def {name}(...)`")
+            continue
+        out = candidate
+    return out, errors

@@ -10,6 +10,9 @@ design that violates the requirement.
 
 from __future__ import annotations
 
+import json
+
+from specflow.refmodel import variants
 from specflow.refmodel import variants as V
 from specflow.refmodel.oracles import RequirementOracle
 from specflow.refmodel.trust import CONVICTED, SENSITIVE, UNKNOWN
@@ -392,3 +395,87 @@ def test_without_a_conforming_design_the_verdict_still_stands():
         {"TP-0000": STEPS})
     assert got == V.CONVICTED, why
     assert apart == ""
+
+
+# --- variants emit CHANGED METHODS, spliced onto the conforming model ----
+#
+# Whole-module emission cost 32% of a2-i2c's output tokens -- 948k over 185
+# calls -- to re-type a median 283 of 289 unchanged code lines. The tokens are
+# the smaller half: naming the methods bounds the blast radius, so a variant
+# that rewrites five methods has to say so.
+
+SPLICE_BASE = (
+    "class Model:\n"
+    "    OUTPUT_PORTS = ('q',)\n"
+    "\n"
+    "    def reset(self):\n"
+    "        self.q = 0\n"
+    "\n"
+    "    def step(self, i):\n"
+    "        self.q = i['d']\n"
+    "        return {'q': self.q}\n"
+)
+
+
+def _variant_reply(**kw):
+    return json.dumps({"reasoning": "r", "clause": "c", **kw})
+
+
+def test_changed_methods_are_spliced_and_the_rest_is_untouched():
+    out = variants.parse_and_splice(
+        _variant_reply(methods={"step": "def step(self, i):\n    self.q = 1\n"
+                                "    return {'q': self.q}"}), SPLICE_BASE)
+    assert not out.splice_error
+    assert "self.q = 1" in out.source
+    assert "def reset(self):" in out.source        # untouched, and still there
+    assert "OUTPUT_PORTS = ('q',)" in out.source
+    compile(out.source, "<variant>", "exec")       # and it is a real module
+
+
+def test_a_variant_may_ADD_a_method_it_needs():
+    """A variant needing new state has nowhere to put a helper otherwise, and
+    forcing it back to whole-module emission for that one case would give up
+    the bound this exists to create."""
+    out = variants.parse_and_splice(
+        _variant_reply(methods={"_edge": "def _edge(self, v):\n    return v"}), SPLICE_BASE)
+    assert not out.splice_error
+    assert "def _edge(self, v):" in out.source
+    from specflow.refmodel.slicer import methods_of
+    assert methods_of(out.source) == ["reset", "step", "_edge"]
+
+
+def test_a_splice_that_does_not_parse_becomes_a_REPAIRABLE_issue():
+    """The objection to patches was that they can fail to apply. They can --
+    and a failure names the method and the syntax error, which is the most
+    actionable Issue this stage produces. `run_stage` already loops on Issues,
+    so it costs a round, not a counterexample."""
+    out = variants.parse_and_splice(
+        _variant_reply(methods={"step": "def step(self, i):\n    return ("}), SPLICE_BASE)
+    assert out.splice_error and "does not parse" in out.splice_error
+    issues = variants.gate_one(
+        out, req_uid="REQ-0001", kind="action", contract={"io": []},
+        conforming_source=SPLICE_BASE, steps=[], observable=set())
+    assert issues and issues[0].severity == "error"
+    assert "could not be spliced" in issues[0].message
+    assert "step" in issues[0].message          # it names WHICH method
+
+
+def test_a_reply_with_neither_methods_nor_source_is_rejected():
+    issues = variants.gate_one(
+        variants.parse_and_splice(_variant_reply(), SPLICE_BASE),
+        req_uid="REQ-0001", kind="action", contract={"io": []},
+        conforming_source=SPLICE_BASE, steps=[], observable=set())
+    assert issues and "no design here" in issues[0].message
+
+
+def test_a_whole_module_reply_is_still_accepted():
+    """A variant that genuinely has to restructure the model should not be
+    forced to lie about it in patches."""
+    whole = SPLICE_BASE.replace("self.q = i['d']", "self.q = 0")
+    out = variants.parse_and_splice(_variant_reply(source=whole), SPLICE_BASE)
+    assert out.source == whole and not out.splice_error
+
+
+def test_the_prompt_asks_for_methods_rather_than_the_module():
+    assert "SEND ONLY THE METHODS YOU CHANGE" in variants.SYSTEM
+    assert '"methods"' in variants.SYSTEM
