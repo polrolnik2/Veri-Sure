@@ -142,3 +142,30 @@ def test_the_switch_reaches_the_command_line():
     assert "specflow_advisory_verdicts" in open(top).read()
     assert "--advisory-unobservable" in open(
         "benchmarks/run_chipverilog.py").read()
+
+
+def test_the_switch_passes_the_set_it_does_not_respell_it():
+    """SPELLING IT TWICE IS HOW THIS FLAG BECAME A NO-OP.
+
+    `DOWNGRADABLE` moved to {"ABANDONED"} and the CLI went on passing
+    {"UNOBSERVABLE"} -- a set with nothing downgradable in it -- so the switch
+    did nothing and every abandoned requirement would have halted the build it
+    exists to let past. No unit test caught it because none crossed from the
+    CLI to the verdict module; it was found by reading the invocation before a
+    live run.
+
+    Taking the set FROM `verdict` makes the two unable to disagree.
+    """
+    source = open("benchmarks/run_chipverilog.py").read()
+    assert "V.DOWNGRADABLE if args.advisory_abandoned" in source
+    assert 'frozenset({"UNOBSERVABLE"})' not in source
+
+
+def test_the_old_spelling_of_the_switch_still_works():
+    """Runs are reproduced from recorded invocations; silently dropping a flag
+    name turns an old command line into a different experiment."""
+    import benchmarks.run_chipverilog as R
+
+    args = R.build_parser().parse_args(
+        ["--task", "t", "--out", "o", "--advisory-unobservable"])
+    assert args.advisory_abandoned is True

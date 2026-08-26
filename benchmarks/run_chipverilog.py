@@ -35,6 +35,7 @@ if str(REPO_ROOT) not in sys.path:
 from eda_agent.config import load_openai_config  # noqa: E402
 from eda_agent.top_agent import TopAgent, TopAgentConfig  # noqa: E402
 from specflow.model_io import load_env_file  # noqa: E402
+from specflow.refmodel import verdict as V  # noqa: E402
 
 DES = REPO_ROOT / "benchmarks" / "chipverilog" / "Des"
 
@@ -297,8 +298,13 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_correspondence=args.correspondence,
             specflow_adequacy_rounds=args.adequacy_rounds,
             specflow_reconsider_rounds=args.reconsider_rounds,
+            # Taken FROM `verdict.DOWNGRADABLE` rather than spelled again here.
+            # Spelling it twice is how this flag became a no-op: DOWNGRADABLE
+            # moved to {"ABANDONED"} and the CLI went on passing
+            # {"UNOBSERVABLE"}, so the switch did nothing and every abandoned
+            # requirement would have halted the build it was meant to let past.
             specflow_advisory_verdicts=(
-                frozenset({"UNOBSERVABLE"}) if args.advisory_unobservable
+                V.DOWNGRADABLE if args.advisory_abandoned
                 else frozenset()),
         ),
     )
@@ -456,15 +462,21 @@ def build_parser() -> argparse.ArgumentParser:
              "which is what every run did before it existed",
     )
     p.add_argument(
-        "--advisory-unobservable", action="store_true",
-        help="Report UNOBSERVABLE as a warning rather than an error, so the "
-             "build proceeds with those requirements itemised and "
-             "undischarged instead of halting. Measured on s-i2c: the "
-             "reference-model gate failed with 34 issues of which only 9 were "
-             "the debug loop's, and 7 were UNOBSERVABLE -- which no turn of "
-             "any loop clears, because the route leaves the pipeline. Off by "
-             "default: halting on a spec defect is the current contract and "
-             "this has to be measured before it changes.",
+        "--advisory-abandoned", "--advisory-unobservable",
+        dest="advisory_abandoned", action="store_true",
+        help="Report ABANDONED as a warning rather than an error, so the build "
+             "proceeds with those requirements itemised, counted and out of "
+             "every rate's denominator instead of halting. An ABANDONED "
+             "requirement is one a bounded attempt RAN on and exhausted -- no "
+             "observation route found, never reached after N staging attempts, "
+             "or no check survived repair -- so there is no party left with a "
+             "move. Measured on s-i2c: the reference-model gate failed with 34 "
+             "issues of which only 9 were the debug loop's. Off by default: "
+             "halting is the current contract and this has to be measured "
+             "before it changes. `--advisory-unobservable` is the old spelling "
+             "and still works; UNOBSERVABLE itself stopped being downgradable "
+             "when the indirect-resolution pass gave those requirements "
+             "something to try, so reaching it now means a stage did not run.",
     )
     p.add_argument(
         "--reconsider-rounds", type=int, default=0,
