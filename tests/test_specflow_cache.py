@@ -306,3 +306,27 @@ def test_c5_a_fanned_stage_is_one_key_not_one_key_per_item():
     assert d["stage"] == "classify", "the report shows one item's name, not the family"
     assert d["calls"] == WARMUP_CALLS + 20
     assert d["verdict"] == "ok", "a healthy fanned stage must be judgeable at all"
+
+
+def test_a_two_word_family_is_not_split_at_its_first_underscore():
+    """`normalize_indirect` and `normalize` have DIFFERENT SHARED PREFIXES --
+    different system text, different port note -- so they warm separately and
+    cache separately. Pooled, a cold second pass hides behind a warm first one
+    and the report says nothing about the stage that was added.
+
+    Same defect as keying on the raw stage name, which gave 65 keys of one call
+    each and made the gate inert on exactly the runs it exists for.
+    """
+    from specflow.cache_stats import family
+
+    assert family("normalize_indirect_REQ-0002") == "normalize_indirect"
+    assert family("normalize_REQ-0002") == "normalize"
+
+
+def test_the_split_is_at_the_first_ITEM_not_the_first_underscore():
+    from specflow.cache_stats import family
+
+    assert family("variant_REQ-0028_trigger") == "variant"
+    assert family("classify_869") == "classify"
+    assert family("s3_TP-0000") == "s3"
+    assert family("oracles") == "oracles", "a single-call stage keeps its name"

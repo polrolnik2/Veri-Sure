@@ -43,6 +43,8 @@ Two accounting rules that stop the number from lying:
 
 from __future__ import annotations
 
+import re
+
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,13 +62,33 @@ MIN_HIT_RATE = 0.80
 MIN_CALLS_FOR_VERDICT = 8
 
 
+#: What an ITEM suffix looks like: a uid (`REQ-0004`, `TP-0012`) or a bare index
+#: (`869`). Everything before the first one is the family.
+_ITEM = re.compile(r"^(?:[A-Z]{2,4}-\d+|\d+)$")
+
+
 def family(stage: str) -> str:
     """The stage a per-item call belongs to: `classify_869` -> `classify`.
 
-    Stage names are `<family>_<item>` by convention across the fanned-out stages,
-    and the single-call stages have no underscore, so both shapes land correctly.
+    Split at the first ITEM segment rather than at the first underscore, because
+    a family can have two words. `normalize_indirect_REQ-0002` is the case that
+    forced this: splitting on the first underscore pooled the indirect-resolution
+    pass with the first normalisation pass, and THE TWO HAVE DIFFERENT SHARED
+    PREFIXES -- different system text, different port note -- so they warm
+    separately and cache separately. Pooled, a cold second pass hides behind a
+    warm first one and the report says nothing about the stage that was added.
+
+    That is the same defect this module's docstring already records one level
+    down, where keying on the raw stage name gave 65 keys of one call each and
+    made the gate inert on exactly the runs it exists for.
     """
-    return stage.split("_", 1)[0] if "_" in stage else stage
+    parts = stage.split("_")
+    kept: list[str] = []
+    for part in parts:
+        if _ITEM.match(part):
+            break
+        kept.append(part)
+    return "_".join(kept) or stage
 
 
 @dataclass(frozen=True)
