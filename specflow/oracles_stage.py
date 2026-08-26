@@ -1221,14 +1221,30 @@ def _strengthen(
     implementations and a whole debug budget could not satisfy -- it may be
     pinning a detail the requirement leaves open.
 
-    A replacement is kept only if it VERIFIES. An oracle strengthened to catch a
-    mutant very easily becomes over-strict -- that is the oscillation the plan
-    names -- and the honest handling is that the round simply fails to improve
-    it, not that a check no correct design satisfies gets promoted because it
-    was eager. The same guard covers the other direction: a check relaxed until
-    it stops disagreeing is the compliance ratchet gate 1 measured at
-    over-strict 27 -> 15 with convictions 2 -> 16, and a relaxation that goes
-    vacuous fails `verify_one` and leaves the previous check standing.
+    A replacement is kept only if it VERIFIES -- AND THAT GUARD IS DIRECTIONAL,
+    which this docstring used to hide. `verify_one` has four reject paths:
+    malformed (twice), correspondence off-target, and vacuous. NONE OF THEM IS
+    STRICTNESS. So it holds against a replacement that came back too WEAK and is
+    blind to one that came back too STRICT.
+
+    The half that works: a check relaxed until it stops disagreeing is the
+    compliance ratchet gate 1 measured at over-strict 27 -> 15 with convictions
+    2 -> 16, and a relaxation that goes vacuous fails `verify_one` and leaves
+    the previous check standing.
+
+    The half that does not, refuted by the run that spent this edge: t-i2c
+    accepted 5 replacements and REQ-0005 came back newly unsatisfiable by the
+    known-good control -- a check no correct design satisfies, promoted for
+    being eager, through the guard that this text claimed prevents it.
+
+    Nothing here can close that. The control detects over-strictness exactly and
+    may not gate, for the reason `verify_one` records: kept-or-rejected is the
+    one bit that leaks, and it selects the oracles the model is then repaired
+    against. `over_strict_after_repair` reports it instead, and a judge reading
+    requirement text against oracle source -- two texts, no implementation, the
+    standing correspondence already has -- is the only instrument that could
+    decide it. Untested; s-i2c's 15 control-failed oracles are the labelled set
+    to test it on.
     """
     reconsider = dict(reconsider or {})
     witness, witness_kind = _witness(

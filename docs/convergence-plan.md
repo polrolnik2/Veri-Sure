@@ -773,14 +773,55 @@ already records two occasions where I generalised too fast.
     after the fact — which is how the table above was built, without touching
     the field.
 
-20. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
+20. **Can a judge detect over-strictness from the spec alone?** The one gap no
+    gate can currently reach, and the one instrument allowed to reach it.
+
+    `verify_one` has four reject paths — malformed (twice), correspondence
+    off-target, vacuous. **None is strictness.** Both repair loops push
+    *tighter* (vacuity: "you pass something wrong"; adequacy: "a mutant got past
+    you"), and neither can be stopped from overshooting. Measured:
+
+    | | failed by the known-good control |
+    |---|---|
+    | s-i2c, repaired and kept (28) | **13 — 46%** |
+    | s-i2c, never repaired (30) | 2 — 6% |
+    | t-i2c, `_strengthen` kept (5) | 1 newly so — REQ-0005 |
+
+    The control detects this exactly and **may not gate**, for the reason
+    `verify_one` records: kept-or-rejected is the one bit that leaks, it selects
+    which oracles survive, the survivors are what the model is repaired against,
+    and the model is what `golden_check` scores. Gating on it tunes the model
+    toward the held-out grade transitively.
+
+    A judge reading **requirement text against oracle source** has standing the
+    designs do not — two texts, no implementation, so nothing about a design can
+    contaminate it. That is verbatim the argument `verify_one` already makes for
+    `correspondence`, which blocks on exactly that basis. The open question is
+    that correspondence asks a *target* question ("does this decide the
+    requirement it names at all") and over-strictness is a *scope* question
+    ("does it demand more than the requirement states") — same instrument, same
+    independence, second question. Correspondence measured precise but low-yield
+    at 154 calls for 3 rejections, so cost is part of the answer.
+
+    **The experiment needs no live run.** s-i2c is already labelled: 15 of 58
+    trusted oracles are failed by the control, 43 are not. Rebuild the sources
+    from `agent_io` (`latest_oracle` in `scratchpad/vac_counterexample.py` does
+    it), show the judge only the requirement and the oracle, and score it
+    against the control's verdict — the control **grading** the judge, never
+    gating, the standing `golden_check` already has.
+
+    **Decision rule before any of it goes near the gate:** a judge that cannot
+    beat the base rate on a set where the answer is known does not ship. That is
+    the bar correspondence had to clear.
+
+21. **Dynamic `_attach`.** Replay-and-ask instead of `check_static`. Worth doing
     **only if** step 5 shows the false-attach rate is low.
 
 ---
 
 ## Phase 5 — making any of the above trustworthy
 
-21. **Three draws at the final configuration.** Every claim about separation
+22. **Three draws at the final configuration.** Every claim about separation
     rests on a single run, and the s-i2c/t-i2c pair — 57/168 and 30/168 from one
     oracle set — shows that is not enough to distinguish a result from a draw.
 
@@ -788,7 +829,7 @@ already records two occasions where I generalised too fast.
     same settings gave **77 / 116 / 128** requirements, so absolute counts are
     not comparable between runs and every claim here has to be a per-requirement
     rate. This is a harder replication problem than the item was written for.
-22. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
+23. **A second design.** Everything here is i2c, and `benchmarks/controls/` holds
     one design. The rework doc already names this as the weakest joint in the
     architecture; nothing since has strengthened it.
 
