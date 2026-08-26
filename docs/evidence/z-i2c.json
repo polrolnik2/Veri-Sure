@@ -168,6 +168,36 @@
     "REQ-0101",
     "REQ-0114"
    ]
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 61,
+    "from_a_check_that_can_fail": 49,
+    "from_a_check_that_cannot": 12,
+    "from_a_check_undecided": 0,
+    "not_measured": 0
+   },
+   "counts": {
+    "CONFORMS": 61,
+    "NOT_EXERCISED": 34,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 3,
+    "VACUOUS": 8,
+    "VIOLATES": 9
+   },
+   "idle_turns": 0,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r1",
+   "violates_the_witness_also_fails": [
+    "REQ-0004",
+    "REQ-0054",
+    "REQ-0084",
+    "REQ-0100",
+    "REQ-0101",
+    "REQ-0114"
+   ]
   }
  ]
 }
