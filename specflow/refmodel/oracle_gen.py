@@ -331,6 +331,9 @@ def run_oracle_gen(
     #: Regenerate only these requirements. Scoped repair costs one call each,
     #: against 77 for a full pass.
     only: set[str] | None = None,
+    #: `req_uid -> the check being revised`, rendered as the previous answer.
+    #: Only a repair round supplies one; first generation has nothing to revise.
+    standing: dict[str, str] | None = None,
     #: Appended to the stage name so a LATER pass over the same requirement is
     #: recorded beside the first rather than on top of it. `model_io` keys every
     #: prompt/response pair by `{stage}_r{round}` and each `run_stage` call
@@ -369,10 +372,21 @@ def run_oracle_gen(
         return run_stage(
             stage=f"{STAGE}_{uid or 'unknown'}{label}",
             port=port,
+            # `previous` is THIS call's own prior attempt, which is empty on the
+            # first one -- so a repair round said "tighten your check" to an
+            # author holding no copy of the check. `standing` is the frozen
+            # oracle being revised, and it fills that first attempt.
+            #
+            # Measured before this existed: every strengthening rejection read
+            # `vacuous: passed all N variant(s)`, meaning the author answered
+            # "tighten it" by writing something WEAKER. An author composing
+            # afresh from the requirement has no way to be more specific than a
+            # check it cannot see, and no reason to land near it.
             build_prompt=lambda issues, previous: build_prompt(
                 requirement=req, contract_json=contract_json, contract=contract,
                 normalized=(normalized or {}).get(uid),
-                issues=issues or seeds.get(uid), previous=previous,
+                issues=issues or seeds.get(uid),
+                previous=previous or (standing or {}).get(uid),
             ),
             parse=parse_response,
             gate=lambda out: gate_one(

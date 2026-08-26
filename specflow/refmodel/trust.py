@@ -58,6 +58,69 @@ def _project(rows: list[dict], ports: set[str]) -> tuple:
     )
 
 
+#: Disagreeing edges quoted to the oracle author. Three is what fits in an
+#: instruction; the count says how many more there were.
+DIFFS_QUOTED = 3
+
+
+def _difference(
+    base_rows: list[dict], mutant_rows: list[dict], ports: set[str],
+    limit: int = DIFFS_QUOTED,
+) -> list[str]:
+    """Where two traces the oracle could not tell apart actually disagree.
+
+    NEITHER SIDE IS LABELLED, and that is the whole discipline of this function.
+    Naming which trace is the conforming one hands the author the reference
+    model's behaviour to write its check against -- and the reference model is
+    the artifact this oracle exists to judge. The plan already records the
+    weaker form of this: a *control* may reject an oracle but never repair one,
+    because quoting a known-good trace tunes the oracle to it and the model is
+    then tuned to the oracle, so `golden_check` stops being held out. Quoting
+    the model's OWN trace is that failure with the loop closed tighter.
+
+    So the author is told only that two designs differ here and its check passed
+    both. Which of them violates the requirement has to come from the
+    requirement, which is the one source of truth it is allowed.
+    """
+    out: list[str] = []
+    if len(base_rows) != len(mutant_rows):
+        # LENGTH IS A DIFFERENCE, and on this design it is the commonest one.
+        # Measured on w-i2c REQ-0000: the surviving mutant ran 204 edges where
+        # the design it was compared against ran 30, because it never leaves
+        # reset, so the transaction never completes and the replay runs to its
+        # edge budget. `_project` already counts that -- tuples of different
+        # length are unequal -- but zipping the rows positionally finds no
+        # disagreeing port in the first 30 and reports nothing.
+        #
+        # It is also the counterexample most worth sending. A check that cannot
+        # notice the run never finished is vacuous in the plainest way there is.
+        out.append(f"one runs {len(base_rows)} edges and the other "
+                   f"{len(mutant_rows)}, so one of them never finishes")
+    for i, base in enumerate(base_rows):
+        if len(out) >= limit:
+            return out
+        if i >= len(mutant_rows):
+            break
+        edge = base.get("edge", i)
+        b_out = base.get("outputs") or {}
+        m_out = mutant_rows[i].get("outputs") or {}
+        for port in sorted(ports):
+            if port not in b_out and port not in m_out:
+                continue
+            if b_out.get(port) == m_out.get(port) and (
+                    port in b_out) == (port in m_out):
+                continue
+            # `.get` on both sides deliberately: a port PRESENT in one row and
+            # ABSENT in the other is a difference `_project` counts, and
+            # requiring it in both was the second way this returned nothing.
+            out.append(
+                f"edge {edge}: {port} is {b_out.get(port)} in one and "
+                f"{m_out.get(port)} in the other")
+            if len(out) >= limit:
+                return out
+    return out
+
+
 def _steps_for(oracle: RequirementOracle, stimulus_by_tp: dict) -> list[dict]:
     """One testpoint's steps -- the first this oracle names that has any.
 

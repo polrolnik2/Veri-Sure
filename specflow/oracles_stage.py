@@ -281,10 +281,17 @@ def verify_one(
             return off, True, notes
 
     if variants and replayable:
-        level, detail = variants_mod.must_fail(
+        level, detail, apart = variants_mod.must_fail(
             oracle, variants, contract, stimulus_by_tp, base=base,
-            transactional=transactional)
+            transactional=transactional, conforming=witness)
         if level == trust.CONVICTED:
+            # The counterexample rides in `notes` rather than in `why`, which
+            # has to stay the artifact's one-line reason. `_witness_note`
+            # dispatches on named keys and falls through to `[]`, and
+            # `advisory_only` requires a "witness" key, so an extra one here
+            # cannot manufacture an advisory or an extra call.
+            if apart:
+                notes = {**notes, "vacuity": apart}
             return f"vacuous: {detail}", True, notes
     return "", True, notes
 
@@ -533,7 +540,26 @@ def _reconsider_issue(req_uid: str, why: str) -> Issue:
         f"disagreement.")
 
 
-def _repair_issue(req_uid: str, why: str) -> Issue:
+def _standing(held: dict, uids) -> dict[str, str]:
+    """The check each author is being asked to revise, shaped like a reply.
+
+    `run_stage` fills `previous` with the model's own prior attempt inside one
+    call's repair loop, so on the FIRST attempt of a repair round it is empty --
+    and both repair rounds were therefore saying "tighten your check" and
+    "fix your check" to an author holding no copy of it. Rendered as the same
+    JSON object the author is asked to return, because the instruction that
+    follows says "reply with the full corrected JSON object".
+    """
+    out = {}
+    for uid in uids:
+        o = held.get(uid)
+        if o is not None and getattr(o, "source", ""):
+            out[uid] = json.dumps({"clause": o.clause, "source": o.source},
+                                  indent=2, ensure_ascii=False)
+    return out
+
+
+def _repair_issue(req_uid: str, why: str, apart: str = "") -> Issue:
     """The rejection, phrased as something an author can act on.
 
     Not "your oracle was discarded": that names an outcome, not a defect. The
@@ -550,6 +576,13 @@ def _repair_issue(req_uid: str, why: str) -> Issue:
             f"exact count the requirement does not state, an ordering the text "
             f"does not fix -- relax it to what the requirement actually says.")
     if why.startswith("vacuous:"):
+        if apart:
+            # The counterexample REPLACES the generic ask, for the reason
+            # `_witness_note` gives about the idle-match note: sending "check
+            # the specific behaviour the clause states" alongside an exact
+            # disagreement invites a rewrite when there is a repair.
+            return Issue("error", f"oracle.{req_uid}.vacuous",
+                         f"Your check {apart}")
         return Issue(
             "error", f"oracle.{req_uid}.vacuous",
             f"{why}. It passes designs that provably violate this requirement, "
@@ -755,11 +788,14 @@ def run_oracle_stage(
                 uid: _witness_note(uid, disagreements.get(uid, {}))
                      + ([_dead_advisory(uid, dead_now[uid])]
                         if uid in dead_now else [])
-                     + ([_repair_issue(uid, quotable[uid])]
+                     + ([_repair_issue(
+                            uid, quotable[uid],
+                            disagreements.get(uid, {}).get("vacuity", ""))]
                         if uid in quotable else [])
                 for uid in ask
             },
             label=f"_fix{rounds}",
+            standing=_standing(held, ask),
         )
         advised |= advisory_only
         # Only a replacement that actually arrived replaces anything. A round
@@ -1156,6 +1192,8 @@ def _strengthen(
         max_repairs=max_repairs, fanout=fanout,
         only=set(inadequate) | set(reconsider),
         label=f"_strengthen{previous.rounds}",
+        standing=_standing({o.req_uid: o for o in previous.trusted},
+                           set(inadequate) | set(reconsider)),
         feedback={**{uid: [_reconsider_issue(uid, why)]
                      for uid, why in reconsider.items()},
                   **{uid: [_inadequate_issue(uid, why)]

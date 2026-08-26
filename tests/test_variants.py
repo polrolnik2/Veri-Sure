@@ -185,7 +185,7 @@ def _oracle(source: str) -> RequirementOracle:
 
 
 def test_an_oracle_that_catches_a_variant_is_sensitive():
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle(WATCHFUL), _variants(BROKEN_ACTION), CONTRACT,
         {"TP-0000": STEPS})
     assert got == SENSITIVE
@@ -193,7 +193,7 @@ def test_an_oracle_that_catches_a_variant_is_sensitive():
 
 
 def test_an_oracle_nothing_can_fail_is_convicted():
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION,
                                     BROKEN_ACTION),
         CONTRACT, {"TP-0000": STEPS})
@@ -203,26 +203,26 @@ def test_an_oracle_nothing_can_fail_is_convicted():
 
 def test_silence_over_too_few_variants_is_not_vacuity():
     """`MIN_IN_SCOPE` transfers unchanged: one observation is not evidence."""
-    got, _ = V.must_fail(
+    got, _, _apart = V.must_fail(
         _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION),
         CONTRACT, {"TP-0000": STEPS})
     assert got == CONVICTED, "two clauses is the requirement's own k, not too few"
 
     only_one = [V.Variant(req_uid="REQ-0001", kind=V.ACTION, clause="c",
                           source=BROKEN_ACTION)]
-    got, _ = V.must_fail(_oracle(VACUOUS), only_one, CONTRACT,
+    got, _, _apart = V.must_fail(_oracle(VACUOUS), only_one, CONTRACT,
                          {"TP-0000": STEPS})
     assert got == CONVICTED, "one variant IS this requirement's whole k"
 
 
 def test_a_requirement_with_no_variant_is_unknown_not_convicted():
-    got, why = V.must_fail(_oracle(VACUOUS), [], CONTRACT, {"TP-0000": STEPS})
+    got, why, _apart = V.must_fail(_oracle(VACUOUS), [], CONTRACT, {"TP-0000": STEPS})
     assert got == UNKNOWN
     assert "no variant" in why
 
 
 def test_no_stimulus_is_unknown_not_convicted():
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle(VACUOUS), _variants(BROKEN_ACTION), CONTRACT, {})
     assert got == UNKNOWN
     assert "stimulus" in why
@@ -231,7 +231,7 @@ def test_no_stimulus_is_unknown_not_convicted():
 def test_variants_of_another_requirement_are_not_evidence():
     other = [V.Variant(req_uid="REQ-0002", kind=V.ACTION, clause="c",
                        source=BROKEN_ACTION)]
-    got, _ = V.must_fail(_oracle(WATCHFUL), other, CONTRACT,
+    got, _, _apart = V.must_fail(_oracle(WATCHFUL), other, CONTRACT,
                          {"TP-0000": STEPS})
     assert got == UNKNOWN
 
@@ -298,7 +298,7 @@ def test_a_variant_that_never_triggered_the_oracle_is_not_a_pass():
     scenario, and only the first is vacuity -- the second is a fact about the
     stimulus. Convicting on it is the same mistake `verify_one` refuses to make
     about unexercised oracles."""
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle_over(CONDITIONAL, "TP-QUIET"),
         _variants(BROKEN_ACTION, BROKEN_ACTION, BROKEN_ACTION),
         CONTRACT, {"TP-QUIET": QUIET_STEPS})
@@ -312,7 +312,7 @@ def test_unexercised_replays_do_not_count_toward_the_evidence_bar():
     """Worse than a miscount: `in_scope` is what satisfies
     `min(MIN_IN_SCOPE, len(mine))`, so the never-triggered replays were the
     evidence that licensed the conviction."""
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle_over(CONDITIONAL, "TP-QUIET"),
         _variants(BROKEN_ACTION, BROKEN_ACTION, BROKEN_ACTION),
         CONTRACT, {"TP-QUIET": QUIET_STEPS})
@@ -326,7 +326,7 @@ def test_every_named_testpoint_decides_not_only_the_first():
     Here the first named testpoint never triggers the oracle and the second
     catches the variant outright, so first-named-only reports the exact opposite
     of the truth. `_decide_over` carries the same measurement for screening."""
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle_over(CONDITIONAL, "TP-QUIET", "TP-0000"),
         _variants(BROKEN_ACTION),
         CONTRACT, {"TP-QUIET": QUIET_STEPS, "TP-0000": STEPS})
@@ -339,10 +339,56 @@ def test_an_oracle_that_is_triggered_and_still_silent_is_still_convicted():
     """The fix must not become an escape hatch. A check that RUNS, reaches its
     scenario, and passes a design breaking its own clause is vacuous, and
     nothing here changes that."""
-    got, why = V.must_fail(
+    got, why, _apart = V.must_fail(
         _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION,
                                     BROKEN_ACTION),
         CONTRACT, {"TP-0000": STEPS})
 
     assert got == CONVICTED
     assert "passed all 3" in why
+
+
+def test_a_conviction_carries_what_the_variant_did_differently():
+    """The author was told a COUNT and nothing else.
+
+    `_repair_issue` sent "passed all N variant(s) ... check the specific
+    behaviour the clause states", which is what the author had already tried.
+    That is the same starvation `_strengthen` had -- 0 of 72 successes -- one
+    notch worse, since adequacy at least quoted a line number.
+
+    Measured on the rejected sets of s-i2c and r-i2c, rebuilt from `agent_io`:
+    every vacuous oracle has a variant differing from the conforming
+    implementation at ports it READS -- 11 of 11 and 13 of 13, and every variant
+    of every one, 22 of 22 and 19 of 19 replays. There was always something to
+    send.
+    """
+    got, why, apart = V.must_fail(
+        _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION), CONTRACT,
+        {"TP-0000": STEPS}, conforming=CONFORMING)
+    assert got == V.CONVICTED, (got, why)
+    assert apart, "a conviction with a conforming design must name the difference"
+    assert "edge" in apart and " in one and " in apart, apart
+
+
+def test_the_conviction_never_says_which_design_is_correct():
+    """The conforming side is the WITNESS -- a second reading of the same
+    requirements by the same author. Telling the author it is right has the
+    check written against it, and that exact move measured over-strictness
+    27 -> 15 with convictions 2 -> 16: oracles relaxed until they stopped
+    disagreeing with an implementation nobody had shown to be correct."""
+    _got, _why, apart = V.must_fail(
+        _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION), CONTRACT,
+        {"TP-0000": STEPS}, conforming=CONFORMING)
+    assert "Do not assume either trace is correct." in apart
+    for banned in ("correct one", "conforming", "expected", "should be"):
+        assert banned not in apart.lower().replace(
+            "do not assume either trace is correct.", ""), (banned, apart)
+
+
+def test_without_a_conforming_design_the_verdict_still_stands():
+    """No pair to diff is a reason for no counterexample, not for no verdict."""
+    got, why, apart = V.must_fail(
+        _oracle(VACUOUS), _variants(BROKEN_ACTION, BROKEN_ACTION), CONTRACT,
+        {"TP-0000": STEPS})
+    assert got == V.CONVICTED, why
+    assert apart == ""

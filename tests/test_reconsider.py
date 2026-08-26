@@ -249,3 +249,33 @@ def test_a_strengthened_check_that_catches_the_mutant_is_taken_and_is_adequate(
     assert after.verdict == adequacy.ADEQUATE, after
     assert after.counterexample == "", (
         "an adequate oracle has nothing to send a strengthening round")
+
+
+def test_the_author_is_shown_the_check_it_is_told_to_tighten(tmp_path, monkeypatch):
+    """"Tighten your check" went out to an author holding no copy of the check.
+
+    `run_stage` fills `previous` with the model's own prior attempt inside ONE
+    call's repair loop, so on the first attempt of a repair round it is empty.
+    The frozen oracle was never passed, so the instruction was phrased as an
+    EDIT and delivered as a blank-page rewrite.
+
+    That is a coherent account of the one measured result: every strengthening
+    rejection read `vacuous: passed all N variant(s)` -- asked to tighten, the
+    author produced something WEAKER. An author composing afresh from the
+    requirement has no way to be more specific than a check it cannot see.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    port = _Port([_reply(GOOD)])
+    _run(_previous(IMPOSSIBLE), port, tmp_path,
+         strengthen={"REQ-0001": "cannot tell two designs apart. Both pass it, "
+                     "and they differ:\n    edge 3: y is 1 in one and 0 in the "
+                     "other\n  One of them violates this requirement."})
+    sent = [p for p in port.prompts if "tighten the check" in p][0]
+    assert "<previous_answer>" in sent, "no previous-answer block was rendered"
+    block = sent.split("<previous_answer>")[1].split("</previous_answer>")[0]
+    # JSON-escaped, because it is rendered as the reply shape the author is
+    # asked to return -- matching the raw source text would pass only by luck.
+    assert json.dumps(IMPOSSIBLE)[1:-1] in block, block
+    assert block.index("clause") < block.index("source"), (
+        "shaped like an OracleOutput, so 'reply with the full corrected JSON "
+        "object' has something to correct")

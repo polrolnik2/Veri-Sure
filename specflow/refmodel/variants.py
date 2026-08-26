@@ -66,7 +66,8 @@ from .oracles import (
     ports_read,
     replay,
 )
-from .trust import (CONVICTED, MIN_IN_SCOPE, SENSITIVE, UNKNOWN,
+from .trust import (CONVICTED, MIN_IN_SCOPE, SENSITIVE, UNKNOWN, _difference,
+                    _steps_for,
                     _decide_over, _project)
 from .validate import _static_checks
 
@@ -426,8 +427,29 @@ def must_fail(
     *,
     base: str = "step",
     transactional: bool = False,
-) -> tuple[str, str]:
-    """`(verdict, detail)` -- does this oracle catch a design that violates it?
+    conforming: str = "",
+) -> tuple[str, str, str]:
+    """`(verdict, detail, counterexample)` -- does this oracle catch a design
+    that violates it?
+
+    `counterexample` is what the AUTHOR is told when this convicts, and it is
+    empty for every other outcome. `detail` says the oracle passed N variants;
+    it does not say what any of them DID, and until now nothing else did either
+    -- `_repair_issue` sent "check the specific behaviour the clause states",
+    which is what the author already tried.
+
+    That is the same starvation `_strengthen` had, where it produced 0 of 72
+    successes, one notch worse: adequacy at least quoted a line number. Measured
+    on the rejected sets of s-i2c and r-i2c, reconstructed from `agent_io`,
+    every vacuous oracle has a variant that differs from the conforming
+    implementation at ports it READS -- 11 of 11 and 13 of 13, and in fact every
+    variant of every one of them, 22 of 22 and 19 of 19 replays. There was
+    always something to send.
+
+    `conforming` is the implementation the variants were derived from. Without
+    it there is no pair to diff and the counterexample is empty, which is why it
+    defaults to "" rather than raising: a caller that has no conforming source
+    still gets the verdict.
 
     Same three outcomes as gate 2 and the same reason for the third: silence
     from an oracle that was shown too little is not vacuity. `MIN_IN_SCOPE`
@@ -462,17 +484,18 @@ def must_fail(
     """
     mine = [v for v in variants if v.req_uid == oracle.req_uid and v.source]
     if not mine:
-        return UNKNOWN, "no variant was generated for this requirement"
+        return UNKNOWN, "no variant was generated for this requirement", ""
 
     if not any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids):
-        return UNKNOWN, "no stimulus to run a variant against"
+        return UNKNOWN, "no stimulus to run a variant against", ""
 
     ports = ports_read(oracle, contract)
     if not ports:
-        return UNKNOWN, "the oracle reads no declared port"
+        return UNKNOWN, "the oracle reads no declared port", ""
 
     in_scope = 0
     never = 0
+    passed: Variant | None = None
     for variant in mine:
         held = _decide_over(oracle, variant.source, contract, stimulus_by_tp,
                             base=base, transactional=transactional)
@@ -481,11 +504,13 @@ def must_fail(
             # did not run says nothing either way, exactly as `run.error` did.
             continue
         if held.failed():
-            return SENSITIVE, f"caught the {variant.kind} variant"
+            return SENSITIVE, f"caught the {variant.kind} variant", ""
         if held.unexercised():
             never += 1
             continue
         in_scope += 1
+        if passed is None:
+            passed = variant          # the first one it let through
     if in_scope < min(MIN_IN_SCOPE, len(mine)):
         # Say WHICH kind of thin evidence it was: "the variants did not run" and
         # "the variants ran and never reached the scenario" route to different
@@ -494,12 +519,48 @@ def must_fail(
             return UNKNOWN, (
                 f"{never} of {len(mine)} variant(s) never reached the scenario "
                 f"this oracle decides, leaving {in_scope} real observation(s) "
-                f"-- a stimulus finding, not vacuity")
+                f"-- a stimulus finding, not vacuity"), ""
         return UNKNOWN, (f"only {in_scope} variant(s) ran; silence over fewer "
-                         f"than the requirement's own clauses is not vacuity")
+                         f"than the requirement's own clauses is not vacuity"), ""
     return CONVICTED, (f"passed all {in_scope} variant(s) of its own "
                        f"requirement, including one that breaks the clause "
-                       f"it names")
+                       f"it names"), _apart(oracle, passed, conforming, contract,
+                                            stimulus_by_tp, ports, base=base)
+
+
+def _apart(oracle, variant, conforming: str, contract: dict,
+           stimulus_by_tp: dict, ports: set[str], *, base: str) -> str:
+    """What the variant this oracle let through did differently, at its ports.
+
+    NEITHER SIDE IS NAMED, for the reason `trust._difference` records and with
+    one extra turn of the screw here: the conforming side is the WITNESS, a
+    second reading of the same requirements by the same author. Telling the
+    author "the first trace is the correct one" would have it write its check
+    against the witness -- and the same move, measured, is what took
+    over-strictness 27 -> 15 while convictions went 2 -> 16, oracles relaxed
+    until they stopped disagreeing with an implementation nobody had shown to be
+    right.
+
+    So the author gets the disagreement and decides from the requirement.
+    """
+    if variant is None or not conforming:
+        return ""
+    steps = _steps_for(oracle, stimulus_by_tp)
+    if not steps:
+        return ""
+    good = replay(conforming, contract, steps, base=base)
+    bad = replay(variant.source, contract, steps, base=base)
+    if good.error or bad.error:
+        return ""
+    diffs = _difference(good.rows, bad.rows, ports)
+    if not diffs:
+        return ""
+    return ("passed a design built to VIOLATE this requirement. It differs "
+            "from the one you were shown:\n"
+            + "\n".join(f"    {d}" for d in diffs)
+            + f"\n  The {variant.kind} clause is the one it breaks. Decide "
+            f"from the requirement which of the two is wrong and make the "
+            f"check FAIL that one. Do not assume either trace is correct.")
 
 
 def save(variants: list[Variant], path) -> None:
