@@ -612,7 +612,7 @@ def test_an_inert_stimulus_is_measured_and_named(tmp_path, monkeypatch):
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=dead,
         port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
-        fanout=False, max_repairs=0, max_rounds=1, run_dir=tmp_path)
+        fanout=False, max_repairs=0, repair_attempts=0, run_dir=tmp_path)
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     live = blob["stimulus_liveness"]
@@ -627,7 +627,7 @@ def test_a_live_stimulus_reports_zero_rather_than_nothing(tmp_path, monkeypatch)
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
-        fanout=False, max_repairs=0, max_rounds=1, run_dir=tmp_path)
+        fanout=False, max_repairs=0, repair_attempts=0, run_dir=tmp_path)
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["stimulus_liveness"]["inert_count"] == 0
 
@@ -711,7 +711,7 @@ def test_an_oracle_that_cannot_fail_is_re_asked_with_the_counterexample(
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
-        fanout=False, max_repairs=0, max_rounds=2)
+        fanout=False, max_repairs=0, repair_attempts=1)
 
     asked = [p for p in port.prompts if "cannot fail" in p]
     assert asked, "the author is never told"
@@ -742,7 +742,7 @@ def test_a_replacement_that_still_cannot_fail_does_not_displace_the_original(
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
-        fanout=False, max_repairs=0, max_rounds=2)
+        fanout=False, max_repairs=0, repair_attempts=1)
 
     assert got.dispositions["REQ-0001"] == O.TRUSTED, "still not a rejection"
     assert "again" not in got.trusted[0].source, (
@@ -758,7 +758,7 @@ def test_the_advisory_is_asked_once_and_not_repeated(tmp_path, monkeypatch):
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
-        fanout=False, max_repairs=0, max_rounds=3)
+        fanout=False, max_repairs=0, repair_attempts=2)
     assert len([p for p in port.prompts if "cannot fail" in p]) == 1
 
 
@@ -845,3 +845,29 @@ def test_over_strictness_the_repair_created_is_reported_never_acted_on():
     assert '"over_strict_after_repair"' in src, (
         "and it has to reach the artifact, or it decides nothing and reports "
         "nothing -- the pattern this repo has now caught nine times")
+
+
+def test_the_repair_budget_is_attempts_not_verification_rounds():
+    """`max_rounds: int = 2` bought exactly ONE repair attempt, and the name is
+    why nobody noticed.
+
+    The loop breaks at the last round BEFORE re-asking -- correctly, since an
+    attempt whose reply nothing verifies is not an attempt -- so N rounds gave
+    N-1 attempts. `repair_attempts` now says what it means and the loop derives
+    the extra verification pass itself.
+    """
+    import inspect
+
+    from specflow import oracles_stage as OS
+
+    sig = inspect.signature(OS.run_oracle_stage).parameters
+    assert "max_rounds" not in sig, "the misleading name must not survive"
+    assert sig["repair_attempts"].default == 2, (
+        "z-i2c rescued 8 of 16 vacuous oracles on one attempt; the second is "
+        "the cheap untested lever")
+
+    src = inspect.getsource(OS.run_oracle_stage)
+    assert "verifications = max(0, int(repair_attempts)) + 1" in src
+    assert "rounds == verifications" in src, (
+        "the break must key on the derived count, not on the attempt budget, "
+        "or the last attempt goes unverified")

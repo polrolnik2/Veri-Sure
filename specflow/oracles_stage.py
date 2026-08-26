@@ -619,7 +619,28 @@ def run_oracle_stage(
     max_repairs: int = 2,
     #: Verify-repair-verify rounds over the whole set, on top of the per-oracle
     #: repairs `run_stage` already does inside generation.
-    max_rounds: int = 2,
+    #: REPAIR ATTEMPTS an oracle gets, not verification rounds. It was
+    #: `max_rounds: int = 2` and that name is why this sat wrong: the loop
+    #: breaks at `rounds == max_rounds` BEFORE re-asking, because the last round
+    #: has nothing left to verify its answer, so 2 rounds bought exactly ONE
+    #: attempt.
+    #:
+    #: Measured on z-i2c with one attempt each: 16 oracles were rejected as
+    #: vacuous and 8 were rescued -- 50%. s-i2c, with one attempt and no
+    #: counterexample, rescued 13 of 24 -- 54%. So the counterexample did not
+    #: move the conversion rate, and the surviving 8 audit CLEAN: 20 variant
+    #: replays, 0 never-triggered, 0 indistinguishable at the oracle's own
+    #: ports. They are genuine vacuity, correctly convicted, on one attempt.
+    #:
+    #: A second attempt is therefore the cheap untested lever -- roughly one
+    #: call per still-rejected oracle, ~28 on a 116-requirement draw.
+    #:
+    #: IT ALSO PUSHES TIGHTER, and tightening is what makes checks over-strict:
+    #: on s-i2c, 46% of repaired-and-kept oracles were failed by the known-good
+    #: control against 6% of never-repaired. Nothing rejects for strictness, so
+    #: this cannot be guarded -- only reported, via `over_strict_after_repair`,
+    #: which is why that field has to be read beside any gain claimed here.
+    repair_attempts: int = 2,
     transactional: bool = True,
     fanout: bool = True,
     #: `{req_uid: why}` for oracles a LATER stage found inadequate -- a mutation
@@ -728,7 +749,10 @@ def run_oracle_stage(
     #: time to answer a question already answered about the same checks.
     alive: dict = {}
     rounds = 0
-    for rounds in range(1, max_rounds + 1):
+    # One verification pass per attempt, plus a final one to judge the last
+    # answer -- an attempt whose reply nothing checks is not an attempt.
+    verifications = max(0, int(repair_attempts)) + 1
+    for rounds in range(1, verifications + 1):
         rejected = {}
         disagreements = {}
         quotable: dict[str, str] = {}
@@ -775,7 +799,7 @@ def run_oracle_stage(
             uid for uid in dead_now if uid not in quotable and uid not in advised
         }
         ask = set(quotable) | advisory_only
-        if not ask or rounds == max_rounds:
+        if not ask or rounds == verifications:
             # Nothing left that an author could be told about. A control-only
             # rejection is terminal by design, so re-asking would spend a call
             # on a prompt carrying no information.

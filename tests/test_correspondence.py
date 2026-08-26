@@ -171,7 +171,7 @@ def test_the_stage_blocks_on_an_off_target_oracle(tmp_path, monkeypatch):
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=_GenPort([_gen_reply(GOOD)]), workdir=tmp_path, base="step",
-        fanout=False, max_repairs=0, max_rounds=1, want_correspondence=True)
+        fanout=False, max_repairs=0, repair_attempts=0, want_correspondence=True)
 
     assert got.dispositions["REQ-0001"] == "ORACLE_INVALID"
     assert "never reads y" in got.reasons["REQ-0001"]
@@ -194,7 +194,7 @@ def test_the_witness_note_is_taken_before_anything_blocks(tmp_path, monkeypatch)
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=_GenPort([_gen_reply(OVER_STRICT)]), workdir=tmp_path,
-        base="step", fanout=False, max_repairs=0, max_rounds=1,
+        base="step", fanout=False, max_repairs=0, repair_attempts=0,
         run_dir=tmp_path, want_correspondence=True)
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
@@ -222,7 +222,7 @@ def test_gate_1_earns_one_attempt_and_only_one(tmp_path, monkeypatch):
         requirements=REQS, contract_json=json.dumps(CONTRACT),
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=port, workdir=tmp_path, base="step", fanout=False,
-        max_repairs=0, max_rounds=3, run_dir=tmp_path)
+        max_repairs=0, repair_attempts=2, run_dir=tmp_path)
 
     assert len(port.prompts) == 2, (
         f"gate 1 must earn exactly one attempt, got {len(port.prompts)}")
