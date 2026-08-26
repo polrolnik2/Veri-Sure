@@ -128,24 +128,45 @@ def _moves(rows: list[dict], ports: tuple[str, ...]) -> bool:
 
 
 def check_static(
-    ob: Obligation, steps: list[dict], *, reset_ports: frozenset[str] = frozenset()
+    ob: Obligation, steps: list[dict], *,
+    reset_ports: frozenset[str] | dict[str, int] = frozenset(),
 ) -> Check | None:
     """Decide an input-only obligation from the steps alone. No model.
 
     Returns None when the obligation is not input-only, so a caller can tell
     "this stimulus does not stage it" from "this cannot be answered here".
 
-    A required value on a RESET port is satisfied by a reset step rather than by
+    A reset port at its ACTIVE value is satisfied by a reset step rather than by
     a driven value, because reset is not drivable -- the runtime sequences it on
     both sides at once, which is why `_drivable` excludes it.
+
+    A reset port at its IDLE value needs NOTHING. "while not in reset" is the
+    state every trace starts in and stays in unless a reset step says otherwise,
+    so requiring a step for it demands the opposite of what the requirement
+    asks. This used to fire on any value at all, and on a2-i2c it sent five
+    requirements -- REQ-0021, 0043, 0079, 0086, 0087 -- chasing a reset step
+    none of them wanted: every complaint was `nReset=1` or `rst=0`, the inactive
+    levels, while the functional values they actually needed were never the
+    miss. Two of the five eventually added the step, satisfied this check, and
+    still abstained, so the diagnosis had been pointing away from the cause the
+    whole time. A signal that aims a retry at the wrong thing is worse than no
+    signal.
+
+    `reset_ports` may be a plain set of names, or -- from
+    `ports.asserted_resets` -- a mapping of name to the value that ASSERTS it.
+    Membership works either way; only the mapping form can tell an asserted
+    reset from an idle one, so a caller that supplies a set keeps the old
+    all-values behaviour and is no worse off than before.
     """
     if not ob.decidable:
         return None
     driven = _driven_values(steps)
+    active = reset_ports if isinstance(reset_ports, dict) else {}
     missing: list[str] = []
     for name, want in ob.inputs.items():
         if name in reset_ports:
-            if not _reset_asserted(steps):
+            wants_asserted = want == active.get(name, want)
+            if wants_asserted and not _reset_asserted(steps):
                 missing.append(f"{name}={want} (no reset step)")
             continue
         if want not in driven.get(name, set()):
@@ -219,7 +240,7 @@ def report(
     testplan: list[dict],
     stimulus_by_tp: dict[str, list[dict]],
     replay_rows: dict[str, list[dict]] | None = None,
-    reset_ports: frozenset[str] = frozenset(),
+    reset_ports: frozenset[str] | dict[str, int] = frozenset(),
 ) -> dict:
     """Every obligation checked against the testpoints S2 attached to it.
 

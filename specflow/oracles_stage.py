@@ -1451,7 +1451,8 @@ def _witness(
 # already measured against the WITNESS with no reference model in existence.
 
 def _evidence(ob, steps: list[dict], rep, result,
-              *, route_ports: set[str], reset_ports: frozenset[str]) -> dict:
+              *, route_ports: set[str],
+              reset_ports: frozenset[str] | dict[str, int]) -> dict:
     """What one failed staging attempt actually established.
 
     Five sources, none of them a model call, each answering a different
@@ -1671,7 +1672,7 @@ def stage_unexercised(
     """
     from .ids import PREFIX_TESTPLAN, mint, next_index
     from .obligation import Obligation
-    from .ports import classify
+    from .ports import asserted_resets
     from .refmodel.oracles import decide, replay
     from .testcase_agent import stimulus_for_scenario
 
@@ -1685,8 +1686,10 @@ def stage_unexercised(
         logger.info("oracles: staging budget %d testpoint(s) for %d unexercised "
                     "oracle(s)", budget, len(unexercised))
 
-    _, resets, _ = classify(contract)
-    reset_ports = frozenset(resets)
+    # The ACTIVE level per reset port, not just the names: `check_static` needs
+    # it to tell "while rst is asserted" (wants a reset step) from "while not in
+    # reset" (wants nothing, and is every trace's default).
+    reset_ports = asserted_resets(contract)
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
     added: list[str] = []
 

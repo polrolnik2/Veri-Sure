@@ -136,3 +136,55 @@ def test_report_counts_bound_what_the_gate_can_ever_say():
     out = report(obligations_=obs, testplan=[], stimulus_by_tp={})
     assert out["decidable"] == 0
     assert out["counts"][UNKNOWN] == 3
+
+
+# --- a reset port at its IDLE value needs no reset step --------------------
+
+
+def test_a_reset_at_its_idle_value_needs_no_step():
+    """"While not in reset" is every trace's default, not something to stage.
+
+    `check_static` demanded a reset step for ANY value on a reset port, so a
+    requirement whose activation says "while not in reset" was reported as
+    "the stimulus never drives nReset=1 (no reset step)". On a2-i2c that sent
+    five requirements -- REQ-0021, 0043, 0079, 0086, 0087 -- chasing a step
+    none of them wanted, and in every one of the five the complaint was only
+    ever the two reset ports at their inactive levels; cmd, ena, din, sda_i and
+    scl_i were never the miss. Two eventually added the step, satisfied this
+    check, and STILL abstained -- so the diagnosis had been aiming the retry
+    away from the cause the whole time.
+    """
+    from specflow.ports import asserted_resets
+
+    contract = {"io": [
+        {"name": "rst", "dir": "input", "width": 1},
+        {"name": "nReset", "dir": "input", "width": 1},
+        {"name": "cmd", "dir": "input", "width": 4},
+    ]}
+    active = asserted_resets(contract)          # {'rst': 1, 'nReset': 0}
+    idle = Obligation(req_uid="R", text="while not in reset, cmd is WRITE",
+                      inputs={"nReset": 1, "rst": 0, "cmd": 8}, observable=["q"])
+    got = check_static(idle, [{"cmd": 8}], reset_ports=active)
+    assert got.status == FIRED, got.detail
+
+
+def test_a_reset_at_its_ACTIVE_value_still_needs_one():
+    from specflow.ports import asserted_resets
+
+    contract = {"io": [{"name": "rst", "dir": "input", "width": 1},
+                       {"name": "cmd", "dir": "input", "width": 4}]}
+    active = asserted_resets(contract)
+    ob = Obligation(req_uid="R", text="while rst is asserted",
+                    inputs={"rst": 1}, observable=["q"])
+    assert check_static(ob, [{"cmd": 8}], reset_ports=active).status == NOT_FIRED
+    with_step = check_static(ob, [{"reset": True}, {"cmd": 8}], reset_ports=active)
+    assert with_step.status == FIRED
+
+
+def test_the_plain_set_form_keeps_its_old_behaviour():
+    """Only the mapping can tell asserted from idle, so a caller that supplies
+    a bare set is no worse off than before -- and no better."""
+    ob = Obligation(req_uid="R", text="while not in reset",
+                    inputs={"nReset": 1}, observable=["q"])
+    got = check_static(ob, [{"cmd": 8}], reset_ports=frozenset({"nReset"}))
+    assert got.status == NOT_FIRED
