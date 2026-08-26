@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -794,9 +795,142 @@ def resolve_indirect(
             "activated_via": list(answer.activated_via),
         })
     merged = [routed.get(n.req_uid, n) for n in normalized]
-    logger.info("normalize: %d of %d unobservable requirement(s) resolved "
-                "indirectly", len(routed), len(blind))
+    # "28 resolved" alone is the number a reader over-trusts. Logged with what
+    # the routes rest on, because the two together say something neither says
+    # apart -- and a 100% resolution rate is the shape of a model reaching for
+    # an answer, so the count is never the whole report.
+    review = indirect_review(merged)
+    logger.info(
+        "normalize: %d of %d unobservable requirement(s) resolved indirectly "
+        "(%d resting wholly on timing, %d route(s) on a port their own "
+        "activation pins)",
+        len(routed), len(blind),
+        review.get("requirements_resting_wholly_on_timing", 0),
+        len(review.get("antecedent_port_routes", [])),
+    )
     return merged, list(results)
+
+
+#: Vocabulary that makes a `shows` clause rest on WHEN something happens rather
+#: than WHAT value appears. Deliberately lexical and deliberately coarse: this
+#: classifies the model's prose, it does not understand it.
+_TIMING = re.compile(
+    r"\b(cycle|cycles|clock|clk|tick|ticks|edge|edges|period|duration|interval|"
+    r"latency|delay|delayed|pulse|pulses|re-?tim\w*|synchron\w*|held\s+steady|"
+    r"remains?\s+held|quiescent|transition|transitions|timing|sample|samples|"
+    r"sampled|expiry|expires|window)\b",
+    re.I,
+)
+
+
+def discriminates_on(route: Route) -> str:
+    """`"timing"` or `"value"` -- what this route's `shows` separates cases by.
+
+    REPORTED, NEVER GATED, and the distinction is not neutral for this project.
+    Phases 3-6 severed pacing from latency and stopped `latency_cycles` gating
+    precisely because the specification does not pin cycle counts, so a check
+    that asserts one either fails correct designs or asserts nothing. An
+    INDIRECT route is more exposed than a direct one: it borrows a port whose
+    timing belongs to another requirement's behaviour, so it inherits every
+    timing assumption of the requirement it borrowed from.
+
+    A lexical screen over prose is a weak instrument and is named as one -- it
+    goes on the face of the artifact for a reader to weigh, and no gate reads
+    it. On a2-i2c it reproduced a hand reading of all 28 resolved requirements
+    exactly, which calibrates it against the one dataset that exists and not
+    against any other.
+    """
+    return "timing" if _TIMING.search(route.shows or "") else "value"
+
+
+def antecedent_port(req: NormalizedRequirement, route: Route) -> bool:
+    """Is the route's port pinned by the requirement's OWN activation?
+
+    When it is, the check risks reducing to "when scl_oen == 1, scl_oen == 1" --
+    a route observing the requirement's ANTECEDENT instead of its consequent,
+    which cannot fail.
+
+    IT IS A SHAPE, NOT A CONVICTION, and the difference is measured. On a2-i2c
+    seven routes carried an antecedent port: five restate the activation and are
+    genuinely circular, two (REQ-0035, REQ-0069) name the port in a PRECONDITION
+    and then discriminate on its DYNAMICS -- held steady versus transitioning,
+    re-timed versus not -- which is the correct move, not a defect. A gate here
+    would reject those two to catch the five, and this codebase refuses that
+    trade elsewhere: `trust.sensitivity` prefers UNKNOWN over convicted.
+
+    The instrument that convicts a circular route correctly is vacuity, one
+    stage later and for free -- a check that cannot fail is what variants
+    detect.
+    """
+    text = (req.activation.text or "") if req.activation else ""
+    if not route.port or not text:
+        return False
+    return bool(re.search(rf"\b{re.escape(route.port)}\b", text))
+
+
+def indirect_review(normalized: list[NormalizedRequirement]) -> dict:
+    """What we computed ABOUT the routes, kept apart from what the model said.
+
+    `observed_via` is the model's answer; this is our reading of it, and mixing
+    the two into one object would let a computed flag be mistaken for something
+    the resolution pass asserted. Same separation as the slicer replacing
+    `covers`: a claim and a computation do not share a field.
+
+    CONCENTRATION IS HERE FOR A REASON. Eleven requirements routed through one
+    port fail together, and that is one finding rather than eleven -- if the
+    timing story around `cmd_ack` is wrong it is wrong for all of them at once,
+    and they will not fail independently. A reader who sees only "28 resolved"
+    cannot know that.
+    """
+    routes = [(n, r) for n in normalized for r in n.observed_via]
+    if not routes:
+        return {}
+    ports: dict[str, int] = {}
+    through: dict[str, int] = {}
+    kinds = {"timing": 0, "value": 0}
+    antecedent: list[dict] = []
+    per_req: dict[str, list[dict]] = {}
+    for n, r in routes:
+        kind = discriminates_on(r)
+        kinds[kind] += 1
+        ports[r.port] = ports.get(r.port, 0) + 1
+        through[r.through_req] = through.get(r.through_req, 0) + 1
+        pinned = antecedent_port(n, r)
+        per_req.setdefault(n.req_uid, []).append(
+            {"port": r.port, "through_req": r.through_req,
+             "discriminates_on": kind, "antecedent_port": pinned})
+        if pinned:
+            antecedent.append({"req_uid": n.req_uid, "port": r.port})
+    resolved = sorted(per_req)
+    # A requirement every one of whose alternatives is an antecedent port has no
+    # route left that could fail. That is the number to read, not the route
+    # count: one bad alternative among three is survivable, all of them is not.
+    no_free = sorted(u for u in resolved
+                     if all(x["antecedent_port"] for x in per_req[u]))
+    all_timing = sorted(u for u in resolved
+                        if all(x["discriminates_on"] == "timing"
+                               for x in per_req[u]))
+    return {
+        "resolved": len(resolved),
+        "routes": len(routes),
+        "discriminates_on": kinds,
+        "requirements_resting_wholly_on_timing": len(all_timing),
+        "port_concentration": dict(sorted(ports.items(),
+                                          key=lambda kv: (-kv[1], kv[0]))),
+        "through_req_concentration": dict(sorted(through.items(),
+                                                 key=lambda kv: (-kv[1], kv[0]))),
+        "antecedent_port_routes": antecedent,
+        "requirements_with_no_non_antecedent_route": no_free,
+        "by_requirement": per_req,
+        "note": (
+            "Computed from the routes, not asserted by the resolution pass, and "
+            "read by no gate. `discriminates_on` is a lexical screen over the "
+            "model's prose. `antecedent_port` marks a route whose port the "
+            "requirement's own activation already pins -- a shape that MAY be "
+            "circular and may equally be a precondition the route then "
+            "discriminates on the dynamics of; vacuity is what convicts it."
+        ),
+    }
 
 
 def unobservable(normalized: list[NormalizedRequirement]) -> dict[str, str]:
@@ -824,6 +958,7 @@ def write_artifacts(
             {
                 "normalized": [n.model_dump() for n in normalized],
                 "unobservable": unobservable(normalized),
+                "indirect_review": indirect_review(normalized),
                 "issues": [
                     {"severity": i.severity, "path": i.path, "message": i.message,
                      "kind": i.kind}

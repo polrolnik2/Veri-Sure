@@ -14,8 +14,15 @@ is a testplan one, and a requirement can be perfectly observable and unreachable
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from specflow.normalize import (
     Activation,
+    antecedent_port,
+    discriminates_on,
+    indirect_review,
+    write_artifacts,
     NormalizedRequirement,
     NormalizeOutput,
     REACH_DEPTH,
@@ -428,3 +435,119 @@ def test_a_requirement_sees_its_own_entry_and_is_told_to_ignore_it():
                                    "{}", CONTRACT)
     assert prompt.count("REQ-0031") >= 2, "its own entry stays in the set"
     assert "Ignore that entry" in prompt
+
+
+# --- 9.4: what we computed ABOUT the routes ------------------------------
+#
+# Reported, never gated. a2-i2c resolved 28 of 105 requirements and left zero
+# unobservable, and a 100% resolution rate is the shape of a model reaching for
+# an answer -- so the routes were read rather than counted, and these are the
+# three numbers that reading produced.
+
+
+def _norm(uid: str, *, act: str) -> NormalizedRequirement:
+    return NormalizedRequirement(req_uid=uid, activation=Activation(text=act))
+
+
+def test_a_route_discriminating_by_cycle_count_is_marked_timing():
+    assert discriminates_on(
+        Route(shows="cmd_ack pulses one clock cycle after completion")
+    ) == "timing"
+    assert discriminates_on(
+        Route(shows="busy stays low for a narrow glitch and rises for a wide one")
+    ) == "value"
+
+
+def test_a_route_whose_port_its_own_activation_pins_is_flagged():
+    """REQ-0005's shape: the route observes the ANTECEDENT, so it cannot fail."""
+    req = _norm("REQ-0005", act="an output-enable is released high (scl_oen = 1)")
+    circular = Route(port="scl_oen", through_req="REQ-0009",
+                     shows="when this holds scl_oen == 1; when it does not, 0")
+    assert antecedent_port(req, circular)
+
+
+def test_a_port_named_only_by_a_SIBLING_is_not_flagged():
+    req = _norm("REQ-0031", act="a glitch on sda_i while scl_i is high")
+    assert not antecedent_port(req, Route(port="busy", through_req="REQ-0007",
+                                          shows="busy stays low, then rises"))
+
+
+def test_the_flag_is_a_SHAPE_and_the_review_does_not_convict_on_it():
+    """REQ-0035 names the port in a PRECONDITION and discriminates on DYNAMICS.
+
+    A gate here would reject that to catch REQ-0005, which is the trade this
+    codebase refuses elsewhere. So the route stays, flagged, and vacuity is left
+    to convict the one that cannot fail.
+    """
+    req = _norm("REQ-0035", act="the controller releases SCL (scl_oen is released)")
+    dynamics = Route(port="scl_oen", through_req="REQ-0036",
+                     shows="scl_oen remains held steady while slave_wait is "
+                           "active; otherwise it follows normal FSM timing")
+    review = indirect_review([req.model_copy(update={"observed_via": [dynamics],
+                                                     "observable": ["scl_oen"]})])
+    assert review["antecedent_port_routes"] == [
+        {"req_uid": "REQ-0035", "port": "scl_oen"}]
+    assert review["resolved"] == 1          # flagged, and still resolved
+
+
+def test_concentration_is_reported_because_those_requirements_fail_TOGETHER():
+    """Eleven requirements through one port is one finding, not eleven."""
+    reqs = [
+        _norm(f"REQ-000{i}", act="something").model_copy(update={
+            "observable": ["cmd_ack"],
+            "observed_via": [Route(port="cmd_ack", through_req="REQ-0036",
+                                   shows="cmd_ack pulses one cycle later")],
+        })
+        for i in range(3)
+    ]
+    review = indirect_review(reqs)
+    assert review["port_concentration"] == {"cmd_ack": 3}
+    assert review["through_req_concentration"] == {"REQ-0036": 3}
+    assert review["requirements_resting_wholly_on_timing"] == 3
+
+
+def test_a_requirement_whose_EVERY_alternative_is_an_antecedent_has_none_left():
+    """One bad alternative among three is survivable; all of them is not."""
+    req = _norm("REQ-0005", act="an output-enable (scl_oen or sda_oen) is released")
+    both = req.model_copy(update={
+        "observable": ["scl_oen", "sda_oen"],
+        "observed_via": [
+            Route(port="scl_oen", through_req="REQ-0009", shows="scl_oen == 1"),
+            Route(port="sda_oen", through_req="REQ-0009", shows="sda_oen == 1"),
+        ],
+    })
+    survivor = _norm("REQ-0102", act="either output-enable is released").model_copy(
+        update={"observable": ["cmd_ack", "sda_oen"], "observed_via": [
+            Route(port="sda_oen", through_req="REQ-0009", shows="sda_oen == 1"),
+            Route(port="cmd_ack", through_req="REQ-0036",
+                  shows="cmd_ack pulses one cycle after completion"),
+        ]})
+    review = indirect_review([both, survivor])
+    assert review["requirements_with_no_non_antecedent_route"] == ["REQ-0005"]
+
+
+def test_the_review_is_absent_rather_than_empty_when_nothing_resolved():
+    assert indirect_review([_norm("REQ-0001", act="x")]) == {}
+
+
+def test_the_review_is_on_the_face_of_the_artifact(tmp_path):
+    req = _norm("REQ-0031", act="a glitch on sda_i").model_copy(update={
+        "observable": ["busy"],
+        "observed_via": [Route(port="busy", through_req="REQ-0007",
+                               shows="busy stays low then rises one cycle later")],
+    })
+    path = write_artifacts(tmp_path, [req], [])
+    written = json.loads(path.read_text())
+    assert written["indirect_review"]["resolved"] == 1
+    assert written["indirect_review"]["discriminates_on"] == {"timing": 1, "value": 0}
+    # And it says it is our reading, not the resolution pass's claim.
+    assert "no gate" in written["indirect_review"]["note"]
+
+
+def test_no_gate_reads_the_review():
+    """Reported, not gated -- the whole point of it."""
+    src = Path("specflow/normalize.py").read_text()
+    gate = src[src.index("def gate_indirect("):src.index("def _reach_edges(")
+               if "def _reach_edges(" in src else src.index("REACH_DEPTH")]
+    for name in ("indirect_review", "discriminates_on", "antecedent_port"):
+        assert name not in gate
