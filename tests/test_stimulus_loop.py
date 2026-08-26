@@ -120,7 +120,7 @@ def test_a_requirement_never_reached_is_abandoned_with_its_attempt_count():
     verdict. That distinction is what the discard is gated on."""
     gen = _Gen(MISS, MISS, MISS)
     abandoned, record = _run(gen)
-    assert abandoned == {"REQ-0000": "never reached"}
+    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
     assert record["REQ-0000"]["reached_at_attempt"] is None
     assert len([t for t in record["REQ-0000"]["attempts"] if t.get("staged")]) == 3
 
@@ -170,7 +170,7 @@ def test_staged_testpoints_are_appended_never_substituted():
 def test_a_generator_that_produces_nothing_is_recorded_not_crashed():
     gen = _Gen()
     abandoned, record = _run(gen)
-    assert abandoned == {"REQ-0000": "never reached"}
+    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
     assert all("nothing gate-clean" in t["outcome"]
                for t in record["REQ-0000"]["attempts"])
 
@@ -289,3 +289,69 @@ def test_staging_is_skipped_when_the_switch_is_off(tmp_path, monkeypatch):
         port=_Port([_reply(GOOD)]), workdir=tmp_path, base="step",
         fanout=False, max_repairs=0, want_staging=False)
     assert called == []
+
+
+# --- abandonment must be EARNED, and the budget must fit the work ----------
+
+
+def test_a_requirement_the_budget_never_reached_is_NOT_abandoned():
+    """The anti-shortcut pin, and it fired live.
+
+    a2-i2c's flat `STAGING_BUDGET = 12` minted 12 testpoints, covered 4
+    requirements, and recorded the other THIRTY-SIX as `"never reached"` -- a
+    claim about the design and the stimulus -- when no stimulus had ever been
+    generated for them. Section 8.0: "a requirement may only be abandoned if
+    the attempt actually ran... without that pairing the gate rewards not
+    trying." Budget exhaustion IS "the loop did not run".
+    """
+    from specflow.oracles_stage import BUDGET_SPENT, stage_unexercised
+
+    gen = _Gen()
+    abandoned, record = _run(gen, budget=0)          # nothing may be minted
+    assert abandoned == {}, "nothing was attempted, so nothing may be abandoned"
+    outcomes = [t["outcome"] for t in record["REQ-0000"]["attempts"]]
+    assert outcomes == [BUDGET_SPENT]
+    assert record["REQ-0000"]["attempted"] == 0
+    assert stage_unexercised is not None
+
+
+def test_a_generator_that_RAN_and_produced_nothing_still_counts_as_an_attempt():
+    """The distinction is whether the generator was INVOKED, not whether it
+    returned something usable. A generator that ran and came back empty is a
+    finding about the scenario; a budget that ran out is a finding about us."""
+    gen = _Gen()
+    abandoned, record = _run(gen)
+    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
+    assert record["REQ-0000"]["attempted"] == 3
+    assert record["REQ-0000"]["staged"] == 0
+
+
+def test_the_budget_is_sized_from_the_number_of_unexercised_oracles():
+    """A flat constant borrowed from [D]'s per-turn budget is what broke: 41
+    oracles wanting 3 attempts each against a budget of 12."""
+    from specflow import oracles_stage as O
+
+    assert O.STAGING_BUDGET_PER_ORACLE >= 1
+    assert not hasattr(O, "STAGING_BUDGET"), "the flat constant must be gone"
+    import inspect
+    src = inspect.getsource(O.stage_unexercised)
+    assert "len(unexercised)) * STAGING_BUDGET_PER_ORACLE" in src
+
+
+def test_a_route_is_refuted_only_when_NONE_of_its_ports_moved():
+    """`route_never_moved` was the LIST of silent ports, so it was truthy when
+    any port was quiet -- and the message said all of them were.
+
+    Live on a2-i2c: REQ-0006 is observable at six ports, three of which moved
+    on every attempt, and all three retries were told "the ports this
+    requirement is observed on never moved, so the observation route is what is
+    wrong, not the stimulus". That is worse than an unhelpful hint -- it aims
+    the retry away from the stimulus and at a route that was working.
+    """
+    from specflow.oracles_stage import _diagnose
+
+    partial = {"first_change": {"a": 3, "b": None}, "route_never_moved": False}
+    assert "never moved" not in _diagnose(partial)
+    allsilent = {"first_change": {"a": None, "b": None},
+                 "route_never_moved": True}
+    assert "never moved" in _diagnose(allsilent)

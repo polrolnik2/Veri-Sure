@@ -79,10 +79,24 @@ TRUSTED = "TRUSTED"
 #: and the evidence below either sharpens the hint quickly or is not going to.
 STAGING_ATTEMPTS = 3
 
-#: Testpoints this stage may mint in total, separate from the debug loop's. A
-#: scenario found before the model exists is not competing with one found after
-#: it, and both end up in `stimulus_by_tp` where [D] can see what [O] added.
-STAGING_BUDGET = 12
+#: Testpoints this stage may mint PER UNEXERCISED ORACLE, so the budget is
+#: sized from the work in front of it. It used to be a flat 12 for the whole
+#: stage, described as "separate from the debug loop's" -- but [D]'s 12 is per
+#: TURN against a handful of currently-failing oracles, and this is a sweep over
+#: every oracle nothing reaches. On a2-i2c that was 41 oracles wanting 3 attempts
+#: each: 123 testpoints against a budget of 12. Twelve were minted, four
+#: requirements were covered, and THIRTY-SIX WERE ABANDONED WITHOUT AN ATTEMPT.
+#:
+#: Per-oracle rather than a bigger constant, because the failure was a constant
+#: sized for a different loop and a bigger one would only move the cliff.
+STAGING_BUDGET_PER_ORACLE = 3
+
+#: The one outcome that is NOT an attempt: the generator was never invoked.
+BUDGET_SPENT = "budget spent"
+
+#: Absolute ceiling, so a pathological requirement set cannot mint without end.
+#: Generous by design: reaching it should be a finding, not routine.
+STAGING_BUDGET_CAP = 400
 
 
 @dataclass(frozen=True)
@@ -676,7 +690,7 @@ def run_oracle_stage(
     staging_attempts: int = STAGING_ATTEMPTS,
     #: [O]'s own budget, separate from the debug loop's. A scenario found before
     #: the model exists is not competing with one found after it.
-    staging_budget: int = STAGING_BUDGET,
+    staging_budget: int | None = None,
     run_dir: Path | None = None,
     max_repairs: int = 2,
     #: Verify-repair-verify rounds over the whole set, on top of the per-oracle
@@ -1431,8 +1445,15 @@ def _evidence(ob, steps: list[dict], rep, result,
         out["inert"] = all(v is None for v in moved.values())
         out["first_change"] = moved
         if route_ports:
-            out["route_never_moved"] = sorted(
-                p for p in route_ports if moved.get(p) is None)
+            silent = sorted(p for p in route_ports if moved.get(p) is None)
+            out["route_ports_silent"] = silent
+            # ALL of them, not any. A requirement observable at six ports of
+            # which three moved has a working route -- the retry that was told
+            # otherwise was steered away from the stimulus and toward a route
+            # that was fine. Section 8.2 case 4 is "outputs moved but THE
+            # route's port never did", and a route is only refuted when nothing
+            # it names moved at all.
+            out["route_never_moved"] = bool(silent) and len(silent) == len(route_ports)
     if getattr(rep, "error", ""):
         out["replay_error"] = rep.error
     if result is not None and result.detail:
@@ -1561,7 +1582,7 @@ def stage_unexercised(
     port,
     base: str = "step",
     attempts: int = STAGING_ATTEMPTS,
-    budget: int = STAGING_BUDGET,
+    budget: int | None = None,
 ) -> tuple[dict[str, str], dict[str, dict]]:
     """Stage the scenarios nothing reaches. `(abandoned, record)`.
 
@@ -1604,6 +1625,11 @@ def stage_unexercised(
     record: dict[str, dict] = {}
     if not unexercised or not witness:
         return abandoned, record
+    if budget is None:
+        budget = min(STAGING_BUDGET_CAP,
+                     max(1, len(unexercised)) * STAGING_BUDGET_PER_ORACLE)
+        logger.info("oracles: staging budget %d testpoint(s) for %d unexercised "
+                    "oracle(s)", budget, len(unexercised))
 
     _, resets, _ = classify(contract)
     reset_ports = frozenset(resets)
@@ -1627,7 +1653,7 @@ def stage_unexercised(
 
         for attempt in range(1, max(1, attempts) + 1):
             if len(added) >= budget:
-                tries.append({"attempt": attempt, "outcome": "budget spent"})
+                tries.append({"attempt": attempt, "outcome": BUDGET_SPENT})
                 break
             steps = stimulus_for_scenario(
                 requirement=req, contract=contract, port=port,
@@ -1666,14 +1692,40 @@ def stage_unexercised(
                           "diagnosis": _diagnose(evidence),
                           "evidence": evidence})
 
-        record[uid] = {"attempts": tries, "reached_at_attempt": reached}
-        if reached is None:
+        # AN ATTEMPT IS A GENERATOR CALL, not a testpoint that came back usable.
+        # A generator that ran and returned nothing gate-clean HAS been tried --
+        # that is a finding about the scenario. The only outcome that is not an
+        # attempt is the budget running out before the generator was invoked.
+        attempted = sum(1 for t in tries if t.get("outcome") != BUDGET_SPENT)
+        staged_count = sum(1 for t in tries if t.get("staged"))
+        record[uid] = {"attempts": tries, "reached_at_attempt": reached,
+                       "staged": staged_count, "attempted": attempted}
+        if reached is None and attempted:
             # ATTEMPTED AND EXHAUSTED. What is known is that we could not stage
             # it in N tries -- not that no stimulus could, which is a claim
             # about the requirement this has no evidence for.
-            abandoned[uid] = "never reached"
+            abandoned[uid] = f"never reached in {attempted} attempt(s)"
             logger.info("oracles: %s staged %d time(s), never reached", uid,
-                        sum(1 for t in tries if t.get("staged")))
+                        staged_count)
+        elif reached is None:
+            # NOT ABANDONED, BECAUSE NOTHING WAS ATTEMPTED. Budget exhaustion is
+            # precisely "the loop did not run", and section 8.0 makes that the
+            # one thing the softening may not be reached by: "a requirement may
+            # only be abandoned if the attempt actually ran... without that
+            # pairing the gate rewards not trying."
+            #
+            # It fired. On a2-i2c the flat budget covered four requirements and
+            # the other THIRTY-SIX were recorded "never reached" -- a claim about
+            # the design and the stimulus -- when the truth was that no stimulus
+            # was ever generated for them. The old code reached this line with
+            # `sum(... if t.get("staged"))` evaluating to zero and abandoned them
+            # anyway, so the log line stated the count that should have stopped
+            # it. Left NOT_EXERCISED, it blocks, which is what a harness defect
+            # should do.
+            logger.warning(
+                "oracles: %s was never staged (%s) -- left NOT_EXERCISED so it "
+                "BLOCKS, because nothing was attempted", uid,
+                "; ".join(sorted({str(t.get("outcome") or "") for t in tries})))
     if added:
         logger.info("oracles: staged %d new testpoint(s) for %d requirement(s); "
                     "%d still unreached", len(added), len(record), len(abandoned))

@@ -1077,13 +1077,13 @@ def test_a_requirement_the_stage_could_not_reach_leaves_the_frozen_set(
     """"Staged N times, never reached" and "nobody tried" stop being the same
     verdict, and the first one leaves the system."""
     got = _staged(tmp_path, monkeypatch, [{"a": 1}, {"a": 0}])
-    assert got.abandoned == {"REQ-0001": "never reached"}
+    assert got.abandoned == {"REQ-0001": "never reached in 2 attempt(s)"}
     assert [o.req_uid for o in got.trusted] == [], "not in the driving set"
     assert got.dispositions["REQ-0001"] == "ABANDONED"
     assert got.considered() == 0, "it left the denominator too"
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
-    assert blob["abandoned"] == {"REQ-0001": "never reached"}
+    assert blob["abandoned"] == {"REQ-0001": "never reached in 2 attempt(s)"}
     assert blob["staging"]["REQ-0001"]["reached_at_attempt"] is None
     assert len(blob["staging"]["REQ-0001"]["attempts"]) == 2, "both attempts"
 
