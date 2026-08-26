@@ -143,6 +143,18 @@ class OracleSet:
     #: reason here, they are counted on the face of the gate, and they leave the
     #: DENOMINATOR of every rate rather than quietly passing -- see `rates`.
     abandoned: dict[str, str] = field(default_factory=dict)
+    #: The instruments this set was built with, recorded so a later round
+    #: inherits them instead of re-deriving them from a call site's keyword
+    #: arguments.
+    #:
+    #: THIS IS WHY THE TOOLS CANNOT DRIFT BETWEEN ROUNDS. A strengthening round
+    #: used to be a separate function that reimplemented a subset of the stage,
+    #: and which instruments it lost -- correspondence, the repair loop,
+    #: liveness routing, staging -- was decided by which flags one call site in
+    #: `compose` happened to pass. Reading them off the set it is strengthening
+    #: makes "the same tools" a property of the data rather than of five
+    #: keyword arguments staying in step.
+    tools: dict = field(default_factory=dict)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -709,6 +721,18 @@ def run_oracle_stage(
     #: Only the author can tell, and keeping the check is a valid answer.
     reconsider: dict[str, str] | None = None,
     previous: OracleSet | None = None,
+    #: The reference model a strengthening round is reacting to -- the design
+    #: whose mutants got past these checks. Supplied only on a scoped round,
+    #: where it exists by definition.
+    #:
+    #: IT GATES AND IT IS NEVER QUOTED. Running a design to decide whether a
+    #: check improved is what `verify_one` already does with the witness and the
+    #: control. Putting its trace in front of the oracle AUTHOR is a different
+    #: act and is the one this project has already paid for: quoting a design to
+    #: the author tunes the check against it, and the model is then tuned
+    #: against the check, so the held-out grade stops being held out. So this
+    #: reaches `_caught` below and never `conforming_source`.
+    hardened: str = "",
     #: Something upstream regenerated, so the frozen artifacts are about
     #: requirements that no longer exist. Written once means once PER REQUIREMENT
     #: SET, not once per directory -- without this the stage would spend its
@@ -716,17 +740,43 @@ def run_oracle_stage(
     #: loop would measure the new model against the old requirements' checks.
     rewrite: bool = False,
 ) -> OracleSet:
-    """Generate, verify, repair, freeze. Returns a disposition for every requirement."""
-    if (strengthen or reconsider) and previous is not None:
-        return _strengthen(
-            strengthen or {}, previous, reconsider=reconsider or {},
-            requirements=requirements,
-            contract_json=contract_json, contract=contract, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp, port=port, workdir=workdir,
-            base=base, normalized=normalized, control_source=control_source,
-            witness_port=witness_port, run_dir=run_dir,
-            max_repairs=max_repairs, transactional=transactional,
-            fanout=fanout)
+    """Generate, verify, repair, freeze. Returns a disposition for every requirement.
+
+    A STRENGTHENING ROUND IS THIS STAGE, SCOPED -- not a smaller copy of it.
+
+    It used to dispatch to `_strengthen`, which reimplemented a subset: one
+    generation, one `verify_one`, keep-or-revert. No repair loop, no
+    correspondence, no liveness routing, and later no stimulus loop either --
+    so the second iteration of the refmodel/oracle loop ran on strictly weaker
+    instruments than the first, and which instruments it lost was decided by
+    which keyword arguments a call site in `compose` happened to pass.
+
+    Scoping with `only` gives every round the same tools by construction. What
+    a scoped round skips is only what cannot have changed: variants are per
+    requirement and are inherited, and the witness is read back from disk
+    exactly as `_witness` already does for the same reason.
+    """
+    scoped = set(strengthen or {}) | set(reconsider or {})
+    if scoped and previous is not None:
+        # INHERITED, not re-specified. A caller that forgets one of these does
+        # not get a quieter round, it gets the same round.
+        inherited = dict(previous.tools or {})
+        want_correspondence = inherited.get("correspondence", want_correspondence)
+        want_variants = inherited.get("variants", want_variants)
+        want_staging = inherited.get("staging", want_staging)
+        max_repairs = inherited.get("max_repairs", max_repairs)
+        repair_attempts = inherited.get("repair_attempts", repair_attempts)
+        only = scoped
+        feedback = {
+            **{uid: [_reconsider_issue(uid, why)]
+               for uid, why in (reconsider or {}).items()},
+            **{uid: [_inadequate_issue(uid, why)]
+               for uid, why in (strengthen or {}).items()},
+        }
+        standing = _standing({o.req_uid: o for o in previous.trusted}, scoped)
+        label = f"_strengthen{previous.rounds}"
+    else:
+        only, feedback, standing, label = None, None, None, ""
 
     if rewrite and run_dir is not None:
         for name in (ARTIFACT, "variants.json", "witness.py",
@@ -746,8 +796,14 @@ def run_oracle_stage(
     if control:
         witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
 
-    variants: list = []
-    if want_variants and witness:
+    # Inherited on a scoped round: a variant is a wrong implementation of ONE
+    # requirement, and the requirement has not changed. Regenerating would spend
+    # a call per requirement to rebuild the same evidence -- and worse, a
+    # different draw of it, so an oracle could be convicted vacuous this round
+    # and cleared next for no reason anyone could name. Same argument `_witness`
+    # makes for reading itself back.
+    variants: list = list(previous.variants) if only and previous else []
+    if want_variants and witness and not only:
         from .obligation import by_requirement
 
         variants, _ = variants_mod.run_variant_gen(
@@ -766,6 +822,8 @@ def run_oracle_stage(
         normalized=normalized, conforming_source=witness,
         stimulus_by_tp=stimulus_by_tp, base=base,
         max_repairs=max_repairs, fanout=fanout,
+        only=only, feedback=feedback, standing=standing,
+        label=label,
     )
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
@@ -932,6 +990,20 @@ def run_oracle_stage(
             # toward the grade transitively.
             if "control" in fresh and o.req_uid not in was_over_strict:
                 newly_over_strict.add(o.req_uid)
+            # THE ADEQUACY GATE, additional to the four `verify_one` runs and
+            # asked only where a strengthening round has a previous check to
+            # compare against. See `_caught`.
+            if only and o.req_uid in (strengthen or {}):
+                weaker = _caught(
+                    held[o.req_uid], o, hardened, contract, stimulus_by_tp,
+                    base=base, transactional=transactional)
+                if weaker:
+                    logger.info("oracles: %s: %s; the previous check stands",
+                                o.req_uid, weaker)
+                    repairs.setdefault(o.req_uid, []).append(
+                        f"strengthening rejected -- {weaker}")
+                    rejected.setdefault(o.req_uid, f"not-stronger: {weaker}")
+                    continue
             if o.req_uid in advisory_only and o.req_uid in dead_now and not _is_live(
                     o, witness, contract, stimulus_by_tp, base=base):
                 # A replacement that still cannot fail is not an
@@ -984,6 +1056,39 @@ def run_oracle_stage(
         had_source=set(held), normalized=normalized,
         abandoned=abandoned,
         never_decides=_L.never_decides(alive))
+
+    if only and previous is not None:
+        # A SCOPED ROUND DECIDES ONLY WHAT IT WAS ASKED ABOUT. Everything else
+        # keeps the disposition the previous round gave it -- re-deriving one
+        # here would report a verdict for a requirement this round never looked
+        # at, from an `only`-scoped `held` that does not contain its oracle.
+        #
+        # A replacement that failed verification is not promoted and not
+        # demoted: the previous check stands, which is what `rejected` means on
+        # this path, so its uid keeps the old disposition too.
+        kept = {o.req_uid: o for o in previous.trusted}
+        kept.update({o.req_uid: o for o in trusted})
+        for uid in rejected:
+            if uid in kept and uid not in {o.req_uid for o in trusted}:
+                reasons[uid] = (f"strengthening rejected -- {rejected[uid]}; "
+                                f"the previous oracle stands")
+        merged_d = dict(previous.dispositions)
+        merged_d.update({u: v for u, v in dispositions.items() if u in scoped})
+        merged_r = dict(previous.reasons)
+        merged_r.update({u: v for u, v in reasons.items() if u in scoped})
+        replaced = {o.req_uid for o in trusted}
+        for uid in scoped:
+            if uid in kept and uid not in rejected and uid not in abandoned:
+                merged_d[uid] = TRUSTED
+            if uid in replaced:
+                merged_r[uid] = (
+                    "reconsidered after a debug loop and a second "
+                    "implementation both failed to satisfy it"
+                    if uid in (reconsider or {})
+                    else "strengthened after a mutant got past it")
+        trusted = list(kept.values())
+        dispositions, reasons = merged_d, merged_r
+        abandoned = {**previous.abandoned, **abandoned}
     # How much the stimulus gives ANY oracle to work with. Measured on the
     # witness -- a design, but this is not a judgement about correctness, it is
     # the question "does this stimulus make a design do anything".
@@ -1080,8 +1185,11 @@ def run_oracle_stage(
     if run_dir is not None:
         trusted, drift = freeze.freeze(
             trusted, Path(run_dir) / "specflow" / ARTIFACT, normalized,
+            rewrite=rewrite or bool(only),
             extra={"dispositions": dispositions, "reasons": reasons,
-                   "witness": witness_kind, "rounds": rounds,
+                   "witness": witness_kind,
+                   "rounds": (previous.rounds + 1 if only and previous
+                              else rounds),
                    "variants": len(variants),
                    # Legibility, not decoration: a reader has to be able to
                    # tell a check that found nothing from one that never ran.
@@ -1130,8 +1238,15 @@ def run_oracle_stage(
     logger.info("oracles: %s (bound: %s)", _summary(dispositions), witness_kind)
     return OracleSet(trusted=trusted, dispositions=dispositions,
                      abandoned=abandoned,
+                     tools={"correspondence": want_correspondence,
+                            "variants": want_variants,
+                            "staging": want_staging,
+                            "max_repairs": max_repairs,
+                            "repair_attempts": repair_attempts},
                      reasons=reasons, repairs=repairs, variants=variants,
-                     witness_kind=witness_kind, rounds=rounds,
+                     witness_kind=witness_kind,
+                     rounds=(previous.rounds + 1 if only and previous
+                             else rounds),
                      testpoints_no_oracle_names=idle,
                      liveness={u: r.get("verdict", _L.UNKNOWN)
                                for u, r in report.items()},
@@ -1413,6 +1528,65 @@ def stage_unexercised(
     return abandoned, record
 
 
+
+def _caught(oracle: RequirementOracle, replacement: RequirementOracle,
+            hardened: str, contract: dict, stimulus_by_tp: dict, *,
+            base: str, transactional: bool) -> str:
+    """Did the replacement actually get stronger? `""` if it did.
+
+    THE ADEQUACY GATE, and it is a SEPARATE leg rather than a fifth reject path
+    inside `verify_one`, because it asks a different kind of question. The other
+    four are about the check in isolation -- malformed, off-target, vacuous,
+    unsatisfiable. This one is about the check RELATIVE TO THE ONE IT REPLACES,
+    and it can only be asked where there is a previous check to compare with.
+
+    Without it "strengthened" was a claim, not a fact: a replacement that
+    verified was promoted and recorded as strengthened whether or not it caught
+    anything the original missed. That is the same defect the stimulus loop had
+    -- an action reported as done because it was attempted -- and it is worse
+    here, because the feedback edge exists precisely to make this happen.
+
+    Measured against the same model the mutants came from, and only that: the
+    question is whether this check now discriminates where the old one did not,
+    which is a property of the pair and the design between them.
+
+    Strictly fewer survivors is the bar. Equal is not improvement, and the
+    round should say so rather than promote a rewrite that changed nothing --
+    an oracle rewritten every round without getting stronger is the oscillation
+    this edge is bounded to avoid, and it is only visible if it is measured.
+    """
+    if not hardened:
+        return ""
+    from .refmodel.adequacy import ADEQUATE, adequacy_of
+
+    try:
+        was = adequacy_of(oracle, hardened, contract, stimulus_by_tp,
+                          base=base, transactional=transactional)
+        now = adequacy_of(replacement, hardened, contract, stimulus_by_tp,
+                          base=base, transactional=transactional)
+    except Exception as exc:  # noqa: BLE001 -- a measurement, never the stage
+        logger.warning("oracles: adequacy gate could not run for %s: %r",
+                       oracle.req_uid, exc)
+        return ""
+    if now.verdict == ADEQUATE and was.verdict != ADEQUATE:
+        return ""
+    before, after = _survivor_count(was.detail), _survivor_count(now.detail)
+    if after is None or before is None:
+        return ""
+    if after < before:
+        return ""
+    return (f"it still lets {after} mutant(s) past, against {before} before -- "
+            f"the rewrite did not make it discriminate")
+
+
+def _survivor_count(detail: str) -> int | None:
+    """How many mutants a finding says got past, or None if it does not say."""
+    import re
+
+    m = re.search(r"(\d+)\s+of\s+\d+", detail or "")
+    return int(m.group(1)) if m else None
+
+
 def _decides_nothing(testplan: list[dict],
                      oracles: list[RequirementOracle]) -> list[str]:
     """Testpoints in the plan that no oracle names.
@@ -1584,129 +1758,6 @@ def _inadequate_issue(uid: str, why: str) -> Issue:
         f"the check so it FAILS that one -- and only to what the clause states: "
         f"a check no correct design satisfies is rejected outright. Do not "
         f"assume either trace is the correct one.")
-
-
-def _strengthen(
-    inadequate: dict[str, str],
-    previous: OracleSet,
-    *,
-    reconsider: dict[str, str] | None = None,
-    requirements: list[dict],
-    contract_json: str,
-    contract: dict,
-    testplan: list[dict],
-    stimulus_by_tp: dict[str, list[dict]],
-    port: ModelPort,
-    workdir: Path,
-    base: str,
-    normalized: dict[str, dict] | None,
-    control_source: str | None,
-    witness_port: ModelPort | None,
-    run_dir: Path | None,
-    max_repairs: int,
-    transactional: bool,
-    fanout: bool,
-) -> OracleSet:
-    """Re-ask the oracles a round of evidence has something to say about.
-
-    Two reasons, pointing opposite ways, and the same machinery serves both
-    because the discipline is identical. `inadequate` is a check something
-    provably wrong got past -- tighten it. `reconsider` is a check two
-    implementations and a whole debug budget could not satisfy -- it may be
-    pinning a detail the requirement leaves open.
-
-    A replacement is kept only if it VERIFIES -- AND THAT GUARD IS DIRECTIONAL,
-    which this docstring used to hide. `verify_one` has four reject paths:
-    malformed (twice), correspondence off-target, and vacuous. NONE OF THEM IS
-    STRICTNESS. So it holds against a replacement that came back too WEAK and is
-    blind to one that came back too STRICT.
-
-    The half that works: a check relaxed until it stops disagreeing is the
-    compliance ratchet gate 1 measured at over-strict 27 -> 15 with convictions
-    2 -> 16, and a relaxation that goes vacuous fails `verify_one` and leaves
-    the previous check standing.
-
-    The half that does not, refuted by the run that spent this edge: t-i2c
-    accepted 5 replacements and REQ-0005 came back newly unsatisfiable by the
-    known-good control -- a check no correct design satisfies, promoted for
-    being eager, through the guard that this text claimed prevents it.
-
-    Nothing here can close that. The control detects over-strictness exactly and
-    may not gate, for the reason `verify_one` records: kept-or-rejected is the
-    one bit that leaks, and it selects the oracles the model is then repaired
-    against. `over_strict_after_repair` reports it instead, and a judge reading
-    requirement text against oracle source -- two texts, no implementation, the
-    standing correspondence already has -- is the only instrument that could
-    decide it. Untested; s-i2c's 15 control-failed oracles are the labelled set
-    to test it on.
-    """
-    reconsider = dict(reconsider or {})
-    witness, witness_kind = _witness(
-        requirements=requirements, contract_json=contract_json,
-        port=witness_port or port, workdir=workdir, run_dir=run_dir)
-    control = control_source or ""
-    if control:
-        witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
-
-    again, _ = run_oracle_gen(
-        requirements=requirements, contract_json=contract_json,
-        contract=contract, testplan=testplan, port=port,
-        normalized=normalized, conforming_source=witness,
-        stimulus_by_tp=stimulus_by_tp, base=base,
-        max_repairs=max_repairs, fanout=fanout,
-        only=set(inadequate) | set(reconsider),
-        label=f"_strengthen{previous.rounds}",
-        standing=_standing({o.req_uid: o for o in previous.trusted},
-                           set(inadequate) | set(reconsider)),
-        feedback={**{uid: [_reconsider_issue(uid, why)]
-                     for uid, why in reconsider.items()},
-                  **{uid: [_inadequate_issue(uid, why)]
-                     for uid, why in inadequate.items()}},
-    )
-
-    kept = {o.req_uid: o for o in previous.trusted}
-    dispositions = dict(previous.dispositions)
-    reasons = dict(previous.reasons)
-    for oracle in again:
-        why, _quotable, _notes = verify_one(
-            oracle, contract=contract, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp, witness=witness, control=control,
-            variants=previous.variants, base=base, transactional=transactional)
-        if why:
-            # The replacement is worse than what it replaced. Keep the old one
-            # and record that the round did not help: reporting an oscillation
-            # is worth more than promoting whichever attempt happened to be last.
-            reasons[oracle.req_uid] = (
-                f"strengthening rejected -- {why}; the previous oracle stands")
-            continue
-        kept[oracle.req_uid] = oracle
-        dispositions[oracle.req_uid] = TRUSTED
-        reasons[oracle.req_uid] = (
-            "reconsidered after a debug loop and a second implementation both "
-            "failed to satisfy it"
-            if oracle.req_uid in reconsider
-            else "strengthened after a mutant got past it")
-
-    trusted = list(kept.values())
-    if run_dir is not None:
-        trusted, _drift = freeze.freeze(
-            trusted, Path(run_dir) / "specflow" / ARTIFACT, normalized,
-            extra={"dispositions": dispositions, "reasons": reasons,
-                   "witness": witness_kind, "rounds": previous.rounds + 1,
-                   "variants": len(previous.variants)},
-            rewrite=True)
-    else:
-        trusted = freeze.stamp(trusted, normalized)
-
-    logger.info("oracles: strengthened %d of %d inadequate",
-                sum(1 for u in inadequate if dispositions.get(u) == TRUSTED
-                    and reasons.get(u, "").startswith("strengthened")),
-                len(inadequate))
-    return OracleSet(trusted=trusted, dispositions=dispositions,
-                     reasons=reasons, variants=list(previous.variants),
-                     witness_kind=witness_kind, rounds=previous.rounds + 1,
-                     testpoints_no_oracle_names=_decides_nothing(
-                         testplan, trusted))
 
 
 def load(run_dir: Path) -> OracleSet | None:

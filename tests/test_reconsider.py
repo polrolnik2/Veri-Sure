@@ -279,3 +279,92 @@ def test_the_author_is_shown_the_check_it_is_told_to_tighten(tmp_path, monkeypat
     assert block.index("clause") < block.index("source"), (
         "shaped like an OracleOutput, so 'reply with the full corrected JSON "
         "object' has something to correct")
+
+
+# ------------------------------------------------- one loop, the same tools
+#
+# A strengthening round is the oracle stage SCOPED, not a smaller copy of it.
+# It used to dispatch to `_strengthen`, which reimplemented a subset -- one
+# generation, one verify, keep-or-revert -- so the second iteration of the
+# refmodel/oracle loop ran on strictly weaker instruments than the first, and
+# WHICH instruments it lost was decided by which keyword arguments a call site
+# in `compose` happened to pass.
+
+
+def test_there_is_only_one_oracle_stage():
+    """The separate path is gone, not merely bypassed."""
+    from specflow import oracles_stage
+
+    assert not hasattr(oracles_stage, "_strengthen")
+
+
+def test_a_scoped_round_inherits_the_instruments_rather_than_being_told_them():
+    """Read off the set being strengthened, so a caller that forgets a flag
+    does not get a quieter round -- it gets the same round."""
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    body = src[src.index("scoped = set(strengthen"):]
+    for flag in ("correspondence", "variants", "staging",
+                 "max_repairs", "repair_attempts"):
+        assert f'inherited.get("{flag}"' in body, flag
+
+
+def test_the_set_records_what_it_was_built_with():
+    from specflow.oracles_stage import OracleSet
+
+    assert OracleSet().tools == {}
+
+
+def test_variants_are_inherited_on_a_scoped_round_never_redrawn():
+    """A variant is a wrong implementation of ONE requirement and the
+    requirement has not changed. A different draw would convict an oracle
+    vacuous this round and clear it next for no reason anyone could name --
+    the same argument `_witness` makes for reading itself back."""
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert "list(previous.variants) if only and previous" in src
+    assert "if want_variants and witness and not only:" in src
+
+
+# ------------------------------------------------------- the adequacy gate
+
+
+def test_a_replacement_that_catches_no_more_than_before_is_not_promoted():
+    """"Strengthened" has to be a fact, not a claim.
+
+    A replacement that verified used to be promoted and recorded as
+    strengthened whether or not it caught anything the original missed -- the
+    same defect the stimulus loop had, an action reported as done because it
+    was attempted, and worse here because this edge exists precisely to make it
+    happen.
+    """
+    from specflow.oracles_stage import _caught, _survivor_count
+
+    assert _survivor_count("survived 3 of 8 mutants") == 3
+    assert _survivor_count("caught every one of 8") is None
+    # No model to measure against means no opinion, never a rejection.
+    assert _caught(object(), object(), "", {}, {},
+                   base="step", transactional=True) == ""
+
+
+def test_the_hardened_model_gates_and_is_never_quoted():
+    """Running a design to decide whether a check improved is what `verify_one`
+    already does with the witness and the control. Putting its trace in front of
+    the oracle AUTHOR is a different act, and the one already paid for: quoting a
+    design to the author tunes the check against it, and the model is then tuned
+    against the check, so the held-out grade stops being held out."""
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert "conforming_source=witness" in src
+    assert "conforming_source=hardened" not in src
+    # It reaches the gate and nothing else.
+    assert "hardened, contract, stimulus_by_tp" in src

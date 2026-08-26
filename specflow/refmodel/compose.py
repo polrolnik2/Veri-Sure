@@ -467,6 +467,10 @@ def _closed_loop(
             base=base, normalized=normalized, control_source=control_source,
             run_dir=run_dir, strengthen=weak, reconsider=stuck,
             previous=oracle_set,
+            # The model these mutants came from, for the adequacy gate to
+            # measure a replacement against. It GATES and is never quoted --
+            # `run_oracle_stage.hardened` says why the two differ.
+            hardened=source,
         )
         oracles = list(oracle_set.trusted)
         carried = {u: v for u, v in oracle_set.dispositions.items()
