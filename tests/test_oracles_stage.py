@@ -871,3 +871,51 @@ def test_the_repair_budget_is_attempts_not_verification_rounds():
     assert "rounds == verifications" in src, (
         "the break must key on the derived count, not on the attempt budget, "
         "or the last attempt goes unverified")
+
+
+def test_a_check_that_cannot_fire_does_not_refute_unobservable():
+    """SURVIVING IS NOT DECIDING, and that gap sent 19 findings to the wrong party.
+
+    `UNOBSERVABLE` means THIS REQUIREMENT'S TEXT names no declared output port
+    the behaviour is directly visible on -- not that no port could observe it,
+    which is why a working oracle is allowed to refute it. But nothing rejects
+    an oracle for never firing: `verify_one` explicitly does not treat an
+    unexercised replay as a finding, since the scenario not being staged is the
+    stimulus's business. So a check that abstains on every testpoint survived
+    every gate and refuted the claim on no evidence.
+
+    Measured on z-i2c: 19 of 33 NOT_EXERCISED at turn 0 were requirements
+    normalization had called unobservable, routed to "fix the stimulus" -- and a
+    requirement whose own text names no observable gives the stimulus author
+    nothing to aim at either.
+    """
+    reqs = [{"uid": "REQ-0001", "text": "x"}, {"uid": "REQ-0002", "text": "y"}]
+    blind = {"REQ-0001": {"observable": []}, "REQ-0002": {"observable": []}}
+    fires = RequirementOracle(req_uid="REQ-0001", tp_uids=["TP-0000"],
+                              clause="c", source=GOOD)
+    inert = RequirementOracle(req_uid="REQ-0002", tp_uids=["TP-0000"],
+                              clause="c", source=GOOD)
+
+    disp, why = O._dispositions(
+        requirements=reqs, trusted=[fires, inert], rejected={},
+        had_source={"REQ-0001", "REQ-0002"}, normalized=blind,
+        never_decides={"REQ-0002": "the check never triggered"})
+
+    assert disp["REQ-0001"] == O.TRUSTED, (
+        "a check that DOES decide still refutes the claim -- that rule is why "
+        "normalization calling 27 of 77 unobservable was caught")
+    assert disp["REQ-0002"] == "UNOBSERVABLE", (
+        "a check that never fires is not evidence that something observable "
+        f"was there: {disp}")
+
+
+def test_the_refutation_still_works_when_liveness_was_not_measured():
+    """`never_decides` defaults to empty, so a caller without a liveness report
+    keeps the old behaviour rather than silently reclassifying everything."""
+    reqs = [{"uid": "REQ-0001", "text": "x"}]
+    o = RequirementOracle(req_uid="REQ-0001", tp_uids=["TP-0000"],
+                          clause="c", source=GOOD)
+    disp, _ = O._dispositions(
+        requirements=reqs, trusted=[o], rejected={},
+        had_source={"REQ-0001"}, normalized={"REQ-0001": {"observable": []}})
+    assert disp["REQ-0001"] == O.TRUSTED

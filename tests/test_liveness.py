@@ -537,3 +537,43 @@ def test_the_sharper_note_wins_when_both_could_speak():
         "self_split": "holds on 3 of the testpoints it names"})
     assert len(issues) == 1
     assert issues[0].path.endswith("judged_at_idle")
+
+
+def test_a_check_that_never_triggered_is_not_blamed_on_its_author():
+    """The near/far probe edits OUTPUT ports, so a check whose guard is an input
+    condition the stimulus never stages abstains on every row and NOTHING can
+    move it -- landing in "nothing moved it", DEAD_ORACLE, whatever the cause.
+
+    Measured on z-i2c: all 11 DEAD_ORACLE verdicts were oracles returning None
+    on every testpoint they named. Nine were re-asked and told "your check
+    cannot fail"; all nine came back unchanged, because an author can neither
+    stage a scenario nor supply an observable the requirement does not name.
+    """
+    # Reads a declared output -- so it passes the "names no output port" guard
+    # and reaches the perturbation probe -- but its GUARD is an input value the
+    # stimulus never stages, so it abstains on every row.
+    never = ("def decide(trace):\n"
+             "    for row in trace:\n"
+             "        if row['inputs'].get('a') == 99:\n"
+             "            if row['outputs']['y'] != 0:\n"
+             "                return False, row['edge'], 'bad'\n"
+             "            return True, row['edge'], 'ok'\n"
+             "    return None, 0, 'the scenario never occurred'\n")
+    oracle = RequirementOracle(req_uid="REQ-0001", tp_uids=["TP-0000"],
+                               clause="c", source=never)
+    traces = liveness.replay_all([oracle], MODEL, CONTRACT, STIM, base="step")
+    rec = liveness.liveness_of(oracle, traces, CONTRACT)
+    assert rec["verdict"] == liveness.UNKNOWN, rec
+    assert "never decided" in rec["detail"], rec["detail"]
+    assert liveness.never_decides({"REQ-0001": rec}) , (
+        "and the predicate has to name it, since `_dispositions` keys on it")
+
+
+def test_never_decides_does_not_catch_a_working_check():
+    """A predicate that also fires on live oracles would move most of a working
+    set into UNOBSERVABLE. The one that decides anything must not be caught."""
+    live = RequirementOracle(req_uid="REQ-0002", tp_uids=["TP-0000"],
+                             clause="c", source=SHARP)
+    traces = liveness.replay_all([live], MODEL, CONTRACT, STIM, base="step")
+    rec = liveness.liveness_of(live, traces, CONTRACT)
+    assert not liveness.never_decides({"REQ-0002": rec}), rec

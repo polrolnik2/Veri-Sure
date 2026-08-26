@@ -297,7 +297,34 @@ def liveness_of(
     record["asserts_on"] = sorted(near)
     record["asserts_on_far"] = sorted(far)
     record["varying"] = sorted(varying)
-    if violates and not near:
+    if not near and not far and all(
+            b[0] is None for b in record["base"].values()):
+        # NEVER TRIGGERED IS NOT THE AUTHOR'S FAULT, and this branch is why the
+        # split misrouted. The near/far probe edits OUTPUT ports; a check whose
+        # guard is an input condition the stimulus never stages abstains on
+        # every row, so no output edit can move it and it lands in "nothing
+        # moved it" -- DEAD_ORACLE -- whatever the real cause.
+        #
+        # Measured on z-i2c: all 11 DEAD_ORACLE verdicts were oracles that
+        # returned None on every testpoint they named. Nine were re-asked and
+        # told "your check cannot fail"; all nine came back unchanged, because
+        # an author cannot stage a scenario or invent an observable. Six of the
+        # eleven had a real trigger and a real observable and were simply
+        # unstaged -- the testplan's -- and five were requirements whose own
+        # text names no port the behaviour is directly visible on, which is
+        # the spec's. None was the author's.
+        #
+        # UNKNOWN rather than a new verdict: this instrument cannot tell those
+        # apart, and `_dispositions` can, because it holds the normalized form.
+        # Abstaining here is also the conservative direction the module already
+        # commits to -- the dead set is a lower bound because its output is an
+        # accusation.
+        record["verdict"] = UNKNOWN
+        record["detail"] = (
+            "it never decided on any testpoint it names, so nothing at its "
+            "ports could move a verdict it does not reach -- a scenario or "
+            "observability finding, not a defect in the check")
+    elif violates and not near:
         record["verdict"] = LIVE
         record["detail"] = ("it is failing this design, which is a "
                             "demonstration that it can fail")
@@ -381,6 +408,22 @@ def dead(report: dict[str, dict]) -> dict[str, str]:
         uid: record.get("detail", "")
         for uid, record in sorted(report.items())
         if record.get("verdict") == DEAD_ORACLE
+    }
+
+
+def never_decides(report: dict[str, dict]) -> dict[str, str]:
+    """Oracles that returned no decision on any testpoint they name.
+
+    Computable from the run and owned by nobody the loop can address: the check
+    did not run, so it is neither wrong nor vacuous. `_dispositions` uses it to
+    stop a check that cannot fire from REFUTING `UNOBSERVABLE`, and this module
+    uses it to stop accusing the author.
+    """
+    return {
+        uid: "the check never triggered on any testpoint it names"
+        for uid, record in sorted(report.items())
+        if record.get("base") and all(
+            b[0] is None for b in record["base"].values())
     }
 
 

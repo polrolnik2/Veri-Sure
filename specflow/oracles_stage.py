@@ -898,7 +898,8 @@ def run_oracle_stage(
     trusted = [o for uid, o in held.items() if uid not in rejected]
     dispositions, reasons = _dispositions(
         requirements=requirements, trusted=trusted, rejected=rejected,
-        had_source=set(held), normalized=normalized)
+        had_source=set(held), normalized=normalized,
+        never_decides=_L.never_decides(alive))
     # How much the stimulus gives ANY oracle to work with. Measured on the
     # witness -- a design, but this is not a judgement about correctness, it is
     # the question "does this stimulus make a design do anything".
@@ -1110,6 +1111,9 @@ def _dispositions(
     *, requirements: list[dict], trusted: list[RequirementOracle],
     rejected: dict[str, str], had_source: set[str],
     normalized: dict[str, dict] | None,
+    #: `liveness.never_decides` -- oracles that returned no decision on any
+    #: testpoint they name. A check that cannot fire is not evidence.
+    never_decides: dict[str, str] | None = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """One verdict per requirement, and never fewer.
 
@@ -1118,6 +1122,7 @@ def _dispositions(
     """
     norm = normalized or {}
     ok = {o.req_uid for o in trusted}
+    inert = set(never_decides or {})
     out: dict[str, str] = {}
     why: dict[str, str] = {}
     for req in requirements:
@@ -1126,7 +1131,7 @@ def _dispositions(
             continue
         shape = norm.get(uid) or {}
         blind = bool(shape) and not (shape.get("observable") or [])
-        if uid in ok:
+        if uid in ok and not (blind and uid in inert):
             # A WORKING ORACLE REFUTES `UNOBSERVABLE`. Normalization claimed
             # this requirement has no boundary observable; an oracle for it then
             # named a declared port, ran, and survived every gate, which is only
@@ -1143,6 +1148,28 @@ def _dispositions(
             # because 8 requirements were called a spec defect while their
             # oracles sat in the set driving the loop -- which then silently
             # overwrote the verdict, since it decides whatever it is given.
+            # AND SURVIVING IS NOT DECIDING, which is the half this was
+            # missing. Nothing rejects an oracle for never firing -- the
+            # unexercised replay is explicitly not a finding in `verify_one`,
+            # because the scenario not being staged is the stimulus's business
+            # -- so a check that abstains on every testpoint survives every
+            # gate and was refuting the claim on no evidence at all.
+            #
+            # WHAT `UNOBSERVABLE` ACTUALLY CLAIMS, stated precisely because
+            # the loose reading makes this fix look like a bigger one than it
+            # is: THIS REQUIREMENT'S TEXT names no declared output port the
+            # behaviour is directly visible on. It is not a claim that no port
+            # can observe the behaviour -- the effect may well reach the
+            # boundary through a port some other requirement names. That is why
+            # it routes to spec authoring (say what is observable) rather than
+            # to triage, and why a working oracle is allowed to refute it.
+            #
+            # Measured on z-i2c: 19 of the 33 NOT_EXERCISED at turn 0 were
+            # requirements normalization had called unobservable. They reached
+            # the debug agent routed to "fix the stimulus" -- and a requirement
+            # whose own text names no observable gives the stimulus author
+            # nothing to aim at either, so 19 of 56 blocking findings were
+            # addressed to someone with no way to act on them.
             out[uid] = TRUSTED
             if blind:
                 why[uid] = ("normalization called this UNOBSERVABLE and its "
