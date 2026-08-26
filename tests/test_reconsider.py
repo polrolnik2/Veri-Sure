@@ -329,7 +329,11 @@ def test_variants_are_inherited_on_a_scoped_round_never_redrawn():
 
     src = inspect.getsource(oracles_stage.run_oracle_stage)
     assert "list(previous.variants) if only and previous" in src
-    assert "if want_variants and witness and not only:" in src
+    # Three conditions now guard the draw, and the last one is what makes
+    # "once" survive the process rather than only the round: whatever is
+    # already on disk wins over generating a second draw.
+    assert "if want_variants and witness and not only and not variants:" in src
+    assert "variants = variants_mod.load(variants_path)" in src
 
 
 # ------------------------------------------------------- the adequacy gate

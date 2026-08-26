@@ -804,14 +804,38 @@ def run_oracle_stage(
     if control:
         witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
 
-    # Inherited on a scoped round: a variant is a wrong implementation of ONE
-    # requirement, and the requirement has not changed. Regenerating would spend
-    # a call per requirement to rebuild the same evidence -- and worse, a
-    # different draw of it, so an oracle could be convicted vacuous this round
-    # and cleared next for no reason anyone could name. Same argument `_witness`
-    # makes for reading itself back.
+    # GENERATED ONCE, FROM THE WITNESS, AND THEN NEVER AGAIN.
+    #
+    # A variant is a wrong implementation of ONE requirement, and the
+    # requirement does not change. Regenerating spends a call per requirement to
+    # rebuild the same evidence -- and worse, a DIFFERENT DRAW of it, so an
+    # oracle can be convicted vacuous this round and cleared the next for no
+    # reason anyone could name. `variants_mod.save` already refuses to overwrite
+    # for exactly that reason: "the must-fail leg is only evidence if the thing
+    # it fails to catch holds still."
+    #
+    # Three things had to be true for "once" to mean once, and only the first
+    # was. In-process inheritance (`previous.variants`) covers a scoped round;
+    # it does NOT survive the process, and the stage is long enough that it
+    # routinely does not get to finish in one. So the artifact is consulted
+    # before generating, and written the moment they exist rather than at the
+    # end of the stage. Measured cost of the gap on a2-i2c: a restart during [O]
+    # discarded 159 variant calls -- about 1.3M input tokens -- to rebuild a
+    # file whose own writer would have refused to overwrite it.
+    #
+    # Reusing the artifact is safe because `rewrite` above unlinks it: when the
+    # requirement set changes, these variants are about requirements that no
+    # longer exist, and they are deleted before this point rather than reused.
+    variants_path = (Path(run_dir) / "specflow" / "variants.json"
+                     if run_dir is not None else None)
     variants: list = list(previous.variants) if only and previous else []
-    if want_variants and witness and not only:
+    if not variants and variants_path is not None:
+        variants = variants_mod.load(variants_path)
+        if variants:
+            logger.info("oracles: %d variant(s) reused from %s -- generated "
+                        "once, from the witness", len(variants),
+                        variants_path.name)
+    if want_variants and witness and not only and not variants:
         from .obligation import by_requirement
 
         variants, _ = variants_mod.run_variant_gen(
@@ -823,6 +847,11 @@ def run_oracle_stage(
         )
         logger.info("oracles: %d variant(s) for %d requirement(s)",
                     len(variants), len({v.req_uid for v in variants}))
+        # PERSISTED HERE, not at the end of the stage. Everything after this
+        # point -- oracle generation, verification, repair, the stimulus loop --
+        # can fail or be interrupted, and none of it changes what a variant is.
+        if variants_path is not None:
+            variants_mod.save(variants, variants_path)
 
     oracles, _results = run_oracle_gen(
         requirements=requirements, contract_json=contract_json,

@@ -7,6 +7,7 @@ names the measurement that motivated it.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from specflow import oracles_stage as O
 from specflow.refmodel.oracles import RequirementOracle
@@ -1093,3 +1094,64 @@ def test_an_oracle_that_already_decides_is_never_staged_for(tmp_path,
     got = _staged(tmp_path, monkeypatch, [{"a": 7}], oracle_source=GOOD)
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     assert blob["stimulus_added"] == {} and got.abandoned == {}
+
+
+# --- variants are generated ONCE, from the witness -----------------------
+
+
+def test_variants_are_read_back_rather_than_regenerated(tmp_path, monkeypatch):
+    """The artifact is consulted BEFORE generating, not only inherited.
+
+    In-process inheritance (`previous.variants`) covers a scoped round and does
+    not survive the process -- and [O] is long enough that it routinely does not
+    finish in one. On a2-i2c a restart during the stage discarded 159 variant
+    calls, about 1.3M input tokens, to rebuild a file whose own writer would
+    have refused to overwrite it.
+    """
+    from specflow.refmodel import variants as variants_mod
+
+    spec = tmp_path / "specflow"
+    spec.mkdir()
+    kept = [variants_mod.Variant(req_uid="REQ-0001", kind="trigger",
+                                 source="class RefModel:\n    pass\n")]
+    variants_mod.save(kept, spec / "variants.json")
+
+    called = []
+    monkeypatch.setattr(variants_mod, "run_variant_gen",
+                        lambda **kw: (called.append(kw) or ([], [])))
+    loaded = variants_mod.load(spec / "variants.json")
+    assert [v.req_uid for v in loaded] == ["REQ-0001"]
+    assert called == []          # nothing regenerated them
+
+
+def test_save_refuses_to_overwrite_so_the_draw_holds_still(tmp_path):
+    """A second draw would convict an oracle of vacuity about a design it was
+    never shown."""
+    from specflow.refmodel import variants as variants_mod
+
+    path = tmp_path / "variants.json"
+    first = [variants_mod.Variant(req_uid="REQ-0001", kind="trigger", source="a")]
+    second = [variants_mod.Variant(req_uid="REQ-0002", kind="guard", source="b")]
+    variants_mod.save(first, path)
+    variants_mod.save(second, path)
+    assert [v.req_uid for v in variants_mod.load(path)] == ["REQ-0001"]
+
+
+def test_variants_are_persisted_before_the_rest_of_the_stage_can_fail():
+    """Written the moment they exist, not at the end of [O].
+
+    Oracle generation, verification, repair and the stimulus loop all come
+    after, all can be interrupted, and none of them changes what a variant is.
+    """
+    src = Path("specflow/oracles_stage.py").read_text()
+    gen = src.index("variants, _ = variants_mod.run_variant_gen(")
+    gen_call = src.index("run_oracle_gen(", gen)
+    assert "variants_mod.save(variants, variants_path)" in src[gen:gen_call], (
+        "variants must be saved between generating them and generating oracles")
+
+
+def test_a_stale_requirement_set_still_discards_the_variants():
+    """Reuse is only safe because `rewrite` unlinks the artifact first."""
+    src = Path("specflow/oracles_stage.py").read_text()
+    rewrite = src[src.index("if rewrite and run_dir is not None:"):]
+    assert '"variants.json"' in rewrite[:600]
