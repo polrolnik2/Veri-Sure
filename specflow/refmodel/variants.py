@@ -224,8 +224,9 @@ Reply with ONE JSON object and nothing else:
 }
 
 Fewer methods is better, and the smallest change that breaks the clause
-observably is the right one. If -- and only if -- the change genuinely cannot be
-expressed as whole methods, send `"source"` with the complete model instead.
+observably is the right one. Sending the whole module instead of `methods` WILL
+BE REJECTED: rule 1 asks that everything else stay correct, and the only way to
+show that is to not re-type it.
 """
 
 
@@ -354,6 +355,7 @@ def gate_one(
     steps: list[dict],
     observable: set[str],
     base: str = "step",
+    whole_module_ok: bool = False,
 ) -> list[Issue]:
     """A variant must run, and it must be VISIBLY different. Nothing else.
 
@@ -373,6 +375,21 @@ def gate_one(
     if not out.source:
         return [Issue("error", f"variant.{req_uid}.{kind}.methods",
                       "no `methods` and no `source`: there is no design here")]
+    if not out.methods and not whole_module_ok:
+        # ASKED FOR IN THE PROMPT IS NOT ENFORCED. The instruction to send only
+        # changed methods landed in the live prompt and the model emitted the
+        # whole module on 5 of 5 calls anyway, taking the escape clause every
+        # time -- the same failure as `add_stimulus` asking an agent not to
+        # repeat itself, and the reason I8 became a tool refusal instead of
+        # prose. So the escape stays reachable and stops being free: it is
+        # refused once, with the reason, and the repair round may take it.
+        return [Issue("error", f"variant.{req_uid}.{kind}.methods",
+                      "send `methods` -- the changed methods only, spliced onto "
+                      "the conforming model by name -- not the whole module. "
+                      "Everything you do not send stays exactly as it is, which "
+                      "is what 'everything else about the model stays correct' "
+                      "asks for. If this change truly cannot be written as whole "
+                      "methods, send `source` again and it will be accepted.")]
     # The same sandbox screen the reference model gets: a variant is generated
     # Python this process will execute. `requirements=[]` because a variant
     # carries no coverage map -- it is one design, not an answer to a fan-out.
@@ -443,6 +460,18 @@ def run_variant_gen(
             ) -> StageResult[VariantOutput]:
         req, kind, steps, watch = job
         uid = str(req.get("uid") or "")
+        # One refusal, then the model's judgement stands. Counting here rather
+        # than threading a round number through `run_stage` keeps the state
+        # where the retries happen and out of the gate's signature.
+        seen = {"n": 0}
+
+        def gate(out: VariantOutput) -> list[Issue]:
+            seen["n"] += 1
+            return gate_one(
+                out, req_uid=uid, kind=kind, contract=contract,
+                conforming_source=conforming_source, steps=steps,
+                observable=watch, base=base, whole_module_ok=seen["n"] > 1)
+
         return run_stage(
             stage=f"{STAGE}_{uid or 'unknown'}_{kind}",
             port=port,
@@ -452,10 +481,7 @@ def run_variant_gen(
                 normalized=norm.get(uid), issues=issues, previous=previous,
             ),
             parse=lambda t: parse_and_splice(t, conforming_source),
-            gate=lambda out: gate_one(
-                out, req_uid=uid, kind=kind, contract=contract,
-                conforming_source=conforming_source, steps=steps,
-                observable=watch, base=base),
+            gate=gate,
             max_repairs=max_repairs,
         )
 

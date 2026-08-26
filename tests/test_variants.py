@@ -146,7 +146,7 @@ def test_a_variant_that_changes_nothing_observable_is_refused():
     """Equivalence, decided by projection rather than by asking a model."""
     issues = V.gate_one(
         _out(EQUIVALENT), req_uid="REQ-0001", kind=V.ACTION, contract=CONTRACT,
-        conforming_source=CONFORMING, steps=STEPS, observable={"y"})
+        conforming_source=CONFORMING, steps=STEPS, observable={"y"}, whole_module_ok=True)
     assert issues and "equivalent" in issues[0].path
 
 
@@ -154,14 +154,14 @@ def test_a_genuinely_different_variant_passes():
     assert V.gate_one(
         _out(BROKEN_ACTION), req_uid="REQ-0001", kind=V.ACTION,
         contract=CONTRACT, conforming_source=CONFORMING, steps=STEPS,
-        observable={"y"}) == []
+        observable={"y"}, whole_module_ok=True) == []
 
 
 def test_a_variant_that_will_not_run_is_refused():
     issues = V.gate_one(
         _out("class Model:\n    pass\n"), req_uid="REQ-0001", kind=V.ACTION,
         contract=CONTRACT, conforming_source=CONFORMING, steps=STEPS,
-        observable={"y"})
+        observable={"y"}, whole_module_ok=True)
     assert issues
 
 
@@ -170,7 +170,7 @@ def test_a_variant_reaching_outside_specflow_is_refused():
     issues = V.gate_one(
         _out("import os\n" + CONFORMING), req_uid="REQ-0001", kind=V.ACTION,
         contract=CONTRACT, conforming_source=CONFORMING, steps=STEPS,
-        observable={"y"})
+        observable={"y"}, whole_module_ok=True)
     assert issues
 
 
@@ -468,14 +468,37 @@ def test_a_reply_with_neither_methods_nor_source_is_rejected():
     assert issues and "no design here" in issues[0].message
 
 
-def test_a_whole_module_reply_is_still_accepted():
-    """A variant that genuinely has to restructure the model should not be
-    forced to lie about it in patches."""
+def test_a_whole_module_reply_is_REFUSED_the_first_time():
+    """Asked for in the prompt is not enforced.
+
+    The instruction to send only changed methods reached the live prompt and
+    gpt-5-mini emitted the whole module on 5 of 5 calls anyway, taking the
+    escape clause every time. Same failure as `add_stimulus` asking an agent not
+    to repeat itself, and the reason I8 became a tool refusal rather than prose.
+    """
     whole = SPLICE_BASE.replace("self.q = i['d']", "self.q = 0")
     out = variants.parse_and_splice(_variant_reply(source=whole), SPLICE_BASE)
-    assert out.source == whole and not out.splice_error
+    assert out.source == whole and not out.splice_error   # parsing is fine
+    issues = variants.gate_one(
+        out, req_uid="REQ-0001", kind="action", contract={"io": []},
+        conforming_source=SPLICE_BASE, steps=[], observable=set())
+    assert issues and "not the whole module" in issues[0].message
 
 
-def test_the_prompt_asks_for_methods_rather_than_the_module():
-    assert "SEND ONLY THE METHODS YOU CHANGE" in variants.SYSTEM
-    assert '"methods"' in variants.SYSTEM
+def test_and_ACCEPTED_on_the_retry_so_the_escape_stays_reachable():
+    """Refused once, with the reason. A variant that genuinely has to
+    restructure the model is not blocked, only asked to mean it."""
+    whole = SPLICE_BASE.replace("self.q = i['d']", "self.q = 0")
+    out = variants.parse_and_splice(_variant_reply(source=whole), SPLICE_BASE)
+    assert variants.gate_one(
+        out, req_uid="REQ-0001", kind="action", contract={"io": []},
+        conforming_source=SPLICE_BASE, steps=[], observable=set(),
+        whole_module_ok=True) == []
+
+
+def test_the_prompt_says_the_whole_module_will_be_refused():
+    """The prose and the gate must agree, or the model is told one thing and
+    scored on another. Asserted on fragments that do not cross a line wrap --
+    a trap that has already cost this repo once."""
+    assert "Sending the whole module instead of" in variants.SYSTEM
+    assert "BE REJECTED" in variants.SYSTEM
