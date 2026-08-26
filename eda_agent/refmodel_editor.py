@@ -262,15 +262,18 @@ class RefModelEditor:
     # --------------------------------------------------------------- tools
 
     async def _tool_list_oracles(self) -> ToolResponse:
-        """The oracles THIS turn can act on, and a census of the rest.
+        """Detail for the oracles THIS turn can act on; a line for the rest.
 
-        Returns req_uid, the clause it decides, the testpoints it replays, and
-        the current status with the edge it decided on -- for the failing ones
-        on a model turn, the unexercised ones on a stimulus turn. It also names
-        the methods `covers` implicates for them, which is where to read first.
+        `acting_on` carries the full record -- req_uid, the clause it decides,
+        the testpoints it replays, the current status and the edge it decided on
+        -- for the failing ones on a model turn, the unexercised ones on a
+        stimulus turn. `methods_to_look_at_first` names what claims to implement
+        them, which is where to read.
 
-        The oracles it does not list are counted by status, never hidden: every
-        one is still reachable by name through `explain` or `run_oracle`.
+        `not_acting_on` names EVERY other requirement under its status. Those
+        are the ones an edit can break, so check it before you change a method
+        that several requirements share. Read any of them in full by name with
+        explain(req_uid) or run_oracle(req_uid).
         """
         if self._session is None:
             return _no_session()

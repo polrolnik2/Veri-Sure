@@ -150,11 +150,27 @@ def test_the_board_lists_only_what_the_turn_can_act_on_and_counts_the_rest():
                           source=s.oracles[0].source),
     ]
     board = s.board()
+    # Detail for the one it can act on...
     assert [r["req_uid"] for r in board["acting_on"]] == ["REQ-0000"]
-    assert board["not_shown"]["count"] == 2
-    assert board["not_shown"]["by_status"] == {"NOT EXERCISED": 1, "met": 1}
-    assert "not listed here" in board["note"]
+    assert board["acting_on"][0]["detail"] == "ack stayed low"
+    # ...and every other requirement NAMED under its status, not merely counted.
+    # The agent must know REQ-0001 is already met before it edits the method
+    # that satisfies it, and a census cannot tell it which one that is.
+    assert board["not_acting_on"] == {
+        "NOT EXERCISED": ["REQ-0002"], "met": ["REQ-0001"]}
+    assert "an edit can BREAK" in board["note"]
     assert "explain(req_uid)" in board["note"]
+
+
+def test_the_board_names_every_requirement_even_when_it_details_none_of_them():
+    """Nothing may be invisible. `list_suspect_blocks` summarises each item and
+    `read_block` fetches the body; the summary half is what makes the detail
+    half safe to withhold."""
+    s = _session()
+    s._results = [OracleResult("REQ-0000", ok=True, edge=1)]
+    board = s.board()
+    named = {u for uids in board["not_acting_on"].values() for u in uids}
+    assert board["acting_on"] == [] and named == {"REQ-0000"}
 
 
 # ------------------------------------------------------------------ prompts

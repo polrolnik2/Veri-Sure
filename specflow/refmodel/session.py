@@ -30,7 +30,6 @@ from __future__ import annotations
 import ast
 import json
 import tempfile
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -342,29 +341,38 @@ class DebugSession:
         return [r.req_uid for r in rows]
 
     def board(self) -> dict:
-        """The turn's working set, plus a census of what is not shown.
+        """Detail for what the turn can act on; one line for everything else.
 
-        `list_oracles` returns all of them -- 104 on the last live run, ~40 KB --
-        and the turn acts on a handful. This is that handful, with counts for
-        the rest so nothing is silently hidden, and every uid remains reachable
-        by name through `explain`.
+        The `list_suspect_blocks` shape. That tool does not return block bodies
+        -- it returns an entry per block (id, kind, trigger, line span) and the
+        body arrives only when `read_block` asks for one. Summary in the list,
+        detail on request.
+
+        So `not_acting_on` NAMES every other requirement under its status rather
+        than counting them. Counting alone was the wrong half to drop: the agent
+        must know a requirement is already met before it edits the method that
+        satisfies it, and a census cannot tell it which ones those are. Naming
+        them costs ~12 B each -- 1.3 KB across the 104 of the last live run,
+        against the ~40 KB the full records cost -- and every one stays one
+        `explain(req_uid)` away.
         """
         rows = self.list_oracles()
         wanted = "NOT MET" if self.route == MODEL else "NOT EXERCISED"
         acting = [r for r in rows if r["status"] == wanted]
         shown = {r["req_uid"] for r in acting}
-        rest = Counter(r["status"] for r in rows if r["req_uid"] not in shown)
+        rest: dict[str, list[str]] = {}
+        for r in rows:
+            if r["req_uid"] not in shown:
+                rest.setdefault(r["status"], []).append(r["req_uid"])
         return {
             "this_turn_is_about": wanted,
             "acting_on": acting,
-            "not_shown": {
-                "count": len(rows) - len(acting),
-                "by_status": dict(sorted(rest.items())),
-            },
+            "not_acting_on": {k: sorted(v) for k, v in sorted(rest.items())},
             "note": (
-                f"{len(rows) - len(acting)} further oracle(s) are not listed "
-                f"here because this turn cannot act on them. Every one is still "
-                f"reachable by name: explain(req_uid) or run_oracle(req_uid)."
+                f"{len(rows) - len(acting)} further oracle(s) are named above "
+                f"without detail because this turn cannot act on them -- but "
+                f"they are the ones an edit can BREAK. Read any of them in full "
+                f"by name: explain(req_uid) or run_oracle(req_uid)."
             ) if len(rows) > len(acting) else "",
             "methods_to_look_at_first": self._methods_for(
                 [r["req_uid"] for r in acting]),
