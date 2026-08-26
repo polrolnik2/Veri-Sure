@@ -33,7 +33,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..ports import asserted_resets, idle_values, pinned_inputs
-from ..tb.runtime import is_reset_step, normalise_step
+from ..tb.runtime import is_reset_step, normalise_step, reset_ports
 from .validate import _static_checks
 
 #: Hard bound on edges any one replay will simulate. A stimulus step may declare
@@ -199,10 +199,21 @@ def replay(
             # from one defined state rather than from whatever the last vector
             # left. Holding the previous functional inputs instead would let the
             # design keep advancing through its own reset.
+            named = reset_ports(raw)
             state = dict(all_idle)
-            state.update(active_resets)
+            state.update(asserted_resets(contract, only=named))
             until, timeout = None, 0
-            resetting = True
+            # FORCING `reset()` IS WHAT MAKES TWO RESET PORTS INDISTINGUISHABLE,
+            # so it happens only for a whole-design reset. When the step names a
+            # subset the port is driven active and the model is left to respond
+            # to it -- which is precisely the question "is rst a synchronous
+            # reset" asks, and forcing the model into its reset state would
+            # answer it for every port at once and therefore for none.
+            #
+            # The guard against a model that ignores the port is not lost, it
+            # moves: a selective reset that changes nothing is now a visible
+            # failure of that requirement rather than an invisible pass.
+            resetting = named is None or set(named) >= set(active_resets)
         else:
             resetting = False
             state.update(idle_resets)

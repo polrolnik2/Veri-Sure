@@ -184,6 +184,33 @@ def is_reset_step(step: object) -> bool:
     return isinstance(step, dict) and bool(step.get("reset"))
 
 
+def reset_ports(step: object) -> list[str] | None:
+    """Which reset ports this step asserts. `None` means every declared one.
+
+        {"reset": true}              every reset port -- the whole-design reset
+        {"reset": ["rst"]}           that port only, the others left idle
+
+    THE LIST FORM EXISTS BECAUSE A TWO-RESET DESIGN IS OTHERWISE UNASKABLE.
+    `{"reset": true}` drives `rst` active AND `nReset` active at the same edge,
+    so a requirement that distinguishes the synchronous reset from the
+    asynchronous one -- which is the entire content of i2c's REQ-0006 -- can
+    never observe the state it is about. It is not a stimulus defect and no
+    hint fixes it; the scenario simply had no expression in the schema.
+
+    `true` stays the default and keeps its meaning, because whole-design reset
+    is what almost every testpoint wants and changing that would rewrite the
+    semantics of every suite already on disk.
+    """
+    if not isinstance(step, dict):
+        return None
+    value = step.get("reset")
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return [str(v) for v in value]
+    return None
+
+
 def normalise_step(step: dict) -> tuple[dict, int, dict | None, int]:
     """A stimulus step, in either shape, as `(inputs, hold, until, timeout)`.
 
@@ -368,8 +395,15 @@ class Env:
             await env.reset()
         return env
 
-    async def reset(self, cycles: int = 2) -> None:
-        """Assert every declared reset, hold, release, then reset the model.
+    async def reset(self, cycles: int = 2,
+                    only: list[str] | None = None) -> None:
+        """Assert the declared resets, hold, release, then reset the model.
+
+        `only` names a subset, mirroring `{"reset": ["rst"]}` in the step
+        schema, and the two sides must agree on what that means or the invariant
+        this method exists for is gone: for a SUBSET the port is driven and the
+        model is NOT force-reset, because the question being asked is whether
+        the design responds to that particular port. `replay` does the same.
 
         Reset names come from the contract via `tb/ports.py`, not from a local
         probe list. The probe list this replaced knew `rst`/`reset`/`rst_n`/
@@ -381,6 +415,10 @@ class Env:
         if not names:
             names = [n for n in ("rst", "reset", "rst_n", "resetn", "nReset")
                      if getattr(self.dut, n, None) is not None]
+        whole = only is None or set(map(str, only)) >= set(names)
+        if only is not None:
+            wanted = {str(n) for n in only}
+            names = [n for n in names if n in wanted]
 
         handles = [(n, getattr(self.dut, n, None)) for n in names]
         handles = [(n, h) for n, h in handles if h is not None]
@@ -402,7 +440,10 @@ class Env:
                 self._drive(name, self.idle.get(name, 0))
         for name, _ in handles:
             self._drive(name, 1 - inactive_value(name))
-        if hasattr(self.ref, "reset"):
+        # Only for a whole-design reset -- see the docstring. A selective reset
+        # drives its port and leaves the model to answer for itself, which is
+        # the whole point of naming one.
+        if whole and hasattr(self.ref, "reset"):
             self.ref.reset()
         # Lockstep through reset too. The DUT takes `cycles + 1` edges here, and
         # a model that took none arrives at the first stimulus vector that many
@@ -438,8 +479,9 @@ class Env:
             # `reset()` already sequences the DUT and the model together, which
             # is the invariant that keeps reset out of `_drivable`. Routing the
             # step here rather than driving the port directly is what lets a
-            # testpoint exercise reset without the two sides diverging.
-            await self.reset(cycles=hold)
+            # testpoint exercise reset without the two sides diverging -- and
+            # the named subset goes through the same door for the same reason.
+            await self.reset(cycles=hold, only=reset_ports(stim))
             return
         self._inputs = inputs
         for name, value in inputs.items():

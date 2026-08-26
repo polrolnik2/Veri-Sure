@@ -115,7 +115,7 @@ def idle_values(contract: dict) -> dict[str, int]:
     }
 
 
-def asserted_resets(contract: dict) -> dict[str, int]:
+def asserted_resets(contract: dict, only: list[str] | None = None) -> dict[str, int]:
     """Each reset port mapped to its ACTIVE value -- the mirror of `pinned_inputs`.
 
     `idle_value` gives the level a reset holds when it is NOT asserting; for a
@@ -125,6 +125,16 @@ def asserted_resets(contract: dict) -> dict[str, int]:
     declares an explicit `idle_value` honoured in both directions.
     """
     _, resets, _ = classify(contract)
+    # A SUBSET, WHEN THE STEP NAMES ONE. A design with two reset ports cannot
+    # otherwise be asked about either: asserting all of them together makes
+    # "rst asserted while nReset is released" a state the runtime never
+    # produces, and a requirement about which reset is which is then
+    # unjudgeable. Measured on a2-i2c: 204 replayed edges, one row with rst==1,
+    # nReset==0 on that same row, and zero rows with rst==1 and nReset==1 --
+    # so REQ-0006 and REQ-0007 abstained by construction.
+    if only is not None:
+        wanted = {str(n) for n in only}
+        resets = [n for n in resets if n in wanted]
     by_name = {
         str(port.get("name")): port
         for port in (contract.get("io") or []) if port.get("name")

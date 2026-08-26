@@ -33,7 +33,7 @@ from .ids import PREFIX_TESTCASE, mint, next_index
 from .model_io import ModelPort
 from .ports import classify
 from .schema import Issue
-from .tb.runtime import is_reset_step, normalise_step
+from .tb.runtime import is_reset_step, normalise_step, reset_ports
 from .fanout import compose, json_block, shared_block
 from .stage import (
     StageResult,
@@ -299,8 +299,15 @@ TO EXERCISE RESET, USE A RESET STEP. Reset is not a drivable input: the harness
 owns it, so that the design and the reference model are reset together and
 cannot diverge. Ask for one with
 
-  {"reset": true}                           assert reset, hold 2 edges, release
+  {"reset": true}                           assert EVERY reset, hold 2, release
   {"reset": true, "hold": 8}                the same, held 8 edges
+  {"reset": ["rst"], "hold": 2}             assert ONLY that reset port
+
+A design with more than one reset port needs the third form to tell them apart.
+`true` asserts all of them at the same edge, so a requirement about which reset
+does what -- a synchronous active-high `rst` beside an asynchronous active-low
+`nReset` -- can never observe the state it is about. Name the one the
+requirement is about, and the others stay idle.
 
 A reset step drives no inputs -- put the values you want afterwards in the step
 that follows it. Use one whenever the testpoint asks for reset to be applied
@@ -313,7 +320,8 @@ Supply:
                 stimulus_steps  an ordered list of steps. A step is either a
                                 bare dict of input port name -> integer value,
                                 or {"inputs": {...}} with an optional "hold" or
-                                "until"/"timeout", or {"reset": true}. Every
+                                "until"/"timeout", or {"reset": true} or
+                                {"reset": ["<reset port>"]}. Every
                                 drivable input must appear in every step that
                                 is not a reset step.
 
@@ -436,7 +444,23 @@ def gate_suite(
             if is_reset_step(raw):
                 # A reset step drives nothing: the runtime sequences the reset
                 # on both sides at once, which is exactly why reset stays out of
-                # `_drivable`. Only its duration is the test's business.
+                # `_drivable`. Only its duration -- and now which reset ports --
+                # is the test's business.
+                named = reset_ports(raw)
+                if named is not None:
+                    _, declared, _ = classify(contract)
+                    unknown = [n for n in named if n not in declared]
+                    if unknown:
+                        issues.append(
+                            Issue("error", path,
+                                  f"names {', '.join(unknown)} as a reset port; "
+                                  f"this design declares "
+                                  f"{', '.join(declared) or 'none'}"))
+                    elif not named:
+                        issues.append(
+                            Issue("error", path,
+                                  "an empty reset port list asserts nothing -- "
+                                  'use {"reset": true} for a whole reset'))
                 if hold > MAX_HOLD:
                     issues.append(
                         Issue("error", path,
