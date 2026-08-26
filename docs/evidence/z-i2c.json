@@ -137,5 +137,37 @@
  },
  "rtl_produced": false,
  "run": "z-i2c",
- "turns": []
+ "turns": [
+  {
+   "conforms_by_liveness": {
+    "conforms": 60,
+    "from_a_check_that_can_fail": 48,
+    "from_a_check_that_cannot": 12,
+    "from_a_check_undecided": 0,
+    "not_measured": 0
+   },
+   "counts": {
+    "CONFORMS": 60,
+    "NOT_EXERCISED": 33,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 3,
+    "VACUOUS": 8,
+    "VIOLATES": 11
+   },
+   "idle_turns": 0,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r0",
+   "violates_the_witness_also_fails": [
+    "REQ-0004",
+    "REQ-0054",
+    "REQ-0063",
+    "REQ-0084",
+    "REQ-0100",
+    "REQ-0101",
+    "REQ-0114"
+   ]
+  }
+ ]
 }
