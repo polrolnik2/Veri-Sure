@@ -1050,7 +1050,10 @@ def run_oracle_stage(
     if want_staging and witness:
         abandoned, staging = stage_unexercised(
             held={u: o for u, o in held.items() if u not in rejected},
-            unexercised=_L.never_decides(alive),
+            unexercised=unexercised_against(
+                {u: o for u, o in held.items() if u not in rejected},
+                witness, contract, stimulus_by_tp, base=base,
+                transactional=transactional),
             requirements=requirements, normalized=normalized or {},
             contract=contract, testplan=testplan,
             stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
@@ -1448,6 +1451,38 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
 
 
 
+
+def unexercised_against(held: dict, witness: str, contract: dict,
+                        stimulus_by_tp: dict, *, base: str,
+                        transactional: bool) -> dict[str, str]:
+    """`req_uid -> why`, for checks that abstain on every testpoint they name.
+
+    COMPUTED DIRECTLY, not read off `liveness`. The loop's first version used
+    `liveness.never_decides`, which is the right IDEA and the wrong SOURCE: it
+    requires the liveness sweep to have populated `record["base"]`, and a sweep
+    that comes back UNKNOWN populates nothing -- so an oracle that abstains on
+    everything was invisible to the loop precisely when the instrument measuring
+    it had also failed. Caught by running the stage end to end rather than the
+    loop in isolation.
+
+    `decide_all` already answers this and its tri-state is the definition:
+    `ok is None` means the clause's scenario never occurred (`oracles.py:314`).
+    """
+    from .refmodel.oracles import decide_all
+
+    if not held or not witness:
+        return {}
+    try:
+        results = decide_all(list(held.values()), witness, contract,
+                             stimulus_by_tp, base=base,
+                             transactional=transactional)
+    except Exception as exc:  # noqa: BLE001 -- a measurement, never the stage
+        logger.warning("oracles: could not decide the set for staging: %r", exc)
+        return {}
+    return {r.req_uid: "the check never saw its scenario in this stimulus"
+            for r in results if r.unexercised()}
+
+
 def stage_unexercised(
     *,
     held: dict,
@@ -1489,6 +1524,10 @@ def stage_unexercised(
 
     Appends only. Nothing existing is edited, so a grown stimulus set cannot
     make a scenario stop occurring -- the `add_testcase` discipline.
+
+    MUTATES `stimulus_by_tp` AND `testplan` IN PLACE, deliberately: what this
+    stages has to be in the suite the reference model is then debugged against,
+    and returning a copy would leave the caller deciding whether to adopt it.
     """
     from .ids import PREFIX_TESTPLAN, mint, next_index
     from .obligation import Obligation

@@ -1029,3 +1029,67 @@ def test_a_normalized_form_predating_the_pass_is_not_treated_as_asked():
         requirements=[{"uid": "REQ-0000"}], trusted=[], rejected={},
         had_source=set(), normalized=never_asked, abandoned={})
     assert out["REQ-0000"] == "UNOBSERVABLE", "blocking: the pass did not run"
+
+
+# ------------------------------- the staging loop, through the whole stage
+#
+# `test_stimulus_loop` pins the loop in isolation. These run it where it
+# actually sits -- after the repair rounds, before the freeze -- because that
+# placement is what decides whether its results reach the artifact and whether
+# the set it staged into is the set that gets frozen.
+
+
+def _staged(tmp_path, monkeypatch, steps, oracle_source=UNEXERCISED):
+    """Run the whole stage with an oracle nothing reaches, and a scripted
+    generator. Returns the `OracleSet`."""
+    import specflow.testcase_agent as ta
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(ta, "stimulus_for_scenario",
+                        lambda **_kw: list(steps))
+    port = _Port([_reply(oracle_source)])
+    # COPIES: the loop appends to both by design -- the debug loop downstream
+    # has to see what was staged -- so sharing the module fixtures would leak
+    # minted testpoints into every later test in this file.
+    return O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=[dict(e) for e in TESTPLAN],
+        stimulus_by_tp={k: list(v) for k, v in STIM.items()},
+        port=port, workdir=tmp_path, run_dir=tmp_path, base="step",
+        fanout=False, max_repairs=0,
+        want_staging=True, staging_attempts=2)
+
+
+def test_the_stage_stages_what_nothing_reaches_and_records_it(tmp_path,
+                                                              monkeypatch):
+    """The oracle abstains until `a` reaches 7; the generator supplies it."""
+    got = _staged(tmp_path, monkeypatch, [{"a": 7}, {"a": 0}])
+    assert got.abandoned == {}, "it was reached, so nothing is given up on"
+    added = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text()
+                       )["stimulus_added"]
+    assert added["REQ-0001"], "the minted testpoint is named in the artifact"
+    assert got.dispositions["REQ-0001"] == O.TRUSTED
+
+
+def test_a_requirement_the_stage_could_not_reach_leaves_the_frozen_set(
+        tmp_path, monkeypatch):
+    """"Staged N times, never reached" and "nobody tried" stop being the same
+    verdict, and the first one leaves the system."""
+    got = _staged(tmp_path, monkeypatch, [{"a": 1}, {"a": 0}])
+    assert got.abandoned == {"REQ-0001": "never reached"}
+    assert [o.req_uid for o in got.trusted] == [], "not in the driving set"
+    assert got.dispositions["REQ-0001"] == "ABANDONED"
+    assert got.considered() == 0, "it left the denominator too"
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["abandoned"] == {"REQ-0001": "never reached"}
+    assert blob["staging"]["REQ-0001"]["reached_at_attempt"] is None
+    assert len(blob["staging"]["REQ-0001"]["attempts"]) == 2, "both attempts"
+
+
+def test_an_oracle_that_already_decides_is_never_staged_for(tmp_path,
+                                                            monkeypatch):
+    """The loop's input is `never_decides`, not "everything"."""
+    got = _staged(tmp_path, monkeypatch, [{"a": 7}], oracle_source=GOOD)
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["stimulus_added"] == {} and got.abandoned == {}
