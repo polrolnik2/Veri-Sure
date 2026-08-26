@@ -493,6 +493,7 @@ def build_artifacts(
         if fanout:
             merged, per_item = run_s2_fanout(
                 requirements=reqs, contract_json=contract_json, port=port,
+                normalized=normalized_by_uid,
                 max_repairs=max_repairs)
             s2 = StageResult(merged, [i for r in per_item for i in r.issues],
                              max((r.rounds for r in per_item), default=0))
@@ -517,6 +518,7 @@ def build_artifacts(
         if fanout:
             merged3, per_item3 = run_s3_fanout(
                 testplan=tps, contract_json=contract_json, port=port,
+                normalized=normalized_by_uid,
                 max_repairs=max_repairs)
             s3 = StageResult(merged3, [i for r in per_item3 for i in r.issues],
                              max((r.rounds for r in per_item3), default=0))

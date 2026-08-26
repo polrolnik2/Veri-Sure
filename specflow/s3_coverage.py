@@ -259,18 +259,85 @@ def shared_prefix(contract_json: str) -> str:
     return shared_block(("system", SYSTEM), ("contract_json", contract_json))
 
 
+#: Appended to an INDIRECT element's item block, for the same reason S2's is not
+#: in the shared prefix: it applies to a minority and would misdirect the rest.
+INDIRECT_NOTE = """\
+THE REQUIREMENT THIS ELEMENT COVERS IS OBSERVED AT ANOTHER REQUIREMENT'S PORT.
+
+That is what makes a bin writable here at all. A requirement whose own text
+names no port can otherwise only produce a bin condition over something
+internal -- coverable and unverifiable, which is the vacuity failure in its
+purest form. `observed_via` gives you the port; `when` gives you the condition
+under which it carries THIS requirement's effect.
+
+BIN. Write the condition over the route's port AND qualified by this
+requirement's own activation. The port alone is the other requirement's bin.
+
+CHECK. Name the route's port in `signals`. But if your check's signals and its
+`expr` would both be exactly what you would write for `through_req`, you have
+duplicated that requirement's check under a different uid and this one verifies
+nothing -- qualify it by the activation, the way the bin is qualified.
+"""
+
+
 def build_prompt_one(
     element: dict,
     contract_json: str,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    normalized: dict | None = None,
 ) -> str:
+    item = json_block("testplan_element", element)
+    if normalized:
+        item += "\n\n" + json_block("normalized", normalized)
+        if normalized.get("observed_via"):
+            item += "\n\n" + INDIRECT_NOTE
     return compose(
         shared_prefix(contract_json),
-        json_block("testplan_element", element),
+        item,
         issues=issues,
         previous=previous,
     )
+
+
+def indirect_issues(element: dict, out: CoverageOutput,
+                    normalized: dict | None) -> list[Issue]:
+    """An indirect check has to be qualified, or it is the sibling's check.
+
+    The one failure mode indirection introduces: the element borrows a port, and
+    the easiest thing to write about that port is what its OWNER already says
+    about it. Such a check passes and fails with the other requirement, so this
+    requirement is covered on paper and verified by nothing.
+
+    Detected structurally rather than semantically -- an `expr` naming only the
+    route's port, with nothing from this requirement's activation in it. That
+    over-approximates toward silence: a check qualified in words the activation
+    does not use passes here, which is the right way to be wrong for a gate
+    whose alternative is rejecting correct checks.
+    """
+    routes = (normalized or {}).get("observed_via") or []
+    if not routes:
+        return []
+    act = ((normalized or {}).get("activation") or {})
+    words = {w for w in str(act.get("text") or "").lower().split() if len(w) > 3}
+    words |= {str(k).lower() for k in (act.get("inputs") or {})}
+    ports = {str(r.get("port")) for r in routes}
+    issues: list[Issue] = []
+    for check in out.checks:
+        expr = str(getattr(check, "expr", "") or "").lower()
+        named = {str(x) for x in (getattr(check, "signals", None) or [])}
+        if not named or not named <= ports:
+            continue
+        if words and not any(w in expr for w in words):
+            issues.append(Issue(
+                "error", f"s3.{element.get('uid')}.{check.uid}.expr",
+                f"this check names only {sorted(named)}, which belongs to "
+                f"another requirement, and says nothing about when "
+                f"{element.get('uid')}'s own activation holds. As written it "
+                f"passes and fails with that other requirement, so this "
+                f"element is covered on paper and verified by nothing. "
+                f"Qualify it by the activation: {act.get('text')!r}"))
+    return issues
 
 
 def run_s3_fanout(
@@ -280,6 +347,10 @@ def run_s3_fanout(
     port: ModelPort,
     max_repairs: int = 3,
     fanout: bool = True,
+    #: `req_uid -> normalized form`, looked up through the element's `covers`.
+    #: Without it an indirect element's bin can only be written over something
+    #: internal -- coverable and unverifiable.
+    normalized: dict[str, dict] | None = None,
 ) -> tuple[CoverageOutput, list[StageResult[CoverageOutput]]]:
     """One small call per testplan element, merged into one coverage model.
 
@@ -292,14 +363,25 @@ def run_s3_fanout(
     except json.JSONDecodeError:
         contract = {}
 
+    def _shape(element: dict) -> dict | None:
+        from .ids import parse_ref
+
+        for ref in element.get("covers") or []:
+            shape = (normalized or {}).get(parse_ref(str(ref)).uid)
+            if shape:
+                return shape
+        return None
+
     def one(element: dict) -> StageResult[CoverageOutput]:
+        shape = _shape(element)
         return run_stage(
             stage=f"{STAGE}_{element.get('uid', 'unknown')}",
             port=port,
             build_prompt=lambda issues, previous: build_prompt_one(
-                element, contract_json, issues, previous),
+                element, contract_json, issues, previous, normalized=shape),
             parse=parse_response,
-            gate=lambda out: gate([element], out, contract),
+            gate=lambda out: gate([element], out, contract)
+            + indirect_issues(element, out, shape),
             max_repairs=max_repairs,
         )
 

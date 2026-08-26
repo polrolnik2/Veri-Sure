@@ -85,6 +85,40 @@ normalized form:
 Your oracle decides the `expectation` over the `observable`, at the moments the
 `activation` holds.
 
+WHEN `observed_via` IS PRESENT, THE PORT BELONGS TO ANOTHER REQUIREMENT.
+
+This requirement's own text names no output port -- the behaviour reaches the
+boundary through what it makes some other requirement do. Each entry gives you:
+
+  port         the declared output to decide at
+  through_req  the requirement that port belongs to
+  when         the condition under which that port carries THIS requirement's
+               effect rather than the other requirement's own
+  shows        what the port does when this requirement holds, AND when it does
+               not
+
+Any ONE route is enough; you do not have to use them all.
+
+TWO WAYS TO GET THIS WRONG, and they are opposite.
+
+  Checking the OTHER requirement. If your check would pass or fail identically
+  whether or not this requirement holds, you have written `through_req`'s check
+  again under a different uid. `when` is what separates them: decide only at the
+  moments it describes.
+
+  Checking only one side of `shows`. It names two cases because the observation
+  is a DIFFERENCE at a port this requirement does not own -- one case is
+  satisfied by that port's ordinary behaviour, so a check on it alone would pass
+  a design with none of this requirement's behaviour at all. Return None rather
+  than True when the trace shows only one of the two.
+
+WHEN `activated_via` IS PRESENT, the activation is a state something has to
+reach, not values something drives. The entries are the prerequisites in order,
+each naming the requirement whose behaviour gets you there. You do not stage
+anything -- that is the stimulus's job -- but you may need them to recognise the
+moment: the activation holds after those prerequisites have occurred, not
+whenever their inputs appear.
+
     def decide(trace):
         # trace is a list of STATES, not of clock edges:
         #   {"index": int,      position in the sequence, 0, 1, 2, ...

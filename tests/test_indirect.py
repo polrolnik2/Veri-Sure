@@ -199,3 +199,120 @@ def test_an_honest_no_route_leaves_the_requirement_as_it_was():
     got = {n.req_uid: n for n in merged}["REQ-0031"]
     assert got.unobservable and got.unobservable_reason
     assert got.observed_via == []
+
+
+# --------------------------------------------- the route reaches every stage
+#
+# A route computed at normalisation and read by nothing is a field, not a fix.
+# These pin that it arrives everywhere a requirement is planned, covered,
+# checked or staged.
+
+
+ROUTE = {"port": "busy", "through_req": "REQ-0007",
+         "when": "after a glitch narrower than the filter depth",
+         "shows": DISCRIMINATING}
+SHAPE = {"activation": {"text": "a glitch on sda_i", "inputs": {"sda_i": 0}},
+         "observable": ["busy"], "expectation": "no START is detected",
+         "observed_via": [ROUTE], "activated_via": []}
+
+
+def test_s2_is_told_to_plan_both_sides_of_the_difference():
+    """The observation is a DIFFERENCE at a port this requirement does not own,
+    so one scenario there is satisfied by the port's ordinary behaviour -- an
+    element covering only the holding case is discharged by a design with none
+    of this requirement's behaviour."""
+    from specflow.s2_testplan import build_prompt_one
+
+    prompt = build_prompt_one({"uid": "REQ-0031"}, "{}", normalized=SHAPE)
+    assert "PLAN BOTH CASES" in prompt
+    assert "REQ-0007" in prompt and DISCRIMINATING in prompt
+
+
+def test_s2_says_nothing_about_indirection_for_a_direct_requirement():
+    from specflow.s2_testplan import build_prompt_one
+
+    direct = {"activation": {"text": "x"}, "observable": ["busy"]}
+    assert "PLAN BOTH CASES" not in build_prompt_one(
+        {"uid": "REQ-0007"}, "{}", normalized=direct)
+
+
+def test_s3_is_given_the_route_its_bin_condition_needs():
+    """A requirement whose own text names no port can otherwise only produce a
+    bin over something internal -- coverable and unverifiable."""
+    from specflow.s3_coverage import build_prompt_one
+
+    prompt = build_prompt_one({"uid": "TP-0001", "covers": ["REQ-0031@1"]},
+                              "{}", normalized=SHAPE)
+    assert "OBSERVED AT ANOTHER REQUIREMENT'S PORT" in prompt
+    assert "qualified by this" in prompt
+
+
+def test_s3_rejects_a_check_that_is_the_other_requirement_s_check():
+    """It passes and fails with `through_req`, so this element is covered on
+    paper and verified by nothing."""
+    from specflow.s3_coverage import CoverageOutput, indirect_issues
+
+    out = CoverageOutput(checks=[{"uid": "CHK-0000", "covers": ["TP-0001@1"],
+                                  "signals": ["busy"],
+                                  "expr": "busy matches the reference model"}])
+    issues = indirect_issues({"uid": "TP-0001"}, out, SHAPE)
+    assert issues and "verified by nothing" in issues[0].message
+
+
+def test_s3_accepts_a_check_qualified_by_this_requirement_s_activation():
+    from specflow.s3_coverage import CoverageOutput, indirect_issues
+
+    out = CoverageOutput(checks=[{
+        "uid": "CHK-0000", "covers": ["TP-0001@1"], "signals": ["busy"],
+        "expr": "after a glitch on sda_i, busy matches the reference model"}])
+    assert indirect_issues({"uid": "TP-0001"}, out, SHAPE) == []
+
+
+def test_s3_says_nothing_about_a_direct_element():
+    from specflow.s3_coverage import CoverageOutput, indirect_issues
+
+    out = CoverageOutput(checks=[{"uid": "CHK-0000", "covers": ["TP-0001@1"],
+                                  "signals": ["busy"], "expr": "busy rises"}])
+    assert indirect_issues({"uid": "TP-0001"}, out, {"observable": ["busy"]}) == []
+
+
+def test_the_oracle_author_is_told_the_port_belongs_to_another_requirement():
+    from specflow.refmodel.oracle_gen import build_prompt
+
+    prompt = build_prompt(requirement={"uid": "REQ-0031"}, contract_json="{}",
+                          contract={}, normalized=SHAPE)
+    assert "THE PORT BELONGS TO ANOTHER REQUIREMENT" in prompt
+    assert "Checking only one side of `shows`" in prompt
+
+
+def test_the_stimulus_hint_carries_the_reaching_sequence_not_the_state_name():
+    """"Get the FSM into START_B" is not a step list; "issue START as REQ-0012
+    prescribes, then hold" is."""
+    from specflow.oracles_stage import _hint
+
+    stateful = dict(SHAPE, activation={"text": "while in START_B"},
+                    activated_via=[{"through_req": "REQ-0012",
+                                    "activation": {"text": "a START is issued",
+                                                   "inputs": {"cmd": 1}}}])
+    hint = _hint({"uid": "REQ-0031", "text": "t"}, stateful, None, 0)
+    assert "STATE, not a set of values" in hint
+    assert "REQ-0012" in hint and "cmd=1" in hint
+
+
+def test_the_stimulus_hint_names_the_port_the_scenario_must_move():
+    from specflow.oracles_stage import _hint
+
+    hint = _hint({"uid": "REQ-0031", "text": "t"}, SHAPE, None, 0)
+    assert "another requirement's port" in hint and "busy" in hint
+
+
+def test_staging_runs_by_default():
+    """z-i2c ended with 33 unexercised oracles and `stimulus_added: 0`: a third
+    of the set decided nothing, and off-by-default meant the pipeline's answer
+    to "nothing reaches this requirement" was to report it."""
+    import inspect
+
+    from specflow.oracles_stage import run_oracle_stage
+
+    assert inspect.signature(run_oracle_stage).parameters[
+        "want_staging"].default is True

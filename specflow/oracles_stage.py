@@ -661,10 +661,18 @@ def run_oracle_stage(
     #: only check of any kind that connects an oracle to ITS requirement --
     #: without it nothing does, on a run with no variants.
     want_correspondence: bool = False,
-    #: Stage the scenarios nothing reaches, before anything is frozen. Off by
-    #: default because it costs a model call per attempt; the measurement it
-    #: replaces is z-i2c's 33 unexercised oracles and `stimulus_added: 0`.
-    want_staging: bool = False,
+    #: Stage the scenarios nothing reaches, before anything is frozen.
+    #:
+    #: ON, because the alternative is measured and it is worse. z-i2c ended with
+    #: 33 unexercised oracles and `stimulus_added: 0` on all three debug turns:
+    #: a third of the set decided nothing, and the only route to stage one was a
+    #: tool inside a turn that never called it. Off by default meant the
+    #: pipeline's answer to "nothing reaches this requirement" was to report it.
+    #:
+    #: It costs a model call per attempt, bounded by `staging_attempts` and by
+    #: `staging_budget` -- and it is cheaper than the alternative it replaces,
+    #: which is a debug loop spending turns on findings no edit can discharge.
+    want_staging: bool = True,
     staging_attempts: int = STAGING_ATTEMPTS,
     #: [O]'s own budget, separate from the debug loop's. A scenario found before
     #: the model exists is not competing with one found after it.
@@ -1401,6 +1409,32 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
     if act.get("inputs"):
         parts.append("It applies when these inputs hold: "
                      + ", ".join(f"{k}={v}" for k, v in sorted(act["inputs"].items())))
+    # THE REACHING SEQUENCE, WITHOUT WHICH A STATEFUL ACTIVATION IS UNSTAGEABLE.
+    # "Get the FSM into START_B" is not a step list; "issue START as REQ-0012
+    # prescribes, then hold" is. A requirement whose activation is not
+    # `input_only` has no drivable values of its own, so retries without this
+    # are rephrasings carrying no new reachability information -- which is why
+    # this loop's results have to be read split by activation class.
+    for i, hop in enumerate(shape.get("activated_via") or [], 1):
+        hop_act = hop.get("activation") or {}
+        line = (f"  {i}. first, {hop_act.get('text') or 'as ' + hop.get('through_req', '')} "
+                f"(what {hop.get('through_req', '')} prescribes)")
+        if hop_act.get("inputs"):
+            line += (" -- drive "
+                     + ", ".join(f"{k}={v}"
+                                 for k, v in sorted(hop_act["inputs"].items())))
+        if i == 1:
+            parts.append("The situation is a STATE, not a set of values. Reach "
+                         "it in this order:")
+        parts.append(line)
+    # The port the scenario has to make move, when it is not this requirement's
+    # own. Without it the generator aims at nothing observable.
+    routes = shape.get("observed_via") or []
+    if routes:
+        parts.append(
+            "This requirement is observed at another requirement's port. The "
+            "scenario must make the difference visible: "
+            + "; ".join(f"{r.get('port')} -- {r.get('shows')}" for r in routes[:2]))
     if shape.get("expectation"):
         parts.append(f"What must then be true: {shape['expectation']}")
     if ev:

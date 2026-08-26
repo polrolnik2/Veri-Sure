@@ -210,15 +210,43 @@ def shared_prefix(contract_json: str) -> str:
     return shared_block(("system", SYSTEM), ("contract_json", contract_json))
 
 
+#: Appended to an INDIRECT requirement's item block. Not in the shared prefix:
+#: it applies to a minority of requirements and putting it there would tell
+#: every other one to plan a contrast it has no `shows` for.
+INDIRECT_NOTE = """\
+THIS REQUIREMENT IS OBSERVED AT ANOTHER REQUIREMENT'S PORT.
+
+`observed_via` says which port, through which requirement, and -- in `shows` --
+what that port does when this requirement holds AND when it does not.
+
+PLAN BOTH CASES. The observation is a DIFFERENCE at a port this requirement does
+not own, so a single scenario at that port is satisfied by the port's ordinary
+behaviour: an element covering only the holding case would be discharged by a
+design with none of this requirement's behaviour in it. Give the contrasting
+scenario as well, as its own element, and say in `expected_response` which side
+of `shows` each one is.
+
+`activated_via`, when present, is the sequence that reaches the state this
+requirement applies in. `stimulus` has to drive that sequence, not the state:
+"issue START, then hold" is drivable, "be in START_B" is not.
+"""
+
+
 def build_prompt_one(
     requirement: dict,
     contract_json: str,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    normalized: dict | None = None,
 ) -> str:
+    item = json_block("requirement", requirement)
+    if normalized:
+        item += "\n\n" + json_block("normalized", normalized)
+        if normalized.get("observed_via") or normalized.get("activated_via"):
+            item += "\n\n" + INDIRECT_NOTE
     return compose(
         shared_prefix(contract_json),
-        json_block("requirement", requirement),
+        item,
         issues=issues,
         previous=previous,
     )
@@ -258,6 +286,10 @@ def run_s2_fanout(
     port: ModelPort,
     max_repairs: int = 3,
     fanout: bool = True,
+    #: `req_uid -> normalized form`. Carries `observed_via` / `activated_via`,
+    #: without which an indirect requirement is planned as though its own text
+    #: named the port -- one scenario, no contrast, and nothing to discriminate.
+    normalized: dict[str, dict] | None = None,
 ) -> tuple[TestplanOutput, list[StageResult[TestplanOutput]]]:
     """One small call per requirement, merged into one testplan.
 
@@ -271,7 +303,8 @@ def run_s2_fanout(
             stage=f"{STAGE}_{req.get('uid', 'unknown')}",
             port=port,
             build_prompt=lambda issues, previous: build_prompt_one(
-                req, contract_json, issues, previous),
+                req, contract_json, issues, previous,
+                normalized=(normalized or {}).get(str(req.get("uid") or ""))),
             parse=parse_response,
             gate=lambda out: gate_one(req, out),
             max_repairs=max_repairs,
