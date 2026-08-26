@@ -94,6 +94,12 @@ STAGING_BUDGET_PER_ORACLE = 3
 #: The one outcome that is NOT an attempt: the generator was never invoked.
 BUDGET_SPENT = "budget spent"
 
+#: Outputs that only move when another bus master contends. Named by
+#: convention because the contract has no field for "this needs contention",
+#: and on i2c the convention is exact: `al` is arbitration-lost, and nothing in
+#: a single-master sequence asserts it.
+_ARBITRATION_PORTS = frozenset({"al"})
+
 #: Absolute ceiling, so a pathological requirement set cannot mint without end.
 #: Generous by design: reaching it should be a finding, not routine.
 STAGING_BUDGET_CAP = 400
@@ -1550,6 +1556,29 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
             'then the steps that observe what reset left behind. Do not try to '
             'drive rst or nReset as a value; the schema has no such input and '
             'the step will be rejected.')
+    # ARBITRATION LOOKS UNSTAGEABLE AND IS NOT. `al` is asserted when the
+    # controller releases SDA and reads back a low it did not drive -- which
+    # needs a second bus master, and there is no second master to ask. But
+    # `sda_i` and `scl_i` ARE drivable (only clk and the resets are excluded),
+    # so the competing master is emulated by driving the line low while the
+    # controller has released it, and `until` waits for that release rather
+    # than guessing when it happens.
+    #
+    # Three of a2-i2c's five route-refused abandonments hinge on `al`
+    # (REQ-0010, REQ-0020, REQ-0021), refused with "the ports this requirement
+    # is observed on never moved". The schema could always say this; nothing
+    # ever suggested it -- the same shape as the reset case.
+    watched = set(shape.get("observable") or [])
+    if watched & _ARBITRATION_PORTS:
+        parts.append(
+            "This scenario needs ARBITRATION LOST, which needs a second bus "
+            "master -- emulate one. Drive the transfer, use "
+            '{"until": {"port": "sda_oen", "value": 1}} to wait until the '
+            "controller has RELEASED SDA, then in the next step drive sda_i=0 "
+            "while it is still released. The controller reads back a low it did "
+            "not drive, which is exactly the condition. Do not expect al to "
+            "move without that contention: nothing else in a single-master "
+            "sequence produces it.")
     if act.get("inputs"):
         parts.append("It applies when these inputs hold: "
                      + ", ".join(f"{k}={v}" for k, v in sorted(act["inputs"].items())))

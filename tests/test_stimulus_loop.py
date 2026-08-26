@@ -420,3 +420,45 @@ def test_an_UNCONDITIONAL_activation_that_abstains_is_the_CHECK_s_defect():
     assert "unexer.pop(uid)" in block, "and it must not be staged"
     from specflow.refmodel.verdict import of_discard
     assert of_discard("malformed: the activation holds at all times") == "ORACLE_INVALID"
+
+
+def test_an_arbitration_requirement_is_told_how_to_emulate_a_second_master():
+    """`al` looks unstageable and is not.
+
+    Arbitration-lost needs a competing master and there is none to ask -- but
+    sda_i is drivable (only clk and the resets are excluded), so the contention
+    is emulated by driving the line low while the controller has released it,
+    with `until` waiting for the release rather than guessing when it happens.
+
+    Three of a2-i2c's five route-refused abandonments hinge on `al` -- REQ-0010,
+    REQ-0020, REQ-0021 -- all refused with "the ports this requirement is
+    observed on never moved". The schema could always say this; nothing ever
+    suggested it, which is the same shape as the reset case.
+    """
+    from specflow.oracles_stage import _hint
+
+    h = _hint({"uid": "REQ-0021", "text": "al is asserted when SDA is released"},
+              {"activation": {"text": "during the WRITE arbitration-check phase"},
+               "observable": ["al", "sda_oen"]}, None, 0)
+    assert "ARBITRATION LOST" in h
+    assert "sda_i=0" in h and "sda_oen" in h
+
+
+def test_the_arbitration_hint_is_withheld_from_everything_else():
+    """A hint offered to every requirement is noise, and this one describes a
+    contention no ordinary scenario should stage."""
+    from specflow.oracles_stage import _hint
+
+    h = _hint({"uid": "REQ-0031", "text": "the filter suppresses a glitch"},
+              {"activation": {"text": "a glitch on sda_i while scl_i is high"},
+               "observable": ["busy"]}, None, 0)
+    assert "ARBITRATION LOST" not in h
+
+
+def test_reset_and_arbitration_hints_do_not_exclude_each_other():
+    from specflow.oracles_stage import _hint
+
+    h = _hint({"uid": "REQ-0010", "text": "al after reset"},
+              {"activation": {"text": "rst is asserted high at a rising edge"},
+               "observable": ["al"]}, None, 0)
+    assert "ARBITRATION LOST" in h and "reset step" in h
