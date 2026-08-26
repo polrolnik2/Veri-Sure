@@ -180,3 +180,60 @@ def test_nothing_runs_without_a_witness():
     there is nothing to replay against, and inventing a verdict would be worse
     than reporting none."""
     assert _run(_Gen(HIT), witness="") == ({}, {})
+
+
+# --- staging runs after the FIRST verify pass, and what it changes is
+# --- re-verified -----------------------------------------------------------
+
+
+def test_staging_is_inside_the_verify_loop_not_after_it():
+    """Section 7.1: "After [O]'s FIRST verify pass".
+
+    `verify_one`'s evidence-dependent legs have nothing to decide on for an
+    oracle whose scenario nothing reaches, so it cannot be convicted -- and
+    equally cannot be improved, because the repair round hands the author a
+    check with no counterexample. Staging after the whole loop spent every
+    round blind on roughly a third of the set (n-i2c 24 of 70, z-i2c 33).
+    """
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    stage_at = src.index("gone, staging = stage_unexercised(")
+    loop_at = src.index("for rounds in range(1, verifications + 1):")
+    assert loop_at < stage_at, "staging must sit inside the verify loop"
+    assert "if rounds == 1 and want_staging and witness:" in src
+
+
+def test_a_round_that_staged_takes_another_pass_even_with_nothing_rejected():
+    """Staging changes the evidence, so the set must be re-verified.
+
+    Before this, `if not ask: break` ended the loop the moment nothing was
+    rejected -- so a newly reachable oracle went straight to `_dispositions`
+    and `freeze` without one run that decides it.
+    """
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    tail = src[src.index("if rounds == verifications:"):]
+    assert "if not staged_now:" in tail and "break" in tail
+    assert "continue" in tail, "a staged round must re-verify, not stop"
+
+
+def test_abandonment_from_the_resolution_pass_survives_staging():
+    """`stage_unexercised` returns a FRESH dict and the call site rebound it.
+
+    Every "no observation route found" recorded alongside it was discarded, so
+    a requirement the resolution pass could not route stayed in `trusted` and
+    was frozen -- the exact opposite of abandoning it.
+    """
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert "abandoned.update(gone)" in src
+    assert "abandoned, staging = stage_unexercised(" not in src

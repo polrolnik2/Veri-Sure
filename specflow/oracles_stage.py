@@ -873,6 +873,9 @@ def run_oracle_stage(
     #: nothing has been attempted yet, and nothing may be discarded on that
     #: basis. Step 2 of the plan fills it from the stimulus loop.
     abandoned: dict[str, str] = {}
+    #: What the stimulus loop staged, per requirement. Declared here because the
+    #: loop that fills it now runs inside the verify rounds.
+    staging: dict[str, dict] = {}
     #: Oracles a repair round made newly unsatisfiable to the known-good
     #: control. REPORTED, never acted on -- see the round body for why the
     #: control may not select which oracles survive.
@@ -942,11 +945,62 @@ def run_oracle_stage(
             uid for uid in dead_now if uid not in quotable and uid not in advised
         }
         ask = set(quotable) | advisory_only
-        if not ask or rounds == verifications:
+
+        # STAGED AFTER THE FIRST VERIFY PASS, NOT AFTER THE LAST ONE.
+        #
+        # `verify_one`'s evidence-dependent legs -- executability,
+        # over-strictness, vacuity -- have nothing to decide on for an oracle
+        # whose scenario nothing reaches. It is correctly not convicted, and it
+        # equally cannot be IMPROVED: the repair round hands the author a check
+        # with no counterexample, no trace and no failing case. Running the
+        # stimulus loop after the whole repair loop spent every round blind on
+        # exactly the oracles staging would have made checkable -- roughly a
+        # third of the set (n-i2c 24 of 70 unexercised, z-i2c 33).
+        #
+        # And nothing re-verified them afterwards: staging grows `tp_uids` and
+        # changes the evidence, and the set went straight to `_dispositions` and
+        # `freeze`. Section 7.1 asked for both -- "after [O]'s FIRST verify
+        # pass", and "its tp_uids grow, IT IS RE-VERIFIED" -- and the code did
+        # neither. Staging here gives the later rounds live evidence to repair
+        # against, and re-verifies what staging changed, in one move.
+        staged_now = False
+        if rounds == 1 and want_staging and witness:
+            survivors = {u: o for u, o in held.items() if u not in rejected}
+            gone, staging = stage_unexercised(
+                held=survivors,
+                unexercised=unexercised_against(
+                    survivors, witness, contract, stimulus_by_tp, base=base,
+                    transactional=transactional),
+                requirements=requirements, normalized=normalized or {},
+                contract=contract, testplan=testplan,
+                stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
+                base=base, attempts=staging_attempts, budget=staging_budget)
+            # MERGED, NOT REBOUND. `stage_unexercised` returns a fresh dict, and
+            # assigning it discarded every "no observation route found" recorded
+            # alongside it -- so a requirement the resolution pass could not
+            # route stayed in `trusted` and was frozen, the exact opposite of
+            # what abandoning it means.
+            abandoned.update(gone)
+            staged_now = bool(staging)
+            if gone or staged_now:
+                # The set moved, so everything measured against it is stale.
+                alive = _liveness(survivors, witness, contract,
+                                  stimulus_by_tp, base=base)
+
+        if rounds == verifications:
+            break
+        if not ask:
             # Nothing left that an author could be told about. A control-only
             # rejection is terminal by design, so re-asking would spend a call
             # on a prompt carrying no information.
-            break
+            if not staged_now:
+                break
+            # Except when staging just changed the evidence: the newly reachable
+            # oracles have never been verified against a run that decides them,
+            # so take another round to do that and regenerate nothing.
+            logger.info("oracles: staged %d scenario(s); re-verifying against "
+                        "the enlarged stimulus", len(staging))
+            continue
         logger.info("oracles: round %d re-asking %d rejected oracle(s)",
                     rounds, len(quotable))
         again, _ = run_oracle_gen(
@@ -1074,24 +1128,6 @@ def run_oracle_stage(
             continue
         if not (shape.get("observable") or []) and not shape.get("observed_via"):
             abandoned.setdefault(uid, "no observation route found")
-
-    staging: dict[str, dict] = {}
-    if want_staging and witness:
-        abandoned, staging = stage_unexercised(
-            held={u: o for u, o in held.items() if u not in rejected},
-            unexercised=unexercised_against(
-                {u: o for u, o in held.items() if u not in rejected},
-                witness, contract, stimulus_by_tp, base=base,
-                transactional=transactional),
-            requirements=requirements, normalized=normalized or {},
-            contract=contract, testplan=testplan,
-            stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
-            base=base, attempts=staging_attempts, budget=staging_budget)
-        if abandoned:
-            # The set moved, so everything measured against it is stale.
-            alive = _liveness(
-                {u: o for u, o in held.items() if u not in rejected},
-                witness, contract, stimulus_by_tp, base=base)
 
     # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
     # that can be true. Excluding them from `trusted` is what stops the debug
