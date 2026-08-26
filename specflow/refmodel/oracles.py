@@ -27,7 +27,7 @@ cocotb, so a generated model runs in a plain interpreter.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -89,6 +89,11 @@ class OracleResult:
     model_broke: bool = False
     #: The trace it judged, so a caller never re-runs to find out why.
     rows: list[dict] = field(default_factory=list)
+    #: WHICH testpoint produced this verdict. An oracle may name several and
+    #: `_worst` picks one; without this the caller cannot tell which, so a tool
+    #: showing "the trace" had to show all of them. Empty when the result did
+    #: not come from a single testpoint's replay.
+    tp_uid: str = ""
 
     def failed(self) -> bool:
         """The model is wrong here. The only state a repair loop should chase."""
@@ -428,6 +433,7 @@ def decide_all(
                 results.append(OracleResult(
                     oracle.req_uid, ok=False,
                     broken=f"no stimulus recorded for {tp}",
+                    tp_uid=tp,
                 ))
                 continue
             if tp not in cache:
@@ -438,11 +444,13 @@ def decide_all(
                 results.append(OracleResult(
                     oracle.req_uid, ok=False, rows=rep.rows,
                     broken=f"the MODEL {rep.error}",
-                    model_broke=True,
+                    model_broke=True, tp_uid=tp,
                 ))
                 continue
             rows = transactional_view(rep.rows) if transactional else rep.rows
-            results.append(decide(oracle, rows))
+            # Stamped by the harness, never by `decide`: the oracle is handed
+            # rows and has no idea which testpoint they came from.
+            results.append(replace(decide(oracle, rows), tp_uid=tp))
         out.append(_worst(oracle.req_uid, results))
     return out
 

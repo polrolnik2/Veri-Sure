@@ -253,7 +253,7 @@ class TopAgentConfig:
     specflow_refmodel_max_repairs: int = 6
     #: Edit attempts per debug turn on the reference model. 0 disables the
     #: agentic path and falls back to prose-driven regeneration.
-    specflow_refmodel_debug_attempts: int = 6
+    specflow_refmodel_debug_attempts: int = 15
     #: Judging passes. Each is ~one call per requirement, so this is the
     #: expensive budget; the attempts inside a turn are pure Python.
     specflow_refmodel_judge_turns: int = 3

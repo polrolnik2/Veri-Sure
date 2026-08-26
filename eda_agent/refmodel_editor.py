@@ -131,9 +131,32 @@ what stopped you.
 """
 
 
+#: Backstop only. Every tool below answers narrowly by construction -- this
+#: catches the case where one does not, rather than being how size is managed.
+#: `rtl_editor._clip_text` is the same idea and the same shape.
+TOOL_MAX_CHARS = 24_000
+
+
+def _clip(body: str, *, max_chars: int = TOOL_MAX_CHARS) -> str:
+    """Head+tail with the cut declared.
+
+    Declared because "a truncated list that does not say it was truncated reads
+    as the whole population" (`rtl_editor.py:236-243`) -- a silent clip through
+    a trace would have the agent reason about a scenario that does not end where
+    it appears to.
+    """
+    if len(body) <= max_chars:
+        return body
+    half = max_chars // 2
+    cut = len(body) - max_chars
+    return (f"{body[:half]}\n"
+            f"...<{cut} characters cut from the middle of this response; ask a "
+            f"narrower question to see them>...\n{body[-half:]}")
+
+
 def _text(payload: Any) -> ToolResponse:
     body = payload if isinstance(payload, str) else json.dumps(payload, indent=2)
-    return ToolResponse(content=[{"type": "text", "text": body}])
+    return ToolResponse(content=[{"type": "text", "text": _clip(body)}])
 
 
 def _no_session() -> ToolResponse:
@@ -147,17 +170,23 @@ class RefModelEditor:
         self,
         cfg: OpenAIConfig,
         *,
-        max_attempts: int = 6,
-        stall_rounds: int = 2,
+        max_attempts: int = 15,
     ):
-        #: Edit actions, not conversation turns. An attempt is one
-        #: `replace_method`; reading and replaying are free and should be.
+        #: Edit actions, not conversation turns, and NOT model calls. An attempt
+        #: is one `replace_method`; reading and replaying are free and should be.
+        #:
+        #: Was 6, which is a fifth of `RTLEditor`'s 30 (`rtl_editor.py:1031`) and
+        #: under half of `TBEditor`'s 15 (`tb_editor.py:1305`) -- this loop had
+        #: been running at a fraction of its siblings' budget for no stated
+        #: reason. 15 matches TBEditor.
+        #:
+        #: What this does NOT cap is model calls. Each `_agent(...)` below is a
+        #: full ReAct sub-loop of `max_iters=10`, so a turn is up to
+        #: `max_attempts * 10` calls sharing one context. Anything sized against
+        #: this number -- a memory window, a stall count -- is sized against the
+        #: wrong unit; `tb_editor.py:1310-1329` records a window of 6 collapsing
+        #: inside a single trial for exactly this reason.
         self.max_attempts = max(1, int(max_attempts))
-        #: Consecutive attempts with no reduction in the failing count before
-        #: giving up. Deliberately small: a turn that is not converging should
-        #: hand back so the next JUDGE turn can re-read the model, which is a
-        #: better use of budget than more attempts against a stale oracle set.
-        self._stall_rounds = max(1, int(stall_rounds))
         self._session: DebugSession | None = None
 
         toolkit = GuidingToolkit()
@@ -189,17 +218,63 @@ class RefModelEditor:
         clear_memory_safely(self._agent)
         self._session = None
 
+    # ------------------------------------------------------- memory carry
+    #
+    # The turn loop builds a fresh editor per turn -- it has to, because each
+    # turn runs under its own `asyncio.run`, and an httpx client bound to a
+    # closed loop is not reusable. So the CONVERSATION is carried instead of
+    # the editor: same effect on context, none of the cross-loop hazard.
+
+    def snapshot_memory(self) -> list:
+        """The turn's conversation, to seed the next turn with.
+
+        Never raises. Losing the carry costs the next turn its context; letting
+        the loss propagate would cost the whole turn, including the edits it
+        already made and the source it is about to hand back.
+        """
+        try:
+            mem = getattr(self._agent, "memory", None)
+            return list(getattr(mem, "content", None) or [])
+        except Exception:  # noqa: BLE001 -- see the docstring
+            log.warning("could not snapshot the turn's conversation")
+            return []
+
+    def restore_memory(self, msgs: list) -> None:
+        """Seed this turn with the previous turn's conversation.
+
+        No window, no summarisation. `RTLEditor` and `TBEditor` both default
+        `memory_window=0` -- "no truncation, ever" -- having measured that
+        cutting the middle breaks prefix caching (repricing the remainder as
+        fresh tokens) and, separately, loses the reasoning behind a design the
+        agent would otherwise have kept. What keeps this bounded is that the
+        tools answer narrowly, not that the history is trimmed.
+        """
+        if not msgs:
+            return
+        try:
+            mem = getattr(self._agent, "memory", None)
+            if mem is None:
+                return
+            mem.content = list(msgs)
+        except Exception:  # noqa: BLE001 -- a carry failure must not kill the turn
+            log.warning("could not carry the previous turn's conversation")
+
     # --------------------------------------------------------------- tools
 
     async def _tool_list_oracles(self) -> ToolResponse:
-        """List every requirement oracle and whether the model satisfies it.
+        """The oracles THIS turn can act on, and a census of the rest.
 
         Returns req_uid, the clause it decides, the testpoints it replays, and
-        the current status with the edge it decided on.
+        the current status with the edge it decided on -- for the failing ones
+        on a model turn, the unexercised ones on a stimulus turn. It also names
+        the methods `covers` implicates for them, which is where to read first.
+
+        The oracles it does not list are counted by status, never hidden: every
+        one is still reachable by name through `explain` or `run_oracle`.
         """
         if self._session is None:
             return _no_session()
-        return _text(await asyncio.to_thread(self._session.list_oracles))
+        return _text(await asyncio.to_thread(self._session.board))
 
     async def _tool_explain(self, req_uid: str) -> ToolResponse:
         """Everything known about one requirement, in one call.
@@ -216,29 +291,35 @@ class RefModelEditor:
         return _text(await asyncio.to_thread(self._session.explain, req_uid))
 
     async def _tool_run_oracle(
-        self, req_uid: str, from_edge: int = 0, rows: int = 60
+        self, req_uid: str, from_edge: int = -1, rows: int = -1
     ) -> ToolResponse:
         """Replay one requirement's scenario against the model, edge by edge.
 
-        Use this to localise. An output usually diverges many edges after the
-        cause, so read the edges leading up to the failure.
+        Called with just a req_uid it shows a small window CENTRED ON THE EDGE
+        THE ORACLE DECIDED, with the deciding testpoint first -- that edge is
+        the finding, and the neighbours are there to show the approach to it.
+        Widen or move the window with `from_edge` and `rows` when the cause is
+        further back; every response says how many edges it did not show.
 
         READ `activity` BEFORE THE TRACE. It covers the whole replay, not the
-        window: `first_change` gives the edge each output first moves on, so
-        page straight there instead of reading from edge 0. If `inert` is true
-        the testpoint never moves the model at all, and no edit can make its
-        oracle pass -- say so and move to another requirement rather than
-        spending attempts on it.
+        window: `first_change` gives the edge each output first moves on. If
+        `inert` is true the testpoint never moves the model at all, and no edit
+        can make its oracle pass -- say so and move to another requirement
+        rather than spending attempts on it.
 
         Args:
             req_uid: the requirement, e.g. "REQ-0031".
-            from_edge: first edge to show; page forward when the trace is long.
-            rows: how many edges to show.
+            from_edge: first edge to show; omit to centre on the deciding edge.
+            rows: how many edges to show; omit for the default window.
         """
         if self._session is None:
             return _no_session()
+        # -1 is "not given": the schema these tools are described by does not
+        # carry optionality, so a sentinel is what reaches the session as None.
+        start = None if from_edge is None or from_edge < 0 else int(from_edge)
+        span = None if rows is None or rows < 0 else int(rows)
         return _text(await asyncio.to_thread(
-            self._session.run_oracle, req_uid, from_edge, rows))
+            self._session.run_oracle, req_uid, start, span))
 
     async def _tool_add_stimulus(
         self, req_uid: str, what_the_scenario_needs: str
@@ -286,10 +367,14 @@ class RefModelEditor:
         return get_model_usage(getattr(self, "_model", None))
 
     async def _tool_read_model(self, method: str = "") -> ToolResponse:
-        """Read the reference model, line-numbered.
+        """Read ONE method of the reference model, line-numbered.
+
+        Called with no method it lists the method names and marks the ones
+        claimed to implement a requirement this turn can act on. There is no
+        whole-file form: read the methods the finding points at.
 
         Args:
-            method: one method name, or empty for the whole model.
+            method: one method name, or empty to list them.
         """
         if self._session is None:
             return _no_session()
@@ -329,9 +414,32 @@ class RefModelEditor:
         that wandered downhill hands back where it was highest. That is the
         direct answer to a repair round that regenerated an inert model and then
         built the next round on it.
+
+        THE CONVERSATION IS NOT CLEARED HERE. It used to be, and that was the
+        single largest thing this loop did wrong.
+
+        Clearing threw away the reasoning, not just the tokens. `TBEditor`
+        records the same loss from the other direction, where it came from a
+        memory window rather than a reset: "a genuinely correct multi-cycle
+        datapath model, reaching the run's best fail_count, was abandoned one
+        trial later and never rebuilt, registers left unused for the rest of the
+        run, consistent with the model losing the reasoning for why it built
+        that design" (`tb_editor.py:1310-1329`). Both siblings now default
+        `memory_window=0` -- no truncation, ever -- and a per-turn reset is a
+        window of zero applied at the worst possible moment.
+
+        It also cost tokens rather than saving them: a stable prefix is cached
+        at 0.1x, while cache writes cost the same as an uncached call, so
+        discarding the prefix each turn repriced the whole context as fresh.
+
+        The reason the reset was here has expired. It was that the oracle set
+        the agent had been briefed on was "gone" by the next turn -- true when
+        oracles were regenerated per turn, false since they were frozen:
+        `compose.run_debug_turns` raises if the set drifts under the loop. The
+        set is invariant across turns by construction, and `_opening` restates
+        the current verdicts anyway, exactly as `_render_continue_debug_prompt`
+        does for `RTLEditor`.
         """
-        self._session = session
-        self.reset()
         self._session = session
 
         # NOTHING FAILING IS NOT NOTHING TO DO, AND THIS GUARD IS WHERE THAT
@@ -363,18 +471,29 @@ class RefModelEditor:
             return session.best(), 0, why
 
         note = ""
-        # What counts as progress depends on the route, for the same reason the
-        # guard does. On a stimulus turn `failing()` is zero at entry and stays
-        # zero however well the turn goes, so scoring by it would mark every
-        # attempt as stalled and cut the turn off after `_stall_rounds`.
-        # `distance` counts failing, unexercised and a crashed model together,
-        # for the reason its own docstring gives -- scoring by `failing()` alone
-        # rewards an edit that makes a requirement unverifiable. It is also the
-        # only key that moves on a turn whose work is staging stimulus, where
-        # the failing count is zero at entry and stays zero however well the
-        # turn goes.
-        best_seen = session.distance()
-        stalled = 0
+        # NO STALL CUTOFF. A run of non-improving edits is not evidence that the
+        # agent cannot solve the requirement; on a hard one it is the search.
+        #
+        # There used to be one, at two consecutive non-improving ATTEMPTS. Two
+        # things made it worse than it looks. It counted individual edits, where
+        # `RTLEditor`'s equivalent counts outer rounds of up to ten model calls
+        # each (`rtl_editor.py:1451-1453`) -- the same number, an order of
+        # magnitude apart in what it permits. And the turn used to clear its
+        # memory on entry, so the two ruled-out hypotheses were discarded twice
+        # over: the turn stopped, then the reasoning that produced them went
+        # with it, and the next turn re-derived and re-stalled on the same two.
+        #
+        # `RTLEditor`'s own comment makes the argument against keeping it here:
+        # "Crossing a valley takes several consecutive non-improving rounds by
+        # definition, so a stall limit tuned for a monotone search will cut the
+        # search off before it can get anywhere." This loop has no rollback
+        # guard forcing monotonicity, so every valley crossing looked like a
+        # stall.
+        #
+        # `session.best()` is what the turn returns, so a turn that wanders
+        # downhill still hands back its high-water mark -- which is what made
+        # the cutoff look free. It was not: it bought nothing and cost the
+        # search.
         try:
             response = await self._agent(Msg("user", _opening(session), role="user"))
             note = str(getattr(response, "content", "") or "")
@@ -388,24 +507,11 @@ class RefModelEditor:
                 if (session.all_met()
                         and session.stimulus_budget <= len(session.added)):
                     break
-                edits = len(session.history)
-                if edits >= self.max_attempts:
-                    break
-                if stalled >= self._stall_rounds:
+                if len(session.history) >= self.max_attempts:
                     break
                 response = await self._agent(
                     Msg("user", _continue(session), role="user"))
                 note = str(getattr(response, "content", "") or "")
-                current = session.distance()
-                if current < best_seen:
-                    best_seen = current
-                    stalled = 0
-                elif len(session.history) > edits:
-                    # Only an actual ATTEMPT counts toward stalling. A turn spent
-                    # reading and replaying is the agent working, and cutting it
-                    # off there is how a debugger gets stopped before its first
-                    # edit -- observed live in tb_editor.
-                    stalled += 1
         except Exception as exc:  # noqa: BLE001 -- a turn must not kill the stage
             log.warning("reference-model debug turn failed: %r", exc)
             note = f"the debug turn ended early: {exc!r}"
@@ -540,10 +646,12 @@ class SyncRefModelDebugger:
     the editor stays async because AgentScope is.
     """
 
-    def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 6):
+    def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 15):
         self._cfg = cfg
         self._max_attempts = max_attempts
         self._usage: tuple[int, int] = (0, 0)
+        #: The running conversation, carried turn to turn. See `debug` below.
+        self._memory: list = []
 
     #: `(input, output)` summed over every turn this debugger has run. Read by
     #: the stage so the loop's spend lands in the run's ledger instead of being
@@ -555,13 +663,31 @@ class SyncRefModelDebugger:
         import concurrent.futures
 
         def _run() -> tuple[str, int, str]:
-            # A fresh editor per turn: the oracle set it was briefed on is gone,
-            # and carrying that conversation into the next turn would have the
-            # agent reasoning about findings that no longer hold.
+            # A fresh EDITOR per turn, carrying the previous turn's
+            # CONVERSATION. The two used to be the same decision and are not.
+            #
+            # The editor must be fresh: every turn runs under its own
+            # `asyncio.run`, and the model client holds loop-bound resources
+            # that do not survive the loop closing.
+            #
+            # The conversation must not be. The reason given for discarding it
+            # -- "the oracle set it was briefed on is gone" -- was true when
+            # oracles were regenerated per turn and has been false since they
+            # were frozen: `compose.run_debug_turns` raises if the set drifts
+            # under the loop, so it is invariant across turns by construction.
+            # What actually changes is the model source and the verdicts, and
+            # `_opening` restates both at the top of every turn.
+            #
+            # What discarding it cost: the agent re-derived, every turn, which
+            # hypotheses it had already ruled out -- and then re-ruled them out
+            # with the same attempts, on requirements it had already failed to
+            # fix. See `RefModelEditor.debug` for the sibling measurement.
             editor = RefModelEditor(self._cfg, max_attempts=self._max_attempts)
+            editor.restore_memory(self._memory)
             try:
                 return asyncio.run(editor.debug(session))
             finally:
+                self._memory = editor.snapshot_memory()
                 # In `finally` because a turn that raised still spent tokens,
                 # and a ledger that only counts successful turns understates
                 # exactly the runs worth investigating.

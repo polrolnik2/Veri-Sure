@@ -13,7 +13,7 @@ import inspect
 import json
 
 from eda_agent.refmodel_editor import SYSTEM_PROMPT, RefModelEditor, _continue, _opening
-from specflow.refmodel.oracles import RequirementOracle
+from specflow.refmodel.oracles import OracleResult, RequirementOracle
 from specflow.refmodel.session import DebugSession
 from tests.test_refmodel_session import (
     ACK,
@@ -59,7 +59,6 @@ class _StubAgent:
 def _drive(session, script, **kw) -> tuple[str, int, str]:
     editor = RefModelEditor.__new__(RefModelEditor)     # no live model client
     editor.max_attempts = kw.get("max_attempts", 6)
-    editor._stall_rounds = kw.get("stall_rounds", 2)
     editor._session = None
     editor._agent = _StubAgent(session, script)
     editor.reset = lambda: None
@@ -75,7 +74,6 @@ def _drive_counting(session, script, **kw):
     """
     editor = RefModelEditor.__new__(RefModelEditor)
     editor.max_attempts = kw.get("max_attempts", 6)
-    editor._stall_rounds = kw.get("stall_rounds", 2)
     editor._session = None
     agent = _StubAgent(session, script)
     editor._agent = agent
@@ -128,8 +126,35 @@ def test_tools_return_readable_json():
     editor._session = _session()
     out = asyncio.run(editor._tool_list_oracles())
     parsed = json.loads(out.content[0]["text"])
-    assert parsed[0]["req_uid"] == "REQ-0000"
-    assert parsed[0]["status"] == "NOT MET"
+    assert parsed["acting_on"][0]["req_uid"] == "REQ-0000"
+    assert parsed["acting_on"][0]["status"] == "NOT MET"
+
+
+def test_the_board_lists_only_what_the_turn_can_act_on_and_counts_the_rest():
+    """The `list_suspect_blocks` discipline: the failure decides what is shown.
+
+    All 104 oracles used to arrive on every call -- ~40 KB -- and the turn acts
+    on a handful. What is not shown is COUNTED, never hidden: a truncated list
+    that does not say it was truncated reads as the whole population.
+    """
+    s = _session()
+    s._results = [
+        OracleResult("REQ-0000", ok=False, edge=3, detail="ack stayed low"),
+        OracleResult("REQ-0001", ok=True, edge=1),
+        OracleResult("REQ-0002", ok=None),
+    ]
+    s.oracles = list(s.oracles) + [
+        RequirementOracle(req_uid="REQ-0001", clause="c1", tp_uids=["TP-0000"],
+                          source=s.oracles[0].source),
+        RequirementOracle(req_uid="REQ-0002", clause="c2", tp_uids=["TP-0000"],
+                          source=s.oracles[0].source),
+    ]
+    board = s.board()
+    assert [r["req_uid"] for r in board["acting_on"]] == ["REQ-0000"]
+    assert board["not_shown"]["count"] == 2
+    assert board["not_shown"]["by_status"] == {"NOT EXERCISED": 1, "met": 1}
+    assert "not listed here" in board["note"]
+    assert "explain(req_uid)" in board["note"]
 
 
 # ------------------------------------------------------------------ prompts
@@ -282,16 +307,44 @@ def test_a_spent_stimulus_budget_with_nothing_failing_is_also_no_input():
     assert "stimulus budget is spent" in note
 
 
-def test_a_stalling_turn_gives_up_rather_than_grinding():
-    """Only an actual ATTEMPT counts toward stalling.
+def test_a_turn_that_is_not_improving_keeps_its_budget():
+    """NON-IMPROVING EDITS ARE NOT A REASON TO STOP. This is the inverse of a
+    test that used to assert the opposite, and the reason it flipped.
 
-    A turn spent reading and replaying is the agent working; cutting it off
-    there is how a debugger gets stopped before its first edit.
+    There was a cutoff at two consecutive non-improving ATTEMPTS. Two things
+    made it worse than the number suggests. It counted individual edits, where
+    `RTLEditor`'s equivalent counts outer rounds of up to ten model calls each
+    -- same number, an order of magnitude apart in what it permits. And the
+    turn cleared its memory on entry, so the ruled-out hypotheses went with it
+    and the next turn re-derived and re-stalled on the same two.
+
+    `RTLEditor` states the argument against it directly: "Crossing a valley
+    takes several consecutive non-improving rounds by definition, so a stall
+    limit tuned for a monotone search will cut the search off before it can get
+    anywhere." This loop has no rollback guard forcing monotonicity, so every
+    valley crossing scored as a stall.
+
+    The cutoff bought nothing: `best()` already guarantees a turn cannot hand
+    back worse than it started with, whatever it does in between.
     """
     useless = 'def step(self, i):\n    return {"q": 1, "ack": 0}'
     s = _session()
-    _, attempts, _ = _drive(s, [("step", useless)] * 6, stall_rounds=2)
-    assert attempts < 6, "it should stop once edits stop helping"
+    _, attempts, _ = _drive(s, [("step", useless)] * 6)
+    assert attempts == 6, "the whole edit budget is spent on a hard requirement"
+
+
+def test_nothing_named_stall_survives():
+    """The knob is deleted, not defaulted off.
+
+    A parameter whose only correct setting is off is a parameter that will be
+    turned back on by someone reading the signature rather than this test.
+    """
+    import inspect as _i
+
+    from eda_agent import refmodel_editor as mod
+
+    assert "stall" not in _i.signature(RefModelEditor.__init__).parameters
+    assert "_stall_rounds" not in _i.getsource(mod.RefModelEditor.debug)
 
 
 def test_an_agent_failure_ends_the_turn_without_killing_the_stage():
@@ -301,7 +354,7 @@ def test_an_agent_failure_ends_the_turn_without_killing_the_stage():
 
     s = _session()
     editor = RefModelEditor.__new__(RefModelEditor)
-    editor.max_attempts, editor._stall_rounds, editor._session = 6, 2, None
+    editor.max_attempts, editor._session = 6, None
     editor._agent = _Boom()
     editor.reset = lambda: None
     source, _, note = asyncio.run(editor.debug(s))
@@ -336,3 +389,63 @@ def test_the_prompt_does_not_claim_add_stimulus_refuses():
     assert "`add_stimulus` is ALWAYS available" in SYSTEM_PROMPT
     assert "`add_stimulus` refuses" not in SYSTEM_PROMPT
     assert "`replace_method` refuses on a turn with nothing failing" in SYSTEM_PROMPT
+
+
+# --------------------------------------------------- context across turns
+
+
+def test_the_turn_does_not_clear_its_own_conversation():
+    """`debug()` used to call `self.reset()` on entry.
+
+    That threw away the reasoning, not just the tokens. `TBEditor` records the
+    same loss from a memory window: "a genuinely correct multi-cycle datapath
+    model, reaching the run's best fail_count, was abandoned one trial later
+    and never rebuilt ... consistent with the model losing the reasoning for
+    why it built that design." Both siblings default `memory_window=0`, and a
+    per-turn reset is a window of zero applied at the worst moment.
+    """
+    import inspect as _i
+
+    src = _i.getsource(RefModelEditor.debug)
+    assert "self.reset()" not in src
+
+
+def test_the_conversation_is_carried_from_one_turn_to_the_next():
+    """A fresh EDITOR per turn is required -- each turn runs under its own
+    `asyncio.run` and the model client is loop-bound. A fresh CONVERSATION is
+    not, and the reason given for it expired when the oracle set was frozen:
+    `run_debug_turns` raises if the set drifts, so it is invariant across turns.
+    """
+    class _Mem:
+        def __init__(self):
+            self.content = []
+
+    class _Agent:
+        def __init__(self):
+            self.memory = _Mem()
+
+    editor = RefModelEditor.__new__(RefModelEditor)
+    editor._agent = _Agent()
+    editor.restore_memory(["turn-1 said this"])
+    assert editor.snapshot_memory() == ["turn-1 said this"]
+
+
+def test_a_carry_failure_does_not_kill_the_turn():
+    class _Hostile:
+        memory = property(lambda self: (_ for _ in ()).throw(RuntimeError("no")))
+
+    editor = RefModelEditor.__new__(RefModelEditor)
+    editor._agent = _Hostile()
+    editor.restore_memory(["x"])          # must not raise
+    assert editor.snapshot_memory() == []
+
+
+def test_a_clipped_response_declares_the_cut():
+    """The backstop, not the strategy. "A truncated list that does not say it
+    was truncated reads as the whole population" (`rtl_editor.py:236-243`)."""
+    from eda_agent.refmodel_editor import TOOL_MAX_CHARS, _clip
+
+    out = _clip("x" * (TOOL_MAX_CHARS * 2))
+    assert "characters cut from the middle" in out
+    assert len(out) < TOOL_MAX_CHARS * 2
+    assert _clip("short") == "short"

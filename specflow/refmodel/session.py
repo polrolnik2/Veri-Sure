@@ -30,6 +30,7 @@ from __future__ import annotations
 import ast
 import json
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -292,6 +293,83 @@ class DebugSession:
         "if the reasoning does not hold up, leave the model alone."
     )
 
+    # ------------------------------------------------------------ targeting
+    #
+    # THE FAILURE DECIDES WHAT IS READABLE.
+    #
+    # `RTLEditor` never offers the agent the design. It slices backwards from
+    # the signals that actually diverged (`trace_slicer.dynamic_slice`, depth 3)
+    # and the agent's whole readable surface is that slice: `read_block` refuses
+    # an id outside it, `list_suspect_blocks` returns only it, and the trace
+    # window is anchored at the first divergence because "the earliest
+    # divergence is the one that explains the others, and a later sample is
+    # usually downstream corruption" (`trace_report.py:_extract_values`).
+    #
+    # This session already holds both projections a slice needs and used neither
+    # to shape a tool: `covers` maps a requirement to the methods claimed to
+    # implement it (the driver map), and `OracleResult.edge` is the edge the
+    # oracle decided on (the anchor). The defaults below are built from them.
+    #
+    # WHAT TARGETING MUST NOT DO. `rtl_editor` records B21: dropping the
+    # expected/actual VALUES left the debugger with signal names only, so it
+    # "invented a timing theory ... rewrote `always_ff` to `always_comb` and
+    # broke the contract's 1-cycle latency". The rule is the decisive data in
+    # full and nothing else -- never a smaller sample of everything.
+    #
+    # And no silent caps: every narrowed answer says what it left out and how to
+    # ask for it (`rtl_editor.py:236-243`).
+
+    #: Rows either side of the deciding edge. Small because the decisive datum
+    #: is the edge itself; the neighbours are there to show the approach to it.
+    WINDOW = 12
+
+    def _methods_for(self, uids: list[str]) -> list[str]:
+        """The methods `covers` implicates for these requirements -- the slice."""
+        out: list[str] = []
+        for uid in uids:
+            for m in self.covers.get(uid, []):
+                if m not in out:
+                    out.append(str(m))
+        return out
+
+    def focus(self) -> list[str]:
+        """The requirements this turn can act on, in the order it should try.
+
+        The analogue of `list_suspect_blocks`: derived from what is failing (or
+        unexercised, on a stimulus turn), never from the whole set.
+        """
+        rows = self.failing() if self.route == MODEL else self.undecided()
+        return [r.req_uid for r in rows]
+
+    def board(self) -> dict:
+        """The turn's working set, plus a census of what is not shown.
+
+        `list_oracles` returns all of them -- 104 on the last live run, ~40 KB --
+        and the turn acts on a handful. This is that handful, with counts for
+        the rest so nothing is silently hidden, and every uid remains reachable
+        by name through `explain`.
+        """
+        rows = self.list_oracles()
+        wanted = "NOT MET" if self.route == MODEL else "NOT EXERCISED"
+        acting = [r for r in rows if r["status"] == wanted]
+        shown = {r["req_uid"] for r in acting}
+        rest = Counter(r["status"] for r in rows if r["req_uid"] not in shown)
+        return {
+            "this_turn_is_about": wanted,
+            "acting_on": acting,
+            "not_shown": {
+                "count": len(rows) - len(acting),
+                "by_status": dict(sorted(rest.items())),
+            },
+            "note": (
+                f"{len(rows) - len(acting)} further oracle(s) are not listed "
+                f"here because this turn cannot act on them. Every one is still "
+                f"reachable by name: explain(req_uid) or run_oracle(req_uid)."
+            ) if len(rows) > len(acting) else "",
+            "methods_to_look_at_first": self._methods_for(
+                [r["req_uid"] for r in acting]),
+        }
+
     def list_oracles(self) -> list[dict]:
         """Every finding the turn is working on, checked or not.
 
@@ -385,8 +463,11 @@ class DebugSession:
             "methods_claimed_to_implement_it": self.covers.get(req_uid, []),
             "oracle_clause": oracle.clause,
             "oracle_source": oracle.source,
+            # The one unbounded field here: an oracle naming three testpoints
+            # carried three full step lists. Capped, and the cap says so.
             "stimulus": {
-                tp: self.stimulus_by_tp.get(tp, []) for tp in oracle.tp_uids
+                tp: _steps_excerpt(self.stimulus_by_tp.get(tp, []), tp)
+                for tp in oracle.tp_uids
             },
             "current": {
                 "status": ("broken" if result and result.broken else
@@ -399,15 +480,31 @@ class DebugSession:
         }
 
     def run_oracle(
-        self, req_uid: str, from_edge: int = 0, rows: int = 60
+        self, req_uid: str, from_edge: int | None = None, rows: int | None = None
     ) -> dict:
         """Replay this requirement's scenario in isolation, windowed.
 
         Separate from `run_all` because isolation is how a wrong clock
-        generation gets found: replay one scenario and read it edge by edge. The
-        window exists because the interesting edge is often past the head, and a
-        row budget sized for a prompt is the wrong budget for an agent that can
-        ask twice.
+        generation gets found: replay one scenario and read it edge by edge.
+
+        THE WINDOW IS ANCHORED AT THE DECIDING EDGE, not at the head. Its own
+        docstring used to argue that "a row budget sized for a prompt is the
+        wrong budget for an agent that can ask twice" -- and then defaulted to
+        `from_edge=0, rows=60` for EVERY testpoint the oracle names, which is
+        the prompt-sized budget applied in the wrong direction. Measured on the
+        i2c contract (17 ports): 228 B per row, so three testpoints cost 40 KB
+        to reach an edge `OracleResult.edge` already knows.
+
+        The agent can ask twice, so the default is the narrow one and both
+        arguments still open it up: `from_edge=0, rows=10_000` is the old
+        behaviour. Rows stay CONSECUTIVE either way -- `rtl_editor` keeps its
+        mismatch rows consecutive from the first because "the skew detectors
+        compare row i against row i-N, so a scattered sample destroys exactly
+        the structure they exist to find", and a trace read with a hole in it is
+        worse than a short trace for the same reason.
+
+        The deciding testpoint is listed first, and every testpoint reports its
+        `edges_total` and what was shown, so nothing is silently omitted.
         """
         oracle = next((o for o in self.oracles if o.req_uid == req_uid), None)
         if oracle is None:
@@ -418,8 +515,35 @@ class DebugSession:
                         "testpoints": {},
                         "next": "call explain() for the judge's reasoning"}
             return {"error": f"no such requirement {req_uid!r}"}
-        out: dict = {"req_uid": req_uid, "clause": oracle.clause, "testpoints": {}}
-        for tp in oracle.tp_uids:
+        result = next((r for r in self._results if r.req_uid == req_uid), None)
+        # THE ANCHOR. `result.edge` is where the oracle actually decided -- the
+        # analogue of `fail_time` in `trace_report`, and the reason a narrow
+        # window can be narrow without losing the decisive datum. With no
+        # decision yet (unexercised, or never run) there is nothing to centre
+        # on, so the window falls back to the head.
+        decided_at = None if result is None else result.edge
+        anchored = rows is None and from_edge is None and decided_at is not None
+        span = self.WINDOW if rows is None else max(1, int(rows))
+        if from_edge is not None:
+            start = max(0, int(from_edge))
+        elif decided_at is not None:
+            start = max(0, int(decided_at) - self.WINDOW // 2)
+        else:
+            start = 0
+
+        out: dict = {"req_uid": req_uid, "clause": oracle.clause,
+                     "decided_at_edge": decided_at, "testpoints": {}}
+        if anchored:
+            out["window"] = (
+                f"centred on edge {decided_at}, where this oracle decided. "
+                f"Pass from_edge/rows to widen it.")
+        # Deciding testpoint first: it is the one the verdict came from, and on
+        # an oracle naming three it is the only one worth reading first.
+        order = list(oracle.tp_uids)
+        if result is not None and getattr(result, "tp_uid", None) in order:
+            order.remove(result.tp_uid)
+            order.insert(0, result.tp_uid)
+        for tp in order:
             steps = self.stimulus_by_tp.get(tp)
             if not steps:
                 out["testpoints"][tp] = {"error": "no stimulus recorded"}
@@ -428,11 +552,12 @@ class DebugSession:
             if rep.error:
                 out["testpoints"][tp] = {"error": f"the model {rep.error}"}
                 continue
-            window = rep.rows[max(0, int(from_edge)):max(0, int(from_edge)) + max(1, int(rows))]
-            out["testpoints"][tp] = {
+            window = rep.rows[start:start + span]
+            omitted = len(rep.rows) - len(window)
+            entry = {
                 "edges_total": len(rep.rows),
                 "activity": _activity(rep.rows),
-                "showing": f"{from_edge}..{from_edge + len(window) - 1}"
+                "showing": f"{start}..{start + len(window) - 1}"
                            if window else "(none)",
                 "notes": rep.notes,
                 "trace": [
@@ -442,7 +567,14 @@ class DebugSession:
                     for r in window
                 ],
             }
-        result = next((r for r in self._results if r.req_uid == req_uid), None)
+            # No silent caps (`rtl_editor.py:236-243`): a window that does not
+            # say what it left out reads as the whole trace.
+            if omitted > 0:
+                entry["omitted"] = (
+                    f"{omitted} further edge(s) not shown; call "
+                    f"run_oracle({req_uid!r}, from_edge=..., rows=...) for any "
+                    f"range of the {len(rep.rows)} recorded.")
+            out["testpoints"][tp] = entry
         out["verdict"] = {
             "status": ("broken" if result and result.broken else
                        "met" if result and result.ok else
@@ -614,9 +746,32 @@ class DebugSession:
         return hit
 
     def read_model(self, method: str | None = None) -> str:
-        """Line-numbered source, whole or one method."""
+        """Line-numbered source of ONE method. No argument lists the methods.
+
+        There is no read-the-whole-model form, and that is the point.
+        `RTLEditor` has none either: `read_block` accepts only ids the backward
+        slice produced and errors otherwise (`rtl_editor.py:611-614`), so the
+        agent cannot pull the design into context because no tool will hand it
+        over. This used to return the entire line-numbered model -- 10.1 KB on
+        the i2c control -- to an agent that then paid to resend it on every
+        subsequent call of the turn.
+
+        Losing nothing: `covers` already names the methods claimed to implement
+        each requirement, so the failing requirement points straight at the
+        methods worth reading, and the listing below names the rest.
+        """
         if method is None:
-            return _numbered(self.source, 1)
+            names = _methods(self.source)
+            focus = self._methods_for(self.focus())
+            mark = "   <- claimed to implement a requirement this turn can act on"
+            lines = [
+                "The model defines these methods. Read one with "
+                "read_model(method); the whole file is deliberately not "
+                "available in one call.",
+                "",
+            ]
+            lines += [f"  {n}{mark if n in focus else ''}" for n in names]
+            return "\n".join(lines) + "\n"
         span = _method_span(self.source, method)
         if span is None:
             return (f"no method named {method!r}; the model defines: "
@@ -729,6 +884,28 @@ def _movement(before: int, after: int) -> str:
         return (f"{after - before} MORE failing -- this edit made things worse; "
                 f"the session keeps the best version seen, but consider undoing it")
     return "no change in the failing count"
+
+
+#: Steps shown per testpoint in `explain`. The agent asks for the rest by name.
+STEPS_SHOWN = 12
+
+
+def _steps_excerpt(steps: list[dict], tp: str) -> dict | list:
+    """Head of a step list, saying what it left out.
+
+    Never a sample across the list: stimulus is sequential and a scattered
+    subset misrepresents the order things are driven in -- the same argument
+    `rtl_editor` makes for keeping mismatch rows consecutive.
+    """
+    if len(steps) <= STEPS_SHOWN:
+        return list(steps)
+    return {
+        "steps": list(steps[:STEPS_SHOWN]),
+        "omitted": (
+            f"{len(steps) - STEPS_SHOWN} of {len(steps)} steps not shown; "
+            f"run_oracle(req_uid) replays {tp} in full."
+        ),
+    }
 
 
 def _methods(source: str) -> list[str]:

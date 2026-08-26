@@ -478,3 +478,117 @@ def test_the_requester_is_attached_once_not_twice():
         return                               # not unexercised here; nothing to check
     assert out["attached_to"].count("REQ-0000") == 1
     assert oracle.tp_uids.count(out["added"]) == 1
+
+
+# ------------------------------------------------------- targeted reading
+#
+# THE FAILURE DECIDES WHAT IS READABLE. `RTLEditor` never offers the agent the
+# design: it slices backwards from the signals that diverged and `read_block`
+# refuses an id outside that slice. These pin the same discipline here, built
+# from what the session already holds -- `covers` (the driver map) and
+# `OracleResult.edge` (the anchor).
+
+
+def test_there_is_no_read_the_whole_model_form():
+    """`read_model()` used to return the entire line-numbered file.
+
+    10.1 KB on the i2c control, resent on every subsequent call of the turn.
+    The sibling has no such tool and neither should this one.
+    """
+    s = _session()
+    out = s.read_model()
+    assert "def step" not in out, "the BODY must not come back"
+    assert "step" in out, "the method NAME must"
+    assert "read_model(method)" in out
+
+
+def test_the_method_listing_marks_what_the_turn_can_act_on():
+    """`covers` is the driver map and was used only inside `explain`."""
+    s = _session()
+    assert "claimed to implement" in s.read_model()
+
+
+def test_a_named_method_still_comes_back_in_full():
+    """Targeting narrows the DEFAULT. It never withholds what was asked for."""
+    s = _session()
+    assert "def step" in s.read_model("step")
+
+
+def test_the_trace_window_is_centred_on_the_edge_the_oracle_decided():
+    """The anchor, not the head.
+
+    `run_oracle` defaulted to `from_edge=0, rows=60` for every testpoint an
+    oracle names -- 40 KB on a three-testpoint oracle at 228 B/row -- to reach
+    an edge `OracleResult.edge` already knew.
+    """
+    s = _session(model=WORKING)
+    out = s.run_oracle("REQ-0000")
+    decided = out["decided_at_edge"]
+    assert decided is not None
+    shown = [r["edge"] for r in out["testpoints"]["TP-0000"]["trace"]]
+    assert decided in shown, "the deciding edge must be in the default window"
+    assert len(shown) <= DebugSession.WINDOW
+    assert shown == sorted(shown) and shown == list(
+        range(shown[0], shown[0] + len(shown))), "rows stay consecutive"
+    assert "centred on edge" in out["window"]
+
+
+def _long_session(model=WORKING):
+    """A trace long enough for the window to actually bite (fixture STIM is 8)."""
+    return DebugSession(
+        model, CONTRACT, {"TP-0000": [{"inputs": {"a": 3}, "hold": 60}]},
+        [_oracle()], base="step",
+        requirements=[{"uid": "REQ-0000", "text": "ack must pulse"}],
+        covers={"REQ-0000": ["step"]},
+    )
+
+
+def test_a_narrowed_trace_says_what_it_did_not_show():
+    """No silent caps: a window that does not declare the cut reads as the
+    whole trace, and the agent then reasons about a scenario that does not end
+    where it appears to."""
+    s = _long_session()
+    out = s.run_oracle("REQ-0000")
+    tp = out["testpoints"]["TP-0000"]
+    assert tp["edges_total"] > len(tp["trace"])
+    assert "further edge(s) not shown" in tp["omitted"]
+    assert str(tp["edges_total"]) in tp["omitted"]
+
+
+def test_the_whole_trace_is_still_available_when_asked_for():
+    s = _long_session()
+    out = s.run_oracle("REQ-0000", 0, 10_000)
+    tp = out["testpoints"]["TP-0000"]
+    assert len(tp["trace"]) == tp["edges_total"]
+    assert "omitted" not in tp
+
+
+def test_a_short_trace_comes_back_whole_with_no_omission_note():
+    s = _session(model=WORKING)
+    tp = s.run_oracle("REQ-0000")["testpoints"]["TP-0000"]
+    assert len(tp["trace"]) == tp["edges_total"] and "omitted" not in tp
+
+
+def test_the_result_records_which_testpoint_decided_it():
+    """Without it a tool showing "the trace" had to show all of them."""
+    s = _session(model=WORKING)
+    assert s.results[0].tp_uid == "TP-0000"
+
+
+def test_explain_caps_the_stimulus_it_quotes_and_says_so():
+    from specflow.refmodel.session import STEPS_SHOWN
+
+    long_stim = {"TP-0000": [{"inputs": {"a": 1}, "hold": 1}] * (STEPS_SHOWN + 5)}
+    s = DebugSession(
+        BROKEN, CONTRACT, long_stim, [_oracle()], base="step",
+        requirements=[{"uid": "REQ-0000", "text": "ack must pulse"}],
+        covers={"REQ-0000": ["step"]},
+    )
+    quoted = s.explain("REQ-0000")["stimulus"]["TP-0000"]
+    assert len(quoted["steps"]) == STEPS_SHOWN
+    assert "5 of" in quoted["omitted"] and "not shown" in quoted["omitted"]
+
+
+def test_a_short_stimulus_is_quoted_whole_with_no_ceremony():
+    s = _session()
+    assert s.explain("REQ-0000")["stimulus"]["TP-0000"] == STIM["TP-0000"]
