@@ -316,3 +316,31 @@ def test_staging_runs_by_default():
 
     assert inspect.signature(run_oracle_stage).parameters[
         "want_staging"].default is True
+
+
+def test_the_first_pass_is_given_a_third_answer_it_can_actually_give():
+    """It sees ONE requirement, so it cannot name a route -- it does not know
+    which requirement owns which port. What it CAN do is distinguish "I cannot
+    name a port for this" from "nothing at the interface distinguishes this at
+    all", and the second pass reads that difference.
+
+    Without the third answer the first pass has only two moves, and one of them
+    is reaching for the nearest port -- the mistake the discipline exists to
+    stop.
+    """
+    from specflow.normalize import SYSTEM
+
+    assert "THERE IS A THIRD ANSWER" in SYSTEM
+    assert "you cannot see the other requirements" in SYSTEM.lower()
+    assert "Do NOT reach for a port on the" in SYSTEM
+
+
+def test_the_second_pass_is_shown_what_the_first_one_claimed():
+    from specflow.normalize import NormalizedRequirement, build_indirect_prompt
+
+    shape = NormalizedRequirement(
+        req_uid="REQ-0031", observable=[],
+        unobservable_reason="not visible on any port this requirement names")
+    prompt = build_indirect_prompt({"uid": "REQ-0031"}, shape, [shape],
+                                   "{}", CONTRACT)
+    assert "not visible on any port this requirement names" in prompt

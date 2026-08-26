@@ -221,6 +221,27 @@ When it genuinely has none, give `observable: []` and say so in
 for behaviour nobody can verify at the interface, which is a defect in the
 specification and gets returned to whoever wrote it.
 
+THERE IS A THIRD ANSWER, and it is the right one more often than either of the
+first two. You are shown ONE requirement. Some behaviour has no port of its own
+and still reaches the boundary -- through what it makes some OTHER requirement
+do. An FSM state is not a port, but whatever the design does IN that state is,
+and another requirement describes it.
+
+You cannot name that route: you cannot see the other requirements, so you do not
+know which one owns which port. A later pass can, and will be asked. What helps
+it is knowing you suspected one. So when the effect plainly reaches the boundary
+but not through anything this sentence names, still give `observable: []`, and
+say so in `unobservable_reason` in those words -- name the effect you think is
+visible and what you think would show it:
+
+  "not visible on any port this requirement names; the effect is that no START
+   is detected, which should be visible wherever START detection is"
+
+That is a different claim from "nothing at the interface distinguishes this",
+and the difference is what the later pass is for. Do NOT reach for a port on the
+strength of it -- writing a port you cannot justify is the mistake below, and it
+is worse than this answer.
+
 Both mistakes cost something, and they cost different things. Reaching for the
 nearest output port to avoid an empty list produces a check that fails correct
 designs -- a requirement about `div_cnt` reloading is not a requirement about
@@ -384,6 +405,11 @@ def build_indirect_prompt(
                  "one. `observed_via[].port` must be one of them."),
         "\n\n".join([
             json_block("requirement", requirement),
+            # The first pass's reading, INCLUDING its `unobservable_reason`.
+            # That field is where it recorded whether it merely could not name a
+            # port or believed nothing at the interface distinguishes this at
+            # all -- two different claims, and the second is a much stronger
+            # reason to come back empty here.
             json_block("its_first_pass_reading", shape.model_dump()),
             json_block("the_other_requirements", [
                 {"req_uid": o.req_uid, "observable": o.observable,
