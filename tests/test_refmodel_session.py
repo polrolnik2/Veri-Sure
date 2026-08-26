@@ -592,3 +592,80 @@ def test_explain_caps_the_stimulus_it_quotes_and_says_so():
 def test_a_short_stimulus_is_quoted_whole_with_no_ceremony():
     s = _session()
     assert s.explain("REQ-0000")["stimulus"]["TP-0000"] == STIM["TP-0000"]
+
+
+# ------------------------------------------- movement, revert, and the slice
+
+
+def test_run_all_reports_what_moved_rather_than_the_current_state_again():
+    """`run_all` returned a dict per failing oracle carrying edge and detail --
+    106 B each, 3.4 KB at the 33 failing on the last live run, on the tool most
+    likely called after every edit. That is the board's content in the board's
+    shape, and it is not diagnostic: a requirement this edit BROKE and one that
+    has failed since turn 0 look identical in a flat list of uids."""
+    s = _session()
+    assert s.run_all()["changed_since_you_last_looked"] == "nothing moved"
+    # Moved behind run_all's back, so run_all is the first to observe it.
+    # (An edit through `replace_method` reports its own movement -- see below.)
+    s.source = WORKING
+    out = s.run_all()
+    assert out["changed_since_you_last_looked"] == {"NOT MET -> met": ["REQ-0000"]}
+    assert out["census"]["met"] == 1 and out["census"]["not_met"] == 0
+    assert out["failing"] == []
+    assert all(isinstance(u, str) for u in out["failing"]), "uids, not records"
+
+
+def test_an_edit_names_what_it_moved_including_what_it_broke():
+    s = _session()
+    out = s.replace_method("step", GOOD_STEP)
+    assert out["changed"] == {"NOT MET -> met": ["REQ-0000"]}
+
+
+def test_movement_is_diffed_against_what_was_last_shown_not_last_computed():
+    """`replace_method` refreshes, so diffing against the live results would
+    make every `run_all` after an edit report nothing moved -- which is exactly
+    the call where the movement matters."""
+    s = _session()
+    s.replace_method("step", GOOD_STEP)          # reports the move...
+    assert s.run_all()["changed_since_you_last_looked"] == "nothing moved"
+
+
+def test_revert_to_best_undoes_a_bad_edit():
+    """`best()` protects what the TURN hands back. Inside the turn the agent
+    could only overwrite a method, never take an edit out, so a wrong edit
+    stayed in the source every later edit was reasoning about."""
+    s = _session()
+    s.replace_method("step", GOOD_STEP)
+    good = s.source
+    assert s.distance() == 0
+    s.replace_method("step", 'def step(self, i):\n    return {"q": 0, "ack": 0}')
+    assert s.distance() > 0 and s.source != good
+    out = s.revert_to_best()
+    assert out["reverted"] and s.source == good and s.distance() == 0
+
+
+def test_revert_is_a_no_op_when_already_at_the_best():
+    s = _session()
+    out = s.revert_to_best()
+    assert not out["reverted"] and "already at the best" in out["why"]
+
+
+def test_the_methods_to_read_are_a_computed_slice_not_the_covers_claim():
+    """`covers` is a field the model GENERATOR fills in -- an assertion about
+    code that nothing checks and an edit can silently invalidate. The slice is
+    computed from the source, so a wrong claim cannot misdirect the agent."""
+    s = _session(model=WORKING)
+    s.covers = {"REQ-0000": ["a_method_that_does_not_exist"]}
+    reached = s._methods_for(["REQ-0000"])
+    # `step` writes the ports; `reset` writes the attributes it returns. Both
+    # are real drivers, and the claim -- which names neither -- is ignored.
+    assert reached == ["reset", "step"]
+    assert "a_method_that_does_not_exist" not in reached
+
+
+def test_the_claim_is_used_only_when_the_slice_cannot_be_computed():
+    s = DebugSession(
+        "class Model:\n    def step(self", CONTRACT, STIM, [_oracle()],
+        base="step", covers={"REQ-0000": ["step"]},
+    )
+    assert s._methods_for(["REQ-0000"]) == ["step"]

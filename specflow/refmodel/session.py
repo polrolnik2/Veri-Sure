@@ -35,7 +35,14 @@ from pathlib import Path
 
 from ..ids import PREFIX_TESTPLAN, mint, next_index
 from ..obligation import FIRED, Obligation, check_static
-from .oracles import OracleResult, RequirementOracle, decide_all, replay
+from .oracles import (
+    OracleResult,
+    RequirementOracle,
+    decide_all,
+    ports_read,
+    replay,
+)
+from .slicer import backward_slice, parse_methods
 from .validate import validate_source
 
 #: I8's two repair routes. A turn takes exactly one, and which one is decided
@@ -163,7 +170,11 @@ class DebugSession:
         self._results: list[OracleResult] = []
         self.best_source = source
         self.best_failing: int | None = None
+        #: The state the agent was last SHOWN, which movement is diffed against.
+        #: Seeded from entry so the first report covers the whole turn.
+        self._reported: dict[str, str] = {}
         self.refresh()
+        self._reported = self._statuses()
         #: I8, decided once at entry. ADVISORY as of the measurement below:
         #: it chooses what the brief leads with and feeds the stalled signal,
         #: and it no longer refuses a tool. A turn with both a failing oracle
@@ -209,6 +220,41 @@ class DebugSession:
     @property
     def results(self) -> list[OracleResult]:
         return self._results
+
+    # ----------------------------------------------------------- movement
+    #
+    # WHAT MOVED IS THE DIAGNOSIS. A re-decide that hands back the current state
+    # in full answers "where are things now", which the agent already knows from
+    # the board -- and buries the one thing it does not know, which is what its
+    # last edit did. A regression and a pre-existing failure look identical in a
+    # list of uids.
+
+    @staticmethod
+    def _status(r: OracleResult) -> str:
+        return ("broken" if r.broken else "met" if r.ok else
+                "NOT EXERCISED" if r.unexercised() else "NOT MET")
+
+    def _statuses(self) -> dict[str, str]:
+        return {r.req_uid: self._status(r) for r in self._results}
+
+    def _movement(self) -> dict[str, list[str]]:
+        """What changed since the agent last looked, and which way.
+
+        Diffed against the last state REPORTED, not the last state computed:
+        `replace_method` refreshes, so diffing against the live results would
+        make every `run_all` after an edit report nothing moved -- which is
+        exactly the call where the movement matters.
+        """
+        now = self._statuses()
+        was = self._reported
+        moved: dict[str, list[str]] = {}
+        for uid, status in now.items():
+            prior = was.get(uid)
+            if prior is None or prior == status:
+                continue
+            moved.setdefault(f"{prior} -> {status}", []).append(uid)
+        self._reported = now
+        return {k: sorted(v) for k, v in sorted(moved.items())}
 
     def failing(self) -> list[OracleResult]:
         """Oracles still to satisfy. A BROKEN oracle is not one of them.
@@ -278,6 +324,42 @@ class DebugSession:
         """The best model this session reached -- never worse than it started."""
         return self.best_source
 
+    def revert_to_best(self) -> dict:
+        """Put the best model this turn has seen back in place.
+
+        `best()` protects the turn's RETURN VALUE. Until now that was the only
+        protection: inside the turn the agent could only overwrite a method,
+        never undo one, so a wrong edit stayed in the source every later edit
+        was reasoning about and reading back.
+
+        That gap became load-bearing when the stall cutoff was deleted. The
+        cutoff used to end a turn after two non-improving edits -- badly, for
+        the reasons in `refmodel_editor.debug` -- and one thing it did do was
+        stop the wandering early. A turn now spends its whole budget, so it
+        needs the move `TBEditor` exposes for exactly this
+        (`tb_editor._tool_revert_to_best`) and `RTLEditor` keeps as
+        `restore_best`.
+
+        Monotone by construction: it can only move the source to a state already
+        scored no worse, so it cannot be used to escape a verdict.
+        """
+        if self.source == self.best_source:
+            return {"reverted": False,
+                    "why": "the model is already at the best state seen",
+                    "distance": self.distance()}
+        before = self.distance()
+        self.source = self.best_source
+        self.refresh()
+        self.history.append(
+            Edit("(revert)", True, "reverted to best", before, self.distance()))
+        return {
+            "reverted": True,
+            "distance_before": before,
+            "distance_after": self.distance(),
+            "changed": self._movement() or "nothing moved",
+            "failing": [r.req_uid for r in self.failing()],
+        }
+
     # ------------------------------------------------------------- tools
 
     #: Said on every finding that has no executable check behind it. The verdict
@@ -322,14 +404,52 @@ class DebugSession:
     #: is the edge itself; the neighbours are there to show the approach to it.
     WINDOW = 12
 
-    def _methods_for(self, uids: list[str]) -> list[str]:
-        """The methods `covers` implicates for these requirements -- the slice."""
+    def _outputs(self) -> set[str]:
+        return {str(p.get("name")) for p in (self.contract.get("io") or [])
+                if p.get("name") and str(p.get("dir", "")).startswith("out")}
+
+    def _blocks(self) -> list:
+        """Parsed methods of the CURRENT source, cached per source string."""
+        if getattr(self, "_blocks_for", None) != self.source:
+            self._blocks_cache = parse_methods(self.source, self._outputs())
+            self._blocks_for = self.source
+        return self._blocks_cache
+
+    def _slice_for(self, uids: list[str]) -> list[str]:
+        """Methods a backward slice reaches from the ports these oracles read.
+
+        COMPUTED, not claimed. `covers` maps a requirement to methods, but it is
+        a field the model GENERATOR filled in (`agent.py:39`) -- an assertion
+        about code, not an analysis of it, which nothing checks and which an edit
+        can silently invalidate. `trace_slicer.dynamic_slice` had no such option
+        for Verilog and computed the slice; here it is easier, because `ast`
+        gives exact attribute reads and writes with no heuristics.
+
+        Falls back to `covers` when the slice cannot be computed -- an
+        unparseable source, or an oracle naming no output port.
+        """
+        want = self._outputs()
+        ports: set[str] = set()
+        for uid in uids:
+            oracle = next((o for o in self.oracles if o.req_uid == uid), None)
+            if oracle is not None:
+                ports |= ports_read(oracle, self.contract) & want
+        blocks = self._blocks()
+        if not blocks or not ports:
+            return self._claimed_for(uids)
+        return [b.name for b in backward_slice(fail_ports=ports, blocks=blocks)]
+
+    def _claimed_for(self, uids: list[str]) -> list[str]:
+        """The methods `covers` ASSERTS implement these requirements."""
         out: list[str] = []
         for uid in uids:
             for m in self.covers.get(uid, []):
                 if m not in out:
                     out.append(str(m))
         return out
+
+    def _methods_for(self, uids: list[str]) -> list[str]:
+        return self._slice_for(uids)
 
     def focus(self) -> list[str]:
         """The requirements this turn can act on, in the order it should try.
@@ -851,8 +971,13 @@ class DebugSession:
             "accepted": True,
             "failing_before": before,
             "failing_after": after,
+            # WHICH ones moved, not just how many. `still_failing` alone could
+            # not distinguish a requirement this edit BROKE from one that has
+            # been failing since turn 0 -- the same defect `run_all` had, and
+            # the regression signal is the whole reason to report after an edit.
+            "changed": self._movement() or "nothing moved",
             "still_failing": [r.req_uid for r in self.failing()],
-            "note": _movement(before, after),
+            "note": _moved(before, after),
         }
 
     def _reject(self, method: str, before: int, reason: str) -> dict:
@@ -860,18 +985,38 @@ class DebugSession:
         return {"accepted": False, "reason": reason, "failing": before}
 
     def run_all(self) -> dict:
-        """Re-decide everything, plus the liveness question."""
+        """Re-decide everything: the census, WHAT MOVED, and liveness.
+
+        Not a second copy of the board. It used to return a dict per failing
+        oracle carrying `edge` and `detail` -- 106 B each, 3.4 KB at the 33
+        failing on the last live run, on the tool most likely to be called after
+        every edit -- which is the board's content in the board's shape, minus
+        the board's structure.
+
+        And it is not diagnostic in that form. Detail per requirement answers
+        "what is wrong now", which `list_oracles` already answers and
+        `run_oracle` answers properly with a trace. What only this call can say
+        is what CHANGED, and a flat list of currently-failing uids cannot: a
+        requirement this edit broke and one that has failed since turn 0 look
+        the same in it.
+
+        So: counts, the failing uids, the transitions, and where to look next.
+        """
         self.refresh()
+        moved = self._movement()
         states = _distinct_output_states(
             self.source, self.contract, self.stimulus_by_tp, base=self.base)
+        failing = [r.req_uid for r in self.failing()]
         return {
-            "failing": [
-                {"req_uid": r.req_uid, "edge": r.edge, "detail": r.detail}
-                for r in self.failing()
-            ],
-            "met": sum(1 for r in self._results if r.ok),
-            "not_exercised": sum(1 for r in self._results if r.unexercised()),
-            "not_met": len(self.failing()),
+            "census": {
+                "met": sum(1 for r in self._results if r.ok),
+                "not_met": len(failing),
+                "not_exercised": sum(
+                    1 for r in self._results if r.unexercised()),
+                "broken_oracles": sum(1 for r in self._results if r.broken),
+            },
+            "failing": failing,
+            "changed_since_you_last_looked": moved or "nothing moved",
             "broken_oracles": [r.req_uid for r in self._results if r.broken],
             "distinct_output_states": states,
             "liveness": (
@@ -879,13 +1024,17 @@ class DebugSession:
                 "satisfies nothing and discriminates no design from any other"
                 if states == 1 else "outputs move"
             ),
+            "next": (
+                "run_oracle(req_uid) for the trace behind any one of these; "
+                "list_oracles() for the clause and detail of each."
+            ),
         }
 
 
 # ------------------------------------------------------------------ helpers
 
 
-def _movement(before: int, after: int) -> str:
+def _moved(before: int, after: int) -> str:
     if after < before:
         return f"{before - after} fewer failing"
     if after > before:

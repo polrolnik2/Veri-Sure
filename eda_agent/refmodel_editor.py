@@ -197,6 +197,7 @@ class RefModelEditor:
         toolkit.register_tool_function(self._tool_replace_method)
         toolkit.register_tool_function(self._tool_run_all)
         toolkit.register_tool_function(self._tool_add_stimulus)
+        toolkit.register_tool_function(self._tool_revert_to_best)
 
         # Held so the turn's token usage can be read back. The wrapper counts
         # it either way; without a reference nothing ever asks, and this loop's
@@ -402,8 +403,29 @@ class RefModelEditor:
             self._session.replace_method, method, new_code)
         return _text(result)
 
+    async def _tool_revert_to_best(self) -> ToolResponse:
+        """Undo back to the best state this turn has reached.
+
+        Use it when an edit made things worse and you would rather start again
+        from the last good model than keep patching on top of a bad one. It can
+        only move the model to a state already scored no worse, so it is always
+        safe; it reports what moved back.
+        """
+        if self._session is None:
+            return _no_session()
+        return _text(await asyncio.to_thread(self._session.revert_to_best))
+
     async def _tool_run_all(self) -> ToolResponse:
-        """Re-decide every oracle, and report whether the outputs move at all."""
+        """Re-decide every oracle: the census, WHAT MOVED, and liveness.
+
+        Read `changed_since_you_last_looked` first -- it is the only thing this
+        call tells you that the board does not. It names the requirements that
+        changed status since your last look and which way they went, so an edit
+        that fixed one thing and broke another is visible as both.
+
+        It does NOT return traces or per-requirement detail. Use run_oracle for
+        the trace behind one, list_oracles for its clause and detail.
+        """
         if self._session is None:
             return _no_session()
         return _text(await asyncio.to_thread(self._session.run_all))

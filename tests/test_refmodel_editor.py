@@ -95,6 +95,12 @@ def test_every_tool_is_registered_and_documented():
     assert set(tools) == {
         "_tool_list_oracles", "_tool_explain", "_tool_run_oracle",
         "_tool_read_model", "_tool_replace_method", "_tool_run_all",
+        # Eighth: undo. `best()` protects what the TURN hands back; without a
+        # revert the agent could only overwrite a bad edit, never take it out,
+        # so every later edit reasoned about a model it had already broken.
+        # `TBEditor` exposes the same move. It became load-bearing when the
+        # stall cutoff was deleted: a turn now spends its whole budget.
+        "_tool_revert_to_best",
         # Seventh: an oracle reporting NOT EXERCISED is not a defect in the
         # model, and until this existed the turn had no instrument to act on
         # one -- 30 of 67 requirements on f-i2c were in exactly that state.
