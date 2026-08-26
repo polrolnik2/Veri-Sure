@@ -78,6 +78,43 @@ class Activation(BaseModel):
     def input_only(self) -> bool:
         return bool(self.inputs)
 
+    @property
+    def unconditional(self) -> bool:
+        """The requirement applies at all times, so there is nothing to reach.
+
+        `input_only` was carrying this case and getting it wrong. It is
+        `bool(self.inputs)`, so "at all times" with no inputs reports
+        `input_only == False` and reads as state-dependent -- conflating "no
+        inputs because none are needed" with "needs something to run". Measured
+        on a2-i2c: 11 requirements looked state-dependent by that test and 8 of
+        them were `"always"` or `"at all times"`.
+
+        Lexical, and deliberately conservative in one direction: a missed
+        unconditional costs one model call asking how to reach `"always"`, while
+        a missed STATE-dependent silently skips the reaching chain the stimulus
+        author needed. So a conditional connective anywhere disqualifies it, and
+        when in doubt this returns False.
+        """
+        text = (self.text or "").strip().lower()
+        if not text:
+            return False
+        if re.search(r"\b(when|while|if|after|before|during|until|unless|once)\b",
+                     text):
+            return False
+        return bool(re.match(r"^(always|at all times|continuously|"
+                             r"at every (clock|clk|rising edge)|unconditionally)\b",
+                             text))
+
+    @property
+    def state_dependent(self) -> bool:
+        """Something has to have HAPPENED for this requirement to apply.
+
+        Not drivable as input values, and not true at all times -- the only case
+        that needs an `activated_via` chain. "while the FSM is in START_B" is
+        this; "cmd is WRITE and ena is 1" is not; "at all times" is not.
+        """
+        return not self.input_only and not self.unconditional
+
 
 class Route(BaseModel):
     """How a requirement is observed at a port it does not itself name.
@@ -334,10 +371,15 @@ def build_prompt_one(
 
 
 INDIRECT_SYSTEM = """\
-A requirement has come back with NO declared output port its behaviour is
-directly visible on. Before that is accepted as a hole in the specification,
-you are asked the narrower question the first pass could not: is the behaviour
-visible INDIRECTLY, through what it makes some OTHER requirement do?
+A requirement has come back needing something the first pass could not give it:
+a way to OBSERVE it at a port its own text does not name, or a way to REACH the
+state its activation needs, or both. Before either is accepted as a hole in the
+specification, you are asked the narrower questions the first pass could not.
+
+THE ITEM BLOCK BELOW NAMES WHICH OF THE TWO IS BEING ASKED OF THIS REQUIREMENT.
+Answer that one. Answering the other as well is not useful -- a requirement
+already observable at a port does not need a route to one, and a route invented
+for it will be discarded.
 
 This is not a second chance to reach for the nearest port. It is a different
 question, and it has a real answer more often than the first pass suggests: an
@@ -345,7 +387,8 @@ FSM state is not a port, but the requirements describing behaviour IN each state
 name real ports, so the state is observable through what it makes those
 requirements do.
 
-TWO INDEPENDENT QUESTIONS. Answer both, or say plainly that you cannot.
+TWO INDEPENDENT QUESTIONS, and a requirement may need either without the other.
+Answer the one the item block asks for, or say plainly that you cannot.
 
 OBSERVATION -- `observed_via`, a list of ALTERNATIVES, any one sufficient.
   port         a declared OUTPUT port, named by the OTHER requirement
@@ -457,6 +500,31 @@ def indirect_prefix(contract_json: str, contract: dict,
     )
 
 
+#: What each requirement is being asked. In the ITEM block, never the prefix:
+#: forking the system text per question would split a 64 KB cached head three
+#: ways to say one sentence, and that head is 97% of the prompt.
+_ASKS = {
+    "observation": (
+        "THE QUESTION FOR THIS REQUIREMENT: OBSERVATION ONLY.\n"
+        "No declared output port shows this behaviour directly. Give "
+        "`observed_via`. Leave `activated_via` empty -- its activation is "
+        "drivable, so there is nothing to reach."),
+    "activation": (
+        "THE QUESTION FOR THIS REQUIREMENT: ACTIVATION ONLY.\n"
+        "This requirement is ALREADY OBSERVABLE at the port(s) in its reading "
+        "below -- do not look for another one, and do not return "
+        "`observed_via`. What it lacks is a way to REACH the state its "
+        "activation names. Give `activated_via`: one hop, the requirement whose "
+        "behaviour puts the design in that state."),
+    "both": (
+        "THE QUESTION FOR THIS REQUIREMENT: BOTH.\n"
+        "No port shows it directly AND its activation is not drivable. Give "
+        "`observed_via` and `activated_via`. They are independent: finding one "
+        "and not the other is a real answer, and more useful than inventing "
+        "the missing half."),
+}
+
+
 def build_indirect_prompt(
     requirement: dict,
     shape: NormalizedRequirement,
@@ -465,16 +533,23 @@ def build_indirect_prompt(
     contract: dict,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    ask: str = "observation",
 ) -> str:
-    """The blind requirement and its own first-pass reading; the set is cached.
+    """The requirement, its first-pass reading, and WHICH question it is asked.
 
     `others` carries `req_uid`, `observable`, `activation` and `expectation`
     only -- the vocabulary needed to name a route, and nothing that would let
     this become a second attempt at the first pass's job.
+
+    `ask` exists because the two indirections are independent and the pass now
+    admits requirements that need only the second. Sending an already-observable
+    requirement the blind requirement's prompt invites it to invent a route it
+    does not need, and `observable` is the field every downstream stage reads.
     """
     return compose(
         indirect_prefix(contract_json, contract, others),
         "\n\n".join([
+            _ASKS.get(ask, _ASKS["observation"]),
             json_block("requirement", requirement),
             # The first pass's reading, INCLUDING its `unobservable_reason`.
             # That field is where it recorded whether it merely could not name a
@@ -758,9 +833,23 @@ def resolve_indirect(
     downstream stage plans against the route. Repairing it later would leave the
     testplan built from the claim that was wrong.
     """
-    blind = [n for n in normalized if n.unobservable]
+    # ENTRY IS NOT GATED ON OBSERVABILITY ALONE, and it used to be. The two
+    # indirections are independent -- `observed_via` makes a requirement
+    # CHECKABLE, `activated_via` makes it STAGEABLE -- but `blind` selected on
+    # `unobservable`, so the "observable but unreachable" case could never be
+    # filled. Measured on a2-i2c: 28 requirements got `observed_via`, 18 got
+    # `activated_via`, and `activated_via` WITHOUT `observed_via` was zero --
+    # not a property of the design, an artefact of who was let in.
+    def _ask(n: NormalizedRequirement) -> str:
+        if n.unobservable:
+            return "both" if n.activation.state_dependent else "observation"
+        return "activation"
+
+    blind = [n for n in normalized
+             if n.unobservable or n.activation.state_dependent]
     if not blind:
         return list(normalized), []
+    asks = {n.req_uid: _ask(n) for n in blind}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
     known = {n.req_uid for n in normalized}
 
@@ -770,7 +859,8 @@ def resolve_indirect(
             port=port,
             build_prompt=lambda issues, previous: build_indirect_prompt(
                 by_uid.get(shape.req_uid, {}), shape, normalized,
-                contract_json, contract, issues, previous),
+                contract_json, contract, issues, previous,
+                ask=asks[shape.req_uid]),
             parse=parse_response,
             gate=lambda out: gate_indirect(
                 out, uid=shape.req_uid, contract=contract, known=known),
@@ -783,17 +873,30 @@ def resolve_indirect(
         if not result.ok or not result.output.normalized:
             continue
         answer = result.output.normalized[0]
-        if not answer.observed_via:
+        update: dict = {}
+        # AN OBSERVATION ROUTE IS ONLY APPLIED TO A REQUIREMENT THAT LACKED ONE.
+        # `observable` is the field every downstream stage reads, and a
+        # requirement asked only the activation question is already decidable at
+        # a port of its own -- a route returned for it anyway is the model
+        # answering a question it was told not to, and overwriting a good claim
+        # with it would be strictly worse than ignoring it.
+        if shape.unobservable and answer.observed_via:
+            # `observable` now holds the ports it is decidable at BY ANY ROUTE,
+            # so every downstream consumer keeps reading one field. The reason
+            # goes, because it is no longer true.
+            update["observable"] = sorted(
+                {r.port for r in answer.observed_via if r.port})
+            update["unobservable_reason"] = ""
+            update["observed_via"] = list(answer.observed_via)
+        # A REACHING CHAIN IS KEPT ON ITS OWN. It used to be discarded whenever
+        # no observation route came back -- `if not answer.observed_via:
+        # continue` threw away the whole answer -- so the one artefact the
+        # stimulus author needs went out with a question it had not been asked.
+        if answer.activated_via:
+            update["activated_via"] = list(answer.activated_via)
+        if not update:
             continue          # an honest "no route" -- see INDIRECT_SYSTEM
-        # `observable` now holds the ports it is decidable at BY ANY ROUTE, so
-        # every downstream consumer keeps reading one field. The reason goes,
-        # because it is no longer true.
-        routed[shape.req_uid] = shape.model_copy(update={
-            "observable": sorted({r.port for r in answer.observed_via if r.port}),
-            "unobservable_reason": "",
-            "observed_via": list(answer.observed_via),
-            "activated_via": list(answer.activated_via),
-        })
+        routed[shape.req_uid] = shape.model_copy(update=update)
     merged = [routed.get(n.req_uid, n) for n in normalized]
     # "28 resolved" alone is the number a reader over-trusts. Logged with what
     # the routes rest on, because the two together say something neither says
@@ -801,7 +904,7 @@ def resolve_indirect(
     # an answer, so the count is never the whole report.
     review = indirect_review(merged)
     logger.info(
-        "normalize: %d of %d unobservable requirement(s) resolved indirectly "
+        "normalize: %d of %d requirement(s) resolved indirectly "
         "(%d resting wholly on timing, %d route(s) on a port their own "
         "activation pins)",
         len(routed), len(blind),

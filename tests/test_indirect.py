@@ -193,9 +193,97 @@ def test_the_other_requirements_are_the_evidence():
     assert "busy" in port.prompts[0]
 
 
-def test_a_directly_observable_requirement_is_never_asked():
-    _, results, port = _resolve(ROUTED, [_seer()])
+def _settled(uid="REQ-0012"):
+    """A known sibling that needs nothing: observable, and drivable."""
+    return NormalizedRequirement(
+        req_uid=uid, activation=Activation(text="cmd is START", inputs={"cmd": 1}),
+        observable=["cmd_ack"], expectation="cmd_ack pulses")
+
+
+def test_a_requirement_that_needs_NEITHER_is_never_asked():
+    """Observable at its own port AND drivable -- nothing to resolve."""
+    settled = _seer().model_copy(update={
+        "activation": Activation(text="cmd is WRITE", inputs={"cmd": 1})})
+    _, results, port = _resolve(ROUTED, [settled])
     assert port.prompts == [] and results == []
+
+
+def test_an_UNCONDITIONAL_activation_is_not_asked_how_to_reach_it():
+    """`input_only` was carrying this and getting it wrong.
+
+    It is `bool(inputs)`, so "at all times" with no inputs read as
+    state-dependent. On a2-i2c that mislabelled 8 of 11 requirements -- and
+    every one of them would have cost a model call asking how to reach
+    "always".
+    """
+    always = _seer().model_copy(update={"activation": Activation(text="at all times")})
+    _, results, port = _resolve(ROUTED, [always])
+    assert port.prompts == [] and results == []
+
+
+def test_an_OBSERVABLE_but_UNREACHABLE_requirement_is_asked_the_other_question():
+    """The cell the pass could never fill: entry was gated on observability.
+
+    Live proof it was structural rather than a property of the design -- on
+    a2-i2c, `activated_via` WITHOUT `observed_via` came back zero of 105.
+    """
+    stateful = _seer().model_copy(update={
+        "activation": Activation(text="the FSM is in START_B")})
+    reply = ('{"normalized": [{"req_uid": "REQ-0007", "activated_via": '
+             '[{"through_req": "REQ-0012", "activation": {"text": "issue START",'
+             ' "inputs": {"cmd": 1}}}]}]}')
+    merged, results, port = _resolve(reply, [stateful, _settled()])
+    assert len(port.prompts) == 1
+    assert "ACTIVATION ONLY" in port.prompts[0]
+    got = next(n for n in merged if n.req_uid == "REQ-0007")
+    assert [h.through_req for h in got.activated_via] == ["REQ-0012"]
+    # And its own observable is untouched -- it never needed a route.
+    assert got.observable == ["busy"] and got.observed_via == []
+
+
+def test_a_route_returned_for_a_requirement_that_did_NOT_ask_is_ignored():
+    """`observable` is what every downstream stage reads.
+
+    A requirement asked only the activation question is already decidable at a
+    port of its own. Overwriting that with a route it was told not to look for
+    is strictly worse than ignoring the route.
+    """
+    stateful = _seer().model_copy(update={
+        "activation": Activation(text="the FSM is in START_B")})
+    reply = ('{"normalized": [{"req_uid": "REQ-0007", "observed_via": [{"port": '
+             '"cmd_ack", "through_req": "REQ-0009", "when": "later", '
+             f'"shows": "{DISCRIMINATING}"}}]}}]}}')
+    merged, _, _ = _resolve(reply, [stateful])
+    got = next(n for n in merged if n.req_uid == "REQ-0007")
+    assert got.observable == ["busy"] and got.observed_via == []
+
+
+def test_a_reaching_chain_survives_an_answer_with_no_observation_route():
+    """`if not answer.observed_via: continue` threw the whole answer away.
+
+    A blind requirement whose route was not found but whose reaching chain WAS
+    lost the chain too -- the one artefact the stimulus author needs, discarded
+    with a question it had not been asked.
+    """
+    reply = ('{"normalized": [{"req_uid": "REQ-0031", "observed_via": [], '
+             '"activated_via": [{"through_req": "REQ-0012", "activation": '
+             '{"text": "issue START"}}]}]}')
+    merged, _, _ = _resolve(reply, [_blind(), _settled()])
+    got = next(n for n in merged if n.req_uid == "REQ-0031")
+    assert [h.through_req for h in got.activated_via] == ["REQ-0012"]
+    assert got.unobservable          # still blind: no route was found
+    assert got.unobservable_reason   # and its reason is left standing
+
+
+def test_the_ask_note_is_in_the_ITEM_block_not_the_cached_prefix():
+    """Forking the system text per question would split a 64 KB head three ways.
+
+    Measured: that head is 97.3% of the prompt, so the note has to ride in the
+    item block or the stage pays for the sentence three times over.
+    """
+    from specflow.normalize import indirect_prefix
+    for note in ("OBSERVATION ONLY", "ACTIVATION ONLY", "THE QUESTION FOR THIS"):
+        assert note not in indirect_prefix("{}", CONTRACT, [_seer()])
 
 
 def test_an_honest_no_route_leaves_the_requirement_as_it_was():
