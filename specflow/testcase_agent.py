@@ -513,6 +513,12 @@ def gate_suite(
 _WANTS_RESET_ASSERTED = re.compile(
     r"(assert\w*\s+(the\s+)?(a?sync\w*\s+)?reset|apply\s+reset|pulse\s+reset"
     r"|drive\s+reset\s+low|during\s+reset|reset\s+is\s+asserted"
+    # `rst` AS WELL AS `reset`, because that is what the spec calls it. The
+    # spelled-out form was the only one here, and normalisation writes the
+    # abbreviation: all three of a2-i2c's reset requirements say "rst is
+    # asserted high" and none of them matched, so the stimulus loop was never
+    # told to use a reset step and spent nine attempts driving inputs instead.
+    r"|\brst(_n)?\s+(is\s+)?asserted\b|\bwhile\s+rst(_n)?\s+is\s+high\b"
     # The literal forms. `nReset=0` and `rst=1` ARE the assertion; their
     # opposites (`nReset=1`, `rst=0`) are the harness default and must not match.
     r"|\bnReset\s*=\s*0\b|\brst\s*=\s*1\b|\brst_n\s*=\s*0\b)", re.I)

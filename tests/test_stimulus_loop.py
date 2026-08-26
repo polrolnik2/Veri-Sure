@@ -355,3 +355,68 @@ def test_a_route_is_refuted_only_when_NONE_of_its_ports_moved():
     allsilent = {"first_change": {"a": None, "b": None},
                  "route_never_moved": True}
     assert "never moved" in _diagnose(allsilent)
+
+
+# --- the two classified failures: reset scenarios and unconditional checks --
+
+
+def test_a_reset_scenario_is_told_to_use_a_RESET_STEP():
+    """Reset is not a drivable input and the hint never said so.
+
+    a2-i2c's three genuinely-attempted reset requirements -- REQ-0006, 0007,
+    0009 -- spent every attempt driving inputs. Their ports moved each time, so
+    the design was running; the reset scenario was simply never staged.
+    """
+    from specflow.oracles_stage import _hint
+
+    shape = {"activation": {"text": "rst is asserted high at a rising edge of clk"}}
+    h = _hint({"uid": "REQ-0007", "text": "reset clears internal state"},
+              shape, None, 0)
+    assert '{"reset": true}' in h
+    assert "not a drivable input" in h
+
+
+def test_an_ordinary_scenario_is_not_told_about_reset():
+    """The detector must stay narrow -- "start with reset released" describes
+    the harness default and matching it would fire on nearly every testpoint."""
+    from specflow.oracles_stage import _hint
+
+    for text in ("a glitch on sda_i while scl_i is high",
+                 "start with reset released and cmd = WRITE"):
+        h = _hint({"uid": "REQ-0031", "text": "t"}, {"activation": {"text": text}},
+                  None, 0)
+        assert "reset step" not in h and '{"reset": true}' not in h
+
+
+def test_the_reset_detector_learned_the_abbreviation():
+    """It spelled out `reset` and normalisation writes `rst`."""
+    from specflow.testcase_agent import _WANTS_RESET_ASSERTED as R
+
+    for yes in ("on a rising clk edge while rst is asserted high",
+                "rst is asserted high and a rising edge of clk occurs",
+                "assert the reset", "rst=1"):
+        assert R.search(yes), yes
+    for no in ("rst is released", "reset is deasserted", "rst is not asserted",
+               "start with reset released", "rst=0", "nReset=1", "always"):
+        assert not R.search(no), no
+
+
+def test_an_UNCONDITIONAL_activation_that_abstains_is_the_CHECK_s_defect():
+    """It cannot be waiting for a scenario that is always true.
+
+    a2-i2c's REQ-0003: activation "always", both observable ports moving on all
+    three attempts, the check abstaining every time -- and it was recorded
+    "never reached", blaming the stimulus author for a check that was broken.
+    """
+    import inspect
+
+    from specflow import oracles_stage as O
+
+    src = inspect.getsource(O.run_oracle_stage)
+    block = src[src.index("if rounds == 1 and want_staging and witness:"):]
+    assert ".unconditional" in block
+    assert 'why = ("malformed:' in block, "must route to ORACLE_INVALID"
+    assert "quotable[uid] = why" in block, "the AUTHOR is re-asked, not the stimulus"
+    assert "unexer.pop(uid)" in block, "and it must not be staged"
+    from specflow.refmodel.verdict import of_discard
+    assert of_discard("malformed: the activation holds at all times") == "ORACLE_INVALID"

@@ -979,12 +979,46 @@ def run_oracle_stage(
         # against, and re-verifies what staging changed, in one move.
         staged_now = False
         if rounds == 1 and want_staging and witness:
+            from .normalize import Activation
+
             survivors = {u: o for u, o in held.items() if u not in rejected}
+            unexer = unexercised_against(
+                survivors, witness, contract, stimulus_by_tp, base=base,
+                transactional=transactional)
+            # AN UNCONDITIONAL ACTIVATION CANNOT FAIL TO OCCUR, so an oracle
+            # that abstains under one is not waiting for a scenario -- it is
+            # broken, and no amount of staging can reach a condition that is
+            # already true. Sending it to the stimulus loop spends the budget
+            # asking for something that is not missing, and then abandons the
+            # requirement for the stimulus author's supposed failure.
+            #
+            # a2-i2c's REQ-0003 is the case: activation "always", both its
+            # observable ports moving on all three attempts, and the check
+            # abstaining every time. It was recorded "never reached".
+            #
+            # Rejected rather than abandoned, and quotable, so the repair loop
+            # re-asks the AUTHOR with the reason -- which is the party that can
+            # actually fix it.
+            for uid in sorted(unexer):
+                shape = (normalized or {}).get(uid) or {}
+                if not Activation(**(shape.get("activation") or {})).unconditional:
+                    continue
+                why = ("malformed: the activation holds at all times, so this "
+                       "check cannot be waiting for a scenario -- it decided "
+                       "nothing on every testpoint it names, which makes it a "
+                       "defect in the check rather than in the stimulus")
+                rejected[uid] = why
+                quotable[uid] = why
+                repairs.setdefault(uid, []).append(why)
+                unexer.pop(uid)
+                logger.info("oracles: %s abstains under an unconditional "
+                            "activation -- re-asking the author, not the "
+                            "stimulus", uid)
+            survivors = {u: o for u, o in survivors.items() if u not in rejected}
+            ask = set(quotable) | advisory_only
             gone, staging = stage_unexercised(
                 held=survivors,
-                unexercised=unexercised_against(
-                    survivors, witness, contract, stimulus_by_tp, base=base,
-                    transactional=transactional),
+                unexercised=unexer,
                 requirements=requirements, normalized=normalized or {},
                 contract=contract, testplan=testplan,
                 stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
@@ -1495,6 +1529,26 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
     parts = [
         f"Stage the situation this requirement is about: {act.get('text') or req.get('text', '')}",
     ]
+    # RESET IS NOT A DRIVABLE INPUT, and a hint that does not say so sends the
+    # generator to drive a port the schema forbids. The runtime owns reset and
+    # offers a first-class step for it; the generator's own prompt documents
+    # `{"reset": true}`, but nothing here ever pointed at it.
+    #
+    # All three of a2-i2c's genuinely-attempted reset requirements -- REQ-0006,
+    # REQ-0007, REQ-0009 -- spent every attempt this way. Their ports moved each
+    # time, so the design was running; the RESET scenario was simply never
+    # staged, because the hint asked for "rst asserted high" and the schema has
+    # no such input.
+    from .testcase_agent import _WANTS_RESET_ASSERTED
+    if _WANTS_RESET_ASSERTED.search(str(act.get("text") or "")
+                                    + " " + str(req.get("text") or "")):
+        parts.append(
+            'This scenario needs RESET ASSERTED, which is not a drivable input '
+            '-- the runtime owns reset on both sides at once. Use a reset step: '
+            '{"reset": true} (or {"reset": true, "hold": N} to hold it N edges), '
+            'then the steps that observe what reset left behind. Do not try to '
+            'drive rst or nReset as a value; the schema has no such input and '
+            'the step will be rejected.')
     if act.get("inputs"):
         parts.append("It applies when these inputs hold: "
                      + ", ".join(f"{k}={v}" for k, v in sorted(act["inputs"].items())))
