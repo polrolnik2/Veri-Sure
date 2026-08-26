@@ -411,6 +411,51 @@ With no route, that is:
 """
 
 
+def indirect_prefix(contract_json: str, contract: dict,
+                    others: list[NormalizedRequirement]) -> str:
+    """The cached head for the indirect pass: ports, system text, and the SET.
+
+    `the_other_requirements` BELONGS IN THE PREFIX, and putting it in the item
+    block was measured costing 7x. Every call needs the whole set -- that is
+    what the pass is for -- and the set is the same for all of them, so it is
+    the largest cacheable thing this stage has. It was in the item block only
+    because each call filtered out the requirement's own entry, which made a
+    ~48 KB block differ on every call for the sake of one row.
+
+    Measured on a2-i2c before the fix: 31 calls, 549 KB of input, 11.9% cached,
+    with a common prefix of 16,262 of 64,423 characters -- 25%. `normalize`
+    beside it, whose set-free prompt caches properly, ran 84.7%.
+
+    The self entry stays IN, and the prompt says to ignore it. A row a model is
+    told to skip costs a few tokens once; a prefix that differs per call costs
+    the whole prefix every time.
+    """
+    return shared_block(
+        ("system", INDIRECT_SYSTEM),
+        ("contract_json", contract_json),
+        ("output_ports", json.dumps([
+            {"name": p.get("name"), "width": p.get("width", 1)}
+            for p in (contract.get("io") or [])
+            if p.get("dir") == "output" and p.get("name")
+        ], indent=2) + "\n\nA route may name ANY of these -- the point of this "
+           "pass is that the port belongs to another requirement, not to this "
+           "one. `observed_via[].port` must be one of them."),
+        ("input_ports", json.dumps([
+            {"name": p.get("name"), "width": p.get("width", 1)}
+            for p in (contract.get("io") or [])
+            if p.get("dir") == "input" and p.get("name")
+        ], indent=2)),
+        ("the_other_requirements", json.dumps([
+            {"req_uid": o.req_uid, "observable": o.observable,
+             "activation": o.activation.model_dump(),
+             "expectation": o.expectation}
+            for o in others
+        ], indent=2) + "\n\nYour own requirement is in this list. Ignore that "
+           "entry: a requirement cannot be observed through itself, and naming "
+           "it will be rejected."),
+    )
+
+
 def build_indirect_prompt(
     requirement: dict,
     shape: NormalizedRequirement,
@@ -420,18 +465,14 @@ def build_indirect_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
-    """The blind requirement, its own first-pass reading, and the others'.
+    """The blind requirement and its own first-pass reading; the set is cached.
 
     `others` carries `req_uid`, `observable`, `activation` and `expectation`
     only -- the vocabulary needed to name a route, and nothing that would let
     this become a second attempt at the first pass's job.
     """
     return compose(
-        shared_prefix(
-            contract_json, contract, system=INDIRECT_SYSTEM,
-            note="A route may name ANY of these ports -- the point of this pass "
-                 "is that the port belongs to another requirement, not to this "
-                 "one. `observed_via[].port` must be one of them."),
+        indirect_prefix(contract_json, contract, others),
         "\n\n".join([
             json_block("requirement", requirement),
             # The first pass's reading, INCLUDING its `unobservable_reason`.
@@ -440,12 +481,6 @@ def build_indirect_prompt(
             # all -- two different claims, and the second is a much stronger
             # reason to come back empty here.
             json_block("its_first_pass_reading", shape.model_dump()),
-            json_block("the_other_requirements", [
-                {"req_uid": o.req_uid, "observable": o.observable,
-                 "activation": o.activation.model_dump(),
-                 "expectation": o.expectation}
-                for o in others if o.req_uid != shape.req_uid
-            ]),
         ]),
         issues=issues,
         previous=previous,

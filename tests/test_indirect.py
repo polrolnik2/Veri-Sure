@@ -389,3 +389,42 @@ def test_every_prompt_parsed_as_json_says_so():
     ):
         assert "JSON" in text, f"{name} never asks for JSON"
         assert "{" in text and "}" in text, f"{name} never shows the shape"
+
+
+def test_the_whole_requirement_set_is_in_the_CACHED_prefix():
+    """MEASURED AT 7x. The set is the largest thing this stage sends and it is
+    the same for every call, so it is the largest cacheable thing it has. It sat
+    in the item block because each call filtered out its own entry -- making a
+    ~48 KB block differ per call for the sake of one row.
+
+    Live on a2-i2c before the fix: `normalize_indirect` ran 31 calls, 549 KB of
+    input, 11.9% cached, common prefix 16,262 of 64,423 characters. `normalize`
+    beside it ran 84.7%.
+    """
+    from specflow.fanout import PREFIX_SENTINEL
+    from specflow.normalize import build_indirect_prompt
+
+    others = [_seer("REQ-0007"), _blind("REQ-0031"), _blind("REQ-0044")]
+    a = build_indirect_prompt({"uid": "REQ-0031"}, _blind("REQ-0031"), others,
+                              "{}", CONTRACT)
+    b = build_indirect_prompt({"uid": "REQ-0044"}, _blind("REQ-0044"), others,
+                              "{}", CONTRACT)
+    head_a = a[: a.index(PREFIX_SENTINEL)]
+    assert head_a == b[: b.index(PREFIX_SENTINEL)], "the head must be identical"
+    assert "REQ-0007" in head_a, "the set is in the cached head, not the item"
+    # The gap between the two is what a provider can cache. Before the fix it
+    # was 25% of the prompt; the whole set being shared is what moves it.
+    common = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    assert common > len(a) * 0.5, f"only {common / len(a):.0%} shared"
+
+
+def test_a_requirement_sees_its_own_entry_and_is_told_to_ignore_it():
+    """A row a model is told to skip costs a few tokens once; a prefix that
+    differs per call costs the whole prefix every time."""
+    from specflow.normalize import build_indirect_prompt
+
+    mine = _blind("REQ-0031")
+    prompt = build_indirect_prompt({"uid": "REQ-0031"}, mine, [mine, _seer()],
+                                   "{}", CONTRACT)
+    assert prompt.count("REQ-0031") >= 2, "its own entry stays in the set"
+    assert "Ignore that entry" in prompt
