@@ -146,3 +146,42 @@ def test_the_oracle_prompt_offers_them_and_forbids_a_cycle_count():
 
     assert "after(trace" in SYSTEM and "eventually(w" in SYSTEM
     assert "NEVER A COUNT" in SYSTEM
+
+
+def test_the_prompt_states_the_RETURN_contract_and_the_SVA_mapping():
+    """The operators were described by meaning and never by signature.
+
+    An author was told what `eventually` MEANS and never what it RETURNS, so the
+    one fact that makes `return worst([...])` the whole function -- that a
+    Verdict is the same `(ok, edge, detail)` triple `decide` returns -- appeared
+    only implicitly, inside an example. Uptake was 1 of 182.
+
+    And they ARE the SVA operators. A model writing hardware checks has priors
+    for `throughout`, `$stable` and `s_eventually`; naming the correspondence
+    costs four lines and buys the semantics. It has to name where the analogy
+    BREAKS too, and the third break is the one that bites: a row is not a clock
+    tick, because the trace is state-compressed.
+    """
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    assert "`(ok, edge, detail)`" in SYSTEM or "(ok, edge, detail)" in SYSTEM
+    assert "worst([])" in SYSTEM, "the abstention path must be spelled out"
+    # ASSERT ON A FRAGMENT THAT DOES NOT CROSS A LINE WRAP. The prompt reads
+    # "the scenario was never\nstaged", so "never staged" is not a substring of
+    # it -- and the assertion failed for the formatting rather than for the
+    # meaning. This repo has paid for that mistake before.
+    assert "blames the design for a testpoint that does not exist" in SYSTEM, (
+        "an empty window list is a stimulus fact; turning it into False blames "
+        "the design for a testpoint that does not exist")
+    assert "SVA OPERATORS" in SYSTEM
+    for sva in ("s_eventually", "throughout", "$stable", "$rose"):
+        assert sva in SYSTEM, sva
+    assert "A ROW IS NOT A CLOCK TICK" in SYSTEM
+    assert "at most 64" in SYSTEM, "a silent cap is against the house rule"
+
+
+def test_worst_of_nothing_abstains_exactly_as_the_prompt_promises():
+    """Pinned because the prompt now instructs the author to return it."""
+    ok, edge, detail = worst([])
+    assert ok is None and edge is None
+    assert detail == "the activation never occurred"

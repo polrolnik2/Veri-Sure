@@ -248,14 +248,50 @@ count the specification never gave.
         return worst([eventually(w, lambda r: r['outputs']['sda_oen'] == w.value('din'))
                       for w in windows])
 
-  after(trace, applies, until=closes)   the windows the requirement governs
-  eventually(w, holds)                  true at some row before the window shuts
-  throughout(w, holds)                  true at EVERY row of the window
-  stable(w, port)                       that port never changes in the window
-  pulse(w, port, width=1)               active for exactly `width` EDGES, once
-  worst(verdicts)                       fold many windows, failure first
-  w.value(port)                         the value AT the activation, for
-                                        expectations written against it
+  after(trace, applies, until=closes)   -> list[Window], one per activation
+  eventually(w, holds)                  -> Verdict; holds at SOME row of w
+  throughout(w, holds)                  -> Verdict; holds at EVERY row of w
+  stable(w, port)                       -> Verdict; port never changes in w
+  pulse(w, port, width=1, active=1)     -> Verdict; active for exactly `width`
+                                           EDGES, exactly once
+  worst(verdicts)                       -> Verdict; folds many, failure first
+  w.value(port)                         the value AT the activation
+  w.rows, w.edge, w.closed              the rows it spans, where it opened, and
+                                           whether it was closed or ran out
+
+A `Verdict` IS `(ok, edge, detail)` -- the same triple `decide` returns -- so
+`return worst([...])` is the whole function, and one temporal result can sit
+beside hand-written branches without conversion.
+
+`worst([])` is `(None, None, 'the activation never occurred')`. Return it. Do
+NOT turn an empty window list into False: no window means the scenario was never
+staged, which is a fact about the stimulus, and reporting it as a violation
+blames the design for a testpoint that does not exist.
+
+`after` returns at most 64 windows. If you hit that on a long trace you are
+matching something far broader than the requirement.
+
+THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
+
+  after(a, until=b)  the antecedent and its window -- `a |-> ...` up to `b`
+  eventually(w, p)   `s_eventually p` inside that window
+  throughout(w, p)   `p throughout` the window
+  stable(w, port)    `$stable(port)` across it
+  pulse(w, port)     `$rose(port)` followed by `$fell` one cycle later
+
+Write the check the way you would write the assertion, and reach for the
+operator you would reach for in SVA. THREE PLACES THE ANALOGY BREAKS, and the
+third is the one that bites:
+
+  1. `throughout(w, p)` takes a WINDOW and a PREDICATE, where SVA takes a
+     sequence on each side.
+  2. `stable(w, port)` is "never changed anywhere in the window", not a
+     sampled-value function at one tick.
+  3. A ROW IS NOT A CLOCK TICK. The trace is state-compressed: consecutive
+     edges with identical inputs AND outputs collapse into one row carrying
+     `held`. So `len(w.rows)` is not a cycle count and never was. `pulse` sums
+     `held` for you -- which is why a 40-edge assertion is not a one-cycle
+     pulse -- and any counting you do yourself must sum it too.
 
 GIVE `after` AN `until`. Without one the window ends where the activation
 does, so a check looking for a later effect sees nothing and fails -- which is
