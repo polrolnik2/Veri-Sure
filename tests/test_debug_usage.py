@@ -87,13 +87,38 @@ def test_the_loops_tokens_reach_the_turn_artifact(tmp_path):
     assert blob["debug_tokens"]["output"] > 0, (
         "the loop spent tokens and the ledger says zero")
     assert blob["debug_tokens"]["input"] > 0
+    # CACHED IS ALWAYS PRESENT, even at zero. A key that appears only when the
+    # gateway reported one is a key a reader cannot distinguish from a cache
+    # that stopped working, which is the whole failure this ledger exists to
+    # make visible.
+    assert "cached" in blob["debug_tokens"]
+    assert blob["debug_tokens"]["cached"] <= blob["debug_tokens"]["input"], (
+        "cached tokens are a SUBSET of input tokens, not a separate column")
+
+
+def test_a_two_element_usage_still_reports_what_it_has(tmp_path):
+    """A debugger built against the older `(input, output)` signature must
+    degrade to `cached: 0`, not raise inside the loop."""
+    from specflow.refmodel.compose import _tokens
+
+    class _Old:
+        def usage(self):
+            return (500, 40)
+
+    assert _tokens(_Old()) == {"input": 500, "cached": 0, "output": 40}
+
+    class _New:
+        def usage(self):
+            return (500, 300, 40)
+
+    assert _tokens(_New()) == {"input": 500, "cached": 300, "output": 40}
 
 
 def test_a_debugger_without_a_counter_reports_a_hole_not_a_guess(tmp_path):
     """Zero, never an estimate. A guessed number in a cost ledger is worse than
     a hole, because a hole is visibly a hole."""
     blob = _run(tmp_path, _Silent())
-    assert blob["debug_tokens"] == {"input": 0, "output": 0}
+    assert blob["debug_tokens"] == {"input": 0, "cached": 0, "output": 0}
 
 
 def test_a_turn_that_raised_still_counts_what_it_spent():

@@ -367,16 +367,24 @@ class RefModelEditor:
         return _text(await asyncio.to_thread(
             self._session.add_stimulus, req_uid, what_the_scenario_needs))
 
-    def usage(self) -> tuple[int, int]:
-        """`(input_tokens, output_tokens)` for this turn, or `(0, 0)`.
+    def usage(self) -> tuple[int, int, int]:
+        """`(input, cached, output)` tokens, cumulative, or `(0, 0, 0)`.
 
         Zero when the wrapper does not expose counters, never an estimate: a
         guessed number in a cost ledger is worse than a hole, because a hole
         is visibly a hole.
-        """
-        from .model import get_model_usage
 
-        return get_model_usage(getattr(self, "_model", None))
+        `cached` is a SUBSET of `input`. It is here because this loop is where
+        the input total is large and its meaning most uncertain -- a turn
+        re-sends a growing conversation up to `max_attempts * 10` times, which
+        is either the best case for prompt caching or the worst case for cost,
+        and the two look identical without this number.
+        """
+        from .model import get_model_cached, get_model_usage
+
+        model = getattr(self, "_model", None)
+        got = get_model_usage(model)
+        return got[0], get_model_cached(model), got[1]
 
     async def _tool_read_model(self, method: str = "") -> ToolResponse:
         """Read ONE method of the reference model, line-numbered.

@@ -202,6 +202,7 @@ class UsageTrackingModel(ChatModelBase):
         )
         self._input_tokens = 0
         self._output_tokens = 0
+        self._cached_tokens = 0
 
     @property
     def model_name(self) -> str:  # type: ignore[override]
@@ -234,12 +235,39 @@ class UsageTrackingModel(ChatModelBase):
     def reset_usage(self) -> None:
         self._input_tokens = 0
         self._output_tokens = 0
+        self._cached_tokens = 0
+
+    @property
+    def total_cached_tokens(self) -> int:
+        """How much of `total_input_tokens` was served from the prompt cache.
+
+        Cached tokens are a SUBSET of input tokens, not an extra column, and
+        they price at a fraction of a fresh read -- so an input total without
+        this beside it cannot be turned into a cost. The refmodel debug loop is
+        where that bites: it re-sends a monotonically growing conversation up to
+        `max_attempts * 10` times per turn, 46.1M input tokens on a2-i2c against
+        10.8M for every specflow stage combined, and it was the one stage whose
+        cache rate nothing recorded.
+        """
+        return self._cached_tokens
 
     def _accumulate_usage(self, usage: Any) -> None:
         if usage is None:
             return
         self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        # THE KEY IS NESTED, and reading the top level returns nothing and
+        # reports 0% on a run that was in fact heavily cached -- a mistake this
+        # project has already made once. `cache_stats` is the one place that
+        # knows both API shapes (`input_tokens_details` on Responses,
+        # `prompt_tokens_details` on Chat), so this borrows its reader rather
+        # than becoming a second one that can drift from it.
+        from specflow.cache_stats import _first_int
+
+        details = (getattr(usage, "input_tokens_details", None)
+                   or getattr(usage, "prompt_tokens_details", None))
+        if details is not None:
+            self._cached_tokens += _first_int(details, ("cached_tokens",)) or 0
 
     # A provider can answer HTTP 200 with a body that is not valid JSON — a
     # truncated stream, or an error page — and the OpenAI client raises
@@ -414,6 +442,22 @@ def get_model_usage(model: Any) -> tuple[int, int]:
     if input_tokens is None or output_tokens is None:
         return 0, 0
     return int(input_tokens), int(output_tokens)
+
+
+def get_model_cached(model: Any) -> int:
+    """Cached input tokens, cumulative. A SUBSET of `get_model_usage`'s first.
+
+    Separate from `get_model_usage` rather than a third element of it, on
+    purpose. `UsageBreakdown` stores that function's result as a pair and its
+    `total` sums `p[0]` and `p[1]`; widening the tuple would have made it sum
+    input and CACHED and call the answer output -- a silently wrong number in a
+    cost ledger, which is worse than the hole this exists to fill.
+
+    An input total on its own cannot be turned into a cost: a cache read prices
+    at a fraction of a fresh one, so 46M input tokens is two figures an order of
+    magnitude apart depending on this.
+    """
+    return int(getattr(model, "total_cached_tokens", 0) or 0)
 
 
 def _is_llama_model(model_name: str) -> bool:

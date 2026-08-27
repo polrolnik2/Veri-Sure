@@ -63,6 +63,31 @@ def choose_base(contract: dict) -> str:
     return "evaluate"
 
 
+def _tokens(debugger) -> dict[str, int]:
+    """`{input, cached, output}` from a debugger, or zeros.
+
+    CACHED IS A SUBSET OF INPUT, not a third column, and it is here because
+    without it the input total cannot be turned into a cost. This loop re-sends
+    a growing conversation up to `max_attempts * 10` times per turn -- 46.1M
+    input tokens on a2-i2c against 10.8M for every specflow stage combined --
+    so it is both the largest line in the ledger and the one whose price was
+    least determined. specflow's own ports have recorded this since
+    `cache_stats`; the eda_agent path never did.
+
+    Tolerates a two-element `usage()` so a debugger built against the older
+    signature still reports what it has rather than raising inside the loop.
+    """
+    try:
+        got = tuple(debugger.usage())          # type: ignore[attr-defined]
+    except Exception:                          # noqa: BLE001 -- optional
+        return {"input": 0, "cached": 0, "output": 0}
+    if len(got) >= 3:
+        return {"input": got[0], "cached": got[1], "output": got[2]}
+    if len(got) == 2:
+        return {"input": got[0], "cached": 0, "output": got[1]}
+    return {"input": 0, "cached": 0, "output": 0}
+
+
 def output_ports(contract: dict) -> list[str]:
     return [
         str(p.get("name"))
@@ -624,11 +649,7 @@ def _debug_turns(
         # is a joint property of the stimulus and the design, so an edit that
         # stops the model entering a state un-fires an activation the stimulus
         # still drives, and the failing count DROPS.
-        spent = (0, 0)
-        try:
-            spent = tuple(debugger.usage())          # type: ignore[attr-defined]
-        except Exception:                            # noqa: BLE001
-            spent = (0, 0)                           # a debugger without it
+        spent = _tokens(debugger)
 
         regressed = (ratchet.note(
             Path(run_dir) / "specflow" / "exercised.json", mechanical)
@@ -649,7 +670,7 @@ def _debug_turns(
                     # Cumulative across turns, so the last turn's file carries
                     # the loop's whole spend -- which is the number a cost
                     # ledger needs and the one nothing used to record.
-                    "debug_tokens": {"input": spent[0], "output": spent[1]},
+                    "debug_tokens": spent,
                     "rates": oracle_rates,
                     # WHAT A CONFORMS IS WORTH. "46 CONFORMS" was reported as
                     # the loop converging on a model that fails 138 of 168
@@ -827,11 +848,7 @@ def _debug_turns(
             # only ever saw the previous turns and a single-turn run recorded
             # zero. The last artifact carries the cumulative total, which is
             # the number a cost ledger actually needs.
-            try:
-                final = tuple(debugger.usage())   # type: ignore[attr-defined]
-            except Exception:                     # noqa: BLE001
-                final = (0, 0)                    # a debugger without a counter
-            blob["debug_tokens"] = {"input": final[0], "output": final[1]}
+            blob["debug_tokens"] = _tokens(debugger)
             last_artifact.write_text(
                 json.dumps(blob, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8")
