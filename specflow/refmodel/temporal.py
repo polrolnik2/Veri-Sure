@@ -71,10 +71,34 @@ class Window:
     start: dict
     rows: list[dict] = field(default_factory=list)
     closed: bool = True
+    #: The row immediately before the activation, for `$past`. One row, not a
+    #: history: `$past(sig, 3)` is a cycle count and Phases 3-6 severed those.
+    #: `$past(sig)` -- "what it was before this happened" -- is not.
+    prev: dict | None = None
 
     @property
     def edge(self) -> int | None:
         return self.start.get("edge")
+
+    @property
+    def body(self) -> list[dict]:
+        """The rows AFTER the activation row -- the `|=>` half of the window.
+
+        `rows` opens AT the activation, so a consequent that happens to be true
+        at that instant satisfies `eventually` over `rows`. That is the exact
+        vacuity this module was written to remove: six of a2-i2c's fourteen
+        vacuous checks evaluated the expectation on the SAME row as the
+        activation. Reading `body` instead is `|=>`.
+        """
+        return self.rows[1:]
+
+    def past(self, port: str):
+        """`$past(port)` at the activation -- its value on the row before.
+
+        `None` when the activation is the first row of the trace, which is
+        `$past`'s own semantics: there is no previous sample to name.
+        """
+        return _val(self.prev, port) if self.prev is not None else None
 
     def value(self, port: str):
         """The value of `port` at the activation -- for expectations written
@@ -145,7 +169,7 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
 
 
 def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
-          max_windows: int = 64) -> list[Window]:
+          max_windows: int = 64, overlap: bool = False) -> list[Window]:
     """Every window the requirement applies over.
 
     A window opens on a RISING activation -- the first row where `activation`
@@ -157,10 +181,15 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
     out: list[Window] = []
     i, n = 0, len(trace)
     while i < n and len(out) < max_windows:
-        if not activation(trace[i]):
+        # A RISING activation, in both modes: a condition true for forty
+        # consecutive rows opens one window, not forty. What `overlap` changes
+        # is where the scan resumes, not what counts as a start.
+        rising = activation(trace[i]) and (i == 0 or not activation(trace[i - 1]))
+        if not rising:
             i += 1
             continue
-        w = Window(start=trace[i], rows=[trace[i]], closed=False)
+        w = Window(start=trace[i], rows=[trace[i]], closed=False,
+                   prev=trace[i - 1] if i else None)
         j = i + 1
         while j < n:
             w.rows.append(trace[j])
@@ -173,22 +202,43 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
                 break
             j += 1
         out.append(w)
-        i = j + 1
+        i = i + 1 if overlap else j + 1
     return out
 
 
-def eventually(w: Window, holds: Pred, *, what: str = "the expected response"
-               ) -> Verdict:
+def eventually(w: Window, holds: Pred, *, strong: bool = False,
+               after_activation: bool = False,
+               what: str = "the expected response") -> Verdict:
     """`holds` must be true at some row before the window closes.
 
+    `s_eventually` VERSUS `eventually`, AND THE DEFAULT IS THE WEAK ONE.
     A window that ran off the end of the trace returns UNKNOWN, not False:
     nothing was seen to be wrong, we simply stopped looking. That is the
     distinction `verdict.truncated()` reconstructs from prose today.
+
+    But a requirement that says the response MUST come is a strong liveness
+    claim, and under weak semantics it can never be violated by this instrument
+    -- only left undecided. Measured on a2-i2c: 11 of 105 requirements are
+    phrased that way, and 5 of 14 abstaining checks abstained for exactly this
+    reason ("had not occurred by the end of trace"). `strong=True` is
+    `s_eventually`: running out of trace is a failure, because the obligation
+    was never discharged.
+
+    `after_activation` is `|=>` against `|->`. The window OPENS at the
+    activation row, so a consequent that is already true there satisfies the
+    default -- which is the vacuity this module exists to remove. Set it when
+    the requirement says the effect FOLLOWS the trigger, which is most of them.
     """
-    for row in w.rows:
+    rows = w.body if after_activation else w.rows
+    for row in rows:
         if holds(row):
             return True, row.get("edge"), f"{what} occurred"
     if not w.closed:
+        if strong:
+            return False, w.edge, (
+                f"{what} never occurred, and the window opening at edge "
+                f"{w.edge} ran to the end of trace -- the obligation was never "
+                f"discharged")
         return None, w.edge, (
             f"{what} had not occurred by the end of trace, and the window "
             f"opened at edge {w.edge} never closed")
@@ -196,15 +246,18 @@ def eventually(w: Window, holds: Pred, *, what: str = "the expected response"
         f"{what} never occurred in the window opening at edge {w.edge}")
 
 
-def throughout(w: Window, holds: Pred, *, what: str = "the invariant"
-               ) -> Verdict:
+def throughout(w: Window, holds: Pred, *, after_activation: bool = False,
+               what: str = "the invariant") -> Verdict:
     """`holds` must be true at EVERY row of the window.
 
     Fails on the first row that breaks it, and names that row -- an invariant
     is refuted by one counterexample, and the first is the one that explains
     the rest.
+
+    `after_activation` excludes the activation row, for a requirement whose
+    invariant begins once the trigger has happened rather than at it.
     """
-    for row in w.rows:
+    for row in (w.body if after_activation else w.rows):
         if not holds(row):
             return False, row.get("edge"), (
                 f"{what} broke at edge {row.get('edge')}, in the window opening "
@@ -282,6 +335,133 @@ def pulse(w: Window, port: str, *, active: int = 1, width: int = 1) -> Verdict:
             f"{port} was held at {active} for {got} edge(s), not {width}, in the "
             f"window opening at edge {w.edge}")
     return True, at, f"{port} pulsed once for {width} edge(s)"
+
+
+def never(w: Window, holds: Pred, *, what: str = "the forbidden condition"
+          ) -> Verdict:
+    """`holds` must be true at NO row of the window -- SVA's `not`.
+
+    `throughout(w, lambda r: not p(r))` says the same thing and reads as its
+    own double negative. A requirement phrased "shall never" deserves an
+    operator spelled the way the requirement is, so the transcription stays
+    mechanical and the failure message says "occurred" rather than "the
+    invariant broke".
+    """
+    for row in w.rows:
+        if holds(row):
+            return False, row.get("edge"), (
+                f"{what} occurred at edge {row.get('edge')}, in the window "
+                f"opening at edge {w.edge}")
+    if not w.closed:
+        return None, w.edge, (
+            f"{what} was not seen, but the window opening at edge {w.edge} ran "
+            f"to the end of trace without closing")
+    return True, w.edge, f"{what} never occurred"
+
+
+def nexttime(w: Window, holds: Pred, *, what: str = "the expected response"
+             ) -> Verdict:
+    """`holds` at the row immediately after the activation -- SVA `##1`.
+
+    ORDERING, NOT A CYCLE COUNT, and the difference is the whole reason this
+    one is admissible while `##[2:5]` is not. A row is a STATE: consecutive
+    edges with identical inputs and outputs collapse into one. So "the next
+    row" means "the next time anything changed", which is what "then" means in
+    a specification -- not "one clock later", which the specification does not
+    state and Phases 3-6 stopped this pipeline from asserting.
+    """
+    body = w.body
+    if not body:
+        return None, w.edge, (
+            f"nothing follows the activation at edge {w.edge}; the trace ends "
+            f"there, so {what} could not be observed either way")
+    row = body[0]
+    if holds(row):
+        return True, row.get("edge"), f"{what} occurred at the next state"
+    return False, row.get("edge"), (
+        f"{what} did not hold at the state after edge {w.edge}")
+
+
+def sequence(w: Window, *steps: Pred, strong: bool = False,
+             what: str = "the sequence") -> Verdict:
+    """The steps must occur IN ORDER within the window -- SVA `a ##[1:$] b`.
+
+    Each step matches at a row strictly after the previous step's, so this is
+    the count-free form: `##[1:$]` between every pair, never `##[2:5]`. What it
+    adds over a conjunction of `eventually` calls is exactly the ordering, and
+    that is the whole point -- three `eventually`s pass a design that does the
+    three things backwards.
+
+    Only 5 of a2-i2c's 105 requirements name an ordered multi-step sequence,
+    because bit-level i2c is deliberately low-level. A byte-level or
+    protocol-level design is dominated by them, which is why this is here
+    before it is needed rather than after.
+
+    Names the step that stalled, because "the sequence did not complete" sends
+    a reader to re-read the whole check.
+    """
+    if not steps:
+        return None, w.edge, "no steps given, so there is nothing to decide"
+    at = 0
+    for n, step in enumerate(steps):
+        while at < len(w.rows) and not step(w.rows[at]):
+            at += 1
+        if at >= len(w.rows):
+            if not w.closed and not strong:
+                return None, w.edge, (
+                    f"{what} reached step {n + 1} of {len(steps)} and the "
+                    f"window opening at edge {w.edge} ran to the end of trace")
+            return False, w.edge, (
+                f"{what} stalled at step {n + 1} of {len(steps)}, in the "
+                f"window opening at edge {w.edge}")
+        at += 1
+    return True, w.edge, f"{what} completed all {len(steps)} steps in order"
+
+
+def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
+          what: str = "the condition") -> Verdict:
+    """`holds` at every row until `release` occurs -- SVA `until` / `s_until`.
+
+    Distinct from `after(..., until=)`, which DEFINES the window. This asserts
+    something about the rows inside one: "SCL stays low until the divider
+    ticks" is `until`, where "while SCL is low" is the window.
+
+    Weak, like SVA's: if `release` never occurs, holding throughout is enough.
+    `strong=True` is `s_until` and additionally requires the release to happen
+    -- reach the end without it and the obligation was never discharged.
+    """
+    for row in w.rows:
+        if release(row):
+            return True, row.get("edge"), (
+                f"{what} held until the release at edge {row.get('edge')}")
+        if not holds(row):
+            return False, row.get("edge"), (
+                f"{what} broke at edge {row.get('edge')}, before any release, "
+                f"in the window opening at edge {w.edge}")
+    if strong:
+        return False, w.edge, (
+            f"{what} held, but the release never occurred in the window "
+            f"opening at edge {w.edge}")
+    if not w.closed:
+        return None, w.edge, (
+            f"{what} held for every row seen, but the window opening at edge "
+            f"{w.edge} ran to the end of trace without a release")
+    return True, w.edge, f"{what} held and was never released"
+
+
+def first_match(windows: list[Window]) -> list[Window]:
+    """Only the first window -- SVA `first_match`.
+
+    For a requirement about the FIRST time something happens ("the first
+    filtered SCL rising edge after reset samples dout"), where folding every
+    later occurrence in with `worst` would convict the design for behaviour the
+    requirement says nothing about.
+
+    A list rather than one window so it drops into the same comprehension the
+    other operators are used from, and so an empty trace stays empty rather
+    than becoming `None` for a caller to special-case.
+    """
+    return windows[:1]
 
 
 def worst(verdicts: list[Verdict]) -> Verdict:

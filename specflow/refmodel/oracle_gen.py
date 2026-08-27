@@ -364,14 +364,44 @@ were 79% and 83% exactly this shape.
 
 THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
 
-  after(a, until=b)  the antecedent and its window -- `a |-> ...` up to `b`
-  eventually(w, p)   `s_eventually p` inside that window
-  throughout(w, p)   `p throughout` the window
-  stable(w, port)    `$stable(port)` across it
-  pulse(w, port)     `$rose(port)` followed by `$fell` one cycle later
-  edges(t, p, "rise")   `$rose(p)`      -- the rows where it went low to high
-  edges(t, p, "fall")   `$fell(p)`      -- high to low
-  edges(t, p, "change") `$changed(p)`   -- either direction
+  after(t, a, until=b)          `a |-> ...` up to `b` -- the antecedent window
+  eventually(w, p)              `p` at SOME row of it        -- weak
+  eventually(w, p, strong=True) `s_eventually p`             -- must happen
+  eventually(w, p, after_activation=True)   `a |=> p` -- NOT at the trigger row
+  throughout(w, p)              `p throughout` the window
+  never(w, p)                   `not p` anywhere in it
+  until(w, p, q)                `p until q`   (strong=True -> `s_until`)
+  sequence(w, p, q, r)          `p ##[1:$] q ##[1:$] r` -- ORDER, no counts
+  nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
+  stable(w, port)               `$stable(port)` across it
+  pulse(w, port)                `$rose` then `$fell` one state later
+  edges(t, port, "rise")        `$rose(port)`   ("fall" -> `$fell`,
+                                                 "change" -> `$changed`)
+  w.value(port)                 the sampled value AT the activation
+  w.past(port)                  `$past(port)` -- its value the row before
+  first_match(windows)          `first_match` -- the first attempt only
+  after(t, a, overlap=True)     SVA's attempt model: a new attempt at every
+                                rise, so they run CONCURRENTLY
+  worst(verdicts)               fold many attempts, failure first
+
+TWO THINGS ARE DELIBERATELY ABSENT AND YOU SHOULD NOT WANT THEM.
+`##[2:5]` and `[*n]` are CYCLE COUNTS. This specification does not state edge
+counts, so a check that asserts one either fails correct designs or asserts
+nothing -- Phases 3-6 of this project severed pacing from latency for exactly
+that reason. `##1` survives because a ROW IS A STATE: consecutive edges with
+identical inputs and outputs collapse into one, so "the next row" means "the
+next time anything changed", which is what "then" means in a specification.
+
+THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
+
+  * `eventually(w, p)` is satisfied AT THE ACTIVATION ROW, because the window
+    opens there. If the requirement says the effect FOLLOWS the trigger -- and
+    most do -- pass `after_activation=True`. Six of one run's fourteen vacuous
+    checks read the expectation on the same row as the activation.
+  * `eventually(w, p)` is WEAK: a window that runs off the end returns UNKNOWN,
+    not a failure. If the requirement says the response MUST come, pass
+    `strong=True`, or the check can never be violated -- only left undecided.
+    Five of one run's fourteen abstaining checks abstained for this reason.
 
 Write the check the way you would write the assertion, and reach for the
 operator you would reach for in SVA. FOUR PLACES THE ANALOGY BREAKS, and the

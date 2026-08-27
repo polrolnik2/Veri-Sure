@@ -185,3 +185,117 @@ def test_worst_of_nothing_abstains_exactly_as_the_prompt_promises():
     ok, edge, detail = worst([])
     assert ok is None and edge is None
     assert detail == "the activation never occurred"
+
+
+# ---------------------------------------------------------------- SVA toolbox
+def _t(*rows):
+    """`(edge, a, b)` triples -> trace rows. `a` is an input, `b` an output."""
+    return [{"edge": e, "inputs": {"a": a}, "outputs": {"b": b}}
+            for e, a, b in rows]
+
+
+def _a(r):
+    return r["inputs"]["a"] == 1
+
+
+def _b(r):
+    return r["outputs"]["b"] == 1
+
+
+def test_the_activation_row_is_excluded_by_after_activation():
+    """`|=>` against `|->`, and this is the gap that mattered most.
+
+    The window OPENS at the activation row, so a consequent already true there
+    satisfies `eventually` -- which is the exact vacuity this module was
+    written to remove. Six of a2-i2c's fourteen vacuous checks evaluated the
+    expectation on the SAME row as the activation, and the operators as first
+    built still permitted it.
+    """
+    from specflow.refmodel.temporal import after, eventually, throughout
+
+    # b is true AT the activation and false afterwards.
+    w = after(_t((0, 1, 1), (2, 1, 0), (4, 0, 0)), _a)[0]
+    assert eventually(w, _b)[0] is True, "|-> is satisfied at the activation"
+    assert eventually(w, _b, after_activation=True)[0] is False, (
+        "|=> must not be satisfied by the activation instant itself")
+    assert throughout(w, _b)[0] is False
+    assert throughout(w, lambda r: not _b(r), after_activation=True)[0] is True
+
+
+def test_strong_eventually_convicts_where_weak_abstains():
+    """A requirement that says the response MUST come is a strong liveness
+    claim, and under weak semantics it can never be violated -- only left
+    undecided. 11 of 105 requirements are phrased that way, and 5 of 14
+    abstaining checks abstained for exactly this reason."""
+    from specflow.refmodel.temporal import after, eventually
+
+    w = after(_t((0, 1, 0), (2, 1, 0)), _a)[0]  # never closes
+    assert not w.closed
+    assert eventually(w, _b)[0] is None, "weak: we stopped looking"
+    assert eventually(w, _b, strong=True)[0] is False, (
+        "strong: the obligation was never discharged")
+
+
+def test_sequence_is_ordering_and_three_eventuallys_are_not():
+    """What `sequence` adds over a conjunction of `eventually` calls is exactly
+    the ordering -- and three `eventually`s pass a design that does the three
+    things backwards."""
+    from specflow.refmodel.temporal import after, eventually, sequence
+
+    rows = _t((0, 1, 0), (2, 1, 1), (4, 1, 0), (6, 0, 0))
+    w = after(rows, _a)[0]
+    b_on, b_off = _b, (lambda r: not _b(r))
+    assert sequence(w, b_off, b_on, b_off)[0] is True
+    # Backwards: b is never off-then-on-then-off in THAT order twice over.
+    assert sequence(w, b_on, b_off, b_on)[0] is False
+    # Both orders satisfy a bare conjunction of eventuallys, which is the point.
+    assert eventually(w, b_on)[0] and eventually(w, b_off)[0]
+
+
+def test_never_and_until_and_nexttime():
+    from specflow.refmodel.temporal import after, never, nexttime, until
+
+    w = after(_t((0, 1, 0), (2, 1, 0), (4, 1, 1), (6, 0, 1)), _a)[0]
+    assert never(w, _b)[0] is False, "b does occur inside the window"
+    assert never(w, lambda r: r["outputs"]["b"] == 9)[0] is True
+
+    # `##1`: ORDERING, not a cycle count -- a row is a state, so "the next row"
+    # is "the next time anything changed".
+    assert nexttime(w, lambda r: not _b(r))[0] is True
+    assert nexttime(w, _b)[0] is False
+
+    # p until q, weak and strong.
+    assert until(w, lambda r: not _b(r), _b)[0] is True
+    closed = after(_t((0, 1, 0), (2, 1, 0), (4, 0, 0)), _a)[0]
+    assert closed.closed
+    assert until(closed, lambda r: not _b(r), _b)[0] is True, "weak: no release needed"
+    assert until(closed, lambda r: not _b(r), _b, strong=True)[0] is False
+
+
+def test_first_match_and_overlapping_attempts():
+    """SVA starts an attempt at EVERY tick the antecedent holds, so attempts
+    run concurrently; the default here scans past a window first. Right for a
+    serialized protocol, wrong for a pipelined one."""
+    from specflow.refmodel.temporal import after, first_match
+
+    # `a` rises three times; each window runs to the next `b`.
+    rows = _t((0, 1, 0), (1, 0, 0), (2, 1, 0), (3, 0, 0), (4, 1, 0), (5, 0, 1))
+    serial = after(rows, _a, until=_b)
+    assert len(serial) == 1, "the first window swallows the later rises"
+    concurrent = after(rows, _a, until=_b, overlap=True)
+    assert [w.edge for w in concurrent] == [0, 2, 4]
+    assert [w.edge for w in first_match(concurrent)] == [0]
+    assert first_match([]) == []
+
+
+def test_past_is_one_row_not_a_cycle_count():
+    """`$past(sig)` -- what it was before this happened -- is not a count.
+    `$past(sig, 3)` is, and Phases 3-6 severed those."""
+    from specflow.refmodel.temporal import after
+
+    w = after(_t((0, 0, 1), (2, 1, 0)), _a)[0]
+    assert w.edge == 2
+    assert w.past("b") == 1, "the value on the row before the activation"
+    assert w.value("b") == 0, "the value AT the activation"
+    first = after(_t((0, 1, 1),), _a)[0]
+    assert first.past("b") is None, "no previous sample to name"
