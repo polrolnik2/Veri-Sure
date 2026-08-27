@@ -669,6 +669,16 @@ def run_oracle_stage(
     workdir: Path,
     base: str = "step",
     normalized: dict[str, dict] | None = None,
+    #: The source document S1 read. Passed to `correspondence.review`, whose
+    #: `build_prompt` puts it AHEAD of the requirement expressly "so the shared
+    #: prefix stays cacheable across the fan-out" -- and which never received it,
+    #: so that prefix was `SYSTEM` alone at ~471 tokens, under the provider's
+    #: 1024-token cache floor. Measured on a2-i2c: correspondence came back at
+    #: 12% cached over 315 calls, against 65-83% for every other fan-out.
+    #:
+    #: Strictly upstream of every artifact here -- it is what S1 read -- so it
+    #: cannot carry anything the pipeline produced back into the gate.
+    spec: str = "",
     #: A known-good implementation, where the design has one. Preferred over a
     #: generated witness and recorded as such.
     control_source: str | None = None,
@@ -926,7 +936,7 @@ def run_oracle_stage(
         reviews = (
             correspondence.review(
                 list(held.values()), by_uid, port=port, normalized=normalized,
-                round_=rounds - 1, fanout=fanout)
+                spec=spec, round_=rounds - 1, fanout=fanout)
             if want_correspondence else {})
         for uid, oracle in held.items():
             why, may_quote, notes = verify_one(

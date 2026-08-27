@@ -57,6 +57,36 @@ STAGE = "normalize"
 PARSE_ERROR = "Parse Error: "
 
 
+#: Phrases that name a SPAN rather than an instant. Lexical, and broad on
+#: measured grounds rather than by default.
+#:
+#: The narrower reading is tempting: `after(trace, activation)` with no `until`
+#: already closes when the activation stops holding, so "while X" with
+#: `inputs={X}` is CORRECTLY normalised and warning on it looks like a false
+#: positive by construction. Restricting the list to the sequential words on
+#: that argument makes the screen strictly worse on BOTH axes -- measured
+#: against a2-i2c's 41 known-bad checks (over-strict plus vacuous):
+#:
+#:     sequential only            fires 39/105   recall 36%   precision 38%
+#:     sequential + co-extensive  fires 73/105   recall 80%   precision 45%
+#:
+#: Because "during an accepted WRITE" needs a close condition and "during reset"
+#: does not, and which one a phrase is depends on whether the activation outlasts
+#: its own trigger -- not on the word. No lexical split separates them, and the
+#: broad list at least separates them no worse.
+#:
+#: This is a MIGRATION signal, not a permanent lint. A high count now is the
+#: finding; it falls as normalisation starts filling `until`.
+_WINDOW_WORDS = re.compile(
+    r"\b(during|while|throughout|until|for the duration|as long as|"
+    r"start of|end of|sequence|phase|then|after|subsequent|following)\b",
+    re.IGNORECASE)
+
+
+def _names_a_window(text: str) -> bool:
+    return bool(_WINDOW_WORDS.search(text or ""))
+
+
 class Activation(BaseModel):
     """When the requirement applies.
 
@@ -72,11 +102,56 @@ class Activation(BaseModel):
     #: input port -> the value that must hold. Includes reset ports: "while
     #: reset is asserted" is a real precondition and the runtime has a reset
     #: step that reaches it, even though reset is not a *drivable* input.
+    #:
+    #: INPUT PORTS ONLY, and that restriction is load-bearing:
+    #: `obligation.check_static` decides from the stimulus steps alone, "no
+    #: model, no replay, no doubt", which is only possible because every name
+    #: here is something the stimulus drives. Conditions on outputs go in
+    #: `opens_on`.
     inputs: dict[str, int] = Field(default_factory=dict)
+    #: The rest of the opening condition -- port -> value -- and this one MAY
+    #: name outputs.
+    #:
+    #: The schema had one slot for "when" and it held inputs, so a requirement
+    #: activated by an OUTPUT had nowhere to say so and the slot was filled with
+    #: whatever inputs were lying around. Measured on a2-i2c: REQ-0028's
+    #: activation is "an output-enable (scl_oen or sda_oen) is driven low" and
+    #: its `inputs` came back `{nReset: 1, rst: 0}` -- the reset qualifier and
+    #: nothing of the actual condition, so the check keyed on the wrong thing.
+    opens_on: dict[str, int] = Field(default_factory=dict)
+    #: WHERE THE WINDOW CLOSES -- port -> value, outputs allowed. Empty means
+    #: the requirement is about the activation instant itself.
+    #:
+    #: This is the field whose absence caused the largest measured defect in the
+    #: pipeline. `Activation` could express only a predicate over ONE ROW, while
+    #: 63% of a2-i2c's requirements name a window in their own text -- "at the
+    #: start of the STOP sequence", "during an accepted WRITE". Normalisation
+    #: flattened each to the instant the command was asserted and dropped the
+    #: sequence, so every check over one became a point check.
+    #:
+    #: That produces two opposite symptoms from one cause, depending on which
+    #: way the output happens to sit at that instant: the check fails every
+    #: design (over-strict) or passes every design (vacuous). Measured, the two
+    #: populations have the same profile -- 79% and 83% of them are a windowed
+    #: requirement with a one-row activation, against 58% of the clean set.
+    #:
+    #: A CONDITION, NEVER A COUNT. "wait until cmd_ack" is expressible; "wait 12
+    #: edges" is a guess at pacing this specification does not state, and Phases
+    #: 3-6 severed pacing from latency for exactly that reason. Deliberately the
+    #: same shape as the stimulus schema's own `until`, which exists for the
+    #: same reason, and it feeds `temporal.after(trace, applies, until=closes)`
+    #: directly -- so the check author transcribes a window rather than
+    #: inventing one.
+    until: dict[str, int] = Field(default_factory=dict)
 
     @property
     def input_only(self) -> bool:
         return bool(self.inputs)
+
+    @property
+    def windowed(self) -> bool:
+        """The requirement governs a span, not an instant."""
+        return bool(self.until)
 
     @property
     def unconditional(self) -> bool:
@@ -310,6 +385,41 @@ Naming a signal that is not a declared output is a different thing entirely and
 will be rejected: either the name is wrong, or there is no observable and you
 should say there is none.
 
+
+WHERE THE WINDOW CLOSES. Give `until` whenever the requirement governs a SPAN
+that outlasts its own trigger -- port -> value, and this one MAY name outputs,
+because a window closes on what the DESIGN does.
+
+  "during an accepted WRITE"          -> inputs {"cmd": 8}, until {"cmd_ack": 1}
+  "at the start of the STOP sequence" -> inputs {"cmd": 2}, until {"cmd_ack": 1}
+  "the START sequence completes"      -> inputs {"cmd": 1}, until {"cmd_ack": 1}
+
+A CONDITION, NEVER A COUNT. "until cmd_ack" is expressible; "for 12 edges" is a
+guess at pacing this specification does not state, and a check that asserts one
+either fails correct designs or asserts nothing.
+
+Leave `until` EMPTY when the activation condition is itself co-extensive with
+the span -- "while ena is low", "during reset". Those hold at every row they
+govern, so the condition already delimits the window and a close condition would
+be redundant.
+
+The cost of getting this wrong is not small and is not hypothetical. A
+requirement whose span was dropped can only be checked at the instant its
+activation began, which reads the outputs before the design has done anything.
+Depending on which way the port happens to sit at that instant, the check then
+fails EVERY design or passes every design -- and on one measured run those two
+populations were 79% and 83% exactly this.
+
+WHEN AN OUTPUT IS PART OF THE TRIGGER. `inputs` takes input ports only, because
+a later stage decides it from the stimulus steps alone with no model. If the
+activation also depends on an output, put that in `opens_on`:
+
+  "an output-enable is driven low"    -> opens_on {"sda_oen": 0}
+  "after the controller releases SCL" -> opens_on {"scl_oen": 1}
+
+Putting it in `inputs` is rejected, and leaving it out silently changes what the
+requirement is about.
+
 EXPECTATION. What must hold of those outputs when the activation occurs, in one
 clause. If `observable` is empty, still state the expectation in terms of the
 internal thing -- it records what could not be checked.
@@ -322,7 +432,9 @@ Reply with ONE JSON object and nothing else:
     {
       "activation": {
         "text": "a START command is issued while the core is enabled",
-        "inputs": {"cmd": 1, "ena": 1}
+        "inputs": {"cmd": 1, "ena": 1},
+        "opens_on": {},
+        "until": {"cmd_ack": 1}
       },
       "observable": ["cmd_ack", "busy"],
       "unobservable_reason": "",
@@ -728,6 +840,9 @@ def gate_one(
     issues: list[Issue] = []
     outputs = _ports(contract, "output")
     inputs = _ports(contract, "input")
+    # Both directions: a window closes on what the DESIGN does, and a
+    # requirement can be activated by an output. Only `inputs` is one-sided.
+    ports = {**inputs, **outputs}
 
     for name in norm.observable:
         if name not in outputs:
@@ -798,6 +913,46 @@ def gate_one(
         if not (0 <= as_int < (1 << inputs[name])):
             issues.append(Issue("error", path,
                                 f"{name}={as_int} does not fit {inputs[name]} bit(s)"))
+
+    # `opens_on` and `until` may name ANY declared port, unlike `inputs`. A
+    # window closes on what the design does -- "until cmd_ack" -- and a
+    # requirement can be activated by an output. Same width and integer checks.
+    for field in ("opens_on", "until"):
+        for name, value in (getattr(norm.activation, field) or {}).items():
+            path = f"normalize.{uid}.activation.{field}"
+            width = ports.get(name)
+            if width is None:
+                issues.append(Issue("error", path,
+                                    f"{name!r} is not a declared port"))
+                continue
+            try:
+                as_int = int(value)
+            except Exception:  # noqa: BLE001
+                issues.append(Issue("error", path,
+                                    f"{name}={value!r} is not an integer"))
+                continue
+            if not (0 <= as_int < (1 << width)):
+                issues.append(Issue("error", path,
+                                    f"{name}={as_int} does not fit {width} bit(s)"))
+
+    # A WINDOW IN THE PROSE AND AN INSTANT IN THE SCHEMA. Reported, not
+    # rejected: the phrasing is heuristic, and this repo has twice paid for a
+    # screen that blocked before its false-positive rate was known -- gate 1's
+    # blanket "met" discarded 30 requirements, and correspondence rejected 56 of
+    # 70 on a miscalibration.
+    #
+    # What it catches is the largest measured defect here: 63% of a2-i2c's
+    # requirements name a span in their own text, and every one of them was
+    # normalised to the instant its activation began. The two symptoms that
+    # produces -- over-strict and vacuous checks -- have the same profile, 79%
+    # and 83% windowed-text-with-one-row-activation against 58% of the rest.
+    if not norm.activation.windowed and _names_a_window(
+            f"{norm.activation.text} {norm.expectation}"):
+        issues.append(Issue(
+            "warning", f"normalize.{uid}.activation.until",
+            "the text names a span ('during', 'while', 'the ... sequence') but "
+            "no close condition is given, so every check over this requirement "
+            "can only read the instant the activation began"))
 
     if not norm.activation.text.strip():
         issues.append(Issue("error", f"normalize.{uid}.activation",

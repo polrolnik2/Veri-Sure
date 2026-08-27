@@ -271,6 +271,65 @@ blames the design for a testpoint that does not exist.
 `after` returns at most 64 windows. If you hit that on a long trace you are
 matching something far broader than the requirement.
 
+THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
+`activation.inputs` and `activation.opens_on` are what OPENS it;
+`activation.until` is what CLOSES it. You are not inventing a window, you are
+copying one. Every construct below is built the same way:
+
+    from specflow.refmodel.temporal import (after, eventually, throughout,
+                                            stable, pulse, worst)
+
+    # `{port: value}` straight out of the normalized block -> a row predicate.
+    def _holds(cond):
+        def p(row):
+            return all(
+                row["outputs"].get(k, row["inputs"].get(k)) == v
+                for k, v in cond.items())
+        return p
+
+  A WINDOW THAT OUTLASTS ITS TRIGGER -- `until` is non-empty:
+
+    # normalized: inputs {"cmd": 8, "ena": 1}, until {"cmd_ack": 1}
+    windows = after(trace, _holds({"cmd": 8, "ena": 1}),
+                    until=_holds({"cmd_ack": 1}))
+
+  A CO-EXTENSIVE WINDOW -- `until` is EMPTY. Omit it, and the window closes when
+  the activation stops holding, which is what "while ena is low" means:
+
+    # normalized: inputs {"ena": 0}, until {}
+    windows = after(trace, _holds({"ena": 0}))
+
+  AN INSTANT -- the same call. A one-row activation gives a one-row window and
+  `throughout` over it IS the point check. There is no separate form:
+
+    windows = after(trace, _holds({"rst": 1}))
+
+  AN INVARIANT -- "at all times", "never":
+
+    windows = after(trace, lambda r: True)
+
+  AN ACTIVATION THAT DEPENDS ON AN OUTPUT -- merge `opens_on` into the opening
+  predicate. It qualifies the trigger; it is not the thing being checked:
+
+    # normalized: inputs {"nReset": 1}, opens_on {"sda_oen": 0}
+    windows = after(trace, _holds({"nReset": 1, "sda_oen": 0}))
+
+  THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
+
+    return worst([eventually(w, lambda r: r["outputs"]["sda_oen"] == w.value("din"))
+                  for w in windows])     # at SOME row -- "eventually X"
+    return worst([throughout(w, lambda r: r["outputs"]["scl_oen"] == 1)
+                  for w in windows])     # at EVERY row -- "X remains"
+    return worst([stable(w, "scl_oen") for w in windows])   # "held steady"
+    return worst([pulse(w, "cmd_ack") for w in windows])    # "for one clk cycle"
+
+DO NOT RE-DERIVE THE WINDOW BY HAND. `for i in range(len(trace))` with your own
+index arithmetic is how a check ends up reading the outputs on the row the
+activation began, before the design has done anything. That gives a check which
+fails EVERY design or passes every design depending only on which way the port
+happened to sit at that instant -- and on one measured run those two populations
+were 79% and 83% exactly this shape.
+
 THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
 
   after(a, until=b)  the antecedent and its window -- `a |-> ...` up to `b`

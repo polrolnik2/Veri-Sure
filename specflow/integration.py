@@ -641,6 +641,10 @@ def build_artifacts(
             port=port, workdir=run_dir / "specflow",
             base=choose_base(contract),
             normalized=normalized_by_uid or None,
+            # Reaches `correspondence.review`, whose shared prefix is otherwise
+            # `SYSTEM` alone -- under the provider's 1024-token cache floor, so
+            # nothing cached at all. See `run_oracle_stage`'s `spec`.
+            spec=spec,
             control_source=refmodel_control,
             want_variants=variants, want_correspondence=correspondence,
             run_dir=run_dir, fanout=fanout,

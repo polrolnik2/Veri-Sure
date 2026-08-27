@@ -107,7 +107,12 @@ def test_reset_may_appear_in_an_activation_even_though_it_is_not_drivable():
     conditioned on."""
     out = _out(observable=["busy"],
                activation=Activation(text="during reset", inputs={"nReset": 0}))
-    assert gate_one(REQ, out, CONTRACT) == []
+    # Asserted on the reset property specifically rather than on an empty issue
+    # list: "during reset" also trips the windowed-text screen, which is a
+    # separate (and advisory) finding about `until`. Pinning `== []` here would
+    # make this test fail whenever any unrelated advisory is added.
+    assert not [i for i in gate_one(REQ, out, CONTRACT)
+                if "nReset" in i.message or "activation.inputs" in i.path]
 
 
 def test_an_input_only_activation_is_distinguishable_from_a_stateful_one():
@@ -294,3 +299,69 @@ def test_declining_every_route_abandons_the_requirement():
     assert _declines(f"{NO_DISCRIMINATION}: nothing contradicts it")
     assert not _declines("busy stays low for a narrow glitch and rises "
                          "for a wide one")
+
+
+def test_the_activation_can_express_a_WINDOW_and_an_output_trigger():
+    """The schema could only express a predicate over ONE ROW, and 63% of a
+    real design's requirements name a span in their own text.
+
+    Normalisation flattened each to the instant its activation began, so every
+    check over one became a point check -- which fails every design or passes
+    every design depending only on which way the port sat at that instant. The
+    two populations that produces were measured at 79% and 83% windowed-text-
+    with-one-row-activation, against 58% of the checks carrying neither flag.
+    """
+    from specflow.normalize import Activation
+
+    windowed = Activation(text="during an accepted WRITE",
+                          inputs={"cmd": 8}, until={"cmd_ack": 1})
+    assert windowed.windowed and windowed.input_only
+
+    # Co-extensive: `after` with no `until` closes when the activation stops
+    # holding, so "while ena is low" needs none and must not be forced to one.
+    assert not Activation(text="while ena is low", inputs={"ena": 0}).windowed
+
+    # `inputs` stays INPUT-ONLY -- `obligation.check_static` decides from the
+    # steps alone, which only works if every name there is driven. An output in
+    # the trigger goes to `opens_on`.
+    out_trigger = Activation(text="an output-enable is driven low",
+                             inputs={"nReset": 1}, opens_on={"sda_oen": 0})
+    assert out_trigger.opens_on == {"sda_oen": 0}
+    assert "sda_oen" not in out_trigger.inputs
+
+
+def test_until_and_opens_on_may_name_OUTPUTS_but_inputs_may_not():
+    """A window closes on what the DESIGN does, so `until` must reach outputs.
+    `inputs` must not, for the reason above."""
+    out = _out(observable=["busy"],
+               activation=Activation(text="during a WRITE", inputs={"cmd": 8},
+                                     until={"cmd_ack": 1},
+                                     opens_on={"busy": 1}))
+    bad = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
+    assert not bad, f"outputs must be legal in until/opens_on: {bad}"
+
+    rejected = _out(observable=["busy"],
+                    activation=Activation(text="x", inputs={"cmd": 8},
+                                          until={"nope": 1}))
+    assert any("not a declared port" in i.message
+               for i in gate_one(REQ, rejected, CONTRACT))
+
+
+def test_a_span_in_the_text_with_no_close_condition_is_REPORTED_not_rejected():
+    """Advisory, deliberately. This repo has twice paid for a screen that
+    blocked before its false-positive rate was known -- gate 1's blanket "met"
+    discarded 30 requirements, and correspondence rejected 56 of 70 on a
+    miscalibration. Measured on a2-i2c the broad screen fires on 73 of 105 at
+    45% precision and 80% recall against the 41 known-bad checks."""
+    out = _out(observable=["busy"],
+               activation=Activation(text="at the start of the STOP sequence",
+                                     inputs={"cmd": 2}))
+    issues = gate_one(REQ, out, CONTRACT)
+    flagged = [i for i in issues if i.path.endswith("activation.until")]
+    assert flagged and all(i.severity == "warning" for i in flagged)
+    # And giving the window silences it.
+    ok = _out(observable=["busy"],
+              activation=Activation(text="at the start of the STOP sequence",
+                                    inputs={"cmd": 2}, until={"cmd_ack": 1}))
+    assert not [i for i in gate_one(REQ, ok, CONTRACT)
+                if i.path.endswith("activation.until")]

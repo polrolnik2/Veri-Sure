@@ -23,14 +23,55 @@ in this repo:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 
 from .schema import Issue
 from .stage import gate_failures_block, previous_answer_block
 
+logger = logging.getLogger(__name__)
+
 #: Ends the shared block. A literal marker rather than an implicit boundary, so
 #: a test can assert *where* prompts diverge instead of merely that they do.
 PREFIX_SENTINEL = "\n</shared_context>\n"
+
+#: The provider caches from 1024 tokens up, in 128-token increments. BELOW IT
+#: NOTHING CACHES AT ALL -- not a smaller discount, none -- so a stage whose
+#: shared block is short pays full price on every call while looking, in the
+#: artifacts, exactly like a stage that caches perfectly.
+#:
+#: Found the hard way. `correspondence.build_prompt` puts the specification
+#: ahead of the requirement expressly "so the shared prefix stays cacheable
+#: across the fan-out", and its only caller never passed `spec` -- leaving
+#: `SYSTEM` alone at ~471 tokens. Measured on a2-i2c: 12% cached over 315
+#: calls, against 65-83% for every other fan-out.
+CACHE_FLOOR_TOKENS = 1024
+
+#: ~4 characters per token. Deliberately crude: this decides whether to WARN,
+#: and a stage sitting near enough to the floor for the estimate to matter is
+#: one worth looking at regardless.
+_CHARS_PER_TOKEN = 4
+
+#: Prefixes already warned about, by hash. One line per distinct shared block,
+#: not one per item -- a 300-call fan-out would otherwise bury its own warning.
+_warned: set[str] = set()
+
+
+def _warn_if_under_floor(shared: str) -> None:
+    """A shared block too short to cache is a silent 100% miss. Say so."""
+    tokens = len(shared) // _CHARS_PER_TOKEN
+    if tokens >= CACHE_FLOOR_TOKENS:
+        return
+    key = hashlib.sha256(shared.encode("utf-8")).hexdigest()[:16]
+    if key in _warned:
+        return
+    _warned.add(key)
+    logger.warning(
+        "shared prompt prefix is ~%d tokens, under the %d-token cache floor: "
+        "every call in this fan-out pays full price. Move per-design constants "
+        "(the specification, the contract) into the shared block.",
+        tokens, CACHE_FLOOR_TOKENS)
 
 
 def shared_block(*sections: tuple[str, str]) -> str:
@@ -52,6 +93,7 @@ def compose(
     previous: str | None = None,
 ) -> str:
     """Assemble one item's prompt in the only order that preserves the cache."""
+    _warn_if_under_floor(shared)
     parts = [shared, item]
     if previous:
         parts.append(previous_answer_block(previous))
