@@ -496,3 +496,148 @@ def test_the_edit_budget_is_30_everywhere_it_is_declared():
                      cli), "the CLI default disagrees with the code default"
     src = pathlib.Path(top_agent.__file__).read_text()
     assert "specflow_refmodel_debug_attempts: int = 30" in src
+
+
+# ------------------------------- a staged testpoint and the rendered suite
+
+def _plan_with_a_staged_tp():
+    """S2 planned TP-0000 for REQ-0000 and S3 wrote it a check. [O] then staged
+    TP-0100 for the SAME requirement, long after S3 ran."""
+    testplan = [
+        {"uid": "TP-0000", "covers": ["REQ-0000@1"], "stimulus": "s",
+         "expected_response": "cmd_ack pulses", "dimension": "D2_control_flow"},
+        {"uid": "TP-0100", "covers": ["REQ-0000@1"], "stimulus": "staged",
+         "expected_response": "", "dimension": "D2_control_flow"},
+        {"uid": "TP-0001", "covers": ["REQ-0001@1"], "stimulus": "s",
+         "expected_response": "y follows a", "dimension": "D2_control_flow"},
+    ]
+    checks = [{"uid": "CHK-0000", "rev": 1, "covers": ["TP-0000@1"],
+               "signals": ["cmd_ack"], "expr": "matches the reference"},
+              {"uid": "CHK-0001", "rev": 1, "covers": ["TP-0001@1"],
+               "signals": ["y"], "expr": "matches the reference"}]
+    return testplan, checks
+
+
+def test_a_staged_testpoint_inherits_its_REQUIREMENTS_check():
+    """A check covers a TESTPOINT and a testpoint covers a REQUIREMENT, so a
+    testpoint minted after S3 ran has no check of its own -- it renders with no
+    `env.check(...)` at all, the scoreboard stays empty, and the runtime rightly
+    calls it vacuous. One such testpoint aborts the whole suite, which is how
+    a2-i2c's `golden_check` came back 0/0.
+
+    The check belongs to the requirement, not to the vectors: a new stimulus for
+    REQ-0000 is still judged by what REQ-0000 demands.
+    """
+    from specflow.tb.render import _by_tp, _checks_for, _siblings_by_requirement
+
+    testplan, checks = _plan_with_a_staged_tp()
+    by_tp, by_req = _by_tp(checks), _siblings_by_requirement(testplan)
+
+    got, borrowed = _checks_for(testplan[1], by_tp, by_req)
+    assert [c["uid"] for c in got] == ["CHK-0000"], "REQ-0000's own check"
+    assert borrowed is True, "and it must be reported as inherited"
+
+
+def test_a_planned_testpoint_keeps_its_own_check_and_borrows_nothing():
+    """Own checks win outright: a testpoint S3 planned for is never
+    second-guessed, or a requirement with two testpoints would cross-wire."""
+    from specflow.tb.render import _by_tp, _checks_for, _siblings_by_requirement
+
+    testplan, checks = _plan_with_a_staged_tp()
+    by_tp, by_req = _by_tp(checks), _siblings_by_requirement(testplan)
+
+    got, borrowed = _checks_for(testplan[0], by_tp, by_req)
+    assert [c["uid"] for c in got] == ["CHK-0000"] and borrowed is False
+
+
+def test_nothing_is_invented_when_the_requirement_has_no_check_either():
+    """The fallback borrows; it never fabricates. A requirement S3 wrote no
+    check for still yields nothing, and that is a finding rather than a check
+    nobody authored."""
+    from specflow.tb.render import _by_tp, _checks_for, _siblings_by_requirement
+
+    testplan, checks = _plan_with_a_staged_tp()
+    orphan = {"uid": "TP-0200", "covers": ["REQ-0099@1"], "stimulus": "x",
+              "expected_response": "", "dimension": "D2_control_flow"}
+    by_tp = _by_tp(checks)
+    by_req = _siblings_by_requirement([*testplan, orphan])
+    got, borrowed = _checks_for(orphan, by_tp, by_req)
+    assert got == [] and borrowed is False
+
+
+def test_an_inherited_check_is_counted_ONCE_in_the_manifest(tmp_path):
+    """It now runs under two testpoints and is still one check. Counting it
+    twice would inflate the coverage denominator with an entry nobody wrote."""
+    from specflow.tb.render import render_suite
+
+    testplan, checks = _plan_with_a_staged_tp()
+    contract = {"module_name": "m", "io": [
+        {"name": "clk", "dir": "input", "width": 1},
+        {"name": "a", "dir": "input", "width": 1},
+        {"name": "cmd_ack", "dir": "output", "width": 1},
+        {"name": "y", "dir": "output", "width": 1}],
+        "clocking": {"clock": {"name": "clk", "edge": "posedge"}}}
+    manifest = render_suite(testplan=testplan, bins=[], checks=checks,
+                            contract=contract, out_dir=tmp_path)
+    assert sorted(manifest.checks) == ["CHK-0000", "CHK-0001"]
+    assert len(manifest.testpoints) == 3, "every testpoint still renders"
+    body = (tmp_path / "tests" / "test_TP0100.py").read_text()
+    assert 'env.check("CHK-0000", "cmd_ack")' in body, (
+        "the staged testpoint must actually call the inherited check")
+
+
+def test_every_path_handed_to_the_runner_is_ABSOLUTE(tmp_path, monkeypatch):
+    """cocotb runs a testcase with its cwd set to the test directory, so EVERY
+    relative path derived from `suite_dir` is re-resolved from there.
+
+    Two ways it shows up, and they look nothing alike. `SPECFLOW_RESULTS` fails
+    silently: the records land in a nested copy, the tally globs the real
+    directory, finds nothing, and reports 0/0 -- which reads exactly like a
+    suite that never ran. Measured: 371 records written, 0/0 reported.
+    `results_xml` fails loudly, with a FileNotFoundError on a path carrying the
+    doubled prefix.
+
+    So the pin is on the root rather than on either symptom: resolve `suite_dir`
+    once and every derived path is immune, instead of fixing them one at a time
+    as each is found -- which is how the second one survived the first fix.
+
+    Invisible on the normal path, where `integration.py` passes an absolute run
+    dir. `golden_check --out` defaults to a RELATIVE `golden_check/`, so it is
+    the one caller that triggers it.
+    """
+    import json
+    from pathlib import Path
+
+    from specflow import run as run_mod
+
+    suite = tmp_path / "suite"
+    (suite / "tests").mkdir(parents=True)
+    (suite / "manifest.json").write_text(json.dumps({"modules": ["test_TP0000"]}))
+    (tmp_path / "ref_model.py").write_text("class Model: pass\n")
+    (tmp_path / "dut.v").write_text("module dut; endmodule\n")
+
+    seen: dict[str, object] = {}
+
+    class _Runner:
+        def build(self, **kw):
+            seen["build"] = kw
+
+        def test(self, **kw):
+            seen["test"] = kw
+
+    monkeypatch.setattr(run_mod, "_ensure_importable", lambda: None)
+    monkeypatch.setattr("cocotb_tools.runner.get_runner", lambda _name: _Runner())
+    # A RELATIVE suite_dir, which is what `golden_check --out` produces.
+    monkeypatch.chdir(tmp_path)
+    run_mod.run_suite(rtl_path=tmp_path / "dut.v", hdl_toplevel="dut",
+                      suite_dir=Path("suite"), refmodel_path=tmp_path / "ref_model.py",
+                      coverage=False, trace=False)
+
+    paths = [seen["build"]["build_dir"],
+             seen["test"]["test_dir"],
+             seen["test"]["results_xml"],
+             seen["test"]["extra_env"]["SPECFLOW_RESULTS"]]
+    relative = [p for p in paths if not Path(p).is_absolute()]
+    assert not relative, (
+        f"re-resolved from the cocotb cwd, so the run either scores 0/0 or "
+        f"raises FileNotFoundError: {relative}")

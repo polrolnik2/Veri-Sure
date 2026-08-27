@@ -12,6 +12,8 @@ model, so a testcase cannot smuggle in an oracle that mirrors the design.
 
 from __future__ import annotations
 
+import logging
+
 import ast
 import itertools
 import json
@@ -133,6 +135,8 @@ class Manifest:
         ) + "\n"
 
 
+logger = logging.getLogger(__name__)
+
 def _by_tp(items: list[dict]) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = {}
     for item in items:
@@ -213,6 +217,55 @@ def render_testcase(
     return "\n".join(lines)
 
 
+def _siblings_by_requirement(testplan: list[dict]) -> dict[str, list[str]]:
+    """`requirement uid -> the testpoints that cover it`."""
+    out: dict[str, list[str]] = {}
+    for tp in testplan:
+        uid = str(tp.get("uid") or "")
+        for ref in tp.get("covers") or []:
+            out.setdefault(str(ref).split("@")[0], []).append(uid)
+    return out
+
+
+def _checks_for(tp: dict, checks_by_tp: dict[str, list[dict]],
+                by_req: dict[str, list[str]]) -> tuple[list[dict], bool]:
+    """This testpoint's checks, falling back to its REQUIREMENT'S.
+
+    A check covers a TESTPOINT and a testpoint covers a REQUIREMENT, so a
+    testpoint minted after S3 ran has no check of its own and renders with no
+    `env.check(...)` at all -- an empty scoreboard, which the runtime rightly
+    calls vacuous, and one such testpoint aborts the whole suite.
+
+    That is what the [O] stimulus loop mints: 78 of a2-i2c's 344 testpoints,
+    TP-0266 onward, staged for a requirement whose scenario nothing reached.
+    They were invisible until `_persist_grown` started writing them to disk.
+
+    THE CHECK BELONGS TO THE REQUIREMENT, NOT TO THE VECTORS. A new stimulus for
+    REQ-0098 is still judged by what REQ-0098 demands -- different vectors, same
+    criterion -- so the fallback is the checks of the sibling testpoints that
+    cover the same requirement. Nothing is invented, and no check enters the
+    suite that S3 did not write.
+
+    Own checks win outright: a testpoint S3 planned for is never second-guessed.
+    """
+    uid = str(tp.get("uid") or "")
+    own = checks_by_tp.get(uid, [])
+    if own:
+        return own, False
+    seen: set[str] = set()
+    borrowed: list[dict] = []
+    for ref in tp.get("covers") or []:
+        for sibling in by_req.get(str(ref).split("@")[0], []):
+            if sibling == uid:
+                continue
+            for check in checks_by_tp.get(sibling, []):
+                key = str(check.get("uid") or "")
+                if key not in seen:
+                    seen.add(key)
+                    borrowed.append(check)
+    return borrowed, bool(borrowed)
+
+
 def render_suite(
     *,
     testplan: list[dict],
@@ -228,6 +281,8 @@ def render_suite(
     (tests_dir / "__init__.py").write_text("", encoding="utf-8")
 
     bins_by_tp, checks_by_tp = _by_tp(bins), _by_tp(checks)
+    by_req = _siblings_by_requirement(testplan)
+    inherited: list[str] = []
     default = default_stimulus(contract)
     ports, pinned = input_names(contract), pinned_inputs(contract)
     idle = idle_values(contract)
@@ -236,10 +291,13 @@ def render_suite(
     for tp in testplan:
         uid = tp["uid"]
         stim = (stimulus_by_tp or {}).get(uid) or default
+        tp_checks, borrowed = _checks_for(tp, checks_by_tp, by_req)
+        if borrowed:
+            inherited.append(uid)
         source = render_testcase(
             tp=tp,
             bins=bins_by_tp.get(uid, []),
-            checks=checks_by_tp.get(uid, []),
+            checks=tp_checks,
             stimulus=stim,
             input_ports=ports,
             pinned=pinned,
@@ -251,8 +309,18 @@ def render_suite(
         manifest.modules.append(name)
         manifest.testpoints.append(uid)
         manifest.bins += [b["uid"] for b in bins_by_tp.get(uid, [])]
-        manifest.checks += [c["uid"] for c in checks_by_tp.get(uid, [])]
+        # DEDUPED, because a check that now runs under two testpoints is still
+        # one check. Counting it twice would inflate the coverage denominator
+        # with an entry nobody wrote.
+        for c in tp_checks:
+            if c["uid"] not in manifest.checks:
+                manifest.checks.append(c["uid"])
 
+    if inherited:
+        logger.info(
+            "render: %d testpoint(s) had no check of their own and inherited "
+            "their requirement's: %s", len(inherited),
+            ", ".join(inherited[:8]) + (" ..." if len(inherited) > 8 else ""))
     (out_dir / "manifest.json").write_text(manifest.to_json(), encoding="utf-8")
     return manifest
 

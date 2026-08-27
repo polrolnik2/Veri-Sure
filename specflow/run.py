@@ -119,7 +119,22 @@ def run_suite(
     """
     from cocotb_tools.runner import get_runner
 
-    suite_dir = Path(suite_dir)
+    # ABSOLUTE, and resolved ONCE here rather than at each use. cocotb runs the
+    # testcase with its cwd set to the test directory, so every relative path
+    # derived from `suite_dir` is re-resolved from THERE:
+    # `golden_check/g/suite/results` becomes
+    # `golden_check/g/suite/tests/golden_check/g/suite/results`. The records land
+    # in the nested copy, the tally globs the real one and finds nothing, and the
+    # run reads exactly like "the suite never ran" -- 371 files written and 0/0
+    # reported. `results_xml` fails louder, with a FileNotFoundError on a path
+    # carrying the doubled prefix.
+    #
+    # Invisible on the normal path, where `integration.py` passes an absolute run
+    # dir. `golden_check --out` defaults to a RELATIVE `golden_check/`, so it was
+    # the one caller that triggered it -- and a 0/0 from it was once put down to
+    # usage error. Resolving the root is what makes every derived path immune,
+    # rather than fixing them one at a time as each one is found.
+    suite_dir = Path(suite_dir).resolve()
     manifest = json.loads((suite_dir / "manifest.json").read_text(encoding="utf-8"))
     results_dir = suite_dir / "results"
     if results_dir.exists():
@@ -221,6 +236,7 @@ def run_suite(
                 test_args=[*(["--trace", "--trace-file", str(part_wave)] if trace else [])],
                 waves=trace,
                 extra_env={
+                    # Absolute by construction: `suite_dir` is resolved above.
                     "SPECFLOW_RESULTS": str(results_dir),
                     "SPECFLOW_ITER": str(iteration),
                     # PYTHONPATH deliberately absent: cocotb overwrites it from the
