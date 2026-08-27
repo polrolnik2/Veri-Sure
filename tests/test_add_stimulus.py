@@ -362,7 +362,7 @@ def test_the_opening_brief_offers_BOTH_tools_on_a_model_turn():
     assert s.route == "model"
     brief = _opening(s)
     assert "REQ-0003" in brief, "the failing oracle must be named"
-    assert "`add_stimulus` is closed" not in brief
+    assert "`_tool_add_stimulus` is closed" not in brief
     assert "open on EVERY turn" in brief
     assert "cannot confound an edit" in brief
     # And the preference survives as an order to work in.

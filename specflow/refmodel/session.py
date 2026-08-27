@@ -950,7 +950,7 @@ class DebugSession:
             return {"error": f"this turn's route is {self.route!r}: nothing is "
                              f"failing, so there is no model finding to act on "
                              f"and an edit made now would be unattributable. "
-                             f"Stage a scenario with add_stimulus instead."}
+                             f"Stage a scenario with _tool_add_stimulus instead."}
         before = len(self.failing())
         before_distance = self.distance()
         span = _method_span(self.source, method)

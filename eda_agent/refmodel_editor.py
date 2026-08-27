@@ -57,11 +57,11 @@ CANNOT edit them. Satisfy them by fixing the model.
 
 Work like this:
 
-  1. `list_oracles()` to see what is failing.
-  2. `explain(req_uid)` on one of them. This gives you the requirement, the
+  1. `_tool_list_oracles()` to see what is failing.
+  2. `_tool_explain(req_uid)` on one of them. This gives you the requirement, the
      specification text it was drawn from, the judge's reasoning, the oracle's
      own source, the stimulus, and which methods claim to implement it.
-  3. `run_oracle(req_uid)` to see the model actually running that scenario, edge
+  3. `_tool_run_oracle(req_uid)` to see the model actually running that scenario, edge
      by edge. This is where a wrong clock generation becomes visible -- an
      output diverges many edges after the cause, so read the internals leading
      up to the failing edge, not just the failing edge. Its `activity` field
@@ -71,7 +71,7 @@ Work like this:
 
 A status of NOT EXERCISED is not a defect in the model, and no edit will
 discharge one -- the oracle never saw the situation its clause is about. It is
-not something to leave alone either. Call `add_stimulus(req_uid, "...")` and
+not something to leave alone either. Call `_tool_add_stimulus(req_uid, "...")` and
 describe what has to happen; the harness generates the vectors, gates them and
 adds a new testpoint. Then the oracle either decides -- possibly against the
 model, which is a real finding you can then fix -- or reports that your scenario
@@ -79,14 +79,14 @@ still did not stage it, which tells you the description was not concrete enough.
 
 THE TWO TOOLS ARE NOT SYMMETRIC, and the difference is worth understanding.
 
-`add_stimulus` is ALWAYS available. Staging a scenario only ever ADDS evidence
+`_tool_add_stimulus` is ALWAYS available. Staging a scenario only ever ADDS evidence
 -- nothing existing is edited -- so it cannot make a finding disappear, and a
 requirement that gains a testpoint can only move toward a worse verdict, never
 a better one. Do failing oracles FIRST when there are any, because a VIOLATES
 is evidence you already have and costs no generation to act on. That is an
 order to work in, not a door that is locked.
 
-`replace_method` refuses on a turn with nothing failing, and that one IS a
+`_tool_replace_method` refuses on a turn with nothing failing, and that one IS a
 locked door. With no oracle accusing the model, the only thing an edit can
 achieve is to make some unexercised oracle's activation start occurring -- which
 is editing the design so a check fires, rather than staging the scenario the
@@ -95,13 +95,13 @@ check is about. The prompt below tells you which turn this is.
 Some findings come back with `checked: false` and NO EXECUTABLE CHECK. The
 judge reached a verdict but no oracle survived screening for it, so nothing can
 decide it mechanically. The verdict is unchanged and it is still worth reading
--- `explain` gives the reasoning -- but it is one reader's opinion of the source
+-- `_tool_explain` gives the reasoning -- but it is one reader's opinion of the source
 and was never confirmed. Treat it as a lead: check whether the reasoning holds
 against what the model actually does, and if it does not, LEAVE THE MODEL ALONE
 and say so. Editing to satisfy an unverified opinion is how a correct model
 gets broken. Fix the checked failures first; they are the ones with evidence.
-  4. `read_model(method)` on the method that should be doing the work.
-  5. `replace_method(name, code)` with the whole corrected `def`.
+  4. `_tool_read_model(method)` on the method that should be doing the work.
+  5. `_tool_replace_method(name, code)` with the whole corrected `def`.
 
 Then check what happened and continue.
 
@@ -128,7 +128,7 @@ CONSTRUCTION, so treating that as finished would end every stimulus turn before
 it began.
 
 You are done when every oracle CONFORMS, or when the tools stop giving you
-moves: nothing failing for `replace_method` to act on AND the `add_stimulus`
+moves: nothing failing for `_tool_replace_method` to act on AND the `_tool_add_stimulus`
 budget spent. Until then keep going. Finish with a plain sentence saying what you
 changed and why, and if oracles are still short of conforming, say which and
 what stopped you.
@@ -177,7 +177,7 @@ class RefModelEditor:
         max_attempts: int = 30,
     ):
         #: Edit actions, not conversation turns, and NOT model calls. An attempt
-        #: is one `replace_method`; reading and replaying are free and should be.
+        #: is one `_tool_replace_method`; reading and replaying are free and should be.
         #:
         #: Was 6, which is a fifth of `RTLEditor`'s 30 (`rtl_editor.py:1031`) and
         #: under half of `TBEditor`'s 15 (`tb_editor.py:1305`) -- this loop had
@@ -282,7 +282,7 @@ class RefModelEditor:
         `not_acting_on` names EVERY other requirement under its status. Those
         are the ones an edit can break, so check it before you change a method
         that several requirements share. Read any of them in full by name with
-        explain(req_uid) or run_oracle(req_uid).
+        _tool_explain(req_uid) or _tool_run_oracle(req_uid).
         """
         if self._session is None:
             return _no_session()
@@ -488,7 +488,7 @@ class RefModelEditor:
         #
         # It used to be `if not failing: return` -- and a turn with nothing
         # failing IS the stimulus turn, so the agent was never invoked on one.
-        # `add_stimulus` could therefore only ever be called from a MODEL turn,
+        # `_tool_add_stimulus` could therefore only ever be called from a MODEL turn,
         # where it refuses by design. Five runs, zero testpoints staged, and
         # three earlier fixes -- the prompt's stop rule, `_debug_turns`
         # returning on an idle turn, and `_opening` showing an empty list --
@@ -499,7 +499,7 @@ class RefModelEditor:
         # here.
         #
         # The question is whether the turn has ANY input, and it no longer
-        # depends on the route: `add_stimulus` stopped refusing off-route, so a
+        # depends on the route: `_tool_add_stimulus` stopped refusing off-route, so a
         # turn with something unexercised and budget left has work whichever
         # way the brief leads.
         failing = [r.req_uid for r in session.failing()]
@@ -566,12 +566,12 @@ def _opening(session: DebugSession) -> str:
     It used to open with "the reference model fails N of M oracles" and list the
     failing ones. On a stimulus turn N is zero by construction, so the brief read
     "fails 0 of 70", listed nothing, and then said "stage the scenarios the
-    unexercised oracles are waiting for -- start with `explain` on one of them",
+    unexercised oracles are waiting for -- start with `_tool_explain` on one of them",
     where "them" was the empty list above. That was fixed by branching the brief
     on the route, which fixed the symptom and kept the premise: that a turn is
     EITHER a model turn or a stimulus turn, and the other tool is shut.
 
-    The premise is wrong, and `add_stimulus`'s own docstring already says why.
+    The premise is wrong, and `_tool_add_stimulus`'s own docstring already says why.
     Staging APPENDS -- nothing existing is edited, `_worst` ranks failing above
     everything a new testpoint can add, and `distance` counts unexercised
     alongside failing -- so a grown evidence set can only move a verdict toward
@@ -624,7 +624,7 @@ def _opening(session: DebugSession) -> str:
                 lines.append(f"      observed: {r['detail']}")
         if len(group) > 40:
             lines.append(f"  ... and {len(group) - 40} more; "
-                         f"list_oracles() has all.")
+                         f"_tool_list_oracles() has all.")
         if not group:
             lines.append("  (none)")
 
@@ -646,12 +646,12 @@ def _opening(session: DebugSession) -> str:
     lines += [
         "",
         f"Start with {first}.",
-        "`add_stimulus(req_uid, \"...\") is open on EVERY turn, on any "
+        "`_tool_add_stimulus(req_uid, \"...\") is open on EVERY turn, on any "
         "requirement showing NOT EXERCISED: describe what has to happen and the "
         "harness generates and gates the vectors. Staging only ever ADDS "
         "evidence, so it cannot make a failing oracle pass and cannot confound "
         "an edit you make beside it.",
-        "`replace_method(method, new_code)` edits the model, and is open "
+        "`_tool_replace_method(method, new_code)` edits the model, and is open "
         + ("now." if session.route == MODEL else
            "only while something is failing -- with no oracle accusing the "
            "model, the only thing an edit can achieve is to make an unexercised "
@@ -659,8 +659,8 @@ def _opening(session: DebugSession) -> str:
            "a check fires rather than staging the scenario the check is about."),
         f"Stimulus budget left this run: {budget_left}."
         if budget_left else
-        "The stimulus budget for this run is spent; `add_stimulus` will say so.",
-        "Start with `explain` on one of them.",
+        "The stimulus budget for this run is spent; `_tool_add_stimulus` will say so.",
+        "Start with `_tool_explain` on one of them.",
     ]
     return "\n".join(lines)
 

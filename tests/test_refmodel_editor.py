@@ -427,9 +427,10 @@ def test_the_prompt_does_not_claim_add_stimulus_refuses():
     turn was the model-repair route" -- it believed the prose. The refusal is
     gone; the prose has to go with it or the belief outlives the code.
     """
-    assert "`add_stimulus` is ALWAYS available" in SYSTEM_PROMPT
-    assert "`add_stimulus` refuses" not in SYSTEM_PROMPT
-    assert "`replace_method` refuses on a turn with nothing failing" in SYSTEM_PROMPT
+    assert "`_tool_add_stimulus` is ALWAYS available" in SYSTEM_PROMPT
+    assert "`_tool_add_stimulus` refuses" not in SYSTEM_PROMPT
+    assert ("`_tool_replace_method` refuses on a turn with nothing failing"
+            in SYSTEM_PROMPT)
 
 
 # --------------------------------------------------- context across turns
@@ -490,3 +491,40 @@ def test_a_clipped_response_declares_the_cut():
     assert "characters cut from the middle" in out
     assert len(out) < TOOL_MAX_CHARS * 2
     assert _clip("short") == "short"
+
+
+def test_every_tool_the_prompt_NAMES_is_a_tool_that_exists():
+    """The prompt told the agent to call tools by names nothing answers to.
+
+    `Toolkit.register_tool_function` takes the name from `func.__name__`, so the
+    schema carries `_tool_add_stimulus` while the prompt said `add_stimulus`.
+    An agent following the prose gets
+
+        ToolError: 'add_stimulus' is not an available tool
+
+    burns the round trip, and re-issues against the schema. `GuidingToolkit`
+    makes that recoverable rather than fatal, which is exactly why it went
+    unnoticed -- and the tool the prose pushed hardest is the one that never
+    fired in five runs.
+
+    `RTLEditor` has this right: its prompt says `_tool_read_block(block_id)`
+    (`rtl_editor.py:409, :428`), matching what it registers. This pins the same
+    property for the sibling that diverged.
+    """
+    import re
+
+    from eda_agent import refmodel_editor as RE
+
+    registered = {n for n in dir(RE.RefModelEditor) if n.startswith("_tool_")}
+    assert registered, "no tools found -- the check would pass vacuously"
+    bare = {n[len("_tool_"):] for n in registered}
+
+    surfaces = [RE.SYSTEM_PROMPT]
+    named = set()
+    for text in surfaces:
+        for m in re.finditer(r"`?\b(\w+)\(", text):
+            named.add(m.group(1))
+    offenders = sorted(named & bare)
+    assert not offenders, (
+        f"the prompt calls {offenders} but the toolkit registers them as "
+        f"_tool_-prefixed; an agent following the prose gets ToolError")
