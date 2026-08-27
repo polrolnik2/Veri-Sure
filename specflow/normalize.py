@@ -39,7 +39,7 @@ import logging
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
@@ -172,6 +172,38 @@ class Activation(BaseModel):
     @property
     def windowed(self) -> bool:
         """The requirement governs a span, not an instant."""
+        return bool(self.until)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def effect_follows(self) -> bool:
+        """Does the expectation land AFTER the trigger, or at it? -- `|=>`.
+
+        DERIVED, NOT ASKED, and that is the point. `after_activation` was
+        offered to the check author in prose with the measured count behind it,
+        which is exactly the posture that got v1 of the temporal block 0 uptake
+        in 306 responses. The schema already knows the answer, so it should
+        carry it rather than request it.
+
+        A window that closes on a CONDITION is a window whose effect outlasts
+        its trigger: "during an accepted WRITE, until cmd_ack" describes bus
+        activity that runs for many states after `cmd` was sampled. A window
+        with no close condition is either an instant or co-extensive with a
+        level -- "while ena is low" -- and there the expectation holds at the
+        activation row too. So `bool(until)` is the whole rule.
+
+        `computed_field` so it SERIALIZES: the author reads the normalized
+        block as JSON, and a plain property would be invisible there.
+
+        WHY `strong` IS NOT DERIVED THE SAME WAY, since the signal looks
+        identical and is not. A non-empty `until` says the window closes on a
+        condition; it does NOT say the requirement asserts that the closing
+        happens. "During a WRITE, sda_oen follows din" with `until cmd_ack` is
+        about sda_oen, not about the write completing -- deriving `strong` from
+        the same field would convict a design whose trace merely ended early.
+        Liveness is a claim in the requirement's own words and stays a claim
+        the author makes.
+        """
         return bool(self.until)
 
     @property

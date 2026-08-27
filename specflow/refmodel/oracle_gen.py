@@ -340,6 +340,19 @@ copying one. Every construct below is built the same way:
   already-low `scl_i`. That is a different event, and it is the one three
   checks reported as never occurring.
 
+  WHETHER THE EFFECT FOLLOWS THE TRIGGER IS ALREADY DECIDED FOR YOU. The
+  normalized block carries `activation.effect_follows`. Pass it straight
+  through -- do not re-derive it, and do not leave it out:
+
+    follows = normalized["activation"]["effect_follows"]
+    return worst([eventually(w, holds, after_activation=follows)
+                  for w in windows])
+
+  It is true exactly when the window closes on a condition, because a window
+  that closes on a condition is one whose effect outlasts its trigger. When it
+  is false the expectation holds at the activation row too, and reading from
+  there is correct.
+
   THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
 
     return worst([eventually(w, lambda r: r["outputs"]["sda_oen"] == w.value("din"))
@@ -395,9 +408,10 @@ next time anything changed", which is what "then" means in a specification.
 THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
 
   * `eventually(w, p)` is satisfied AT THE ACTIVATION ROW, because the window
-    opens there. If the requirement says the effect FOLLOWS the trigger -- and
-    most do -- pass `after_activation=True`. Six of one run's fourteen vacuous
-    checks read the expectation on the same row as the activation.
+    opens there -- six of one run's fourteen vacuous checks read the
+    expectation on the same row as the activation. You do not have to judge
+    this: `activation.effect_follows` in the normalized block is the answer,
+    and passing it through is the whole of the fix.
   * `eventually(w, p)` is WEAK: a window that runs off the end returns UNKNOWN,
     not a failure. If the requirement says the response MUST come, pass
     `strong=True`, or the check can never be violated -- only left undecided.

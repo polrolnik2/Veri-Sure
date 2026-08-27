@@ -164,6 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     (args.out / "oracles.json").write_text(
         json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8")
 
+    # THE TWO DEFAULTS MOST OFTEN WRONG, now that both are reachable. Uptake
+    # of `after` says the author found the window; these say it aimed it.
+    follows = [r for r in rows if "after_activation" in r["source"]]
+    strong = [r for r in rows if "strong=True" in r["source"]]
     used = [r for r in rows if r["operators"]]
     used_after = [r for r in rows if "after" in r["operators"]]
     hand = [r for r in rows if r["hand_rolled"]]
@@ -171,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  call ANY temporal operator: {len(used)}/{len(rows)}")
     print(f"  call `after`:               {len(used_after)}/{len(rows)}")
     print(f"  still hand-roll an index:   {len(hand)}/{len(rows)}")
+    print(f"  pass `after_activation`:   {len(follows)}/{len(rows)}  (derived; |=>)")
+    print(f"  pass `strong=True`:        {len(strong)}/{len(rows)}  (authored; s_eventually)")
 
     # The conditional is the number that decides whether the SCHEMA is the
     # lever: uptake among checks that were actually handed a window.

@@ -458,3 +458,46 @@ def test_edges_computes_the_transition_not_the_level():
                    lambda r: r["inputs"]["scl_i"] == 0 and r["inputs"]["scl_oen"] == 1)
     assert [w.edge for w in levels] == [5], "the level form fires here"
     assert not edges(already_low, "scl_i", "fall"), "the edge form does not"
+
+
+def test_effect_follows_is_DERIVED_and_serialises():
+    """`after_activation` was offered to the check author in prose with the
+    measured count behind it -- which is exactly the posture that got v1 of the
+    temporal block 0 uptake in 306 responses. The schema already knows the
+    answer, so it carries it.
+
+    A window that closes on a CONDITION is one whose effect outlasts its
+    trigger. A window with no close condition is an instant or co-extensive
+    with a level, and there the expectation holds at the activation row too."""
+    from specflow.normalize import Activation
+
+    follows = Activation(text="during a WRITE", inputs={"cmd": 8},
+                         until=[{"cmd_ack": 1}])
+    at_instant = Activation(text="while ena is low", inputs={"ena": 0})
+    assert follows.effect_follows is True
+    assert at_instant.effect_follows is False
+
+    # It must SERIALISE: the author reads the normalized block as JSON, and a
+    # plain property would be invisible there.
+    assert follows.model_dump()["effect_follows"] is True
+    assert "effect_follows" in at_instant.model_dump()
+
+
+def test_strong_is_NOT_derived_from_the_same_field():
+    """The signal looks identical and is not. A non-empty `until` says the
+    window closes on a condition; it does NOT say the requirement asserts that
+    the closing happens. "During a WRITE, sda_oen follows din" with
+    `until cmd_ack` is about sda_oen, not about the write completing --
+    deriving `strong` from the same field would convict a design whose trace
+    merely ended early."""
+    import inspect
+
+    from specflow.normalize import Activation
+
+    assert not hasattr(Activation, "strong"), (
+        "liveness is a claim in the requirement's own words, not a shape of "
+        "the window")
+    src = inspect.getsource(Activation)
+    assert "WHY `strong` IS NOT DERIVED" in src, (
+        "the reasoning must stay next to the thing it explains, or the next "
+        "reader adds it")
