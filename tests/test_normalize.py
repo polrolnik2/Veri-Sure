@@ -378,3 +378,83 @@ def test_a_span_in_the_text_with_no_close_condition_is_REPORTED_not_rejected():
                                     inputs={"cmd": 2}, until=[{"cmd_ack": 1}]))
     assert not [i for i in gate_one(REQ, ok, CONTRACT)
                 if i.path.endswith("activation.until")]
+
+
+def test_a_condition_may_name_an_EDGE_and_it_maps_to_SVA():
+    """A LEVEL IS NOT AN EDGE, and the schema could only say level.
+
+    Measured on a2-i2c: 28 of 105 requirements name an edge or transition in
+    their own text. REQ-0038's requirement says "a falling edge observed on the
+    filtered SCL", its activation text says "a filtered SCL falling edge
+    occurs", and its schema said `scl_i == 0`. Three checks reported the
+    activation as never occurring for exactly that reason.
+
+    `after` does not cover it: it opens on a rising activation, so a LONE
+    `{scl_i: 0}` gives falling-edge windows -- but a MIXED condition makes it
+    open on the edge of the CONJUNCTION, which also fires when `scl_oen` rises
+    over an already-low `scl_i`. A different event.
+    """
+    from specflow.normalize import _EDGE_WORDS
+    from specflow.refmodel.temporal import EDGES
+
+    # The vocabulary is defined once, in the module that computes it.
+    assert set(EDGES) == _EDGE_WORDS
+
+    ok = _out(observable=["busy"],
+              activation=Activation(text="ena falls while busy is high",
+                                    inputs={"ena": 0},
+                                    opens_on=[{"ena": "fall", "busy": 1}]))
+    assert not [i for i in gate_one(REQ, ok, CONTRACT) if i.severity == "error"]
+
+    bad = _out(observable=["busy"],
+               activation=Activation(text="x", inputs={"ena": 0},
+                                     opens_on=[{"ena": "wobble"}]))
+    assert any("neither a value nor one of" in i.message
+               for i in gate_one(REQ, bad, CONTRACT))
+
+
+def test_rise_on_a_multibit_port_is_WARNED_because_SVA_reads_the_LSB():
+    """SVA's `$rose`/`$fell` are defined on the LSB; `temporal.edges` reads
+    them as increased/decreased. Identical on a 1-bit port -- which is every
+    port these requirements name an edge of -- and different on a wider one.
+
+    A warning, not an error: the wide case is unusual but not illegal, and this
+    repo has twice paid for a screen that blocked before its false-positive
+    rate was known."""
+    wide = _out(observable=["busy"],
+                activation=Activation(text="x", inputs={"cmd": 8},
+                                      opens_on=[{"cmd": "rise"}]))
+    flagged = [i for i in gate_one(REQ, wide, CONTRACT)
+               if "increased or decreased" in i.message]
+    assert flagged and all(i.severity == "warning" for i in flagged)
+
+
+def test_edges_computes_the_transition_not_the_level():
+    """The reason this lives in `temporal` rather than in the prompt: an author
+    re-deriving it per check is the hand-rolled index arithmetic the operators
+    exist to replace."""
+    from specflow.refmodel.temporal import after, edges
+
+    trace = [{"edge": 0, "inputs": {"scl_i": 1, "scl_oen": 0}, "outputs": {}},
+             {"edge": 4, "inputs": {"scl_i": 1, "scl_oen": 1}, "outputs": {}},
+             {"edge": 9, "inputs": {"scl_i": 0, "scl_oen": 1}, "outputs": {}}]
+    # Port names here are the i2c ones the finding came from; `edges` reads the
+    # trace, not the contract, so no declaration is needed.
+    fell = edges(trace, "scl_i", "fall")
+    assert fell == {9}
+    assert edges(trace, "scl_i", "rise") == set()
+    assert edges(trace, "scl_oen", "change") == {4}
+
+    # The whole point: a level conjunction opens a window at edge 9 EITHER way,
+    # but it ALSO opens one where scl_oen rose over an already-low scl_i --
+    # which the edge form does not.
+    edge_windows = after(trace, lambda r: r["edge"] in fell
+                         and r["inputs"]["scl_oen"] == 1)
+    assert [w.edge for w in edge_windows] == [9]
+
+    already_low = [{"edge": 0, "inputs": {"scl_i": 0, "scl_oen": 0}, "outputs": {}},
+                   {"edge": 5, "inputs": {"scl_i": 0, "scl_oen": 1}, "outputs": {}}]
+    levels = after(already_low,
+                   lambda r: r["inputs"]["scl_i"] == 0 and r["inputs"]["scl_oen"] == 1)
+    assert [w.edge for w in levels] == [5], "the level form fires here"
+    assert not edges(already_low, "scl_i", "fall"), "the edge form does not"

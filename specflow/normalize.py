@@ -77,6 +77,10 @@ PARSE_ERROR = "Parse Error: "
 #:
 #: This is a MIGRATION signal, not a permanent lint. A high count now is the
 #: finding; it falls as normalisation starts filling `until`.
+#: Edge words a condition may carry instead of a level. Mirrors
+#: `temporal.EDGES` -- the one place that computes them.
+_EDGE_WORDS = frozenset({"rise", "fall", "change"})
+
 _WINDOW_WORDS = re.compile(
     r"\b(during|while|throughout|until|for the duration|as long as|"
     r"start of|end of|sequence|phase|then|after|subsequent|following)\b",
@@ -121,7 +125,7 @@ class Activation(BaseModel):
     #: activated by an OUTPUT had nowhere to say so and the slot was filled with
     #: whatever inputs were lying around -- REQ-0028's came back
     #: `{nReset: 1, rst: 0}`, the reset qualifier and none of the condition.
-    opens_on: list[dict[str, int]] = Field(default_factory=list)
+    opens_on: list[dict[str, int | str]] = Field(default_factory=list)
     #: WHERE THE WINDOW CLOSES -- same any-of-a-list shape, outputs allowed.
     #: Empty means the requirement is about the activation instant itself.
     #:
@@ -149,7 +153,7 @@ class Activation(BaseModel):
     #: severed pacing from latency for exactly that reason. Deliberately the same
     #: shape as the stimulus schema's own `until`, and it feeds
     #: `temporal.after(trace, applies, until=closes)` directly.
-    until: list[dict[str, int]] = Field(default_factory=list)
+    until: list[dict[str, int | str]] = Field(default_factory=list)
 
     @field_validator("opens_on", "until", mode="before")
     @classmethod
@@ -442,6 +446,25 @@ activation began, which reads the outputs before the design has done anything.
 Depending on which way the port happens to sit at that instant, the check then
 fails EVERY design or passes every design -- and on one measured run those two
 populations were 79% and 83% exactly this.
+
+AN EDGE IS NOT A LEVEL. Where the requirement says a signal RISES, FALLS or
+CHANGES, write that word instead of a value -- `"rise"`, `"fall"`, `"change"`:
+
+  "a falling edge on the filtered SCL
+   while the controller has released SCL"
+        -> opens_on [{"scl_i": "fall", "scl_oen": 1}]
+  "dout captures on the rising edge of SCL"
+        -> opens_on [{"scl_i": "rise"}]
+
+Levels and edges mix freely inside one entry: the edge ports must have just
+transitioned, and the level ports must hold at that same row.
+
+Writing a level where the requirement means an edge changes what is being
+asked. `{"scl_i": 0, "scl_oen": 1}` is "both hold at some row", which is ALSO
+true when `scl_oen` rises over an SCL that was already low -- a different event
+entirely, and not the one the requirement is about. Three checks on one run
+reported their activation as never occurring for exactly this reason, while
+their own activation text said "a falling edge occurs".
 
 WHEN AN OUTPUT IS PART OF THE TRIGGER. `inputs` takes input ports only, because
 a later stage decides it from the stimulus steps alone with no model. If the
@@ -959,6 +982,31 @@ def gate_one(
                 if width is None:
                     issues.append(Issue("error", path,
                                         f"{name!r} is not a declared port"))
+                    continue
+                # AN EDGE IS NOT A LEVEL, and the schema could only say
+                # level. Measured on a2-i2c: 28 of 105 requirements name an
+                # edge or transition in their own text, and three checks
+                # reported the activation as never occurring because
+                # "scl_i falls WHILE scl_oen is released" had been written
+                # `{scl_i: 0, scl_oen: 1}` -- a conjunction of levels, which
+                # also fires when scl_oen rises over an already-low scl_i.
+                if isinstance(value, str):
+                    if value not in _EDGE_WORDS:
+                        issues.append(Issue(
+                            "error", path,
+                            f"{name}={value!r} is neither a value nor one of "
+                            f"{sorted(_EDGE_WORDS)}"))
+                    elif value in ("rise", "fall") and width > 1:
+                        # SVA's `$rose`/`$fell` are defined on the LSB;
+                        # `temporal.edges` reads them as increased/decreased.
+                        # Identical on a 1-bit port -- which is every port these
+                        # requirements name an edge of -- and different on a
+                        # wider one, so say which was meant.
+                        issues.append(Issue(
+                            "warning", path,
+                            f"{name} is {width} bits, so {value!r} means the "
+                            f"value increased or decreased, not that a bit "
+                            f"toggled; 'change' is usually what is meant"))
                     continue
                 try:
                     as_int = int(value)

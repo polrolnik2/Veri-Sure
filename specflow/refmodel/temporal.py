@@ -83,6 +83,67 @@ class Window:
         return _val(self.start, port)
 
 
+#: The transitions an activation may open on. `change` is either direction, for
+#: "whenever X moves" -- narrower than it sounds, since a row exists only where
+#: something moved.
+EDGES = ("rise", "fall", "change")
+
+
+def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
+    """The `edge` numbers of rows where `port` took that transition.
+
+    A LEVEL IS NOT AN EDGE, and the schema could only say level. Measured on
+    a2-i2c: 28 of 105 requirements name an edge or a transition in their own
+    text, and their normalized activations came back as `{scl_i: 0}` -- the
+    author knew it was an edge and had nowhere to write it. REQ-0038's
+    requirement text says "a falling edge observed on the filtered SCL", its
+    activation text says "a filtered SCL falling edge occurs", and its schema
+    said `scl_i == 0`.
+
+    `after` will not save you here, and that is the subtle part. It opens on a
+    RISING activation, so a lone `{scl_i: 0}` does give falling-edge-of-scl_i
+    windows. But the moment the condition is MIXED -- "scl_i falls WHILE
+    scl_oen is released" -- `after` opens on the edge of the CONJUNCTION, which
+    fires when `scl_oen` rises over an already-low `scl_i`. That is a different
+    event, and it is the one three checks reported as never occurring.
+
+    So the edge is computed here, over the port alone, and combined with the
+    level conditions afterwards:
+
+        fell = edges(trace, "scl_i", "fall")
+        after(trace, lambda r: r["edge"] in fell and _val(r, "scl_oen") == 1)
+
+    Returns `edge` numbers rather than rows because `edge` is the one field a
+    row can be identified by; identity comparison on dicts is not stable across
+    a re-read of the trace.
+
+    The FIRST row is never an edge: a transition needs a previous sample, which
+    is `$rose`/`$fell` semantics and not a limitation to work around. A port
+    that starts at its target value has not moved to it.
+
+    ON A MULTI-BIT PORT `rise`/`fall` MEAN INCREASED/DECREASED, and SVA's
+    `$rose`/`$fell` are defined on the LSB. Those coincide exactly on a 1-bit
+    port, which is every port these requirements name an edge of; on a wider
+    one the two readings differ and `change` is what is usually meant.
+    Documented rather than rejected here, and warned about at normalisation
+    where the port width is known.
+    """
+    if direction not in EDGES:
+        raise ValueError(f"direction must be one of {EDGES}, got {direction!r}")
+    out: set[int] = set()
+    prev = None
+    for row in trace:
+        now = _val(row, port)
+        if prev is not None and now != prev:
+            if (direction == "change"
+                    or (direction == "rise" and now > prev)
+                    or (direction == "fall" and now < prev)):
+                out.add(int(row.get("edge", -1)))
+        prev = now
+    out.discard(-1)
+    return out
+
+
 def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
           max_windows: int = 64) -> list[Window]:
     """Every window the requirement applies over.

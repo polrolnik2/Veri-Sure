@@ -238,8 +238,8 @@ Six of the last run's fourteen vacuous checks were exactly this. And a check
 that instead waits a FIXED number of edges is the opposite failure, pinning a
 count the specification never gave.
 
-    from specflow.refmodel.temporal import (after, eventually, throughout,
-                                            stable, pulse, worst)
+    from specflow.refmodel.temporal import (after, edges, eventually,
+                                            throughout, stable, pulse, worst)
 
     def decide(trace):
         windows = after(trace,
@@ -324,6 +324,22 @@ copying one. Every construct below is built the same way:
     opens = _any([{"scl_oen": 0}, {"sda_oen": 0}])
     windows = after(trace, lambda r: _holds({"nReset": 1})(r) and opens(r))
 
+  AN EDGE IN THE CONDITION -- a value of `"rise"`, `"fall"` or `"change"`
+  instead of a number. `edges()` gives you the rows where the port moved, and
+  the level ports are checked at that same row:
+
+    # normalized: opens_on [{"scl_i": "fall", "scl_oen": 1}]
+    fell = edges(trace, "scl_i", "fall")
+    windows = after(trace, lambda r: r["edge"] in fell
+                    and r["outputs"].get("scl_oen") == 1)
+
+  `after` alone will NOT do this for you, and the reason is worth knowing. It
+  opens on a rising activation, so a lone `{"scl_i": 0}` does give
+  falling-edge-of-scl_i windows -- but a MIXED condition makes it open on the
+  edge of the CONJUNCTION, which also fires when `scl_oen` rises over an
+  already-low `scl_i`. That is a different event, and it is the one three
+  checks reported as never occurring.
+
   THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
 
     return worst([eventually(w, lambda r: r["outputs"]["sda_oen"] == w.value("din"))
@@ -353,9 +369,12 @@ THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
   throughout(w, p)   `p throughout` the window
   stable(w, port)    `$stable(port)` across it
   pulse(w, port)     `$rose(port)` followed by `$fell` one cycle later
+  edges(t, p, "rise")   `$rose(p)`      -- the rows where it went low to high
+  edges(t, p, "fall")   `$fell(p)`      -- high to low
+  edges(t, p, "change") `$changed(p)`   -- either direction
 
 Write the check the way you would write the assertion, and reach for the
-operator you would reach for in SVA. THREE PLACES THE ANALOGY BREAKS, and the
+operator you would reach for in SVA. FOUR PLACES THE ANALOGY BREAKS, and the
 third is the one that bites:
 
   1. `throughout(w, p)` takes a WINDOW and a PREDICATE, where SVA takes a
@@ -367,6 +386,17 @@ third is the one that bites:
      `held`. So `len(w.rows)` is not a cycle count and never was. `pulse` sums
      `held` for you -- which is why a 40-edge assertion is not a one-cycle
      pulse -- and any counting you do yourself must sum it too.
+  4. `$rose` IS A SAMPLED-VALUE FUNCTION and `edges` IS A SET. SVA evaluates
+     `$rose(p)` at each tick and you drop it straight into an expression; here
+     `after` takes a predicate over ONE row and cannot see the previous one, so
+     the transitions are computed over the whole trace up front and you test
+     membership: `r["edge"] in fell`. Same meaning, computed once instead of
+     per row.
+
+     And on a MULTI-BIT port they are not the same thing at all. SVA's `$rose`
+     is defined on the LSB; `edges(..., "rise")` means the value INCREASED. On
+     a 1-bit port those coincide exactly, which is every port these
+     requirements are about. On a wider one, say what you mean with "change".
 
 GIVE `after` AN `until`. Without one the window ends where the activation
 does, so a check looking for a later effect sees nothing and fails -- which is
