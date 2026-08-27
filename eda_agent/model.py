@@ -466,7 +466,24 @@ def _is_llama_model(model_name: str) -> bool:
     return any(k in name_lower for k in ["llama", "meta-llama"])
 
 
-def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
+def make_openai_model(cfg: OpenAIConfig,
+                      cache_key: str | None = None) -> ChatModelBase:
+    """`cache_key` is the prompt-cache ROUTING HINT, one per shared prefix.
+
+    A prompt cache lives on the backend that served the request, so calls that
+    share a prefix only benefit if they reach the same backend. Every agent here
+    has its own system prompt and its own tool schema, so every agent is its own
+    prefix and gets its own key -- pooling two would send traffic to a backend
+    holding a head it cannot use.
+
+    It matters most for the refmodel debug loop, which is the largest line in
+    the ledger by a wide margin: 46.1M input tokens on a2-i2c against 10.8M for
+    every specflow stage combined, from a conversation that is re-sent, growing,
+    up to `max_attempts * 10` times per turn. That shape is the best case for
+    caching and the worst case for cost, and routing is the difference.
+
+    Optional, so an agent that has not been given one behaves exactly as before.
+    """
     # Raise the OpenAI SDK's retry count (default 2) so rate-limit (429) and
     # transient 5xx/connection errors are ridden out via the SDK's built-in
     # exponential backoff + jitter (which also honors Retry-After /
@@ -502,6 +519,10 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
     if cfg.base_url:
         client_args["base_url"] = cfg.base_url
 
+    gen_kwargs = dict(cfg.generate_kwargs or {})
+    if cache_key:
+        gen_kwargs.setdefault("prompt_cache_key", f"veri-sure:{cache_key}:{cfg.model}")
+
     if cfg.api_flavor == "responses":
         # Selected when tools and reasoning effort have to coexist: a gateway
         # can refuse that combination on chat-completions and point at
@@ -519,7 +540,7 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
                 reasoning_effort=cfg.reasoning_effort,
                 organization=cfg.organization,
                 client_args=client_args or None,
-                generate_kwargs=cfg.generate_kwargs or None,
+                generate_kwargs=gen_kwargs or None,
             )
         )
 
@@ -530,7 +551,7 @@ def make_openai_model(cfg: OpenAIConfig) -> ChatModelBase:
         reasoning_effort=cfg.reasoning_effort,  # type: ignore[arg-type]
         organization=cfg.organization,
         client_args=client_args or None,
-        generate_kwargs=cfg.generate_kwargs or None,
+        generate_kwargs=gen_kwargs or None,
     )
     return UsageTrackingModel(base_model)
 

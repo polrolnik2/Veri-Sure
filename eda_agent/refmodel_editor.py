@@ -212,7 +212,10 @@ class RefModelEditor:
         # spend then never appears in any ledger -- which is exactly what
         # happened: `get_model_usage` exists and only the verilog-eval harness
         # calls it, so every debug turn on the specflow path was invisible.
-        self._model = make_openai_model(cfg)
+        # One key for this agent, because one agent is one shared prefix:
+        # the system prompt and the tool schema are identical on every
+        # call of every turn of every run, and they are what caches.
+        self._model = make_openai_model(cfg, cache_key="refmodel-debug")
         self._agent = SafeReActAgent(
             name="RefModelDebugger",
             sys_prompt=SYSTEM_PROMPT,

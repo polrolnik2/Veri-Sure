@@ -356,18 +356,59 @@ def _as_input_item(item) -> dict:
     return data
 
 
-def _responses_body(cfg, prompt: str, default_cap: int = 48000) -> dict:
+def _cache_key(cfg, stage: str) -> str:
+    """The routing hint for prompt caching: one key per shared prefix.
+
+    A prompt cache lives on the backend that served the request, so with many
+    distinct prefixes in flight -- eight stage families across sixteen fan-out
+    workers here -- two calls that share a prefix can land on different backends
+    and neither sees the other's entry. The key says "send these together".
+
+    It groups exactly what `shared_block` shares: the stage FAMILY, not the
+    stage. `normalize_indirect_REQ-0002` and `normalize_indirect_REQ-0007` share
+    a prefix and must share a key; keying per item would give one key per call
+    and route nothing together. The model is in the key because a cache entry is
+    per model, and pooling two models under one key would send half the traffic
+    to a backend holding a prefix it cannot use.
+
+    `family()` rather than a split on the first underscore, for the reason that
+    function records: splitting `normalize_indirect_*` at the first underscore
+    pools it with the first normalisation pass, and THE TWO HAVE DIFFERENT
+    SHARED PREFIXES.
+    """
+    from .cache_stats import family
+
+    return f"specflow:{family(stage)}:{cfg.model}"
+
+
+def _responses_body(cfg, prompt: str, default_cap: int = 48000,
+                    stage: str | None = None) -> dict:
     """The request body for `/v1/responses`, built where it can be tested.
 
     Pure on purpose: the two bugs this had were both invisible from the outside
     -- the request looked fine in the code and wrong on the wire -- so the thing
     that needs a test is the body itself, not the call around it.
+
+    `prompt_cache_key` IS THE STAGE FAMILY, and the reason it is the family and
+    not the stage is the reason `family()` exists. A cache lives on the backend
+    that served the request, so with many distinct prefixes in flight -- eight
+    stage families across sixteen fan-out workers here -- two calls that share a
+    prefix can land on different backends and neither sees the other's entry.
+    The key is a routing hint that says "send these together".
+
+    It must group exactly what `shared_block` shares. Keying per ITEM would give
+    one key per call and route nothing together; keying on something coarser
+    would pool families whose prefixes differ -- which is the mistake `family()`
+    already records, where splitting `normalize_indirect_REQ-0002` at the first
+    underscore pooled two passes with different system text.
     """
     body: dict = {
         "model": cfg.model,
         "input": prompt,
         "reasoning": {"effort": cfg.reasoning_effort or "medium", "summary": "auto"},
     }
+    if stage:
+        body["prompt_cache_key"] = _cache_key(cfg, stage)
     gen = dict(cfg.generate_kwargs or {})
     # `max_completion_tokens` is the chat spelling; Responses calls it
     # `max_output_tokens`. Carrying the chat name over silently drops the cap,
@@ -713,7 +754,8 @@ class ApiPort:
         model. 223s total, maximum gap under 10s, effort never lowered.
         """
         effort = cfg.reasoning_effort or "medium"
-        body = _responses_body(cfg, prompt, self.settings.max_output_tokens)
+        body = _responses_body(cfg, prompt, self.settings.max_output_tokens,
+                               stage=stage)
         total = int(body.pop("max_output_tokens"))
         chunk = self.settings.chunk_for(effort)
 
@@ -945,6 +987,11 @@ class ApiPort:
         kwargs: dict = dict(cfg.generate_kwargs or {})
         if cfg.reasoning_effort:
             kwargs["reasoning_effort"] = cfg.reasoning_effort
+        # Same routing hint as the Responses path, same key. A prefix shared
+        # across a fan-out only pays if the calls sharing it reach the same
+        # backend, and which surface the gateway routes to is not this stage's
+        # business -- so both paths set it and set it identically.
+        kwargs.setdefault("prompt_cache_key", _cache_key(cfg, stage))
 
         if cfg.stream:
             # Streaming is not about latency here. A non-streaming reasoning
