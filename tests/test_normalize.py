@@ -25,9 +25,20 @@ CONTRACT = {
 REQ = {"uid": "REQ-0000", "text": "on START, cmd_ack pulses for one clock"}
 
 
+def _route(port: str) -> dict:
+    """A direct self-route. Every requirement carries one now, and the field
+    that matters is `shows`: two cases, so nothing vacuous gets through."""
+    return {"port": port, "through_req": "", "when": "when a START is issued",
+            "shows": f"{port} takes the stated value when the requirement "
+                     f"holds and does not when it does not"}
+
+
 def _out(**kw) -> NormalizeOutput:
     kw.setdefault("activation", Activation(text="a START is issued"))
     kw.setdefault("expectation", "cmd_ack pulses high for exactly one clock")
+    observable = kw.get("observable") or []
+    kw.setdefault("observed_via",
+                  [_route(observable[0])] if observable else [])
     return NormalizeOutput(normalized=[NormalizedRequirement(**kw)])
 
 
@@ -211,3 +222,75 @@ def test_reset_stays_a_legitimate_activation_input():
 
     flat = re.sub(r"\s+", " ", SYSTEM)
     assert "Reset ports may appear in `inputs`" in flat
+
+
+# ------------------------------------------- the route is the base case
+
+def test_a_directly_observable_requirement_must_still_give_a_ROUTE():
+    """The field that matters is `shows`, and only the exception was ever asked
+    for it. REQ-0075 was directly observable, got `observed_via: []`, and was
+    never made to say what distinguishes the requirement holding from it not
+    holding -- so its check settled for "an output moved", which nothing can
+    falsify."""
+    out = NormalizeOutput(normalized=[NormalizedRequirement(
+        req_uid="REQ-0000", activation=Activation(text="a START is issued"),
+        expectation="e", observable=["cmd_ack"], observed_via=[])])
+    issues = gate_one(REQ, out, CONTRACT)
+    assert any("no route given" in i.message for i in issues), issues
+
+
+def test_a_one_sided_shows_is_rejected():
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = "cmd_ack is observable"
+    issues = gate_one(REQ, out, CONTRACT)
+    assert any("when it does NOT" in i.message for i in issues)
+
+
+def test_a_TAUTOLOGY_may_decline_and_is_not_forced_to_invent_one():
+    """The escape hatch, and it has to exist.
+
+    REQ-0005 is "releasing scl_oen high causes the module to release the line":
+    its port is its own antecedent, so there is no second case. A gate that
+    DEMANDS a discrimination from every requirement gets a fabricated one --
+    a model asked for something impossible complies rather than refuses -- and
+    an invented discrimination is worse than an absent one, because it launders
+    a check that cannot fail into one that looks checkable and vacuity only
+    catches it three stages later.
+    """
+    from specflow.normalize import NO_DISCRIMINATION
+
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = (
+        f"{NO_DISCRIMINATION}: the port is the requirement's own antecedent")
+    assert gate_one(REQ, out, CONTRACT) == []
+
+
+def test_SILENCE_is_still_rejected():
+    """An absent answer cannot be told from "there is nothing to distinguish",
+    and the difference decides whether this is a finding about the
+    specification or a defect in the pass. Same shape as `observable` + an
+    `unobservable_reason`: empty WITH a reason passes, empty without does not."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = ""
+    assert gate_one(REQ, out, CONTRACT) != []
+
+
+def test_the_first_pass_may_not_name_ANOTHER_requirement():
+    """It sees one requirement and cannot know another's uid, so a borrowed port
+    is a claim it has no basis for -- that is the second pass's answer."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].through_req = "REQ-0099"
+    issues = gate_one(REQ, out, CONTRACT)
+    assert any("cannot know another's uid" in i.message for i in issues)
+
+
+def test_declining_every_route_abandons_the_requirement():
+    """And the disposition is earned: the pass ran, asked, and was told there is
+    no second case. It leaves the system with a reason rather than becoming an
+    assertion nothing can falsify."""
+    from specflow.normalize import NO_DISCRIMINATION
+    from specflow.oracles_stage import _declines
+
+    assert _declines(f"{NO_DISCRIMINATION}: nothing contradicts it")
+    assert not _declines("busy stays low for a narrow glitch and rises "
+                         "for a wide one")

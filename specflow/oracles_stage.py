@@ -1183,6 +1183,24 @@ def run_oracle_stage(
             continue
         if not (shape.get("observable") or []) and not shape.get("observed_via"):
             abandoned.setdefault(uid, "no observation route found")
+            continue
+        # A REQUIREMENT NOTHING COULD CONTRADICT, caught where it is cheapest.
+        #
+        # Normalisation is asked, per route, what the port does when the
+        # requirement holds AND when it does not. A tautology has no second case
+        # -- REQ-0005 is "releasing scl_oen high causes the module to release
+        # the line", whose port is its own antecedent -- and the gate lets it
+        # say so rather than forcing an invention, because a model asked for
+        # something impossible complies instead of refusing, and a fabricated
+        # discrimination is worse than an absent one: it launders a check that
+        # cannot fail into one that looks checkable.
+        #
+        # Every route declining is the finding. ONE route discriminating is
+        # enough, because routes are alternatives and a single sufficient one
+        # makes the requirement checkable.
+        routes = shape.get("observed_via") or []
+        if routes and all(_declines(r.get("shows", "")) for r in routes):
+            abandoned.setdefault(uid, "no discrimination stated")
 
     # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
     # that can be true. Excluding them from `trusted` is what stops the debug
@@ -1975,6 +1993,18 @@ def _decides_nothing(testplan: list[dict],
     """
     named = {tp for o in oracles for tp in o.tp_uids}
     return sorted({str(e.get("uid")) for e in testplan if e.get("uid")} - named)
+
+
+def _declines(shows: str) -> bool:
+    """Did normalisation explicitly say this requirement has no second case?
+
+    Imported rather than re-spelled: `normalize` owns the sentinel, and a second
+    copy of the phrase here would drift from it silently -- the disposition
+    would stop firing and nothing would say why.
+    """
+    from .normalize import declines_discrimination
+
+    return declines_discrimination(shows)
 
 
 def _dispositions(

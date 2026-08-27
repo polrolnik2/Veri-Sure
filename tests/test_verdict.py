@@ -130,4 +130,4 @@ def test_the_reasons_are_a_closed_set():
 
     assert verdict.ABANDONED_REASONS == frozenset({
         "no observation route found", "never reached",
-        "no check survived repair"})
+        "no check survived repair", "no discrimination stated"})

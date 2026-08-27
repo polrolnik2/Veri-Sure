@@ -73,6 +73,7 @@ ABANDONED_REASONS: frozenset[str] = frozenset({
     "no observation route found",      # the indirect-resolution pass came back empty
     "never reached",                   # the stimulus loop exhausted its attempts
     "no check survived repair",        # the oracle repair loop exhausted its rounds
+    "no discrimination stated",        # normalisation found nothing that could contradict it
 })
 
 #: Who each verdict accuses, and therefore where a repair round should go. This

@@ -581,6 +581,62 @@ def build_indirect_prompt(
     )
 
 
+#: What a `shows` says when the requirement genuinely has no second case: an
+#: EXPLICIT answer, never an empty field. Silence cannot be told apart from not
+#: having answered, and the difference decides whether this is a finding about
+#: the specification or a defect in the pass.
+NO_DISCRIMINATION = "no discrimination"
+
+
+def discriminates(shows: str) -> bool:
+    """Does this `shows` name two cases rather than one?
+
+    A heuristic on wording, deliberately: what it is screening for is an author
+    who wrote "busy is observable" where the check needs "busy stays low for a
+    narrow glitch and rises for a wide one". Over-approximating costs a repair
+    round; under-approximating lets a check that cannot fail through.
+    """
+    text = (shows or "").strip()
+    if len(text) < 2:
+        return False
+    low = text.lower()
+    return (" not " in f" {low} " or "otherwise" in low
+            or "does not" in low or " and " in low)
+
+
+def declines_discrimination(shows: str) -> bool:
+    """Is this an explicit "there is no second case"?
+
+    THE ESCAPE HATCH, and it has to exist. A tautology has no contrasting case
+    -- REQ-0005 is "releasing scl_oen high causes the module to release the
+    line", whose port is its own antecedent -- so a gate that DEMANDS a
+    discrimination from every requirement gets a fabricated one, because a model
+    asked for something impossible complies rather than refuses. An invented
+    discrimination is worse than an absent one: it launders a check that cannot
+    fail into one that looks checkable, and vacuity only catches it three stages
+    later.
+
+    Same shape as `observable` + `unobservable_reason`, which this file already
+    treats as "empty WITH a reason passes, empty WITHOUT one does not".
+    """
+    return NO_DISCRIMINATION in (shows or "").strip().lower()
+
+
+def shows_issue(path: str, shows: str) -> Issue | None:
+    """The rule both passes apply to a route's `shows`."""
+    if declines_discrimination(shows) or discriminates(shows):
+        return None
+    return Issue(
+        "error", path,
+        "`shows` must name what the port does when the requirement HOLDS and "
+        "what it does when it does NOT. One case is not a discrimination, and "
+        "a check written over it would pass a design with none of this "
+        f"behaviour. If there genuinely is no second case -- the requirement "
+        f"restates its own antecedent, so nothing could contradict it -- say "
+        f"so with {NO_DISCRIMINATION!r} and it is recorded as a finding rather "
+        f"than turned into a check.")
+
+
 def gate_indirect(out: NormalizeOutput, *, uid: str,
                   contract: dict, known: set[str]) -> list[Issue]:
     """A route has to be usable, or it is worse than no route at all.
@@ -611,16 +667,9 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                                 "a requirement cannot be observed through "
                                 "itself -- that is the direct case, and the "
                                 "first pass already said there is none"))
-        if len(route.shows.strip()) < 2 or " not " not in f" {route.shows} " \
-                and "otherwise" not in route.shows.lower() \
-                and "does not" not in route.shows.lower() \
-                and " and " not in route.shows.lower():
-            issues.append(Issue(
-                "error", path,
-                "`shows` must name what the port does when the requirement "
-                "HOLDS and what it does when it does NOT. One case is not a "
-                "discrimination, and a check written over it would pass a "
-                "design with none of this behaviour"))
+        bad = shows_issue(path, route.shows)
+        if bad is not None:
+            issues.append(bad)
     for i, hop in enumerate(norm.activated_via):
         path = f"normalize.{uid}.activated_via[{i}]"
         if hop.through_req not in known:
@@ -700,6 +749,40 @@ def gate_one(
             "error", f"normalize.{uid}.unobservable_reason",
             f"names {sorted(norm.observable)} as observable AND gives an "
             f"unobservable_reason; these contradict"))
+
+    # THE ROUTE IS THE BASE CASE, so the first pass gates it too. Until now the
+    # discrimination rule lived only in `gate_indirect`, which runs over the
+    # blind subset -- so a DIRECTLY observable requirement was asked for `shows`
+    # by the prompt and never held to it, which is the temporal-operator lesson
+    # exactly: offered, and taken by 1 of 182.
+    #
+    # `through_req` is empty here by construction: the first pass sees one
+    # requirement and cannot know another's uid, so a borrowed port is the
+    # second pass's answer and naming one here is a claim it cannot support.
+    if norm.observable:
+        if not norm.observed_via:
+            issues.append(Issue(
+                "error", f"normalize.{uid}.observed_via",
+                f"observable at {sorted(norm.observable)} but no route given. "
+                f"Give one naming that port, leaving `through_req` empty, and "
+                f"say in `shows` what the port does when this requirement holds "
+                f"and what it does when it does not"))
+        for i, route in enumerate(norm.observed_via):
+            path = f"normalize.{uid}.observed_via[{i}]"
+            if route.through_req:
+                issues.append(Issue(
+                    "error", path,
+                    f"names {route.through_req!r}; this pass sees one "
+                    f"requirement and cannot know another's uid, so leave "
+                    f"`through_req` empty and name this requirement's own port"))
+            if route.port and route.port not in norm.observable:
+                issues.append(Issue(
+                    "error", path,
+                    f"{route.port!r} is not among the ports this requirement "
+                    f"is observable at ({sorted(norm.observable)})"))
+            bad = shows_issue(path, route.shows)
+            if bad is not None:
+                issues.append(bad)
 
     for name, value in (norm.activation.inputs or {}).items():
         path = f"normalize.{uid}.activation.inputs"
