@@ -170,7 +170,7 @@ class RefModelEditor:
         self,
         cfg: OpenAIConfig,
         *,
-        max_attempts: int = 15,
+        max_attempts: int = 30,
     ):
         #: Edit actions, not conversation turns, and NOT model calls. An attempt
         #: is one `replace_method`; reading and replaying are free and should be.
@@ -178,7 +178,11 @@ class RefModelEditor:
         #: Was 6, which is a fifth of `RTLEditor`'s 30 (`rtl_editor.py:1031`) and
         #: under half of `TBEditor`'s 15 (`tb_editor.py:1305`) -- this loop had
         #: been running at a fraction of its siblings' budget for no stated
-        #: reason. 15 matches TBEditor.
+        #: reason. It went to 15, TBEditor's default, and now to 30, which is
+        #: RTLEditor's: this loop repairs one model against every requirement's
+        #: check at once, which is the harder of the two jobs, and a2-i2c's turn
+        #: 3 was IDLE at 15 with 24 oracles still short of CONFORMS -- the turn
+        #: had stopped finding moves, not run out of them.
         #:
         #: What this does NOT cap is model calls. Each `_agent(...)` below is a
         #: full ReAct sub-loop of `max_iters=10`, so a turn is up to
@@ -545,70 +549,72 @@ class RefModelEditor:
 
 
 def _opening(session: DebugSession) -> str:
-    """Open on what THIS turn can act on, not on what a model turn would.
+    """Every turn sees BOTH kinds of work, and neither tool is ever closed.
 
     It used to open with "the reference model fails N of M oracles" and list the
-    failing ones. On a stimulus turn N is zero by construction, so the brief
-    read "fails 0 of 70", listed nothing, and then said "stage the scenarios the
+    failing ones. On a stimulus turn N is zero by construction, so the brief read
+    "fails 0 of 70", listed nothing, and then said "stage the scenarios the
     unexercised oracles are waiting for -- start with `explain` on one of them",
-    where "them" was the empty list above.
+    where "them" was the empty list above. That was fixed by branching the brief
+    on the route, which fixed the symptom and kept the premise: that a turn is
+    EITHER a model turn or a stimulus turn, and the other tool is shut.
 
-    Measured: across four runs the stimulus tool fired zero times. Three
-    separate causes, and this was the last of them -- the agent was told there
-    was work and shown none. The other two were the stop rule telling it to stop
-    when nothing was failing, and the loop returning after a turn that changed
-    nothing.
+    The premise is wrong, and `add_stimulus`'s own docstring already says why.
+    Staging APPENDS -- nothing existing is edited, `_worst` ranks failing above
+    everything a new testpoint can add, and `distance` counts unexercised
+    alongside failing -- so a grown evidence set can only move a verdict toward
+    WORSE. There is no edit here that turns a VIOLATES into a NOT_EXERCISED, so
+    adding evidence cannot confound the edits it sits beside. The tool stopped
+    refusing off-route for exactly that reason; this removes the last place that
+    still told the agent it had.
+
+    What survives is the PREFERENCE, which is real: a failing oracle is evidence
+    that already exists and costs no model call to act on, while staging spends
+    one to find out whether a scenario can be reached at all. So the route still
+    says where to start. It no longer says what is forbidden.
     """
     rows = session.list_oracles()
-    stimulus_turn = session.route != MODEL
-    wanted = "NOT EXERCISED" if stimulus_turn else "NOT MET"
-    actionable = [r for r in rows if r["status"] == wanted]
+    failing = [r for r in rows if r["status"] == "NOT MET"]
+    waiting = [r for r in rows if r["status"] == "NOT EXERCISED"]
+    budget_left = max(0, session.stimulus_budget - len(session.added))
+    doubted = [r for r in failing
+               if r.get("a_second_implementation_also_fails_this")]
 
-    if stimulus_turn:
-        lines = [
-            f"{len(actionable)} of {len(rows)} requirement oracles have never "
-            f"seen the situation they are about. Nothing is failing, and that "
-            f"is not the same as done: an unexercised requirement is "
-            f"UNVERIFIED, which is worse than a failing one because nothing is "
-            f"even claiming to check it.",
-            "",
-            "Waiting for a scenario:",
-        ]
-    else:
-        doubted = [r for r in actionable
-                   if r.get("a_second_implementation_also_fails_this")]
-        lines = [
-            f"The reference model fails {len(actionable)} of {len(rows)} "
-            f"requirement oracles.",
-            "",
-            "Failing:",
-        ]
-        if doubted:
-            lines[0] += (
-                f" A second implementation of these same requirements, written "
-                f"from the same text and never debugged, ALSO fails "
-                f"{len(doubted)} of them (marked below). That is not a verdict "
-                f"and it does not excuse anything -- it is one more reading by "
-                f"no better authority than yours. It is a hint about where a "
-                f"turn is likely to be repaid: two independent attempts "
-                f"failing the same check more often means the check is pinning "
-                f"a detail the requirement leaves open than that both got the "
-                f"same thing wrong. Spend your edits on the unmarked ones "
-                f"first, and if you conclude a marked one is genuinely the "
-                f"model's fault, fix it and say so.")
+    lines = [
+        f"The reference model fails {len(failing)} of {len(rows)} requirement "
+        f"oracles, and {len(waiting)} more have never seen the situation they "
+        f"are about. An unexercised requirement is UNVERIFIED, which is worse "
+        f"than a failing one because nothing is even claiming to check it."
+    ]
+    if doubted:
+        lines[0] += (
+            f" A second implementation of these same requirements, written from "
+            f"the same text and never debugged, ALSO fails {len(doubted)} of the "
+            f"failing ones (marked below). That is not a verdict and it does not "
+            f"excuse anything -- it is one more reading by no better authority "
+            f"than yours. It is a hint about where a turn is likely to be repaid: "
+            f"two independent attempts failing the same check more often means "
+            f"the check is pinning a detail the requirement leaves open than that "
+            f"both got the same thing wrong. Spend your edits on the unmarked "
+            f"ones first, and if you conclude a marked one is genuinely the "
+            f"model's fault, fix it and say so.")
 
-    for r in actionable[:40]:
-        where = f" (decided at edge {r['edge']})" if r["edge"] is not None else ""
-        mark = (" [a second implementation fails this too]"
-                if r.get("a_second_implementation_also_fails_this") else "")
-        lines.append(f"  {r['req_uid']}: {r['clause']}{where}{mark}")
-        if r["detail"]:
-            lines.append(f"      observed: {r['detail']}")
-    if len(actionable) > 40:
-        lines.append(f"  ... and {len(actionable) - 40} more; "
-                     f"list_oracles() has all.")
-    if not actionable:
-        lines.append("  (none)")
+    for title, group in (("Failing:", failing),
+                         ("Waiting for a scenario:", waiting)):
+        lines += ["", title]
+        for r in group[:40]:
+            where = (f" (decided at edge {r['edge']})"
+                     if r["edge"] is not None else "")
+            mark = (" [a second implementation fails this too]"
+                    if r.get("a_second_implementation_also_fails_this") else "")
+            lines.append(f"  {r['req_uid']}: {r['clause']}{where}{mark}")
+            if r["detail"]:
+                lines.append(f"      observed: {r['detail']}")
+        if len(group) > 40:
+            lines.append(f"  ... and {len(group) - 40} more; "
+                         f"list_oracles() has all.")
+        if not group:
+            lines.append("  (none)")
 
     state = session.run_all()
     if state["distinct_output_states"] == 1:
@@ -618,15 +624,32 @@ def _opening(session: DebugSession) -> str:
             "the first thing to fix: a model with constant outputs satisfies "
             "nothing and cannot tell any design from any other.",
         ]
-    lines += ["",
-              f"This is a {session.route.upper()} turn: "
-              + ("edit the model; `add_stimulus` is closed."
-                 if not stimulus_turn else
-                 "`replace_method` is closed. Call "
-                 "`add_stimulus(req_uid, \"...\")` on the requirements above "
-                 "and describe what has to happen for their scenario to occur; "
-                 "the harness generates and gates the vectors."),
-              "Start with `explain` on one of them."]
+
+    # BOTH TOOLS, EVERY TURN. The route is where to START, and the reason is
+    # given so it can be overridden on evidence rather than obeyed as a rule.
+    first = ("the failing oracles -- they are evidence you already have, and "
+             "acting on them costs no model call"
+             if session.route == MODEL else
+             "the unexercised oracles -- nothing is claiming to check them")
+    lines += [
+        "",
+        f"Start with {first}.",
+        "`add_stimulus(req_uid, \"...\") is open on EVERY turn, on any "
+        "requirement showing NOT EXERCISED: describe what has to happen and the "
+        "harness generates and gates the vectors. Staging only ever ADDS "
+        "evidence, so it cannot make a failing oracle pass and cannot confound "
+        "an edit you make beside it.",
+        "`replace_method(method, new_code)` edits the model, and is open "
+        + ("now." if session.route == MODEL else
+           "only while something is failing -- with no oracle accusing the "
+           "model, the only thing an edit can achieve is to make an unexercised "
+           "oracle's activation start occurring, which is editing the design so "
+           "a check fires rather than staging the scenario the check is about."),
+        f"Stimulus budget left this run: {budget_left}."
+        if budget_left else
+        "The stimulus budget for this run is spent; `add_stimulus` will say so.",
+        "Start with `explain` on one of them.",
+    ]
     return "\n".join(lines)
 
 
@@ -671,7 +694,7 @@ class SyncRefModelDebugger:
     the editor stays async because AgentScope is.
     """
 
-    def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 15):
+    def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 30):
         self._cfg = cfg
         self._max_attempts = max_attempts
         self._usage: tuple[int, int] = (0, 0)

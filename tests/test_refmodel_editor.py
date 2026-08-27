@@ -156,16 +156,35 @@ def test_the_board_lists_only_what_the_turn_can_act_on_and_counts_the_rest():
                           source=s.oracles[0].source),
     ]
     board = s.board()
-    # Detail for the one it can act on...
-    assert [r["req_uid"] for r in board["acting_on"]] == ["REQ-0000"]
+    # Detail for BOTH kinds of work, failing first on a model turn. The
+    # unexercised one is acted on too: `add_stimulus` is open on every turn, and
+    # putting REQ-0002 under "this turn cannot act on them" talked the agent out
+    # of the one tool that was never closed.
+    assert [r["req_uid"] for r in board["acting_on"]] == ["REQ-0000", "REQ-0002"]
     assert board["acting_on"][0]["detail"] == "ack stayed low"
-    # ...and every other requirement NAMED under its status, not merely counted.
-    # The agent must know REQ-0001 is already met before it edits the method
-    # that satisfies it, and a census cannot tell it which one that is.
-    assert board["not_acting_on"] == {
-        "NOT EXERCISED": ["REQ-0002"], "met": ["REQ-0001"]}
+    # ...and every requirement that ALREADY CONFORMS named, not merely counted.
+    # The agent must know REQ-0001 is met before it edits the method that
+    # satisfies it, and a census cannot tell it which one that is.
+    assert board["not_acting_on"] == {"met": ["REQ-0001"]}
     assert "an edit can BREAK" in board["note"]
     assert "explain(req_uid)" in board["note"]
+
+
+def test_a_stimulus_turn_leads_with_the_unexercised_and_still_shows_the_rest():
+    """The route is an ORDER, not a filter. Same set either way."""
+    s = _session()
+    s._results = [
+        OracleResult("REQ-0000", ok=False, edge=3, detail="ack stayed low"),
+        OracleResult("REQ-0002", ok=None),
+    ]
+    s.oracles = list(s.oracles) + [
+        RequirementOracle(req_uid="REQ-0002", clause="c2", tp_uids=["TP-0000"],
+                          source=s.oracles[0].source),
+    ]
+    s.route = "stimulus"
+    assert s.focus() == ["REQ-0002", "REQ-0000"]
+    s.route = "model"
+    assert s.focus() == ["REQ-0000", "REQ-0002"]
 
 
 def test_the_board_names_every_requirement_even_when_it_details_none_of_them():

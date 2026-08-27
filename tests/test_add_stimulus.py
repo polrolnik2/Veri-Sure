@@ -347,14 +347,38 @@ def test_the_opening_brief_lists_what_the_TURN_can_act_on():
     assert "fails 0 of" not in brief, "reads as done on a stimulus turn"
 
 
-def test_the_opening_brief_still_lists_failures_on_a_model_turn():
+def test_the_opening_brief_offers_BOTH_tools_on_a_model_turn():
+    """`add_stimulus` is never closed, and the brief was the last place saying
+    it was.
+
+    The tool stopped refusing off-route because staging APPENDS -- `_worst`
+    ranks failing above anything a new testpoint adds, so a grown evidence set
+    only moves a verdict toward worse and cannot confound an edit beside it.
+    The brief kept announcing a locked door that no longer existed.
+    """
     from eda_agent.refmodel_editor import _opening
 
     s = _mixed(model_route_stalled=False)
     assert s.route == "model"
     brief = _opening(s)
     assert "REQ-0003" in brief, "the failing oracle must be named"
-    assert "`add_stimulus` is closed" in brief
+    assert "`add_stimulus` is closed" not in brief
+    assert "open on EVERY turn" in brief
+    assert "cannot confound an edit" in brief
+    # And the preference survives as an order to work in.
+    assert "Start with the failing oracles" in brief
+
+
+def test_the_brief_says_when_replace_method_IS_shut():
+    """The asymmetry is real and stays: with no oracle accusing the model, an
+    edit can only make an unexercised oracle's activation start occurring."""
+    from eda_agent.refmodel_editor import _opening
+
+    s = _mixed(model_route_stalled=True)
+    assert s.route != "model"
+    brief = _opening(s)
+    assert "only while something is failing" in brief
+    assert "open on EVERY turn" in brief, "add_stimulus is still open"
 
 
 # --------------------------------------------------------------- the guard
@@ -442,3 +466,33 @@ def test_the_growth_BASELINE_is_taken_before_the_oracle_stage():
               if src.startswith("_persist_grown(", i)]
     assert len(writes) == 2, "one write after [O], one after the debug loop"
     assert writes[0] > src.index("run_oracle_stage("), "[O] must have run first"
+
+
+def test_the_edit_budget_is_30_everywhere_it_is_declared():
+    """One number, four declarations. It has been out of step before -- the
+    loop ran at 6 while `RTLEditor` ran 30 and `TBEditor` 15, for no stated
+    reason -- and a default that disagrees with the CLI is the same defect
+    wearing a different hat."""
+    import inspect
+    import pathlib
+
+    from eda_agent.refmodel_editor import RefModelEditor, SyncRefModelDebugger
+
+    for cls in (RefModelEditor, SyncRefModelDebugger):
+        assert inspect.signature(
+            cls.__init__).parameters["max_attempts"].default == 30, cls
+
+    from eda_agent.specflow_node import run_specflow_node
+
+    assert inspect.signature(
+        run_specflow_node).parameters["refmodel_debug_attempts"].default == 30
+
+    import re
+
+    from eda_agent import top_agent
+
+    cli = pathlib.Path("benchmarks/run_chipverilog.py").read_text()
+    assert re.search(r'"--refmodel-debug-attempts",\s*type=int,\s*default=30',
+                     cli), "the CLI default disagrees with the code default"
+    src = pathlib.Path(top_agent.__file__).read_text()
+    assert "specflow_refmodel_debug_attempts: int = 30" in src

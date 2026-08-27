@@ -454,11 +454,22 @@ class DebugSession:
     def focus(self) -> list[str]:
         """The requirements this turn can act on, in the order it should try.
 
-        The analogue of `list_suspect_blocks`: derived from what is failing (or
-        unexercised, on a stimulus turn), never from the whole set.
+        The analogue of `list_suspect_blocks`: derived from what is failing AND
+        what is unexercised, never from the whole set.
+
+        BOTH, because `add_stimulus` is available on every turn. It used to be
+        one or the other by route, which made the tool reachable on a model turn
+        and its targets invisible on the same turn -- a tool with nothing to
+        point it at is a tool that does not exist. Staging only ever APPENDS, so
+        an unexercised oracle is actionable whatever the route says.
+
+        The route survives as the ORDER. A failing oracle is evidence that
+        already exists and costs no model call to act on, so a model turn leads
+        with those; a stimulus turn leads with the ones nothing is checking.
         """
-        rows = self.failing() if self.route == MODEL else self.undecided()
-        return [r.req_uid for r in rows]
+        failing = [r.req_uid for r in self.failing()]
+        waiting = [r.req_uid for r in self.undecided()]
+        return failing + waiting if self.route == MODEL else waiting + failing
 
     def board(self) -> dict:
         """Detail for what the turn can act on; one line for everything else.
@@ -477,8 +488,16 @@ class DebugSession:
         `explain(req_uid)` away.
         """
         rows = self.list_oracles()
-        wanted = "NOT MET" if self.route == MODEL else "NOT EXERCISED"
-        acting = [r for r in rows if r["status"] == wanted]
+        # BOTH STATUSES ARE ACTED ON, in the route's order -- see `focus`. The
+        # previous split named the unexercised ones under "this turn cannot act
+        # on them", which was true of `replace_method` and never true of
+        # `add_stimulus`, and the note then talked the agent out of the one tool
+        # that was open.
+        order = self.focus()
+        by_uid = {r["req_uid"]: r for r in rows}
+        acting = [by_uid[u] for u in order if u in by_uid]
+        wanted = ("NOT MET first, then NOT EXERCISED" if self.route == MODEL
+                  else "NOT EXERCISED first, then NOT MET")
         shown = {r["req_uid"] for r in acting}
         rest: dict[str, list[str]] = {}
         for r in rows:
@@ -490,9 +509,9 @@ class DebugSession:
             "not_acting_on": {k: sorted(v) for k, v in sorted(rest.items())},
             "note": (
                 f"{len(rows) - len(acting)} further oracle(s) are named above "
-                f"without detail because this turn cannot act on them -- but "
-                f"they are the ones an edit can BREAK. Read any of them in full "
-                f"by name: explain(req_uid) or run_oracle(req_uid)."
+                f"without detail because they already CONFORM -- but they are "
+                f"the ones an edit can BREAK. Read any of them in full by name: "
+                f"explain(req_uid) or run_oracle(req_uid)."
             ) if len(rows) > len(acting) else "",
             "methods_to_look_at_first": self._methods_for(
                 [r["req_uid"] for r in acting]),

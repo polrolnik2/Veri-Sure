@@ -247,7 +247,7 @@ async def run_specflow_node(
     #: Edit attempts per debug turn. Zero disables the agentic path entirely and
     #: the stage falls back to prose-driven regeneration, which is what every
     #: run did before this existed.
-    refmodel_debug_attempts: int = 15,
+    refmodel_debug_attempts: int = 30,
     #: Judging passes. Each is ~one model call per requirement, so this is the
     #: expensive budget; attempts inside a turn are pure Python and nearly free.
     refmodel_judge_turns: int = 3,

@@ -456,7 +456,7 @@ def build_parser() -> argparse.ArgumentParser:
              "instead of one small call per item.",
     )
     p.add_argument(
-        "--refmodel-debug-attempts", type=int, default=15,
+        "--refmodel-debug-attempts", type=int, default=30,
         help="edit attempts per reference-model debug turn; 0 disables the "
              "agentic path and repairs by regenerating from the judge's prose, "
              "which is what every run did before it existed",
