@@ -206,12 +206,37 @@ Rules, each for a reason:
 Do NOT name testpoints. Which testpoints exercise this requirement was decided
 by the test plan and is filled in for you.
 
-WHEN THE EFFECT IS NOT AT THE ACTIVATION INSTANT, USE THE TEMPORAL OPERATORS.
-Most requirements here are "when A, then B" where B lands LATER -- a command is
-accepted, and the bus activity it causes runs for many states afterwards. A
+YOUR EXPECTATION IS ABOUT OUTPUTS. INPUTS ARE THE STIMULUS'S AND THE DESIGN
+CANNOT MOVE THEM. Read an input to QUALIFY when your check applies -- "while
+`ena` is high", "out of reset" -- and never as the thing that must happen. A
+check that passes only when an input takes some value is a check on the
+testbench, not on the design: no implementation can satisfy it, so it fails
+every design including a correct one, and there is no edit that discharges it.
+
+The case this is written from: a requirement said "driving an output-enable low
+causes the I2C line to be pulled low", and its check waited for the line INPUT
+`sda_i` to fall after the design asserted `sda_oen`. Pulling the line low is
+what the external open-drain wiring does -- the pad and the pull-up, outside
+this module. The design's half is asserting the enable, and that is all a check
+here may require. Three debug turns could not move it, because nothing could.
+
+TIMING IS TRANSACTIONAL HERE, AND THE OPERATORS ARE HOW YOU SAY SO.
+This pipeline compares designs by TRANSACTION, not by cycle: what a requirement
+pins is the ORDER and the CONDITIONS of what happens, never the number of edges
+between them, because the specification does not state edge counts and a check
+that asserts one either fails correct designs or asserts nothing. A window
+opened by an activation and closed by a CONDITION is that transaction, and
+`after(trace, applies, until=closes)` is how you write one down. These are not
+a convenience for requirements that happen to be temporal -- they are the
+vocabulary for the comparison this whole pipeline makes.
+
+So: most requirements here are "when A, then B" where B lands LATER -- a command
+is accepted, and the bus activity it causes runs for many states afterwards. A
 check that reads the output on the same row the activation held reads it before
 anything has happened, passes every broken design, and is convicted vacuous.
-Six of the last run's fourteen vacuous checks were exactly this.
+Six of the last run's fourteen vacuous checks were exactly this. And a check
+that instead waits a FIXED number of edges is the opposite failure, pinning a
+count the specification never gave.
 
     from specflow.refmodel.temporal import (after, eventually, throughout,
                                             stable, pulse, worst)

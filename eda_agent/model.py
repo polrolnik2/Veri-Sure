@@ -144,6 +144,48 @@ class Llama4ChatFormatter(TruncatedFormatterBase):
         return messages
 
 
+#: Where the API's own `function.arguments` string is stashed on a tool_use
+#: block, so the formatter can replay it instead of re-deriving it.
+RAW_ARGS = "_raw_arguments"
+
+
+class ByteReplayFormatter(OpenAIChatFormatter):
+    """Send back the argument bytes the API sent, not our re-derivation of them.
+
+    A gateway returns `function.arguments` as a JSON STRING. The SDK parses it,
+    agentscope holds a dict, and the base formatter re-serializes it on every
+    later call -- so what goes out is ours: `{"a":1}` becomes `{"a": 1}`.
+
+    That is harmless while the re-derivation is deterministic, and measured
+    against the live gateway it is: same key order, identical output across
+    three hash seeds. But it holds by a property of CPython -- `json.loads`
+    fills a dict in document order and `json.dumps` walks insertion order --
+    and nothing enforces it. A `set` anywhere on that path, a different encoder,
+    or a port to a language with randomized map iteration breaks it silently,
+    and the whole suffix after the first tool call reprices as fresh tokens.
+
+    So the bytes are kept at parse time and replayed verbatim here. Strictly a
+    narrowing: with nothing stashed this is the base formatter exactly, which is
+    what happens for a block this process constructed rather than received.
+    """
+
+    async def _format(self, msgs: list[Msg]) -> list[dict[str, Any]]:
+        formatted = await super()._format(msgs)
+        raw: dict[str, str] = {}
+        for msg in msgs:
+            for block in msg.get_content_blocks():
+                if block.get("type") == "tool_use" and block.get(RAW_ARGS):
+                    raw[str(block.get("id"))] = str(block[RAW_ARGS])
+        if not raw:
+            return formatted
+        for entry in formatted:
+            for call in entry.get("tool_calls") or []:
+                kept = raw.get(str(call.get("id")))
+                if kept is not None and isinstance(call.get("function"), dict):
+                    call["function"]["arguments"] = kept
+        return formatted
+
+
 class FinishReasonPreservingModel(OpenAIChatModel):
     """Keep `finish_reason` instead of discarding it at the parse boundary.
 
@@ -172,6 +214,8 @@ class FinishReasonPreservingModel(OpenAIChatModel):
 
     def _parse_openai_completion_response(self, *args: Any, **kwargs: Any):  # type: ignore[override]
         resp = super()._parse_openai_completion_response(*args, **kwargs)
+        _keep_raw_arguments(resp, kwargs.get("response") or next(
+            (a for a in args if hasattr(a, "choices")), None))
         # `response` is positional in agentscope's signature but be tolerant:
         # a future signature change must not take the model layer down.
         raw = kwargs.get("response") or next(
@@ -191,6 +235,34 @@ class FinishReasonPreservingModel(OpenAIChatModel):
             # Annotation is a diagnostic. Never let it cost a usable response.
             pass
         return resp
+
+
+def _keep_raw_arguments(resp: Any, raw: Any) -> None:
+    """Stash each tool call's `arguments` string exactly as it arrived.
+
+    Matched by call id rather than by position, because a response may carry
+    several calls and nothing guarantees the parsed blocks keep their order.
+    Never raises: replaying bytes is an optimisation, and losing it must not
+    cost a usable response.
+    """
+    try:
+        wire = {}
+        for choice in getattr(raw, "choices", None) or []:
+            message = getattr(choice, "message", None)
+            for call in getattr(message, "tool_calls", None) or []:
+                args = getattr(getattr(call, "function", None), "arguments", None)
+                if isinstance(args, str):
+                    wire[str(getattr(call, "id", ""))] = args
+        if not wire:
+            return
+        for block in getattr(resp, "content", None) or []:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            kept = wire.get(str(block.get("id", "")))
+            if kept is not None:
+                block[RAW_ARGS] = kept
+    except Exception:  # noqa: BLE001 -- see the docstring
+        pass
 
 
 class UsageTrackingModel(ChatModelBase):
@@ -568,4 +640,4 @@ def make_formatter(model_name: str | None = None) -> OpenAIChatFormatter | Llama
     """
     if model_name and _is_llama_model(model_name):
         return Llama4ChatFormatter()
-    return OpenAIChatFormatter()
+    return ByteReplayFormatter()

@@ -171,9 +171,21 @@ class NormalizedRequirement(BaseModel):
     #: UNOBSERVABLE from a mistyped port name.
     unobservable_reason: str = ""
     expectation: str = ""
-    #: Alternatives, any one sufficient. Empty for a directly observable
-    #: requirement. `observable` then holds the ports it is decidable at by ANY
-    #: route, so every downstream stage keeps reading one field.
+    #: Alternatives, any one sufficient -- for EVERY requirement, not only the
+    #: blind ones. A directly observable requirement names its own port with an
+    #: empty `through_req`; an indirect one names another requirement's.
+    #:
+    #: The base case rather than the exception, because the field that matters
+    #: is `shows` and only the exception was ever being asked for it. REQ-0075
+    #: ("the FSM advances only when clk_en is asserted") was DIRECTLY
+    #: observable, got `observed_via: []`, and was never made to say what
+    #: distinguishes the requirement holding from it not holding -- so its check
+    #: settled for "an output moved", which nothing can falsify. Asking every
+    #: requirement for the discrimination puts the vacuity check a stage earlier
+    #: and applies it to all of them instead of to the 28 that borrowed a port.
+    #:
+    #: `observable` still holds the ports it is decidable at by ANY route, so
+    #: every downstream stage keeps reading one field.
     observed_via: list[Route] = Field(default_factory=list)
     #: Prerequisites, ALL required, one hop each. Empty when the activation is
     #: `input_only` -- there is nothing to reach, the values are simply driven.
@@ -185,8 +197,14 @@ class NormalizedRequirement(BaseModel):
 
     @property
     def indirect(self) -> bool:
-        """Observed at a port its own text does not name."""
-        return bool(self.observed_via)
+        """Observed at a port its own text does not name.
+
+        `through_req`, not a non-empty list. Every requirement carries a route
+        now -- a directly observable one names its OWN port with `through_req`
+        empty -- so the list being non-empty stopped meaning indirect the moment
+        the route became the base case rather than the exception.
+        """
+        return any(r.through_req for r in self.observed_via)
 
 
 class NormalizeOutput(BaseModel):

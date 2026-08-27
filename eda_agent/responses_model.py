@@ -265,14 +265,23 @@ class OpenAIResponsesModel(ChatModelBase):
                     content.append(TextBlock(type="text", text=text))
 
             elif kind == "function_call":
-                content.append(
-                    ToolUseBlock(
-                        type="tool_use",
-                        id=getattr(item, "call_id", "") or getattr(item, "id", ""),
-                        name=getattr(item, "name", "") or "",
-                        input=_json_loads_or_raw(getattr(item, "arguments", "") or ""),
-                    )
+                wire = getattr(item, "arguments", "") or ""
+                block = ToolUseBlock(
+                    type="tool_use",
+                    id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                    name=getattr(item, "name", "") or "",
+                    input=_json_loads_or_raw(wire),
                 )
+                # KEEP THE BYTES so the formatter can replay them rather than
+                # re-deriving them from the parsed dict. Re-derivation is
+                # deterministic in CPython and is not guaranteed to be, and a
+                # single differing byte reprices every request after this tool
+                # call as fresh tokens. See `model.ByteReplayFormatter`.
+                if isinstance(wire, str) and wire:
+                    from .model import RAW_ARGS
+
+                    block[RAW_ARGS] = wire
+                content.append(block)
 
         usage = None
         raw_usage = getattr(response, "usage", None)

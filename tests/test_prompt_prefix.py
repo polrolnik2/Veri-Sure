@@ -169,3 +169,52 @@ def test_the_re_emission_is_stable_across_PROCESSES():
                              check=True)
         seen.add(out.stdout)
     assert len(seen) == 1, "the formatted request differs between hash seeds"
+
+
+def test_the_API_argument_bytes_are_replayed_not_re_derived():
+    """Defence in depth over a property nothing enforces.
+
+    Measured against the live gateway, re-deriving `arguments` from the parsed
+    dict gives the same key order and the same bytes across hash seeds -- so
+    today it would have been fine. It is fine because `json.loads` fills a
+    CPython dict in document order and `json.dumps` walks insertion order, and
+    nothing in the codebase requires that to stay true. A set on that path, a
+    different encoder, or a port to a language with randomized map iteration
+    breaks it silently, and everything after the first tool call misses.
+    """
+    import json as _json
+
+    from eda_agent.model import RAW_ARGS, make_formatter
+
+    wire = '{"req_uid":"REQ-0000","rows":12,"from_edge":3}'
+    block = ToolUseBlock(type="tool_use", id="c1", name="_tool_run_oracle",
+                         input=_json.loads(wire))
+    block[RAW_ARGS] = wire
+    fmt = make_formatter("gpt-5.6-luna")
+
+    async def go(msgs):
+        return await fmt.format(msgs)
+
+    out = asyncio.run(go([Msg("assistant", [block], "assistant")]))
+    assert out[0]["tool_calls"][0]["function"]["arguments"] == wire, (
+        "the bytes the API sent must go back out unchanged")
+
+
+def test_a_block_with_no_kept_bytes_behaves_exactly_as_before():
+    """Strictly a narrowing. A block this process constructed -- a replayed
+    fixture, a test, anything not received from the API -- has nothing stashed
+    and must format exactly as the base formatter did."""
+    from agentscope.formatter import OpenAIChatFormatter
+
+    from eda_agent.model import make_formatter
+
+    msgs = [Msg("assistant",
+                [ToolUseBlock(type="tool_use", id="c2", name="n",
+                              input={"b": 2, "a": 1})],
+                "assistant")]
+
+    async def go(f):
+        return await f.format(msgs)
+
+    assert asyncio.run(go(make_formatter("x"))) == asyncio.run(
+        go(OpenAIChatFormatter()))
