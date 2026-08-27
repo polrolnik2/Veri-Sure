@@ -330,3 +330,55 @@ def test_the_split_is_at_the_first_ITEM_not_the_first_underscore():
     assert family("classify_869") == "classify"
     assert family("s3_TP-0000") == "s3"
     assert family("oracles") == "oracles", "a single-call stage keeps its name"
+
+
+def test_a_resumed_fanout_makes_NO_call_for_an_item_already_recorded(tmp_path):
+    """`run_fanout` persists nothing per item, so a fan-out that dies part way
+    loses every call it had already paid for. The oracle stage's own record:
+    "of ~600 variant calls, ended the stage after 1h40m. No oracles.json, no
+    variants.json." A 41-requirement probe lost its second half the same way.
+
+    Asserted by CALL COUNT, not wall clock -- the whole point is that no request
+    is made, and a timing assertion would pass on a fast cache too.
+    """
+    from specflow.model_io import resumable
+
+    calls = []
+
+    class _Inner:
+        def complete(self, *, stage, round_, prompt):
+            calls.append(stage)
+            return f"answer for {stage}"
+
+    port = resumable(_Inner(), tmp_path)
+    assert port.complete(stage="oracle_REQ-0001", round_=0, prompt="p") \
+        == "answer for oracle_REQ-0001"
+    assert len(calls) == 1
+
+    # Record it the way a real port would, then re-ask: no second call.
+    (tmp_path / "oracle_REQ-0001_r0_response.txt").write_text("recorded")
+    assert port.complete(stage="oracle_REQ-0001", round_=0, prompt="p") == "recorded"
+    assert len(calls) == 1, "a recorded item must cost no call at all"
+
+    # A different item still calls.
+    port.complete(stage="oracle_REQ-0002", round_=0, prompt="p")
+    assert len(calls) == 2
+
+
+def test_an_EMPTY_recording_is_re_run_not_replayed(tmp_path):
+    """A prompt written with no response beside it is a call that STARTED and
+    did not finish -- the process died mid-flight. Returning "" would hand the
+    stage a parse failure and blame the model for a container reclaim."""
+    from specflow.model_io import resumable
+
+    calls = []
+
+    class _Inner:
+        def complete(self, *, stage, round_, prompt):
+            calls.append(stage)
+            return "fresh"
+
+    (tmp_path / "oracle_REQ-0003_r0_response.txt").write_text("   \n")
+    port = resumable(_Inner(), tmp_path)
+    assert port.complete(stage="oracle_REQ-0003", round_=0, prompt="p") == "fresh"
+    assert len(calls) == 1

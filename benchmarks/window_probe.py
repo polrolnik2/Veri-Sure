@@ -39,7 +39,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from specflow.model_io import PortSettings, make_port  # noqa: E402
+from specflow.model_io import PortSettings, make_port, resumable  # noqa: E402
 from specflow.normalize import run_normalize_fanout  # noqa: E402
 from specflow.refmodel.oracle_gen import run_oracle_gen  # noqa: E402
 
@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.skip_normalize and norm_path.exists():
         norm_by_uid = json.loads(norm_path.read_text(encoding="utf-8"))
     else:
-        port = make_port("api", args.out, settings=settings)
+        port = resumable(make_port("api", args.out, settings=settings), args.out)
         normed, _ = run_normalize_fanout(
             requirements=[by_uid[u] for u in target if u in by_uid],
             contract_json=contract_json, contract=contract, port=port)
@@ -138,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  carry an output trigger (`opens_on`): {len(opens)}/{len(norm_by_uid)}")
 
     # ---- half 2: does the check transcribe it? ---------------------------
-    port = make_port("api", args.out, settings=settings)
+    # RESUMABLE. `run_fanout` persists nothing per item, so a reclaim part
+    # way through loses every call already paid for -- which is exactly how
+    # this probe lost its second half once. A recorded response costs no call.
+    port = resumable(make_port("api", args.out, settings=settings), args.out)
     got = run_oracle_gen(
         requirements=[by_uid[u] for u in target if u in by_uid],
         contract_json=contract_json, contract=contract, testplan=testplan,

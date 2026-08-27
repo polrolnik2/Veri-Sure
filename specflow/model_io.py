@@ -90,6 +90,50 @@ class ReplayPort:
         return response_path.read_text(encoding="utf-8")
 
 
+@dataclass
+class ResumePort:
+    """A recorded response if there is one, otherwise a real call. RESUMABLE.
+
+    `run_fanout` persists nothing per item, so a fan-out that dies part way
+    loses every call it had already paid for. That is not a hypothetical: the
+    oracle stage's own record reads *"of ~600 variant calls, ended the stage
+    after 1h40m. No `oracles.json`, no `variants.json`"*, and a 41-requirement
+    probe lost its second half to a container reclaim four calls from the end
+    of the first.
+
+    `ReplayPort` reads a recording by `(stage, round_)` and RAISES when there is
+    none, which makes it all-or-nothing -- useful for a fixture, useless for a
+    resume. This is the one line of difference: fall through to the inner port
+    instead of raising, so a second attempt costs only the items the first did
+    not reach.
+
+    NOT a cache. The recording is keyed by `(stage, round_)` and nothing here
+    checks that the prompt still matches, because a repair round composes a NEW
+    prompt for the same `(stage, round_)` -- see `FilePort`'s note on the same
+    hazard. So this is for resuming an interrupted run over unchanged inputs,
+    and a changed prompt needs a fresh `root`. Stated rather than guarded
+    because the guard would be a hash comparison that silently re-ran
+    everything the day a prompt gained a timestamp.
+    """
+
+    root: Path
+    inner: ModelPort
+
+    def complete(self, *, stage: str, round_: int, prompt: str) -> str:
+        _, response_path = _paths(Path(self.root), stage, round_)
+        if response_path.exists():
+            recorded = response_path.read_text(encoding="utf-8")
+            # An empty recording is a call that STARTED and did not finish --
+            # the prompt was written, the process died. Re-running it is
+            # correct; returning "" would hand the stage a parse failure and
+            # blame the model for a reclaim.
+            if recorded.strip():
+                logger.debug("%s r%d: resumed from %s", stage, round_,
+                             response_path.name)
+                return recorded
+        return self.inner.complete(stage=stage, round_=round_, prompt=prompt)
+
+
 def load_env_file(path: Path | None = None) -> dict[str, str]:
     """Read `KEY=value` lines from a credentials file, if one exists.
 
@@ -1108,6 +1152,11 @@ def make_port(kind: str, root: Path, stats: object | None = None,
             full_strength_stages=st.full_strength_stages,
         )
     return kinds[kind](root=Path(root))  # type: ignore[abstract]
+
+
+def resumable(port: ModelPort, root: Path) -> ResumePort:
+    """Wrap any port so an interrupted fan-out resumes instead of restarting."""
+    return ResumePort(root=Path(root), inner=port)
 
 
 def record_fixture(root: Path, stage: str, round_: int, meta: dict) -> None:
