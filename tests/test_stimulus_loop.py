@@ -376,6 +376,45 @@ def test_a_reset_scenario_is_told_to_use_a_RESET_STEP():
     assert "not a drivable input" in h
 
 
+def test_a_two_RESET_design_is_told_to_NAME_the_port():
+    """`{"reset": true}` asserts both at the same edge, which is precisely the
+    state a requirement about ONE reset can never be observed in.
+
+    Measured on a2-i2c: 204 replayed edges, one row with rst==1 and nReset==0 on
+    that same row, and zero rows with rst==1 and nReset==1 -- so REQ-0006 and
+    REQ-0007 abstained by construction. The step schema takes a port list now;
+    this hint is the only thing that can tell the generator which port to name,
+    and until it did it pointed at the one form that cannot express the
+    scenario.
+    """
+    from specflow.oracles_stage import _hint
+
+    shape = {"activation": {"text": "rst is asserted high at a rising edge of clk"}}
+    two = {"rst": 1, "nReset": 0}
+    h = _hint({"uid": "REQ-0007", "text": "reset clears internal state"},
+              shape, None, 0, reset_ports=two)
+    assert '{"reset": ["rst"], "hold": N}' in h
+    assert "nReset" in h.split("port-list form", 1)[1]
+
+    # Naming neither leaves the choice to the generator rather than guessing it.
+    vague = _hint({"uid": "REQ-0009", "text": "reset clears the sample history"},
+                  {"activation": {"text": "the reset is asserted"}}, None, 0,
+                  reset_ports=two)
+    assert '{"reset": ["<port>"], "hold": N}' in vague
+
+
+def test_a_single_RESET_design_is_not_told_to_name_it():
+    """One reset port makes `true` and the list form identical, and the extra
+    paragraph is then noise in a prompt that already has the right advice."""
+    from specflow.oracles_stage import _hint
+
+    h = _hint({"uid": "REQ-0007", "text": "reset clears internal state"},
+              {"activation": {"text": "rst is asserted high"}}, None, 0,
+              reset_ports={"rst": 1})
+    assert '{"reset": true}' in h
+    assert "MORE THAN ONE RESET PORT" not in h
+
+
 def test_an_ordinary_scenario_is_not_told_about_reset():
     """The detector must stay narrow -- "start with reset released" describes
     the harness default and matching it would fire on nearly every testpoint."""

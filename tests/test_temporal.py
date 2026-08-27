@@ -100,10 +100,30 @@ def test_pulse_counts_EDGES_not_rows():
 
 def test_pulse_refuses_two_pulses_in_one_window():
     twice = [_state(0, cmd=8), _state(1, ack=1), _state(2), _state(3, ack=1),
-             _state(4, ack=1)]
-    w = after(twice, lambda r: r["inputs"]["cmd"] == 8)
+             _state(4, ack=1), _state(5, oen=0)]
+    w = after(twice, lambda r: r["inputs"]["cmd"] == 8,
+              until=lambda r: r["outputs"]["oen"] == 0)
     ok, _e, why = pulse(w[0], "ack")
     assert ok is False and "pulsed 2 times" in why
+
+
+def test_a_window_with_no_until_ends_WITH_THE_ACTIVATION():
+    """And that narrowness is deliberate, because of which way it fails.
+
+    Without `until` the window is the activation's own extent plus the row that
+    ended it, so a check looking for a later effect returns False or UNKNOWN --
+    loudly, against the witness, where gate 1 makes the author add the `until`.
+    An open-ended default would fail the other way: `eventually` would find the
+    event somewhere in the remaining trace and pass, which is the vacuity this
+    module exists to remove.
+    """
+    trace = [_state(0, cmd=8), _state(1), _state(2), _state(3, ack=1)]
+    narrow = after(trace, lambda r: r["inputs"]["cmd"] == 8)[0]
+    assert [r["edge"] for r in narrow.rows] == [0, 1]
+    assert eventually(narrow, lambda r: r["outputs"]["ack"] == 1)[0] is False
+    wide = after(trace, lambda r: r["inputs"]["cmd"] == 8,
+                 until=lambda r: r["outputs"]["ack"] == 1)[0]
+    assert eventually(wide, lambda r: r["outputs"]["ack"] == 1)[0] is True
 
 
 def test_worst_puts_failure_first_and_unknown_above_a_pass():

@@ -232,6 +232,10 @@ Six of the last run's fourteen vacuous checks were exactly this.
   w.value(port)                         the value AT the activation, for
                                         expectations written against it
 
+GIVE `after` AN `until`. Without one the window ends where the activation
+does, so a check looking for a later effect sees nothing and fails -- which is
+the safe direction, but it is not the check you meant.
+
 `until` CLOSES ON A CONDITION, NEVER A COUNT. "wait until cmd_ack" is
 expressible; "wait 12 edges" is a guess, and a check that asserts a cycle count
 this specification does not state will either fail correct designs or assert

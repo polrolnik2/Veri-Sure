@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1524,7 +1525,8 @@ def _diagnose(ev: dict) -> str:
     return "the activation was driven and the check still saw nothing"
 
 
-def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
+def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
+          reset_ports: dict[str, int] | None = None) -> str:
     """What to stage, in the vocabulary S2 uses. Never a repeat.
 
     `what_the_scenario_needs` goes where S2's `stimulus` field goes, so this is
@@ -1556,6 +1558,31 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int) -> str:
             'then the steps that observe what reset left behind. Do not try to '
             'drive rst or nReset as a value; the schema has no such input and '
             'the step will be rejected.')
+        # AND ON A DESIGN WITH TWO RESETS, `true` IS THE WRONG FORM. It asserts
+        # both at the same edge, so "rst asserted while nReset is released" has
+        # zero rows in the replay and the oracle abstains by construction --
+        # measured on a2-i2c at 204 edges. `asserted_resets(only=...)` and the
+        # step schema both take a port list now; this is the only place that can
+        # tell the generator which port THIS requirement is about, and until it
+        # did, the hint named the one form that cannot express the scenario.
+        names = sorted(reset_ports or ())
+        if len(names) > 1:
+            haystack = f"{req.get('text') or ''} {act.get('text') or ''}"
+            named = [n for n in names
+                     if re.search(rf"\b{re.escape(n)}\b", haystack, re.I)]
+            others = ", ".join(n for n in names if n not in named) or "the others"
+            parts.append(
+                f'This design has MORE THAN ONE RESET PORT ({", ".join(names)}), '
+                'and {"reset": true} asserts all of them at the same edge -- so a '
+                'requirement about what ONE reset does can never be observed that '
+                'way, because the other is asserted too. Use the port-list form '
+                + (f'{{"reset": {json.dumps(named)}, "hold": N}}, which asserts '
+                   f'only {", ".join(named)} and leaves {others} at its idle '
+                   'value.'
+                   if len(named) == 1 else
+                   '{"reset": ["<port>"], "hold": N} naming the ONE reset port '
+                   'this requirement is about; the rest stay at their idle '
+                   'value.'))
     # ARBITRATION LOOKS UNSTAGEABLE AND IS NOT. `al` is asserted when the
     # controller releases SDA and reads back a low it did not drive -- which
     # needs a second bus master, and there is no second master to ask. But
@@ -1743,7 +1770,8 @@ def stage_unexercised(
                 break
             steps = stimulus_for_scenario(
                 requirement=req, contract=contract, port=port,
-                what_the_scenario_needs=_hint(req, shape, evidence, attempt - 1),
+                what_the_scenario_needs=_hint(req, shape, evidence, attempt - 1,
+                                              reset_ports=reset_ports),
             )
             if not steps:
                 tries.append({"attempt": attempt,
@@ -1755,7 +1783,7 @@ def stage_unexercised(
             stimulus_by_tp[tp_uid] = steps
             testplan.append({
                 "uid": tp_uid, "covers": [f"{uid}@1"],
-                "stimulus": _hint(req, shape, None, 0),
+                "stimulus": _hint(req, shape, None, 0, reset_ports=reset_ports),
                 "expected_response": "", "dimension": "D2_control_flow",
             })
             added.append(tp_uid)

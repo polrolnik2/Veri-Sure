@@ -275,8 +275,13 @@ def test_the_advice_rides_along_when_a_round_happens_anyway(tmp_path,
     gate1 = next((m for m in ("witness_disagrees", "judged_at_idle")
                   if m in repair), None)
     assert gate1, "gate 1's advice is not in the prompt under either spelling"
-    assert "off_target" in repair or "off-target" in repair
-    assert repair.index(gate1) < repair.index("off"), "gate 1 comes first"
+    off = next((m for m in ("off_target", "off-target") if m in repair), None)
+    assert off, "the off-target rejection is not in the prompt"
+    # Index on the FULL marker, never the bare "off": the prompt's temporal
+    # block says "a window that runs off the end of the trace", which precedes
+    # the gate_failures section and made this assertion compare gate 1 against
+    # a word in the system text rather than against the rejection.
+    assert repair.index(gate1) < repair.index(off), "gate 1 comes first"
 
 
 def test_the_advice_says_it_may_be_ignored():
