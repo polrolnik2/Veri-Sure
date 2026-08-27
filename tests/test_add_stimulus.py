@@ -414,3 +414,31 @@ def test_the_editor_guard_matches_that_predicate():
     assert "if not failing:\n            return" not in body, (
         "the guard is back to reading 'nothing failing' as 'nothing to do'")
     assert "stageable" in body and "budget_left" in body
+
+
+def test_the_growth_BASELINE_is_taken_before_the_oracle_stage():
+    """The staging loop's testpoints must be counted as growth, or they are lost.
+
+    [O] appends testpoints itself now, so measuring `(len(testplan),
+    len(stimulus))` after `run_oracle_stage` returned made its additions
+    invisible: a run where only [O] staged anything compared equal and wrote
+    nothing back, leaving `oracles.json` naming tp_uids that `stimulus.json`
+    did not contain. A `--reuse` re-entry then reads frozen oracles pointing at
+    testpoints that do not exist, and they abstain -- discarding every model
+    call the loop paid for.
+
+    Pinned on source order because the defect IS an ordering one: both the
+    baseline and the write are internal to one function, and there is no
+    smaller observable that distinguishes "counted [O]" from "did not".
+    """
+    import inspect
+
+    from specflow.integration import build_artifacts
+
+    src = inspect.getsource(build_artifacts)
+    baseline = src.index("grown_before = (")
+    assert baseline < src.index("run_oracle_stage("), "baseline is after [O]"
+    writes = [i for i in range(len(src))
+              if src.startswith("_persist_grown(", i)]
+    assert len(writes) == 2, "one write after [O], one after the debug loop"
+    assert writes[0] > src.index("run_oracle_stage("), "[O] must have run first"

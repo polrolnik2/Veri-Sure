@@ -613,6 +613,14 @@ def build_artifacts(
     # whose oracles could not be produced is the run every run was before this
     # stage existed, which is a reason not to abort the process and not a
     # reason to let the gate report success.
+    # BEFORE [O], not after it. The oracle stage's own stimulus loop appends
+    # testpoints, and measuring growth after it returned meant [O]'s additions
+    # were never counted -- so a run where only [O] staged anything wrote
+    # nothing back, and `oracles.json` named tp_uids `stimulus.json` did not
+    # contain. A `--reuse` re-entry then reads frozen oracles pointing at
+    # testpoints that do not exist and they abstain, discarding every model call
+    # the staging loop paid for.
+    grown_before = (len(tps), len(stim_by_tp or {}))
     oracle_set = None
     oracle_stage_failed = ""
     try:
@@ -669,9 +677,15 @@ def build_artifacts(
                      "will FAIL, because a model with no oracle set has not "
                      "been checked against anything", exc)
 
+    # PERSIST [O]'s STAGING BEFORE THE MODEL STAGE RUNS. The reference model is
+    # the longest stage in the pipeline and the one most likely to be cut short,
+    # and until this call the staged testpoints reached disk only after it
+    # finished. a2-i2c staged 23 scenarios and lost every one of them that way.
+    # Append-only and idempotent, so the second call after [D] still works.
+    _persist_grown(run_dir, tps, stim_by_tp, before=grown_before)
+
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.
-    grown_before = (len(tps), len(stim_by_tp or {}))
     refmodel_path = run_dir / "specflow" / "ref_model.py"
     rm_issues: list[Issue] = []
     if stale or not refmodel_path.is_file():
