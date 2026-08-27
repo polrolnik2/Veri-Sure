@@ -266,7 +266,7 @@ class ArchitectAgent:
         self._agent = SafeReActAgent(
             name="Architect",
             sys_prompt=SYSTEM_PROMPT,
-            model=make_openai_model(cfg),
+            model=make_openai_model(cfg, cache_key="architect"),
             formatter=make_formatter(cfg.model),
             memory=InMemoryMemory(),
             max_iters=10,

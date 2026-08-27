@@ -80,3 +80,72 @@ def test_the_debug_loop_gets_its_own_key_and_others_are_unchanged():
     assert (keyed._base_model.generate_kwargs["prompt_cache_key"]
             == "veri-sure:refmodel-debug:gpt-5.6-luna")
     assert not make_openai_model(cfg)._base_model.generate_kwargs
+
+
+def test_EVERY_agent_is_keyed_and_no_two_share_a_key():
+    """One agent is one shared prefix, so one agent is one key -- and pooling two
+    would route traffic to a backend holding a head it cannot use.
+
+    Only the refmodel loop was keyed at first, because it is the largest line in
+    the ledger (46.1M input tokens on a2-i2c against 10.8M for every specflow
+    stage combined). But `RTLEditor` and `TBEditor` have the same shape -- a
+    growing conversation re-sent through a ReAct sub-loop of up to `max_iters`
+    calls, `max_trials` times -- so they had the same exposure and none of the
+    routing. This pins the whole set, so a new agent added without a key is a
+    test failure rather than a silent cache miss found in a bill.
+    """
+    import re
+    from pathlib import Path
+
+    calls: dict[str, list[str]] = {}
+    for path in sorted(Path("eda_agent").glob("*.py")):
+        if path.name == "model.py":
+            continue
+        for m in re.finditer(r"make_openai_model\((?P<args>[^)]*)\)",
+                             path.read_text(encoding="utf-8")):
+            calls.setdefault(path.name, []).append(m.group("args"))
+
+    assert calls, "no call sites found -- the scan is looking in the wrong place"
+    unkeyed = {name: args for name, argl in calls.items()
+               for args in argl if "cache_key=" not in args}
+    assert not unkeyed, f"agents constructing a model with no cache key: {unkeyed}"
+
+    keys = [re.search(r'cache_key="([^"]+)"', a).group(1)
+            for argl in calls.values() for a in argl]
+    assert len(keys) == len(set(keys)), f"two agents share a prefix key: {keys}"
+
+
+def test_byte_replay_is_UNIVERSAL_not_opt_in():
+    """The byte-replay formatter has to reach every agent, not just the one it
+    was built for. Re-serialising a tool call through our own structs can
+    reorder JSON keys, and a reordered key breaks prefix matching for every
+    request after it -- so the whole remaining conversation reprices as fresh.
+
+    `make_formatter` is the single door every agent goes through, which is why
+    the fix belongs there and not at a call site.
+    """
+    from eda_agent.model import ByteReplayFormatter, make_formatter
+
+    assert isinstance(make_formatter("gpt-5.6-luna"), ByteReplayFormatter)
+    assert isinstance(make_formatter(None), ByteReplayFormatter)
+
+
+def test_the_two_long_editors_report_cached_tokens_beside_input():
+    """`cached` is a SUBSET of `input`, and without it a re-sent prefix that hit
+    the cache and one that missed look identical in the input total alone --
+    which is exactly how a $23 debug loop reads as a cheap one.
+
+    The model has to be reachable for this: constructed inline inside the
+    `SafeReActAgent(...)` call it is only reachable through the agent, so both
+    editors hold it on the instance.
+    """
+    import inspect
+
+    from eda_agent.rtl_editor import RTLEditor
+    from eda_agent.tb_editor import TBEditor
+
+    for cls in (RTLEditor, TBEditor):
+        assert hasattr(cls, "usage"), f"{cls.__name__} reports no usage at all"
+        src = inspect.getsource(cls.__init__)
+        assert "self._model = make_openai_model(" in src, (
+            f"{cls.__name__} builds its model inline, so usage() cannot read it")

@@ -400,7 +400,7 @@ class RTLGenerator:
         return SafeReActAgent(
             name=name,
             sys_prompt=GLUE_SYSTEM_PROMPT if composition else SYSTEM_PROMPT,
-            model=make_openai_model(self._cfg),
+            model=make_openai_model(self._cfg, cache_key="rtl-generate"),
             formatter=make_formatter(self._cfg.model),
             memory=InMemoryMemory(),
             max_iters=10,

@@ -1081,15 +1081,38 @@ class RTLEditor:
         toolkit.register_tool_function(self._tool_replace_block)
         toolkit.register_tool_function(self._tool_run_simulation)
 
+        # Held on the instance so `usage()` can read the cumulative counters
+        # off it. Constructed inline it is reachable only through the agent.
+        self._model = make_openai_model(cfg, cache_key="rtl-debug")
         self._agent = SafeReActAgent(
             name="Debugger",
             sys_prompt=SYSTEM_PROMPT,
-            model=make_openai_model(cfg),
+            model=self._model,
             formatter=make_formatter(cfg.model),
             toolkit=toolkit,
             memory=InMemoryMemory(),
             max_iters=10,
         )
+
+    def usage(self) -> tuple[int, int, int]:
+        """`(input, cached, output)` for this editor's model, cumulative.
+
+        `cached` is a SUBSET of `input`, and it is the number that decides
+        whether a long tool-using loop is cheap or ruinous. A trial re-sends a
+        growing conversation through a ReAct sub-loop of up to `max_iters`
+        calls, so input dominates the ledger -- and a re-sent prefix that hits
+        the cache and one that misses it look identical in the input total
+        alone. Measured on the refmodel loop, which is the same shape: 46.1M
+        input tokens on a2-i2c against 10.8M for every specflow stage combined.
+
+        A zero here means "nothing recorded yet", not "no cache hits"; the two
+        are only distinguishable because `input` is reported beside it.
+        """
+        from .model import get_model_cached, get_model_usage
+
+        model = getattr(self, "_model", None)
+        got = get_model_usage(model)
+        return got[0], get_model_cached(model), got[1]
 
     def reset(self) -> None:
         clear_memory_safely(self._agent)
