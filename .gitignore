@@ -10,6 +10,9 @@ __pycache__/
 runs/
 sim_build/
 *.xml
+# `golden_check.py --out` defaults here: rendered testbenches and two
+# Verilator builds, ~24 MB a run. A measurement's workspace, not source.
+golden_check/
 
 .venv/
 .env.local
