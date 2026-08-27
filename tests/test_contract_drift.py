@@ -155,3 +155,43 @@ def test_the_spec_check_is_skipped_when_no_spec_is_given():
     io = [{"name": "cmd", "dir": "input", "width": 1}]
     issues, _ = lint_contract_json(json.dumps({"module_name": "i2c", "io": io}))
     assert not [i for i in issues if "module header names port" in i.message]
+
+
+def test_the_architect_is_PRIMED_about_the_ports_it_must_infer():
+    """Guidance and gate, the same pairing the oracle prompt uses for inputs.
+
+    The linter catches a DROPPED port after the fact and that is the gate. It
+    does not stop a direction being decided wrongly, and its "these were
+    inferred" finding is a WARNING -- so it reaches the model only when some
+    other error happens to trigger a repair round, and on a clean-but-inferred
+    contract it reaches nobody but a human reading `contract_lint.txt`.
+
+    Asserted through `prototype_ports`, which is what the priming is built from:
+    on the real i2c header it names exactly the six continuation-line ports, and
+    those are the ones the architect re-decides from prose on every run.
+    """
+    import inspect
+
+    from eda_agent import top_agent
+    from eda_agent.contract_linter import prototype_ports
+
+    _, undirected = prototype_ports(DANGLING)
+    assert undirected == ["cmd_ack", "busy", "dout", "scl_oen"]
+
+    src = inspect.getsource(top_agent.TopAgent._build_contract_json)
+    assert "prototype_ports(spec)" in src, "the priming must be computed"
+    assert "primed" in src and "architect.chat(primed" in src, (
+        "the primed spec must be what is actually sent")
+    assert "authoritative" in src, (
+        "it has to say which source wins when the header and the prose "
+        "disagree, or naming the ports just restates the ambiguity")
+
+
+def test_a_header_with_every_direction_stated_primes_nothing():
+    """No note when there is nothing to warn about: a spec whose header is
+    well formed must produce the same prompt it always did."""
+    from eda_agent.contract_linter import prototype_ports
+
+    clean = ("module m (\n    input clk,\n    input a,\n"
+             "    output y\n);\n")
+    assert prototype_ports(clean)[1] == []

@@ -11,7 +11,8 @@ from typing import Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
-from .contract_linter import lint_contract_json, render_contract_issues
+from .contract_linter import (lint_contract_json, prototype_ports,
+                              render_contract_issues)
 from .config import OpenAIConfig
 from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
@@ -540,7 +541,40 @@ class TopAgent:
                 # Re-gated and it failed, so it is regenerated rather than
                 # trusted. Reuse skips the call, not the check.
 
-        contract = await architect.chat(spec, golden_tb_path=golden_tb_path)
+        # NAME THE PORTS IT WILL HAVE TO GUESS, BEFORE IT GUESSES.
+        #
+        # The linter catches a DROPPED port after the fact, and that is the gate.
+        # It does not stop the architect getting a direction wrong, and its
+        # "these directions were inferred" finding is a WARNING -- so it only
+        # reaches the model when some other error happens to trigger a repair
+        # round, and on a clean-but-inferred contract it reaches nobody but a
+        # human reading `contract_lint.txt`.
+        #
+        # A Verilog port list may state a direction once and let it carry across
+        # the names that follow, and a spec written by stripping an original
+        # header leaves names dangling under whatever preceded them. The i2c
+        # prototype does exactly this to cmd_ack, busy, al and dout -- read
+        # literally, all four are inputs -- so the architect must override the
+        # header from the prose, on four ports, every run. It got `busy` wrong
+        # once and six requirements were abandoned for it.
+        #
+        # Guidance and gate, the same pairing the oracle prompt uses for
+        # declared inputs: say it up front, check it afterwards.
+        undirected = prototype_ports(spec)[1]
+        primed = spec
+        if undirected:
+            primed = spec + (
+                "\n\nNOTE ON THE MODULE HEADER ABOVE. It states no direction "
+                "for " + ", ".join(undirected) + ". In Verilog each of those "
+                "carries the direction of the line above it, so read literally "
+                "they take the preceding port's direction -- which is very "
+                "likely wrong, because a header written this way has usually "
+                "had its `output`/`output reg` keywords stripped. Decide each "
+                "of them from the PROSE port list, which is authoritative "
+                "where the two disagree, and make sure every one appears in "
+                "`io` with a direction.")
+
+        contract = await architect.chat(primed, golden_tb_path=golden_tb_path)
         contract_json = contract.model_dump_json(indent=2, exclude_none=True) + "\n"
 
         for repair_idx in range(max(0, int(max_repairs)) + 1):
