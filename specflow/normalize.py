@@ -39,7 +39,7 @@ import logging
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
@@ -109,40 +109,57 @@ class Activation(BaseModel):
     #: here is something the stimulus drives. Conditions on outputs go in
     #: `opens_on`.
     inputs: dict[str, int] = Field(default_factory=dict)
-    #: The rest of the opening condition -- port -> value -- and this one MAY
-    #: name outputs.
+    #: The rest of the opening condition, and this one MAY name outputs.
+    #:
+    #: A LIST OF ALTERNATIVES: any entry opening the window is enough, and every
+    #: port WITHIN one entry must hold together. Disjunctive normal form, which
+    #: is fully general and is the shape the requirements actually take --
+    #: REQ-0028 is "an output-enable (scl_oen or sda_oen) is driven low", where
+    #: a single dict `{scl_oen: 0, sda_oen: 0}` says BOTH and means neither.
     #:
     #: The schema had one slot for "when" and it held inputs, so a requirement
     #: activated by an OUTPUT had nowhere to say so and the slot was filled with
-    #: whatever inputs were lying around. Measured on a2-i2c: REQ-0028's
-    #: activation is "an output-enable (scl_oen or sda_oen) is driven low" and
-    #: its `inputs` came back `{nReset: 1, rst: 0}` -- the reset qualifier and
-    #: nothing of the actual condition, so the check keyed on the wrong thing.
-    opens_on: dict[str, int] = Field(default_factory=dict)
-    #: WHERE THE WINDOW CLOSES -- port -> value, outputs allowed. Empty means
-    #: the requirement is about the activation instant itself.
+    #: whatever inputs were lying around -- REQ-0028's came back
+    #: `{nReset: 1, rst: 0}`, the reset qualifier and none of the condition.
+    opens_on: list[dict[str, int]] = Field(default_factory=list)
+    #: WHERE THE WINDOW CLOSES -- same any-of-a-list shape, outputs allowed.
+    #: Empty means the requirement is about the activation instant itself.
     #:
-    #: This is the field whose absence caused the largest measured defect in the
-    #: pipeline. `Activation` could express only a predicate over ONE ROW, while
-    #: 63% of a2-i2c's requirements name a window in their own text -- "at the
-    #: start of the STOP sequence", "during an accepted WRITE". Normalisation
-    #: flattened each to the instant the command was asserted and dropped the
-    #: sequence, so every check over one became a point check.
+    #: This is the field whose absence caused the largest measured defect here.
+    #: `Activation` could express only a predicate over ONE ROW, while 63% of
+    #: a2-i2c's 105 requirements name a span in their own text. Normalisation
+    #: flattened each to the instant the activation began, so every check over
+    #: one became a point check -- which fails every design or passes every
+    #: design depending only on which way the port sat at that instant. Measured:
+    #: the over-strict and vacuous populations are 79% and 83% that shape,
+    #: against 58% of the checks carrying neither flag.
     #:
-    #: That produces two opposite symptoms from one cause, depending on which
-    #: way the output happens to sit at that instant: the check fails every
-    #: design (over-strict) or passes every design (vacuous). Measured, the two
-    #: populations have the same profile -- 79% and 83% of them are a windowed
-    #: requirement with a one-row activation, against 58% of the clean set.
+    #: AND THE LIST IS NOT DECORATION. Written first as a single dict -- mirroring
+    #: `inputs` -- it read as a conjunction, and a close condition is routinely a
+    #: disjunction: "until the command completes OR arbitration is lost". Six of
+    #: 28 activations came back `{al: 1, cmd_ack: 1}`, which is unsatisfiable by
+    #: construction, since arbitration loss drives the FSM to idle and clears
+    #: `cmd_ack`. Those windows opened, ran off the end of the trace and decided
+    #: nothing. `inputs` stays a plain dict because there the conjunction is
+    #: right: every named input must be driven for the precondition to be
+    #: reachable at all.
     #:
-    #: A CONDITION, NEVER A COUNT. "wait until cmd_ack" is expressible; "wait 12
-    #: edges" is a guess at pacing this specification does not state, and Phases
-    #: 3-6 severed pacing from latency for exactly that reason. Deliberately the
-    #: same shape as the stimulus schema's own `until`, which exists for the
-    #: same reason, and it feeds `temporal.after(trace, applies, until=closes)`
-    #: directly -- so the check author transcribes a window rather than
-    #: inventing one.
-    until: dict[str, int] = Field(default_factory=dict)
+    #: A CONDITION, NEVER A COUNT. "until cmd_ack" is expressible; "for 12 edges"
+    #: is a guess at pacing this specification does not state, and Phases 3-6
+    #: severed pacing from latency for exactly that reason. Deliberately the same
+    #: shape as the stimulus schema's own `until`, and it feeds
+    #: `temporal.after(trace, applies, until=closes)` directly.
+    until: list[dict[str, int]] = Field(default_factory=list)
+
+    @field_validator("opens_on", "until", mode="before")
+    @classmethod
+    def _one_alternative_is_still_a_list(cls, v):
+        """A bare dict is the single-alternative case. Accepted rather than
+        rejected: the list is the general form, and refusing the common shape
+        would spend a repair round on punctuation."""
+        if isinstance(v, dict):
+            return [v] if v else []
+        return v
 
     @property
     def input_only(self) -> bool:
@@ -390,9 +407,25 @@ WHERE THE WINDOW CLOSES. Give `until` whenever the requirement governs a SPAN
 that outlasts its own trigger -- port -> value, and this one MAY name outputs,
 because a window closes on what the DESIGN does.
 
-  "during an accepted WRITE"          -> inputs {"cmd": 8}, until {"cmd_ack": 1}
-  "at the start of the STOP sequence" -> inputs {"cmd": 2}, until {"cmd_ack": 1}
-  "the START sequence completes"      -> inputs {"cmd": 1}, until {"cmd_ack": 1}
+`until` IS A LIST OF ALTERNATIVES. Any ONE of them closing the window is
+enough, and every port within ONE entry must hold together. So "or" is a second
+entry and "and" is a second key:
+
+  "during an accepted WRITE"          -> inputs {"cmd": 8}, until [{"cmd_ack": 1}]
+  "at the start of the STOP sequence" -> inputs {"cmd": 2}, until [{"cmd_ack": 1}]
+  "until the WRITE completes or
+   arbitration is lost"               -> until [{"cmd_ack": 1}, {"al": 1}]
+
+Getting that wrong is not cosmetic. `[{"al": 1, "cmd_ack": 1}]` is ONE entry
+naming two ports, so it asks for both AT THE SAME ROW -- and arbitration loss
+drives the FSM to idle and clears `cmd_ack`, so it can never happen. The window
+then opens, runs off the end of the trace and decides nothing. Six of one run's
+28 windows were exactly this.
+
+`opens_on` takes the same list-of-alternatives shape, for the same reason:
+"an output-enable (scl_oen or sda_oen) is driven low" is
+`[{"scl_oen": 0}, {"sda_oen": 0}]`, and `[{"scl_oen": 0, "sda_oen": 0}]` says
+BOTH and means neither.
 
 A CONDITION, NEVER A COUNT. "until cmd_ack" is expressible; "for 12 edges" is a
 guess at pacing this specification does not state, and a check that asserts one
@@ -414,8 +447,8 @@ WHEN AN OUTPUT IS PART OF THE TRIGGER. `inputs` takes input ports only, because
 a later stage decides it from the stimulus steps alone with no model. If the
 activation also depends on an output, put that in `opens_on`:
 
-  "an output-enable is driven low"    -> opens_on {"sda_oen": 0}
-  "after the controller releases SCL" -> opens_on {"scl_oen": 1}
+  "an output-enable is driven low"    -> opens_on [{"scl_oen": 0}, {"sda_oen": 0}]
+  "after the controller releases SCL" -> opens_on [{"scl_oen": 1}]
 
 Putting it in `inputs` is rejected, and leaving it out silently changes what the
 requirement is about.
@@ -433,8 +466,8 @@ Reply with ONE JSON object and nothing else:
       "activation": {
         "text": "a START command is issued while the core is enabled",
         "inputs": {"cmd": 1, "ena": 1},
-        "opens_on": {},
-        "until": {"cmd_ack": 1}
+        "opens_on": [],
+        "until": [{"cmd_ack": 1}, {"al": 1}]
       },
       "observable": ["cmd_ack", "busy"],
       "unobservable_reason": "",
@@ -918,22 +951,25 @@ def gate_one(
     # window closes on what the design does -- "until cmd_ack" -- and a
     # requirement can be activated by an output. Same width and integer checks.
     for field in ("opens_on", "until"):
-        for name, value in (getattr(norm.activation, field) or {}).items():
-            path = f"normalize.{uid}.activation.{field}"
-            width = ports.get(name)
-            if width is None:
-                issues.append(Issue("error", path,
-                                    f"{name!r} is not a declared port"))
-                continue
-            try:
-                as_int = int(value)
-            except Exception:  # noqa: BLE001
-                issues.append(Issue("error", path,
-                                    f"{name}={value!r} is not an integer"))
-                continue
-            if not (0 <= as_int < (1 << width)):
-                issues.append(Issue("error", path,
-                                    f"{name}={as_int} does not fit {width} bit(s)"))
+        alternatives = getattr(norm.activation, field) or []
+        for alt in alternatives:
+            for name, value in (alt or {}).items():
+                path = f"normalize.{uid}.activation.{field}"
+                width = ports.get(name)
+                if width is None:
+                    issues.append(Issue("error", path,
+                                        f"{name!r} is not a declared port"))
+                    continue
+                try:
+                    as_int = int(value)
+                except Exception:  # noqa: BLE001
+                    issues.append(Issue("error", path,
+                                        f"{name}={value!r} is not an integer"))
+                    continue
+                if not (0 <= as_int < (1 << width)):
+                    issues.append(Issue("error", path,
+                                        f"{name}={as_int} does not fit "
+                                        f"{width} bit(s)"))
 
     # A WINDOW IN THE PROSE AND AN INSTANT IN THE SCHEMA. Reported, not
     # rejected: the phrasing is heuristic, and this repo has twice paid for a

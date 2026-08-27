@@ -287,16 +287,24 @@ copying one. Every construct below is built the same way:
                 for k, v in cond.items())
         return p
 
+    # `opens_on` and `until` are LISTS OF ALTERNATIVES: any entry is enough,
+    # and every port within one entry holds together. So this is the one you
+    # want for both of them.
+    def _any(alts):
+        preds = [_holds(a) for a in alts]
+        return lambda row: any(p(row) for p in preds)
+
   A WINDOW THAT OUTLASTS ITS TRIGGER -- `until` is non-empty:
 
-    # normalized: inputs {"cmd": 8, "ena": 1}, until {"cmd_ack": 1}
+    # normalized: inputs {"cmd": 8, "ena": 1}, until [{"cmd_ack": 1}, {"al": 1}]
+    # -- "until the WRITE completes OR arbitration is lost"
     windows = after(trace, _holds({"cmd": 8, "ena": 1}),
-                    until=_holds({"cmd_ack": 1}))
+                    until=_any([{"cmd_ack": 1}, {"al": 1}]))
 
   A CO-EXTENSIVE WINDOW -- `until` is EMPTY. Omit it, and the window closes when
   the activation stops holding, which is what "while ena is low" means:
 
-    # normalized: inputs {"ena": 0}, until {}
+    # normalized: inputs {"ena": 0}, until []
     windows = after(trace, _holds({"ena": 0}))
 
   AN INSTANT -- the same call. A one-row activation gives a one-row window and
@@ -311,8 +319,10 @@ copying one. Every construct below is built the same way:
   AN ACTIVATION THAT DEPENDS ON AN OUTPUT -- merge `opens_on` into the opening
   predicate. It qualifies the trigger; it is not the thing being checked:
 
-    # normalized: inputs {"nReset": 1}, opens_on {"sda_oen": 0}
-    windows = after(trace, _holds({"nReset": 1, "sda_oen": 0}))
+    # normalized: inputs {"nReset": 1}, opens_on [{"scl_oen": 0}, {"sda_oen": 0}]
+    # -- "AN output-enable is driven low", either of them
+    opens = _any([{"scl_oen": 0}, {"sda_oen": 0}])
+    windows = after(trace, lambda r: _holds({"nReset": 1})(r) and opens(r))
 
   THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
 
@@ -322,6 +332,12 @@ copying one. Every construct below is built the same way:
                   for w in windows])     # at EVERY row -- "X remains"
     return worst([stable(w, "scl_oen") for w in windows])   # "held steady"
     return worst([pulse(w, "cmd_ack") for w in windows])    # "for one clk cycle"
+
+NEVER COLLAPSE A LIST OF ALTERNATIVES INTO ONE DICT. `[{"al": 1},
+{"cmd_ack": 1}]` is "either"; `{"al": 1, "cmd_ack": 1}` is "both at one row",
+and arbitration loss clears `cmd_ack`, so that one can never happen -- the
+window opens, runs to the end of the trace and decides nothing. Six of one
+run's 28 windows were exactly this.
 
 DO NOT RE-DERIVE THE WINDOW BY HAND. `for i in range(len(trace))` with your own
 index arithmetic is how a check ends up reading the outputs on the row the

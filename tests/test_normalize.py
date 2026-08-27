@@ -314,7 +314,7 @@ def test_the_activation_can_express_a_WINDOW_and_an_output_trigger():
     from specflow.normalize import Activation
 
     windowed = Activation(text="during an accepted WRITE",
-                          inputs={"cmd": 8}, until={"cmd_ack": 1})
+                          inputs={"cmd": 8}, until=[{"cmd_ack": 1}])
     assert windowed.windowed and windowed.input_only
 
     # Co-extensive: `after` with no `until` closes when the activation stops
@@ -325,9 +325,22 @@ def test_the_activation_can_express_a_WINDOW_and_an_output_trigger():
     # steps alone, which only works if every name there is driven. An output in
     # the trigger goes to `opens_on`.
     out_trigger = Activation(text="an output-enable is driven low",
-                             inputs={"nReset": 1}, opens_on={"sda_oen": 0})
-    assert out_trigger.opens_on == {"sda_oen": 0}
+                             inputs={"nReset": 1},
+                             opens_on=[{"scl_oen": 0}, {"sda_oen": 0}])
+    assert out_trigger.opens_on == [{"scl_oen": 0}, {"sda_oen": 0}]
     assert "sda_oen" not in out_trigger.inputs
+
+    # ANY-OF, NOT ALL-OF. Written first as a single dict -- mirroring `inputs`
+    # -- `until` read as a conjunction, and a close condition is routinely a
+    # disjunction. Six of 28 activations came back {al: 1, cmd_ack: 1}, which
+    # is unsatisfiable: arbitration loss drives the FSM to idle and clears
+    # cmd_ack. Those windows opened, ran off the end and decided nothing.
+    either = Activation(text="until the WRITE completes or arbitration is lost",
+                        inputs={"cmd": 8}, until=[{"cmd_ack": 1}, {"al": 1}])
+    assert either.until == [{"cmd_ack": 1}, {"al": 1}]
+    # A bare dict is the single-alternative case, accepted rather than rejected:
+    # refusing the common shape would spend a repair round on punctuation.
+    assert Activation(text="x", until={"cmd_ack": 1}).until == [{"cmd_ack": 1}]
 
 
 def test_until_and_opens_on_may_name_OUTPUTS_but_inputs_may_not():
@@ -335,14 +348,14 @@ def test_until_and_opens_on_may_name_OUTPUTS_but_inputs_may_not():
     `inputs` must not, for the reason above."""
     out = _out(observable=["busy"],
                activation=Activation(text="during a WRITE", inputs={"cmd": 8},
-                                     until={"cmd_ack": 1},
-                                     opens_on={"busy": 1}))
+                                     until=[{"cmd_ack": 1}],
+                                     opens_on=[{"busy": 1}]))
     bad = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
     assert not bad, f"outputs must be legal in until/opens_on: {bad}"
 
     rejected = _out(observable=["busy"],
                     activation=Activation(text="x", inputs={"cmd": 8},
-                                          until={"nope": 1}))
+                                          until=[{"nope": 1}]))
     assert any("not a declared port" in i.message
                for i in gate_one(REQ, rejected, CONTRACT))
 
@@ -362,6 +375,6 @@ def test_a_span_in_the_text_with_no_close_condition_is_REPORTED_not_rejected():
     # And giving the window silences it.
     ok = _out(observable=["busy"],
               activation=Activation(text="at the start of the STOP sequence",
-                                    inputs={"cmd": 2}, until={"cmd_ack": 1}))
+                                    inputs={"cmd": 2}, until=[{"cmd_ack": 1}]))
     assert not [i for i in gate_one(REQ, ok, CONTRACT)
                 if i.path.endswith("activation.until")]
