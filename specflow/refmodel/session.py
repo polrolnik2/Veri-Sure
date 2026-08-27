@@ -62,6 +62,12 @@ class Edit:
     reason: str
     failing_before: int
     failing_after: int
+    #: `distance` before and after -- failing PLUS unexercised plus broken. The
+    #: failing count alone cannot tell an edit that satisfied a clause from one
+    #: that stopped its scenario occurring, and those are opposite outcomes.
+    #: Defaulted so a caller constructing an Edit without them still works.
+    distance_before: int = 0
+    distance_after: int = 0
 
 
 def _activity(rows: list[dict]) -> dict:
@@ -946,6 +952,7 @@ class DebugSession:
                              f"and an edit made now would be unattributable. "
                              f"Stage a scenario with add_stimulus instead."}
         before = len(self.failing())
+        before_distance = self.distance()
         span = _method_span(self.source, method)
         if span is None:
             return self._reject(method, before,
@@ -985,22 +992,41 @@ class DebugSession:
         self.source = candidate
         self.refresh()
         after = len(self.failing())
-        self.history.append(Edit(method, True, "accepted", before, after))
+        after_distance = self.distance()
+        self.history.append(Edit(method, True, "accepted", before, after,
+                                 before_distance, after_distance))
+        # WHAT MOVED IS READ BEFORE THE NOTE, because the note is written from
+        # it. `_movement` also advances `_reported`, so it must be called once.
+        moved = self._movement()
         return {
             "accepted": True,
             "failing_before": before,
             "failing_after": after,
+            # THE NUMBER TO STEER BY. `distance` counts unexercised alongside
+            # failing, and its own docstring says why: an edit that stops the
+            # design reaching a scenario turns a VIOLATES into a NOT_EXERCISED
+            # and REDUCES the failing count. That guard existed only in the
+            # score picking `best_source` -- the agent read `failing_before` /
+            # `failing_after` and was congratulated for destroying evidence.
+            #
+            # Measured on a2-i2c across three turns: 4 requirements went
+            # VIOLATES -> NOT_EXERCISED (reported as "1 fewer failing") and 4
+            # went CONFORMS -> NOT_EXERCISED (reported as "no change"). 13
+            # genuine fixes netted 7 after that drift and 2 regressions.
+            "distance_before": before_distance,
+            "distance_after": after_distance,
             # WHICH ones moved, not just how many. `still_failing` alone could
             # not distinguish a requirement this edit BROKE from one that has
             # been failing since turn 0 -- the same defect `run_all` had, and
             # the regression signal is the whole reason to report after an edit.
-            "changed": self._movement() or "nothing moved",
+            "changed": moved or "nothing moved",
             "still_failing": [r.req_uid for r in self.failing()],
-            "note": _moved(before, after),
+            "note": _moved(before_distance, after_distance, moved),
         }
 
     def _reject(self, method: str, before: int, reason: str) -> dict:
-        self.history.append(Edit(method, False, reason, before, before))
+        d = self.distance()
+        self.history.append(Edit(method, False, reason, before, before, d, d))
         return {"accepted": False, "reason": reason, "failing": before}
 
     def run_all(self) -> dict:
@@ -1053,13 +1079,37 @@ class DebugSession:
 # ------------------------------------------------------------------ helpers
 
 
-def _moved(before: int, after: int) -> str:
+#: Transitions that destroy evidence: a requirement that was being DECIDED stops
+#: being decided at all. Neither is an improvement, and the failing count calls
+#: the first one an improvement and the second one nothing.
+_UNEXERCISED = ("NOT MET -> NOT EXERCISED", "met -> NOT EXERCISED")
+
+
+def _moved(before: int, after: int, moved: dict[str, list[str]] | None = None
+           ) -> str:
+    """The headline the agent steers by, scored on DISTANCE not failing count.
+
+    `distance` counts unexercised alongside failing, so an edit that stops a
+    scenario occurring is neutral in it rather than an improvement. Neutral is
+    not enough over a few hundred edits: a check that no longer fires is easier
+    to reach than a clause that is actually satisfied, so an indifferent search
+    drifts that way. Naming the conversion is what makes it cost something.
+    """
+    lost = sorted({u for k in _UNEXERCISED for u in (moved or {}).get(k, [])})
+    warn = ""
+    if lost:
+        warn = (f" -- and {', '.join(lost)} STOPPED BEING EXERCISED at all. "
+                f"That is not a requirement fixed, it is a requirement whose "
+                f"scenario your edit removed, and the check can no longer say "
+                f"anything about it. Put it back unless you can say why the "
+                f"scenario should not occur.")
     if after < before:
-        return f"{before - after} fewer failing"
+        return f"{before - after} closer to satisfying the set{warn}"
     if after > before:
-        return (f"{after - before} MORE failing -- this edit made things worse; "
-                f"the session keeps the best version seen, but consider undoing it")
-    return "no change in the failing count"
+        return (f"{after - before} FURTHER from satisfying the set -- this edit "
+                f"made things worse; the session keeps the best version seen, "
+                f"but consider undoing it{warn}")
+    return f"no net change{warn}"
 
 
 #: Steps shown per testpoint in `explain`. The agent asks for the rest by name.

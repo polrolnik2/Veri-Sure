@@ -109,7 +109,11 @@ Some things that will save you attempts:
 
   - ONE FIX AT A TIME. An edit that changes several things cannot be attributed
     when the failing count moves, and cannot be undone selectively.
-  - The failing count going UP means the edit was wrong. Say so and put it back.
+  - The count of requirements still to satisfy going UP means the edit was
+    wrong. Say so and put it back. That count includes the UNEXERCISED ones, so
+    an edit that makes a failing requirement stop being exercised does not
+    improve it -- a check that no longer fires has not been satisfied, it has
+    been silenced, and the requirement is less verified than when it failed.
   - `mask(value, width)` exists on the base class. An unbounded Python integer
     where hardware would wrap is the single most common defect in these models.
   - If an oracle looks WRONG to you -- it demands something the specification
@@ -666,14 +670,27 @@ def _continue(session: DebugSession) -> str:
     if last is None:
         lines.append("No edit has been made yet.")
     elif last.accepted:
+        # DISTANCE, not the failing count. Failing alone calls an edit that
+        # stopped a scenario occurring an improvement, because a VIOLATES that
+        # became a NOT_EXERCISED leaves the failing count and takes its evidence
+        # with it. Distance counts both, so the conversion shows as no progress.
         lines.append(
-            f"Your edit to `{last.method}` was accepted: failing went "
-            f"{last.failing_before} -> {last.failing_after}."
+            f"Your edit to `{last.method}` was accepted: {last.distance_before} "
+            f"-> {last.distance_after} requirement(s) still to satisfy "
+            f"(failing {last.failing_before} -> {last.failing_after}; the "
+            f"difference is requirements nothing is exercising)."
         )
-        if last.failing_after > last.failing_before:
+        if last.distance_after > last.distance_before:
             lines.append(
                 "That made things WORSE. Consider putting it back before "
                 "trying something else."
+            )
+        elif (last.distance_after == last.distance_before
+              and last.failing_after < last.failing_before):
+            lines.append(
+                "The failing count fell and the distance did not, which means "
+                "a requirement stopped being EXERCISED rather than starting to "
+                "pass. That is evidence removed, not a defect fixed."
             )
     else:
         lines.append(f"Your edit to `{last.method}` was REJECTED: {last.reason}")

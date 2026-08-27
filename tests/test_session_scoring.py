@@ -141,3 +141,56 @@ def test_the_stimulus_budget_is_finite():
     s._results = [OracleResult("REQ-0000", ok=None)]
     out = s.add_stimulus("REQ-0000", "x")
     assert "error" in out and "budget" in out["error"]
+
+
+# --------------------------------------------- what the AGENT is told
+
+def test_an_edit_that_UNEXERCISES_a_failure_is_not_reported_as_progress():
+    """The defect that cost a2-i2c most of its loop.
+
+    `distance` already counted unexercised alongside failing, and said in its
+    own docstring why. But it was used only to pick `best_source`: the agent
+    read `failing_before` / `failing_after`, so an edit that stopped a scenario
+    occurring reported "1 fewer failing" and was congratulated for destroying
+    evidence. Four requirements went VIOLATES -> NOT_EXERCISED that way and four
+    more went CONFORMS -> NOT_EXERCISED, reported as "no change".
+    """
+    from specflow.refmodel.session import _moved
+
+    moved = {"NOT MET -> NOT EXERCISED": ["REQ-0044"]}
+    # Distance is unchanged -- one leaves `failing`, one enters `undecided`.
+    note = _moved(5, 5, moved)
+    assert "no net change" in note
+    assert "STOPPED BEING EXERCISED" in note
+    assert "REQ-0044" in note
+    assert "fewer failing" not in note
+
+
+def test_losing_a_CONFORMING_requirement_is_named_too():
+    """`met -> NOT EXERCISED` costs a distance point, so the headline already
+    says "further" -- but it must say WHICH requirement and why, or the agent
+    reads it as an ordinary regression and looks in the wrong place."""
+    from specflow.refmodel.session import _moved
+
+    note = _moved(4, 5, {"met -> NOT EXERCISED": ["REQ-0088"]})
+    assert "FURTHER from satisfying" in note and "REQ-0088" in note
+    assert "scenario your edit removed" in note
+
+
+def test_a_real_fix_still_reads_as_progress_and_carries_no_warning():
+    from specflow.refmodel.session import _moved
+
+    note = _moved(5, 4, {"NOT MET -> met": ["REQ-0001"]})
+    assert "1 closer to satisfying the set" == note
+
+
+def test_the_edit_record_carries_distance_so_the_history_cannot_lie():
+    """`_continue` restates the last edit from `Edit`, so the record needs both
+    numbers or the restatement re-introduces the defect one message later."""
+    from specflow.refmodel.session import Edit
+
+    e = Edit("m", True, "accepted", 5, 4, 5, 5)
+    assert (e.failing_before, e.failing_after) == (5, 4)
+    assert (e.distance_before, e.distance_after) == (5, 5), (
+        "failing fell while distance held -- the signature of a requirement "
+        "that stopped being exercised rather than starting to pass")
