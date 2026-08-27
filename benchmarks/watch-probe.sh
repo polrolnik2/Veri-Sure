@@ -18,16 +18,19 @@
 # it has cost two shells already. Kill by recorded PID.
 set -u
 
-PIDFILE="${1:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S]}"
-WATCH="${2:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S]}"
+PIDFILE="${1:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S] [HEARTBEAT_S]}"
+WATCH="${2:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S] [HEARTBEAT_S]}"
 # EXPLICIT, not derived. The first version guessed it as
 # `$(dirname "$WATCH")/done`, and the watch file sat one level above the run
 # directory holding the marker -- so a run that SUCCEEDED was reported as
 # "gone with no done-marker". The wake fired correctly and said the wrong
 # thing, which is worse than not firing: it invites treating a good result as
 # a crash.
-DONEFILE="${3:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S]}"
+DONEFILE="${3:?usage: watch-probe.sh PIDFILE WATCHFILE DONEFILE [INTERVAL_S] [HEARTBEAT_S]}"
 INTERVAL="${4:-20}"
+# Seconds between heartbeat lines. An ARGUMENT rather than a constant so the
+# behaviour can be exercised in seconds instead of asserted in a comment.
+HEARTBEAT="${5:-300}"
 
 note() { printf '%s  uptime_since=%s  %s\n' "$(date '+%H:%M:%S')" "$(uptime -s)" "$1" >> "$WATCH"; }
 
@@ -38,8 +41,20 @@ fi
 PID="$(cat "$PIDFILE")"
 note "watching pid=$PID"
 
+# HEARTBEAT, because a silent watchdog is not observably a watchdog. The first
+# version wrote one line at start and one at exit, so ten minutes of a healthy
+# run and ten minutes of a dead one produced identical files -- and the only
+# way to tell them apart was `ps`, which is exactly the check the watchdog
+# exists to remove. `uptime -s` on every line is what makes a RECLAIM legible
+# after the fact: the reboot timestamp changes mid-file.
+BEAT=$(( HEARTBEAT / INTERVAL )); [ "$BEAT" -lt 1 ] && BEAT=1
+ticks=0
 while kill -0 "$PID" 2>/dev/null; do
     sleep "$INTERVAL"
+    ticks=$(( ticks + 1 ))
+    if [ $(( ticks % BEAT )) -eq 0 ]; then
+        note "alive pid=$PID  ${ticks}x${INTERVAL}s"
+    fi
 done
 
 # Exiting is the message. Non-zero so the notification reads as "look at this"
