@@ -269,18 +269,24 @@ def throughout(w: Window, holds: Pred, *, after_activation: bool = False,
     return True, w.edge, f"{what} held throughout"
 
 
-def stable(w: Window, port: str) -> Verdict:
+def stable(w: Window, port: str, *, after_activation: bool = False) -> Verdict:
     """`port` must not change anywhere in the window.
 
     The "held steady" shape, which on i2c is most of the `slave_wait` cluster:
     while the bus is stretched, `scl_oen` must not take its next phase-driven
     transition. Distinct from `throughout` because the value it must hold is
     whatever it happened to be, not one the requirement names.
+
+    `after_activation` holds from the row AFTER the trigger, for a requirement
+    whose steadiness begins once the trigger has happened rather than at it --
+    which also makes the baseline value the one AFTER the activation settled,
+    not the one it was caught mid-transition at.
     """
-    if not w.rows:
+    rows = w.body if after_activation else w.rows
+    if not rows:
         return None, w.edge, f"{port} had no rows to hold over"
-    first = _val(w.rows[0], port)
-    for row in w.rows[1:]:
+    first = _val(rows[0], port)
+    for row in rows[1:]:
         if _val(row, port) != first:
             return False, row.get("edge"), (
                 f"{port} changed from {first} to {_val(row, port)} at edge "
@@ -292,7 +298,8 @@ def stable(w: Window, port: str) -> Verdict:
     return True, w.edge, f"{port} stayed at {first} throughout"
 
 
-def pulse(w: Window, port: str, *, active: int = 1, width: int = 1) -> Verdict:
+def pulse(w: Window, port: str, *, active: int = 1, width: int = 1,
+          after_activation: bool = False) -> Verdict:
     """`port` must go active for exactly `width` consecutive rows, once.
 
     i2c's `cmd_ack` is this and nothing else -- "asserts for one clk cycle to
@@ -307,16 +314,17 @@ def pulse(w: Window, port: str, *, active: int = 1, width: int = 1) -> Verdict:
     # `held == 1`, and counting rows would call a 40-edge assertion a
     # single-cycle pulse. Summing `held` is the only reading that matches what
     # the requirement means by "for one clk cycle".
+    rows = w.body if after_activation else w.rows
     runs: list[tuple[int, int]] = []
     run = 0
-    for row in w.rows:
+    for row in rows:
         if _val(row, port) == active:
             run += int(row.get("held", 1) or 1)
         elif run:
             runs.append((run, row.get("edge")))
             run = 0
     if run:
-        runs.append((run, w.rows[-1].get("edge")))
+        runs.append((run, rows[-1].get("edge")))
     if not runs:
         if not w.closed:
             return None, w.edge, (
@@ -337,8 +345,8 @@ def pulse(w: Window, port: str, *, active: int = 1, width: int = 1) -> Verdict:
     return True, at, f"{port} pulsed once for {width} edge(s)"
 
 
-def never(w: Window, holds: Pred, *, what: str = "the forbidden condition"
-          ) -> Verdict:
+def never(w: Window, holds: Pred, *, after_activation: bool = False,
+          what: str = "the forbidden condition") -> Verdict:
     """`holds` must be true at NO row of the window -- SVA's `not`.
 
     `throughout(w, lambda r: not p(r))` says the same thing and reads as its
@@ -346,8 +354,12 @@ def never(w: Window, holds: Pred, *, what: str = "the forbidden condition"
     operator spelled the way the requirement is, so the transcription stays
     mechanical and the failure message says "occurred" rather than "the
     invariant broke".
+
+    `after_activation` excludes the activation row, for a prohibition that
+    begins once the trigger has happened -- "once a STOP is accepted, sda_oen
+    must never fall again" says nothing about the row the STOP arrived on.
     """
-    for row in w.rows:
+    for row in (w.body if after_activation else w.rows):
         if holds(row):
             return False, row.get("edge"), (
                 f"{what} occurred at edge {row.get('edge')}, in the window "
@@ -359,9 +371,23 @@ def never(w: Window, holds: Pred, *, what: str = "the forbidden condition"
     return True, w.edge, f"{what} never occurred"
 
 
-def nexttime(w: Window, holds: Pred, *, what: str = "the expected response"
-             ) -> Verdict:
+def nexttime(w: Window, holds: Pred, *, after_activation: bool = True,
+             what: str = "the expected response") -> Verdict:
     """`holds` at the row immediately after the activation -- SVA `##1`.
+
+    `after_activation` IS WHAT THIS OPERATOR ALREADY IS, and it is accepted so
+    the schema-derived value can be passed through mechanically to whichever
+    operator a requirement needs. `##1` evaluates at `w.body[0]`, which is the
+    row after the trigger -- so `True` is what it already does, and the
+    parameter changes nothing. It defaults to True for that reason, rather than
+    to the False the other operators default to.
+
+    Passing `False` does NOT move the evaluation onto the activation row: that
+    would be `##0`, which is not `nexttime` but a plain predicate at the
+    trigger, and an operator that silently became a different operator on a
+    keyword would be worse than one that ignores it. The value is recorded in
+    the detail so a reader who passed it can see it was not honoured, rather
+    than finding a check that quietly answered a different question.
 
     ORDERING, NOT A CYCLE COUNT, and the difference is the whole reason this
     one is admissible while `##[2:5]` is not. A row is a STATE: consecutive
@@ -375,14 +401,22 @@ def nexttime(w: Window, holds: Pred, *, what: str = "the expected response"
         return None, w.edge, (
             f"nothing follows the activation at edge {w.edge}; the trace ends "
             f"there, so {what} could not be observed either way")
+    # NEVER SILENT. `##1` is defined at the row after the trigger, so the
+    # caller's `False` cannot be honoured without making this a different
+    # operator -- say so in the verdict rather than answering a question the
+    # caller did not ask.
+    note = ("" if after_activation else
+            "; `after_activation=False` was passed and ignored -- `nexttime` "
+            "is `##1` and is defined at the state after the activation")
     row = body[0]
     if holds(row):
-        return True, row.get("edge"), f"{what} occurred at the next state"
+        return True, row.get("edge"), f"{what} occurred at the next state{note}"
     return False, row.get("edge"), (
-        f"{what} did not hold at the state after edge {w.edge}")
+        f"{what} did not hold at the state after edge {w.edge}{note}")
 
 
 def sequence(w: Window, *steps: Pred, strong: bool = False,
+             after_activation: bool = False,
              what: str = "the sequence") -> Verdict:
     """The steps must occur IN ORDER within the window -- SVA `a ##[1:$] b`.
 
@@ -399,14 +433,19 @@ def sequence(w: Window, *steps: Pred, strong: bool = False,
 
     Names the step that stalled, because "the sequence did not complete" sends
     a reader to re-read the whole check.
+
+    `after_activation` starts matching at the row AFTER the trigger, so step 1
+    cannot be satisfied by the activation row itself -- the same vacuity
+    `eventually` guards against, one operator along.
     """
     if not steps:
         return None, w.edge, "no steps given, so there is nothing to decide"
+    rows = w.body if after_activation else w.rows
     at = 0
     for n, step in enumerate(steps):
-        while at < len(w.rows) and not step(w.rows[at]):
+        while at < len(rows) and not step(rows[at]):
             at += 1
-        if at >= len(w.rows):
+        if at >= len(rows):
             if not w.closed and not strong:
                 return None, w.edge, (
                     f"{what} reached step {n + 1} of {len(steps)} and the "
@@ -419,6 +458,7 @@ def sequence(w: Window, *steps: Pred, strong: bool = False,
 
 
 def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
+          after_activation: bool = False,
           what: str = "the condition") -> Verdict:
     """`holds` at every row until `release` occurs -- SVA `until` / `s_until`.
 
@@ -429,8 +469,12 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     Weak, like SVA's: if `release` never occurs, holding throughout is enough.
     `strong=True` is `s_until` and additionally requires the release to happen
     -- reach the end without it and the obligation was never discharged.
+
+    `after_activation` starts at the row after the trigger, for the common
+    shape where the release condition is ALREADY true at the activation and
+    would otherwise discharge the obligation instantly.
     """
-    for row in w.rows:
+    for row in (w.body if after_activation else w.rows):
         if release(row):
             return True, row.get("edge"), (
                 f"{what} held until the release at edge {row.get('edge')}")

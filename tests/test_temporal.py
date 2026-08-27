@@ -13,8 +13,9 @@ the shape index arithmetic makes easiest.
 
 from __future__ import annotations
 
-from specflow.refmodel.temporal import (after, eventually, pulse, stable,
-                                        throughout, worst)
+from specflow.refmodel.temporal import (after, eventually, never, nexttime,
+                                        pulse, sequence, stable, throughout,
+                                        until, worst)
 from specflow.refmodel.verdict import truncated
 
 
@@ -299,3 +300,106 @@ def test_past_is_one_row_not_a_cycle_count():
     assert w.value("b") == 0, "the value AT the activation"
     first = after(_t((0, 1, 1),), _a)[0]
     assert first.past("b") is None, "no previous sample to name"
+
+
+# ------------------------------------------- `|=>` on every window operator
+def _t3(*rows):
+    """`(edge, a, b, c)` -> rows. `a` drives the window, `b`/`c` are outputs."""
+    return [{"edge": e, "inputs": {"a": a}, "outputs": {"b": b, "c": c}}
+            for e, a, b, c in rows]
+
+
+def _c(r):
+    return r["outputs"]["c"] == 1
+
+
+def test_every_window_operator_accepts_after_activation():
+    """THE REGRESSION THIS EXISTS FOR, and it was a live defect.
+
+    `after_activation` is DERIVED from the normalized schema (`effect_follows`)
+    and the prompt tells the check author to pass it through. So the author
+    passes it to whichever operator the requirement needs -- and six of the
+    eight raised `TypeError`, because only `eventually` and `throughout`
+    accepted it. Measured on the stage run over a2-i2c's 40 broken checks:
+    REQ-0013, REQ-0076 and REQ-0103 were rejected as malformed with
+    `never() got an unexpected keyword argument 'after_activation'` and the
+    same for `pulse()`, and REQ-0076 hit it twice across three repair rounds.
+
+    A kwarg that is correct on two operators and fatal on six is not an API,
+    and no amount of prompt wording fixes it -- so this asserts the surface,
+    operator by operator, rather than any one behaviour.
+    """
+    w = after(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    for name, call in (
+            ("eventually", lambda: eventually(w, _b, after_activation=True)),
+            ("throughout", lambda: throughout(w, _b, after_activation=True)),
+            ("stable", lambda: stable(w, "b", after_activation=True)),
+            ("pulse", lambda: pulse(w, "b", after_activation=True)),
+            ("never", lambda: never(w, _b, after_activation=True)),
+            ("nexttime", lambda: nexttime(w, _b, after_activation=True)),
+            ("sequence", lambda: sequence(w, _b, after_activation=True)),
+            ("until", lambda: until(w, _b, _c, after_activation=True)),
+    ):
+        ok, _, _ = call()                       # must not raise
+        assert ok in (True, False, None), name
+
+
+def test_never_after_activation_ignores_a_prohibition_met_at_the_trigger():
+    """"Once X, never Y" says nothing about the row X arrived on."""
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    assert never(w, _b)[0] is False, "b occurs at the activation row"
+    assert never(w, _b, after_activation=True)[0] is True
+
+
+def test_stable_after_activation_takes_its_baseline_after_the_trigger():
+    """The activation row catches the port mid-transition.
+
+    Without this, a port that settles one row after the trigger and then holds
+    is reported as unstable -- which is the over-strictness half of the same
+    defect `eventually` had.
+    """
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    assert stable(w, "b")[0] is False, "b moves 1 -> 0 across the trigger"
+    assert stable(w, "b", after_activation=True)[0] is True
+
+
+def test_pulse_after_activation_does_not_count_a_pulse_at_the_trigger():
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    assert pulse(w, "b")[0] is True, "one one-edge pulse, at the activation"
+    ok, _, detail = pulse(w, "b", after_activation=True)
+    assert ok is False and "never went to 1" in detail
+
+
+def test_sequence_after_activation_cannot_match_step_one_at_the_trigger():
+    """Three `eventually`s pass a design that does the three things backwards;
+    a `sequence` whose first step is satisfied by the activation row itself
+    passes one that never starts."""
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    assert sequence(w, _b, lambda r: not _b(r))[0] is True
+    ok, _, detail = sequence(w, _b, lambda r: not _b(r), after_activation=True)
+    assert ok is False and "step 1 of 2" in detail
+
+
+def test_until_after_activation_is_not_discharged_by_a_release_at_the_trigger():
+    """The sharpest of the six: a release already true at the activation
+    discharges the obligation instantly, so a real violation one row later is
+    never looked at. `until` is weak, so this reads as a PASS."""
+    w = after(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 1, 0, 1), (6, 0, 0, 0)), _a)[0]
+    assert until(w, _c, _b)[0] is True, "released at the activation instant"
+    ok, edge, detail = until(w, _c, _b, after_activation=True)
+    assert ok is False and edge == 2 and "before any release" in detail
+
+
+def test_nexttime_is_already_after_the_activation_and_says_so_when_overridden():
+    """`##1` is DEFINED at the row after the trigger, so `after_activation` is
+    what this operator already is. It is accepted so the derived value can be
+    passed through mechanically, defaults to True, and a `False` is reported
+    rather than silently turning `nexttime` into a predicate at the trigger --
+    an operator that quietly becomes a different operator on a keyword is worse
+    than one that ignores it."""
+    w = after(_t3((0, 1, 0, 0), (2, 1, 1, 0), (4, 0, 0, 0)), _a)[0]
+    assert nexttime(w, _b)[0] is True
+    assert nexttime(w, _b, after_activation=True) == nexttime(w, _b)
+    ok, _, detail = nexttime(w, _b, after_activation=False)
+    assert ok is True, "the verdict is unchanged"
+    assert "ignored" in detail and "`##1`" in detail

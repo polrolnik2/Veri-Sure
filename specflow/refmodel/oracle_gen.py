@@ -353,6 +353,12 @@ copying one. Every construct below is built the same way:
   is false the expectation holds at the activation row too, and reading from
   there is correct.
 
+  EVERY WINDOW OPERATOR TAKES IT, not just `eventually` -- `throughout`,
+  `stable`, `pulse`, `never`, `sequence` and `until` all do, and they all mean
+  the same thing by it: evaluate from the row AFTER the trigger. Pass it to
+  whichever one the requirement needs. (`nexttime` accepts it too and is
+  already `##1`, so it is a no-op there.)
+
   THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
 
     return worst([eventually(w, lambda r: r["outputs"]["sda_oen"] == w.value("din"))
@@ -388,6 +394,10 @@ THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
   nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
   stable(w, port)               `$stable(port)` across it
   pulse(w, port)                `$rose` then `$fell` one state later
+
+  ...and `after_activation=` is accepted by EVERY operator on that list which
+  takes a window: `throughout`, `never`, `until`, `sequence`, `stable`,
+  `pulse`, `nexttime`. It always means `|=>` rather than `|->`.
   edges(t, port, "rise")        `$rose(port)`   ("fall" -> `$fell`,
                                                  "change" -> `$changed`)
   w.value(port)                 the sampled value AT the activation
