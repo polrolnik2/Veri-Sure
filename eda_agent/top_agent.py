@@ -504,13 +504,47 @@ class TopAgent:
         golden_tb_path: str | None,
         output_dir_per_run: Path,
         max_repairs: int = 2,
+        reuse: bool = False,
     ) -> str:
-        """Generate contract.json and (best-effort) repair it until lint passes."""
+        """Generate contract.json and (best-effort) repair it until lint passes.
+
+        REUSED WHEN ONE IS ALREADY THERE, on the same terms as every specflow
+        artifact: skip the model call, never the lint. Until this existed the
+        contract was the one artifact `--reuse` did not cover -- it is built
+        here, one level above specflow, so `specflow_reuse` never reached it --
+        and it is the artifact every other one is DERIVED from. Everything
+        downstream was pinned; the thing they were pinned to was re-rolled each
+        run.
+
+        That is not a theoretical hazard. The i2c spec's own prototype omits the
+        direction keyword on cmd_ack, busy, al and dout -- each name dangles
+        under the preceding `input` line, so read literally all four are inputs
+        -- and the architect has to override the prototype from the prose. It is
+        a judgement call on four ports, re-taken every run. On a2-i2c one run
+        dropped `busy` from the outputs and the next kept it; the witness, held
+        from the first, then had no `busy` to emit, and six requirements were
+        abandoned as "never reached" for a stimulus that was never at fault.
+        """
+        held = output_dir_per_run / "contract.json"
+        if reuse and held.is_file():
+            existing = held.read_text(encoding="utf-8")
+            if existing.strip():
+                issues, obj = lint_contract_json(existing, spec)
+                if obj is not None and not [i for i in issues if i.severity == "error"]:
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="contract_lint.txt",
+                        content=render_contract_issues(issues) or "(no issues)\n",
+                    )
+                    return existing
+                # Re-gated and it failed, so it is regenerated rather than
+                # trusted. Reuse skips the call, not the check.
+
         contract = await architect.chat(spec, golden_tb_path=golden_tb_path)
         contract_json = contract.model_dump_json(indent=2, exclude_none=True) + "\n"
 
         for repair_idx in range(max(0, int(max_repairs)) + 1):
-            issues, _obj = lint_contract_json(contract_json)
+            issues, _obj = lint_contract_json(contract_json, spec)
             errors = [i for i in issues if i.severity == "error"]
             lint_report = render_contract_issues(issues)
 
@@ -592,6 +626,7 @@ class TopAgent:
             spec=spec,
             golden_tb_path=golden_tb_path,
             output_dir_per_run=output_dir_per_run,
+            reuse=self.config.specflow_reuse,
         )
 
         # Orchestrator-supplied fields, merged exactly as the original path did.

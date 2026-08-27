@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from specflow.ports import is_reset
 
@@ -208,7 +208,57 @@ def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIs
     return issues
 
 
-def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
+_DIRECTIONS = ("input", "output", "inout")
+
+
+def prototype_ports(spec: str) -> tuple[list[str], list[str]]:
+    """`(every port the spec's module header names, the ones with no direction)`.
+
+    A Verilog port list may state the direction once and let it carry forward
+    across the names that follow, and a spec written by stripping an original
+    header leaves names dangling under whatever line preceded them. The i2c
+    prototype does exactly this:
+
+        input      [ 3:0] cmd,
+               cmd_ack,
+               busy,
+               al,
+
+    Read literally, `cmd_ack`, `busy` and `al` are INPUTS -- the direction of
+    the last declaration carries. They are outputs, and the only place that says
+    so is the prose. So the architect has to override the header from the prose
+    on precisely those names, it is a judgement call, and it is re-taken on
+    every run: one a2-i2c run kept `busy` as an output and the next dropped it.
+
+    Returned rather than judged, because this cannot know which reading is
+    right. What it can say is WHICH NAMES THE SPEC DID NOT PIN, and that is the
+    set a reader should be told about.
+    """
+    head = re.search(r"\bmodule\s+\w+\s*\((.*?)\)\s*;", spec, re.S)
+    if not head:
+        return [], []
+    names: list[str] = []
+    undirected: list[str] = []
+    for raw in head.group(1).split(","):
+        line = re.sub(r"//.*", "", raw).strip()
+        if not line:
+            continue
+        stated = any(re.match(rf"\b{d}\b", line) for d in _DIRECTIONS)
+        ident = re.findall(r"[A-Za-z_]\w*", re.sub(r"\[[^\]]*\]", " ", line))
+        ident = [i for i in ident if i not in _DIRECTIONS
+                 and i not in ("reg", "wire", "logic", "signed", "unsigned")]
+        if not ident:
+            continue
+        name = ident[-1]
+        names.append(name)
+        if not stated:
+            undirected.append(name)
+    return names, undirected
+
+
+def lint_contract_json(
+    contract_json_text: str, spec: str | None = None,
+) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
     This is intentionally lightweight: it catches the most common contract
@@ -259,6 +309,36 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
             inputs.add(name)
         elif direction == "output":
             outputs.add(name)
+
+    # EVERY PORT THE SPEC'S HEADER NAMES MUST BE IN THE CONTRACT, and the ones
+    # the header did not pin a direction for are named for the reader.
+    #
+    # This is the check that was missing when a2-i2c's contract lost `busy`. The
+    # contract was internally consistent -- eight well-formed entries, no
+    # duplicates, valid widths -- and the port simply was not among them, so
+    # nothing here had anything to compare against. Everything downstream is
+    # derived from this file, so a port that never enters it is a port no
+    # requirement can be observed on, and the failure surfaces stages later as
+    # oracles that abstain and requirements abandoned for a stimulus that was
+    # never at fault.
+    if spec:
+        named, undirected = prototype_ports(spec)
+        for name in named:
+            if name not in seen_names:
+                issues.append(ContractIssue(
+                    "error", "io",
+                    f"the spec's module header names port {name!r} and the "
+                    f"contract does not; every stage downstream is derived from "
+                    f"this file, so a port missing here cannot be observed at all"))
+        inferred = [n for n in undirected if n in seen_names]
+        if inferred:
+            issues.append(ContractIssue(
+                "warning", "io",
+                "the spec's header states no direction for "
+                + ", ".join(sorted(inferred))
+                + " -- each carries the direction of the line above it, so their "
+                  "direction here was INFERRED from the prose rather than read. "
+                  "Re-deriving this contract may not infer it the same way"))
 
     # parameters is optional (many modules have none) but, when present, each
     # entry must carry a usable name so the Coder can declare it verbatim.

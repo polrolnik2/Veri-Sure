@@ -336,6 +336,42 @@ def _behavioural_checks(
                   "OUTPUT_PORTS is empty; output determination cannot be checked")
         )
 
+    # AND `declared` IS CHECKED AGAINST THE CONTRACT, not only against itself.
+    #
+    # Everything above asks whether the model is self-consistent: does it write
+    # every port it declares, do its outputs move, is it deterministic. A model
+    # that simply OMITS a contract output passes all of it, because the omitted
+    # port is absent from both sides of every comparison.
+    #
+    # Measured on a2-i2c. `busy` is a declared contract output; the witness's
+    # OUTPUT_PORTS held seven of the eight and `busy` was not among them. Every
+    # oracle reading it abstained with "trace missing declared output 'busy'",
+    # the stimulus loop then spent its full budget and six requirements were
+    # ABANDONED as "never reached" -- a witness defect reported as a stimulus
+    # one, through a gate that had looked and seen nothing wrong.
+    #
+    # `compose.compose_model` writes this header from `output_ports(contract)`,
+    # so a freshly composed model cannot drift; a REUSED or hand-edited one can,
+    # and that is the case this catches.
+    from .compose import output_ports
+
+    wanted = set(output_ports(contract))
+    if declared and wanted:
+        for name in sorted(wanted - declared):
+            issues.append(
+                Issue("error", "ref_model.py.OUTPUT_PORTS",
+                      f"the contract declares output {name!r} and the model does "
+                      f"not; every oracle reading it can only abstain, and the "
+                      f"abstention is indistinguishable from a stimulus that "
+                      f"never reached the scenario")
+            )
+        for name in sorted(declared - wanted):
+            issues.append(
+                Issue("error", "ref_model.py.OUTPUT_PORTS",
+                      f"the model declares output {name!r} and the contract does "
+                      f"not; the two disagree about the interface")
+            )
+
     return issues
 
 
