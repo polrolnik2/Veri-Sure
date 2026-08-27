@@ -501,3 +501,31 @@ def test_strong_is_NOT_derived_from_the_same_field():
     assert "WHY `strong` IS NOT DERIVED" in src, (
         "the reasoning must stay next to the thing it explains, or the next "
         "reader adds it")
+
+
+def test_an_edge_on_the_CLOCK_is_rejected():
+    """Every row of the trace is already a clock edge, so `{"clk": "rise"}`
+    matches NO row and `{"clk": 1}` matches every one.
+
+    Not hypothetical: the first time the edge vocabulary ran live, 3 of 40
+    activations came back `opens_on [{"clk": "rise"}]`, and
+    `edges(trace, "clk", "rise")` returns 0 of 105 rows -- those windows could
+    never open. Giving the author a way to name an edge gave it a way to name
+    the clock's, which reads natural and is empty.
+    """
+    clocked = {**CONTRACT, "clocking": {"clock": {"name": "clk", "edge": "posedge"}}}
+    for field in ("opens_on", "until"):
+        out = _out(observable=["busy"],
+                   activation=Activation(text="on the rising edge of clk",
+                                         inputs={"ena": 1}, **{field: [{"clk": "rise"}]}))
+        assert any("is the clock" in i.message and i.severity == "error"
+                   for i in gate_one(REQ, out, clocked)), field
+    # A level on it is just as empty.
+    lvl = _out(observable=["busy"],
+               activation=Activation(text="x", inputs={"clk": 1, "ena": 1}))
+    assert any("is the clock" in i.message for i in gate_one(REQ, lvl, clocked))
+    # And a non-clock edge is untouched.
+    ok = _out(observable=["busy"],
+              activation=Activation(text="ena falls", inputs={"ena": 0},
+                                    opens_on=[{"ena": "fall"}]))
+    assert not [i for i in gate_one(REQ, ok, clocked) if i.severity == "error"]

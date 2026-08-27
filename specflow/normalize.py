@@ -479,6 +479,11 @@ Depending on which way the port happens to sit at that instant, the check then
 fails EVERY design or passes every design -- and on one measured run those two
 populations were 79% and 83% exactly this.
 
+NEVER NAME THE CLOCK. Every row of the trace a check sees is already a clock
+edge, so `{"clk": "rise"}` matches no row at all and `{"clk": 1}` matches every
+one. If the requirement says "on the rising edge of clk", the trigger is
+whatever ELSE must be true at that edge -- name that instead.
+
 AN EDGE IS NOT A LEVEL. Where the requirement says a signal RISES, FALLS or
 CHANGES, write that word instead of a value -- `"rise"`, `"fall"`, `"change"`:
 
@@ -928,6 +933,16 @@ def gate_one(
     issues: list[Issue] = []
     outputs = _ports(contract, "output")
     inputs = _ports(contract, "input")
+    # THE CLOCK IS PINNED AND EVERY ROW IS ALREADY AN EDGE. Conditioning on it
+    # cannot mean anything: `clk` is constant across the trace the oracle sees,
+    # so `{"clk": "rise"}` matches NO row and `{"clk": 1}` matches every one.
+    #
+    # Not hypothetical -- it appeared the first time the edge vocabulary was
+    # live. Three of forty activations came back `opens_on [{"clk": "rise"}]`,
+    # and `edges(trace, "clk", "rise")` returns 0 of 105 rows, so those windows
+    # could never open. Giving the author a way to name an edge gave it a way
+    # to name the clock's, which reads natural and is empty.
+    clock = str(((contract.get("clocking") or {}).get("clock") or {}).get("name") or "")
     # Both directions: a window closes on what the DESIGN does, and a
     # requirement can be activated by an output. Only `inputs` is one-sided.
     ports = {**inputs, **outputs}
@@ -989,6 +1004,11 @@ def gate_one(
 
     for name, value in (norm.activation.inputs or {}).items():
         path = f"normalize.{uid}.activation.inputs"
+        if clock and name == clock:
+            issues.append(Issue("error", path,
+                                f"{name!r} is the clock; every row is already "
+                                f"one of its edges, so this constrains nothing"))
+            continue
         if name not in inputs:
             issues.append(Issue("error", path,
                                 f"{name!r} is not a declared input port"))
@@ -1010,6 +1030,14 @@ def gate_one(
         for alt in alternatives:
             for name, value in (alt or {}).items():
                 path = f"normalize.{uid}.activation.{field}"
+                if clock and name == clock:
+                    issues.append(Issue(
+                        "error", path,
+                        f"{name!r} is the clock, and every row of the trace is "
+                        f"already one of its edges -- an edge on it matches no "
+                        f"row and a level matches every row. Name what the "
+                        f"requirement is actually triggered by."))
+                    continue
                 width = ports.get(name)
                 if width is None:
                     issues.append(Issue("error", path,
