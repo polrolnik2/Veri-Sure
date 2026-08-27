@@ -545,11 +545,32 @@ class DebugSession:
                             "NOT EXERCISED" if r and r.unexercised() else "NOT MET"),
                 "edge": None if r is None else r.edge,
                 "detail": "" if r is None else (r.broken or r.detail),
-                # What a SECOND implementation of the same requirement made of
-                # this check, where it could not satisfy it either. Empty for
-                # most. Not a verdict: see `witness_notes`.
-                "a_second_implementation_also_fails_this": bool(
-                    self.witness_notes.get(oracle.req_uid)),
+                # THE WITNESS DOES NOT REACH THE AGENT. It used to, as a
+                # per-requirement flag saying a second implementation fails this
+                # check too -- and that is an implementation's behaviour shaping
+                # the construction of another implementation, which is the leak
+                # the whole [O]-before-[R] ordering exists to close. Temporal
+                # isolation cannot close this one, because the witness IS built
+                # before [R].
+                #
+                # The repo already draws this line one boundary over: a control
+                # "may reject an oracle but never repair one", because quoting a
+                # design's trace to the oracle author tunes the oracle against
+                # it and the model is then tuned against the oracle. Same shape
+                # here, one stage later.
+                #
+                # And the two sources were being conflated. The measurement that
+                # added this flag was about a known-good CONTROL failing five
+                # checks -- strong evidence a check is over-strict. A WITNESS
+                # failing one is weak evidence: same author, same text, never
+                # debugged, and this run's witness omitted a declared port and
+                # never implements arbitration. The agent was shown only the
+                # weak signal, and it reads as permission to leave a check
+                # alone.
+                #
+                # It stays in the artifact and in the stop reason, where a
+                # reader can weigh it. `reconsider` still acts on it, at [O],
+                # which is the stage that owns the check.
                 "checked": True,
             })
         have = {o.req_uid for o in self.oracles}

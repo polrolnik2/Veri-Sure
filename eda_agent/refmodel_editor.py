@@ -592,8 +592,6 @@ def _opening(session: DebugSession) -> str:
     failing = [r for r in rows if r["status"] == "NOT MET"]
     waiting = [r for r in rows if r["status"] == "NOT EXERCISED"]
     budget_left = max(0, session.stimulus_budget - len(session.added))
-    doubted = [r for r in failing
-               if r.get("a_second_implementation_also_fails_this")]
 
     lines = [
         f"The reference model fails {len(failing)} of {len(rows)} requirement "
@@ -601,28 +599,13 @@ def _opening(session: DebugSession) -> str:
         f"are about. An unexercised requirement is UNVERIFIED, which is worse "
         f"than a failing one because nothing is even claiming to check it."
     ]
-    if doubted:
-        lines[0] += (
-            f" A second implementation of these same requirements, written from "
-            f"the same text and never debugged, ALSO fails {len(doubted)} of the "
-            f"failing ones (marked below). That is not a verdict and it does not "
-            f"excuse anything -- it is one more reading by no better authority "
-            f"than yours. It is a hint about where a turn is likely to be repaid: "
-            f"two independent attempts failing the same check more often means "
-            f"the check is pinning a detail the requirement leaves open than that "
-            f"both got the same thing wrong. Spend your edits on the unmarked "
-            f"ones first, and if you conclude a marked one is genuinely the "
-            f"model's fault, fix it and say so.")
-
     for title, group in (("Failing:", failing),
                          ("Waiting for a scenario:", waiting)):
         lines += ["", title]
         for r in group[:40]:
             where = (f" (decided at edge {r['edge']})"
                      if r["edge"] is not None else "")
-            mark = (" [a second implementation fails this too]"
-                    if r.get("a_second_implementation_also_fails_this") else "")
-            lines.append(f"  {r['req_uid']}: {r['clause']}{where}{mark}")
+            lines.append(f"  {r['req_uid']}: {r['clause']}{where}")
             if r["detail"]:
                 lines.append(f"      observed: {r['detail']}")
         if len(group) > 40:

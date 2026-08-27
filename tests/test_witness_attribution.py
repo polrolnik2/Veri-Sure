@@ -57,36 +57,46 @@ def _session(notes=None) -> DebugSession:
         covers={}, verdicts={})
 
 
-def test_the_note_reaches_the_agent_marked_per_oracle():
+def test_the_witness_DOES_NOT_reach_the_agent():
+    """It used to, as a per-oracle flag saying a second implementation fails
+    this check too. That is one implementation's behaviour shaping the
+    construction of another, which is the leak the [O]-before-[R] ordering
+    exists to close and cannot -- the witness IS built before [R].
+
+    The repo already draws this line one boundary over: a control "may reject an
+    oracle but never repair one", because quoting a design's trace to the oracle
+    author tunes the oracle against it and the model is then tuned against the
+    oracle. Same shape, one stage later.
+    """
     rows = _session({"REQ-0001": "could not satisfy it either"}).list_oracles()
-    by_uid = {r["req_uid"]: r for r in rows}
-    assert by_uid["REQ-0001"]["a_second_implementation_also_fails_this"] is True
-    assert by_uid["REQ-0002"]["a_second_implementation_also_fails_this"] is False
+    for r in rows:
+        assert "a_second_implementation_also_fails_this" not in r
 
 
-def test_a_marked_oracle_is_still_failing_and_still_listed():
-    """Attribution, not suppression. A note that removed the finding would let
-    the witness overrule the requirement, which is the authority it does not
-    have -- and would hand the model agent a way to make a VIOLATES vanish."""
+def test_a_noted_oracle_is_still_failing_and_still_listed():
+    """Attribution, not suppression. Withholding the note must not withhold the
+    FINDING: the requirement still fails, still blocks, and is still named."""
     session = _session({"REQ-0001": "could not satisfy it either"})
     failing = {r.req_uid for r in session.failing()}
-    assert failing == {"REQ-0001", "REQ-0002"}, (
-        "a marked oracle still fails and still blocks")
+    assert failing == {"REQ-0001", "REQ-0002"}
 
     brief = _opening(session)
     assert "REQ-0001" in brief and "REQ-0002" in brief
-    assert "[a second implementation fails this too]" in brief
+    assert "second implementation" not in brief
 
 
-def test_the_brief_says_it_is_not_a_verdict():
-    """The measured failure mode of the opposite phrasing: when the witness
-    could REJECT, over-strictness fell 27 -> 15 and convictions rose 2 -> 16 --
-    oracles relaxed until they stopped disagreeing, because compliance was the
-    only way to survive. The wording has to leave declining open."""
-    brief = _opening(_session({"REQ-0001": "could not satisfy it either"}))
-    assert "not a verdict" in brief
-    assert "no better authority than yours" in brief
-    assert "genuinely the model's fault" in brief
+def test_the_note_survives_where_a_READER_can_weigh_it():
+    """Removed from the agent, kept in the artifact. The signal is real -- it is
+    what the stop reason uses to attribute a residue -- and the objection is to
+    who acts on it, not to recording it.
+
+    And the two sources it conflated have different authority: a known-good
+    CONTROL failing a check is strong evidence the check is over-strict, while a
+    WITNESS failing one is a second reading by the same author from the same
+    text, never debugged. Only the weak one was ever shown to the agent.
+    """
+    session = _session({"REQ-0001": "could not satisfy it either"})
+    assert session.witness_notes == {"REQ-0001": "could not satisfy it either"}
 
 
 def test_an_unmarked_run_says_nothing_extra():
