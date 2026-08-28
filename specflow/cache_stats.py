@@ -46,8 +46,11 @@ from __future__ import annotations
 import re
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass, field
+
+# The LOWER layer owns it: `eda_agent` may not import `specflow`
+# (arm A is specflow-deleted), and specflow imports eda_agent widely.
+from eda_agent.model import usage_attr as _attr
 from pathlib import Path
 
 #: Calls at the head of each (stage, model) that are expected to miss. Measured:
@@ -235,32 +238,6 @@ class CacheStats:
             f"      billed {d['billed_input_tokens']:,}"
         )
         return "\n".join(rows)
-
-
-def _attr(obj, name: str, default=None):
-    """Read `name` off a usage object of ANY shape, without raising.
-
-    `getattr(obj, name, default)` IS NOT SAFE HERE, and the three-argument form
-    reads as though it were. agentscope's `ChatUsage` subclasses `dict` via
-    `DictMixin`, so its `__getattr__` is `self[name]` and a missing key raises
-    KeyError -- while `getattr`'s default only absorbs AttributeError.
-
-    Measured, on the first live call of a full run: `getattr(usage,
-    "input_tokens_details", None)` raised `KeyError: 'input_tokens_details'`
-    inside the usage accumulator, killing the leaf before any artifact existed.
-    The run then exited 0, because the leaf exception is caught and reported as
-    a result -- so the whole failure surfaced as a successful run that happened
-    to produce nothing.
-
-    A Mapping is read as a mapping, everything else by attribute, and both
-    swallow only lookup failure -- never a genuine error from a property.
-    """
-    if isinstance(obj, Mapping):
-        return obj.get(name, default)
-    try:
-        return getattr(obj, name, default)
-    except (AttributeError, KeyError, TypeError):
-        return default
 
 
 def _first_int(obj, names: tuple[str, ...]) -> int | None:

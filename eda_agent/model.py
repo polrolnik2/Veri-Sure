@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +21,41 @@ from agentscope.message import (
 from agentscope.model import ChatModelBase, OpenAIChatModel
 
 from eda_agent.config import OpenAIConfig
+
+def usage_attr(obj: Any, name: str, default: Any = None) -> Any:
+    """Read `name` off a token-usage object of ANY shape, without raising.
+
+    `getattr(obj, name, default)` IS NOT SAFE HERE, and the three-argument form
+    reads as though it were. agentscope's `ChatUsage` subclasses `dict` via
+    `DictMixin`, so its `__getattr__` is `self[name]` and a missing key raises
+    KeyError -- while `getattr`'s default only absorbs AttributeError. Measured
+    live: a full run died on its first model response with
+    `KeyError: 'input_tokens_details'` and still exited 0.
+
+    IT LIVES IN THIS MODULE FOR A LAYERING REASON, and the reason cost a run.
+    It was first put in `specflow.cache_stats`, which already knew both API
+    shapes -- and that made `eda_agent/model.py` import specflow. Arm A is by
+    construction the tree with specflow DELETED, and `make_arm_a.sh` copies
+    this file into it whole, so arm A died immediately with
+    `ModuleNotFoundError: No module named 'specflow'`. specflow imports
+    eda_agent in a dozen places and never the reverse.
+
+    `eda_agent/utils.py` was the next candidate and is worse: `make_arm_a.sh`
+    carries config.py and model.py only, deliberately, so putting it there
+    would force arm A to take HEAD's whole 862-line utils.py and contaminate
+    the arm with code that IS the hardening under test. Here it rides along
+    with a file the arm already takes.
+
+    A Mapping is read as a mapping, everything else by attribute, and both
+    swallow only lookup failure -- never a genuine error from a property.
+    """
+    if isinstance(obj, Mapping):
+        return obj.get(name, default)
+    try:
+        return getattr(obj, name, default)
+    except (AttributeError, KeyError, TypeError):
+        return default
+
 
 logger = logging.getLogger(__name__)
 
@@ -327,26 +363,25 @@ class UsageTrackingModel(ChatModelBase):
     def _accumulate_usage(self, usage: Any) -> None:
         if usage is None:
             return
-        from specflow.cache_stats import _attr
-
-        # `_attr`, not `getattr`: agentscope's `ChatUsage` is a dict subclass
+        # `usage_attr`, not `getattr`: agentscope's `ChatUsage` is a dict subclass
         # whose `__getattr__` raises KeyError, which `getattr`'s default does
         # not absorb. See `_attr`'s docstring -- this killed a run at its first
         # call, and the run then exited 0.
-        self._input_tokens += int(_attr(usage, "input_tokens", 0) or 0)
-        self._output_tokens += int(_attr(usage, "output_tokens", 0) or 0)
+        self._input_tokens += int(usage_attr(usage, "input_tokens", 0) or 0)
+        self._output_tokens += int(usage_attr(usage, "output_tokens", 0) or 0)
         # THE KEY IS NESTED, and reading the top level returns nothing and
         # reports 0% on a run that was in fact heavily cached -- a mistake this
         # project has already made once. `cache_stats` is the one place that
         # knows both API shapes (`input_tokens_details` on Responses,
         # `prompt_tokens_details` on Chat), so this borrows its reader rather
         # than becoming a second one that can drift from it.
-        from specflow.cache_stats import _first_int
-
-        details = (_attr(usage, "input_tokens_details")
-                   or _attr(usage, "prompt_tokens_details"))
+        details = (usage_attr(usage, "input_tokens_details")
+                   or usage_attr(usage, "prompt_tokens_details"))
         if details is not None:
-            self._cached_tokens += _first_int(details, ("cached_tokens",)) or 0
+            try:
+                self._cached_tokens += int(usage_attr(details, "cached_tokens", 0) or 0)
+            except (TypeError, ValueError):
+                pass
 
     # A provider can answer HTTP 200 with a body that is not valid JSON — a
     # truncated stream, or an error page — and the OpenAI client raises
@@ -470,15 +505,13 @@ class UsageTrackingModel(ChatModelBase):
         except Exception:  # noqa: BLE001
             return
         if reason == "length":
-            from specflow.cache_stats import _attr as _usage_attr
-
             usage = getattr(res, "usage", None)
             logger.warning(
                 "MODEL RESPONSE TRUNCATED (finish_reason=length%s): the artifact "
                 "is incomplete, not wrong — it stopped at the token cap. Raise "
                 "max_completion_tokens or continue the response; do not score "
                 "what came back as a failed generation.",
-                f", output_tokens={_usage_attr(usage, 'output_tokens', '?')}" if usage else "",
+                f", output_tokens={usage_attr(usage, 'output_tokens', '?')}" if usage else "",
             )
 
     def __getattr__(self, name: str) -> Any:

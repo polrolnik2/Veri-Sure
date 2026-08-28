@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any
 
+
 # Per-scenario failure markers emitted by the structured TB (tb_generator
 # NON_GOLDEN_TB_PROMPT item 9). The result line carries timing pointers, e.g.:
 #   [TEST overflow] FAIL (3 mismatches, first at time 240, window 200..280)

@@ -65,7 +65,15 @@ COLUMNS = [
     # only 6 task dirs ship a testbench, so for most tasks this is an
     # equivalence result and NOT a testbench pass rate. Reporting it as one is
     # the mistake benchmarks/baselines/'s README exists to prevent.
-    "produced_rtl", "syntax_pass", "functional_pass", "verdict",
+    # THE MISS RATE. `self_tb_pass` is the pipeline's verdict on its OWN
+    # testbench; `functional_pass` is the held-out verifier's. `tb_agreement`
+    # crosses them, and `miss` is the cell that matters: the pipeline declared
+    # the RTL good and the golden oracle disagreed. That is the inert-testbench
+    # failure this project exists to prevent, and it is invisible in either
+    # column alone -- a run reporting only self_tb_pass reports its own opinion
+    # of itself.
+    "produced_rtl", "syntax_pass", "self_tb_pass", "tb_agreement",
+    "functional_pass", "verdict",
     "flow", "proof_type", "cv_compile_gate", "formal_status",
     "interface_status", "reference_precheck", "verdict_reason",
     # health
@@ -235,6 +243,13 @@ def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
         # does not compile, and collapsing them loses the distinction between
         # "the pipeline made nothing" and "the pipeline made something wrong".
         r["produced_rtl"] = "no" if "no candidate RTL" in str(cg.get("reason", "")) else "yes"
+        # Both arms record this: chipverilog_arm_a.py:177 and
+        # run_chipverilog.py:313. Absent (an older run, or one that never got
+        # far enough to simulate) stays empty rather than becoming "no" -- "did
+        # not pass" and "was never asked" are different, and only the first
+        # belongs in a miss rate's denominator.
+        if "is_sim_pass" in base:
+            r["self_tb_pass"] = "yes" if base.get("is_sim_pass") else "no"
 
     sc = _load(run / "score.json")
     if isinstance(sc, dict):
@@ -249,6 +264,21 @@ def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
                  interface_status=sc.get("interface_status", ""),
                  reference_precheck=sc.get("reference_precheck", ""),
                  verdict_reason=str(sc.get("reason", ""))[:160].replace("\n", " "))
+
+    # ---- the two testbenches, crossed --------------------------------------
+    self_tb, golden = r["self_tb_pass"], r["functional_pass"]
+    if self_tb and golden:
+        r["tb_agreement"] = {
+            ("yes", "yes"): "agree_pass",
+            # THE ONE TO COUNT: the pipeline passed its own testbench and the
+            # held-out oracle failed the same RTL.
+            ("yes", "no"): "miss",
+            ("no", "no"): "agree_fail",
+            # The opposite error, and worth its own name rather than being
+            # folded in: the pipeline's testbench was stricter than the
+            # verifier, which costs a good design rather than passing a bad one.
+            ("no", "yes"): "self_tb_over_strict",
+        }.get((self_tb, golden), "")
 
     # ---- health ------------------------------------------------------------
     gates = [p for p in sf.glob("*_gate.json")]

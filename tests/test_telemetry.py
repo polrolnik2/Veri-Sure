@@ -146,3 +146,36 @@ def test_rerunning_a_run_REPLACES_its_row(tmp_path):
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1, "one row per run, not one per extraction"
     assert rows[0]["functional_pass"] == "yes"
+
+
+def test_the_miss_is_self_tb_pass_crossed_with_a_golden_fail(tmp_path):
+    """THE NUMBER THE MISS RATE IS BUILT ON.
+
+    `self_tb_pass` is the pipeline's verdict on its own testbench and
+    `functional_pass` is the held-out verifier's. Neither alone says anything
+    about the other: a run reporting only the first reports its own opinion of
+    itself, which is exactly the inert-testbench failure the project exists to
+    prevent. The cross is what makes the failure countable.
+    """
+    def _row(sim, status):
+        run = _run(tmp_path, f"t-{sim}-{status}")
+        _write(run / "baseline.json", {"is_sim_pass": sim,
+                                       "compile_gate": {"status": "pass"}})
+        _write(run / "score.json", {"status": status})
+        return telemetry.row_for(run, pathlib.Path("."))
+
+    assert _row(True, "function_fail")["tb_agreement"] == "miss"
+    assert _row(True, "pass")["tb_agreement"] == "agree_pass"
+    assert _row(False, "function_fail")["tb_agreement"] == "agree_fail"
+    # The opposite error keeps its own name: a self-TB stricter than the
+    # verifier costs a good design rather than passing a bad one.
+    assert _row(False, "pass")["tb_agreement"] == "self_tb_over_strict"
+
+
+def test_a_run_that_never_simulated_is_not_a_self_tb_failure(tmp_path):
+    """"did not pass" and "was never asked" are different, and only the first
+    belongs in a miss rate's denominator."""
+    run = _run(tmp_path)
+    _write(run / "baseline.json", {"compile_gate": {"status": "fail"}})
+    row = telemetry.row_for(run, pathlib.Path("."))
+    assert row["self_tb_pass"] == "" and row["tb_agreement"] == ""
