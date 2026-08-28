@@ -23,6 +23,25 @@ ARM=/home/user/arm-a
 RUNS=/home/user/runs
 PAR="${1:?usage: batch-arm-a.sh PARALLEL task:count [task:count ...]}"
 shift
+# THE EFFORT IS THE LEVER THAT DECIDES WHETHER ARM A RUNS AT ALL, and it lives
+# in the env file because arm A has no model switches -- `chipverilog_arm_a.py`
+# calls `load_openai_config()` with no model or effort argument.
+#
+# At xhigh, gpt-5.6-luna reasons past this gateway's 300s idle reaper and the
+# connection is closed: 10 of 11 batch runs died that way, and an isolated
+# retry died identically at 903s == 3 x 301s. Streaming plus reasoning
+# summaries moved the failure but did not remove it. At medium the same task
+# (or1200_dc_fsm) completes in 4 minutes with a passing self-TB.
+#
+# So ARM_ENV selects the configuration, and every run in one batch must use
+# ONE of them: an effort mixed across a set makes its runs incomparable to each
+# other, which is the confound this project keeps paying for.
+ARM_ENV="${ARM_ENV:-$REPO/.env.local}"
+# Runs are named `a-<TAG><task>-<n>`, so a batch at one configuration cannot
+# overwrite a batch at another. Without it the medium re-run would have
+# destroyed the two xhigh results that DID complete, and the telemetry row
+# keyed on the run name would have silently been replaced rather than added.
+ARM_TAG="${ARM_TAG:-}"
 
 find_task() {
     find "$REPO/benchmarks/chipverilog/Des" -maxdepth 2 -type d -name "$1" | head -1
@@ -56,7 +75,7 @@ for spec in "$@"; do
     if [ -z "$dir" ]; then echo "!! no task dir for $task; skipped"; continue; fi
     for i in $(seq 1 "$n"); do
         while [ "$(jobs -rp | wc -l)" -ge "$PAR" ]; do wait -n; done
-        one "$dir" "$task" "$RUNS/a-$task-$i" &
+        one "$dir" "$task" "$RUNS/a-$ARM_TAG$task-$i" &
     done
 done
 wait
