@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -554,8 +555,34 @@ def make_openai_model(cfg: OpenAIConfig,
     up to `max_attempts * 10` times per turn. That shape is the best case for
     caching and the worst case for cost, and routing is the difference.
 
-    Optional, so an agent that has not been given one behaves exactly as before.
+    OPT-IN WAS THE BUG. This used to be "optional, so an agent that has not
+    been given one behaves exactly as before" -- and behaving as before means
+    NO routing hint at all, silently. Measured: arm A, reconstructed by
+    `benchmarks/make_arm_a.sh`, takes this module whole from HEAD but its seven
+    agents from the merge base, where `git grep cache_key` matches nothing. So
+    every arm A request went out unkeyed while the mechanism sat right here,
+    unused, and nothing said so. Byte replay reached that arm because it lives
+    INSIDE the single door (`make_formatter`); the key did not, because it was
+    handed in from outside.
+
+    So a caller that passes nothing now gets a key derived from ITS OWN MODULE
+    rather than none. That keeps the one property that matters -- one key per
+    prefix, never pooled, since every agent has its own system prompt and tool
+    schema -- while making it impossible to miss by omission. Each of the seven
+    agent modules holds exactly one construction site, so module identity and
+    prefix identity coincide; a module that ever grows a second, differently
+    prefixed agent must pass an explicit key, and the explicit keys below are
+    kept for exactly that reason and because they survive a file rename.
     """
+    if not cache_key:
+        # The CALLER's module, not this one: `sys._getframe(1)` is the frame
+        # that called `make_openai_model`. Cheap (no stack walk) and evaluated
+        # once per agent construction, not once per request.
+        try:
+            mod = sys._getframe(1).f_globals.get("__name__") or ""
+        except Exception:  # noqa: BLE001 -- a missing frame must not stop a run
+            mod = ""
+        cache_key = mod.rsplit(".", 1)[-1] or None
     # Raise the OpenAI SDK's retry count (default 2) so rate-limit (429) and
     # transient 5xx/connection errors are ridden out via the SDK's built-in
     # exponential backoff + jitter (which also honors Retry-After /

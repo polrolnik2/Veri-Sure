@@ -67,10 +67,18 @@ def test_an_explicitly_configured_key_is_not_overridden():
     assert m._base_model.generate_kwargs["prompt_cache_key"] == "mine"
 
 
-def test_the_debug_loop_gets_its_own_key_and_others_are_unchanged():
+def test_the_debug_loop_gets_its_own_key_and_a_bare_call_gets_a_derived_one():
     """One agent is one shared prefix: its system prompt and tool schema are
-    identical on every call of every turn. An agent given no key must behave
-    exactly as it did before this existed."""
+    identical on every call of every turn.
+
+    THIS TEST USED TO ASSERT THE OPPOSITE OF ITS SECOND HALF -- that "an agent
+    given no key must behave exactly as it did before this existed", i.e. sends
+    no key at all. That was the defect, not the contract: arm A takes this
+    module whole from HEAD but its seven agents from the merge base, where no
+    call site passes a key, so every request it ever made went out unrouted
+    with the mechanism sitting unused one frame away. A bare call now derives a
+    key from the CALLER's module, which is per-prefix exactly as an explicit
+    one is."""
     from eda_agent.config import OpenAIConfig
     from eda_agent.model import make_openai_model
 
@@ -79,7 +87,9 @@ def test_the_debug_loop_gets_its_own_key_and_others_are_unchanged():
     keyed = make_openai_model(cfg, cache_key="refmodel-debug")
     assert (keyed._base_model.generate_kwargs["prompt_cache_key"]
             == "veri-sure:refmodel-debug:gpt-5.6-luna")
-    assert not make_openai_model(cfg)._base_model.generate_kwargs
+    # Derived from this test module, and never absent.
+    bare = make_openai_model(cfg)._base_model.generate_kwargs
+    assert bare["prompt_cache_key"] == "veri-sure:test_cache_key:gpt-5.6-luna"
 
 
 def test_EVERY_agent_is_keyed_and_no_two_share_a_key():
@@ -149,3 +159,82 @@ def test_the_two_long_editors_report_cached_tokens_beside_input():
         src = inspect.getsource(cls.__init__)
         assert "self._model = make_openai_model(" in src, (
             f"{cls.__name__} builds its model inline, so usage() cannot read it")
+
+
+# -------------------------------------------- the eda_agent side of the door
+def _built_from(module_name: str, **kw):
+    """Build a model as if `make_openai_model` were called from `module_name`.
+
+    The derivation reads the CALLER's frame, so the only faithful way to
+    exercise it is to call from globals carrying that `__name__`.
+    """
+    from eda_agent.config import OpenAIConfig
+    from eda_agent.model import make_openai_model
+    cfg = OpenAIConfig(model="gpt-5-mini", api_key="dummy",
+                       base_url="https://example.invalid/v1")
+    ns = {"make_openai_model": make_openai_model, "cfg": cfg, "kw": kw,
+          "__name__": module_name}
+    exec("m = make_openai_model(cfg, **kw)", ns)  # noqa: S102 -- see docstring
+    return ns["m"].generate_kwargs
+
+
+def test_an_agent_that_passes_no_key_still_gets_one():
+    """OPT-IN WAS THE BUG, and this is the pin for it.
+
+    `make_openai_model` used to set `prompt_cache_key` only when handed one, so
+    an agent that did not pass one sent every request unrouted and nothing said
+    so. Measured: arm A (`benchmarks/make_arm_a.sh`) takes eda_agent/model.py
+    whole from HEAD but its seven agents from the merge base, where
+    `git grep cache_key` matches nothing -- so the mechanism was present and
+    unused on every request that arm ever made.
+
+    Byte replay reached that arm because it lives INSIDE the single door
+    (`make_formatter`). The key did not, because it was handed in from outside.
+    """
+    got = _built_from("eda_agent.rtl_editor")
+    assert got["prompt_cache_key"] == "veri-sure:rtl_editor:gpt-5-mini"
+
+
+def test_the_default_is_still_ONE_KEY_PER_PREFIX_not_a_shared_pool():
+    """The property that must survive the convenience.
+
+    Pooling two agents would send traffic to a backend holding a head it cannot
+    use -- every agent has its own system prompt and tool schema, so every agent
+    is its own prefix. A default that collapsed them would be worse than none.
+    """
+    a = _built_from("eda_agent.rtl_editor")["prompt_cache_key"]
+    b = _built_from("eda_agent.tb_editor")["prompt_cache_key"]
+    assert a != b
+
+
+def test_an_explicit_key_beats_the_derived_one():
+    """The seven explicit keys stay, and stay authoritative: they survive a file
+    rename, and a module that grows a second differently-prefixed agent has to
+    say so rather than silently pooling the two under one module name."""
+    got = _built_from("eda_agent.rtl_editor", cache_key="rtl-debug")
+    assert got["prompt_cache_key"] == "veri-sure:rtl-debug:gpt-5-mini"
+
+
+def test_a_key_already_in_generate_kwargs_is_not_overwritten():
+    """`setdefault`, not assignment -- a caller that has chosen a key for its
+    own reasons keeps it."""
+    from eda_agent.config import OpenAIConfig
+    from eda_agent.model import make_openai_model
+    cfg = OpenAIConfig(model="gpt-5-mini", api_key="dummy",
+                       base_url="https://example.invalid/v1",
+                       generate_kwargs={"prompt_cache_key": "mine"})
+    assert make_openai_model(cfg).generate_kwargs["prompt_cache_key"] == "mine"
+
+
+def test_every_shipped_agent_still_names_its_own_key():
+    """The census, so a new agent module cannot quietly join an existing pool."""
+    import pathlib
+    import re
+    seen = {}
+    for path in pathlib.Path("eda_agent").glob("*.py"):
+        for m in re.finditer(r'make_openai_model\([^)]*cache_key=["\']([^"\']+)',
+                             path.read_text(encoding="utf-8")):
+            seen.setdefault(m.group(1), []).append(path.name)
+    assert set(seen) == {"rtl-debug", "tb-debug", "refmodel-debug", "architect",
+                         "asserter", "rtl-generate", "boolean-proofer"}, seen
+    assert all(len(v) == 1 for v in seen.values()), seen
