@@ -179,3 +179,20 @@ def test_a_run_that_never_simulated_is_not_a_self_tb_failure(tmp_path):
     _write(run / "baseline.json", {"compile_gate": {"status": "fail"}})
     row = telemetry.row_for(run, pathlib.Path("."))
     assert row["self_tb_pass"] == "" and row["tb_agreement"] == ""
+
+
+def test_arm_a_records_its_cost_in_baseline_not_agent_io(tmp_path):
+    """Arm A writes no agent_io/ -- per-call recording is a specflow port
+    feature and arm A is the specflow-deleted tree. Left unhandled, every arm A
+    cost cell is blank beside a populated arm B row, which reads as "cost 0" in
+    the one comparison the two arms exist for."""
+    run = _run(tmp_path)
+    _write(run / "baseline.json",
+           {"model": "gpt-5.6-luna", "reasoning_effort": "xhigh",
+            "is_sim_pass": True, "compile_gate": {"status": "pass"},
+            "tokens": {"eda_agent_input": 62437, "eda_agent_output": 56352}})
+    row = telemetry.row_for(run, pathlib.Path("."))
+    assert row["input_tokens"] == 62437 and row["output_tokens"] == 56352
+    assert row["small_model"] == "gpt-5.6-luna"
+    # Arm A's ledger has no cached field; that is absence, not a measured zero.
+    assert row["cached_tokens"] == "" and row["cache_hit_pct"] == ""

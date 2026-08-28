@@ -177,6 +177,23 @@ def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
         r["big_model"] = _join(big & set(stages), "models")
         r["big_effort"] = _join(big & set(stages), "efforts")
 
+    # ARM A KEEPS ITS LEDGER SOMEWHERE ELSE. It writes no agent_io/, because
+    # per-call recording is a specflow port feature and arm A is the tree with
+    # specflow deleted -- it totals into baseline.json instead. Without this an
+    # arm A row is blank in every cost column, which reads as "cost 0" beside a
+    # populated arm B row: the exact absent-vs-zero confusion this file exists
+    # to avoid, in the one comparison the arms are FOR.
+    if not stages:
+        b = _load(run / "baseline.json") or {}
+        tk = b.get("tokens") or {}
+        if tk.get("eda_agent_input") is not None:
+            r["input_tokens"] = tk.get("eda_agent_input", "")
+            r["output_tokens"] = tk.get("eda_agent_output", "")
+            # `cached` stays EMPTY: arm A's ledger has no such field, and it is
+            # not a measured zero. Its per-agent breakdown is in baseline.json.
+            r["small_model"] = str(b.get("model") or "")
+            r["small_effort"] = str(b.get("reasoning_effort") or "")
+
     # ---- the debug loop, which is its own budget ---------------------------
     # Newest round only: turns are cumulative, so summing them double-counts.
     rounds = sorted((sf / "judge").glob("r*/trust.json")) if (sf / "judge").is_dir() else []
