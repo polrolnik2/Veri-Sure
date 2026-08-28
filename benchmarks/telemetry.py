@@ -39,7 +39,6 @@ import datetime as dt
 import json
 import pathlib
 import re
-import subprocess
 
 #: Column order. Provenance and confounds first -- see the module docstring.
 COLUMNS = [
@@ -136,12 +135,28 @@ def calls_by_stage(run: pathlib.Path) -> dict[str, dict]:
     return dict(out)
 
 
-def _git_commit(repo: pathlib.Path) -> str:
-    try:
-        return subprocess.run(["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
-                              capture_output=True, text=True, timeout=10).stdout.strip()
-    except Exception:  # noqa: BLE001 -- provenance missing is not fatal
-        return ""
+def _run_commit(run: pathlib.Path) -> str:
+    """The commit the RUN executed at, or empty. NEVER the current HEAD.
+
+    This read `git rev-parse HEAD` at packaging time, which is the code as it
+    stands when the row is written and not the code that produced the run. A
+    run packaged hours later got today's sha, silently -- and `commit` is one of
+    the five confound columns this module's own docstring calls load-bearing,
+    because "every comparison this project has got wrong was got wrong by
+    comparing two runs that differed in one of them". Stamping it wrong is
+    worse than leaving it blank: a blank says "unknown", a wrong sha says
+    "these two runs were the same code" when they were not.
+
+    So: read what the run recorded, and if it recorded nothing, say nothing --
+    the same rule the header states for every other column.
+    """
+    for name in ("commit.txt", "commit"):
+        f = run / name
+        if f.is_file():
+            got = f.read_text().strip().split()[0] if f.read_text().strip() else ""
+            if got:
+                return got[:12]
+    return ""
 
 
 def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
@@ -149,7 +164,7 @@ def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
     r: dict = {c: "" for c in COLUMNS}
     r["run"] = run.name
     r["packaged_utc"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    r["commit"] = _git_commit(repo)
+    r["commit"] = _run_commit(run)
 
     # ---- cost, from every recorded call ------------------------------------
     stages = calls_by_stage(run)

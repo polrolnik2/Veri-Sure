@@ -278,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
                          "control. Required for --question surplus; unused by "
                          "--question direction, which reads its label from "
                          "oracles.json's dispositions.")
-    ap.add_argument("--model", default="gpt-5.4-mini")
+    ap.add_argument("--model", default="gpt-5.1-codex-mini")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--env-file", type=pathlib.Path)
     ap.add_argument("--limit", type=int, default=0)

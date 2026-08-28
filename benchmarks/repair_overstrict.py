@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                     / "i2c_master_bit_ctrl" / "ref_model.py")
     # The fan-out model, per the standing rule that per-item authoring
     # runs on the small model and never on Luna.
-    ap.add_argument("--model", default="gpt-5-mini")
+    ap.add_argument("--model", default="gpt-5.1-codex-mini")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--env-file", type=pathlib.Path)
     ap.add_argument("--limit", type=int, default=0)

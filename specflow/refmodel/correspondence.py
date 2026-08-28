@@ -97,20 +97,29 @@ are NOT judging how the code is written: which combinators it uses, how it is
 organised, which data structures it reaches for, whether you would have written
 it differently. Only WHAT IT DECIDES.
 
-**A check that decides the requirement WEAKLY is ON TARGET.** A requirement
-here states ONE claim -- it is meant to be atomic and almost always is -- so
-the question is never "did the check cover enough of it". It is: does the check
-decide that claim at all. Deciding it loosely, without timing constraints,
-without every sub-condition of its trigger, or in a way you would have written
-more tightly, is ON TARGET. Whether a check is strong enough is a different
-question measured by a different gate, and answering it here would push every
-check toward demanding more -- while another gate is simultaneously pushing them
-toward demanding less.
+**YOU DECIDE THE LOGIC, NOT THE IMPLEMENTATION.** A requirement here states ONE
+claim -- it is meant to be atomic and almost always is -- so the question is
+never "did the check cover enough of it", and never "would I have written it
+this way".
+
+THE LOGIC IS YOURS TO JUDGE. Does the check assert what the requirement says
+is true, under the condition the requirement says makes it true, in the
+direction the requirement states it? Direction, causality, and what is ASSERTED
+against what is merely ASSUMED -- those are the question.
+
+THE IMPLEMENTATION IS NOT YOURS. Which combinators it uses, how it is
+organised, where it reads a value from, and HOW MUCH IT DEMANDS. A check whose
+logic is right and which does not pin the timing, does not test every
+sub-condition of its trigger, or asks for less than you would have asked for,
+is ON TARGET. How much a check demands is a different question measured by a
+different gate, and answering it here would push every check toward demanding
+more -- while another gate is simultaneously pushing them toward demanding less.
 
 The one claim has two halves: a CONDITION under which it applies, and what it
-says HAPPENS then. Being weak about the second half is fine. Deciding only the
-FIRST half is not weakness -- it is checking the premise, which is true whenever
-the check looks, and says nothing whatever about the design.
+says HAPPENS then. Asking little of the second half is an implementation
+choice and is fine. Asserting only the FIRST half is a LOGIC error -- it checks
+the premise, which is true whenever the check looks, and says nothing whatever
+about the design.
 
 Answer NO only when the procedure is about something ELSE, or is about it
 BACKWARDS:
@@ -132,17 +141,16 @@ BACKWARDS:
     happens when the condition does NOT hold. A requirement that says what
     happens under X says nothing whatever about not-X.
 
-Those last three are one question, not three: does the check decide what the
+Those last three are one question, not three: does the check assert what the
 requirement says, in the direction the requirement says it? Name the
 requirement's condition and its effect in `reasoning` before you answer, and
-say which of the two the check asserts. This is about the LOGIC, not the code:
-a check that gets the direction right and is written awkwardly, partially or
-weakly is a YES.
+say which of the two the check asserts.
 
-Answer YES whenever the procedure is a check of this requirement's EFFECT,
-however weak. "It should also check X" is a YES. "It should check X more
-precisely" is a YES. Only "it is checking something else" and "it is checking
-it backwards" are a NO.
+Answer YES whenever the check's LOGIC is this requirement's logic, however
+little it demands and however awkwardly it is written. "It should also check X"
+is a YES. "It should check X more precisely" is a YES. "I would have written
+this differently" is a YES. Only "it is checking something else" and "it is
+checking it backwards" are a NO.
 
 There is no third answer. If you find yourself wanting to say "it depends" or
 "unclear", decide which is more nearly true and say why in `reasoning` -- a

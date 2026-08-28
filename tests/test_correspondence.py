@@ -132,7 +132,9 @@ def test_the_gate_refuses_STRENGTH_and_CODE_STYLE_but_not_LOGIC():
     """
     for phrase in ("not judging how thorough, how strict",
                    "NOT judging how the code is written",
-                   "Only WHAT IT DECIDES"):
+                   "Only WHAT IT DECIDES",
+                   "THE IMPLEMENTATION IS NOT YOURS",
+                   "THE LOGIC IS YOURS TO JUDGE"):
         assert phrase in C.SYSTEM, phrase
 
 
@@ -161,7 +163,8 @@ def test_asserting_the_premise_is_not_a_WEAK_check():
     A requirement states one claim; the licence is to decide it weakly, never
     to decide half of it."""
     assert "it is meant to be atomic and almost always is" in C.SYSTEM
-    assert "Deciding only the\nFIRST half is not weakness" in C.SYSTEM
+    assert "Asserting only the FIRST half is a LOGIC error" in C.SYSTEM
+    assert "Asking little of the second half is an implementation" in C.SYSTEM
 
 
 def test_partial_and_loose_checks_are_on_target():
@@ -171,8 +174,16 @@ def test_partial_and_loose_checks_are_on_target():
     answers to a question a different gate asks. As a blocking gate that pushes
     every check toward demanding MORE, while gate 1 pushes them toward
     demanding less."""
-    assert "decides the requirement WEAKLY is ON TARGET" in C.SYSTEM
-    assert '"It should also check X" is a YES' in C.SYSTEM
+    assert "YOU DECIDE THE LOGIC, NOT THE IMPLEMENTATION" in C.SYSTEM
+    # Fragments that do not cross a line wrap -- the rewrite above moved the
+    # break into the middle of the old assertion, which is the third time this
+    # trap has fired in this file.
+    assert "It should also check X" in C.SYSTEM
+    assert "I would have written" in C.SYSTEM
+    assert "however\nlittle it demands" in C.SYSTEM
+    # the licence is the IMPLEMENTATION axis, never a licence to be vague about
+    # logic -- "loosely" invited exactly that reading and is gone.
+    assert "loosely" not in C.SYSTEM and "more tightly" not in C.SYSTEM
 
 
 # ----------------------------------------------------------------- the verdict

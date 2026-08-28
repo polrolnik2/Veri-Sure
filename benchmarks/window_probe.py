@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True, type=pathlib.Path)
     ap.add_argument("--limit", type=int, default=0,
                     help="first N of the target population; 0 = all")
-    ap.add_argument("--model", default="gpt-5-mini",
+    ap.add_argument("--model", default="gpt-5.1-codex-mini",
                     help="the fan-out model. NOT Luna: this is a fan-out.")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--skip-normalize", action="store_true",

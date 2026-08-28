@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True, type=pathlib.Path,
                     help="where agent_io lands; kept out of the run copy so a "
                          "resume does not have to distinguish them")
-    ap.add_argument("--model", default="gpt-5-mini",
+    ap.add_argument("--model", default="gpt-5.1-codex-mini",
                     help="the fan-out model. NOT Luna: this is a fan-out.")
     ap.add_argument("--effort", default="medium")
     # WITHOUT THIS THE RUN IS BOUNDED BY THE WITNESS ALONE, and the witness
