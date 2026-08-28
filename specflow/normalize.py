@@ -1139,6 +1139,26 @@ def run_normalize_fanout(
     results = run_fanout(requirements, one) if fanout else [one(r) for r in requirements]
     merged: list[NormalizedRequirement] = []
     for req, result in zip(requirements, results):
+        # A REQUIREMENT WHOSE NORMALIZED FORM NEVER PASSED ITS OWN GATE DOES
+        # NOT SHIP. Until this line existed, `merged` took `result.output`
+        # regardless of `result.ok`, so a form the gate had rejected reached S2,
+        # the stimulus and the check author identically to one it had accepted.
+        # Measured on c1-i2c: 15 of 122, every one of them carrying "observable
+        # at [...] but no route given" or a `shows` that names only one case --
+        # which hands the check author a port it may assert ANYTHING about.
+        # REQ-0094 is the worked case and it did exactly that.
+        #
+        # NOT A QUALITY CLAIM, and the measurement forbids making one: 39% of
+        # the checks from flagged requirements are refuted by the known-good
+        # control against 39% from clean ones. This is a consistency fix. The
+        # pipeline stops acting on a claim its own gate rejected.
+        #
+        # AND THE BUDGET IS NOT WHAT IS BINDING. All 15 spent every repair
+        # round -- r0 through r3, the whole budget -- and still failed, so they
+        # are not near-misses that one more round would rescue. Raising
+        # `max_repairs` is not the fix and was measured before this landed.
+        if not result.ok:
+            continue
         for norm in result.output.normalized[:1]:
             # `req_uid` is the harness's to stamp, never the model's -- the same
             # treatment `run_judge` gives a verdict (`judge.py:796-804`). A model
@@ -1487,10 +1507,41 @@ def unsupported_observable(
     }
 
 
+def malformed(
+    requirements: list[dict],
+    results: list[StageResult[NormalizeOutput]],
+) -> dict[str, list[str]]:
+    """`req_uid -> the errors it still carried`, for what never normalized.
+
+    DELIBERATELY NOT `ABANDONED`. That disposition means "we attempted this and
+    the attempt was exhausted" -- a finding about the specification or the
+    stimulus, routed to whoever wrote them. This is a finding about the
+    NORMALIZER: it returned a structure its own gate rejects, after every
+    repair round it was given. Collapsing the two would file a prompt defect
+    inside a spec-quality count, and the two have different readers.
+
+    Dropped from the loop, never dropped from the report. §8.0's denominator
+    rule applies without exception: these leave the numerator AND the
+    denominator, and the count is printed beside every rate that now has a
+    smaller one. A build that passes with N requirements carrying no check at
+    all has to say N.
+    """
+    out: dict[str, list[str]] = {}
+    for req, result in zip(requirements, results):
+        if result.ok:
+            continue
+        uid = str(req.get("uid") or "")
+        if uid:
+            out[uid] = [f"{i.path}: {i.message}"
+                        for i in result.issues if i.severity == "error"]
+    return out
+
+
 def write_artifacts(
     run_dir: Path,
     normalized: list[NormalizedRequirement],
     results: list[StageResult[NormalizeOutput]],
+    requirements: list[dict] | None = None,
 ) -> Path:
     out_dir = Path(run_dir) / "specflow"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1504,6 +1555,11 @@ def write_artifacts(
                 # same -- no check can be written -- while the cause is not: the
                 # boundary was named and never explained.
                 "unsupported_observable": unsupported_observable(normalized),
+                # What never normalized, and is therefore absent from
+                # `normalized` above. On the face of the artifact so the
+                # smaller denominator is visible beside the count.
+                "malformed": (malformed(requirements, results)
+                              if requirements is not None else {}),
                 "indirect_review": indirect_review(normalized),
                 "issues": [
                     {"severity": i.severity, "path": i.path, "message": i.message,

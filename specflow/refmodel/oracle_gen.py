@@ -85,10 +85,21 @@ normalized form:
 Your oracle decides the `expectation` over the `observable`, at the moments the
 `activation` holds.
 
-WHEN `observed_via` IS PRESENT, THE PORT BELONGS TO ANOTHER REQUIREMENT.
+WHEN A ROUTE NAMES A `through_req`, THE PORT BELONGS TO ANOTHER REQUIREMENT.
 
-This requirement's own text names no output port -- the behaviour reaches the
-boundary through what it makes some other requirement do. Each entry gives you:
+`observed_via` IS NOT THAT SIGNAL, and reading it as one is the error this
+paragraph used to invite. Every observable requirement carries a route -- the
+route is the base case, and a DIRECTLY observable one names its own port with
+`through_req` EMPTY. Measured on c1-i2c: 109 of 122 requirements carry
+`observed_via` and only 33 name a `through_req`, so everything below applied to
+76 requirements whose port was their own. Check the field, not the list.
+
+A route with an empty `through_req` is your own port and the rest of this
+section does not apply to it: decide the `expectation` there directly.
+
+For a route that DOES name one, this requirement's own text names no output
+port -- the behaviour reaches the boundary through what it makes some other
+requirement do. Each such entry gives you:
 
   port         the declared output to decide at
   through_req  the requirement that port belongs to

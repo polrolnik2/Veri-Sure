@@ -479,7 +479,7 @@ def build_artifacts(
     except Exception as exc:  # noqa: BLE001
         logger.warning("normalize: not produced (%r)", exc)
     else:
-        write_normalized(run_dir, normalized, norm_results)
+        write_normalized(run_dir, normalized, norm_results, requirements=reqs)
         normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
                              if n.req_uid}
 

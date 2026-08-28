@@ -23,6 +23,7 @@ from .assure import assure_testplan_to_bins, assure_testplan_to_checks
 from .ids import PREFIX_BIN, PREFIX_CHECK, mint
 from .fanout import compose, json_block, shared_block
 from .model_io import ModelPort
+from .s2_testplan import borrowed
 from .schema import CoverageOutput, Issue
 from .stage import (
     StageResult,
@@ -290,7 +291,7 @@ def build_prompt_one(
     item = json_block("testplan_element", element)
     if normalized:
         item += "\n\n" + json_block("normalized", normalized)
-        if normalized.get("observed_via"):
+        if borrowed(normalized):
             item += "\n\n" + INDIRECT_NOTE
     return compose(
         shared_prefix(contract_json),
@@ -315,7 +316,7 @@ def indirect_issues(element: dict, out: CoverageOutput,
     does not use passes here, which is the right way to be wrong for a gate
     whose alternative is rejecting correct checks.
     """
-    routes = (normalized or {}).get("observed_via") or []
+    routes = borrowed(normalized)
     if not routes:
         return []
     act = ((normalized or {}).get("activation") or {})

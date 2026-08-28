@@ -232,6 +232,24 @@ requirement applies in. `stimulus` has to drive that sequence, not the state:
 """
 
 
+def borrowed(normalized: dict | None) -> list[dict]:
+    """The routes that name ANOTHER requirement's port, not this one's.
+
+    `observed_via` is NOT the indirect flag. The first-pass gate requires a
+    route on EVERY observable requirement -- "the route is the base case" -- so
+    a directly observable one carries a route naming its own port with an empty
+    `through_req`. Keying the indirect instruction on the presence of
+    `observed_via` therefore fires on almost everything.
+
+    Measured on c1-i2c: 109 of 122 requirements carry `observed_via` and only
+    33 name a `through_req`, so 76 were told the port belonged to another
+    requirement when it was their own. `through_req` is the only field that
+    distinguishes them.
+    """
+    return [r for r in ((normalized or {}).get("observed_via") or [])
+            if r.get("through_req")]
+
+
 def build_prompt_one(
     requirement: dict,
     contract_json: str,
@@ -242,7 +260,7 @@ def build_prompt_one(
     item = json_block("requirement", requirement)
     if normalized:
         item += "\n\n" + json_block("normalized", normalized)
-        if normalized.get("observed_via") or normalized.get("activated_via"):
+        if borrowed(normalized) or normalized.get("activated_via"):
             item += "\n\n" + INDIRECT_NOTE
     return compose(
         shared_prefix(contract_json),

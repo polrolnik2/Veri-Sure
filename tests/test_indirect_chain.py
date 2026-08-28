@@ -40,10 +40,23 @@ BLIND = json.dumps({"normalized": [{
                             "the effect is that no START is detected"),
     "expectation": "no START is detected"}]})
 
+#: The DIRECTLY observable one. It carries an `observed_via` naming its own
+#: port with an empty `through_req`, because that is what `gate_one` requires of
+#: a first-pass answer -- the route is the base case, not an indirect-only
+#: field. This fixture asserted `observable: ["busy"]` with no route until the
+#: merge started honouring `StageResult.ok`, at which point it stopped shipping
+#: and five tests here failed. It was always gate-failing; nothing had ever
+#: read the verdict.
 SEER = json.dumps({"normalized": [{
     "req_uid": "REQ-0001",
     "activation": {"text": "a START is detected", "inputs": {"sda_i": 0}},
-    "observable": ["busy"], "expectation": "busy rises"}]})
+    "observable": ["busy"],
+    "observed_via": [{
+        "port": "busy", "through_req": "",
+        "when": "after a START-shaped edge on sda_i while scl_i is high",
+        "shows": "busy is high once a START has been detected and low when "
+                 "none has"}],
+    "expectation": "busy rises"}]})
 
 ROUTED = json.dumps({"normalized": [{
     "req_uid": "REQ-0002",
@@ -170,3 +183,102 @@ def test_a_requirement_with_no_route_stays_blind_and_carries_its_reason():
     blind = {n.req_uid: n for n in merged}["REQ-0002"]
     assert blind.unobservable and blind.observed_via == []
     assert "no START is detected" in blind.unobservable_reason
+
+
+# ------------------------------- a form that failed its gate does not ship
+
+
+def test_a_form_that_never_passed_its_gate_is_absent_from_merged():
+    """MEASURED: 15 of c1-i2c's 122 shipped this way, every one carrying
+    "observable at [...] but no route given" -- which hands the check author a
+    port it may assert anything about. REQ-0094 did exactly that.
+
+    Not a quality claim: 39% of checks from flagged requirements are refuted by
+    the known-good control against 39% from clean ones. The pipeline stops
+    acting on a claim its own gate rejected, which is a different argument and
+    the one that holds.
+    """
+    bad = json.dumps({"normalized": [{
+        "req_uid": "REQ-0001",
+        "activation": {"text": "a START is detected", "inputs": {"sda_i": 0}},
+        "observable": ["busy"],          # ... and no `observed_via`
+        "expectation": "busy rises"}]})
+    port = _Port({"normalize_REQ-0001": bad, "normalize_REQ-0002": BLIND,
+                  "normalize_indirect_REQ-0002": ROUTED})
+    merged, results = run_normalize_fanout(
+        requirements=REQS, contract_json=CONTRACT_JSON, contract=CONTRACT,
+        port=port, max_repairs=0, fanout=False)
+    assert "REQ-0001" not in {n.req_uid for n in merged}
+    assert not results[0].ok
+
+
+def test_what_did_not_ship_is_named_and_reasoned_rather_than_dropped_quietly():
+    """Dropped from the loop, never dropped from the report. A build that
+    passes with N requirements carrying no check has to say N."""
+    from specflow.normalize import malformed
+
+    bad = json.dumps({"normalized": [{
+        "req_uid": "REQ-0001", "observable": ["busy"],
+        "activation": {"text": "t", "inputs": {"sda_i": 0}},
+        "expectation": "e"}]})
+    port = _Port({"normalize_REQ-0001": bad, "normalize_REQ-0002": BLIND,
+                  "normalize_indirect_REQ-0002": ROUTED})
+    _, results = run_normalize_fanout(
+        requirements=REQS, contract_json=CONTRACT_JSON, contract=CONTRACT,
+        port=port, max_repairs=0, fanout=False)
+    report = malformed(REQS, results)
+    assert "REQ-0001" in report
+    assert any("no route given" in why for why in report["REQ-0001"])
+    assert "REQ-0002" not in report, "one that passed is not reported"
+
+
+def test_malformed_is_not_abandoned():
+    """ABANDONED means "attempted and exhausted" and routes to the spec author.
+    This is the NORMALIZER returning a structure its own gate rejects, and it
+    routes to whoever owns that prompt. Filing one as the other hides a prompt
+    defect inside a spec-quality count."""
+    from specflow import normalize as N
+    from specflow.refmodel import verdict as V
+
+    assert "ABANDONED" not in (N.malformed.__doc__ or "").split("DELIBERATELY")[0]
+    assert "ABANDONED" in V.ROUTE
+    assert "MALFORMED" not in V.ROUTE, "different stage, different reader"
+
+
+# --------------------------- `observed_via` is not the indirect flag
+
+
+def test_a_direct_route_does_not_make_a_requirement_indirect():
+    """MEASURED, and this is what the blocking merge exposed. The first-pass
+    gate REQUIRES a route on every observable requirement, so a directly
+    observable one carries one naming its own port with an empty `through_req`.
+    Branching on the presence of `observed_via` therefore fires on almost
+    everything: 109 of c1-i2c's 122 carry it and only 33 name a `through_req`,
+    so 76 requirements were told the port belonged to someone else.
+    """
+    from specflow.s2_testplan import borrowed
+
+    direct = {"observed_via": [{"port": "busy", "through_req": "",
+                                "when": "w", "shows": "s"}]}
+    indirect = {"observed_via": [{"port": "busy", "through_req": "REQ-0001",
+                                  "when": "w", "shows": "s"}]}
+    assert borrowed(direct) == []
+    assert len(borrowed(indirect)) == 1
+    assert borrowed({}) == [] and borrowed(None) == []
+    mixed = {"observed_via": direct["observed_via"] + indirect["observed_via"]}
+    assert len(borrowed(mixed)) == 1, "only the borrowed one counts"
+
+
+def test_the_indirect_note_reaches_only_the_borrowed_requirement():
+    from specflow import s2_testplan, s3_coverage
+
+    direct = {"observable": ["busy"],
+              "observed_via": [{"port": "busy", "through_req": "",
+                                "when": "w", "shows": "s"}]}
+    req = {"uid": "REQ-0001", "text": "t"}
+    s2 = s2_testplan.build_prompt_one(req, CONTRACT_JSON, normalized=direct)
+    assert "PLAN BOTH CASES" not in s2
+    s3 = s3_coverage.build_prompt_one(
+        {"tp_uid": "TP-0001", "covers": ["REQ-0001"]}, CONTRACT_JSON,
+        normalized=direct)
+    assert "OBSERVED AT ANOTHER REQUIREMENT'S PORT" not in s3
