@@ -468,3 +468,22 @@ def test_the_per_design_constants_sit_in_the_CACHED_prefix():
     assert REQ["text"] not in head, "the requirement varies per item"
     assert "def decide" not in head, "so does the oracle"
     assert REQ["text"] in tail and "def decide" in tail
+
+
+def test_demanding_an_INTERNAL_signal_is_not_a_valid_rejection():
+    """MEASURED, and this is the fix for it. Given the interface, the reviewer
+    began rejecting checks for not observing signals that are not ports at all
+    -- "would need to observe the internal sto_condition signal", "instead of
+    checking slave_wait", "does not detect when the internal counter expires".
+    Four of arm C's five false positives had exactly that shape, and the arm
+    scored 29% precision against a 45% base rate: worse than rejecting at
+    random.
+
+    It is the same error made once already at normalization, reading each
+    requirement's MECHANISM instead of its EFFECT, which called 27 of 77
+    requirements unobservable when 10 of them already had working checks.
+    """
+    for phrase in ("THE CHECK CAN ONLY SEE DECLARED PORTS",
+                   "IS NEVER A VALID REJECTION",
+                   "instead of its EFFECT"):
+        assert phrase in C.SYSTEM, phrase

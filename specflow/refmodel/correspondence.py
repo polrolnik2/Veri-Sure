@@ -121,6 +121,19 @@ choice and is fine. Asserting only the FIRST half is a LOGIC error -- it checks
 the premise, which is true whenever the check looks, and says nothing whatever
 about the design.
 
+**THE CHECK CAN ONLY SEE DECLARED PORTS.** The trace it reads is a list of
+rows carrying the interface above and nothing else -- no internal register, no
+counter, no state variable, no intermediate signal, whatever the requirement's
+text names. So a requirement that describes an internal MECHANISM is decided at
+the port its effect reaches, and a check doing that is CORRECT, not off-target.
+
+"It would need to observe <internal signal>" IS NEVER A VALID REJECTION. It
+asks for something no check can do, and it is the specific error this project
+has already made once at another stage -- reading each requirement's MECHANISM
+instead of its EFFECT, which called 27 of 77 requirements unobservable when 10
+of them already had working checks. If the only fault you can find is that the
+check does not look at something that is not a port, the answer is YES.
+
 Answer NO only when the procedure is about something ELSE, or is about it
 BACKWARDS:
 
