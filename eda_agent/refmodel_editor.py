@@ -708,14 +708,23 @@ class SyncRefModelDebugger:
     def __init__(self, cfg: OpenAIConfig, *, max_attempts: int = 30):
         self._cfg = cfg
         self._max_attempts = max_attempts
-        self._usage: tuple[int, int] = (0, 0)
+        self._usage: tuple[int, int, int] = (0, 0, 0)
         #: The running conversation, carried turn to turn. See `debug` below.
         self._memory: list = []
 
-    #: `(input, output)` summed over every turn this debugger has run. Read by
-    #: the stage so the loop's spend lands in the run's ledger instead of being
-    #: counted in memory and dropped.
-    def usage(self) -> tuple[int, int]:
+    #: `(input, cached, output)` summed over every turn this debugger has run.
+    #: Read by the stage so the loop's spend lands in the run's ledger instead
+    #: of being counted in memory and dropped.
+    #:
+    #: THIS DROPPED `cached` AND RAISED WHILE DOING IT. `RefModelEditor.usage`
+    #: has returned three values since the cached-token work landed, and this
+    #: wrapper still declared two and unpacked two -- so `debug()` raised
+    #: `ValueError: too many values to unpack` inside a `finally`, was caught by
+    #: the "a turn must not kill the stage" handler, and lost the turn silently.
+    #: Had the unpack succeeded, `compose._tokens` would have taken its
+    #: two-element branch and reported `cached: 0` forever: a permanent 0% cache
+    #: rate that looks exactly like caching that does not work.
+    def usage(self) -> tuple[int, int, int]:
         return self._usage
 
     def debug(self, session: DebugSession) -> tuple[str, int, str]:
@@ -750,9 +759,10 @@ class SyncRefModelDebugger:
                 # In `finally` because a turn that raised still spent tokens,
                 # and a ledger that only counts successful turns understates
                 # exactly the runs worth investigating.
-                got_in, got_out = editor.usage()
+                got_in, got_cached, got_out = editor.usage()
                 self._usage = (self._usage[0] + got_in,
-                               self._usage[1] + got_out)
+                               self._usage[1] + got_cached,
+                               self._usage[2] + got_out)
 
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:

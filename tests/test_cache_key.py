@@ -289,3 +289,51 @@ def test_the_same_reader_handles_plain_objects_and_plain_dicts():
     # Chat-shaped and Responses-shaped names, neither raising on the other.
     assert _first_int({"prompt_tokens": 4}, ("input_tokens", "prompt_tokens")) == 4
     assert _first_int({"input_tokens": 9}, ("input_tokens", "prompt_tokens")) == 9
+
+
+# ------------------------------- the debug loop's ledger reaches the artifact
+def test_the_sync_debugger_reports_three_counters_not_two():
+    """THE ARITY MISMATCH, and it lost a whole debug turn without a word.
+
+    `RefModelEditor.usage()` has returned `(input, cached, output)` since the
+    cached-token work landed. `SyncRefModelDebugger` still declared two and
+    unpacked two, so `debug()` raised `ValueError: too many values to unpack`
+    inside a `finally` -- caught by the "a turn must not kill the stage"
+    handler, which is right in general and here meant the turn vanished.
+
+    And the quieter half: had the unpack succeeded, `compose._tokens` would have
+    taken its two-element branch and reported `cached: 0` permanently. A 0%
+    cache rate is indistinguishable from caching that does not work, which is
+    precisely the number this instrumentation exists to establish.
+    """
+    from eda_agent.refmodel_editor import SyncRefModelDebugger
+    from specflow.refmodel.compose import _tokens
+
+    class _Cfg:
+        model = "gpt-5.6-luna"
+
+    d = SyncRefModelDebugger(_Cfg(), max_attempts=1)
+    assert len(d.usage()) == 3, d.usage()
+    # The stage's reader must take its THREE-element branch, so `cached` is
+    # carried rather than zeroed.
+    d._usage = (1000, 400, 50)
+    assert _tokens(d) == {"input": 1000, "cached": 400, "output": 50}
+
+
+def test_the_stage_reader_still_tolerates_a_two_element_usage():
+    """`_tokens` promises to tolerate an older debugger rather than raise inside
+    the loop; that promise is what made the arity mismatch survivable, and it
+    stays."""
+    from specflow.refmodel.compose import _tokens
+
+    class _Old:
+        def usage(self):
+            return (10, 2)
+
+    assert _tokens(_Old()) == {"input": 10, "cached": 0, "output": 2}
+
+    class _Broken:
+        def usage(self):
+            raise RuntimeError("no counters")
+
+    assert _tokens(_Broken()) == {"input": 0, "cached": 0, "output": 0}
