@@ -322,61 +322,76 @@ defect rate; they do not make the set independent of its author.
 
 Read after §4, and it revises part of it.
 
-### 5.1 The author prompt covers both classes, and two of its own fixes cause them
+### 5.1 The author does what it was told, three times, each with a count behind it
 
-**Level-vs-edge is not an unwarned edge case. It is two instructions doing
-their job.**
+**An earlier draft of this section blamed `effect_follows` and normalization.
+That was confounded and is retracted.** The class was selected by reading 40
+free-text repair descriptions and then one variable was measured on it (8 of 8
+carry `effect_follows=True` against a base rate of 75 of 122). Two checks kill
+it: the mechanism does not reproduce -- a stable-correct level under
+`after_activation=True, strong=True` PASSES, because the window's closing row
+keeps `body` non-empty -- and the 8 checks fail through at least four different
+mechanisms (`sequence`, `throughout`, `eventually`, and hand-rolled edge tests),
+so one cause was never available to find.
 
-*The `effect_follows` pass-through.* `oracle_gen` says
-`activation.effect_follows` *"is the answer, and passing it through is the whole
-of the fix"*, and `after_activation` is `|=>` against `|->`: it drops the
-activation row from the window, so a consequent already true at the trigger no
-longer satisfies the check. **All 8 of the level-vs-edge requirements carry
-`effect_follows=True`**, against a base rate of 75 of 122 (61%). Several state a
-coincident effect rather than a following one -- REQ-0124, *"Driving an
-output-enable low CAUSES the corresponding line to be actively driven low"*, is
-combinational: the effect does not follow the cause, it coincides with it. The
-author obeyed a normalization claim that was wrong.
+**The real answer is in the prompt, and it is not an omission. It is an
+instruction.** `oracle_gen.py:140`, in capitals:
 
-**So most of this class is a normalization defect, not an authoring one**, and
-it belongs with §2 rather than in the check-detector list. The textual rule
-`normalize` needs is the one it does not have: *does the requirement describe a
-STATE that holds, or an EVENT that follows?* `effect_follows` currently answers
-a question nobody asked it to distinguish.
+> `WHEN THE REQUIREMENT DESCRIBES AN ACTION, LOOK FOR THE TRANSITION, NOT THE
+> LEVEL.` On an open-drain or active-low line the RESTING value and the
+> "released"/"inactive" value are the SAME NUMBER, so a scan for
+> `outputs[p] == released` matches the very first state, before anything has
+> happened [...] it was a level read where a transition was meant.
 
-*The `strong=True` instruction.* The prompt says a weak `eventually` running off
-the end returns UNKNOWN, so *"if the requirement says the response MUST come,
-pass `strong=True`, or the check can never be violated -- only left undecided.
-Five of one run's fourteen abstaining checks abstained for this reason."* Two of
-the level-vs-edge removals are exactly a `strong=True` (REQ-0030, REQ-0060).
+That reasoning is correct and the measurement behind it is real. What is absent
+is its boundary: **nothing anywhere says that requiring the transition convicts
+a design whose signal is correctly already at the value and stays there.**
 
-**Absence-mapped-to-failure has the same root, and the prompt's coverage misses
-by one case.** It states the rule twice, explicitly and with reasons:
+Three instructions push the same direction, each with a measured count, none
+carrying its converse:
 
-> *"Return ok=None when THE ACTIVATION NEVER OCCURS in this trace ... Do NOT
-> return False for that."*
-> *"`worst([])` is `(None, None, ...)`. Return it. Do NOT turn an empty window
-> list into False."*
+| where | says | measured on |
+|---|---|---|
+| `oracle_gen:140` | look for the TRANSITION, not the level | a level scan matching index 0, idle == released |
+| `oracle_gen:425` | pass `strong=True`, or the check can never be violated | 5 of 14 abstaining checks |
+| `temporal:228` | a consequent already true at the activation satisfies the default -- **the vacuity this module exists to remove** | 6 of 14 vacuous checks |
 
-Both cover **no window**. Every one of the five actual defects is **a window
-that opened and did not contain the evidence** -- REQ-0043 verbatim: *"the code
-path that let `eventually(...)` produce a False verdict for an activation (i.e.
-'no indicator observed')"*. That case is uncovered, and `strong=True` instructs
-the author to convict on it.
+And the asymmetry is total: **every occurrence of "already" in `oracle_gen.py`
+and `temporal.py` is on the vacuity side.** There is no sentence in either file
+describing a legitimately already-correct signal.
 
-**One rule fixes both, and it is textual.** `strong=True` is right when the
-requirement states an OBLIGATION (*"shall assert"*, *"must complete"*) and wrong
-when it states a STATE (*"is high while"*, *"is observed low"*) -- the same
-level-versus-event reading `effect_follows` needs. The prompt has the
-conditional (*"if the requirement says the response MUST come"*) but frames the
-instruction as a measured defect-fix with a count behind it, which is not a
-distinction an author will hold against that pressure.
+So the answer to "why can't the author figure it out" is that it is not failing
+to figure anything out. It is following three explicit rules, each justified by
+evidence, whose joint effect on a requirement stating a STATE is to convict a
+correct design. The vacuity-side rules are unconditional imperatives with
+counts; the over-strictness-side boundaries are absent. An author would have to
+override a capitalised instruction on its own reading of the requirement.
 
-**This is #99 arriving from the prompt side.** Over-strictness and vacuity as
-one expressiveness defect with two signs -- except here the pipeline is
-over-correcting one into the other through two prompt lines, each added to fix a
-measured abstention problem. Any fix must be measured on **both** counts at
-once, or it will trade the classes back.
+**What the prompt is missing is one sentence, and it is the converse of the one
+it has:**
+
+> A requirement can describe a STATE rather than an ACTION -- *"is high while
+> X"*, *"is observed low"*, *"remains released"*. There the correct design may
+> already hold the value when the window opens and never change it, so a check
+> requiring a transition, an edge, or `strong=True` reports a failure against a
+> design that is right. Require the transition when the requirement names an
+> ACTION; require the level when it names a STATE; and when the resting value
+> and the asserted value are the same number, say which one the requirement
+> means before you choose.
+
+**Absence-as-failure is the same defect and the same shape**, which is why the
+two classes group together. The prompt states its rule twice and both statements
+cover NO WINDOW -- *"Return ok=None when THE ACTIVATION NEVER OCCURS"*, *"Do NOT
+turn an empty window list into False"* -- while all five defects are a window
+that OPENED and did not contain the evidence (REQ-0043: *"the code path that let
+`eventually(...)` produce a False verdict for an activation (i.e. 'no indicator
+observed')"*). Uncovered by the rule, and covered by `strong=True` pointing the
+other way.
+
+**This is #99 from the prompt side**, and it sets the measurement obligation:
+every one of these three instructions exists because vacuity was the previous
+complaint, so any change to them must be scored on over-strictness AND vacuity
+together, or the classes trade back.
 
 ### 5.2 Correspondence never sees the interface
 
