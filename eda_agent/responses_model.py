@@ -280,6 +280,27 @@ class OpenAIResponsesModel(ChatModelBase):
     #: which is why no accumulator is needed.
     _TERMINAL = ("response.completed", "response.incomplete", "response.failed")
 
+    @staticmethod
+    def _vitals(started: float, events: int, gap: float, summary_chars: int,
+                first_content: float | None, request: dict) -> str:
+        """What a stream did, in one line, identical on every exit.
+
+        Written once and shared because the three ways out of `_create` --
+        dropped, ended with no terminal event, completed -- are only
+        comparable if they report the same fields. The first version had two
+        of them formatting their own string and the third saying nothing.
+        """
+        return (
+            f"after {time.monotonic() - started:.1f}s: {events} events, "
+            f"largest gap {gap:.1f}s, {summary_chars} summary chars, "
+            f"first content "
+            f"{f'{first_content:.1f}s' if first_content else 'NEVER'}, "
+            f"max_output_tokens={request.get('max_output_tokens')}. "
+            "A gap near 300s with no content is the gateway's idle reaper; a "
+            "large gap under it with content flowing is the client timeout; "
+            "summary chars near a completed call's is a spent output budget."
+        )
+
     async def _create(self, request: dict) -> Any:
         """One response, streamed so the connection never goes idle.
 
@@ -352,29 +373,27 @@ class OpenAIResponsesModel(ChatModelBase):
                     final = getattr(event, "response", None) or final
         except Exception:
             # The drop is re-raised unchanged -- this only makes it legible.
-            logger.warning(
-                "responses stream DROPPED after %.1fs: %d events, largest gap "
-                "%.1fs, %d summary chars, first content %s. A gap near 300s "
-                "with no content is the idle reaper; compare summary chars "
-                "against a completed call to tell a spent budget "
-                "(max_output_tokens=%s) from the model going quiet.",
-                time.monotonic() - started, events, gap, summary_chars,
-                f"{first_content:.1f}s" if first_content else "NEVER",
-                request.get("max_output_tokens"))
+            logger.warning("responses stream DROPPED %s", self._vitals(
+                started, events, gap, summary_chars, first_content, request))
             raise
         if final is None:
-            # A stream that ended with no terminal event. Named rather than
-            # returned as an empty response, because a caller that got `None`
-            # here would report an empty generation as a modelling failure.
+            # A stream that ENDED CLEANLY and still carried no terminal event:
+            # the iterator stopped, no exception, no `response.completed`. That
+            # is a different failure from a mid-stream drop and it needs the
+            # same vitals, which the first version of this instrumentation did
+            # not give it -- logging only on the exception path and on success
+            # left this branch, the one that then fired, silent. Found by
+            # reading a failed run that produced no telemetry at all.
+            logger.warning("responses stream ENDED WITH NO TERMINAL EVENT %s",
+                           self._vitals(started, events, gap, summary_chars,
+                                        first_content, request))
             raise RuntimeError(
                 "the response stream ended without a terminal event; the "
                 "connection was closed before the model finished")
-        logger.info(
-            "responses stream ok in %.1fs: %d events, largest gap %.1fs, "
-            "%d summary chars, first content %s, status=%s",
-            time.monotonic() - started, events, gap, summary_chars,
-            f"{first_content:.1f}s" if first_content else "NEVER",
-            getattr(final, "status", None))
+        logger.warning("responses stream OK (status=%s) %s",
+                       getattr(final, "status", None),
+                       self._vitals(started, events, gap, summary_chars,
+                                    first_content, request))
         return final
 
     # ------------------------------------------------------------------ parse
