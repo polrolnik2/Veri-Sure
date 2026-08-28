@@ -238,3 +238,54 @@ def test_every_shipped_agent_still_names_its_own_key():
     assert set(seen) == {"rtl-debug", "tb-debug", "refmodel-debug", "architect",
                          "asserter", "rtl-generate", "boolean-proofer"}, seen
     assert all(len(v) == 1 for v in seen.values()), seen
+
+
+# --------------------------------------- reading usage off a dict-subclass
+def test_usage_is_read_off_a_dict_subclass_without_raising():
+    """THE CRASH THIS PINS, and it killed a full run at its first call.
+
+    agentscope's `ChatUsage` subclasses `dict` through `DictMixin`, so its
+    `__getattr__` is `self[name]` and a missing key raises KeyError -- which the
+    three-argument `getattr` does NOT absorb, because its default only covers
+    AttributeError. `getattr(usage, "input_tokens_details", None)` therefore
+    raises rather than returning None, and the cached-token instrumentation sat
+    on exactly that call.
+
+    Live: c1-i2c died on its first model response with
+    `KeyError: 'input_tokens_details'`, produced no specflow/ directory at all,
+    and EXITED 0 -- the leaf exception is caught and reported as a result, so a
+    total failure reads as a run that happened to make nothing.
+    """
+    from specflow.cache_stats import _attr
+
+    class _DictUsage(dict):
+        """`ChatUsage`'s shape: attribute access delegates to the mapping."""
+        def __getattr__(self, name):
+            return self[name]        # KeyError, not AttributeError
+
+    u = _DictUsage(input_tokens=10, output_tokens=5)
+    assert getattr(u, "input_tokens") == 10
+    try:
+        getattr(u, "input_tokens_details", None)
+        raise AssertionError("expected the KeyError this test exists for")
+    except KeyError:
+        pass
+    assert _attr(u, "input_tokens_details") is None
+    assert _attr(u, "input_tokens") == 10
+    assert _attr(u, "nope", "dflt") == "dflt"
+
+
+def test_the_same_reader_handles_plain_objects_and_plain_dicts():
+    """Both real API shapes still work: the OpenAI SDK returns pydantic objects
+    on one path and this repo reads recorded JSON on another."""
+    from specflow.cache_stats import _attr, _first_int
+
+    class _Obj:
+        input_tokens = 3
+
+    assert _attr(_Obj(), "input_tokens") == 3
+    assert _attr(_Obj(), "missing", "dflt") == "dflt"
+    assert _attr({"input_tokens": 7}, "input_tokens") == 7
+    # Chat-shaped and Responses-shaped names, neither raising on the other.
+    assert _first_int({"prompt_tokens": 4}, ("input_tokens", "prompt_tokens")) == 4
+    assert _first_int({"input_tokens": 9}, ("input_tokens", "prompt_tokens")) == 9

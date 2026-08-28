@@ -327,8 +327,14 @@ class UsageTrackingModel(ChatModelBase):
     def _accumulate_usage(self, usage: Any) -> None:
         if usage is None:
             return
-        self._input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
-        self._output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        from specflow.cache_stats import _attr
+
+        # `_attr`, not `getattr`: agentscope's `ChatUsage` is a dict subclass
+        # whose `__getattr__` raises KeyError, which `getattr`'s default does
+        # not absorb. See `_attr`'s docstring -- this killed a run at its first
+        # call, and the run then exited 0.
+        self._input_tokens += int(_attr(usage, "input_tokens", 0) or 0)
+        self._output_tokens += int(_attr(usage, "output_tokens", 0) or 0)
         # THE KEY IS NESTED, and reading the top level returns nothing and
         # reports 0% on a run that was in fact heavily cached -- a mistake this
         # project has already made once. `cache_stats` is the one place that
@@ -337,8 +343,8 @@ class UsageTrackingModel(ChatModelBase):
         # than becoming a second one that can drift from it.
         from specflow.cache_stats import _first_int
 
-        details = (getattr(usage, "input_tokens_details", None)
-                   or getattr(usage, "prompt_tokens_details", None))
+        details = (_attr(usage, "input_tokens_details")
+                   or _attr(usage, "prompt_tokens_details"))
         if details is not None:
             self._cached_tokens += _first_int(details, ("cached_tokens",)) or 0
 
@@ -464,13 +470,15 @@ class UsageTrackingModel(ChatModelBase):
         except Exception:  # noqa: BLE001
             return
         if reason == "length":
+            from specflow.cache_stats import _attr as _usage_attr
+
             usage = getattr(res, "usage", None)
             logger.warning(
                 "MODEL RESPONSE TRUNCATED (finish_reason=length%s): the artifact "
                 "is incomplete, not wrong — it stopped at the token cap. Raise "
                 "max_completion_tokens or continue the response; do not score "
                 "what came back as a failed generation.",
-                f", output_tokens={getattr(usage, 'output_tokens', '?')}" if usage else "",
+                f", output_tokens={_usage_attr(usage, 'output_tokens', '?')}" if usage else "",
             )
 
     def __getattr__(self, name: str) -> Any:
