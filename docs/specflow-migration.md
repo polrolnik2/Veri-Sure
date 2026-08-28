@@ -259,9 +259,27 @@ design preference.
   `xhigh` originally asked for, which is a condition change the baseline records
   rather than hides.
 - **ChipVerilog is the sharper target** and has its own runner
-  (`benchmarks/run_chipverilog.py`). Note that specflow is scoped to leaf
-  nodes, so the 16 hierarchical tasks of its 64 are out of scope by
-  construction rather than by accident.
+  (`benchmarks/run_chipverilog.py`).
+
+  > **CORRECTION.** This bullet used to end "specflow is scoped to leaf nodes,
+  > so the 16 hierarchical tasks of its 64 are out of scope by construction
+  > rather than by accident." That was true when written (`ad7adbb`, 08:32) and
+  > stopped being true thirty-three minutes later (`c25bc8e`, 09:05), which
+  > added `specflow_extra_sources`. The chain is live end to end today:
+  > `run_chipverilog.py:287` -> `TopAgentConfig` -> `specflow_node.py:197` ->
+  > `specflow/run.py`'s `extra_sources`, and `submodules()` walks the subtree
+  > transitively so a grandchild is supplied too.
+  >
+  > 16 of the 64 tasks are hierarchical, and **none has ever been run** --
+  > both committed baselines (`i2c_master_bit_ctrl`, `or1200_ctrl`) are leaf.
+  > So the support is landed and unexercised, not proven.
+  >
+  > What hierarchy support DOES and does not mean, in `specflow/run.py`'s own
+  > words: the children are *libraries*, not part of the oracle. Supplying them
+  > makes a hierarchical design **elaborate and simulate**; the reference model
+  > still has to derive the COMPOSED behaviour from the specification alone.
+  > That is the hard half, and it scales with the subtree: `i2c_master_top` has
+  > 2 children, `or1200_top` has 38.
 
 ### How the node path is wired
 
