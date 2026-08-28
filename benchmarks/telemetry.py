@@ -265,7 +265,18 @@ def row_for(run: pathlib.Path, repo: pathlib.Path) -> dict:
         # far enough to simulate) stays empty rather than becoming "no" -- "did
         # not pass" and "was never asked" are different, and only the first
         # belongs in a miss rate's denominator.
-        if "is_sim_pass" in base:
+        # `is_sim_pass` IS PRESENT EVEN WHEN THE SELF-TB NEVER RAN. The leaf
+        # handler sets `record["is_sim_pass"] = False` on any exception
+        # (chipverilog_arm_a.py:188, run_chipverilog.py:327), so a run killed
+        # in transport records "the self-TB failed" when nothing was simulated.
+        #
+        # Measured: a-fpu_exceptions-2 died on `openai.APIConnectionError`
+        # after the architect call, produced no rtl.sv, and logged
+        # self_tb_pass=no -- which would have entered a miss rate's
+        # DENOMINATOR as a genuine self-TB failure. Gate on RTL actually
+        # existing: with no candidate there was nothing to test, and that is
+        # absence, not a verdict.
+        if "is_sim_pass" in base and int(base.get("rtl_bytes") or 0) > 0:
             r["self_tb_pass"] = "yes" if base.get("is_sim_pass") else "no"
 
     sc = _load(run / "score.json")

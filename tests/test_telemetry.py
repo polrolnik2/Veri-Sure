@@ -96,7 +96,8 @@ def test_syntax_and_functional_come_from_their_own_artifacts(tmp_path):
     the functional verdict is an EQUIVALENCE result, not a testbench pass
     rate."""
     run = _run(tmp_path)
-    _write(run / "baseline.json", {"compile_gate": {"status": "pass"}})
+    _write(run / "baseline.json", {"rtl_bytes": 6222,
+                                   "compile_gate": {"status": "pass"}})
     _write(run / "score.json", {"status": "function_fail", "flow": "equivalence",
                                 "proof_type": "bounded_seq",
                                 "compile_gate_status": "pass",
@@ -159,7 +160,9 @@ def test_the_miss_is_self_tb_pass_crossed_with_a_golden_fail(tmp_path):
     """
     def _row(sim, status):
         run = _run(tmp_path, f"t-{sim}-{status}")
-        _write(run / "baseline.json", {"is_sim_pass": sim,
+        # `rtl_bytes` is not decoration: a self-TB verdict only exists if
+        # there was RTL to run it against, and the extractor gates on it.
+        _write(run / "baseline.json", {"is_sim_pass": sim, "rtl_bytes": 6222,
                                        "compile_gate": {"status": "pass"}})
         _write(run / "score.json", {"status": status})
         return telemetry.row_for(run, pathlib.Path("."))
@@ -189,10 +192,44 @@ def test_arm_a_records_its_cost_in_baseline_not_agent_io(tmp_path):
     run = _run(tmp_path)
     _write(run / "baseline.json",
            {"model": "gpt-5.6-luna", "reasoning_effort": "xhigh",
-            "is_sim_pass": True, "compile_gate": {"status": "pass"},
+            "is_sim_pass": True, "rtl_bytes": 6222,
+            "compile_gate": {"status": "pass"},
             "tokens": {"eda_agent_input": 62437, "eda_agent_output": 56352}})
     row = telemetry.row_for(run, pathlib.Path("."))
     assert row["input_tokens"] == 62437 and row["output_tokens"] == 56352
     assert row["small_model"] == "gpt-5.6-luna"
     # Arm A's ledger has no cached field; that is absence, not a measured zero.
     assert row["cached_tokens"] == "" and row["cache_hit_pct"] == ""
+
+
+def test_a_run_killed_before_simulating_has_NO_self_tb_verdict(tmp_path):
+    """`is_sim_pass` is present even when the self-TB never ran: the leaf
+    handler sets it False on ANY exception. So a run killed in transport
+    records "the self-TB failed", and that would enter a miss rate's
+    denominator as a genuine failure.
+
+    Live: a-fpu_exceptions-2 died on openai.APIConnectionError after the
+    architect call, produced no rtl.sv, and logged self_tb_pass=no.
+    """
+    run = _run(tmp_path)
+    _write(run / "baseline.json",
+           {"is_sim_pass": False, "rtl_bytes": 0,
+            "compile_gate": {"status": "fail",
+                             "reason": "no candidate RTL was produced"}})
+    (run / "leaf_exception.txt").write_text("APIConnectionError", encoding="utf-8")
+    row = telemetry.row_for(run, pathlib.Path("."))
+    assert row["self_tb_pass"] == "", "nothing was simulated, so there is no verdict"
+    assert row["tb_agreement"] == ""
+    assert row["produced_rtl"] == "no" and row["leaf_exception"] == "yes"
+
+
+def test_a_real_self_tb_failure_on_real_rtl_still_reads_no(tmp_path):
+    """The counter-case, so the guard above cannot swallow a genuine failure."""
+    run = _run(tmp_path)
+    _write(run / "baseline.json",
+           {"is_sim_pass": False, "rtl_bytes": 4210,
+            "compile_gate": {"status": "pass"}})
+    _write(run / "score.json", {"status": "pass"})
+    row = telemetry.row_for(run, pathlib.Path("."))
+    assert row["self_tb_pass"] == "no"
+    assert row["tb_agreement"] == "self_tb_over_strict"
