@@ -647,11 +647,20 @@ def make_openai_model(cfg: OpenAIConfig,
     # This is a per-ATTEMPT bound, and max_retries above still applies, so a
     # genuinely slow-but-alive call is retried rather than lost. Generous by
     # default because reasoning models on ~20K-token composition prompts
-    # legitimately take minutes. Overridable via OPENAI_TIMEOUT_S.
-    try:
-        _timeout_s = float(_os.environ.get("OPENAI_TIMEOUT_S", "600"))
-    except ValueError:
-        _timeout_s = 600.0
+    # legitimately take minutes.
+    #
+    # IT COMES FROM THE CONFIG, so a caller sets it with a switch and the run
+    # can report what it used. The environment is read only as a fallback for
+    # a config built before the field existed; a value passed in always wins.
+    # This bound is not theoretical -- see `OpenAIConfig.timeout_s` for the
+    # measurement where it, and not the gateway, ended the request.
+    _timeout_s = getattr(cfg, "timeout_s", None)
+    if _timeout_s is None:
+        try:
+            _timeout_s = float(_os.environ.get("OPENAI_TIMEOUT_S", "600"))
+        except ValueError:
+            _timeout_s = 600.0
+    _timeout_s = float(_timeout_s)
     client_args: dict[str, Any] = {
         "max_retries": _max_retries,
         "timeout": _timeout_s,

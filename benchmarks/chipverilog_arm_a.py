@@ -154,7 +154,8 @@ async def run(args: argparse.Namespace) -> dict:
     out.mkdir(parents=True, exist_ok=True)
 
     # temperature deliberately not passed: see the module docstring.
-    cfg = load_openai_config(max_completion_tokens=args.max_tokens)
+    cfg = load_openai_config(max_completion_tokens=args.max_tokens,
+                             timeout_s=args.timeout)
     record: dict = {
         "arm": "A",
         "description": "pre-specflow SystemVerilog testbench path (merge-base + transport fixes)",
@@ -208,7 +209,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--task-dir", required=True, help="ChipVerilog Des/<family>/<module> dir")
     p.add_argument("--out", required=True)
     p.add_argument("--submodule", action="append", help="submodule name to supply at compile time")
-    p.add_argument("--max-tokens", type=int, default=40000)
+    # THE TWO BOUNDS THAT DECIDE WHETHER A LONG GENERATION SURVIVES, and both
+    # are switches so a run can report what it used rather than what the
+    # environment happened to hold.
+    #
+    # 40000 was measured to be the binding one at xhigh: four or1200_dc_fsm
+    # runs at that ceiling produced no testbench at all, and one at 128000
+    # produced a complete 40 KB testbench before dying elsewhere.
+    p.add_argument("--max-tokens", type=int, default=40000,
+                   help="per-call output budget (reasoning AND content "
+                        "together, so it must exceed the reasoning budget "
+                        "the effort asks for)")
+    # And 600s was the next one. Instrumented on the same task at 128000: the
+    # stream dropped at 662.4s having emitted 10,082 events with a largest gap
+    # of 9.9s and first content at 312.4s -- nothing idle, nothing truncated,
+    # just past the client's own bound. specflow never meets this because
+    # chunking bounds each call's duration; an unchunked caller does not.
+    p.add_argument("--timeout", type=float, default=1800.0,
+                   help="per-attempt client timeout in seconds")
     p.add_argument("--sim-max-retry", type=int, default=2)
     p.add_argument("--debug-max-trials", type=int, default=6)
     p.add_argument("--env-file", required=True)

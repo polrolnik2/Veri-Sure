@@ -21,6 +21,21 @@ class OpenAIConfig:
     #: surface without being told to.
     api_flavor: str = "chat"
     stream: bool = False
+    #: Per-attempt client timeout, in seconds. A RUNTIME SWITCH rather than an
+    #: environment read, because it decides whether a long generation survives
+    #: and a run must be able to say what it used.
+    #:
+    #: The default is the one that has been in force, and it is BINDING on this
+    #: gateway rather than theoretical. Measured on or1200_dc_fsm at xhigh with
+    #: a 128000-token ceiling: the stream dropped at 662.4s having emitted
+    #: 10,082 events with a largest inter-event gap of 9.9s and first content at
+    #: 312.4s. Nothing was idle and nothing was truncated -- the request was
+    #: healthy and simply ran past the client's own 600s bound.
+    #:
+    #: specflow never meets this because chunking bounds each call's DURATION:
+    #: a slice returns long before 600s and the continuation starts a fresh
+    #: request. An unchunked caller has no such bound and needs a bigger one.
+    timeout_s: float = 600.0
     generate_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -36,6 +51,7 @@ def load_openai_config(
     temperature: float | None = None,
     top_p: float | None = None,
     max_completion_tokens: int | None = None,
+    timeout_s: float | None = None,
     extra_body: dict[str, Any] | str | None = None,
 ) -> OpenAIConfig:
     env_model = os.environ.get("OPENAI_MODEL")
@@ -93,5 +109,7 @@ def load_openai_config(
             else (env_stream.strip().lower() in ("1", "true", "yes", "on")
                   if env_stream else OpenAIConfig.stream)
         ),
+        timeout_s=(float(timeout_s) if timeout_s is not None
+                   else OpenAIConfig.timeout_s),
         generate_kwargs=generate_kwargs,
     )
