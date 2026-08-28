@@ -77,11 +77,21 @@ def test_there_is_no_parameter_a_design_could_arrive_through():
     The line that would fail: a `model`, `witness`, `trace`, `replay` or
     `verdict` parameter. Any of those carries what a design DID, which is what
     I1 exists to keep out of a reviewer that is meant to compare two texts.
+
+    `siblings` was added third and failed here too. It carries OTHER
+    REQUIREMENTS -- their sentences and normalized forms -- which is the same
+    class of text as `requirement` itself and upstream of every design, so it
+    admits on the same ground. It is needed because `through_req` was a bare
+    uid: on REQ-0085's prompt "REQ-0007" appeared exactly once, in the route,
+    with that requirement's text absent, so the route pointed at nothing the
+    reviewer could read. Only the requirements a route NAMES are carried, and a
+    separate test pins that.
     """
     import inspect
 
     taken = set(inspect.signature(C.build_prompt).parameters)
-    assert taken == {"requirement", "oracle", "normalized", "spec", "contract"}
+    assert taken == {"requirement", "oracle", "normalized", "spec", "contract",
+                     "siblings"}
     assert not (taken & {"model", "witness", "trace", "replay", "verdict",
                          "design", "rows"})
 
@@ -514,3 +524,55 @@ def test_the_route_actually_reaches_the_prompt():
     body = C.build_prompt(requirement=REQ, oracle=ORACLE, normalized=normalized)
     assert "observed_via" in body
     assert "rises for a wide one" in body, "the discrimination, not just the port"
+
+
+def test_a_route_s_through_req_is_not_a_dangling_pointer():
+    """MEASURED: on REQ-0085's prompt the string "REQ-0007" appeared exactly
+    ONCE -- inside the route -- while that requirement's text and its normalized
+    form were both absent. A reviewer told a behaviour is visible through
+    REQ-0007, and given no way to read REQ-0007, cannot judge the route at all
+    and falls back to this requirement's own sentence, which names the internal
+    mechanism the route exists to get past. That is arm C's failure mode.
+    """
+    normalized = {"observable": ["busy"], "observed_via": [
+        {"port": "busy", "through_req": "REQ-0007", "when": "w", "shows": "s"}]}
+    siblings = {"REQ-0007": {"uid": "REQ-0007",
+                             "text": "busy is set when a START is detected",
+                             "observable": ["busy"],
+                             "expectation": "busy rises on START"}}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE, normalized=normalized,
+                          siblings=siblings)
+    assert "<route_requirements>" in body, "the BLOCK, not the word: SYSTEM names it too"
+    assert "busy is set when a START is detected" in body
+    assert "busy rises on START" in body
+
+
+def test_only_the_requirements_a_route_NAMES_are_carried():
+    """Not the whole set: the reviewer judges one requirement and the prompt
+    stays a pair of texts plus what its own routes point at."""
+    normalized = {"observed_via": [
+        {"port": "busy", "through_req": "REQ-0007", "when": "w", "shows": "s"}]}
+    siblings = {"REQ-0007": {"text": "the one that is named"},
+                "REQ-0099": {"text": "the one that is NOT named"}}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE, normalized=normalized,
+                          siblings=siblings)
+    assert "the one that is named" in body
+    assert "the one that is NOT named" not in body
+
+
+def test_a_direct_route_carries_no_sibling_block():
+    """`through_req` empty is this requirement's own port -- there is nothing to
+    point at, and an empty block would be noise on the 76 of 122 that are
+    direct."""
+    normalized = {"observed_via": [
+        {"port": "busy", "through_req": "", "when": "w", "shows": "s"}]}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE, normalized=normalized,
+                          siblings={"REQ-0007": {"text": "x"}})
+    assert "<route_requirements>" not in body
+
+
+def test_the_gate_is_told_it_can_convict_a_check_that_became_the_siblings():
+    """The one rejection only this gate can make, and it was not expressible
+    while `through_req` was a bare uid."""
+    assert "silently become the SIBLING's" in C.SYSTEM
+    assert "under a different uid" in C.SYSTEM

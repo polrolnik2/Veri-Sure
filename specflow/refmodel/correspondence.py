@@ -134,6 +134,16 @@ instead of its EFFECT, which called 27 of 77 requirements unobservable when 10
 of them already had working checks. If the only fault you can find is that the
 check does not look at something that is not a port, the answer is YES.
 
+**AND WHEN A ROUTE NAMES A `through_req`, THAT REQUIREMENT IS PRINTED FOR YOU**
+in `route_requirements`: its sentence, the ports IT is observable at, and what
+IT expects. Read it, because it decides two things you cannot otherwise judge.
+Whether the route is credible -- does that requirement really put this
+behaviour on that port. And whether the check has silently become the SIBLING's
+check: if it would pass or fail identically whether or not THIS requirement
+holds, it is testing the neighbour under a different uid, and `when` is what
+was supposed to separate them. That is a NO, and it is the one rejection only
+this gate can make.
+
 **AND THE `normalized` BLOCK ALREADY TELLS YOU WHERE TO LOOK. READ IT FIRST.**
 `observed_via` is the OBSERVATION ROUTE: the declared port this requirement is
 decidable at, `when` it carries this requirement's effect rather than another's,
@@ -217,6 +227,37 @@ def _ports(contract: dict) -> dict:
     return {"ports": out}
 
 
+def _through(normalized: dict, siblings: dict[str, dict]) -> dict:
+    """The requirements a route POINTS AT, so the pointer is not dangling.
+
+    `through_req` names the requirement whose port this one borrows, and until
+    now the prompt carried the uid and nothing else -- "REQ-0007" appearing
+    exactly once, with that requirement's text and normalized form both absent.
+    A reviewer told a behaviour is visible through REQ-0007 and given no way to
+    read REQ-0007 cannot evaluate the route at all, and falls back to the only
+    thing it can read: this requirement's own sentence, which is the MECHANISM
+    the route exists to get past. That is arm C's failure mode exactly.
+
+    It also unblocks the one job the route design assigned this gate -- asking
+    whether an indirect check silently became the SIBLING's check. That test is
+    not expressible without the sibling in front of the reviewer.
+
+    Texts only, and only the ones a route names: the requirement sentence and
+    the normalized fields that say where IT is decided. No design, so I1 holds.
+    """
+    out: dict[str, dict] = {}
+    for route in normalized.get("observed_via") or []:
+        uid = route.get("through_req")
+        if not uid or uid in out:
+            continue
+        sib = siblings.get(uid)
+        if not sib:
+            continue
+        out[uid] = {k: sib[k] for k in ("text", "observable", "expectation")
+                    if sib.get(k) is not None}
+    return out
+
+
 def build_prompt(
     *,
     requirement: dict,
@@ -224,6 +265,7 @@ def build_prompt(
     normalized: dict | None = None,
     spec: str = "",
     contract: dict | None = None,
+    siblings: dict[str, dict] | None = None,
 ) -> str:
     """Texts only. There is no parameter a design could arrive through.
 
@@ -292,6 +334,9 @@ def build_prompt(
     parts = [json_block("requirement", requirement)]
     if normalized:
         parts.append(json_block("normalized", normalized))
+        borrowed = _through(normalized, siblings or {})
+        if borrowed:
+            parts.append(json_block("route_requirements", borrowed))
     parts.append(json_block("oracle", {
         "clause": oracle.clause, "source": oracle.source}))
     return compose(shared_block(*shared), "\n\n".join(parts))
@@ -313,6 +358,7 @@ def review_one(
     normalized: dict | None = None,
     spec: str = "",
     contract: dict | None = None,
+    siblings: dict[str, dict] | None = None,
     round_: int = 0,
 ) -> Review:
     """One call. Never raises: a reviewer that cannot answer does not reject.
@@ -326,7 +372,7 @@ def review_one(
             stage=f"{STAGE}_{oracle.req_uid or 'unknown'}", round_=round_,
             prompt=build_prompt(requirement=requirement, oracle=oracle,
                                 normalized=normalized, spec=spec,
-                                contract=contract))
+                                contract=contract, siblings=siblings))
     except Exception as exc:  # noqa: BLE001
         return Review(reasoning=f"{PARSE_ERROR}{exc!r}")
     out = parse_response(reply)
@@ -349,12 +395,18 @@ def review(
     """`{req_uid: Review}` over the oracles given. One call each."""
     norm = normalized or {}
     wanted = [o for o in oracles if o.req_uid in requirements]
+    # Every requirement, keyed by uid, so a route's `through_req` resolves. The
+    # caller already holds them; the reviewer only ever sees the handful its
+    # own routes name.
+    sibs = {u: {**requirements.get(u, {}), **{k: v for k, v in norm.get(u, {}).items()
+                                              if k in ("observable", "expectation")}}
+            for u in requirements}
 
     def one(oracle: RequirementOracle) -> Review:
         return review_one(
             oracle, requirements[oracle.req_uid], port=port,
             normalized=norm.get(oracle.req_uid), spec=spec,
-            contract=contract, round_=round_)
+            contract=contract, siblings=sibs, round_=round_)
 
     done = run_fanout(wanted, one) if fanout else [one(o) for o in wanted]
     return {o.req_uid: r for o, r in zip(wanted, done)}
