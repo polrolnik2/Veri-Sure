@@ -263,3 +263,75 @@ def test_the_author_is_told_to_check_transitions_not_levels():
     assert "RESTING value" in flat and "SAME NUMBER" in flat
     # And point at where the polarity actually is, rather than assuming it.
     assert "notes" in flat
+
+
+# ------------------------------------ the two halves of the level/action rule
+
+
+def _author_prompt() -> str:
+    from specflow.refmodel import oracle_gen
+
+    return oracle_gen.build_prompt(
+        requirement={"uid": "REQ-0001", "text": "t"},
+        contract_json="{}", contract={"ports": []})
+
+
+def test_the_transition_rule_carries_its_converse():
+    """MEASURED, and this pin is the fix for it. The prompt said "WHEN THE
+    REQUIREMENT DESCRIBES AN ACTION, LOOK FOR THE TRANSITION, NOT THE LEVEL"
+    with a real case behind it -- on an open-drain line the resting value and
+    the released value are the same number, so a level scan matches index 0 --
+    and never said what following it costs on a requirement that states a
+    STATE. 8 of one run's 43 control-refuted checks demanded a transition where
+    the requirement stated a level, and a correct design that already holds the
+    value and never changes it was convicted for being right.
+
+    Both halves or neither: the rule is a choice between two readings, and a
+    prompt carrying only one of them is what produced the class.
+    """
+    body = _author_prompt()
+    # Fragments only, none crossing a line wrap: the prompt is a wrapped comment
+    # block and an assertion spanning a break has cost this repo once already.
+    assert "LOOK FOR THE TRANSITION" in body
+    assert "AND THE CONVERSE" in body
+    for phrase in ("requirement can describe a STATE rather than an ACTION",
+                   "There a correct design may ALREADY hold the value",
+                   "require the TRANSITION when the requirement names an ACTION",
+                   "require the LEVEL when it names a STATE"):
+        assert phrase in body, phrase
+
+
+def test_strong_true_is_offered_with_the_boundary_it_lacked():
+    """`strong=True` converts "the trace ended" into "the design failed". True
+    for an OBLIGATION, false for a STATE, where it convicts on a short
+    testpoint. The instruction existed with a measured count behind it (5 of 14
+    abstentions) and no boundary at all."""
+    body = _author_prompt()
+    assert "strong=True" in body
+    assert "OBLIGATION" in body
+    assert "false for a STATE" in body
+
+
+def test_absence_inside_an_opened_window_is_distinguished_from_no_window():
+    """The ok=None rule was stated twice and both statements cover NO WINDOW.
+    Every one of the 7 measured defects in this class is a window that OPENED
+    and did not contain the evidence -- uncovered by the rule, and covered by
+    `strong=True` pointing the other way."""
+    body = _author_prompt()
+    assert 'THAT RULE COVERS "NO WINDOW"' in body
+    assert "the activation DID occur, the window opened" in body
+    for phrase in ("absence IS the violation, and False is right",
+                   "that is missing evidence and ok=None is"):
+        assert phrase in body, phrase
+
+
+def test_the_temporal_flags_state_the_cost_of_setting_them():
+    """Both flags remove vacuity by converting an abstention into a conviction,
+    so both have the same boundary and it runs the other way. Every occurrence
+    of "already" in these two modules used to sit on the vacuity side."""
+    from specflow.refmodel.temporal import eventually
+
+    doc = eventually.__doc__ or ""
+    assert "BOTH FLAGS HAVE THE SAME BOUNDARY" in doc
+    assert "may hold the value from before the activation" in doc
+    assert "trades vacuity for over-strictness" in doc

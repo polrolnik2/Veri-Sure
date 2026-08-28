@@ -936,7 +936,7 @@ def run_oracle_stage(
         reviews = (
             correspondence.review(
                 list(held.values()), by_uid, port=port, normalized=normalized,
-                spec=spec, round_=rounds - 1, fanout=fanout)
+                spec=spec, contract=contract, round_=rounds - 1, fanout=fanout)
             if want_correspondence else {})
         for uid, oracle in held.items():
             why, may_quote, notes = verify_one(

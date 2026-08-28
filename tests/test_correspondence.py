@@ -64,11 +64,26 @@ def test_there_is_no_parameter_a_design_could_arrive_through():
     others on this list are the requirement, its normalized form and the oracle
     under review; none is an implementation, and adding one that is should fail
     this assertion rather than pass quietly.
+
+    `contract` was added second, and this test failed on it before it was
+    admitted here -- which is the mechanism working. It is admitted on the same
+    ground as `spec`: an INTERFACE is not a design. The contract fixes port
+    names, directions and widths before the reference model, the witness or any
+    trace exists, so nothing about a design's BEHAVIOUR can travel through it.
+    `oracle_gen.build_prompt` has taken it all along, so the author knew every
+    port's direction while its reviewer did not, and that asymmetry had no
+    defence.
+
+    The line that would fail: a `model`, `witness`, `trace`, `replay` or
+    `verdict` parameter. Any of those carries what a design DID, which is what
+    I1 exists to keep out of a reviewer that is meant to compare two texts.
     """
     import inspect
 
     taken = set(inspect.signature(C.build_prompt).parameters)
-    assert taken == {"requirement", "oracle", "normalized", "spec"}
+    assert taken == {"requirement", "oracle", "normalized", "spec", "contract"}
+    assert not (taken & {"model", "witness", "trace", "replay", "verdict",
+                         "design", "rows"})
 
 
 def test_wider_spec_context_did_not_help_and_is_off_by_default():
@@ -293,3 +308,47 @@ def test_the_advice_says_it_may_be_ignored():
     for phrase in ("TRY to make", "NOT A DEFECT AND YOU MAY DECLINE",
                    "no better authority", "KEEP YOUR", "rejected for declining"):
         assert phrase in issue.message, phrase
+
+
+def test_the_interface_reaches_the_reviewer_with_directions_and_notes():
+    """Port direction is what makes three of the reviewer's cases decidable.
+
+    Without it, "reads ports the requirement is not about" has nothing to
+    resolve a name against, and a check convicting on the value of an INPUT --
+    something the DUT does not drive -- is indistinguishable from one
+    convicting on an output. REQ-0028 is the recorded case.
+    """
+    contract = {"ports": [
+        {"name": "scl_oen", "direction": "output", "width": 1,
+         "notes": "0 drives SCL low; 1 releases it to the pull-up"},
+        {"name": "sda_i", "direction": "input", "width": 1},
+    ]}
+    oracle = C.RequirementOracle(
+        req_uid="REQ-0001", clause="c", source="def decide(trace): ...")
+    body = C.build_prompt(requirement={"uid": "REQ-0001"}, oracle=oracle,
+                          contract=contract)
+    assert "scl_oen" in body and "output" in body
+    assert "sda_i" in body and "input" in body
+    assert "releases it to the pull-up" in body
+
+
+def test_pacing_fields_are_not_offered_to_the_reviewer():
+    """Phases 3-6 severed cycle counts from gating, and the surplus question
+    exists to catch invented timing. Handing the reviewer a `latency_cycles`
+    would invite exactly the demand the other gate is trying to remove.
+    """
+    contract = {"ports": [{"name": "busy", "direction": "output", "width": 1}],
+                "latency_cycles": 3, "clock": "clk"}
+    oracle = C.RequirementOracle(req_uid="R", clause="c", source="s")
+    body = C.build_prompt(requirement={"uid": "R"}, oracle=oracle,
+                          contract=contract)
+    assert "latency_cycles" not in body
+
+
+def test_an_absent_contract_leaves_the_prompt_exactly_as_it_was():
+    """The parameter defaults off, so the measured arm-A prompt is reproducible."""
+    oracle = C.RequirementOracle(req_uid="R", clause="c", source="s")
+    req = {"uid": "R", "text": "t"}
+    assert (C.build_prompt(requirement=req, oracle=oracle)
+            == C.build_prompt(requirement=req, oracle=oracle, contract=None)
+            == C.build_prompt(requirement=req, oracle=oracle, contract={}))

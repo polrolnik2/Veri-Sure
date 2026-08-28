@@ -228,6 +228,19 @@ def eventually(w: Window, holds: Pred, *, strong: bool = False,
     activation row, so a consequent that is already true there satisfies the
     default -- which is the vacuity this module exists to remove. Set it when
     the requirement says the effect FOLLOWS the trigger, which is most of them.
+
+    BOTH FLAGS HAVE THE SAME BOUNDARY AND IT RUNS THE OTHER WAY. They exist
+    because a check that cannot fail is worthless, and each converts an
+    abstention into a conviction. On a requirement describing a STATE rather
+    than an event -- "is high while X", "remains released" -- a correct design
+    may hold the value from before the activation and never change it, and it
+    may still be holding it when the trace ends. `strong=True` then convicts
+    the design for the trace being short, and `after_activation=True` asks for
+    a change the requirement never demanded. Neither flag is a default to
+    reach for: each answers a question about the REQUIREMENT (does it oblige a
+    response? does the effect follow the trigger?) and passing it without
+    answering that question trades vacuity for over-strictness one check at a
+    time.
     """
     rows = w.body if after_activation else w.rows
     for row in rows:

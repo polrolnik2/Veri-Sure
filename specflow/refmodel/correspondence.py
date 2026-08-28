@@ -116,12 +116,32 @@ Reply with ONE JSON object and nothing else:
 """
 
 
+def _ports(contract: dict) -> dict:
+    """The interface, projected to what a reviewer of two texts can use.
+
+    Direction, width and `notes` -- not the whole contract. `latency_cycles` and
+    the pacing fields were severed from gating in Phases 3-6 precisely because
+    the specification does not pin cycle counts, and putting them in front of a
+    reviewer invites the timing demands the surplus question exists to catch.
+    """
+    out = []
+    for port in contract.get("ports") or []:
+        row = {k: port.get(k) for k in ("name", "direction", "width")
+               if port.get(k) is not None}
+        if port.get("notes"):
+            row["notes"] = port["notes"]
+        if row:
+            out.append(row)
+    return {"ports": out}
+
+
 def build_prompt(
     *,
     requirement: dict,
     oracle: RequirementOracle,
     normalized: dict | None = None,
     spec: str = "",
+    contract: dict | None = None,
 ) -> str:
     """Texts only. There is no parameter a design could arrive through.
 
@@ -141,10 +161,33 @@ def build_prompt(
     It does NOT let this gate see behaviour. Whether a check can fail is decided
     by `liveness`, mechanically, from traces -- a fact about execution that no
     amount of prose can settle.
+
+    `contract` is admitted on the same argument and was missing for the same
+    reason nothing else here was: it was never added. `oracle_gen.build_prompt`
+    takes it (`:514-522`), so until now the check's AUTHOR knew every port's
+    direction and width and its REVIEWER did not -- an asymmetry with no
+    defence. The contract is an interface, not a design: it is upstream of the
+    reference model, the witness and every trace, so it can carry nothing back
+    from any of them, and I1 is untouched.
+
+    Three questions become answerable that were not. "Reads ports the
+    requirement is not about" needs to know what the ports are. A check that
+    convicts on the value of an INPUT is asserting something the DUT does not
+    drive, which is visible in one line with directions and invisible without
+    them. And a check reading a declared OUTPUT out of the `inputs` half of a
+    row is a navigation error rather than a subject-matter one -- the reviewer
+    can now say which, instead of confabulating a semantic story for a
+    mechanical slip.
+
+    Ports only, and deliberately: `notes` are included because they say which
+    value drives and which releases, which is what "asserted" means for an
+    open-drain line and is the distinction the author is held to.
     """
     parts = []
     if spec.strip():
         parts.append(json_block("specification", {"text": spec}))
+    if contract:
+        parts.append(json_block("interface", _ports(contract)))
     parts.append(json_block("requirement", requirement))
     if normalized:
         parts.append(json_block("normalized", normalized))
@@ -168,6 +211,7 @@ def review_one(
     port: ModelPort,
     normalized: dict | None = None,
     spec: str = "",
+    contract: dict | None = None,
     round_: int = 0,
 ) -> Review:
     """One call. Never raises: a reviewer that cannot answer does not reject.
@@ -180,7 +224,8 @@ def review_one(
         reply = port.complete(
             stage=f"{STAGE}_{oracle.req_uid or 'unknown'}", round_=round_,
             prompt=build_prompt(requirement=requirement, oracle=oracle,
-                                normalized=normalized, spec=spec))
+                                normalized=normalized, spec=spec,
+                                contract=contract))
     except Exception as exc:  # noqa: BLE001
         return Review(reasoning=f"{PARSE_ERROR}{exc!r}")
     out = parse_response(reply)
@@ -196,6 +241,7 @@ def review(
     port: ModelPort,
     normalized: dict[str, dict] | None = None,
     spec: str = "",
+    contract: dict | None = None,
     round_: int = 0,
     fanout: bool = True,
 ) -> dict[str, Review]:
@@ -206,7 +252,8 @@ def review(
     def one(oracle: RequirementOracle) -> Review:
         return review_one(
             oracle, requirements[oracle.req_uid], port=port,
-            normalized=norm.get(oracle.req_uid), spec=spec, round_=round_)
+            normalized=norm.get(oracle.req_uid), spec=spec,
+            contract=contract, round_=round_)
 
     done = run_fanout(wanted, one) if fanout else [one(o) for o in wanted]
     return {o.req_uid: r for o, r in zip(wanted, done)}

@@ -155,6 +155,24 @@ whenever their inputs appear.
         # Each port's `notes` in the contract say which value drives and which
         # releases. Read them before deciding what "asserted" means for it.
         #
+        # AND THE CONVERSE, WHICH IS THE OTHER HALF OF THE SAME RULE. A
+        # requirement can describe a STATE rather than an ACTION -- "is high
+        # while X", "is observed low", "remains released", "holds its value".
+        # There a correct design may ALREADY hold the value when the window
+        # opens and never change it, so a check that requires a transition, an
+        # edge, or `strong=True` reports a failure against a design that is
+        # right. Nothing in the trace distinguishes "it changed to the correct
+        # value" from "it was correct all along" except which of the two the
+        # requirement asked for.
+        #
+        # So: require the TRANSITION when the requirement names an ACTION, and
+        # require the LEVEL when it names a STATE. When the resting value and
+        # the asserted value are the same number, say which one the requirement
+        # means BEFORE choosing -- that ambiguity is the reason for both halves
+        # of this rule, and reading it only one way is how a correct design gets
+        # convicted. Measured: 8 of one run's 43 control-refuted checks demanded
+        # a transition where the requirement stated a level.
+        #
         # Return ok=None when THE ACTIVATION NEVER OCCURS in this trace -- no
         # START was issued, reset was never asserted, the arbitration case never
         # arose. Do NOT return False for that. False means you SAW the situation
@@ -163,6 +181,20 @@ whenever their inputs appear.
         # because it never looked is vacuous, and is discarded as such. ok=None
         # is the honest answer and costs you nothing -- it is routed to whoever
         # writes the stimulus, not counted against the design.
+        #
+        # THAT RULE COVERS "NO WINDOW". IT DOES NOT COVER THE COMMONER CASE:
+        # the activation DID occur, the window opened, and the evidence you
+        # were looking for is not inside it. Ask which of two things you are
+        # looking at before convicting. If the requirement obliges the design to
+        # produce something -- "shall assert", "must complete" -- then its
+        # absence IS the violation, and False is right. If the requirement
+        # states a condition the design is meant to hold, and the window simply
+        # never contained the case, that is missing evidence and ok=None is
+        # right. "I did not see it" and "it failed to happen" are different
+        # findings with different owners, and returning False for the first
+        # blames the design for a testpoint that did not exercise it. Measured:
+        # 7 of one run's 43 control-refuted checks convicted on absent
+        # evidence inside a window that opened.
 
 Rules, each for a reason:
 
@@ -426,6 +458,15 @@ THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
     not a failure. If the requirement says the response MUST come, pass
     `strong=True`, or the check can never be violated -- only left undecided.
     Five of one run's fourteen abstaining checks abstained for this reason.
+
+    THIS ONE HAS A BOUNDARY AND IT IS EASY TO CROSS. `strong=True` says
+    "running out of trace is the design's fault". That is true for an
+    OBLIGATION -- the requirement promised a response and none came -- and
+    false for a STATE, where running out of trace means only that you stopped
+    looking. Passing it on a requirement that says "is high while X" converts
+    a short testpoint into a conviction. Read the requirement for an obligation
+    before you pass it; the default is weak because most requirements are not
+    obligations.
 
 Write the check the way you would write the assertion, and reach for the
 operator you would reach for in SVA. FOUR PLACES THE ANALOGY BREAKS, and the
