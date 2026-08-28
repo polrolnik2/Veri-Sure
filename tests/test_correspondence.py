@@ -318,10 +318,15 @@ def test_the_interface_reaches_the_reviewer_with_directions_and_notes():
     something the DUT does not drive -- is indistinguishable from one
     convicting on an output. REQ-0028 is the recorded case.
     """
-    contract = {"ports": [
-        {"name": "scl_oen", "direction": "output", "width": 1,
+    # THE REAL ARTIFACT SHAPE: `io`, and the direction key is `dir`. The first
+    # version of this test invented `{"ports": [...]}` with a `direction` key,
+    # so it passed against a projection that read neither and emitted an empty
+    # block -- the change was inert and the test said it worked. A fixture that
+    # invents its input tests nothing.
+    contract = {"io": [
+        {"name": "scl_oen", "dir": "output", "width": 1,
          "notes": "0 drives SCL low; 1 releases it to the pull-up"},
-        {"name": "sda_i", "direction": "input", "width": 1},
+        {"name": "sda_i", "dir": "input", "width": 1, "idle_value": 1},
     ]}
     oracle = C.RequirementOracle(
         req_uid="REQ-0001", clause="c", source="def decide(trace): ...")
@@ -330,6 +335,7 @@ def test_the_interface_reaches_the_reviewer_with_directions_and_notes():
     assert "scl_oen" in body and "output" in body
     assert "sda_i" in body and "input" in body
     assert "releases it to the pull-up" in body
+    assert "idle_value" in body, "a port resting at its asserted value is the case"
 
 
 def test_pacing_fields_are_not_offered_to_the_reviewer():
@@ -337,8 +343,8 @@ def test_pacing_fields_are_not_offered_to_the_reviewer():
     exists to catch invented timing. Handing the reviewer a `latency_cycles`
     would invite exactly the demand the other gate is trying to remove.
     """
-    contract = {"ports": [{"name": "busy", "direction": "output", "width": 1}],
-                "latency_cycles": 3, "clock": "clk"}
+    contract = {"io": [{"name": "busy", "dir": "output", "width": 1}],
+                "latency_cycles": 3, "clocking": {"clock": "clk"}}
     oracle = C.RequirementOracle(req_uid="R", clause="c", source="s")
     body = C.build_prompt(requirement={"uid": "R"}, oracle=oracle,
                           contract=contract)
@@ -352,3 +358,36 @@ def test_an_absent_contract_leaves_the_prompt_exactly_as_it_was():
     assert (C.build_prompt(requirement=req, oracle=oracle)
             == C.build_prompt(requirement=req, oracle=oracle, contract=None)
             == C.build_prompt(requirement=req, oracle=oracle, contract={}))
+
+
+def test_the_projection_is_pinned_to_the_shape_a_real_contract_has():
+    """The regression that a hand-written fixture could not catch.
+
+    `contract.json` carries `io`, and each entry's direction key is `dir`. A
+    projection reading `ports`/`direction` returns an empty list against every
+    real artifact in this repo, which is silent: the prompt still renders, just
+    with nothing in it. So this asserts against a contract loaded the way the
+    pipeline loads one, not one written to suit the code.
+    """
+    import json
+    import pathlib
+
+    found = [p for p in pathlib.Path("benchmarks").rglob("contract*.json")]
+    real = None
+    for path in found:
+        try:
+            obj = json.loads(path.read_text())
+        except Exception:  # noqa: BLE001, PERF203
+            continue
+        if isinstance(obj, dict) and obj.get("io"):
+            real = obj
+            break
+    if real is None:  # no fixture on disk: assert the key names directly
+        real = {"io": [{"name": "p", "dir": "output", "width": 1}]}
+    got = C._ports(real)["ports"]
+    assert got, "an empty projection means the interface block carries nothing"
+    assert all("name" in r for r in got)
+    assert any(r.get("direction") in ("input", "output") for r in got), \
+        "the direction key is `dir` in the artifact and `direction` in the projection"
+    assert C._ports({"ports": [{"name": "x", "direction": "output"}]})["ports"] == [], \
+        "the OLD shape must project to nothing, so this test fails if it is restored"

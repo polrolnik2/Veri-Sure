@@ -125,12 +125,14 @@ def _ports(contract: dict) -> dict:
     reviewer invites the timing demands the surplus question exists to catch.
     """
     out = []
-    for port in contract.get("ports") or []:
-        row = {k: port.get(k) for k in ("name", "direction", "width")
-               if port.get(k) is not None}
-        if port.get("notes"):
-            row["notes"] = port["notes"]
-        if row:
+    for port in contract.get("io") or []:
+        row = {"name": port.get("name"), "direction": port.get("dir"),
+               "width": port.get("width")}
+        row = {k: v for k, v in row.items() if v is not None}
+        for extra in ("notes", "idle_value"):
+            if port.get(extra) is not None:
+                row[extra] = port[extra]
+        if row.get("name"):
             out.append(row)
     return {"ports": out}
 
@@ -181,7 +183,16 @@ def build_prompt(
 
     Ports only, and deliberately: `notes` are included because they say which
     value drives and which releases, which is what "asserted" means for an
-    open-drain line and is the distinction the author is held to.
+    open-drain line and is the distinction the author is held to, and
+    `idle_value` with them because a port resting at its asserted value is the
+    exact case the level/action rule turns on.
+
+    THE FIELD IS `io` AND THE DIRECTION KEY IS `dir`. The first version of this
+    read `contract["ports"]` and `port["direction"]`, which are both absent, so
+    it emitted an empty block and the whole change was inert -- caught only
+    because an A/B of it against itself would have measured nothing.
+    `oracle_gen.shared_prefix` reads `contract.get("io")`, and this is the same
+    contract.
     """
     parts = []
     if spec.strip():
