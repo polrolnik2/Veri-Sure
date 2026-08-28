@@ -121,6 +121,49 @@ def test_the_reviewer_is_told_not_to_judge_strictness_or_designs():
         assert phrase in C.SYSTEM, phrase
 
 
+def test_the_gate_refuses_STRENGTH_and_CODE_STYLE_but_not_LOGIC():
+    """The line this gate must not cross, stated as three separate refusals.
+
+    Strength is another gate's question and asking it here rejected 56 of 70.
+    Code style is nobody's -- a reviewer asked how the check is WRITTEN will
+    find something. Logical direction is neither: a check that asserts its own
+    antecedent is not a weak check of the requirement, it is not a check of it,
+    which is this gate's own question.
+    """
+    for phrase in ("not judging how thorough, how strict",
+                   "NOT judging how the code is written",
+                   "Only WHAT IT DECIDES"):
+        assert phrase in C.SYSTEM, phrase
+
+
+def test_direction_is_asked_as_part_of_the_same_question():
+    """MEASURED BEFORE IT WAS ADDED: 0 rejections in 82 checks, 37 of which a
+    known-good implementation refutes. The topic question alone contributes
+    nothing to that residue."""
+    for phrase in ("IT ASSERTS THE CONDITION INSTEAD OF THE EFFECT",
+                   "IT HAS THE IMPLICATION THE WRONG WAY ROUND",
+                   "IT DECIDES THE CASE THE REQUIREMENT DOES NOT COVER",
+                   "one question, not three"):
+        assert phrase in C.SYSTEM, phrase
+    # and it must still be ONE verdict, not a second field to hide behind
+    assert set(C.Review.model_fields) == {
+        "reasoning", "tests_the_requirement", "what_is_missing"}
+
+
+def test_asserting_the_premise_is_not_a_WEAK_check():
+    """The collision the direction leg would otherwise have with the old rule,
+    and the reason the escape hatch is WEAKNESS rather than PARTIALNESS.
+
+    MEASURED on c1-i2c: 99 of 104 requirements have exactly ONE distinct
+    clause -- 95% atomic. So "decides only PART of the requirement" was
+    accommodating a case that barely exists while muddying the common one, and
+    it would have readmitted a check asserting only the condition as a "part".
+    A requirement states one claim; the licence is to decide it weakly, never
+    to decide half of it."""
+    assert "it is meant to be atomic and almost always is" in C.SYSTEM
+    assert "Deciding only the\nFIRST half is not weakness" in C.SYSTEM
+
+
 def test_partial_and_loose_checks_are_on_target():
     """Measured: asking this reviewer about strength made it reject 56 of 70
     real oracles, and only 3 of those were genuinely about the wrong subject.
@@ -128,7 +171,7 @@ def test_partial_and_loose_checks_are_on_target():
     answers to a question a different gate asks. As a blocking gate that pushes
     every check toward demanding MORE, while gate 1 pushes them toward
     demanding less."""
-    assert "decides only PART of the requirement is ON TARGET" in C.SYSTEM
+    assert "decides the requirement WEAKLY is ON TARGET" in C.SYSTEM
     assert '"It should also check X" is a YES' in C.SYSTEM
 
 

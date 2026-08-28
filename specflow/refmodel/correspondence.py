@@ -20,7 +20,18 @@ cannot be contaminated by an implementation because it is never shown one.
 
 **One question, deliberately.** It is not offered "ambiguous". A reviewer given
 that option takes it, which is how the retired judge produced a run of 50
-AMBIGUOUS verdicts out of 77. Yes or no, and a no carries what is missing, so
+AMBIGUOUS verdicts out of 77.
+
+**AND LOGICAL DIRECTION IS PART OF THAT ONE QUESTION, not a second one.** A
+check that asserts its own antecedent is not a weak check of the requirement;
+it is not a check of the requirement at all, which is exactly what this gate
+asks. Splitting it out was over-cautious: the reason it was going to be a
+separate reviewer is that its LABEL differs -- a check that cannot fail is
+satisfied by any implementation, so vacuity sees it and over-strictness does not
+-- and that is a fact about how to CALIBRATE it, not about what to ask. The
+line this gate must not cross is strength and code style, and direction is
+neither. Measured before it was added: 0 rejections in 82 checks, 37 of which a
+known-good implementation refutes. Yes or no, and a no carries what is missing, so
 the stage's repair loop has something to act on.
 
 **What it is NOT asked.** Not whether the oracle is too strict -- that is a
@@ -81,27 +92,57 @@ You are given a requirement and a decision procedure written to decide it. You
 answer ONE question: is that procedure ABOUT that requirement?
 
 Subject matter only. You are not judging any design -- none appears below. You
-are not judging how thorough, how strict, or how complete the check is.
+are not judging how thorough, how strict, or how complete the check is. And you
+are NOT judging how the code is written: which combinators it uses, how it is
+organised, which data structures it reaches for, whether you would have written
+it differently. Only WHAT IT DECIDES.
 
-**A check that decides only PART of the requirement is ON TARGET.** A check that
-decides it loosely, without timing constraints, without every sub-condition, or
-in a way you would have written more tightly, is ON TARGET. Whether a check is
-strong enough is a different question measured by a different gate, and
-answering it here would push every check toward demanding more -- while another
-gate is simultaneously pushing them toward demanding less.
+**A check that decides the requirement WEAKLY is ON TARGET.** A requirement
+here states ONE claim -- it is meant to be atomic and almost always is -- so
+the question is never "did the check cover enough of it". It is: does the check
+decide that claim at all. Deciding it loosely, without timing constraints,
+without every sub-condition of its trigger, or in a way you would have written
+more tightly, is ON TARGET. Whether a check is strong enough is a different
+question measured by a different gate, and answering it here would push every
+check toward demanding more -- while another gate is simultaneously pushing them
+toward demanding less.
 
-Answer NO only when the procedure is about something ELSE:
+The one claim has two halves: a CONDITION under which it applies, and what it
+says HAPPENS then. Being weak about the second half is fine. Deciding only the
+FIRST half is not weakness -- it is checking the premise, which is true whenever
+the check looks, and says nothing whatever about the design.
+
+Answer NO only when the procedure is about something ELSE, or is about it
+BACKWARDS:
 
   - it reads ports the requirement is not about, and not the ones it is;
   - it decides a different behaviour than the one the requirement names --
     a different command, a different signal, a different phase of operation;
   - `clause` names one sentence and the code plainly decides another;
   - it is a placeholder: it decides nothing at all about this requirement,
-    whatever it returns.
+    whatever it returns;
+  - IT ASSERTS THE CONDITION INSTEAD OF THE EFFECT. It opens on a situation and
+    then requires that same situation, or a restatement of it, to hold. It
+    reduces to "when X, X" and no design can fail it;
+  - IT HAS THE IMPLICATION THE WRONG WAY ROUND. The requirement says the
+    condition produces the effect; the check requires the effect to imply the
+    condition, and so convicts a design that produced that effect for some
+    other legitimate reason;
+  - IT DECIDES THE CASE THE REQUIREMENT DOES NOT COVER. It convicts on what
+    happens when the condition does NOT hold. A requirement that says what
+    happens under X says nothing whatever about not-X.
 
-Answer YES whenever the procedure is a check of this requirement, however
-partial. "It should also check X" is a YES. "It should check X more precisely"
-is a YES. Only "it is checking something else" is a NO.
+Those last three are one question, not three: does the check decide what the
+requirement says, in the direction the requirement says it? Name the
+requirement's condition and its effect in `reasoning` before you answer, and
+say which of the two the check asserts. This is about the LOGIC, not the code:
+a check that gets the direction right and is written awkwardly, partially or
+weakly is a YES.
+
+Answer YES whenever the procedure is a check of this requirement's EFFECT,
+however weak. "It should also check X" is a YES. "It should check X more
+precisely" is a YES. Only "it is checking something else" and "it is checking
+it backwards" are a NO.
 
 There is no third answer. If you find yourself wanting to say "it depends" or
 "unclear", decide which is more nearly true and say why in `reasoning` -- a
