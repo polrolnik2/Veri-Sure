@@ -529,3 +529,32 @@ def test_an_edge_on_the_CLOCK_is_rejected():
               activation=Activation(text="ena falls", inputs={"ena": 0},
                                     opens_on=[{"ena": "fall"}]))
     assert not [i for i in gate_one(REQ, ok, clocked) if i.severity == "error"]
+
+
+def test_an_observable_no_route_explains_is_reported_not_shipped_silently():
+    """The gate already fires on this; nothing acted on it.
+
+    REQ-0094's worked case: text about arbitration checking during WRITE
+    operations, one named port, and four ports declared observable with no
+    route saying what any of them shows. The check it got then invented a
+    claim -- both lines released on arbitration loss -- that correct hardware
+    does not satisfy.
+    """
+    from specflow.normalize import (NormalizedRequirement, Route,
+                                    unsupported_observable)
+
+    bare = NormalizedRequirement(
+        req_uid="REQ-0094", observable=["al", "sda_oen"], observed_via=[])
+    explained = NormalizedRequirement(
+        req_uid="REQ-0007", observable=["busy"],
+        observed_via=[Route(port="busy", shows="busy rises on a wide glitch "
+                                               "and does not on a narrow one")])
+    blind = NormalizedRequirement(
+        req_uid="REQ-0000", observable=[], unobservable_reason="internal only")
+
+    got = unsupported_observable([bare, explained, blind])
+    assert set(got) == {"REQ-0094"}, got
+    assert "no route explains" in got["REQ-0094"]
+    # A requirement with NO observable is a different finding with a different
+    # cause, and `unobservable` already reports it.
+    assert "REQ-0000" not in got

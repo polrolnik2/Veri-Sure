@@ -1448,6 +1448,45 @@ def unobservable(normalized: list[NormalizedRequirement]) -> dict[str, str]:
     }
 
 
+def unsupported_observable(
+    normalized: list[NormalizedRequirement],
+) -> dict[str, str]:
+    """`req_uid -> why`, for a requirement whose `observable` NOTHING explains.
+
+    A gate that says `error` and is then ignored is not a gate. The rule this
+    reports on already exists and already fires -- "observable at [...] but no
+    route given" -- and on c1-i2c it fired on 15 requirements whose checks were
+    written anyway. REQ-0094 is the worked case: its text is "arbitration
+    checking is performed during WRITE bit operations", it named one port
+    (`cmd`), and it shipped declaring `al`, `cmd_ack`, `scl_oen` and `sda_oen`
+    observable with NO route saying what any of them shows. The check it got was
+    then free to invent one, and did: it required both lines released on
+    arbitration loss, which correct hardware does not do.
+
+    A `shows` is what stops that. Without one the port is a licence with no
+    claim attached, which is the vacuity failure this stage exists to catch
+    arriving as its opposite.
+
+    STATED HONESTLY, because it bears on what this is worth: carrying this
+    error does NOT predict a worse check. Measured on c1-i2c, 39% of the checks
+    from flagged requirements are refuted by the known-good control, against
+    39% from clean ones -- no difference at all. So this is not a quality fix
+    and must not be reported as one. It is a consistency fix: the pipeline
+    stops acting on a claim its own gate rejected, and the requirement is
+    reported to the specification's author instead of being handed to a check
+    author who has nothing to write.
+    """
+    return {
+        n.req_uid: (
+            f"observable at {sorted(n.observable)} but no route explains what "
+            f"any of them shows when this requirement holds and when it does "
+            f"not, so a check over them has nothing to assert"
+        )
+        for n in normalized
+        if n.req_uid and n.observable and not n.observed_via
+    }
+
+
 def write_artifacts(
     run_dir: Path,
     normalized: list[NormalizedRequirement],
@@ -1461,6 +1500,10 @@ def write_artifacts(
             {
                 "normalized": [n.model_dump() for n in normalized],
                 "unobservable": unobservable(normalized),
+                # Reported beside `unobservable` because the consequence is the
+                # same -- no check can be written -- while the cause is not: the
+                # boundary was named and never explained.
+                "unsupported_observable": unsupported_observable(normalized),
                 "indirect_review": indirect_review(normalized),
                 "issues": [
                     {"severity": i.severity, "path": i.path, "message": i.message,
