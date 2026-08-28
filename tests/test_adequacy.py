@@ -577,3 +577,32 @@ def test_the_widths_come_from_the_contract():
         {"name": "q", "dir": "output", "width": 4},
         {"name": "f", "dir": "output"},
     ]}) == {"q": 4, "f": 1}
+
+
+def test_a_survivor_is_described_by_its_EFFECT_not_its_source_edit():
+    """The report defect that sent an earlier analysis after a phantom filter.
+
+    `mutant.description` names the source edit -- "line 48: 1 becomes 2" -- and
+    read alone that looks like a design no hardware can be. The observable
+    truth for that same mutant was `scl_oen 1->0`: SCL driven low instead of
+    released after reset, an ordinary and serious defect the oracle missed.
+    """
+    from specflow.refmodel.adequacy import _effect
+
+    base = [{"edge": 0, "inputs": {}, "outputs": {"scl_oen": 1, "busy": 0}},
+            {"edge": 1, "inputs": {}, "outputs": {"scl_oen": 1, "busy": 0}}]
+    mutant = [{"edge": 0, "inputs": {}, "outputs": {"scl_oen": 0, "busy": 0}},
+              {"edge": 1, "inputs": {}, "outputs": {"scl_oen": 0, "busy": 0}}]
+    got = _effect(base, mutant, {"scl_oen", "busy"})
+    assert got == "scl_oen 1->0", got
+    # A port the oracle does not read is not reported, and neither is a
+    # repetition of the same transition on later rows.
+    assert "busy" not in got
+
+
+def test_effect_says_so_when_nothing_at_the_ports_moved():
+    """Silence would read as "no evidence gathered" rather than "none found"."""
+    from specflow.refmodel.adequacy import _effect
+
+    rows = [{"edge": 0, "inputs": {}, "outputs": {"scl_oen": 1}}]
+    assert _effect(rows, rows, {"scl_oen"}) == "no port difference"

@@ -127,6 +127,34 @@ def _instruct(diffs: list[str], missed: int, in_scope: int) -> str:
             f"{in_scope} such pairs got past this check.")
 
 
+def _effect(base_rows: list[dict], mutant_rows: list[dict],
+            ports: set[str]) -> str:
+    """What a mutant changed AT THE PORTS, as `port base->mutant`.
+
+    The companion to `mutate_model.Mutant.description`, which names the source
+    edit. A literal changed from 1 to 2 in the model's reset block may reach the
+    trace as `scl_oen 1->0`, because the output path normalises it -- so the
+    edit reads as impossible and the effect is an ordinary, serious defect.
+    Reporting only the edit is what made 24 of this run's 79 inadequacy
+    verdicts look like noise.
+
+    Ports only, and only the ports this oracle reads: a mutant is in scope
+    precisely because `_project` saw it change one of them.
+    """
+    seen: list[str] = []
+    for a, b in zip(base_rows, mutant_rows):
+        for name in sorted(ports):
+            was = (a.get("outputs") or {}).get(name)
+            now = (b.get("outputs") or {}).get(name)
+            if was != now:
+                item = f"{name} {was}->{now}"
+                if item not in seen:
+                    seen.append(item)
+        if len(seen) >= 3:
+            break
+    return ", ".join(seen) or "no port difference"
+
+
 def _survived(survivors: list[str], in_scope: int) -> str:
     """The reason an inadequate oracle is handed to a strengthening round.
 
@@ -263,7 +291,19 @@ def adequacy_of(
         in_scope += 1
         rows = transactional_view(run.rows) if transactional else run.rows
         if not decide(oracle, rows).failed():
-            survivors.append(mutant.description)
+            # NAME WHAT THE MUTANT DID TO THE PORTS, not what it did to the
+            # source. `mutant.description` is the edit -- "line 48: 1 becomes
+            # 2" -- and read alone that looks like a design no hardware can be,
+            # which is exactly how it was read: it sent an earlier analysis
+            # hunting an illegal-mutant filter that then fired on 0 of 110.
+            #
+            # The observable truth for that same mutant is `scl_oen 1 -> 0`,
+            # SCL driven low instead of released for the edges after reset --
+            # a real defect, and one this oracle missed. The edit and the
+            # effect are not the same statement and only the second is
+            # evidence about the check.
+            effect = _effect(baseline.rows, run.rows, ports)
+            survivors.append(f"{mutant.description} ({effect})")
             # The REPLAY is the counterexample, not the mutation. Taken from the
             # first survivor only: the author is being asked to make one
             # discrimination it failed to make, and three edges of one pair is

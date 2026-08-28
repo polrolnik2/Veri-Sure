@@ -82,8 +82,17 @@ def _score(label: str, rtl: Path, suite_src: Path, out: Path, *,
         coverage=False, trace=False, include_dirs=include,
     )
     if not result.build_ok:
+        # A BUILD FAILURE IS NOT A SCORE OF ZERO, and returning one makes it
+        # read as a measurement. `0/0` has already been mistaken for an
+        # instrument verdict once and retracted; it happened again here when
+        # the golden i2c RTL failed to elaborate because `i2c_master_defines.v`
+        # sits in the parent directory and only the module directory was on
+        # `--include`. Both models then "scored" 0/0 with an identical empty
+        # divergence histogram, which is precisely what a real zero-separation
+        # result would look like.
         print(f"{label}: BUILD FAILED\n{result.build_log[-3000:]}")
-        return {"label": label, "passed": 0, "total": 0, "by_signal": {}}
+        return {"label": label, "passed": 0, "total": 0, "by_signal": {},
+                "build_failed": True}
 
     passed = total = 0
     by_signal: Counter = Counter()
@@ -159,6 +168,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     for row in rows:
+        if row.get("build_failed"):
+            # Loud, and NOT a number: nothing was measured, so nothing that
+            # looks like a measurement may be printed beside it.
+            print(f"{row['label']:>12}: NOT MEASURED -- the DUT did not build. "
+                  f"This is a usage or environment fault, not a score. Check "
+                  f"that every `include file is on --include.")
+            continue
         print(f"{row['label']:>12}: {row['passed']}/{row['total']}"
               f"   diverging outputs {row['by_signal']}")
     if len(rows) >= 2:
