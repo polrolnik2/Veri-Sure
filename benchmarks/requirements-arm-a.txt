@@ -50,7 +50,20 @@ vcdvcd>=1,<2
 # and the test suite, and arm A has no specflow by construction -- installing
 # them would not break it, but it would blur what the arm actually needs.
 #
-# NOT PIP-INSTALLABLE, and required: a Verilog simulator on PATH. Arm A drives
-# `iverilog`/`vvp` and calls `verilator` directly from `sim_reviewer.py`.
-# Install those from the system package manager. Arm A does NOT need
-# verilator >= 5.036 -- that floor is cocotb 2.x's, and cocotb is specflow's.
+# NOT PIP-INSTALLABLE, and required: `verilator` on PATH. That is the ONLY
+# external binary arm A needs -- checked against the merge-base tree, where
+# every simulator call in eda_agent is verilator (rtl_editor, tb_editor,
+# sim_reviewer, verilator_judge, rtl_generator, top_agent).
+#
+# yosys, sby, z3 and mcy are NOT needed. They appear only in
+# `boolean_proofer.py`, and `TopAgent` at the merge base never constructs
+# `BooleanProofer` or `AsserterAgent` -- so nothing on arm A's path reaches
+# them. iverilog is not needed either.
+#
+# NO VERSION FLOOR APPLIES TO ARM A. The >= 5.036 requirement is cocotb 2.x's,
+# and cocotb is specflow's; the merge-base tree checks no verilator version
+# anywhere. A distribution package is fine. To install without root, build with
+# a prefix -- `./configure --prefix="$VIRTUAL_ENV"` puts the binary on PATH
+# whenever the venv is active -- but note the build itself needs a C++
+# toolchain (git perl make autoconf g++ flex bison libfl-dev zlib1g-dev),
+# which is the part that usually wants root if it is not already there.
