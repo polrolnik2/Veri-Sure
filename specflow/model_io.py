@@ -28,6 +28,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
+from eda_agent import stream_policy as _policy
+
 logger = logging.getLogger(__name__)
 
 
@@ -309,9 +311,12 @@ class PortSettings:
     #:
     #: `_complete_responses` widens on a drop as well, because a table cannot
     #: cover every prompt. This is the cheap prevention, that is the recovery.
-    effort_chunk: dict[str, int] = field(default_factory=lambda: {
-        "low": 9000, "medium": 9000, "high": 48000, "xhigh": 64000,
-    })
+    #: Shared with `eda_agent.responses_model` through
+    #: `eda_agent.stream_policy.EFFORT_CHUNK`, so the two transports cannot
+    #: drift apart on the one number that decides whether a request outlives
+    #: this gateway's ~475-665s cap on a single response.
+    effort_chunk: dict[str, int] = field(
+        default_factory=lambda: dict(_policy.EFFORT_CHUNK))
 
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
     #: applies before a response starts.
@@ -384,20 +389,8 @@ class PortSettings:
 
 
 def _as_input_item(item) -> dict:
-    """An output item, reshaped into something the API accepts as INPUT.
-
-    The two are not the same schema, and the difference is not written down
-    anywhere you would look for it. Feeding a reasoning item straight back
-    yields `Unknown parameter: 'input[1].status'` -- `status` is emitted on
-    output and rejected on input. Nulls go for the same reason: to a strict
-    validator an explicit `"content": null` is not an absent key.
-    """
-    if hasattr(item, "model_dump"):
-        data = item.model_dump(exclude_none=True)
-    else:
-        data = {k: v for k, v in dict(item).items() if v is not None}
-    data.pop("status", None)
-    return data
+    """An output item reshaped as INPUT. Delegated to the shared policy."""
+    return _policy.as_input_item(item)
 
 
 def _cache_key(cfg, stage: str) -> str:
@@ -486,8 +479,9 @@ def _responses_body(cfg, prompt: str, default_cap: int = 48000,
 #: failure when widening is spent must agree on what "dropped" means -- they
 #: were two copies of the same tuple, and a name added to one of them would
 #: have changed the report without changing the recovery.
-_MIDSTREAM_DROP = ("RemoteProtocolError", "ReadTimeout", "ConnectError",
-                   "ReadError", "APIConnectionError", "APITimeoutError")
+#: Re-exported from the shared policy so the two transports cannot drift. The
+#: name stays because call sites and tests read it.
+_MIDSTREAM_DROP = _policy.MIDSTREAM_DROP
 
 #: Exceptions that will fail identically however many times we resend.
 #:
@@ -496,50 +490,15 @@ _MIDSTREAM_DROP = ("RemoteProtocolError", "ReadTimeout", "ConnectError",
 #: throws away a whole generation -- an i2c reference model at `xhigh` is ~30
 #: minutes of work, and one was lost to a gateway 500 whose own message said
 #: "You can retry your request".
-_PERMANENT = frozenset({
-    "BadRequestError",           # 400 -- the body is malformed; it still will be
-    "AuthenticationError",       # 401
-    "PermissionDeniedError",     # 403
-    "NotFoundError",             # 404 -- wrong route, or a model this gateway
-                                 # cannot resolve
-    "UnprocessableEntityError",  # 422
-    "TypeError", "KeyError", "IndexError",  # an event shape the SDK cannot parse
-})
+_PERMANENT = _policy.PERMANENT
 
 #: Error `code`/`type` values that stay permanent inside a 500-shaped reply.
-_PERMANENT_CODES = frozenset({
-    "content_filter", "invalid_request_error", "context_length_exceeded",
-    "invalid_prompt", "model_not_found", "string_above_max_length",
-})
+_PERMANENT_CODES = _policy.PERMANENT_CODES
 
 
 def _retryable(exc: BaseException) -> bool:
-    """Should this failure be resent?
-
-    The exception's type alone is not enough to decide. When an SSE stream
-    carries an error event the SDK raises a **bare `APIError`** -- not an
-    `APIStatusError`, so there is no `status_code` to read -- and that is
-    exactly how this gateway reports a transient server-side 500 in the middle
-    of a long generation. Classifying by name filed it with the permanent
-    failures, so a 500 that explicitly invited a retry killed a 30-minute
-    reference-model generation on its second continuation chunk instead.
-
-    Permanent by name, permanent by error code in the body, retryable
-    otherwise -- deliberately biased towards retrying, because the two mistakes
-    do not cost the same.
-    """
-    if type(exc).__name__ in _PERMANENT:
-        return False
-    body = getattr(exc, "body", None)
-    if isinstance(body, dict):
-        for key in ("code", "type"):
-            value = body.get(key)
-            if isinstance(value, str) and value in _PERMANENT_CODES:
-                return False
-    status = getattr(exc, "status_code", None)
-    if isinstance(status, int) and 400 <= status < 500 and status not in (408, 409, 429):
-        return False
-    return True
+    """Should this failure be resent? Delegated to the shared policy."""
+    return _policy.retryable(exc)
 
 
 @dataclass

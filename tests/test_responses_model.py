@@ -343,4 +343,106 @@ def test_a_gateway_that_refuses_to_stream_falls_back_and_says_so(caplog):
         res = asyncio.run(model([{"role": "user", "content": "hi"}]))
     assert res.content[0]["text"] == "ok"
     assert len(calls) == 2 and calls[1].get("stream") is None
+    # The warning must name what the fallback exposes the run to. Both hazards
+    # are pinned: the idle reaper this path originally existed for, and the
+    # single-response cap measured later (550.6s and 662.4s drops on healthy
+    # streams), which chunking defends against and a non-streamed call cannot.
     assert "idle reaper" in caplog.text
+    assert "single response" in caplog.text
+
+
+# ---------------------------------------------------------------- chunking
+def _chunk_response(items, *, status="completed", reason=None, out_tokens=100):
+    return SimpleNamespace(
+        output=items, status=status,
+        incomplete_details=SimpleNamespace(reason=reason) if reason else None,
+        usage=SimpleNamespace(input_tokens=10, output_tokens=out_tokens,
+                              input_tokens_details=None),
+    )
+
+
+def _chunk_stream(response):
+    """An async iterator ending in the terminal event carrying `response`."""
+    async def _gen():
+        for ev in (SimpleNamespace(type="response.output_text.delta", delta="x"),
+                   SimpleNamespace(type=f"response.{response.status}",
+                                   response=response)):
+            yield ev
+    return _gen()
+
+
+def test_a_spent_slice_continues_and_every_round_reaches_the_caller():
+    """THE POINT OF CHUNKING, and the failure it must not introduce.
+
+    A generation split across slices emits text and tool calls in more than one
+    response. Parsing only the last would silently drop everything before it.
+    """
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    model.reasoning_effort = "xhigh"
+    seen: list[dict] = []
+
+    rounds = [
+        _chunk_response([SimpleNamespace(type="message",
+                                         content=[SimpleNamespace(text="first ")])],
+                        status="incomplete", reason="max_output_tokens"),
+        _chunk_response([SimpleNamespace(type="message",
+                                         content=[SimpleNamespace(text="second")])]),
+    ]
+
+    async def _create(**kwargs):
+        seen.append(kwargs)
+        return _chunk_stream(rounds[len(seen) - 1])
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    res = asyncio.run(model([{"role": "user", "content": "hi"}]))
+
+    assert len(seen) == 2, "a spent slice must continue"
+    # Both rounds' text survives.
+    assert "first " in res.content[0]["text"] and "second" in res.content[0]["text"]
+    # The continuation carried the first round's items plus a nudge.
+    second_input = seen[1]["input"]
+    assert any("Continue from exactly" in str(m.get("content", ""))
+               for m in second_input if isinstance(m, dict))
+    # Statelessness: the continuation depends on what we send, not on what the
+    # gateway remembers -- this gateway cannot retrieve a stored response.
+    assert seen[0]["store"] is False
+    assert seen[0]["include"] == ["reasoning.encrypted_content"]
+
+
+def test_the_slice_is_the_effort_s_not_the_whole_ceiling():
+    """Each REQUEST is short; the ceiling is the budget across all of them."""
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    model.reasoning_effort = "xhigh"
+    seen: list[dict] = []
+
+    async def _create(**kwargs):
+        seen.append(kwargs)
+        return _chunk_stream(_chunk_response([]))
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    asyncio.run(model([{"role": "user", "content": "hi"}],
+                      max_tokens=192000))
+    assert seen[0]["max_output_tokens"] == 64000, \
+        "an xhigh request must be capped at the xhigh slice, not the ceiling"
+
+
+def test_usage_is_summed_across_continuations():
+    """The last chunk's usage describes that REQUEST, not the generation."""
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    model.reasoning_effort = "xhigh"
+    rounds = [
+        _chunk_response([], status="incomplete", reason="max_output_tokens",
+                        out_tokens=100),
+        _chunk_response([], out_tokens=250),
+    ]
+    n = {"i": 0}
+
+    async def _create(**kwargs):
+        r = rounds[n["i"]]
+        n["i"] += 1
+        return _chunk_stream(r)
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    res = asyncio.run(model([{"role": "user", "content": "hi"}]))
+    assert res.usage.output_tokens == 350
+    assert res.usage.input_tokens == 20

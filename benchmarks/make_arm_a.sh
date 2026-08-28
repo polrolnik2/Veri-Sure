@@ -42,6 +42,9 @@ git -C "$REPO" worktree add --detach "$DEST" "$BASE"
 git -C "$REPO" diff "$BASE" HEAD -- eda_agent/config.py eda_agent/model.py \
     | git -C "$DEST" apply
 cp "$REPO/eda_agent/responses_model.py" "$DEST/eda_agent/responses_model.py"
+# The chunk-and-continue policy the transport decides from. Without it
+# `responses_model` raises ImportError before arm A makes a single call.
+cp "$REPO/eda_agent/stream_policy.py" "$DEST/eda_agent/stream_policy.py"
 
 # 2. hierarchy plumbing
 git -C "$DEST" apply "$REPO/benchmarks/arm_a_hierarchy.patch"

@@ -25,7 +25,20 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 
 #: The files `make_arm_a.sh` copies from HEAD into a specflow-less tree. These
 #: are the ones where a specflow import is FATAL rather than merely wrong.
-CARRIED_TO_ARM_A = ("eda_agent/config.py", "eda_agent/model.py")
+#: EVERY file `make_arm_a.sh` copies into the arm A tree, not just the two it
+#: started with. `responses_model.py` and `stream_policy.py` are carried too,
+#: and they are the likeliest place for a specflow import to appear -- the
+#: chunk-and-continue policy `stream_policy` holds was LIFTED from
+#: `specflow/model_io.py`, so importing it from there is the obvious wrong
+#: move and this list is what refuses it. A previous version of this mistake,
+#: `usage_attr` placed in a module arm A does not carry, killed a whole batch
+#: with ModuleNotFoundError.
+CARRIED_TO_ARM_A = (
+    "eda_agent/config.py",
+    "eda_agent/model.py",
+    "eda_agent/responses_model.py",
+    "eda_agent/stream_policy.py",
+)
 
 
 def _imports(path: pathlib.Path) -> set[str]:

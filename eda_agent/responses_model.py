@@ -44,6 +44,7 @@ final response is still assembled once, from `get_final_response()`, so
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -53,6 +54,8 @@ from typing import Any
 from agentscope.message import TextBlock, ThinkingBlock, ToolUseBlock
 from agentscope.model import ChatModelBase, ChatResponse
 from agentscope.model._model_usage import ChatUsage
+
+from . import stream_policy as policy
 
 
 logger = logging.getLogger(__name__)
@@ -179,6 +182,70 @@ def to_responses_tools(tools: list[dict] | None) -> list[dict] | None:
     return out
 
 
+class _MergedUsage:
+    """Usage summed across every continuation of one generation.
+
+    The final chunk's own `usage` describes THAT REQUEST, not the generation.
+    Reporting it would under-count a chunked call by however many rounds it
+    took -- and each round is a separately billed request, so both input and
+    output are additive here. A cost figure that silently drops four fifths of
+    the calls is the class of number this project has already had to retract.
+    """
+
+    def __init__(self, usages: list) -> None:
+        self._usages = usages
+
+    def _sum(self, name: str) -> int:
+        total = 0
+        for u in self._usages:
+            try:
+                total += int(getattr(u, name, 0) or 0)
+            except (TypeError, ValueError):
+                pass
+        return total
+
+    @property
+    def input_tokens(self) -> int:
+        return self._sum("input_tokens")
+
+    @property
+    def output_tokens(self) -> int:
+        return self._sum("output_tokens")
+
+    @property
+    def input_tokens_details(self):
+        # The LAST round's, unsummed: it is a breakdown of that request's
+        # prefix, and the rounds do not share one. Summing cached tokens across
+        # continuations would report a cache hit rate for a prefix that never
+        # existed.
+        return (getattr(self._usages[-1], "input_tokens_details", None)
+                if self._usages else None)
+
+
+class _Merged:
+    """The final response, carrying the output items of EVERY round.
+
+    A chunked generation emits text and tool calls across several responses.
+    `_parse` reads `response.output`, so handing it only the last one would
+    silently drop everything produced before the last slice ran out -- a
+    failure the chunking would otherwise INTRODUCE while fixing the one it
+    exists for. Status and incomplete details come from the final response,
+    because they describe how the generation actually ended.
+    """
+
+    def __init__(self, final, output: list, usages: list | None = None) -> None:
+        self._final = final
+        self.output = output
+        self._usage = _MergedUsage(usages or [])
+
+    @property
+    def usage(self):
+        return self._usage
+
+    def __getattr__(self, name: str):
+        return getattr(self._final, name)
+
+
 class OpenAIResponsesModel(ChatModelBase):
     """Chat model over `client.responses.create`.
 
@@ -302,54 +369,151 @@ class OpenAIResponsesModel(ChatModelBase):
         )
 
     async def _create(self, request: dict) -> Any:
-        """One response, streamed so the connection never goes idle.
+        """One generation, CHUNKED so no single request outlives the gateway.
 
-        `create(stream=True)`, NOT the `stream()` helper, and the distinction is
-        load-bearing -- `specflow/model_io.py` measured it: the helper runs an
+        This gateway terminates a single response somewhere in a ~475-665s band
+        while the stream is still healthy -- measured, not inferred: two drops
+        on or1200_dc_fsm at xhigh, at 550.6s and 662.4s, with largest
+        inter-event gaps of 8.8s and 9.9s, one of them with a 1800s client
+        timeout in force and 128000 output tokens unspent. Nothing was idle,
+        nothing was truncated, nothing timed out locally.
+
+        So a request that must carry a whole generation is a request that will
+        eventually be killed, and no ceiling or timeout fixes that. What fixes
+        it is keeping every request short: cap each at the effort's slice and
+        continue from the model's own reasoning items. `specflow` has done this
+        all along, which is the whole of why it completed 2,400 calls -- longest
+        536s, exactly one over 475s -- while arm A produced RTL on 2 runs of 18.
+
+        Every decision here comes from `stream_policy`, shared with that
+        transport. Only the loop is separate, because one SDK iterator is async
+        and the other is not.
+
+        The output items of EVERY round are merged and handed to `_parse`.
+        Taking only the final response's would silently drop text and tool calls
+        emitted before the last slice ran out -- the failure this mechanism
+        would otherwise introduce while fixing the one it exists for.
+        """
+        effort = self.reasoning_effort
+        total = int(request.pop("max_output_tokens", None)
+                    or policy.DEFAULT_TOTAL)
+        chunk, rounds, warning = policy.plan(total, policy.chunk_for(effort))
+        if warning:
+            logger.warning("responses: %s", warning)
+
+        # Continuation carries the model's OWN reasoning, not a summary of it.
+        # The plaintext `content` comes back empty from this gateway and the
+        # summary is lossy by construction, so the encrypted item is the only
+        # faithful carrier. `store: false` keeps it stateless -- the
+        # continuation depends on what we send, not on what the gateway
+        # remembers, and this gateway cannot retrieve a stored response anyway.
+        request["include"] = ["reasoning.encrypted_content"]
+        request["store"] = False
+        request["max_output_tokens"] = min(chunk, total)
+
+        conversation = request.get("input") or []
+        if isinstance(conversation, str):
+            conversation = [{"role": "user", "content": conversation}]
+        merged: list[Any] = []
+        usages: list[Any] = []
+        final = None
+        spent = 0
+        widenings = policy.DEFAULT_WIDENINGS
+        attempt = 0
+
+        while attempt < rounds:
+            call = dict(request)
+            call["input"] = conversation
+            try:
+                # A drop we can still widen out of must not be resent
+                # identically first: the resend reproduces it, and at high
+                # effort each reproduction costs minutes to learn nothing.
+                final = await self._stream_chunk(
+                    call,
+                    retries=0 if widenings and call["max_output_tokens"] < total
+                    else policy.DEFAULT_STREAM_RETRIES)
+            except Exception as exc:  # noqa: BLE001
+                if (widenings and call["max_output_tokens"] < total
+                        and policy.is_midstream_drop(exc)):
+                    widenings -= 1
+                    request["max_output_tokens"] = min(
+                        total, call["max_output_tokens"] * 2)
+                    rounds = max(attempt + 1,
+                                 -(-total // max(1, request["max_output_tokens"])))
+                    logger.warning(
+                        "responses: stream dropped with no terminal event at "
+                        "slice=%s -- widening to %s and re-issuing "
+                        "continuation %s",
+                        call["max_output_tokens"], request["max_output_tokens"],
+                        attempt + 1)
+                    continue
+                raise
+
+            attempt += 1
+            merged.extend(getattr(final, "output", None) or [])
+            usage = getattr(final, "usage", None)
+            if usage is not None:
+                usages.append(usage)
+            spent += int(getattr(usage, "output_tokens", 0) or 0)
+            if not policy.wants_continuation(final):
+                break
+            conversation = policy.continuation_input(conversation, final)
+            request["max_output_tokens"] = min(chunk, max(chunk, total - spent))
+
+        if final is None:
+            raise RuntimeError("no response was produced")
+        if attempt > 1:
+            logger.warning("responses: generation took %d continuations, "
+                           "%d output tokens", attempt, spent)
+        return _Merged(final, merged, usages)
+
+    async def _stream_chunk(self, call: dict, *, retries: int) -> Any:
+        """One streamed slice, resent on any failure a resend could fix.
+
+        Retrying is cheap precisely BECAUSE the work is chunked -- one slice is
+        lost, not a whole generation -- so the thing that made chunking
+        necessary also makes it affordable.
+
+        `create(stream=True)`, NOT the `stream()` helper: the helper runs an
         accumulator that rebuilds a snapshot from every event and raises on
-        shapes this gateway actually sends (`IndexError: list index out of
-        range` from `snapshot.output[event.output_index]`), which killed a live
-        run in a small, cheap stage. Raw event iteration never hit it across
-        thousands of events. The accumulation is not needed: the final response
-        arrives in the terminal event.
+        shapes this gateway actually sends. And the final response is taken
+        from the terminal EVENT, because `incomplete` is the normal path here --
+        hitting the slice cap is exactly how a continuation is signalled.
+        """
+        last: Exception | None = None
+        for attempt in range(max(0, retries) + 1):
+            if attempt:
+                # Bounded so the backoff cannot itself become the idle gap this
+                # path exists to avoid.
+                await asyncio.sleep(min(30.0, 4.0 * (2 ** (attempt - 1))))
+            try:
+                return await self._stream_once(call)
+            except Exception as exc:  # noqa: BLE001
+                if not policy.retryable(exc):
+                    raise
+                last = exc
+        raise last  # type: ignore[misc]
 
-        The events are otherwise discarded -- this class returns one
-        `ChatResponse`, so there is nothing to yield them to. Reading them is
-        what keeps the socket alive past the 300s idle reaper, which is the
-        entire reason this path exists.
+    async def _stream_once(self, request: dict) -> Any:
+        """One streamed request, instrumented on every exit.
 
-        Falls back to a plain create if the gateway refuses to stream, and SAYS
-        SO: a silent fallback would restore the exact failure this replaced
-        without a line in any log.
+        The three ways out -- dropped, ended with no terminal event, completed
+        -- share one `_vitals` line, because they are only comparable if they
+        report the same fields.
         """
         try:
             stream = await self.client.responses.create(**request, stream=True)
         except TypeError:
             return await self.client.responses.create(**request)  # SDK too old
-        except Exception as exc:  # noqa: BLE001 -- see the docstring
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "responses streaming refused (%s: %s); falling back to a "
-                "non-streaming call, which this gateway's 300s idle reaper can "
-                "kill on a long reason", type(exc).__name__, str(exc)[:200])
+                "non-streaming call, which this gateway kills two ways: the "
+                "300s idle reaper while the model reasons, and the ~475-665s "
+                "cap on a single response. Chunking cannot help a call that "
+                "is not streamed.", type(exc).__name__, str(exc)[:200])
             return await self.client.responses.create(**request)
 
-        # INSTRUMENTATION, because this run records nothing per call and the
-        # one question that matters is not answerable without it.
-        #
-        # When a stream dies here, two causes produce an IDENTICAL exception:
-        # the response hit `max_output_tokens` while still reasoning (the
-        # gateway then sends no terminal event at all -- see
-        # `specflow/model_io.py`'s `effort_chunk`), or the model itself went
-        # quiet long enough for the 300s idle reaper. Raising the ceiling fixes
-        # the first and does nothing for the second, so telling them apart is
-        # what decides the next move rather than another guess.
-        #
-        # `summary_chars` is the discriminator. Reasoning-summary text is the
-        # only proxy for reasoning VOLUME available before a terminal event
-        # arrives: a call that dies having emitted as much summary as a
-        # completed one spent its budget, and a call that dies far short of it
-        # went silent early. `gap` separates a drop from a slow finish -- a
-        # reaper kill is preceded by ~300s of nothing, a healthy stream is not.
         started = time.monotonic()
         last = started
         events = 0
@@ -372,18 +536,10 @@ class OpenAIResponsesModel(ChatModelBase):
                 if etype in self._TERMINAL:
                     final = getattr(event, "response", None) or final
         except Exception:
-            # The drop is re-raised unchanged -- this only makes it legible.
             logger.warning("responses stream DROPPED %s", self._vitals(
                 started, events, gap, summary_chars, first_content, request))
             raise
         if final is None:
-            # A stream that ENDED CLEANLY and still carried no terminal event:
-            # the iterator stopped, no exception, no `response.completed`. That
-            # is a different failure from a mid-stream drop and it needs the
-            # same vitals, which the first version of this instrumentation did
-            # not give it -- logging only on the exception path and on success
-            # left this branch, the one that then fired, silent. Found by
-            # reading a failed run that produced no telemetry at all.
             logger.warning("responses stream ENDED WITH NO TERMINAL EVENT %s",
                            self._vitals(started, events, gap, summary_chars,
                                         first_content, request))
@@ -438,6 +594,29 @@ class OpenAIResponsesModel(ChatModelBase):
 
                     block[RAW_ARGS] = wire
                 content.append(block)
+
+        # ADJACENT TEXT IS ONE MESSAGE THAT A SLICE BOUNDARY CUT IN HALF.
+        #
+        # A chunked generation emits each round's text as its own `message`
+        # item, so the answer arrives as several TextBlocks that were one
+        # sentence before the split. Callers read `content[0]["text"]` -- this
+        # module's own tests do -- so leaving them apart hands back the first
+        # half and silently drops the rest, which is precisely the truncation
+        # the chunking exists to prevent, moved one layer up.
+        #
+        # Only ADJACENT runs are merged, so a tool call between two texts still
+        # separates them and the order the model produced is preserved.
+        coalesced: list[Any] = []
+        for block in content:
+            if (coalesced and isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(coalesced[-1], dict)
+                    and coalesced[-1].get("type") == "text"):
+                coalesced[-1] = TextBlock(
+                    type="text", text=coalesced[-1]["text"] + block["text"])
+            else:
+                coalesced.append(block)
+        content = coalesced
 
         usage = None
         raw_usage = getattr(response, "usage", None)
