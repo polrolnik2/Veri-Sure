@@ -1,0 +1,15 @@
+{
+  "parent": "or1200_sb",
+  "child_module": "or1200_sb_fifo",
+  "instance": "or1200_sb_fifo",
+  "note": "description.txt declares every net below in its own 'Internal reg/wire signals' section -- fifo_dat_i[67:0], fifo_dat_o[67:0], fifo_wr, fifo_rd, fifo_full, fifo_empty -- and describes the direction each carries. The child's RTL is NOT in this repository, so `--check` can audit these against the parent's instantiation but cannot confirm the child's own header; that half is reported as unchecked rather than assumed.",
+  "shared_domain": ["clk", "rst"],
+  "ports": [
+    {"child": "dat_i",   "glue": "or1200_sb_fifo_dat_i",   "dir": "output", "width": 68, "parent_net": "fifo_dat_i"},
+    {"child": "wr_i",    "glue": "or1200_sb_fifo_wr_i",    "dir": "output", "width": 1,  "parent_net": "fifo_wr"},
+    {"child": "rd_i",    "glue": "or1200_sb_fifo_rd_i",    "dir": "output", "width": 1,  "parent_net": "fifo_rd"},
+    {"child": "dat_o",   "glue": "or1200_sb_fifo_dat_o",   "dir": "input",  "width": 68, "parent_net": "fifo_dat_o"},
+    {"child": "full_o",  "glue": "or1200_sb_fifo_full_o",  "dir": "input",  "width": 1,  "parent_net": "fifo_full"},
+    {"child": "empty_o", "glue": "or1200_sb_fifo_empty_o", "dir": "input",  "width": 1,  "parent_net": "fifo_empty"}
+  ]
+}

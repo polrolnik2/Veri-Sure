@@ -228,7 +228,19 @@ def compile_gate(
 
 
 async def run(args: argparse.Namespace) -> dict:
-    task_dir = find_task(args.task)
+    # `--task-dir` exists for task dirs that deliberately live OUTSIDE `Des/`.
+    # `benchmarks/glue_spec.py` emits one per hierarchical design, holding the
+    # same spec with the child's boundary on the module header; it is kept out
+    # of `Des/` because `find_task` globs that tree and matches on directory
+    # name, so a same-named copy there would give two hits and the winner would
+    # be whichever `rglob` reached first -- a run silently using the wrapper
+    # spec while its name says glue.
+    if bool(args.task) == bool(args.task_dir):
+        raise SystemExit("pass exactly one of --task or --task-dir")
+    task_dir = Path(args.task_dir).resolve() if args.task_dir \
+        else find_task(args.task)
+    if not (task_dir / "description.txt").is_file():
+        raise SystemExit(f"{task_dir} has no description.txt")
     top = task_dir.name
     from specflow.model_io import PortSettings
 
@@ -369,7 +381,11 @@ def build_parser() -> argparse.ArgumentParser:
     caller. A knob reachable only from Python is not a runtime switch.
     """
     p = argparse.ArgumentParser(prog="run_chipverilog")
-    p.add_argument("--task", required=True, help="module name, e.g. i2c_master_top")
+    p.add_argument("--task", help="module name, e.g. i2c_master_top; resolved "
+                                  "under benchmarks/chipverilog/Des")
+    p.add_argument("--task-dir", help="a task directory outside Des/, e.g. one "
+                                      "emitted by benchmarks/glue_spec.py. The "
+                                      "directory name is the top module.")
     p.add_argument("--out", required=True, help="run directory")
     p.add_argument("--max-tokens", type=int, default=40000)
     p.add_argument("--sim-max-retry", type=int, default=2)
