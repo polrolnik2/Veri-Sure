@@ -126,8 +126,7 @@ def test_the_reviewer_is_not_offered_a_third_answer():
 
 
 def test_the_reviewer_is_told_not_to_judge_strictness_or_designs():
-    for phrase in ("You are not judging any design",
-                   "how thorough, how strict"):
+    for phrase in ("no design", "HOW MUCH IT DEMANDS"):
         assert phrase in C.SYSTEM, phrase
 
 
@@ -140,11 +139,9 @@ def test_the_gate_refuses_STRENGTH_and_CODE_STYLE_but_not_LOGIC():
     antecedent is not a weak check of the requirement, it is not a check of it,
     which is this gate's own question.
     """
-    for phrase in ("not judging how thorough, how strict",
-                   "NOT judging how the code is written",
-                   "Only WHAT IT DECIDES",
-                   "THE IMPLEMENTATION IS NOT YOURS",
-                   "THE LOGIC IS YOURS TO JUDGE"):
+    for phrase in ("HOW MUCH IT DEMANDS", "HOW IT IS WRITTEN",
+                   "WHERE IT READS A VALUE FROM",
+                   "DOES THE CODE DECIDE WHAT THE"):
         assert phrase in C.SYSTEM, phrase
 
 
@@ -152,10 +149,10 @@ def test_direction_is_asked_as_part_of_the_same_question():
     """MEASURED BEFORE IT WAS ADDED: 0 rejections in 82 checks, 37 of which a
     known-good implementation refutes. The topic question alone contributes
     nothing to that residue."""
-    for phrase in ("IT ASSERTS THE CONDITION INSTEAD OF THE EFFECT",
-                   "IT HAS THE IMPLICATION THE WRONG WAY ROUND",
-                   "IT DECIDES THE CASE THE REQUIREMENT DOES NOT COVER",
-                   "one question, not three"):
+    for phrase in ("ASSERTS THE TRIGGER INSTEAD OF THE EFFECT",
+                   "TRIGGERS ON THE WRONG SITUATION",
+                   "CONVICTS OUTSIDE THE CLAIM",
+                   "THERE MUST BE A SENTENCE"):
         assert phrase in C.SYSTEM, phrase
     # and it must still be ONE verdict, not a second field to hide behind
     assert set(C.Review.model_fields) == {
@@ -172,9 +169,9 @@ def test_asserting_the_premise_is_not_a_WEAK_check():
     it would have readmitted a check asserting only the condition as a "part".
     A requirement states one claim; the licence is to decide it weakly, never
     to decide half of it."""
-    assert "it is meant to be atomic and almost always is" in C.SYSTEM
-    assert "Asserting only the FIRST half is a LOGIC error" in C.SYSTEM
-    assert "Asking little of the second half is an implementation" in C.SYSTEM
+    assert "says NOTHING about any other row" in C.SYSTEM
+    assert "ASSERTS THE TRIGGER INSTEAD OF THE EFFECT" in C.SYSTEM
+    assert "no design can fail it" in C.SYSTEM
 
 
 def test_partial_and_loose_checks_are_on_target():
@@ -184,13 +181,11 @@ def test_partial_and_loose_checks_are_on_target():
     answers to a question a different gate asks. As a blocking gate that pushes
     every check toward demanding MORE, while gate 1 pushes them toward
     demanding less."""
-    assert "YOU DECIDE THE LOGIC, NOT THE IMPLEMENTATION" in C.SYSTEM
-    # Fragments that do not cross a line wrap -- the rewrite above moved the
-    # break into the middle of the old assertion, which is the third time this
-    # trap has fired in this file.
-    assert "It should also check X" in C.SYSTEM
-    assert "I would have written" in C.SYSTEM
-    assert "however\nlittle it demands" in C.SYSTEM
+    # Fragments that do not cross a line wrap -- an assertion spanning a break
+    # has now cost this file four times.
+    assert "NOT YOUR QUESTION" in C.SYSTEM
+    assert "weaker than you would have written" in C.SYSTEM
+    assert "pushes every check toward demanding more" in C.SYSTEM
     # the licence is the IMPLEMENTATION axis, never a licence to be vague about
     # logic -- "loosely" invited exactly that reading and is gone.
     assert "loosely" not in C.SYSTEM and "more tightly" not in C.SYSTEM
@@ -470,14 +465,16 @@ def test_the_per_design_constants_sit_in_the_CACHED_prefix():
     """
     from specflow.fanout import PREFIX_SENTINEL
 
-    contract = {"io": [{"name": "busy", "dir": "output", "width": 1}]}
-    body = C.build_prompt(requirement=REQ, oracle=ORACLE, spec="the spec text",
-                          contract=contract)
+    contract = {"io": [{"name": "zzbusyzz", "dir": "output", "width": 1}]}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE,
+                          spec="THE-SPEC-TEXT-MARKER", contract=contract)
     head, tail = body.split(PREFIX_SENTINEL, 1)
-    assert "the spec text" in head and "busy" in head
+    assert "THE-SPEC-TEXT-MARKER" in head and "zzbusyzz" in head
     assert REQ["text"] not in head, "the requirement varies per item"
-    assert "def decide" not in head, "so does the oracle"
-    assert REQ["text"] in tail and "def decide" in tail
+    # A marker unique to the FIXTURE: the briefing itself contains `def decide`
+    # in its worked examples, so that string cannot distinguish the two halves.
+    assert "'pulsed'" not in head, "so does the oracle"
+    assert REQ["text"] in tail and "pulsed" in tail
 
 
 def test_demanding_an_INTERNAL_signal_is_not_a_valid_rejection():
@@ -493,9 +490,9 @@ def test_demanding_an_INTERNAL_signal_is_not_a_valid_rejection():
     requirement's MECHANISM instead of its EFFECT, which called 27 of 77
     requirements unobservable when 10 of them already had working checks.
     """
-    for phrase in ("THE CHECK CAN ONLY SEE DECLARED PORTS",
-                   "IS NEVER A VALID REJECTION",
-                   "instead of its EFFECT"):
+    for phrase in ("THAT IT DOES NOT WATCH AN INTERNAL SIGNAL",
+                   "NEVER a valid rejection",
+                   "MECHANISM instead of its"):
         assert phrase in C.SYSTEM, phrase
 
 
@@ -510,8 +507,8 @@ def test_the_reviewer_is_pointed_AT_the_observation_route():
     So the fix is not to supply the route -- it is to say the route is the
     STANDARD the check is judged against.
     """
-    for phrase in ("READ IT FIRST", "OBSERVATION ROUTE",
-                   "is ON TARGET even when the requirement's own sentence"):
+    for phrase in ("OBSERVATION ROUTE", "THAT IS THE STANDARD",
+                   "even when the requirement's"):
         assert phrase in C.SYSTEM, phrase
 
 
@@ -574,5 +571,5 @@ def test_a_direct_route_carries_no_sibling_block():
 def test_the_gate_is_told_it_can_convict_a_check_that_became_the_siblings():
     """The one rejection only this gate can make, and it was not expressible
     while `through_req` was a bare uid."""
-    assert "silently become the SIBLING's" in C.SYSTEM
-    assert "under a different uid" in C.SYSTEM
+    assert "has the check silently become THAT" in C.SYSTEM
+    assert "testing the neighbour under a different uid" in C.SYSTEM
