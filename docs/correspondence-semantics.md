@@ -315,3 +315,110 @@ reviewer are all text by the same author reading the same specification, so a
 misreading they share passes every one of them. `--variants` remains the only
 leg that does not share that reading. These checks reduce a measured 43-of-110
 defect rate; they do not make the set independent of its author.
+
+---
+
+## 5. Where these two classes actually come from, and what correspondence is missing
+
+Read after §4, and it revises part of it.
+
+### 5.1 The author prompt covers both classes, and two of its own fixes cause them
+
+**Level-vs-edge is not an unwarned edge case. It is two instructions doing
+their job.**
+
+*The `effect_follows` pass-through.* `oracle_gen` says
+`activation.effect_follows` *"is the answer, and passing it through is the whole
+of the fix"*, and `after_activation` is `|=>` against `|->`: it drops the
+activation row from the window, so a consequent already true at the trigger no
+longer satisfies the check. **All 8 of the level-vs-edge requirements carry
+`effect_follows=True`**, against a base rate of 75 of 122 (61%). Several state a
+coincident effect rather than a following one -- REQ-0124, *"Driving an
+output-enable low CAUSES the corresponding line to be actively driven low"*, is
+combinational: the effect does not follow the cause, it coincides with it. The
+author obeyed a normalization claim that was wrong.
+
+**So most of this class is a normalization defect, not an authoring one**, and
+it belongs with §2 rather than in the check-detector list. The textual rule
+`normalize` needs is the one it does not have: *does the requirement describe a
+STATE that holds, or an EVENT that follows?* `effect_follows` currently answers
+a question nobody asked it to distinguish.
+
+*The `strong=True` instruction.* The prompt says a weak `eventually` running off
+the end returns UNKNOWN, so *"if the requirement says the response MUST come,
+pass `strong=True`, or the check can never be violated -- only left undecided.
+Five of one run's fourteen abstaining checks abstained for this reason."* Two of
+the level-vs-edge removals are exactly a `strong=True` (REQ-0030, REQ-0060).
+
+**Absence-mapped-to-failure has the same root, and the prompt's coverage misses
+by one case.** It states the rule twice, explicitly and with reasons:
+
+> *"Return ok=None when THE ACTIVATION NEVER OCCURS in this trace ... Do NOT
+> return False for that."*
+> *"`worst([])` is `(None, None, ...)`. Return it. Do NOT turn an empty window
+> list into False."*
+
+Both cover **no window**. Every one of the five actual defects is **a window
+that opened and did not contain the evidence** -- REQ-0043 verbatim: *"the code
+path that let `eventually(...)` produce a False verdict for an activation (i.e.
+'no indicator observed')"*. That case is uncovered, and `strong=True` instructs
+the author to convict on it.
+
+**One rule fixes both, and it is textual.** `strong=True` is right when the
+requirement states an OBLIGATION (*"shall assert"*, *"must complete"*) and wrong
+when it states a STATE (*"is high while"*, *"is observed low"*) -- the same
+level-versus-event reading `effect_follows` needs. The prompt has the
+conditional (*"if the requirement says the response MUST come"*) but frames the
+instruction as a measured defect-fix with a count behind it, which is not a
+distinction an author will hold against that pressure.
+
+**This is #99 arriving from the prompt side.** Over-strictness and vacuity as
+one expressiveness defect with two signs -- except here the pipeline is
+over-correcting one into the other through two prompt lines, each added to fix a
+measured abstention problem. Any fix must be measured on **both** counts at
+once, or it will trade the classes back.
+
+### 5.2 Correspondence never sees the interface
+
+`correspondence.build_prompt` takes `requirement`, `normalized`,
+`oracle{clause, source}` and `spec`. **It does not take the contract.**
+`oracle_gen.build_prompt` takes `contract_json` and `contract` (`:514-522`).
+
+So the check author knows every port's direction and the reviewer does not.
+There is no principled defence for that asymmetry: the contract is upstream of
+every artifact the pipeline produces, which is exactly the argument that already
+admits `spec` to this prompt, and it is an interface, not a design. It carries
+nothing back from the model, the witness or the trace.
+
+What it unlocks, in the order the classes matter:
+
+* **quantifier inflation** -- *"more ports than the requirement names"* is not
+  answerable without knowing what the ports are;
+* **#95 directly** -- REQ-0028's check asserts on an INPUT the design cannot
+  drive. A reviewer holding port directions sees *"this convicts on a value the
+  DUT does not drive"* in one line; without them it cannot see it at all;
+* **invented conjunction** -- whether the added conjunct is even an observable
+  of this design.
+
+**And it partly revises §4's "route away" call on trace-schema navigation.**
+Those 5 checks read a port from `row['outputs']` when it is in `row['inputs']`
+or the reverse. With port directions the reviewer can distinguish *the check
+read the wrong dict* (a check defect, repairable) from *the trace put an output
+in the inputs dict* (a harness defect, and a different owner). That does not
+make it a semantic check -- it stays a mechanical one -- but it converts an
+undiagnosable class into a routable one, which §4 said was out of reach.
+
+### 5.3 What to do, in order
+
+1. **Add the contract to `correspondence.build_prompt`**, ahead of the
+   requirement so the shared prefix stays cacheable across the fan-out -- the
+   same placement and the same reason as `spec`. Smallest change here, and it is
+   a precondition for three of §4's five checks rather than one of them.
+2. **Give `normalize` the state-versus-event distinction** that `effect_follows`
+   is currently answering by accident, and re-measure the 8. This is the larger
+   half of level-vs-edge and it lands with §2, not with the detectors.
+3. **Rewrite the `strong=True` guidance** to carry the obligation-versus-state
+   rule, and measure over-strictness AND vacuity together, since the instruction
+   exists because vacuity was the previous complaint.
+4. Only then the detectors in §4, against a population these three have already
+   changed.
