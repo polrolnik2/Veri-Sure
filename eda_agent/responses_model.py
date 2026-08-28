@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -311,10 +312,56 @@ class OpenAIResponsesModel(ChatModelBase):
                 "kill on a long reason", type(exc).__name__, str(exc)[:200])
             return await self.client.responses.create(**request)
 
+        # INSTRUMENTATION, because this run records nothing per call and the
+        # one question that matters is not answerable without it.
+        #
+        # When a stream dies here, two causes produce an IDENTICAL exception:
+        # the response hit `max_output_tokens` while still reasoning (the
+        # gateway then sends no terminal event at all -- see
+        # `specflow/model_io.py`'s `effort_chunk`), or the model itself went
+        # quiet long enough for the 300s idle reaper. Raising the ceiling fixes
+        # the first and does nothing for the second, so telling them apart is
+        # what decides the next move rather than another guess.
+        #
+        # `summary_chars` is the discriminator. Reasoning-summary text is the
+        # only proxy for reasoning VOLUME available before a terminal event
+        # arrives: a call that dies having emitted as much summary as a
+        # completed one spent its budget, and a call that dies far short of it
+        # went silent early. `gap` separates a drop from a slow finish -- a
+        # reaper kill is preceded by ~300s of nothing, a healthy stream is not.
+        started = time.monotonic()
+        last = started
+        events = 0
+        gap = 0.0
+        summary_chars = 0
+        first_content: float | None = None
         final = None
-        async for event in stream:
-            if getattr(event, "type", "") in self._TERMINAL:
-                final = getattr(event, "response", None) or final
+        try:
+            async for event in stream:
+                now = time.monotonic()
+                gap = max(gap, now - last)
+                last = now
+                events += 1
+                etype = getattr(event, "type", "") or ""
+                if etype.endswith("output_text.delta"):
+                    if first_content is None:
+                        first_content = now - started
+                elif etype.endswith("summary_text.delta"):
+                    summary_chars += len(getattr(event, "delta", "") or "")
+                if etype in self._TERMINAL:
+                    final = getattr(event, "response", None) or final
+        except Exception:
+            # The drop is re-raised unchanged -- this only makes it legible.
+            logger.warning(
+                "responses stream DROPPED after %.1fs: %d events, largest gap "
+                "%.1fs, %d summary chars, first content %s. A gap near 300s "
+                "with no content is the idle reaper; compare summary chars "
+                "against a completed call to tell a spent budget "
+                "(max_output_tokens=%s) from the model going quiet.",
+                time.monotonic() - started, events, gap, summary_chars,
+                f"{first_content:.1f}s" if first_content else "NEVER",
+                request.get("max_output_tokens"))
+            raise
         if final is None:
             # A stream that ended with no terminal event. Named rather than
             # returned as an empty response, because a caller that got `None`
@@ -322,6 +369,12 @@ class OpenAIResponsesModel(ChatModelBase):
             raise RuntimeError(
                 "the response stream ended without a terminal event; the "
                 "connection was closed before the model finished")
+        logger.info(
+            "responses stream ok in %.1fs: %d events, largest gap %.1fs, "
+            "%d summary chars, first content %s, status=%s",
+            time.monotonic() - started, events, gap, summary_chars,
+            f"{first_content:.1f}s" if first_content else "NEVER",
+            getattr(final, "status", None))
         return final
 
     # ------------------------------------------------------------------ parse
