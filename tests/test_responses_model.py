@@ -446,3 +446,56 @@ def test_usage_is_summed_across_continuations():
     res = asyncio.run(model([{"role": "user", "content": "hi"}]))
     assert res.usage.output_tokens == 350
     assert res.usage.input_tokens == 20
+
+
+def test_the_cache_breakdown_survives_into_the_usage_object():
+    """THE COUNT THAT WAS NEVER COLLECTED, not a cache that was not working.
+
+    `model._accumulate_usage` reads `input_tokens_details.cached_tokens` off the
+    object `_parse` builds. `ChatUsage.__init__` cannot take that field, so
+    dropping it here made `total_cached_tokens` permanently 0 on the Responses
+    path -- and c1-i2c's debug loop reported `input 16,021,769, cached 0`, which
+    reads as a broken cache and was a hole in the instrument.
+    """
+    from eda_agent.model import usage_attr
+
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    resp = _chunk_response([])
+    resp.usage = SimpleNamespace(
+        input_tokens=8055, output_tokens=3257,
+        input_tokens_details=SimpleNamespace(cached_tokens=6144,
+                                             cache_write_tokens=0))
+
+    async def _create(**kwargs):
+        return _chunk_stream(resp)
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    res = asyncio.run(model([{"role": "user", "content": "hi"}]))
+
+    details = usage_attr(res.usage, "input_tokens_details")
+    assert details is not None, "the breakdown was dropped again"
+    assert usage_attr(details, "cached_tokens", 0) == 6144
+
+
+def test_the_accumulator_actually_counts_it_end_to_end():
+    """The pin that matters: the number reaches `total_cached_tokens`.
+
+    Asserting only that `_parse` carries the field would pass while the reader
+    on the other side still saw nothing -- which is the shape of the original
+    defect, a fix landing one layer away from the hole.
+    """
+    from eda_agent.model import UsageTrackingModel, get_model_cached
+
+    inner = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    resp = _chunk_response([])
+    resp.usage = SimpleNamespace(
+        input_tokens=8055, output_tokens=3257,
+        input_tokens_details=SimpleNamespace(cached_tokens=6144))
+
+    async def _create(**kwargs):
+        return _chunk_stream(resp)
+
+    inner.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    wrapped = UsageTrackingModel(inner)
+    asyncio.run(wrapped([{"role": "user", "content": "hi"}]))
+    assert get_model_cached(wrapped) == 6144

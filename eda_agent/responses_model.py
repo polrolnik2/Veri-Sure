@@ -626,6 +626,31 @@ class OpenAIResponsesModel(ChatModelBase):
                 output_tokens=int(getattr(raw_usage, "output_tokens", 0) or 0),
                 time=(datetime.now() - start).total_seconds(),
             )
+            # CARRY THE CACHE BREAKDOWN, which this constructor cannot take.
+            #
+            # `model._accumulate_usage` reads `input_tokens_details.cached_tokens`
+            # off whatever it is handed, and it is handed THIS object -- so
+            # dropping the field here made `total_cached_tokens` permanently 0
+            # on the Responses path. c1-i2c's debug loop duly reported
+            # `input 16,021,769, cached 0`, which reads as a cache that is not
+            # working and was in fact a number that was never collected. The
+            # accumulator was added to fix exactly this hole and landed one
+            # layer above where the data was being discarded.
+            #
+            # `ChatUsage.__init__` rejects the keyword (`unexpected keyword
+            # argument`), but the class is a dict subclass, so the key is set
+            # after construction. Both API spellings are carried because the
+            # same accumulator serves both surfaces.
+            for key in ("input_tokens_details", "prompt_tokens_details"):
+                details = getattr(raw_usage, key, None)
+                if details is None:
+                    continue
+                if hasattr(details, "model_dump"):
+                    details = details.model_dump(exclude_none=True)
+                elif not isinstance(details, dict):
+                    details = {k: v for k, v in vars(details).items()
+                               if not k.startswith("_")}
+                usage[key] = details
 
         # Preserve the truncation signal. `model.py` reports a truncated
         # artifact off `metadata["finish_reason"] == "length"`, and without this
