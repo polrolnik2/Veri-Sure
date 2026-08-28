@@ -53,6 +53,7 @@ both off-target and dead, and both instruments name it independently.
 
 from __future__ import annotations
 
+import json
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from pydantic import BaseModel
@@ -194,17 +195,27 @@ def build_prompt(
     `oracle_gen.shared_prefix` reads `contract.get("io")`, and this is the same
     contract.
     """
-    parts = []
+    # BOTH PER-DESIGN CONSTANTS GO IN THE SHARED BLOCK, not merely early in the
+    # item. `shared_block` is the cached head and its rule is that nothing in it
+    # varies between the items of one stage -- which is true of the
+    # specification and of the interface, and of neither the requirement nor
+    # the oracle. Putting them in the item half placed them AFTER the sentinel,
+    # so they were re-sent and re-priced on every call while the docstring
+    # claimed the opposite. `fanout.py`'s floor comment records this stage
+    # doing it once already: SYSTEM alone is ~471 tokens, under the 1024-token
+    # floor below which NOTHING caches, measured at 12% against 65-83% for
+    # every other fan-out.
+    shared: list[tuple[str, str]] = [("system", SYSTEM)]
     if spec.strip():
-        parts.append(json_block("specification", {"text": spec}))
+        shared.append(("specification", spec))
     if contract:
-        parts.append(json_block("interface", _ports(contract)))
-    parts.append(json_block("requirement", requirement))
+        shared.append(("interface", json.dumps(_ports(contract), indent=2)))
+    parts = [json_block("requirement", requirement)]
     if normalized:
         parts.append(json_block("normalized", normalized))
     parts.append(json_block("oracle", {
         "clause": oracle.clause, "source": oracle.source}))
-    return compose(shared_block(("system", SYSTEM)), "\n\n".join(parts))
+    return compose(shared_block(*shared), "\n\n".join(parts))
 
 
 def parse_response(text: str) -> Review:

@@ -391,3 +391,26 @@ def test_the_projection_is_pinned_to_the_shape_a_real_contract_has():
         "the direction key is `dir` in the artifact and `direction` in the projection"
     assert C._ports({"ports": [{"name": "x", "direction": "output"}]})["ports"] == [], \
         "the OLD shape must project to nothing, so this test fails if it is restored"
+
+
+def test_the_per_design_constants_sit_in_the_CACHED_prefix():
+    """`shared_block` is the cached head, and its rule is that nothing in it
+    varies between the items of one stage. The specification and the interface
+    satisfy that; the requirement and the oracle do not.
+
+    Placing them merely EARLY in the item half puts them after the sentinel, so
+    they are re-sent and re-priced on every call -- which is what `fanout.py`'s
+    floor comment records this stage doing once already: SYSTEM alone is ~471
+    tokens, under the 1024-token floor below which NOTHING caches, measured at
+    12% against 65-83% for every other fan-out.
+    """
+    from specflow.fanout import PREFIX_SENTINEL
+
+    contract = {"io": [{"name": "busy", "dir": "output", "width": 1}]}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE, spec="the spec text",
+                          contract=contract)
+    head, tail = body.split(PREFIX_SENTINEL, 1)
+    assert "the spec text" in head and "busy" in head
+    assert REQ["text"] not in head, "the requirement varies per item"
+    assert "def decide" not in head, "so does the oracle"
+    assert REQ["text"] in tail and "def decide" in tail
