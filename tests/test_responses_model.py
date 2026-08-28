@@ -256,7 +256,12 @@ def test_the_effort_and_the_token_budget_reach_the_request():
         )
     )
 
-    assert seen["reasoning"] == {"effort": "xhigh"}
+    # `summary` rides with the effort and is NOT optional: without it the
+    # gateway sends nothing for the whole reasoning phase, so a streamed
+    # connection is still idle and its 300s reaper still closes it. Pinned as
+    # part of the request rather than left to the transport, because dropping
+    # it is silent -- a shallow merge over `reasoning` would do it.
+    assert seen["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert seen["max_output_tokens"] == 8000
     assert "max_completion_tokens" not in seen
     # Reasoning models reject an explicit temperature, and this surface is only
