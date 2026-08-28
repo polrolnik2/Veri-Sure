@@ -4,3 +4,11 @@ a-fpu,2026-08-28 07:59:04,17b6f88,,gpt-5.6-luna,xhigh,,,,,,62437,,,56352,,,,,,,,
 a-fpu_exceptions-1,2026-08-28 08:16:32,ddca10a,,gpt-5.6-luna,xhigh,,,,,,47504,,,52771,,,,,,,,,,,,,,,,,,,,,,,,,,,,,yes,pass,yes,miss,no,function_fail,equivalence,bounded_seq,pass,not_equivalent,compatible,pass,$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$868 when 1'1. | Import proof for assert: $auto$miter.cc:269:c,,no,0
 a-fpu_exceptions-2,2026-08-28 08:29:07,3a20234,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
 a-or1200_dc_fsm-1,2026-08-28 08:29:31,3a20234,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-or1200_dc_fsm-2,2026-08-28 08:36:40,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-or1200_dc_fsm-3,2026-08-28 08:45:02,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-or1200_wb_biu-1,2026-08-28 08:49:41,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-or1200_wb_biu-2,2026-08-28 08:55:45,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-or1200_wb_biu-3,2026-08-28 09:04:25,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-fpu_addsub_pipeline-1,2026-08-28 09:07:23,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-fpu_addsub_pipeline-2,2026-08-28 09:12:15,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
+a-fpu_addsub_pipeline-3,2026-08-28 09:21:42,2f97134,,gpt-5.6-luna,xhigh,,,,,,0,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,no,fail,,,,,,,,,,,,,yes,0
