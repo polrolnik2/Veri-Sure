@@ -147,6 +147,28 @@ def _response(output, *, status="completed", reason=None):
     )
 
 
+class _FakeStream:
+    """What `responses.create(stream=True)` returns: an async iterator of events.
+
+    The final response arrives INSIDE the terminal event, which is the shape
+    `_create` reads and the reason it needs no accumulator.
+    """
+
+    def __init__(self, events):
+        self._events = list(events)
+
+    def __aiter__(self):
+        async def gen():
+            for e in self._events:
+                yield e
+        return gen()
+
+
+def _stream_of(response, *, terminal="response.completed", extra=()):
+    return _FakeStream(list(extra) + [
+        SimpleNamespace(type=terminal, response=response)])
+
+
 def test_a_function_call_becomes_a_tool_use_block():
     resp = _response(
         [
@@ -213,9 +235,9 @@ def test_the_effort_and_the_token_budget_reach_the_request():
 
     async def _create(**kwargs):
         seen.update(kwargs)
-        return _response(
+        return _stream_of(_response(
             [SimpleNamespace(type="message", content=[SimpleNamespace(text="ok")])]
-        )
+        ))
 
     model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
     asyncio.run(
@@ -244,3 +266,76 @@ def test_the_effort_and_the_token_budget_reach_the_request():
     assert json.loads(json.dumps(seen["input"])) == [
         {"role": "user", "content": "hi"}
     ]
+
+
+
+# ------------------------------------------------- streaming, and why it exists
+def test_the_request_is_streamed_and_the_response_comes_from_the_terminal_event():
+    """STREAMING IS SURVIVAL HERE, NOT A FEATURE.
+
+    A non-streaming request sends no bytes while the model reasons, and this
+    gateway closes a connection after 300s of silence. Measured on arm A,
+    or1200_dc_fsm, isolated: contract.json at 09:28:32, done at 09:43:35 --
+    903s, which is exactly 3 x 301s, one per attempt under
+    OPENAI_MAX_RETRIES=2, every one an APIConnectionError.
+
+    The response is read from the TERMINAL EVENT rather than an accumulator:
+    `specflow/model_io.py` measured the SDK's `stream()` helper raising
+    `IndexError` on shapes this gateway sends, and raw iteration never hit it.
+    """
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    seen: dict = {}
+
+    async def _create(**kwargs):
+        seen.update(kwargs)
+        return _stream_of(
+            _response([SimpleNamespace(type="message",
+                                       content=[SimpleNamespace(text="ok")])]),
+            # Deltas the model emits on the way; they keep the socket alive and
+            # are otherwise discarded, since this class returns one response.
+            extra=[SimpleNamespace(type="response.output_text.delta", delta="o"),
+                   SimpleNamespace(type="response.output_text.delta", delta="k")])
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    res = asyncio.run(model([{"role": "user", "content": "hi"}]))
+    assert seen["stream"] is True, "the whole point is that bytes keep flowing"
+    assert res.content[0]["text"] == "ok"
+
+
+def test_a_stream_that_ends_without_a_terminal_event_RAISES():
+    """Returning None here would report a closed connection as an empty
+    generation -- a transport failure wearing a modelling failure's clothes,
+    which is the confusion this repo has had to unpick repeatedly."""
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+
+    async def _create(**kwargs):
+        return _FakeStream([SimpleNamespace(type="response.output_text.delta",
+                                            delta="partial")])
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    try:
+        asyncio.run(model([{"role": "user", "content": "hi"}]))
+    except RuntimeError as exc:
+        assert "without a terminal event" in str(exc)
+    else:
+        raise AssertionError("a truncated stream must not look like a result")
+
+
+def test_a_gateway_that_refuses_to_stream_falls_back_and_says_so(caplog):
+    """A silent fallback would restore the exact failure streaming replaced."""
+    model = OpenAIResponsesModel(model_name="gpt-5.6-luna", api_key="k")
+    calls: list[dict] = []
+
+    async def _create(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("stream"):
+            raise ValueError("streaming not supported here")
+        return _response([SimpleNamespace(type="message",
+                                          content=[SimpleNamespace(text="ok")])])
+
+    model.client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    with caplog.at_level("WARNING"):
+        res = asyncio.run(model([{"role": "user", "content": "hi"}]))
+    assert res.content[0]["text"] == "ok"
+    assert len(calls) == 2 and calls[1].get("stream") is None
+    assert "idle reaper" in caplog.text
