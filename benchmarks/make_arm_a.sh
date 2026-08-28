@@ -49,6 +49,15 @@ git -C "$DEST" apply "$REPO/benchmarks/arm_a_hierarchy.patch"
 # 3. the runner
 cp "$REPO/benchmarks/chipverilog_arm_a.py" "$DEST/"
 
+# 4. dependencies. The merge base's own requirements.txt leaves `mcp` unpinned
+#    -- agentscope 1.0.7 imports a client mcp 2.0.0 removed, so a fresh resolve
+#    makes `import agentscope` fail before arm A runs -- and never names
+#    `openai` at all. Same rationale as the transport diff above: an ImportError
+#    and a bad testbench both score zero, so reaching the model is not the
+#    experiment. Copied in rather than applied over the base file, so what arm A
+#    installs is legible beside what it inherited.
+cp "$REPO/benchmarks/requirements-arm-a.txt" "$DEST/"
+
 echo
 echo "verifying arm A is the pre-hardening tree:"
 [ -d "$DEST/specflow" ]                  && { echo "  FAIL specflow/ present"; exit 1; }
@@ -59,7 +68,10 @@ echo
 echo "changed vs $BASE (must be transport + hierarchy only):"
 git -C "$DEST" diff --stat
 echo
-echo "run it with:"
-echo "  cd $DEST && python3 chipverilog_arm_a.py \\"
+echo "set it up and run it with:"
+echo "  cd $DEST"
+echo "  python3 -m venv .venv"
+echo "  .venv/bin/pip install -r requirements-arm-a.txt"
+echo "  .venv/bin/python chipverilog_arm_a.py \\"
 echo "      --task-dir $REPO/benchmarks/chipverilog/Des/<family>/<module> \\"
 echo "      --out <run-dir> --env-file $REPO/.env.local"

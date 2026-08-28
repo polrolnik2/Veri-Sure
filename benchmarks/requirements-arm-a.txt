@@ -1,0 +1,56 @@
+# Dependencies for ARM A, the pre-hardening baseline arm.
+#
+# WHY A SEPARATE FILE. Arm A is a git worktree at the merge base, so it carries
+# the merge base's own `requirements.txt` -- and that file is missing the two
+# things a fresh install on a clean machine needs. Neither omission is visible
+# until it fails, and both fail in ways that look like the experiment rather
+# than like the environment:
+#
+#   1. `mcp` IS UNPINNED THERE. agentscope 1.0.7 imports
+#      `mcp.client.streamable_http.streamablehttp_client`, which mcp 2.0.0
+#      removed, and agentscope declares `mcp` without an upper bound. A fresh
+#      resolve therefore picks 2.0.0 and `import agentscope` dies with an
+#      ImportError before a line of arm A runs.
+#   2. `openai` IS NAMED IN NEITHER FILE. It arrives only as a transitive
+#      dependency of agentscope, so the arm's own model transport rests on
+#      something no file it ships declares.
+#
+# This is the same reasoning `make_arm_a.sh` already gives for including the
+# transport diff: a zero caused by an ImportError is indistinguishable from a
+# zero caused by a bad testbench, so making the arm REACH the model is not
+# part of the thing being measured. No prompt, gate, testbench or verdict is
+# touched by anything here.
+#
+#     python3 -m venv .venv
+#     .venv/bin/pip install -r benchmarks/requirements-arm-a.txt
+#
+# The RANGES match the ones arm B resolves under, so the two arms are not
+# running structurally different libraries. They are ranges, not exact pins, so
+# a fresh install can still land a newer patch or minor: verified here, a clean
+# venv took openai 3.5.0 where this tree runs 3.1.0. That is fine for the
+# comparison the arms are for -- both are OpenAI-SDK v3 -- but if a run has to
+# be reproduced byte for byte later, freeze the resolved set at the time with
+# `pip freeze > requirements-arm-a.lock.txt` and record it beside the result.
+# Do not tighten these pins to chase that; an unreproducible library version is
+# a smaller problem than two arms on different ones.
+
+agentscope==1.0.7
+# The pin the merge base lacks. See (1) above -- without it `import agentscope`
+# fails outright.
+mcp>=1.29,<2
+# Declared explicitly rather than inherited. See (2) above.
+openai>=3,<4
+pydantic>=2,<3
+tqdm>=4,<5
+tree-sitter>=0.25,<0.26
+tree-sitter-verilog>=1,<2
+vcdvcd>=1,<2
+
+# NOT INCLUDED, deliberately: cocotb, ruff and pytest. Those belong to specflow
+# and the test suite, and arm A has no specflow by construction -- installing
+# them would not break it, but it would blur what the arm actually needs.
+#
+# NOT PIP-INSTALLABLE, and required: a Verilog simulator on PATH. Arm A drives
+# `iverilog`/`vvp` and calls `verilator` directly from `sim_reviewer.py`.
+# Install those from the system package manager. Arm A does NOT need
+# verilator >= 5.036 -- that floor is cocotb 2.x's, and cocotb is specflow's.
