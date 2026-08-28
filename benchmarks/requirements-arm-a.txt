@@ -55,10 +55,22 @@ vcdvcd>=1,<2
 # every simulator call in eda_agent is verilator (rtl_editor, tb_editor,
 # sim_reviewer, verilator_judge, rtl_generator, top_agent).
 #
-# yosys, sby, z3 and mcy are NOT needed. They appear only in
-# `boolean_proofer.py`, and `TopAgent` at the merge base never constructs
-# `BooleanProofer` or `AsserterAgent` -- so nothing on arm A's path reaches
-# them. iverilog is not needed either.
+# yosys, sby and z3 ARE used, and their absence is SILENT. `RTLEditor` builds
+# a `BooleanProofer` (rtl_editor.py:1111) and an `Asserter` (:1139) on every
+# debug round. Both are labelled "best-effort" and both sit inside
+# `except Exception: hint = ""`, so a missing binary does not fail the run --
+# it empties the hint. `BooleanProofer` requires all three (sby, yosys, z3 via
+# smtbmc); `Asserter` requires only verilator.
+#
+# INSTALL THEM IF THE RUN IS BEING COMPARED TO A COMMITTED BASELINE. Without
+# them arm A still completes, but its RTL debugger works from two fewer hints
+# than the machine that produced `benchmarks/baselines/`, and nothing in the
+# artifact records the difference -- so a lower score would read as the arm
+# rather than as the toolchain. Leave them out only for a run that is being
+# compared to nothing.
+#
+# mcy is genuinely unused on this path, and so is iverilog: every simulator
+# call in the merge-base eda_agent is verilator.
 #
 # NO VERSION FLOOR APPLIES TO ARM A. The >= 5.036 requirement is cocotb 2.x's,
 # and cocotb is specflow's; the merge-base tree checks no verilator version
