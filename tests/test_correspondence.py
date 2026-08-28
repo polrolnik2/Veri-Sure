@@ -487,3 +487,30 @@ def test_demanding_an_INTERNAL_signal_is_not_a_valid_rejection():
                    "IS NEVER A VALID REJECTION",
                    "instead of its EFFECT"):
         assert phrase in C.SYSTEM, phrase
+
+
+def test_the_reviewer_is_pointed_AT_the_observation_route():
+    """It always HAD `observed_via` -- `build_prompt` passes `normalized`
+    whole -- and that is what makes arm C's false positives a misreading rather
+    than a gap. REQ-0085's prompt carried a route naming `scl_oen` with a
+    `shows` spelling out both cases, and the reviewer rejected the check for
+    "checking scl_oen held released instead of checking slave_wait": it named
+    the internal mechanism over the route printed beside it.
+
+    So the fix is not to supply the route -- it is to say the route is the
+    STANDARD the check is judged against.
+    """
+    for phrase in ("READ IT FIRST", "OBSERVATION ROUTE",
+                   "is ON TARGET even when the requirement's own sentence"):
+        assert phrase in C.SYSTEM, phrase
+
+
+def test_the_route_actually_reaches_the_prompt():
+    """The pin under the paragraph above: a rule about `observed_via` is worth
+    nothing if the block never carries one."""
+    normalized = {"observable": ["busy"], "observed_via": [
+        {"port": "busy", "through_req": "REQ-0007", "when": "w",
+         "shows": "busy stays low for a narrow glitch and rises for a wide one"}]}
+    body = C.build_prompt(requirement=REQ, oracle=ORACLE, normalized=normalized)
+    assert "observed_via" in body
+    assert "rises for a wide one" in body, "the discrimination, not just the port"

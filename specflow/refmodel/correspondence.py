@@ -134,6 +134,23 @@ instead of its EFFECT, which called 27 of 77 requirements unobservable when 10
 of them already had working checks. If the only fault you can find is that the
 check does not look at something that is not a port, the answer is YES.
 
+**AND THE `normalized` BLOCK ALREADY TELLS YOU WHERE TO LOOK. READ IT FIRST.**
+`observed_via` is the OBSERVATION ROUTE: the declared port this requirement is
+decidable at, `when` it carries this requirement's effect rather than another's,
+and `shows` -- what that port does when the requirement HOLDS and what it does
+when it does not. That is the standard the check is written to and the standard
+you judge it against. A check deciding at the route's port, under the route's
+condition, is ON TARGET even when the requirement's own sentence names a signal
+that is nowhere in the trace.
+
+Measured, and it is why this paragraph exists: given a requirement whose route
+read "when this requirement holds, scl_oen remains released and is held steady;
+when it does not, scl_oen follows normal FSM bit-timing", the reviewer rejected
+a check for "checking scl_oen held released instead of checking slave_wait" --
+naming the internal mechanism over the route printed in the same prompt. If
+`observed_via` names a port and the check decides there, that is the route
+working, not the check missing its subject.
+
 Answer NO only when the procedure is about something ELSE, or is about it
 BACKWARDS:
 
