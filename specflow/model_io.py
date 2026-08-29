@@ -10,6 +10,10 @@ phases with no async blocking. Three ports implement the same interface:
 * `ReplayPort` -- reads a recorded response. No model, no I/O, fully
   deterministic. This is what makes M5-M9 developable and CI-testable without a
   model in the loop at all.
+* `AgentPort` -- writes the prompt and WAITS for a local agent to answer it.
+  Same rendezvous as `FilePort`, but it blocks instead of raising, which is what
+  lets a whole fan-out be served by a pool of subagents rather than aborting on
+  its first item.
 * `ApiPort`   -- the HTTP path, resolving credentials through
   `eda_agent.config` and recording every exchange as a replayable fixture.
 
@@ -90,6 +94,62 @@ class ReplayPort:
                 f"drive this stage with --model-port file first"
             )
         return response_path.read_text(encoding="utf-8")
+
+
+@dataclass
+class AgentPort:
+    """Block until a local agent answers. The MODEL is a subagent, not a service.
+
+    `FilePort` emits and STOPS -- it raises `PendingResponse` on the first
+    unanswered call, which `run_fanout` re-raises to the caller, so a fan-out
+    over 43 requirements aborts on requirement one instead of emitting 43
+    prompts. That makes it useless for driving a whole stage by hand, which is
+    the one thing a local agent is for.
+
+    This port waits instead. A fan-out worker thread parks on its own rendezvous
+    file, so N concurrent calls surface N prompts at once and a pool of agents
+    can answer them in parallel -- the shape the stage already has.
+
+    ATOMICITY, BOTH DIRECTIONS. The prompt is written to a temporary name and
+    `os.replace`d in, so a poller can never read a half-written prompt; the
+    answering agent is required to do the same, because a response read while it
+    is still being written is a truncated check that the stage will blame on the
+    model. Non-empty is checked as well, since `open(...,'w')` alone creates the
+    file before a byte of it exists.
+
+    AND THE STALE RESPONSE IS DELETED, not tolerated. `FilePort` documents the
+    hazard it cannot fix -- a repair round composes a NEW prompt under the same
+    `(stage, round_)`, and a leftover answer to the OLD one reads as a reply to
+    a question that was never asked. A live rendezvous can fix it: unlink the
+    response before publishing the prompt, so what comes back was necessarily
+    written after this prompt was visible.
+    """
+
+    root: Path
+    #: An agent answering a check takes minutes, and a pool clearing a backlog of
+    #: 43 can leave the last prompt parked for much longer. The timeout exists to
+    #: stop a dead pool hanging the stage overnight, not to pace anything.
+    timeout: float = 7200.0
+    poll: float = 2.0
+
+    def complete(self, *, stage: str, round_: int, prompt: str) -> str:
+        prompt_path, response_path = _paths(Path(self.root), stage, round_)
+        response_path.unlink(missing_ok=True)
+        tmp = prompt_path.with_name(prompt_path.name + ".part")
+        tmp.write_text(prompt, encoding="utf-8")
+        os.replace(tmp, prompt_path)
+        deadline = time.monotonic() + self.timeout
+        while True:
+            if response_path.exists():
+                text = response_path.read_text(encoding="utf-8")
+                if text.strip():
+                    return text
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"no agent answered {prompt_path.name} within "
+                    f"{self.timeout:.0f}s; write the reply to {response_path}"
+                )
+            time.sleep(self.poll)
 
 
 @dataclass
@@ -1140,7 +1200,8 @@ def make_port(kind: str, root: Path, stats: object | None = None,
     Keyword-optional rather than required so a caller that substitutes this
     function (tests do) is not broken by the addition.
     """
-    kinds = {"file": FilePort, "replay": ReplayPort, "api": ApiPort}
+    kinds = {"file": FilePort, "replay": ReplayPort, "api": ApiPort,
+             "agent": AgentPort}
     if kind not in kinds:
         raise ValueError(f"unknown model port {kind!r}; expected one of {sorted(kinds)}")
     if kind == "api":
