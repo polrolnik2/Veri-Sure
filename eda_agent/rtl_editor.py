@@ -434,6 +434,16 @@ Rules:
 - If a removal takes away a signal's last driver, add the replacement driver in
   THE SAME batch. Nothing warns you at simulation -- the signal simply goes X
   and every check that reads it stops deciding.
+- FAILING and UNCOVERED are different findings with different remedies. A
+  failing requirement is evidence about the design: fix the design. An UNCOVERED
+  one means its check never saw the situation its clause is about, so no edit
+  can discharge it -- call _tool_add_stimulus(req_uid, "<what must happen>") and
+  describe the scenario in prose. Never edit the design to chase an uncovered
+  requirement, and never call add_stimulus for a failing one.
+- Whether a requirement is covered depends on WHAT THE DESIGN DOES, so an
+  uncovered one can be the symptom of the very bug you are hunting: if the
+  design never leaves a state, everything downstream of it abstains. Staging the
+  scenario is how you find out which it is.
 - Do not modify the testbench. Only modify the RTL code.
 - Preserve the module interface and the contract's timing assumptions.
 - Only modify code inside suspect blocks.
@@ -454,6 +464,10 @@ Use tools:
 - _tool_check_staged()                      syntax + drivers      free, unlimited
 - _tool_discard_staged()                    back to accepted RTL  free
 - _tool_commit()                            build + simulate      ONE TRIAL
+- _tool_add_stimulus(req_uid, what_the_scenario_needs)
+                                            stage a scenario the suite never
+                                            reaches, for an UNCOVERED
+                                            requirement                 free
 - _tool_run_simulation()
 
 These are the exact names the tool schema exposes. Earlier revisions of this
@@ -580,6 +594,24 @@ class _EditSession:
     #: "removed", not "unknown block_id" -- different facts, and the second
     #: reads as the agent's mistake rather than its own edit.
     retired_ids: set = field(default_factory=set)
+    #: THE STIMULUS ROUTE. Anything exposing
+    #: `add_stimulus(req_uid, what_the_scenario_needs) -> dict`; the refmodel
+    #: arm's `specflow.refmodel.session` already does.
+    #:
+    #: Here because "decides nothing" is a property of the CURRENT DESIGN, not
+    #: of the stimulus: an oracle abstains when its activation never occurred,
+    #: and whether it occurs depends on what the design does. #98 is the case on
+    #: record -- a model invented a two-tick command handshake, brief `cmd`
+    #: pulses never left IDLE, and everything downstream abstained. The evidence
+    #: that exposes such a bug only exists once the design changes AND stimulus
+    #: reaches the new behaviour, so the loop that edits the design is exactly
+    #: where this has to be reachable.
+    #:
+    #: Without it an uncovered requirement is a finding the agent is shown and
+    #: cannot act on -- and once the build is gated on assertion coverage, a
+    #: number it can be blocked by and cannot move.
+    stimulus_stager: object | None = None
+
     #: `check_staged()` calls. Unbounded (it is static and costs about a second)
     #: but COUNTED and reported: fifty dry runs against two commits is a finding
     #: about the agent, and a silent cap would hide it.
@@ -815,6 +847,41 @@ class _EditSession:
                 "warnings": warnings, "multidriven": multi,
                 "staged": self.staged_rtl is not None,
                 "check_calls": self.check_calls}
+
+    def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> Dict[str, Any]:
+        """Stage a scenario the current stimulus never reaches. FREE, not a trial.
+
+        ONLY for a requirement reported UNCOVERED -- one whose check never saw
+        the situation its clause is about. That is not an accusation against the
+        design and NO EDIT CAN DISCHARGE IT: the testplan is what is missing.
+
+        You describe WHAT MUST HAPPEN, in prose, the way a test plan does --
+        "issue a WRITE command with ena=1 and hold it until cmd_ack", "drive
+        sda_i low while the controller has released SDA". You never write
+        vectors: the harness generates them, gates them, and APPENDS a new
+        testpoint. Nothing existing is changed, so this can only add evidence.
+
+        That append-only discipline is what makes the tool safe to hand an agent
+        whose score falls with the failing count. A mutable stimulus would open
+        a real shortcut -- make the scenario stop occurring and a failure
+        becomes an abstention -- and appending cannot do that, because `_worst`
+        ranks failing above anything a new testpoint could contribute.
+
+        Not a trial: it costs a model call inside the harness, not a build, and
+        charging it against `max_trials` would price evidence-gathering at the
+        same rate as a design hypothesis.
+        """
+        stager = self.stimulus_stager
+        if stager is None or not hasattr(stager, "add_stimulus"):
+            return {"error": (
+                "no stimulus route is wired into this session, so an uncovered "
+                "requirement cannot be staged from here. Report it as a testplan "
+                "gap rather than editing the design to chase it.")}
+        try:
+            out = stager.add_stimulus(req_uid, what_the_scenario_needs)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"stimulus staging failed: {exc!r}"}
+        return dict(out) if isinstance(out, dict) else {"result": out}
 
     def commit(self) -> Dict[str, Any]:
         """Build and run the STAGED buffer. ONE TRIAL. Latch, or keep the batch.
@@ -1451,9 +1518,16 @@ class RTLEditor:
         #: stays ON by default -- a greedy filter is the right default, and this
         #: exists to make its cost measurable rather than to remove it.
         rollback_guard: bool | None = None,
+        #: Backend-supplied stimulus route (see `_EditSession.stimulus_stager`).
+        #: None leaves `add_stimulus` registered but refusing, which is the
+        #: honest state for a backend that cannot mint testpoints -- rather than
+        #: hiding the tool and leaving the agent to wonder why an uncovered
+        #: requirement has no remedy.
+        stimulus_stager: object | None = None,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
+        self._stimulus_stager = stimulus_stager
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
         # Consecutive outer-loop rounds with no mismatch-count reduction before
@@ -1486,6 +1560,7 @@ class RTLEditor:
         toolkit.register_tool_function(self._tool_check_staged)
         toolkit.register_tool_function(self._tool_discard_staged)
         toolkit.register_tool_function(self._tool_commit)
+        toolkit.register_tool_function(self._tool_add_stimulus)
         toolkit.register_tool_function(self._tool_run_simulation)
 
         # Held on the instance so `usage()` can read the cumulative counters
@@ -1652,6 +1727,40 @@ class RTLEditor:
         self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
+    async def _tool_add_stimulus(
+        self, req_uid: str, what_the_scenario_needs: str
+    ) -> ToolResponse:
+        """Stage a scenario the suite never reaches, for a requirement reported UNCOVERED. Free: costs no trial. You describe what must happen in prose; the harness generates and gates the vectors and APPENDS a testpoint.
+
+        Use this when a requirement's check decided NOTHING. That means the
+        check never saw the situation its clause is about, so the design is not
+        being accused of anything and no edit can discharge it -- the testplan is
+        what is missing. This is how you say so.
+
+        Do NOT use it for a FAILING requirement. A failure is evidence that
+        already exists and is a finding about the design; adding stimulus cannot
+        discharge one.
+
+        The new testpoint is also attached to every other requirement whose
+        activation it happens to stage, so one good scenario can cover several.
+        Check the result's `attached_to`. If the result says the requirement is
+        still uncovered, the scenario you described did not stage it -- describe
+        it more concretely rather than repeating it.
+
+        Args:
+            req_uid: the requirement, e.g. "REQ-0031". Must currently be uncovered.
+            what_the_scenario_needs: what has to happen, concretely, in prose.
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(
+            self._session.add_stimulus, req_uid, what_the_scenario_needs)
+        self._session._record_trajectory("add_stimulus", result=result,
+                                         block_id=req_uid,
+                                         diff=what_the_scenario_needs)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
     async def chat(
         self,
         *,
@@ -1701,6 +1810,7 @@ class RTLEditor:
             max_trials=session_max_trials,
             child_names=child_names,
             rollback_on_regression=self._rollback_guard,
+            stimulus_stager=self._stimulus_stager,
         )
 
         if tb_text is not None:

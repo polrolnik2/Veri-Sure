@@ -9,6 +9,8 @@ introduces.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from eda_agent.rtl_editor import _EditSession
@@ -435,3 +437,148 @@ def test_a_dead_anchor_names_BOTH_causes(tmp_path):
     assert not res["is_action_executed"]
     assert "staged edit overlapped" in res["error_msg"]
     assert "commit has latched" in res["error_msg"]
+
+
+# ------------------------------------------------------------ add_stimulus
+#
+# "Decides nothing" is a property of the CURRENT DESIGN, not of the stimulus:
+# an oracle abstains when its activation never occurred, and whether it occurs
+# depends on what the design does. #98 is the case on record -- a two-tick
+# command handshake meant brief cmd pulses never left IDLE and everything
+# downstream abstained. So the loop that edits the design is exactly where this
+# has to be reachable.
+
+
+class _Stager:
+    def __init__(self, out=None, boom=False):
+        self.calls = []
+        self.out = out if out is not None else {"added": "TP-0400", "attached_to": ["REQ-0031"]}
+        self.boom = boom
+
+    def add_stimulus(self, req_uid, what_the_scenario_needs):
+        self.calls.append((req_uid, what_the_scenario_needs))
+        if self.boom:
+            raise RuntimeError("generator died")
+        return self.out
+
+
+def test_add_stimulus_delegates_and_costs_no_trial(tmp_path):
+    s = _session(tmp_path)
+    s.stimulus_stager = _Stager()
+    out = s.add_stimulus("REQ-0031", "issue a WRITE and hold ena until cmd_ack")
+    assert out["added"] == "TP-0400"
+    assert s.stimulus_stager.calls == [
+        ("REQ-0031", "issue a WRITE and hold ena until cmd_ack")]
+    assert s.action_calls == 0, "gathering evidence is not a design hypothesis"
+
+
+def test_add_stimulus_without_a_route_says_so_instead_of_failing(tmp_path):
+    """A backend that cannot mint testpoints leaves the tool REGISTERED and
+    refusing. Hiding it would leave the agent with an uncovered requirement, no
+    remedy, and no explanation."""
+    s = _session(tmp_path)
+    out = s.add_stimulus("REQ-0031", "anything")
+    assert "no stimulus route" in out["error"]
+    assert "testplan gap" in out["error"]
+
+
+def test_a_stager_that_raises_is_reported_not_propagated(tmp_path):
+    s = _session(tmp_path)
+    s.stimulus_stager = _Stager(boom=True)
+    out = s.add_stimulus("REQ-0031", "anything")
+    assert "stimulus staging failed" in out["error"]
+
+
+def test_the_stimulus_route_never_touches_the_rtl(tmp_path):
+    """It APPENDS evidence. The design is not edited, which is what keeps the
+    tool safe to hand an agent whose score falls with the failing count."""
+    s = _session(tmp_path)
+    s.stimulus_stager = _Stager()
+    before = s.read_rtl()
+    s.add_stimulus("REQ-0031", "drive sda_i low while the controller released SDA")
+    assert s.read_rtl() == before and s.staged_rtl is None
+
+
+# ----------------------------------------- the specflow backend's stimulus route
+
+
+def _stager(tmp_path, monkeypatch, steps=None, checks=None):
+    import eda_agent.specflow_node as node
+    run = tmp_path / "run"
+    (run / "specflow").mkdir(parents=True)
+    (run / "specflow/testplan.json").write_text(json.dumps({"elements": [
+        {"uid": "TP-0000", "tp_uid": "TP-0000", "covers": ["REQ-0001@1"]}]}))
+    (run / "specflow/stimulus.json").write_text(json.dumps({"testpoints": [
+        {"tp_uid": "TP-0000", "stimulus_steps": [{"inputs": {"a": 1}}]}]}))
+    (run / "specflow/requirements.json").write_text(json.dumps({"requirements": [
+        {"uid": "REQ-0031", "text": "the thing"}]}))
+    if checks is not None:
+        (run / "specflow/coverage_model.json").write_text(json.dumps({"checks": checks}))
+    s = node.SpecflowStimulusStager(
+        run_dir=run, contract={}, bins=[{"uid": "BIN-0001"}],
+        suite_dir=tmp_path / "suite", model_port=object())
+    rendered = {}
+    monkeypatch.setattr(node, "SpecflowStimulusStager", node.SpecflowStimulusStager)
+    import specflow.tb.render as render_mod
+    import specflow.testcase_agent as tca
+    monkeypatch.setattr(tca, "stimulus_for_scenario",
+                        lambda **kw: (steps if steps is not None else [{"inputs": {"a": 0}}]))
+    monkeypatch.setattr(render_mod, "render_suite",
+                        lambda **kw: rendered.update(kw) or {})
+    return s, run, rendered
+
+
+def test_the_stager_refuses_a_requirement_that_is_not_uncovered(tmp_path, monkeypatch):
+    """Mirrors the refmodel arm's rule: the target must already be reported
+    uncovered, so it cannot be invented. A FAILING requirement is evidence about
+    the design and no amount of stimulus discharges it."""
+    s, _, _ = _stager(tmp_path, monkeypatch, checks=[{"uid": "CHK-0001"}])
+    out = s.add_stimulus("REQ-0031", "do the thing")
+    assert "not currently uncovered" in out["error"]
+
+
+def test_the_stager_appends_and_rerenders(tmp_path, monkeypatch):
+    s, run, rendered = _stager(tmp_path, monkeypatch, checks=[{"uid": "CHK-0001"}])
+    s.uncovered = {"REQ-0031"}
+    out = s.add_stimulus("REQ-0031", "hold ena until cmd_ack")
+    assert out["covers"] == "REQ-0031" and out["added"].startswith("TP-")
+    # APPEND-ONLY: the original testpoint is still there.
+    tp = json.loads((run / "specflow/testplan.json").read_text())["elements"]
+    assert [e["tp_uid"] for e in tp] == ["TP-0000", out["added"]]
+    # And the suite was re-rendered, or the new testpoint would never be run.
+    assert rendered["stimulus_by_tp"].keys() == {"TP-0000", out["added"]}
+    assert rendered["checks"] == [{"uid": "CHK-0001"}], "checks must survive the re-render"
+
+
+def test_a_missing_coverage_model_REFUSES_rather_than_dropping_every_check(
+        tmp_path, monkeypatch):
+    """Re-rendering with an empty check list produces a suite that passes
+    because it stopped looking. That must never be the quiet outcome."""
+    s, run, rendered = _stager(tmp_path, monkeypatch, checks=None)
+    s.uncovered = {"REQ-0031"}
+    out = s.add_stimulus("REQ-0031", "hold ena until cmd_ack")
+    assert "stopped looking" in out["error"]
+    assert not rendered, "nothing may be rendered when the checks are unknown"
+
+
+def test_the_budget_is_finite(tmp_path, monkeypatch):
+    s, _, _ = _stager(tmp_path, monkeypatch, checks=[])
+    s.uncovered = {"REQ-0031"}
+    s.added = ["TP-1"] * s.budget
+    assert "budget spent" in s.add_stimulus("REQ-0031", "x")["error"]
+
+
+def test_uncovered_requirements_needs_EVERY_covering_testpoint_idle(tmp_path):
+    """Under-approximating is the safe direction: it can refuse to stage a
+    requirement that would have benefited, and can never let the agent bury an
+    existing verdict under new testpoints."""
+    from eda_agent.specflow_node import _uncovered_requirements
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "manifest.json").write_text(json.dumps({"testpoints": [
+        {"tp_uid": "TP-0", "covers": ["REQ-A@1", "REQ-B@1"]},
+        {"tp_uid": "TP-1", "covers": ["REQ-B@1"]},
+    ]}))
+    assert _uncovered_requirements(["TP-0"], suite) == {"REQ-A"}
+    assert _uncovered_requirements(["TP-0", "TP-1"], suite) == {"REQ-A", "REQ-B"}
+    assert _uncovered_requirements([], suite) == set()

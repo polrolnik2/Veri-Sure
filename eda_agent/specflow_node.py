@@ -172,7 +172,8 @@ class SpecflowReviewer:
 
     def __init__(self, *, built, hdl_toplevel: str, output_dir: Path,
                  extra_sources: Sequence[Path | str] = (),
-                 include_dirs: Sequence[Path | str] = ()):
+                 include_dirs: Sequence[Path | str] = (),
+                 stager: "SpecflowStimulusStager | None" = None):
         self._built = built
         self._top = hdl_toplevel
         self._dir = Path(output_dir)
@@ -183,6 +184,9 @@ class SpecflowReviewer:
         self._incs = list(include_dirs)
         self._iteration = 0
         self.golden_rtl_path = None  # rtl_editor getattrs this
+        #: Published to after every run, so `add_stimulus`'s "must currently be
+        #: uncovered" gate is never reading a stale set.
+        self._stager = stager
 
     def review(self) -> Tuple[bool, int, str]:
         from specflow.integration import failure_payload, judge, trace_summary
@@ -198,6 +202,10 @@ class SpecflowReviewer:
             include_dirs=self._incs,
         )
         self._iteration += 1
+
+        if self._stager is not None:
+            self._stager.uncovered = _uncovered_requirements(
+                verdict.not_exercised, self._built.suite_dir)
 
         payload = failure_payload(self._built.suite_dir)
         wave = info.get("wave_vcd")
@@ -229,6 +237,177 @@ class SpecflowReviewer:
             indent=2,
         )
         return verdict.outcome == "ACCEPT", len(verdict.failing), sim_output
+
+
+def _uncovered_requirements(not_exercised, suite_dir: Path) -> set[str]:
+    """Requirements every one of whose testpoints decided nothing.
+
+    `GateVerdict.not_exercised` is TESTPOINT-keyed -- `gate.py` builds it from
+    `results`, which `run_suite` keys by tp_uid -- and `add_stimulus` needs
+    requirement uids. The map is the testplan's own `covers`, so no inference is
+    involved beyond the join.
+
+    UNDER-APPROXIMATES ON PURPOSE. A requirement is listed only when EVERY
+    testpoint covering it came back NOT_EXERCISED; one exercised testpoint takes
+    it off the list even if others abstained. That is the safe direction: it can
+    refuse to stage a requirement that would have benefited, and it can never
+    let the agent stage one that already has evidence -- which is the failure
+    that would turn this tool into a way of burying a verdict under new
+    testpoints.
+
+    The exact answer needs per-REQUIREMENT verdicts to reach this arm at all,
+    which is the same gap that leaves the debugger unable to name the
+    requirement behind a failing check.
+    """
+    idle = set(not_exercised or ())
+    if not idle:
+        return set()
+    try:
+        manifest = json.loads(
+            (Path(suite_dir) / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    covers: dict[str, list[str]] = {}
+    for entry in manifest.get("testpoints") or manifest.get("elements") or []:
+        tp = entry.get("tp_uid") or entry.get("uid") or ""
+        for c in entry.get("covers") or []:
+            covers.setdefault(str(c).split("@")[0], []).append(tp)
+    return {req for req, tps in covers.items() if tps and all(t in idle for t in tps)}
+
+
+class SpecflowStimulusStager:
+    """The stimulus route for the RTL debug loop, on the specflow backend.
+
+    `refmodel_editor` has had `add_stimulus` since #80 and the RTL editor never
+    did, so on this arm an UNCOVERED requirement was a finding the agent was
+    shown and could not act on. That is not a cosmetic gap: whether a check is
+    covered depends on WHAT THE DESIGN DOES -- an oracle abstains when its
+    activation never occurred -- so an uncovered requirement can be the symptom
+    of the very bug being hunted. #98 is the case on record: a two-tick command
+    handshake meant brief `cmd` pulses never left IDLE and everything downstream
+    abstained. Dropping those would have locked the bug in.
+
+    THE DIFFERENCE FROM THE REFMODEL ARM, and the reason this is a separate
+    class rather than a reuse: there, `session.add_stimulus` appends and calls
+    `refresh()`, which re-decides the oracles in Python. Here the new testpoint
+    has to be SIMULATED, so the suite is re-rendered into the same `suite_dir`
+    the reviewer already runs -- and the next `commit()` picks it up with no
+    other wiring.
+
+    APPEND-ONLY, like its counterpart. Nothing existing is edited, so a grown
+    evidence set can only move a verdict toward worse: `_worst` ranks failing
+    above anything a new testpoint could contribute. That is what makes the tool
+    safe to hand an agent whose score falls with the failing count.
+    """
+
+    def __init__(self, *, run_dir: Path, contract: dict, bins,
+                 suite_dir: Path, model_port, budget: int = 6):
+        self.run_dir = Path(run_dir)
+        self.contract = contract
+        self.bins = bins or []
+        #: NOT a constructor argument, and that is the point: re-rendering with
+        #: an empty check list would silently strip every check from the suite,
+        #: which reads downstream as a design that suddenly passes everything.
+        #: They are loaded from the coverage model the original render used, and
+        #: a missing one REFUSES the stage rather than rendering without them.
+        self._checks: list[dict] | None = None
+        self.suite_dir = Path(suite_dir)
+        self.port = model_port
+        self.budget = int(budget)
+        self.added: list[str] = []
+        #: Requirement uids the last suite run decided NOTHING about. Set by the
+        #: reviewer after each run; empty means the gate cannot be applied, and
+        #: an empty gate is a REFUSAL rather than a waiver -- inventing a target
+        #: is exactly what the refmodel arm's "must already be unexercised" rule
+        #: exists to prevent.
+        self.uncovered: set[str] = set()
+
+    def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> dict:
+        from specflow.ids import PREFIX_TESTPLAN, mint, next_index
+        from specflow.tb.render import render_suite
+        from specflow.testcase_agent import stimulus_for_scenario
+
+        if len(self.added) >= self.budget:
+            return {"error": f"stimulus budget spent ({self.budget} testpoints "
+                             f"added); the remaining uncovered requirements need "
+                             f"a testplan fix, not more steps"}
+        if req_uid not in self.uncovered:
+            return {"error": f"{req_uid} is not currently uncovered. This tool "
+                             f"only stages a scenario nothing reaches -- a "
+                             f"FAILING requirement is evidence about the design "
+                             f"and adding stimulus cannot discharge it."}
+
+        if self._checks is None:
+            cov = self.run_dir / "specflow/coverage_model.json"
+            try:
+                self._checks = json.loads(cov.read_text(encoding="utf-8")).get("checks") or []
+            except (OSError, ValueError, AttributeError):
+                return {"error": (
+                    "the coverage model could not be read, so re-rendering the "
+                    "suite would drop every check from it. Refusing rather than "
+                    "producing a suite that passes because it stopped looking.")}
+
+        tp_path = self.run_dir / "specflow/testplan.json"
+        st_path = self.run_dir / "specflow/stimulus.json"
+        req_path = self.run_dir / "specflow/requirements.json"
+        try:
+            testplan = json.loads(tp_path.read_text(encoding="utf-8"))
+            testplan = testplan.get("elements") or testplan.get("testplan") or testplan
+            stim = json.loads(st_path.read_text(encoding="utf-8"))
+            reqs = json.loads(req_path.read_text(encoding="utf-8"))["requirements"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {"error": f"could not read the testplan artifacts: {exc!r}"}
+
+        req = next((r for r in reqs if r.get("uid") == req_uid), {})
+        try:
+            steps = stimulus_for_scenario(
+                requirement=req, what_the_scenario_needs=what_the_scenario_needs,
+                contract=self.contract, port=self.port,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"stimulus generation failed: {exc!r}"}
+        if not steps:
+            return {"error": "the generator produced no steps"}
+
+        by_tp = {t["tp_uid"]: t["stimulus_steps"] for t in stim.get("testpoints", [])}
+        # Byte-identical to something already present buys nothing and costs a
+        # simulator process on every future run, not just this one.
+        key = json.dumps(steps, sort_keys=True)
+        if any(json.dumps(v, sort_keys=True) == key for v in by_tp.values()):
+            return {"error": "identical to stimulus already in the suite"}
+
+        uid = mint(PREFIX_TESTPLAN, next_index(
+            [str(t.get("tp_uid") or t.get("uid") or "") for t in testplan]
+            + list(by_tp), PREFIX_TESTPLAN))
+        testplan.append({
+            "uid": uid, "tp_uid": uid, "covers": [f"{req_uid}@1"],
+            "stimulus": what_the_scenario_needs, "expected_response": "",
+            "dimension": "D2_control_flow",
+        })
+        by_tp[uid] = steps
+        stim.setdefault("testpoints", []).append(
+            {"tp_uid": uid, "stimulus_steps": steps})
+
+        try:
+            render_suite(testplan=testplan, bins=self.bins, checks=self._checks,
+                         contract=self.contract, out_dir=self.suite_dir,
+                         stimulus_by_tp=by_tp)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"the suite would not re-render with it: {exc!r}"}
+
+        # ONLY after the render succeeded. A testplan on disk naming a testpoint
+        # the suite does not contain is the failure mode #126 already cost a run
+        # to: frozen artifacts pointing at testpoints that do not exist, whose
+        # checks then abstain and discard every call that produced them.
+        tp_path.write_text(json.dumps({"elements": testplan}, indent=2) + "\n",
+                           encoding="utf-8")
+        st_path.write_text(json.dumps(stim, indent=2) + "\n", encoding="utf-8")
+        self.added.append(uid)
+        return {"added": uid, "steps": len(steps), "covers": req_uid,
+                "budget_left": self.budget - len(self.added),
+                "now": ("the suite has been re-rendered; the next commit() runs "
+                        "this testpoint and will say whether it covered "
+                        f"{req_uid}")}
 
 
 async def run_specflow_node(
@@ -363,9 +542,20 @@ async def run_specflow_node(
         detail["history"].append("RTL failed syntax check")
         return False, rtl_code, detail
 
+    # THE STIMULUS ROUTE for the RTL debug loop. Without it an uncovered
+    # requirement reaches the debugger as a finding it cannot act on -- and
+    # since coverage depends on what the design DOES, an uncovered requirement
+    # can be the symptom of the very bug being hunted (#98).
+    stager = SpecflowStimulusStager(
+        run_dir=output_dir_per_run,
+        contract=json.loads(contract_json) if contract_json else {},
+        bins=built.bins,
+        suite_dir=built.suite_dir, model_port=model_port,
+    )
     reviewer = SpecflowReviewer(
         built=built, hdl_toplevel=top, output_dir=output_dir_per_run,
         extra_sources=extra_sources, include_dirs=include_dirs,
+        stager=stager,
     )
     remaining = int(debug_max_trials)
 
@@ -387,7 +577,8 @@ async def run_specflow_node(
             detail["history"].append("debug budget exhausted")
             return False, rtl_path.read_text(encoding="utf-8"), detail
 
-        editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining)
+        editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
+                           stimulus_stager=stager)
         _, repaired, used, _ = await editor.chat(
             spec=spec,
             output_dir_per_run=str(output_dir_per_run),
