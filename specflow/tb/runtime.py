@@ -704,7 +704,23 @@ class Env:
             {p: self.sample(p) for p in ports},
             {p: _plain(expected.get(p)) for p in ports},
             self.step_index,
-            self._inputs,
+            # THE COMPLETE DECLARED INPUT SET, not just the ports this step
+            # sweeps -- the same correction `_bundle` already makes for the
+            # reference model's benefit, applied to what gets recorded.
+            #
+            # `self._inputs` is the stimulus vector, and the stimulus drives
+            # functional inputs only: the runtime owns clock and reset. So a
+            # recorded row carried 6 of this design's 9 declared inputs, with
+            # `clk`, `nReset` and `rst` absent. `oracles.replay` carries all
+            # nine, and a check reading `row["inputs"]["nReset"]` therefore
+            # decided against a model and abstained against the DUT -- for a
+            # harness reason, wearing "the activation never occurred".
+            #
+            # Measured on the golden i2c suite before this fix: 59 of 110
+            # checks abstained that way, and REQ-0009 said it outright --
+            # "normal-operation activation (nReset=1, rst=0) never occurred",
+            # of a trace that was in normal operation almost throughout.
+            self._bundle(self._inputs),
         ))
         if _INTERNALS:
             self._internals.append((
@@ -802,7 +818,12 @@ class Env:
             )
 
     def _ctx_at(self, verdict) -> dict:
-        """The stimulus vector in force when the divergent state began."""
+        """The input state in force when the divergent state began.
+
+        A superset of the stimulus vector since `_record` began bundling: the
+        reset and clock ports are in here now too, which is strictly more of
+        what a repair agent needs to reproduce a divergence and never less.
+        """
         at = getattr(verdict, "diverged_at", None)
         if at is None or not self._trace:
             return dict(self._inputs)
