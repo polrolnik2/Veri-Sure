@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -538,6 +538,26 @@ class _EditSession:
     # was a guess because the falsifying data did not exist.
     traj_iter: int = 0
 
+    #: THE STAGED BUFFER. `None` means nothing is staged and the buffer IS the
+    #: accepted RTL on disk. Edits mutate this and never `rtl_path`, which is
+    #: what removes rollback entirely: a commit that does not improve never
+    #: overwrote anything, so there is nothing to put back and the agent's work
+    #: is not destroyed by a failed attempt.
+    staged_rtl: str | None = None
+    #: Each block's CURRENT text in the staged buffer, so a second edit to the
+    #: same block anchors on what the first one wrote rather than on the
+    #: original. Without it, refining your own staged edit is indistinguishable
+    #: from editing against a destroyed anchor.
+    staged_text: Dict[str, str] = field(default_factory=dict)
+    #: Blocks removed in this batch. A later `read_block` on one of these says
+    #: "removed", not "unknown block_id" -- different facts, and the second
+    #: reads as the agent's mistake rather than its own edit.
+    retired_ids: set = field(default_factory=set)
+    #: `check_staged()` calls. Unbounded (it is static and costs about a second)
+    #: but COUNTED and reported: fifty dry runs against two commits is a finding
+    #: about the agent, and a silent cap would hide it.
+    check_calls: int = 0
+
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -549,6 +569,202 @@ class _EditSession:
     def write_rtl(self, content: str) -> None:
         with open(self.rtl_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+    # ------------------------------------------------------------ staging
+    #
+    # Edits mutate a buffer; only `commit` builds and runs. A coherent change
+    # spanning several blocks could not be expressed before, because every
+    # intermediate state was simulated on the spot and rolled back as a
+    # regression -- and a batch legitimately passes through broken intermediate
+    # states, which is the whole point.
+
+    def staged(self) -> str:
+        """The buffer edits apply to: the staged text, or the accepted RTL."""
+        return self.staged_rtl if self.staged_rtl is not None else self.read_rtl()
+
+    def _anchor_for(self, block_id: str) -> str | None:
+        """This block's CURRENT text in the staged buffer.
+
+        Falls back to the text the trace report extracted, which is right until
+        the block has been staged over. Tracking it per block is what lets an
+        agent REFINE its own staged edit -- anchoring on the original text
+        forever would make the second edit to a block indistinguishable from an
+        edit against an anchor some other edit destroyed.
+        """
+        if block_id in self.retired_ids:
+            # REMOVED is not UNKNOWN, and not "your anchor was destroyed"
+            # either. Falling through to `blocks_by_id` here would report the
+            # agent's own deletion back to it as a collision with some other
+            # edit -- three different facts, and only one of them is true.
+            return None
+        if block_id in self.staged_text:
+            return self.staged_text[block_id]
+        block = (self.blocks_by_id or {}).get(block_id)
+        return block.code if block else None
+
+    def _splice(self, anchor: str, replacement: str, what: str) -> Dict[str, Any]:
+        """Content-anchored substitution. NEVER line numbers.
+
+        `blocks_by_id` carries line bounds from the last trace report, and one
+        staged edit shifts every line after it. Under batching a second edit
+        against stale bounds would splice into the wrong place SILENTLY, so the
+        anchor is the block's text and a miss is an explicit refusal.
+        """
+        buf = self.staged()
+        found = buf.count(anchor)
+        if found == 0:
+            return {"is_action_executed": False, "error_msg": (
+                f"Cannot {what}: its text is no longer in the staged buffer, so "
+                f"an earlier staged edit overlapped it. Re-read the block and "
+                f"edit what is there now, or discard_staged() and start over.")}
+        if found > 1:
+            return {"is_action_executed": False, "error_msg": (
+                f"Cannot {what}: its text appears {found} times in the staged "
+                f"buffer, so a substitution would be ambiguous. Include "
+                f"surrounding lines to make it unique.")}
+        self.staged_rtl = buf.replace(anchor, replacement, 1)
+        return {"is_action_executed": True}
+
+    def undriven_signals(self, text: str) -> list[str]:
+        """Signals a still-read name has lost its last driver for.
+
+        The mirror of `multidriven_signals`, and it exists because the failure
+        is otherwise silent: Verilator runs `-Wno-fatal` (deliberately -- the
+        lint gate owns lint findings), so UNDRIVEN does not fail the build. The
+        signal becomes X, the oracle X-guard turns that into an abstention, and
+        removing a driver would surface only as coverage quietly falling with
+        nothing naming the cause.
+        """
+        blocks = list((self.blocks_by_id or {}).values())
+        if not blocks:
+            return []
+        driven = {w for b in blocks if b.code in text for w in b.writes}
+        read = {r for b in blocks if b.code in text for r in b.reads}
+        lost = {w for b in blocks if b.code not in text for w in b.writes}
+        return sorted(w for w in lost - driven if w in read)
+
+    def driver_warnings(self) -> list[str]:
+        """Driver hazards in the staged buffer. WARNINGS, never refusals.
+
+        A batch that removes a block and adds its replacement two edits later is
+        legitimately undriven in between, so refusing here would break exactly
+        the workflow staging exists for. `commit` rejects what is still
+        unresolved once the batch is claimed complete.
+
+        PURE PYTHON, from the block table, because this runs on EVERY staged
+        edit. `multidriven_signals` shells out to Verilator and costs about a
+        second, which is fine once per `check_staged` and far too much per
+        keystroke -- so the multi-driver half here is the cheap approximation
+        (a signal two surviving blocks both write) and the authoritative check
+        runs where it is affordable.
+        """
+        text = self.staged()
+        blocks = list((self.blocks_by_id or {}).values())
+        out = []
+        writers: Dict[str, int] = {}
+        for b in blocks:
+            if b.code in text and b.kind == "assign":
+                for w in b.writes:
+                    writers[w] = writers.get(w, 0) + 1
+        multi = sorted(w for w, n in writers.items() if n > 1)
+        if multi:
+            out.append(f"{', '.join(multi)} look to have MORE THAN ONE "
+                       f"continuous driver (confirm with check_staged)")
+        gone = self.undriven_signals(text)
+        if gone:
+            out.append(f"{', '.join(gone)} are still read but have LOST their "
+                       f"last driver")
+        return out
+
+    def stage_replace(self, block_id: str, new_code: str) -> Dict[str, Any]:
+        anchor = self._anchor_for(block_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {block_id}"
+                if block_id in self.retired_ids
+                else f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.")}
+        body = new_code.rstrip("\n")
+        res = self._splice(anchor, body, f"replace {block_id}")
+        if res.get("is_action_executed"):
+            self.staged_text[block_id] = body
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def stage_remove(self, block_id: str) -> Dict[str, Any]:
+        anchor = self._anchor_for(block_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {block_id}"
+                if block_id in self.retired_ids
+                else f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.")}
+        res = self._splice(anchor, "", f"remove {block_id}")
+        if res.get("is_action_executed"):
+            self.staged_text.pop(block_id, None)
+            self.retired_ids.add(block_id)
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def stage_add(self, anchor_id: str, code: str) -> Dict[str, Any]:
+        """Insert after `anchor_id`, or before `endmodule` when that is named.
+
+        Without this the editor can only rewrite blocks the slice found: a
+        repair needing a new register, state or `always_ff` is unreachable.
+        """
+        body = code.rstrip("\n")
+        if anchor_id == "endmodule":
+            buf = self.staged()
+            if buf.count("endmodule") != 1:
+                return {"is_action_executed": False, "error_msg": (
+                    "Cannot add at module end: 'endmodule' does not appear "
+                    "exactly once.")}
+            self.staged_rtl = buf.replace("endmodule", body + "\n\nendmodule", 1)
+            return {"is_action_executed": True, "warnings": self.driver_warnings()}
+        anchor = self._anchor_for(anchor_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {anchor_id}"
+                if anchor_id in self.retired_ids
+                else f"Unknown anchor '{anchor_id}'. Pass a block_id from "
+                     f"list_suspect_blocks(), or \"endmodule\".")}
+        res = self._splice(anchor, anchor + "\n\n" + body, f"add after {anchor_id}")
+        if res.get("is_action_executed"):
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def discard_staged(self) -> Dict[str, Any]:
+        """Back to the last accepted RTL. Costs nothing: nothing was written."""
+        self.staged_rtl = None
+        self.staged_text.clear()
+        self.retired_ids.clear()
+        return {"is_action_executed": True}
+
+    def check_staged(self) -> Dict[str, Any]:
+        """Static only: syntax and drivers. No simulation, NO TRIAL.
+
+        The expensive thing is the suite; syntax and drivers cost about a
+        second. Settling those for free, then spending the trial on the question
+        only simulation can answer, prices each check at what it actually costs
+        -- and is what makes "a failed commit costs a trial" a fair rule rather
+        than charging a typo the same as a wrong design hypothesis.
+        """
+        self.check_calls += 1
+        scratch = Path(self.output_dir) / "staged.sv"
+        scratch.write_text(self.staged(), encoding="utf-8")
+        ok, out = check_syntax(str(scratch))
+        # The AUTHORITATIVE multi-driver check, which `driver_warnings` only
+        # approximates because it cannot afford Verilator per edit.
+        warnings = list(self.driver_warnings())
+        try:
+            multi = sorted(multidriven_signals(str(scratch)))
+        except Exception:  # noqa: BLE001
+            multi = []
+        if multi:
+            warnings.append(f"{', '.join(multi)} have MORE THAN ONE continuous "
+                            f"driver (Verilator)")
+        return {"is_syntax_correct": ok, "syntax_output": out,
+                "warnings": warnings, "multidriven": multi,
+                "staged": self.staged_rtl is not None,
+                "check_calls": self.check_calls}
 
     def note_best(self, mismatch_cnt: int, rtl_text: str) -> bool:
         """Record `rtl_text` if it is the best seen. Returns True when it is.
