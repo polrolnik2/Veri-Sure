@@ -204,3 +204,73 @@ def test_the_benchmark_runner_default_keeps_the_fanouts_small():
                   if "--full-strength-stages" in (a.option_strings or []))
     named = {s.strip() for s in str(action.default).split(",") if s.strip()}
     assert named == {"refmodel", "witness"}
+
+
+# ------------------------------------------------ the cheap tier (`tiny_*`)
+
+
+def _tiered(**kw):
+    from specflow.model_io import PortSettings
+    base = dict(model="big", effort="xhigh", small_model="small",
+                small_effort="medium")
+    return PortSettings(**{**base, **kw})
+
+
+def test_nothing_is_demoted_by_default():
+    """Empty `tiny_stages` and no `tiny_model`: the library default must not
+    quietly move any stage onto a cheaper model."""
+    from specflow.model_io import PortSettings
+
+    assert PortSettings().tiny_stages == frozenset()
+    assert PortSettings().tiny_model is None
+    s = _tiered()
+    for stage in ("variant_REQ-0001_trigger", "oracle_REQ-0001",
+                  "correspond_REQ-0001", "normalize_REQ-0001"):
+        assert s.for_stage(stage) == ("small", "medium"), stage
+
+
+def test_a_named_stage_runs_on_the_cheap_model_and_its_neighbours_do_not():
+    """Matched by leading segment, because these stages are named per
+    requirement -- `variant_REQ-0001_trigger` is what the port actually sees."""
+    s = _tiered(tiny_model="tiny", tiny_stages=frozenset({"variant"}))
+    assert s.for_stage("variant_REQ-0001_trigger") == ("tiny", "medium")
+    assert s.for_stage("variant") == ("tiny", "medium")
+    for other in ("oracle_REQ-0001", "correspond_REQ-0001", "stimulus_TP-0001"):
+        assert s.for_stage(other) == ("small", "medium"), other
+
+
+def test_the_cheap_tier_needs_a_model_not_just_an_effort():
+    """`tiny_effort` alone would silently lower the effort of whatever model
+    was already serving -- the override this class forbids, and the failure
+    `deep_effort` guards against one branch up."""
+    s = _tiered(tiny_effort="low", tiny_stages=frozenset({"variant"}))
+    assert s.for_stage("variant_REQ-0001_trigger") == ("small", "medium")
+
+
+def test_the_cheap_tier_defaults_its_effort_to_the_small_one():
+    s = _tiered(tiny_model="tiny", tiny_stages=frozenset({"variant"}))
+    assert s.for_stage("variant_REQ-0001")[1] == "medium"
+    s = _tiered(tiny_model="tiny", tiny_effort="low",
+                tiny_stages=frozenset({"variant"}))
+    assert s.for_stage("variant_REQ-0001")[1] == "low"
+
+
+def test_promotion_beats_demotion_when_a_stage_is_named_in_both():
+    """A caller who asks for more on a stage and forgets to remove it from the
+    cheap set gets the more. Silently demoting what was explicitly promoted is
+    the worse of the two failures."""
+    s = _tiered(tiny_model="tiny", tiny_stages=frozenset({"variant"}),
+                full_strength_stages=frozenset({"variant"}))
+    assert s.for_stage("variant_REQ-0001") == (None, None)
+    s = _tiered(tiny_model="tiny", tiny_stages=frozenset({"oracle"}),
+                deep_effort="high", deep_effort_stages=frozenset({"oracle"}))
+    assert s.for_stage("oracle_REQ-0001") == ("small", "high")
+
+
+def test_the_benchmark_runner_demotes_nothing_by_default():
+    from benchmarks.run_chipverilog import build_parser
+
+    opts = {o: next(a for a in build_parser()._actions
+                    if o in (a.option_strings or []))
+            for o in ("--tiny-model", "--tiny-stages")}
+    assert all(not str(a.default) for a in opts.values())

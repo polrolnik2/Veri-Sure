@@ -255,6 +255,11 @@ async def run(args: argparse.Namespace) -> dict:
         full_strength_stages=frozenset(
             x.strip() for x in (args.full_strength_stages or "").split(",") if x.strip()
         ),
+        tiny_model=args.tiny_model or None,
+        tiny_effort=args.tiny_effort or None,
+        tiny_stages=frozenset(
+            x.strip() for x in (args.tiny_stages or "").split(",") if x.strip()
+        ),
         max_output_tokens=args.max_output_tokens,
         responses_chunk=args.responses_chunk,
         stream_retries=args.stream_retries,
@@ -414,6 +419,21 @@ def build_parser() -> argparse.ArgumentParser:
              "a 77-call fan-out. OFF by default: at 'high' a ~19 KB oracle "
              "prompt killed the stream six times running through this gateway, "
              "at two different chunk sizes.")
+    g.add_argument(
+        "--tiny-model", default="",
+        help="A cheaper model for the stages in --tiny-stages. Nothing is "
+             "demoted unless both this and --tiny-stages are given.")
+    g.add_argument(
+        "--tiny-effort", default="",
+        help="Reasoning effort for --tiny-stages; defaults to --small-effort.")
+    g.add_argument(
+        "--tiny-stages", default="",
+        help="comma-separated stages to run on --tiny-model. `variant` is the "
+             "intended one: a variant is gated only on RUNNING and being "
+             "VISIBLY DIFFERENT, so a weaker model degrades toward no evidence "
+             "rather than wrong evidence. Watch the KEEPER RATE, not the token "
+             "saving -- codex-mini already needed 554 calls for 200 variants "
+             "and left 26 of 97 requirements with none.")
     g.add_argument("--full-strength-stages", default="refmodel,witness",
                    help="comma-separated stages the small model must NOT touch. "
                         "`refmodel` above all: every check compares the design "

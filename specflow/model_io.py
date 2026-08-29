@@ -252,6 +252,34 @@ class PortSettings:
     #: Whether it buys ENOUGH is unmeasured. It is the cheap arm of the same
     #: experiment, and it ships first for that reason.
     deep_effort_stages: frozenset[str] = frozenset({"oracle"})
+
+    #: A THIRD, CHEAPER tier, and the stages allowed onto it. Empty by default:
+    #: nothing is demoted unless a caller says so.
+    #:
+    #: `variant` is the candidate, and the argument is about what a variant is
+    #: FOR. It must be an implementation that is wrong in a stated way -- and
+    #: `variants._gate` deliberately checks only that it RUNS and is VISIBLY
+    #: DIFFERENT, because judging "wrong in the way it was asked to be wrong"
+    #: would need an oracle, which is the thing the variant exists to test.
+    #:
+    #: So a weaker model degrades toward NO EVIDENCE rather than wrong
+    #: evidence, which is the safe direction. Malformed output is refused and
+    #: re-asked; a variant that runs but moves nothing is recorded as
+    #: EQUIVALENT, "a real answer rather than a defect"; and one broken in the
+    #: wrong way is caught downstream by `must_fail`'s `why_passed`, which
+    #: separates "differs inside the window" (vacuous) from "differs outside
+    #: it" (looked in the wrong place, repairable) and "differs nowhere".
+    #:
+    #: WHAT IT COSTS IS COVERAGE, and that is the number to watch. On d1-i2c,
+    #: `gpt-5.1-codex-mini` needed 554 calls to keep 200 variants -- 2.77 calls
+    #: per usable one -- and 26 of 97 requirements ended with NO variant at all,
+    #: so vacuity already had no evidence for a quarter of the set. A weaker
+    #: model raises that ratio against a per-requirement budget, so the honest
+    #: measure of this switch is the KEEPER RATE and the count of requirements
+    #: left with none, never the token saving.
+    tiny_model: str | None = None
+    tiny_effort: str | None = None
+    tiny_stages: frozenset[str] = frozenset()
     #: OFF BY DEFAULT -- but no longer because `high` is unsafe. It is not.
     #:
     #: It shipped as `"high"` and killed the stream six times running on real
@@ -385,6 +413,19 @@ class PortSettings:
                     and (stage in self.deep_effort_stages
                          or stage.split("_", 1)[0] in self.deep_effort_stages)):
                 return self.small_model, self.deep_effort
+            # The cheap tier, matched by leading segment like the two above.
+            # Checked AFTER them so a stage named in both is promoted, never
+            # demoted: a caller who asks for more on a stage and forgets to
+            # remove it from the cheap set should get the more.
+            #
+            # ONLY WHERE A MODEL IS NAMED. `tiny_effort` alone would silently
+            # lower the effort of whatever model was already serving -- the
+            # exact override this class's docstring forbids, and the failure
+            # `deep_effort` guards against one branch up.
+            if (self.tiny_model
+                    and (stage in self.tiny_stages
+                         or stage.split("_", 1)[0] in self.tiny_stages)):
+                return self.tiny_model, self.tiny_effort or self.small_effort
         return self.small_model, self.small_effort
 
 
