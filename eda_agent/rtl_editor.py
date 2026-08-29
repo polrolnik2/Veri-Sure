@@ -400,15 +400,26 @@ KMAP_DEBUG_HINT_PROMPT = r"""
 
 EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until pass):
+0) START WITH THE REQUIREMENTS, not with the waveform. Call
+   _tool_list_failing_requirements() to see what actually failed, in each
+   requirement's own words, then _tool_explain(req_uid) on the one you intend to
+   fix. `explain` gives you what that requirement OWES -- its text, when it
+   applies, what must then happen -- alongside the span its check objected in,
+   the boundary ports across that span, the transitions in it, the suspect
+   blocks' internal signals from the waveform, and what value change would have
+   satisfied the check. Do not theorise about timing from signal names; the
+   requirement states the timing it requires.
 1) Use the contract + trace report + <failing_scenarios> to find the most likely
    root cause. All listed scenarios fail simultaneously — prefer a single fix that
    resolves the whole group over patching one failing case at a time.
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
-3) Call _tool_list_suspect_blocks(), then _tool_read_block(block_id) for the most
-   relevant one. Never guess a block_id -- list them first; an invented id costs
-   a whole iteration and returns nothing.
+3) Call _tool_focus(req_uid) for the requirement you are fixing, THEN
+   _tool_list_suspect_blocks() and _tool_read_block(block_id). Focus slices from
+   that one requirement's ports; unfocused, with many requirements failing, the
+   slice is most of the design and tells you nothing. Never guess a block_id --
+   list them first; an invented id costs a whole iteration and returns nothing.
 4) STAGE the change. _tool_replace_block, _tool_add_block and _tool_remove_block
    all edit a staged buffer: they do not compile, do not simulate, and DO NOT
    COST A TRIAL. So a repair that needs several blocks to change together is one
@@ -434,6 +445,10 @@ Rules:
 - If a removal takes away a signal's last driver, add the replacement driver in
   THE SAME batch. Nothing warns you at simulation -- the signal simply goes X
   and every check that reads it stops deciding.
+- A check failing tells you something is wrong AT A PORT. Only the requirement
+  tells you what the design was supposed to do there. If _tool_explain reports
+  that NO single-value change satisfies the check, the defect is TEMPORAL --
+  ordering or timing -- and looking for a wrong constant will waste the trial.
 - FAILING and UNCOVERED are different findings with different remedies. A
   failing requirement is evidence about the design: fix the design. An UNCOVERED
   one means its check never saw the situation its clause is about, so no edit
@@ -455,6 +470,9 @@ You will also receive a structured trace-grounded bug report (JSON) that include
 
 You MUST only modify code inside suspect blocks.
 Use tools:
+- _tool_list_failing_requirements()          what failed, as REQUIREMENTS  free
+- _tool_explain(req_uid)                     what it owed + where to look  free
+- _tool_focus(req_uid)                       slice from its ports alone    free
 - _tool_list_suspect_blocks()
 - _tool_read_block(block_id)
 - _tool_replace_block(block_id, new_code)   stage a replacement   free
@@ -611,6 +629,30 @@ class _EditSession:
     #: cannot act on -- and once the build is gated on assertion coverage, a
     #: number it can be blocked by and cannot move.
     stimulus_stager: object | None = None
+
+    #: THE REQUIREMENT VIEW, keyed by req_uid: text, activation, expectation,
+    #: the frozen check and the ports it reads. Empty when the backend does not
+    #: supply one, which is the state the loop was ALWAYS in -- `req_uid`
+    #: appeared nowhere in the report path, so the agent was shown check ids and
+    #: asked to name the requirement behind them.
+    requirements: Dict[str, Any] = field(default_factory=dict)
+    #: Per-requirement results from the last suite run, keyed by req_uid.
+    #: `focus` and `explain` read this; without it they can still slice from a
+    #: requirement's ports but cannot say what its check objected to.
+    req_results: Dict[str, Any] = field(default_factory=dict)
+    #: The requirement `focus` last selected. `list_suspect_blocks` narrows to
+    #: it, which is what keeps the slice a slice once many requirements fail.
+    focused: str = ""
+    #: The port contract, for `ports_read` and for the perturbation's declared
+    #: widths. Empty disables the perturbation half of `explain` and nothing else.
+    contract: Dict[str, Any] = field(default_factory=dict)
+    #: The waveform for the last run, when one was dumped. Only `explain`'s
+    #: block-internals half needs it; everything else comes from the recorded
+    #: trace, which is why the annotation degrades rather than fails without it.
+    vcd_path: Any = None
+    #: DUT instance name inside the testbench hierarchy, so a VCD lookup prefers
+    #: the copy inside the design over a same-named wire in the harness.
+    dut_instance: str = ""
 
     #: `check_staged()` calls. Unbounded (it is static and costs about a second)
     #: but COUNTED and reported: fifty dry runs against two commits is a finding
@@ -847,6 +889,95 @@ class _EditSession:
                 "warnings": warnings, "multidriven": multi,
                 "staged": self.staged_rtl is not None,
                 "check_calls": self.check_calls}
+
+    def focus(self, req_uid: str) -> Dict[str, Any]:
+        """Slice from ONE requirement's ports, and remember the choice.
+
+        §6.2(b): the slice's value comes from starting at *the* failing signal.
+        With 43 of 110 requirements failing -- the measured figure against
+        golden i2c RTL -- the union of their ports is most of the port list and
+        `dynamic_slice` returns most of the design. Slicing one requirement at a
+        time is what keeps it a slice, and it is why `focus` becomes
+        load-bearing here rather than merely convenient.
+        """
+        from .explain import focus_slice
+
+        view = self.requirements.get(req_uid)
+        if view is None:
+            known = ", ".join(sorted(self.requirements)[:8])
+            return {"is_action_executed": False, "error_msg": (
+                f"Unknown requirement '{req_uid}'."
+                + (f" Known: {known}..." if known else
+                   " No requirement view is wired into this session."))}
+        if not view.ports:
+            return {"is_action_executed": False, "error_msg": (
+                f"{req_uid}'s check reads no declared port, so there is nothing "
+                f"to slice from. Its evidence is indirect -- see its "
+                f"requirement text via explain({req_uid!r}).")}
+        blocks = focus_slice(self.staged(), view.ports)
+        self.focused = req_uid
+        # The slice is rebuilt from the STAGED buffer, so it describes what a
+        # commit would compile rather than the last accepted design.
+        self.blocks_by_id = {b.id: b for b in blocks} or self.blocks_by_id
+        return {
+            "is_action_executed": True, "focused": req_uid,
+            "ports": view.ports,
+            "suspect_blocks": [
+                {"id": b.id, "kind": b.kind, "clocking": b.clocking,
+                 "start_line": b.start_line, "end_line": b.end_line,
+                 "writes": list(b.writes)} for b in blocks],
+            "note": ("sliced from this requirement's ports alone; "
+                     "list_suspect_blocks() now shows these"),
+        }
+
+    def explain(self, req_uid: str) -> Dict[str, Any]:
+        """What this requirement OWES, what its check objected to, and where.
+
+        The requirement's own text is the half the loop never had. B21 is the
+        measured cost of its absence: with names only the debugger *"invented a
+        timing theory... rewrote `always_ff` to `always_comb` and broke the
+        contract's 1-cycle latency."*
+        """
+        from .explain import explain_failure
+
+        view = self.requirements.get(req_uid)
+        if view is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"Unknown requirement '{req_uid}'. Use list_failing_requirements().")}
+        found = self.req_results.get(req_uid)
+        if found is None:
+            # The requirement text is still worth handing back: knowing what the
+            # design owes is useful even with no verdict to attach it to.
+            return {"is_action_executed": True, "requirement": view.brief(),
+                    "note": ("no per-requirement result is available from the "
+                             "last run, so there is no span, no boundary trace "
+                             "and no perturbation -- only what this requirement "
+                             "asks for.")}
+        result, trace = found
+        return {"is_action_executed": True, **explain_failure(
+            view=view, result=result, trace=trace or {},
+            contract=self.contract or {}, rtl_text=self.staged(),
+            vcd_path=self.vcd_path, dut_instance=self.dut_instance)}
+
+    def list_failing_requirements(self) -> list[dict]:
+        """Every requirement the last run decided against, with its own words.
+
+        Not check ids. The whole point of the view is that a finding arrives
+        naming the requirement it is about.
+        """
+        out = []
+        for uid, found in sorted(self.req_results.items()):
+            result = found[0] if isinstance(found, tuple) else found
+            view = self.requirements.get(uid)
+            ok = getattr(result, "ok", None)
+            out.append({
+                "req_uid": uid,
+                "verdict": "FAILS" if ok is False else ("passes" if ok else "UNCOVERED"),
+                "requirement": (view.text if view else "")[:200],
+                "check_said": (getattr(result, "detail", "") or "")[:160],
+                "ports": view.ports if view else [],
+            })
+        return out
 
     def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> Dict[str, Any]:
         """Stage a scenario the current stimulus never reaches. FREE, not a trial.
@@ -1524,10 +1655,20 @@ class RTLEditor:
         #: hiding the tool and leaving the agent to wonder why an uncovered
         #: requirement has no remedy.
         stimulus_stager: object | None = None,
+        #: `{req_uid: RequirementView}` from `explain.load_requirement_views`.
+        #: Empty leaves `explain`/`focus` registered and answering "unknown
+        #: requirement", which is the honest state for a backend with no
+        #: requirement artifacts -- and exactly the state the loop was always
+        #: in, silently.
+        requirements: dict | None = None,
+        #: The port contract, for `ports_read` and the perturbation's widths.
+        contract: dict | None = None,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self._stimulus_stager = stimulus_stager
+        self._requirements = dict(requirements or {})
+        self._contract = dict(contract or {})
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
         # Consecutive outer-loop rounds with no mismatch-count reduction before
@@ -1549,6 +1690,12 @@ class RTLEditor:
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
+        # THE REQUIREMENT SURFACE. Before these the loop was handed check ids
+        # and the whole spec as background, and asked to name the requirement
+        # behind a failure -- which it had to guess. B21 is what that cost.
+        toolkit.register_tool_function(self._tool_list_failing_requirements)
+        toolkit.register_tool_function(self._tool_explain)
+        toolkit.register_tool_function(self._tool_focus)
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
         # The STAGING surface. Edits are free and latch nothing; `commit` is the
@@ -1727,6 +1874,46 @@ class RTLEditor:
         self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
+    async def _tool_list_failing_requirements(self) -> ToolResponse:
+        """Every requirement the last run decided against or could not cover, in the requirement's OWN WORDS rather than as check ids. Start here."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        rows = self._session.list_failing_requirements()
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(rows, indent=2)}])
+
+    async def _tool_explain(self, req_uid: str) -> ToolResponse:
+        """What one requirement OWES, what its check objected to, and where to look: the span it governs, the boundary ports across that span, the transitions in it, the suspect blocks' INTERNAL signals from the waveform, and what single value change would have satisfied the check.
+
+        Read this before editing anything. It carries the requirement's own text
+        and its normalized activation, which no other tool gives you -- a
+        failing check tells you something is wrong at a port; only the
+        requirement tells you what the design was supposed to do there.
+
+        If it reports that NO single-value change satisfies the check, the
+        defect is TEMPORAL: the ordering or the timing, not a wrong value at one
+        edge. Do not go looking for a wrong constant.
+
+        Args:
+            req_uid: the requirement, e.g. "REQ-0031".
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.explain, req_uid)
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=2, default=str)}])
+
+    async def _tool_focus(self, req_uid: str) -> ToolResponse:
+        """Narrow the dataflow slice to ONE requirement's ports. With many requirements failing, an unfocused slice returns most of the design; this is what keeps it a slice. Costs no trial.
+
+        Args:
+            req_uid: the requirement to slice from, e.g. "REQ-0031".
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.focus, req_uid)
+        self._session._record_trajectory("focus", result=result, block_id=req_uid)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=2)}])
+
     async def _tool_add_stimulus(
         self, req_uid: str, what_the_scenario_needs: str
     ) -> ToolResponse:
@@ -1811,6 +1998,8 @@ class RTLEditor:
             child_names=child_names,
             rollback_on_regression=self._rollback_guard,
             stimulus_stager=self._stimulus_stager,
+            requirements=self._requirements,
+            contract=self._contract,
         )
 
         if tb_text is not None:

@@ -916,6 +916,11 @@ def failure_payload(suite_dir: Path) -> list[dict]:
     """
     payload: list[dict] = []
     for path in sorted((Path(suite_dir) / "results").glob("*.json")):
+        # `{tp}.trace.json` shares this directory and is the RECORDING, not a
+        # verdict. See `run._read_results` for the same exclusion and why the
+        # bare glob stopped being right.
+        if path.name.endswith(".trace.json"):
+            continue
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("status") != "FAIL":
             continue

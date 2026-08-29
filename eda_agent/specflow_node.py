@@ -546,9 +546,10 @@ async def run_specflow_node(
     # requirement reaches the debugger as a finding it cannot act on -- and
     # since coverage depends on what the design DOES, an uncovered requirement
     # can be the symptom of the very bug being hunted (#98).
+    contract = json.loads(contract_json) if contract_json else {}
     stager = SpecflowStimulusStager(
         run_dir=output_dir_per_run,
-        contract=json.loads(contract_json) if contract_json else {},
+        contract=contract,
         bins=built.bins,
         suite_dir=built.suite_dir, model_port=model_port,
     )
@@ -577,8 +578,17 @@ async def run_specflow_node(
             detail["history"].append("debug budget exhausted")
             return False, rtl_path.read_text(encoding="utf-8"), detail
 
+        # THE REQUIREMENT VIEW. Assembled from artifacts that all already
+        # existed and were never joined -- requirements.json for the text,
+        # normalized.json for the activation and expectation, oracles.json for
+        # the frozen check, the contract for the ports it reads. Without it the
+        # debugger sees check ids and is asked to name the requirement behind
+        # them, which is what B21 measured the cost of.
+        from .explain import load_requirement_views
+        views = load_requirement_views(output_dir_per_run, contract)
         editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
-                           stimulus_stager=stager)
+                           stimulus_stager=stager, requirements=views,
+                           contract=contract)
         _, repaired, used, _ = await editor.chat(
             spec=spec,
             output_dir_per_run=str(output_dir_per_run),

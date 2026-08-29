@@ -582,3 +582,65 @@ def test_uncovered_requirements_needs_EVERY_covering_testpoint_idle(tmp_path):
     assert _uncovered_requirements(["TP-0"], suite) == {"REQ-A"}
     assert _uncovered_requirements(["TP-0", "TP-1"], suite) == {"REQ-A", "REQ-B"}
     assert _uncovered_requirements([], suite) == set()
+
+
+# --------------------------------------------------- focus / explain on the session
+
+
+def test_focus_narrows_the_block_table_and_read_block_follows(tmp_path):
+    from eda_agent.explain import RequirementView
+    s = _session(tmp_path)
+    s.contract = {"io": [{"name": "b", "dir": "output", "width": 1},
+                         {"name": "c", "dir": "output", "width": 1}]}
+    s.requirements = {
+        "REQ-B": RequirementView(req_uid="REQ-B", text="b follows a", ports=["b"]),
+        "REQ-C": RequirementView(req_uid="REQ-C", text="c registers a", ports=["c"]),
+    }
+    out = s.focus("REQ-B")
+    assert out["is_action_executed"] and s.focused == "REQ-B"
+    ids = {b["id"] for b in out["suspect_blocks"]}
+    assert ids and ids == set(s.blocks_by_id)
+    # read_block still works against the narrowed table.
+    one = next(iter(ids))
+    assert "ERROR" not in s.read_block(one)
+    assert {b["id"] for b in s.focus("REQ-C")["suspect_blocks"]} != ids
+
+
+def test_focus_on_an_unknown_requirement_says_which_are_known(tmp_path):
+    from eda_agent.explain import RequirementView
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", ports=["b"])}
+    out = s.focus("REQ-NOPE")
+    assert not out["is_action_executed"] and "REQ-B" in out["error_msg"]
+
+
+def test_explain_without_a_result_still_returns_what_the_requirement_OWES(tmp_path):
+    """Knowing what the design owes is useful even with no verdict to attach it
+    to -- and it is the half the loop never had at all."""
+    from eda_agent.explain import RequirementView
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(
+        req_uid="REQ-B", text="b shall follow a", expectation="b is high")}
+    out = s.explain("REQ-B")
+    assert out["is_action_executed"]
+    assert out["requirement"]["requirement"] == "b shall follow a"
+    assert "no per-requirement result" in out["note"]
+
+
+def test_list_failing_requirements_reports_requirements_not_check_ids(tmp_path):
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None
+        detail: str = ""
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="b follows a",
+                                               ports=["b"])}
+    s.req_results = {"REQ-B": (R(False, "b fell early"), {})}
+    rows = s.list_failing_requirements()
+    assert rows == [{"req_uid": "REQ-B", "verdict": "FAILS",
+                     "requirement": "b follows a", "check_said": "b fell early",
+                     "ports": ["b"]}]

@@ -72,8 +72,19 @@ def _ensure_importable() -> None:
 
 
 def _read_results(results_dir: Path) -> dict[str, TestpointResult]:
+    """The per-testpoint VERDICT records, and only those.
+
+    `{tp}.trace.json` lives in the same directory and is a different artifact:
+    the recording the oracles decide over, with no `status` in it. It used to be
+    written only when `SPECFLOW_TRACE_INTERNALS` named a signal, so a bare
+    `*.json` glob happened to be right; now that the trace is unconditional it
+    would give every testpoint a second, statusless record and no testpoint
+    would ever read PASS.
+    """
     out: dict[str, TestpointResult] = {}
     for path in sorted(Path(results_dir).glob("*.json")):
+        if path.name.endswith(".trace.json"):
+            continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001

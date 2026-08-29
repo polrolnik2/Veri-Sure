@@ -251,6 +251,27 @@ def normalise_step(step: dict) -> tuple[dict, int, dict | None, int]:
     return dict(step), 1, None, 0
 
 
+def _sim_time() -> int | None:
+    """Simulator time now, in ns, or None outside a simulation.
+
+    RECORDED, never computed as `edge * period_ns`: stimulus steps carry holds
+    and durations, so the mapping from edge index to time is not uniform and a
+    computed one would be wrong exactly where a repair agent looks.
+
+    Why it has to exist at all: `_build_window_times` filters VCD clock-edge
+    TIMESTAMPS with `t <= t_star`, and an `OracleResult.edge` is an INDEX into
+    the recorded row list. Feeding an index of 0-100 to a filter over timestamps
+    in the thousands of nanoseconds silently collapses the window to the start
+    of the run -- the agent is shown the wrong ten cycles, with no error
+    anywhere. This is the lookup that closes that.
+    """
+    try:
+        from cocotb.utils import get_sim_time
+        return int(get_sim_time("ns"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _plain(value: Any) -> Any:
     """Make a cocotb BinaryValue (or anything) JSON-safe."""
     if isinstance(value, (int, float, str, bool)) or value is None:
@@ -337,7 +358,10 @@ class Env:
         #: Both sides already advance in lockstep, so this is a recording rather
         #: than a second simulation, and it is what lets a check compare
         #: SEQUENCES instead of one sampled point per stimulus vector.
-        self._trace: list[tuple[dict, dict]] = []
+        #: `(dut outputs, model outputs, step index, input bundle, sim time)`
+        #: per clock edge after reset. Both sides already advance in lockstep,
+        #: so this is a recording rather than a second simulation.
+        self._trace: list[tuple] = []
         #: Per-edge internal signals, when `SPECFLOW_TRACE_INTERNALS` names any.
         #: Empty and untouched otherwise -- see `_INTERNALS`.
         self._internals: list[tuple[dict, dict]] = []
@@ -721,6 +745,7 @@ class Env:
             # "normal-operation activation (nReset=1, rst=0) never occurred",
             # of a trace that was in normal operation almost throughout.
             self._bundle(self._inputs),
+            _sim_time(),
         ))
         if _INTERNALS:
             self._internals.append((
@@ -834,7 +859,10 @@ class Env:
         # IS an edge, so an empty list means "take it literally".
         offset = sum(verdict.dut_durations[:at]) if verdict.dut_durations else at
         edge = min(offset, len(self._trace) - 1)
-        _, _, step, inputs = self._trace[edge]
+        # Indexed, not unpacked: the row gained a simulator-time stamp and a
+        # fixed-arity unpack would break silently every time it gains another.
+        row = self._trace[edge]
+        step, inputs = row[2], row[3]
         return {"vector": step, **{k: _plain(v) for k, v in inputs.items()}}
 
     async def finish(self) -> None:
@@ -873,21 +901,30 @@ class Env:
         (self.results_dir / f"{self.tp_uid}.json").write_text(
             json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
-        if _INTERNALS:
-            (self.results_dir / f"{self.tp_uid}.trace.json").write_text(
-                json.dumps({
-                    "tp_uid": self.tp_uid,
-                    "signals": _INTERNALS,
-                    "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
-                    "edges": [
-                        {"edge": i, "step": t[2], "inputs": t[3],
-                         "dut": t[0], "model": t[1],
-                         "dut_internal": v[0], "model_internal": v[1]}
-                        for i, (t, v) in enumerate(zip(self._trace, self._internals))
-                    ],
-                }, indent=2, ensure_ascii=False, default=str) + "\n",
-                encoding="utf-8",
-            )
+        # UNCONDITIONAL. It used to be written only when
+        # `SPECFLOW_TRACE_INTERNALS` named something, which made the recording
+        # that DECIDES the design a side effect of asking for debug signals.
+        # Internals stay optional -- they are extra columns, not the trace.
+        edges = []
+        for i, t in enumerate(self._trace):
+            row = {"edge": i, "step": t[2], "inputs": t[3],
+                   "dut": t[0], "model": t[1]}
+            # The edge -> simulator-time lookup every VCD consumer needs.
+            if len(t) > 4 and t[4] is not None:
+                row["t"] = t[4]
+            if i < len(self._internals):
+                row["dut_internal"] = self._internals[i][0]
+                row["model_internal"] = self._internals[i][1]
+            edges.append(row)
+        (self.results_dir / f"{self.tp_uid}.trace.json").write_text(
+            json.dumps({
+                "tp_uid": self.tp_uid,
+                "signals": _INTERNALS,
+                "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
+                "edges": edges,
+            }, indent=2, ensure_ascii=False, default=str) + "\n",
+            encoding="utf-8",
+        )
 
         assert not self.sb.failed, (
             f"{self.tp_uid}: {len(self.sb.failed)} of {len(self.sb.invoked)} checks "

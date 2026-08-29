@@ -308,3 +308,29 @@ def test_tracing_can_be_turned_off(tmp_path):
     )
     assert outcome.build_ok, outcome.build_log
     assert outcome.wave_vcd is None
+
+
+def test_the_recording_is_not_mistaken_for_a_verdict(tmp_path):
+    """`{tp}.trace.json` shares the results directory with `{tp}.json` and is a
+    DIFFERENT artifact: the recording the oracles decide over, with no `status`.
+
+    While the trace was written only when SPECFLOW_TRACE_INTERNALS named a
+    signal, a bare `*.json` glob happened to be right. Making it unconditional
+    gave every testpoint a second, statusless record -- and no testpoint read
+    PASS again. 26 tests caught it; this one names it.
+    """
+    from specflow.run import _read_results
+
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "TP-0000.json").write_text(json.dumps({
+        "tp_uid": "TP-0000", "status": "PASS", "checks_invoked": ["CHK-0000"],
+        "checks_failed": [], "signals_failed": [], "timeouts": [],
+        "bins_hit": [], "mismatches": []}))
+    (results / "TP-0000.trace.json").write_text(json.dumps({
+        "tp_uid": "TP-0000", "signals": [], "outputs": ["b"],
+        "edges": [{"edge": 0, "t": 100, "inputs": {}, "dut": {"b": 0}}]}))
+
+    out = _read_results(results)
+    assert set(out) == {"TP-0000"}
+    assert out["TP-0000"].status == "PASS"
