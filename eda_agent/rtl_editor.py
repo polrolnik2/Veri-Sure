@@ -409,10 +409,31 @@ Workflow (repeat until pass):
 3) Call _tool_list_suspect_blocks(), then _tool_read_block(block_id) for the most
    relevant one. Never guess a block_id -- list them first; an invented id costs
    a whole iteration and returns nothing.
-4) Make ONE small change in ONE block via _tool_replace_block(block_id, new_code).
-5) Immediately call _tool_run_simulation() and iterate on the new trace summary.
+4) STAGE the change. _tool_replace_block, _tool_add_block and _tool_remove_block
+   all edit a staged buffer: they do not compile, do not simulate, and DO NOT
+   COST A TRIAL. So a repair that needs several blocks to change together is one
+   batch, not several rejected attempts -- stage every part of it before
+   committing anything.
+5) _tool_check_staged() -- free and unlimited -- settles syntax and driver
+   problems before you pay for a build. Use it; a commit that fails to compile
+   costs a trial for something this would have told you for nothing.
+6) _tool_commit() compiles and simulates the batch. THIS IS THE TRIAL, and the
+   only one. If it improves, the batch is latched. If it does not, the accepted
+   RTL is untouched and YOUR STAGED EDITS ARE KEPT -- adjust them and commit
+   again rather than starting over. _tool_discard_staged() throws the batch away
+   and costs nothing.
 
 Rules:
+- Edits are free; commits are not. Think in batches, and commit a coherent
+  change rather than a fragment.
+- _tool_read_block shows the STAGED text with the line numbers a commit would
+  write, so it always reflects your own pending edits. _tool_list_suspect_blocks
+  describes the last ACCEPTED design and does not move until a commit lands.
+- Removing a block retires its id: reading it afterwards says "removed in this
+  staged batch", which is your own edit and not an error.
+- If a removal takes away a signal's last driver, add the replacement driver in
+  THE SAME batch. Nothing warns you at simulation -- the signal simply goes X
+  and every check that reads it stops deciding.
 - Do not modify the testbench. Only modify the RTL code.
 - Preserve the module interface and the contract's timing assumptions.
 - Only modify code inside suspect blocks.
@@ -426,7 +447,13 @@ You MUST only modify code inside suspect blocks.
 Use tools:
 - _tool_list_suspect_blocks()
 - _tool_read_block(block_id)
-- _tool_replace_block(block_id, new_code)
+- _tool_replace_block(block_id, new_code)   stage a replacement   free
+- _tool_add_block(anchor_id, code)          stage a NEW block after anchor_id,
+                                            or at module end with "endmodule"
+- _tool_remove_block(block_id)              stage a deletion      free
+- _tool_check_staged()                      syntax + drivers      free, unlimited
+- _tool_discard_staged()                    back to accepted RTL  free
+- _tool_commit()                            build + simulate      ONE TRIAL
 - _tool_run_simulation()
 
 These are the exact names the tool schema exposes. Earlier revisions of this
@@ -613,10 +640,17 @@ class _EditSession:
         buf = self.staged()
         found = buf.count(anchor)
         if found == 0:
+            # TWO causes, and naming only one of them sends the agent looking in
+            # the wrong place. Within a batch it means an earlier staged edit
+            # overlapped this block; after a commit LATCHED it means the block
+            # table still describes the design from before that commit, which
+            # `_refresh_trace` only rebuilds when the run still has mismatches.
             return {"is_action_executed": False, "error_msg": (
-                f"Cannot {what}: its text is no longer in the staged buffer, so "
-                f"an earlier staged edit overlapped it. Re-read the block and "
-                f"edit what is there now, or discard_staged() and start over.")}
+                f"Cannot {what}: its text is not in the buffer. Either an earlier "
+                f"staged edit overlapped it, or a commit has latched since the "
+                f"block list was built. read_block({what.split()[-1]!r}) shows "
+                f"what is actually there; list_suspect_blocks() rebuilds the "
+                f"list against the accepted design.")}
         if found > 1:
             return {"is_action_executed": False, "error_msg": (
                 f"Cannot {what}: its text appears {found} times in the staged "
@@ -738,18 +772,21 @@ class _EditSession:
         self.retired_ids.clear()
         return {"is_action_executed": True}
 
-    def check_staged(self) -> Dict[str, Any]:
-        """Static only: syntax and drivers. No simulation, NO TRIAL.
+    def _static_findings(self, text: str) -> tuple[bool, str, list[str], list[str]]:
+        """Syntax and drivers for `text`, WITHOUT touching `check_calls`.
 
-        The expensive thing is the suite; syntax and drivers cost about a
-        second. Settling those for free, then spending the trial on the question
-        only simulation can answer, prices each check at what it actually costs
-        -- and is what makes "a failed commit costs a trial" a fair rule rather
-        than charging a typo the same as a wrong design hypothesis.
+        Shared by `check_staged` (the agent's dry run, which counts) and by
+        `commit`'s pre-flight (which must not). `check_calls` is reported as a
+        finding about the agent -- fifty dry runs against two commits -- so
+        counting commit's own internal checks there would corrupt the very
+        number it exists to expose.
+
+        Written to a scratch file because both `check_syntax` and
+        `multidriven_signals` take a PATH and shell out to Verilator. The
+        accepted RTL is never the file they read.
         """
-        self.check_calls += 1
         scratch = Path(self.output_dir) / "staged.sv"
-        scratch.write_text(self.staged(), encoding="utf-8")
+        scratch.write_text(text, encoding="utf-8")
         ok, out = check_syntax(str(scratch))
         # The AUTHORITATIVE multi-driver check, which `driver_warnings` only
         # approximates because it cannot afford Verilator per edit.
@@ -761,10 +798,149 @@ class _EditSession:
         if multi:
             warnings.append(f"{', '.join(multi)} have MORE THAN ONE continuous "
                             f"driver (Verilator)")
+        return ok, out, warnings, multi
+
+    def check_staged(self) -> Dict[str, Any]:
+        """Static only: syntax and drivers. No simulation, NO TRIAL.
+
+        The expensive thing is the suite; syntax and drivers cost about a
+        second. Settling those for free, then spending the trial on the question
+        only simulation can answer, prices each check at what it actually costs
+        -- and is what makes "a failed commit costs a trial" a fair rule rather
+        than charging a typo the same as a wrong design hypothesis.
+        """
+        self.check_calls += 1
+        ok, out, warnings, multi = self._static_findings(self.staged())
         return {"is_syntax_correct": ok, "syntax_output": out,
                 "warnings": warnings, "multidriven": multi,
                 "staged": self.staged_rtl is not None,
                 "check_calls": self.check_calls}
+
+    def commit(self) -> Dict[str, Any]:
+        """Build and run the STAGED buffer. ONE TRIAL. Latch, or keep the batch.
+
+        The trial is here and not on the edits, which is what `max_trials`
+        always claimed to count: 30 compile-and-test cycles, with the edits
+        inside each one free. A budget counting individual edits is an order of
+        magnitude tighter than one counting rounds, and it charged an agent for
+        thinking rather than for simulating.
+
+        WHAT A FAILED COMMIT COSTS: a trial, and nothing else. The accepted RTL
+        is byte-identical afterwards and THE STAGED BUFFER SURVIVES, so the
+        agent adjusts its batch rather than starting over from the baseline.
+        That is what makes `commit` itself the test -- a separate `test_staged`
+        would only be a commit that refuses to bank a good result.
+
+        The mechanism is a write-run-restore rather than a build at a scratch
+        path, and the difference is worth naming: `sim_review` derives the RTL
+        it compiles from its run directory (`{output_path_per_run}/rtl.sv`), so
+        a genuinely separate build location means a separate run directory --
+        and on the specflow backend there is no `tb.sv` to copy into one, the
+        suite lives elsewhere. The OBSERVABLE contract is the same and is
+        pinned: after a commit that does not latch, `read_rtl()` returns exactly
+        what it returned before.
+
+        The static pre-flight is not redundant with the judge. The judge checks
+        syntax and MULTI-driver; only here is the mirror case checked -- a
+        removal that took away a signal's LAST driver. Verilator runs
+        `-Wno-fatal` so UNDRIVEN does not fail the build: the signal becomes X,
+        the oracle X-guard turns that into an abstention, and the defect would
+        surface only as coverage quietly falling with nothing naming the cause.
+        """
+        result = self._base_result()
+        if self.staged_rtl is None:
+            result["error_msg"] = (
+                "Nothing is staged, so there is nothing to commit. No trial was "
+                "consumed. Use add_block/replace_block/remove_block first.")
+            return result
+
+        # REFUSED BEFORE THE COUNTER MOVES, and staging stays open afterwards so
+        # the agent can still be asked to explain itself.
+        if self.action_calls >= self.max_trials:
+            result["error_msg"] = (
+                f"Reached maximum debug trials ({self.max_trials}); refusing to "
+                f"commit. Staged edits are kept and staging remains open.")
+            return result
+        self.action_calls += 1
+
+        accepted = self.read_rtl()
+        staged = self.staged_rtl
+        pre_multi = set(multidriven_signals(self.rtl_path))
+
+        ok, syntax_out, warnings, multi = self._static_findings(staged)
+        result["is_syntax_correct"] = ok
+        result["syntax_output"] = syntax_out
+        result["warnings"] = warnings
+        result["action_calls"] = self.action_calls
+        result["trials_left"] = max(0, self.max_trials - self.action_calls)
+        result["staged_kept"] = True
+        result["check_calls"] = self.check_calls
+
+        if not ok:
+            result["error_msg"] = (
+                "Commit rejected: the staged buffer does not compile. This cost "
+                "a trial -- check_staged() would have told you the same thing "
+                "for free. The accepted RTL is untouched and your staged edits "
+                "are kept; fix them and commit again.")
+            return result
+
+        introduced = sorted(set(multi) - pre_multi)
+        if introduced:
+            result["error_msg"] = (
+                "Commit rejected: the batch gave " + ", ".join(introduced)
+                + " MORE THAN ONE continuous driver. The accepted RTL is "
+                "untouched and your staged edits are kept. Remove the duplicate "
+                "assignment -- most often the replacement re-declares something "
+                "that already exists outside the block it replaced.")
+            return result
+
+        lost = self.undriven_signals(staged)
+        if lost:
+            result["error_msg"] = (
+                "Commit rejected: " + ", ".join(lost)
+                + " are still read but the batch removed their LAST driver. "
+                "Verilator runs -Wno-fatal, so this would not have failed the "
+                "build -- the signal would go X, every check reading it would "
+                "abstain, and coverage would fall with nothing naming the "
+                "cause. Add the replacement driver to this batch, or restore "
+                "the block you removed.")
+            return result
+
+        if self.child_names:
+            went_dark = _child_outputs_gone_dark(accepted, staged, self.child_names)
+            if went_dark:
+                result["error_msg"] = (
+                    "Commit rejected: it left " + ", ".join(sorted(went_dark))
+                    + " READ BY NOTHING. That port carries a CHILD'S RESULT into "
+                    "this glue, and the batch recomputed the child's function "
+                    "inline instead of routing its output. Restore the "
+                    "assignment that consumes the port.")
+                return result
+
+        self.write_rtl(staged)
+        # The judge owns the ratchet, the fail-time allowance, `best_rtl` and the
+        # restore. Reusing it keeps ONE accept criterion rather than a second
+        # one here that would drift away from it.
+        judged = self._judge_replace_action_execution(
+            old_file_content=accepted, pre_multidriven=pre_multi,
+        )
+        judged["action_calls"] = self.action_calls
+        judged["trials_left"] = max(0, self.max_trials - self.action_calls)
+        judged["check_calls"] = self.check_calls
+        judged["warnings"] = warnings
+        if judged.get("is_action_executed"):
+            # LATCHED: the accepted RTL now IS the staged text, so there is no
+            # longer a batch pending. Anything staged next anchors on what was
+            # just banked.
+            self.staged_rtl = None
+            self.staged_text.clear()
+            self.retired_ids.clear()
+            judged["staged_kept"] = False
+        else:
+            # The judge restored the accepted bytes. The batch is NOT discarded:
+            # losing the agent's work is the cost staging exists to remove.
+            judged["staged_kept"] = True
+        return judged
 
     def note_best(self, mismatch_cnt: int, rtl_text: str) -> bool:
         """Record `rtl_text` if it is the best seen. Returns True when it is.
@@ -825,11 +1001,31 @@ class _EditSession:
         return list(self.trace_report.get("suspect_blocks") or [])
 
     def read_block(self, block_id: str) -> str:
-        if not self.blocks_by_id or block_id not in self.blocks_by_id:
+        """The block AS STAGED, with the line numbers a commit would write.
+
+        Reading the trace report's copy instead would show the agent the text it
+        edited away from -- and its line numbers, which one staged edit above it
+        has already invalidated. Locating the block in the staged buffer makes
+        both true at once, which is what lets an agent refine its own batch
+        instead of guessing what is currently in it.
+        """
+        if block_id in self.retired_ids:
+            return (f"ERROR: '{block_id}' was removed in this staged batch. It is "
+                    f"not an unknown block -- you deleted it. discard_staged() "
+                    f"brings it back along with the rest of the batch.")
+        text = self._anchor_for(block_id)
+        if text is None:
             return f"ERROR: Unknown block_id '{block_id}'."
-        block = self.blocks_by_id[block_id]
-        lines = block.code.splitlines()
-        return "\n".join(f"{block.start_line + i}: {line}" for i, line in enumerate(lines)) + "\n"
+        buf = self.staged()
+        idx = buf.find(text)
+        if idx < 0:
+            return (f"ERROR: '{block_id}' is no longer in the staged buffer -- an "
+                    f"earlier staged edit overlapped it. list_suspect_blocks() "
+                    f"describes the last ACCEPTED design; discard_staged() "
+                    f"returns to it.")
+        start = buf.count("\n", 0, idx) + 1
+        lines = text.splitlines()
+        return "\n".join(f"{start + i}: {line}" for i, line in enumerate(lines)) + "\n"
 
     def _refresh_trace(self, *, sim_log_json: str) -> None:
         report, suspect_blocks = build_trace_report(
@@ -1165,41 +1361,13 @@ class _EditSession:
             result["trace_summary"] = self.trace_summary()
         return result
 
-    def replace_block(self, block_id: str, new_code: str) -> Dict[str, Any]:
-        if not self.blocks_by_id or block_id not in self.blocks_by_id:
-            return {
-                "is_action_executed": False,
-                "error_msg": f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.",
-            }
-
-        old_file_content = self.read_rtl()
-        old_lines = old_file_content.splitlines()
-        # Snapshot BEFORE the splice so the guard can reject only what this edit
-        # introduces, rather than refusing to work on RTL that arrived broken.
-        pre_multidriven = multidriven_signals(self.rtl_path)
-        block = self.blocks_by_id[block_id]
-        start = block.start_line - 1
-        end = block.end_line - 1
-        if start < 0 or end >= len(old_lines) or start > end:
-            return {
-                "is_action_executed": False,
-                "error_msg": f"Invalid block range for {block_id}: {block.start_line}-{block.end_line}.",
-            }
-
-        self.action_calls += 1
-        if self.action_calls > self.max_trials:
-            return {
-                "is_action_executed": False,
-                "error_msg": "Reached maximum debug trials; refusing further edits.",
-            }
-
-        new_block_lines = new_code.rstrip("\n").splitlines()
-        new_lines = old_lines[:start] + new_block_lines + old_lines[end + 1 :]
-        self.write_rtl("\n".join(new_lines) + ("\n" if old_file_content.endswith("\n") else ""))
-
-        return self._judge_replace_action_execution(
-            old_file_content=old_file_content, pre_multidriven=pre_multidriven,
-        )
+    # `replace_block` -- the immediate-latch splice -- is DELETED, not kept for
+    # compatibility. It spliced by LINE NUMBER, wrote `rtl_path` on the spot,
+    # simulated, and rolled back on regression; every one of those is wrong now.
+    # Line numbers shift under a staged edit above them, writing on the spot is
+    # what made rollback necessary, and rolling back is what destroyed the
+    # agent's work. `stage_replace` + `commit` replace it. A method left here
+    # would still latch, silently, from any caller that had not been updated.
 
 
 def _render_continue_debug_prompt(session: "_EditSession") -> str:
@@ -1230,13 +1398,28 @@ def _render_continue_debug_prompt(session: "_EditSession") -> str:
         if session.last_fail_time is not None else ""
     )
 
+    staged_note = ""
+    if session.staged_rtl is not None:
+        pending = sorted(set(session.staged_text) | set(session.retired_ids))
+        staged_note = (
+            "You have edits STAGED and not yet committed"
+            + (f" (blocks touched: {', '.join(pending)})" if pending else "")
+            + ". They are not in the design until _tool_commit() latches them.\n\n"
+        )
+
     return (
         f"{last_action_block}"
-        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n\n"
+        f"{staged_note}"
+        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n"
+        f"Trials used: {session.action_calls}/{session.max_trials} "
+        f"(a trial is a commit; edits and check_staged are free).\n\n"
         "Continue debugging. Preserve the contract and module interface. If mismatches remain, "
-        "pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) "
-        "once, then run_simulation(). Do NOT call generate_response until run_simulation() reports "
-        "is_sim_pass=true with 0 mismatches — an unverified claim of success is not accepted as done."
+        "pick a suspect block and call _tool_read_block(block_id), stage every part of the fix with "
+        "_tool_replace_block / _tool_add_block / _tool_remove_block, settle syntax and drivers with "
+        "_tool_check_staged(), then call _tool_commit() ONCE for the whole batch. A commit that does "
+        "not improve keeps your staged edits — adjust them rather than starting over. Do NOT call "
+        "generate_response until a commit reports is_sim_pass=true with 0 mismatches — an unverified "
+        "claim of success is not accepted as done."
     )
 
 
@@ -1294,7 +1477,15 @@ class RTLEditor:
         toolkit = GuidingToolkit()
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
+        # The STAGING surface. Edits are free and latch nothing; `commit` is the
+        # trial. Without these registered the staged buffer is unreachable --
+        # the methods exist on the session and no agent can call them.
         toolkit.register_tool_function(self._tool_replace_block)
+        toolkit.register_tool_function(self._tool_add_block)
+        toolkit.register_tool_function(self._tool_remove_block)
+        toolkit.register_tool_function(self._tool_check_staged)
+        toolkit.register_tool_function(self._tool_discard_staged)
+        toolkit.register_tool_function(self._tool_commit)
         toolkit.register_tool_function(self._tool_run_simulation)
 
         # Held on the instance so `usage()` can read the cumulative counters
@@ -1339,7 +1530,21 @@ class RTLEditor:
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         blocks = self._session.list_suspect_blocks()
-        return ToolResponse(content=[{"type": "text", "text": json.dumps(blocks, indent=2)}])
+        # §12: the slice comes from a trace report built on the last ACCEPTED
+        # RTL, so after several staged edits it describes an older design. That
+        # is acceptable -- the slice is a hint, not an authority -- but it has
+        # to SAY so, or the agent reads stale line numbers as current ones.
+        if self._session.staged_rtl is not None:
+            payload = {
+                "note": ("This list was built from the last ACCEPTED RTL and "
+                         "does not include your staged edits. Line numbers here "
+                         "predate them; read_block(block_id) shows the staged "
+                         "text at the line numbers a commit would write."),
+                "blocks": blocks,
+            }
+        else:
+            payload = blocks
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(payload, indent=2)}])
 
     async def _tool_read_block(self, block_id: str) -> ToolResponse:
         """Read a suspect block by id with line numbers."""
@@ -1368,12 +1573,11 @@ class RTLEditor:
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
-        """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
+        """Stage a replacement for a suspect block. Free: no compile, no simulation, no trial. Call commit() to build and test the batch."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
-        blk = (self._session.blocks_by_id or {}).get(block_id)
-        before = getattr(blk, "code", "") if blk is not None else ""
-        result = await asyncio.to_thread(self._session.replace_block, block_id, new_code)
+        before = self._session._anchor_for(block_id) or ""
+        result = await asyncio.to_thread(self._session.stage_replace, block_id, new_code)
         # The DIFF, not the whole file: what the model actually tried is the
         # thing that was never recorded, and it is what a post-mortem needs.
         try:
@@ -1394,6 +1598,55 @@ class RTLEditor:
         )
         # Even if the action was rolled back, return the latest available trace pointer/summary
         # so the agent can re-ground itself quickly.
+        if self._session.trace_report:
+            result.setdefault("trace_summary", self._session.trace_summary())
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_add_block(self, anchor_id: str, code: str) -> ToolResponse:
+        """Stage a NEW block after block `anchor_id`, or at module end when anchor_id is "endmodule". Free: no compile, no simulation, no trial."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.stage_add, anchor_id, code)
+        self._session._record_trajectory("add_block", result=result, block_id=anchor_id,
+                                         diff=code)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_remove_block(self, block_id: str) -> ToolResponse:
+        """Stage the DELETION of a suspect block. Free: no compile, no simulation, no trial. Its id is then retired, not unknown."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        before = self._session._anchor_for(block_id) or ""
+        result = await asyncio.to_thread(self._session.stage_remove, block_id)
+        self._session._record_trajectory("remove_block", result=result,
+                                         block_id=block_id, diff=before)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_check_staged(self) -> ToolResponse:
+        """Syntax and driver check on the staged batch. Static only: no simulation and NO TRIAL, so it is free and unlimited."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.check_staged)
+        self._session._record_trajectory("check_staged", result=result)
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_discard_staged(self) -> ToolResponse:
+        """Throw away every staged edit and return to the last accepted RTL. Costs no trial."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.discard_staged)
+        self._session._record_trajectory("discard_staged", result=result)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_commit(self) -> ToolResponse:
+        """Compile and simulate the staged batch. THIS IS THE TRIAL. Improved -> latched; not improved -> the accepted RTL is untouched and your staged edits are kept."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.commit)
+        self._session._record_trajectory("commit", result=result)
         if self._session.trace_report:
             result.setdefault("trace_summary", self._session.trace_summary())
         self._session.last_action_result = result
