@@ -13,9 +13,9 @@ the shape index arithmetic makes easiest.
 
 from __future__ import annotations
 
-from specflow.refmodel.temporal import (after, eventually, never, nexttime,
-                                        pulse, sequence, stable, throughout,
-                                        until, worst)
+from specflow.refmodel.temporal import (after, edges, eventually, never,
+                                        nexttime, pulse, sequence, stable,
+                                        throughout, until, worst)
 from specflow.refmodel.verdict import truncated
 
 
@@ -403,3 +403,120 @@ def test_nexttime_is_already_after_the_activation_and_says_so_when_overridden():
     ok, _, detail = nexttime(w, _b, after_activation=False)
     assert ok is True, "the verdict is unchanged"
     assert "ignored" in detail and "`##1`" in detail
+
+
+# ------------------------------------------------ SVA soundness fixes (§17.2)
+# Each pin below is a case that was WRONG before the fix. The comment on each
+# says what it returned, because a pin whose failure mode is not written down
+# gets "corrected" back to the defect by the next reader.
+
+
+def test_an_empty_row_set_is_unknown_in_every_window_operator():
+    """RETURNED `True` FROM `throughout` AND `never`, WHICH IS A VACUOUS PASS.
+
+    `after_activation=True` on a one-row window leaves `w.body` empty. An
+    invariant that held over zero rows did not hold; a prohibition that was not
+    violated over zero rows was not tested. `stable` already guarded this and
+    the other three did not, so the module written to remove vacuous passes
+    contained one -- reachable, measured on c1-i2c, by 39 of 110 oracles, which
+    call `throughout` or `never` with `after_activation=`.
+    """
+    # The activation on the LAST row of the trace: `after` seeds `rows` with
+    # the trigger and never appends, so `body` is empty.
+    w = after(_t3((0, 0, 0, 0), (2, 1, 1, 0)), _a)[0]
+    assert w.body == [], "the fixture must actually produce an empty body"
+    for name, verdict in (
+        ("throughout", throughout(w, lambda r: False, after_activation=True)),
+        ("never", never(w, lambda r: True, after_activation=True)),
+        ("stable", stable(w, "b", after_activation=True)),
+        ("pulse", pulse(w, "b", after_activation=True)),
+    ):
+        assert verdict[0] is None, f"{name} decided something over zero rows"
+        assert "no rows" in verdict[2], f"{name} does not say why"
+
+
+def test_throughout_and_never_still_decide_when_there_are_rows():
+    """The counter-case: the empty guard must not swallow a real verdict."""
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    assert throughout(w, _b)[0] is False, "b is 0 at edge 2"
+    assert throughout(w, lambda r: True)[0] is True
+    assert never(w, _b)[0] is False, "b IS 1 at the activation"
+    assert never(w, lambda r: False)[0] is True
+
+
+def test_pulse_needs_evidence_of_a_rise_not_just_an_active_value():
+    """RETURNED `(True, 'pulsed once for 1 edge(s)')` FOR A PORT ALREADY HIGH.
+
+    The window opens while `b` is already 1 and `b` never rises inside it, so
+    no pulse occurred there -- but the run was counted and the check passed the
+    exact design it exists to catch. `w.prev` is the evidence: it is `$past` at
+    the activation, and it says the port was already active.
+    """
+    w = after(_t3((0, 0, 1, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    assert w.prev is not None and w.prev["outputs"]["b"] == 1
+    ok, _, detail = pulse(w, "b")
+    assert ok is None, "no rise was witnessed, so the width is not measurable"
+    assert "already 1 before the window" in detail
+
+
+def test_pulse_accepts_a_rise_at_the_first_row_it_looks_at():
+    """The counter-case, and the reason the guard reads `prev` rather than just
+    `rows[0]`: a port that rises exactly as the window opens HAS pulsed, and
+    convicting it would trade the vacuity for over-strictness."""
+    w = after(_t3((0, 0, 0, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    assert w.prev["outputs"]["b"] == 0, "it was at rest before the window"
+    ok, edge, _ = pulse(w, "b")
+    assert ok is True and edge == 2, "and the edge names where it BEGAN"
+
+
+def test_pulse_at_the_very_start_of_a_trace_is_not_convicted():
+    """No preceding sample is not evidence of a missing rise. A window opening
+    on the trace's first row has `prev is None` -- the design has just come out
+    of reset, and a port at its active value there has genuinely just
+    asserted."""
+    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    assert w.prev is None
+    assert pulse(w, "b")[0] is True
+
+
+def test_edges_skips_a_row_that_carries_no_sample():
+    """RAISED `TypeError` ON rise/fall, AND REPORTED A PHANTOM EDGE ON change.
+
+    `_val` returns `None` both for a port absent from the row and for one the
+    harness could not read -- a DUT not exposing a declared output samples as
+    `None`. Neither is a transition. `None > 0` killed the whole check on
+    rise/fall; on change it was quieter and worse, reporting an edge where the
+    sample went missing and another where it came back.
+    """
+    trace = [{"edge": 0, "inputs": {"a": 0}, "outputs": {}},
+             {"edge": 1, "inputs": {}, "outputs": {}},
+             {"edge": 2, "inputs": {"a": 1}, "outputs": {}}]
+    assert edges(trace, "a", "rise") == {2}, "one rise, 0 -> 1, across the gap"
+    assert edges(trace, "a", "fall") == set()
+    assert edges(trace, "a", "change") == {2}, "NOT {1}, the row with no sample"
+
+
+def test_worst_names_the_furthest_window_on_the_all_passing_path():
+    """RETURNED THE FIRST. The failing and unknown paths name the EARLIEST
+    offending window, because the first counterexample explains the rest. A
+    pass has no counterexample, so the useful thing to name is how far the
+    evidence reached -- naming the first told a reader the requirement held at
+    the earliest place it could have, which reads as weaker evidence than was
+    gathered."""
+    assert worst([(True, 3, "first"), (True, 9, "last")]) == (True, 9, "last")
+    assert worst([(True, 3, "p"), (False, 9, "f")])[1] == 9, "failure wins"
+    assert worst([(None, 3, "u"), (True, 9, "p")])[1] == 3, "earliest unknown"
+
+
+def test_the_two_untils_state_one_release_rule_between_them():
+    """`after(..., until=)` DEFINES a window and skips the trigger row, so a
+    release already true at the activation cannot collapse it to nothing. The
+    `until()` OPERATOR asserts inside a window someone else defined, so it
+    reads every row it is handed. Both are right; the pin exists because two
+    operators spelled the same way, differing silently, is how a check answers
+    a question nobody asked."""
+    trace = _t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 1, 1, 0), (6, 0, 0, 0))
+    w = after(trace, _a, until=_b)[0]
+    assert [r["edge"] for r in w.rows] == [0, 2, 4], "the release AT 0 is skipped"
+    assert until(w, lambda r: True, _b)[1] == 0, "the operator reads row 0"
+    assert until(w, lambda r: True, _b, after_activation=True)[1] == 4

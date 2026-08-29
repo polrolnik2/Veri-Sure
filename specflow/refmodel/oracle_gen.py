@@ -424,7 +424,9 @@ fails EVERY design or passes every design depending only on which way the port
 happened to sit at that instant -- and on one measured run those two populations
 were 79% and 83% exactly this shape.
 
-THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
+THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock.
+They are SVA-SHAPED, NOT SVA -- the eight numbered differences further
+down are the ones that will bite you:
 
   after(t, a, until=b)          `a |-> ...` up to `b` -- the antecedent window
   eventually(w, p)              `p` at SOME row of it        -- weak
@@ -446,8 +448,11 @@ THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock:
   w.value(port)                 the sampled value AT the activation
   w.past(port)                  `$past(port)` -- its value the row before
   first_match(windows)          `first_match` -- the first attempt only
-  after(t, a, overlap=True)     SVA's attempt model: a new attempt at every
-                                rise, so they run CONCURRENTLY
+  after(t, a, overlap=True)     windows may OVERLAP in extent -- the scan for
+                                the next one resumes at the row after this
+                                window OPENED rather than after it closed.
+                                NOT SVA's attempt model: a window still starts
+                                only on a RISING activation, in both modes.
   worst(verdicts)               fold many attempts, failure first
 
 TWO THINGS ARE DELIBERATELY ABSENT AND YOU SHOULD NOT WANT THEM.
@@ -480,7 +485,7 @@ THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
     obligations.
 
 Write the check the way you would write the assertion, and reach for the
-operator you would reach for in SVA. FOUR PLACES THE ANALOGY BREAKS, and the
+operator you would reach for in SVA. EIGHT PLACES THE ANALOGY BREAKS, and the
 third is the one that bites:
 
   1. `throughout(w, p)` takes a WINDOW and a PREDICATE, where SVA takes a
@@ -503,6 +508,36 @@ third is the one that bites:
      is defined on the LSB; `edges(..., "rise")` means the value INCREASED. On
      a 1-bit port those coincide exactly, which is every port these
      requirements are about. On a wider one, say what you mean with "change".
+  5. AN ANTECEDENT THAT NEVER MATCHES IS UNKNOWN HERE, NOT A PASS. `a |-> b`
+     with no matching `a` is VACUOUSLY TRUE in SVA and only `cover property`
+     reports the miss. `worst([])` returns UNKNOWN instead, because a check
+     that decided nothing must not read as a check that passed. You do not
+     have to do anything about this -- just do not write a fallback `return
+     True` for "the activation never occurred", which would reintroduce
+     exactly the vacuous pass the operator refuses.
+  6. AN INCOMPLETE WINDOW IS UNKNOWN HERE TOO. SVA passes attempts still open
+     when the simulation ends; a window that ran off the end of the trace
+     returns UNKNOWN. Same reason as 5.
+  7. THERE IS NO `disable iff`, and no `[->n]` goto repetition. Reset
+     exclusion goes in your activation predicate, by hand. "The nth
+     occurrence" is not expressible -- note that this is NOT the cycle-count
+     rule below, which is a separate and deliberate omission; `[->n]` is
+     simply not built yet, so write the requirement without it or say in your
+     reasoning that you could not.
+  8. `until` IS SVA's `until`, NOT `until_with`: `holds` need not be true on
+     the row where `release` fires, because the release is tested first.
+     There is no `until_with`.
+
+TWO OPERATORS ABSTAIN WHERE YOU MIGHT EXPECT A VERDICT, AND BOTH ARE ON
+PURPOSE. `throughout`, `never`, `stable` and `pulse` over ZERO rows -- which
+is what `after_activation=True` gives you on a one-row window -- return
+UNKNOWN, because an invariant that held over no rows did not hold. And `pulse`
+returns UNKNOWN when the port was ALREADY at its active value before the
+window opened: no rise was witnessed there, so the width is not measurable,
+and counting it let a port stuck high report "pulsed once". If you need the
+pulse and the window keeps opening too late, put
+`edges(trace, "port", "rise")` in the ACTIVATION rather than widening the
+check.
 
 GIVE `after` AN `until`. Without one the window ends where the activation
 does, so a check looking for a later effect sees nothing and fails -- which is

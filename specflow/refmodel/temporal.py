@@ -34,6 +34,12 @@ against seven phrases ("end of trace", "never asserted", ...). An author who
 words it differently is scored as having found a real bug. A window that closes
 by running out of trace returns UNKNOWN here, once, and says so in wording
 `truncated()` already recognises.
+
+THIS IS AN SVA-SHAPED VOCABULARY, NOT SVA. `docs/sva-divergence.md` is the
+complete list of where the two differ -- five places that were defects and are
+now fixed, and ten that are deliberate. Read it before "correcting" an operator
+toward SVA semantics: the abstentions especially are choices, not oversights,
+and SVA's answer in several of them is a vacuous pass this pipeline refuses.
 """
 
 from __future__ import annotations
@@ -151,6 +157,17 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
     one the two readings differ and `change` is what is usually meant.
     Documented rather than rejected here, and warned about at normalisation
     where the port width is known.
+
+    A ROW THAT CARRIES NO SAMPLE OF `port` IS SKIPPED, and `prev` is left
+    standing. `_val` returns `None` both for a port absent from the row and for
+    one the harness could not read -- a DUT that does not expose a declared
+    output samples as `None` -- and neither is a transition. Comparing that
+    `None` raised `TypeError: '>' not supported between 'NoneType' and 'int'`
+    on `rise`/`fall`, killing the whole check; on `change` it was quieter and
+    worse, reporting an edge at the row where the sample went missing and
+    another where it came back. Skipping means "we did not look here", so
+    `0, <absent>, 1` is one rise at the third row rather than two changes at the
+    second and third.
     """
     if direction not in EDGES:
         raise ValueError(f"direction must be one of {EDGES}, got {direction!r}")
@@ -158,6 +175,8 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
     prev = None
     for row in trace:
         now = _val(row, port)
+        if now is None:
+            continue
         if prev is not None and now != prev:
             if (direction == "change"
                     or (direction == "rise" and now > prev)
@@ -177,6 +196,22 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
     consecutive edges is one window, not forty. It closes on the first row
     satisfying `until`, or on the last row where `activation` still holds when
     no `until` is given.
+
+    THE ACTIVATION ROW IS NEVER TESTED FOR `until`. The scan for the close
+    starts at the row AFTER the trigger, so a release condition that is already
+    true when the window opens does not close it instantly -- which is what a
+    reader means by "after A, until B" when A and B can hold together. The
+    `until()` OPERATOR is the other half of this and takes the opposite default
+    for the opposite reason: it asserts something INSIDE a window that already
+    exists, so its release is tested from the first row it is given, and
+    `after_activation=True` is how a caller excludes the trigger there. One
+    rule, stated at both ends: *`after` defines the window and skips the trigger;
+    `until` asserts within one and does not.*
+
+    `overlap` CHANGES WHERE THE SCAN RESUMES, NOT WHAT COUNTS AS A START. The
+    rising test above runs in both modes, so this is NOT SVA's attempt model --
+    SVA opens an attempt at every tick the antecedent holds, and this opens one
+    per rise, in both modes. See `docs/sva-divergence.md`, D4.
     """
     out: list[Window] = []
     i, n = 0, len(trace)
@@ -269,8 +304,21 @@ def throughout(w: Window, holds: Pred, *, after_activation: bool = False,
 
     `after_activation` excludes the activation row, for a requirement whose
     invariant begins once the trigger has happened rather than at it.
+
+    AN EMPTY ROW SET IS UNKNOWN, NOT A PASS. `after_activation=True` on a
+    one-row window leaves nothing to check, and returning `True` there is a
+    vacuous pass -- the exact defect this module exists to remove, arriving
+    through the operator meant to remove it. `stable` already guarded this and
+    the three others did not; measured on c1-i2c, 39 of 110 oracles call
+    `throughout` or `never` with `after_activation=`, so this was reachable by
+    a third of the check set.
     """
-    for row in (w.body if after_activation else w.rows):
+    rows = w.body if after_activation else w.rows
+    if not rows:
+        return None, w.edge, (
+            f"{what} had no rows to hold over in the window opening at edge "
+            f"{w.edge}, so nothing was checked")
+    for row in rows:
         if not holds(row):
             return False, row.get("edge"), (
                 f"{what} broke at edge {row.get('edge')}, in the window opening "
@@ -328,16 +376,51 @@ def pulse(w: Window, port: str, *, active: int = 1, width: int = 1,
     # single-cycle pulse. Summing `held` is the only reading that matches what
     # the requirement means by "for one clk cycle".
     rows = w.body if after_activation else w.rows
+    if not rows:
+        return None, w.edge, (
+            f"{port} had no rows to pulse in, in the window opening at edge "
+            f"{w.edge}, so nothing was checked")
+    # A PULSE IS A RISE, AND THE EVIDENCE MUST SHOW ONE. If `port` is at
+    # `active` on the first row considered AND the sample before it was ALSO
+    # `active`, the transition happened before this window was looking: its
+    # width is not measurable here, so the run is not a pulse this window
+    # witnessed. Counting it anyway let a port stuck at `active` report
+    # "pulsed once" -- verified on a window opening while `cmd_ack` was already
+    # 1 and never rising inside it, which returned
+    # `(True, 'cmd_ack pulsed once for 1 edge(s)')`. That is the check passing
+    # the one design it exists to catch.
+    #
+    # THE PRECEDING SAMPLE DEPENDS ON THE MODE. Reading `w.rows`, it is
+    # `w.prev` -- `$past` at the activation. Reading `w.body`, it is the
+    # activation row itself, which `w.body` excluded but which was still
+    # sampled. `None` means there is no preceding sample at all: the window
+    # opens at the first row of the trace. That is NOT evidence of a missing
+    # rise -- the design has just come out of reset and a port at its active
+    # value there has genuinely just asserted -- so it is left alone, and only
+    # positive evidence of "already active" abstains.
+    before = w.start if after_activation else w.prev
+    if _val(rows[0], port) == active and before is not None \
+            and _val(before, port) == active:
+        return None, w.edge, (
+            f"{port} was already {active} before the window opening at edge "
+            f"{w.edge}, so no rise was observed and the pulse width could not "
+            f"be measured; open the window earlier, or put "
+            f"`edges(trace, {port!r}, 'rise')` in the activation")
     runs: list[tuple[int, int]] = []
-    run = 0
+    run, began = 0, None
     for row in rows:
         if _val(row, port) == active:
+            if not run:
+                began = row.get("edge")
             run += int(row.get("held", 1) or 1)
         elif run:
-            runs.append((run, row.get("edge")))
+            # The edge NAMED is where the pulse began, not where it ended. The
+            # end row is the first one where the port is back at rest, and
+            # pointing a reader there sends them to a row the pulse is not on.
+            runs.append((run, began))
             run = 0
     if run:
-        runs.append((run, rows[-1].get("edge")))
+        runs.append((run, began))
     if not runs:
         if not w.closed:
             return None, w.edge, (
@@ -371,8 +454,17 @@ def never(w: Window, holds: Pred, *, after_activation: bool = False,
     `after_activation` excludes the activation row, for a prohibition that
     begins once the trigger has happened -- "once a STOP is accepted, sda_oen
     must never fall again" says nothing about the row the STOP arrived on.
+
+    AN EMPTY ROW SET IS UNKNOWN, NOT A PASS -- see `throughout`, which shares
+    the defect and the reasoning. "It never happened" over zero rows is not
+    evidence that it never happens.
     """
-    for row in (w.body if after_activation else w.rows):
+    rows = w.body if after_activation else w.rows
+    if not rows:
+        return None, w.edge, (
+            f"{what} had no rows to occur in, in the window opening at edge "
+            f"{w.edge}, so nothing was checked")
+    for row in rows:
         if holds(row):
             return False, row.get("edge"), (
                 f"{what} occurred at edge {row.get('edge')}, in the window "
@@ -486,6 +578,19 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     `after_activation` starts at the row after the trigger, for the common
     shape where the release condition is ALREADY true at the activation and
     would otherwise discharge the obligation instantly.
+
+    THE TRIGGER ROW IS TESTED BY DEFAULT HERE, AND SKIPPED BY DEFAULT IN
+    `after(..., until=)`. Both are right and the difference is what each word
+    is doing: `after`'s `until` DEFINES the window, so a release already true
+    at the trigger must not collapse it to nothing; this `until` ASSERTS inside
+    a window someone else defined, so it reads every row it is handed and
+    `after_activation=True` is how a caller excludes the trigger. Stated at both
+    ends because two operators spelled the same way, differing silently, is how
+    a check ends up answering a question nobody asked.
+
+    IT IS SVA'S `until`, NOT `until_with`: `holds` need not be true on the row
+    where `release` fires, because `release` is tested first. There is no
+    `until_with` here -- see `docs/sva-divergence.md`, D8.
     """
     for row in (w.body if after_activation else w.rows):
         if release(row):
@@ -528,6 +633,20 @@ def worst(verdicts: list[Verdict]) -> Verdict:
     and an UNKNOWN outranks a pass for the same reason `_worst` gives one level
     up: a grown evidence set only ever moves a verdict toward worse, so nothing
     can be laundered by adding more of it.
+
+    ON THE ALL-PASSING PATH THE LAST VERDICT IS RETURNED, not the first. The
+    failing and unknown paths name the EARLIEST offending window, because the
+    first counterexample is the one that explains the rest. A pass has no
+    counterexample, so the useful thing to name is the furthest the evidence
+    reached -- returning the first window told a reader the requirement held at
+    the earliest place it could have, which reads as much weaker evidence than
+    was actually gathered.
+
+    EMPTY IS AN ABSTENTION, AND IT DIFFERS FROM SVA DELIBERATELY. `a |-> b`
+    with no matching `a` is a VACUOUS PASS in SVA and only `cover property`
+    reports the miss. Here it is UNKNOWN, because this pipeline keeps "could
+    not answer" separate from a verdict at every gate and a vacuous pass is a
+    false green. See `docs/sva-divergence.md`, D1.
     """
     if not verdicts:
         return None, None, "the activation never occurred"
@@ -537,4 +656,4 @@ def worst(verdicts: list[Verdict]) -> Verdict:
     for ok, edge, detail in verdicts:
         if ok is None:
             return None, edge, detail
-    return verdicts[0]
+    return verdicts[-1]
