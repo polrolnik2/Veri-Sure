@@ -201,27 +201,43 @@ def test_staging_is_inside_the_verify_loop_not_after_it():
     from specflow import oracles_stage
 
     src = inspect.getsource(oracles_stage.run_oracle_stage)
-    stage_at = src.index("gone, staging = stage_unexercised(")
     loop_at = src.index("for rounds in range(1, verifications + 1):")
-    assert loop_at < stage_at, "staging must sit inside the verify loop"
-    assert "if rounds == 1 and want_staging and witness:" in src
+    stage_at = src.index("gone, staging = stage_unexercised(")
+    gate_at = src.index("why, may_quote, notes = verify_one(")
+    repair_at = src.index("again, _ = run_oracle_gen(")
+    assert loop_at < stage_at < gate_at < repair_at, (
+        "the round must run generate/repair -> STAGE -> GATE. Staging after the "
+        "gate is what made the routes one-way on d1-i2c.")
+    assert "if rounds == 1 and want_staging" not in src, (
+        "staging must run EVERY round: a check rewritten at round 2 has a "
+        "different trigger, and the old scenario verdict is about a check that "
+        "no longer exists")
+    assert "survivors = {u: o for u, o in held.items() if u not in rejected}" not in src, (
+        "eligibility is `this check decides nothing`, full stop -- a rejected "
+        "check must not be excluded from staging")
 
 
-def test_a_round_that_staged_takes_another_pass_even_with_nothing_rejected():
-    """Staging changes the evidence, so the set must be re-verified.
+def test_the_gate_always_decides_against_the_stimulus_staging_just_added():
+    """The reason the extra re-verify pass could be deleted.
 
-    Before this, `if not ask: break` ended the loop the moment nothing was
-    rejected -- so a newly reachable oracle went straight to `_dispositions`
-    and `freeze` without one run that decides it.
+    Staging used to run AFTER the gate, so a newly reachable oracle needed a
+    whole extra round to be judged against evidence that now decided it, and
+    `if not ask: break` carried an exception to allow it. Staging now runs
+    BEFORE the gate in the same round, so the exception is not merely
+    unnecessary -- it must be ABSENT, or a round that stages and rejects nothing
+    spins without regenerating anything.
     """
     import inspect
 
     from specflow import oracles_stage
 
     src = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert src.index("gone, staging = stage_unexercised(") < src.index(
+        "why, may_quote, notes = verify_one(")
+    assert "staged_now" not in src, "the extra-pass flag has no meaning now"
     tail = src[src.index("if rounds == verifications:"):]
-    assert "if not staged_now:" in tail and "break" in tail
-    assert "continue" in tail, "a staged round must re-verify, not stop"
+    assert "continue" not in tail.split("again, _ = run_oracle_gen(")[0], (
+        "a round that staged must fall through to the gate, not take another")
 
 
 def test_abandonment_from_the_resolution_pass_survives_staging():
@@ -453,7 +469,7 @@ def test_an_UNCONDITIONAL_activation_that_abstains_is_the_CHECK_s_defect():
     from specflow import oracles_stage as O
 
     src = inspect.getsource(O.run_oracle_stage)
-    block = src[src.index("if rounds == 1 and want_staging and witness:"):]
+    block = src[src.index("if want_staging and witness:"):]
     assert ".unconditional" in block
     assert 'why = ("malformed:' in block, "must route to ORACLE_INVALID"
     assert "quotable[uid] = why" in block, "the AUTHOR is re-asked, not the stimulus"
@@ -550,3 +566,92 @@ def test_a_requirement_with_no_normalized_expectation_still_gates_clean():
                            stimulus="drive a=7")
     assert el["expected_response"] == REQ["text"]
     assert _gate_errors([el], [REQ]) == []
+
+
+# --------------------- staging runs every round, and may now gate (#130)
+
+
+def test_attempts_are_per_requirement_not_per_round():
+    """Three rounds of three attempts is nine, and "staged N times, never
+    reached" would stop being true of anything. `prior` carries the count."""
+    gen = _Gen(MISS, MISS, MISS)
+    tp1: list[dict] = []
+    _, first = _run(gen, testplan=tp1, attempts=2)
+    assert first["REQ-0000"]["attempted"] == 2
+
+    # Round 2, same requirement, budget already spent: no further generator call
+    gen2 = _Gen(HIT)
+    _, second = _run(gen2, testplan=tp1, attempts=2, prior=first)
+    assert gen2.hints == [], "an exhausted requirement must not be re-asked"
+    assert second["REQ-0000"]["attempted"] == 2, "the count carries, not restarts"
+
+
+def test_abandonment_waits_for_the_last_round():
+    """Between rounds the AUTHOR REWRITES THE CHECK, so its activation is a
+    different scenario. "Never reached" taken early is a verdict about a trigger
+    that no longer exists."""
+    gone, rec = _run(_Gen(MISS, MISS), attempts=2, final=False)
+    assert gone == {}, "not the last round -- record the attempts, judge nothing"
+    assert rec["REQ-0000"]["attempted"] == 2
+
+    gone2, _ = _run(_Gen(), attempts=2, prior=rec, final=True)
+    assert gone2 == {"REQ-0000": "never reached in 2 attempt(s)"}, (
+        "a requirement whose attempts an earlier round spent must still reach "
+        "its disposition on the last round")
+
+
+# ------------------------------------------- the `unreached` gate and its guards
+
+
+def _record(**kw):
+    base = {"attempted": 2, "reached_at_attempt": None, "staged": 2,
+            "attempts": [{"attempt": 1, "staged": "TP-0001",
+                          "evidence": {"inert": True}}]}
+    base.update(kw)
+    return base
+
+
+def test_an_unattempted_check_is_never_convicted_of_being_unreached():
+    """THE ANTI-SHORTCUT PIN. A discard must be EARNED by an attempt that ran,
+    or the gate rewards not trying -- section 8.0's rule, and the one that keeps
+    this narrower than "unexercised is a finding", which the module refuses."""
+    o = _oracle()
+    o.tp_uids = ["TP-0000"]
+    for record in (None, {}, _record(attempted=0), _record(reached_at_attempt=2)):
+        assert O._unreached(o, record, WITNESS, CONTRACT, {"TP-0000": MISS},
+                            base="step", transactional=True) == ""
+
+
+def test_a_check_that_decides_somewhere_is_not_unreached():
+    """Zero, not partial. Deciding on one testpoint and not another is ordinary."""
+    o = _oracle()
+    o.tp_uids = ["TP-0000", "TP-0001"]
+    stim = {"TP-0000": HIT, "TP-0001": MISS}       # HIT makes the check decide
+    assert O._unreached(o, _record(), WITNESS, CONTRACT, stim,
+                        base="step", transactional=True) == ""
+
+
+def test_a_refuted_observation_route_is_not_the_check_s_fault():
+    """`route_never_moved` is a finding against normalisation. Re-asking the
+    check author for it sends the finding to the party who cannot act on it."""
+    o = _oracle()
+    o.tp_uids = ["TP-0000"]
+    rec = _record(attempts=[{"attempt": 1, "staged": "TP-0001",
+                             "evidence": {"route_never_moved": True}}])
+    assert O._unreached(o, rec, WITNESS, CONTRACT, {"TP-0000": MISS},
+                        base="step", transactional=True) == ""
+
+
+def test_an_exhausted_staging_attempt_convicts_and_says_what_was_tried():
+    """The check decides nothing AND an independent author could not reach it.
+    That pairing is what the ordering earns -- before staging ran first, an
+    abstention could not be attributed and the module refused to try."""
+    o = _oracle()
+    o.tp_uids = ["TP-0000"]
+    why = O._unreached(o, _record(), WITNESS, CONTRACT, {"TP-0000": MISS},
+                       base="step", transactional=True)
+    assert why.startswith("unreached: ")
+    assert "2 attempt(s)" in why
+    assert "nothing in the design moved" in why, "the diagnosis must travel"
+    from specflow.refmodel.verdict import of_discard
+    assert of_discard(why) == "ORACLE_INVALID"

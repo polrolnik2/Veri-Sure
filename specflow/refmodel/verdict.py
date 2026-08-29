@@ -118,6 +118,12 @@ _DISCARD_PREFIX: tuple[tuple[str, str], ...] = (
     # is still a check that cannot discharge this requirement, so it goes back
     # to the party that wrote it.
     ("off-target:", "ORACLE_INVALID"),
+    # The check decides nothing AND the stimulus loop was given its activation
+    # and could not make it occur. Deliberately NOT `NOT_EXERCISED`, which means
+    # "nobody reached it" and BLOCKS as a harness defect: here somebody did
+    # reach for it, on the evidence, and failed. What is left is a trigger no
+    # run satisfies, which is a defect in the check and routes to its author.
+    ("unreached:", "ORACLE_INVALID"),
     # The oracle contradicts the verdict it shipped with. In the target there is
     # no opinion for it to contradict, so this case disappears; until then the
     # oracle is the thing that cannot be trusted, which is ORACLE_INVALID.

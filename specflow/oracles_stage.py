@@ -551,6 +551,63 @@ def _decides(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
     return n
 
 
+def _unreached(oracle, record: dict | None, witness: str, contract: dict,
+               stimulus_by_tp: dict, *, base: str, transactional: bool) -> str:
+    """The check decides nothing AND the stimulus loop already failed to reach it.
+
+    WHY THIS MAY GATE, WHEN "UNEXERCISED IS NOT A FINDING" IS THE MODULE'S OWN
+    RULE. That rule is right while the gate runs BEFORE staging: an abstention
+    is then ambiguous between a bad check and an unstaged scenario, and
+    convicting the check deletes exactly the findings the stimulus tool exists
+    to act on. Once staging runs first, every round, the ambiguity has been
+    settled by an experiment -- an independent generator was handed this
+    activation, retried on evidence, and could not make it occur. "Still decides
+    nothing" then means something it could not mean before.
+
+    Measured on d1-i2c, which is what this is for: 16 of 48 frozen checks
+    decided nothing at generation and at every repair round, were rejected up to
+    twice for a trigger defect no reader could diagnose, and were frozen TRUSTED.
+
+    FIVE GUARDS, each one a scar. A discard must be EARNED by an attempt that
+    ran, or the gate rewards not trying. A check whose testpoints carry no
+    stimulus at all is a testplan defect, not a check defect. Deciding on SOME
+    testpoints is fine and must not fire this. A route whose ports never moved
+    is a finding against normalisation and `_diagnose` already says so. And this
+    returns a REJECTION, not a disposition: the author is re-asked, and only an
+    exhausted repair budget turns it into `ABANDONED`, with the record to prove
+    it.
+    """
+    if not record:
+        return ""                                   # nothing was attempted
+    attempted = int(record.get("attempted") or 0)
+    if not attempted or record.get("reached_at_attempt"):
+        return ""
+    if not any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids):
+        return ""                                   # no evidence to run at all
+    if _decides(oracle, witness, contract, stimulus_by_tp,
+                base=base, transactional=transactional):
+        return ""                                   # partial is not silence
+    evidence = [t.get("evidence") or {} for t in (record.get("attempts") or [])
+                if t.get("evidence")]
+    last = evidence[-1] if evidence else {}
+    if last.get("route_never_moved"):
+        # The ports this requirement is observed on never moved at all. That is
+        # a defect in the observation route, and re-asking the check author for
+        # it sends the finding to the one party who cannot act on it.
+        return ""
+    said = _diagnose(last) if last else "the scenario was never made to occur"
+    return (
+        f"unreached: an independent stimulus author was given this check's "
+        f"activation and could not make it occur in {attempted} attempt(s) -- "
+        f"{said}. The check decided nothing on any of the "
+        f"{len(oracle.tp_uids)} testpoint(s) it names, so this is no longer a "
+        f"gap in the stimulus. What the last attempt actually produced: "
+        f"{json.dumps(last, default=str, sort_keys=True)}. Widen the trigger to "
+        f"the condition the requirement states, rather than a narrower one that "
+        f"nothing reaches."
+    )
+
+
 def _is_live(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
              *, base: str) -> bool:
     """Whether ONE replacement can fail. Unknown counts as live.
@@ -946,6 +1003,10 @@ def run_oracle_stage(
     #: What the stimulus loop staged, per requirement. Declared here because the
     #: loop that fills it now runs inside the verify rounds.
     staging: dict[str, dict] = {}
+    #: What is LEFT of the stage's one staging budget. Sized on first use and
+    #: spent down across rounds, because the loop that spends it now runs once
+    #: per round and a per-round budget would triple the stimulus calls.
+    staging_left: int | None = None
     #: Oracles a repair round made newly unsatisfiable to the known-good
     #: control. REPORTED, never acted on -- see the round body for why the
     #: control may not select which oracles survive.
@@ -972,6 +1033,83 @@ def run_oracle_stage(
         rejected = {}
         disagreements = {}
         quotable: dict[str, str] = {}
+        # STAGE BEFORE THE GATES, AND EVERY ROUND. The order is the fix.
+        #
+        # It used to run AFTER the gates and only at `rounds == 1`, over
+        # `survivors = held - rejected`. Two filters, and together they made the
+        # routes one-way: a check rejected in round 1 was excluded from staging
+        # and staging never ran again, so it could be rewritten twice and never
+        # once be given stimulus. Measured on d1-i2c: 16 of 48 frozen checks
+        # decided nothing at generation and at every repair round, 15 of them
+        # rejected for a trigger defect, and NOT ONE was staged -- while 17 of
+        # the 23 staging slots went to checks nobody had flagged.
+        #
+        # Here `rejected` is empty, because the gate has not run yet. So the
+        # `survivors` filter does not need removing: it cannot be expressed.
+        # Eligibility is one predicate -- this check decides nothing.
+        #
+        # And it makes `_unreached` legitimate below. A gate may only convict an
+        # abstaining check once the stimulus route has actually been tried.
+        if want_staging and witness:
+            from .normalize import Activation
+
+            unexer = unexercised_against(
+                held, witness, contract, stimulus_by_tp, base=base,
+                transactional=transactional)
+            # AN UNCONDITIONAL ACTIVATION CANNOT FAIL TO OCCUR, so an oracle
+            # that abstains under one is not waiting for a scenario -- it is
+            # broken, and no amount of staging can reach a condition that is
+            # already true. Sending it to the stimulus loop spends the budget
+            # asking for something that is not missing, and then abandons the
+            # requirement for the stimulus author's supposed failure.
+            #
+            # a2-i2c's REQ-0003 is the case: activation "always", both its
+            # observable ports moving on all three attempts, and the check
+            # abstaining every time. It was recorded "never reached".
+            #
+            # It writes straight into this round's `rejected`/`quotable`, which
+            # the gate phase below then adds to -- and `repairs` is appended
+            # once, there, so the author is not told the same thing twice.
+            for uid in sorted(unexer):
+                shape = (normalized or {}).get(uid) or {}
+                if not Activation(**(shape.get("activation") or {})).unconditional:
+                    continue
+                why = ("malformed: the activation holds at all times, so this "
+                       "check cannot be waiting for a scenario -- it decided "
+                       "nothing on every testpoint it names, which makes it a "
+                       "defect in the check rather than in the stimulus")
+                rejected[uid] = quotable[uid] = why
+                unexer.pop(uid)
+                logger.info("oracles: %s abstains under an unconditional "
+                            "activation -- re-asking the author, not the "
+                            "stimulus", uid)
+            # ONE BUDGET FOR THE WHOLE STAGE, not one per round. Sizing it
+            # inside the block was correct while the block ran once; running it
+            # every round would re-size it every round and spend three times
+            # over. What each round gets is what the previous rounds left.
+            if staging_left is None:
+                staging_left = staging_budget if staging_budget is not None else min(
+                    STAGING_BUDGET_CAP,
+                    max(1, len(unexer)) * STAGING_BUDGET_PER_ORACLE)
+                logger.info("oracles: staging budget %d testpoint(s) for the "
+                            "whole stage", staging_left)
+            before = len(stimulus_by_tp)
+            gone, staging = stage_unexercised(
+                held={u: o for u, o in held.items() if u not in rejected},
+                unexercised=unexer,
+                requirements=requirements, normalized=normalized or {},
+                contract=contract, testplan=testplan,
+                stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
+                base=base, attempts=staging_attempts, budget=staging_left,
+                prior=staging, final=(rounds == verifications))
+            staging_left = max(0, staging_left - (len(stimulus_by_tp) - before))
+            # MERGED, NOT REBOUND. `stage_unexercised` returns a fresh dict, and
+            # assigning it discarded every "no observation route found" recorded
+            # alongside it -- so a requirement the resolution pass could not
+            # route stayed in `trusted` and was frozen, the exact opposite of
+            # what abandoning it means.
+            abandoned.update(gone)
+
         reviews = (
             correspondence.review(
                 list(held.values()), by_uid, port=port, normalized=normalized,
@@ -983,6 +1121,16 @@ def run_oracle_stage(
                 stimulus_by_tp=stimulus_by_tp, witness=witness,
                 control=control, variants=variants, base=base,
                 transactional=transactional, review=reviews.get(uid))
+            if not why:
+                # THE STAGING ROUTE HAS BEEN TRIED AND FAILED, so an abstention
+                # is no longer ambiguous between a bad check and an unstaged
+                # scenario. `verify_one` cannot ask this -- it has no staging
+                # record -- and it is deliberately last, so a check with a real
+                # mechanical defect is reported as that rather than as silence.
+                why = _unreached(oracle, staging.get(uid), witness, contract,
+                                 stimulus_by_tp, base=base,
+                                 transactional=transactional)
+                may_quote = bool(why)
             if notes:
                 disagreements[uid] = notes
             if why:
@@ -1016,95 +1164,19 @@ def run_oracle_stage(
         }
         ask = set(quotable) | advisory_only
 
-        # STAGED AFTER THE FIRST VERIFY PASS, NOT AFTER THE LAST ONE.
-        #
-        # `verify_one`'s evidence-dependent legs -- executability,
-        # over-strictness, vacuity -- have nothing to decide on for an oracle
-        # whose scenario nothing reaches. It is correctly not convicted, and it
-        # equally cannot be IMPROVED: the repair round hands the author a check
-        # with no counterexample, no trace and no failing case. Running the
-        # stimulus loop after the whole repair loop spent every round blind on
-        # exactly the oracles staging would have made checkable -- roughly a
-        # third of the set (n-i2c 24 of 70 unexercised, z-i2c 33).
-        #
-        # And nothing re-verified them afterwards: staging grows `tp_uids` and
-        # changes the evidence, and the set went straight to `_dispositions` and
-        # `freeze`. Section 7.1 asked for both -- "after [O]'s FIRST verify
-        # pass", and "its tp_uids grow, IT IS RE-VERIFIED" -- and the code did
-        # neither. Staging here gives the later rounds live evidence to repair
-        # against, and re-verifies what staging changed, in one move.
-        staged_now = False
-        if rounds == 1 and want_staging and witness:
-            from .normalize import Activation
-
-            survivors = {u: o for u, o in held.items() if u not in rejected}
-            unexer = unexercised_against(
-                survivors, witness, contract, stimulus_by_tp, base=base,
-                transactional=transactional)
-            # AN UNCONDITIONAL ACTIVATION CANNOT FAIL TO OCCUR, so an oracle
-            # that abstains under one is not waiting for a scenario -- it is
-            # broken, and no amount of staging can reach a condition that is
-            # already true. Sending it to the stimulus loop spends the budget
-            # asking for something that is not missing, and then abandons the
-            # requirement for the stimulus author's supposed failure.
-            #
-            # a2-i2c's REQ-0003 is the case: activation "always", both its
-            # observable ports moving on all three attempts, and the check
-            # abstaining every time. It was recorded "never reached".
-            #
-            # Rejected rather than abandoned, and quotable, so the repair loop
-            # re-asks the AUTHOR with the reason -- which is the party that can
-            # actually fix it.
-            for uid in sorted(unexer):
-                shape = (normalized or {}).get(uid) or {}
-                if not Activation(**(shape.get("activation") or {})).unconditional:
-                    continue
-                why = ("malformed: the activation holds at all times, so this "
-                       "check cannot be waiting for a scenario -- it decided "
-                       "nothing on every testpoint it names, which makes it a "
-                       "defect in the check rather than in the stimulus")
-                rejected[uid] = why
-                quotable[uid] = why
-                repairs.setdefault(uid, []).append(why)
-                unexer.pop(uid)
-                logger.info("oracles: %s abstains under an unconditional "
-                            "activation -- re-asking the author, not the "
-                            "stimulus", uid)
-            survivors = {u: o for u, o in survivors.items() if u not in rejected}
-            ask = set(quotable) | advisory_only
-            gone, staging = stage_unexercised(
-                held=survivors,
-                unexercised=unexer,
-                requirements=requirements, normalized=normalized or {},
-                contract=contract, testplan=testplan,
-                stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
-                base=base, attempts=staging_attempts, budget=staging_budget)
-            # MERGED, NOT REBOUND. `stage_unexercised` returns a fresh dict, and
-            # assigning it discarded every "no observation route found" recorded
-            # alongside it -- so a requirement the resolution pass could not
-            # route stayed in `trusted` and was frozen, the exact opposite of
-            # what abandoning it means.
-            abandoned.update(gone)
-            staged_now = bool(staging)
-            if gone or staged_now:
-                # The set moved, so everything measured against it is stale.
-                alive = _liveness(survivors, witness, contract,
-                                  stimulus_by_tp, base=base)
-
         if rounds == verifications:
             break
         if not ask:
             # Nothing left that an author could be told about. A control-only
             # rejection is terminal by design, so re-asking would spend a call
             # on a prompt carrying no information.
-            if not staged_now:
-                break
-            # Except when staging just changed the evidence: the newly reachable
-            # oracles have never been verified against a run that decides them,
-            # so take another round to do that and regenerate nothing.
-            logger.info("oracles: staged %d scenario(s); re-verifying against "
-                        "the enlarged stimulus", len(staging))
-            continue
+            #
+            # This used to need an exception -- "staging just changed the
+            # evidence, so take another round to re-verify against it". Staging
+            # now runs BEFORE the gate in the same round, so the gate has
+            # already decided against the enlarged stimulus and there is nothing
+            # left to come back for.
+            break
         logger.info("oracles: round %d re-asking %d rejected oracle(s)",
                     rounds, len(quotable))
         again, _ = run_oracle_gen(
@@ -1895,6 +1967,19 @@ def stage_unexercised(
     base: str = "step",
     attempts: int = STAGING_ATTEMPTS,
     budget: int | None = None,
+    #: What earlier rounds already spent on each requirement. ATTEMPTS ARE PER
+    #: REQUIREMENT, NOT PER ROUND: this loop now runs once per verify round, so
+    #: without carrying the count three rounds of three attempts would be nine,
+    #: and "staged N times, never reached" would stop being true of anything.
+    prior: dict[str, dict] | None = None,
+    #: Whether an exhausted requirement may be ABANDONED now.
+    #:
+    #: False on every round but the last, and the reason is semantic rather than
+    #: cautious: between rounds the AUTHOR REWRITES THE CHECK, so its activation
+    #: is a different scenario. "Never reached in N attempts" taken at round 1
+    #: is a verdict about a trigger that no longer exists by round 2. Attempts
+    #: accumulate across rounds; the disposition is taken once, at the end.
+    final: bool = True,
 ) -> tuple[dict[str, str], dict[str, dict]]:
     """Stage the scenarios nothing reaches. `(abandoned, record)`.
 
@@ -1934,7 +2019,7 @@ def stage_unexercised(
     from .testcase_agent import stimulus_for_scenario
 
     abandoned: dict[str, str] = {}
-    record: dict[str, dict] = {}
+    record: dict[str, dict] = {uid: dict(r) for uid, r in (prior or {}).items()}
     if not unexercised or not witness:
         return abandoned, record
     if budget is None:
@@ -1955,6 +2040,13 @@ def stage_unexercised(
         req = by_uid.get(uid)
         if oracle is None or req is None:
             continue
+        earlier = (prior or {}).get(uid) or {}
+        spent = int(earlier.get("attempted") or 0)
+        # No `continue` when the attempts are already spent: `range(spent + 1,
+        # attempts + 1)` is empty, and falling THROUGH is what lets the record
+        # and the disposition below still be taken. Skipping here meant a
+        # requirement that exhausted its budget in an earlier round could never
+        # be abandoned at all.
         shape = normalized.get(uid) or {}
         act = shape.get("activation") or {}
         ob = Obligation(uid, str(act.get("text") or ""),
@@ -1965,7 +2057,7 @@ def stage_unexercised(
         evidence: dict | None = None
         reached: int | None = None
 
-        for attempt in range(1, max(1, attempts) + 1):
+        for attempt in range(spent + 1, max(1, attempts) + 1):
             if len(added) >= budget:
                 tries.append({"attempt": attempt, "outcome": BUDGET_SPENT})
                 break
@@ -2009,10 +2101,16 @@ def stage_unexercised(
         # A generator that ran and returned nothing gate-clean HAS been tried --
         # that is a finding about the scenario. The only outcome that is not an
         # attempt is the budget running out before the generator was invoked.
+        tries = list(earlier.get("attempts") or []) + tries
         attempted = sum(1 for t in tries if t.get("outcome") != BUDGET_SPENT)
         staged_count = sum(1 for t in tries if t.get("staged"))
+        reached = reached or earlier.get("reached_at_attempt")
         record[uid] = {"attempts": tries, "reached_at_attempt": reached,
                        "staged": staged_count, "attempted": attempted}
+        if not final:
+            # Round is not the last, so the check may still be rewritten and the
+            # scenario with it. Record the attempts; take no disposition.
+            continue
         if reached is None and attempted:
             # ATTEMPTED AND EXHAUSTED. What is known is that we could not stage
             # it in N tries -- not that no stimulus could, which is a claim
