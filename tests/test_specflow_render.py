@@ -334,3 +334,30 @@ def test_the_recording_is_not_mistaken_for_a_verdict(tmp_path):
     out = _read_results(results)
     assert set(out) == {"TP-0000"}
     assert out["TP-0000"].status == "PASS"
+
+
+def test_a_rendered_suite_carries_its_own_switches(tmp_path):
+    """`Env` is built inside a cocotb subprocess the harness does not construct,
+    which is the real reason these were environment variables. Writing them INTO
+    the testcase removes that reason: the suite stops depending on what happens
+    to be exported when it runs."""
+    from specflow.tb.render import render_testcase
+
+    tp = {"uid": "TP-0000", "dimension": "D1", "stimulus": "s",
+          "expected_response": "r"}
+    src = render_testcase(tp=tp, bins=[], checks=[], stimulus=[{"inputs": {"a": 1}}],
+                          input_ports=["a"], pinned={}, idle={},
+                          trace_internals=["c_state", "clk_en"],
+                          compare="cycle_exact")
+    assert "trace_internals=['c_state', 'clk_en']" in src
+    assert "compare='cycle_exact'" in src
+    # UNSUPPLIED emits NOTHING. Writing an explicit `[]` would override
+    # `Env.start`'s environment fallback and silently switch off internal
+    # recording for every caller that still sets SPECFLOW_TRACE_INTERNALS.
+    plain = render_testcase(tp=tp, bins=[], checks=[], stimulus=[{"inputs": {"a": 1}}],
+                            input_ports=["a"], pinned={}, idle={})
+    assert "trace_internals" not in plain and "compare=" not in plain
+    # And an explicit empty list DOES say "none", which is a different fact.
+    off = render_testcase(tp=tp, bins=[], checks=[], stimulus=[{"inputs": {"a": 1}}],
+                          input_ports=["a"], pinned={}, idle={}, trace_internals=[])
+    assert "trace_internals=[]" in off

@@ -155,6 +155,13 @@ def render_testcase(
     input_ports: list[str] | None = None,
     pinned: dict[str, int] | None = None,
     idle: dict[str, int] | None = None,
+    #: Written INTO the testcase rather than left to the environment. `Env` is
+    #: constructed inside a cocotb subprocess the harness does not build, which
+    #: is the real reason these were environment variables; emitting them here
+    #: removes that reason, and a rendered suite then carries its own switches
+    #: instead of depending on what happens to be exported when it runs.
+    trace_internals: list[str] | None = None,
+    compare: str = "",
 ) -> str:
     tp_uid = tp["uid"]
     lines = [
@@ -194,6 +201,17 @@ def render_testcase(
         f"async def {_fn_name(tp_uid, suffix)}(dut):",
         f'    env = await Env.start(dut, tp_uid="{tp_uid}", model=Model(),',
         "                          input_ports=INPUT_PORTS, pinned=PINNED_INPUTS,",
+    ]
+    # EMITTED ONLY WHEN SUPPLIED. `None` means "the caller said nothing", and
+    # writing an explicit `[]` for it would OVERRIDE `Env.start`'s environment
+    # fallback -- silently switching off internal recording for every existing
+    # caller that still sets SPECFLOW_TRACE_INTERNALS. Caught by the harness
+    # conformance fixture, which does exactly that.
+    if trace_internals is not None:
+        lines.append(f"                          trace_internals={list(trace_internals)!r},")
+    if compare:
+        lines.append(f"                          compare={compare!r},")
+    lines += [
         "                          idle=IDLE_INPUTS)",
         "    for stim in STIMULUS:",
         "        await env.drive(stim)",
@@ -274,6 +292,11 @@ def render_suite(
     contract: dict,
     out_dir: Path,
     stimulus_by_tp: dict[str, list[dict]] | None = None,
+    #: Threaded into every rendered testcase, so a suite carries its own
+    #: switches instead of depending on what happens to be exported when it
+    #: runs. See `render_testcase`.
+    trace_internals: list[str] | None = None,
+    compare: str = "",
 ) -> Manifest:
     out_dir = Path(out_dir)
     tests_dir = out_dir / "tests"
@@ -302,6 +325,8 @@ def render_suite(
             input_ports=ports,
             pinned=pinned,
             idle=idle,
+            trace_internals=trace_internals,
+            compare=compare,
         )
         name = module_name(uid)
         (tests_dir / f"{name}.py").write_text(source, encoding="utf-8")

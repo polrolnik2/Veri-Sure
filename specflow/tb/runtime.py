@@ -362,7 +362,12 @@ class Env:
         #: per clock edge after reset. Both sides already advance in lockstep,
         #: so this is a recording rather than a second simulation.
         self._trace: list[tuple] = []
-        #: Per-edge internal signals, when `SPECFLOW_TRACE_INTERNALS` names any.
+        #: This Env's switches. Set from `Env.start`'s arguments when the
+        #: renderer supplied them, otherwise the module-level environment
+        #: fallback -- see `Env.start`.
+        self.trace_internals: list[str] = list(_INTERNALS)
+        self.compare_mode: str = os.environ.get("SPECFLOW_COMPARE", "")
+        #: Per-edge internal signals, when `trace_internals` names any.
         #: Empty and untouched otherwise -- see `_INTERNALS`.
         self._internals: list[tuple[dict, dict]] = []
         #: Signals registered per check uid, in the order the renderer emitted
@@ -406,9 +411,25 @@ class Env:
         input_ports: list[str] | None = None,
         pinned: dict[str, int] | None = None,
         idle: dict[str, int] | None = None,
+        #: RUNTIME SWITCHES, threaded rather than read from the environment.
+        #:
+        #: The environment reads exist because `Env` is constructed by the
+        #: GENERATED testcase inside a cocotb subprocess the harness does not
+        #: build -- a real transport problem, not a preference. The answer is
+        #: for the renderer to WRITE the values into the testcase, which is
+        #: what these parameters make possible; the module-level reads survive
+        #: only as the fallback for a suite rendered before this existed.
+        results_dir: Path | str | None = None,
+        trace_internals: list[str] | None = None,
+        compare: str = "",
     ) -> "Env":
-        results_dir = Path(os.environ.get("SPECFLOW_RESULTS", "results"))
-        env = cls(dut, tp_uid, model, results_dir, input_ports, pinned, idle)
+        results = Path(results_dir) if results_dir is not None else Path(
+            os.environ.get("SPECFLOW_RESULTS", "results"))
+        env = cls(dut, tp_uid, model, results, input_ports, pinned, idle)
+        if trace_internals is not None:
+            env.trace_internals = [n for n in trace_internals if n]
+        if compare:
+            env.compare_mode = compare
 
         clk = env._clk()
         if clk is not None:
@@ -747,10 +768,10 @@ class Env:
             self._bundle(self._inputs),
             _sim_time(),
         ))
-        if _INTERNALS:
+        if self.trace_internals:
             self._internals.append((
-                {n: self.sample(n) for n in _INTERNALS},
-                {n: _plain(getattr(self.ref, n, None)) for n in _INTERNALS},
+                {n: self.sample(n) for n in self.trace_internals},
+                {n: _plain(getattr(self.ref, n, None)) for n in self.trace_internals},
             ))
 
     def check(self, chk_uid: str, *signals: str) -> None:
@@ -797,7 +818,7 @@ class Env:
         # surplus hold cycle is a function failure.
         compare = (
             cycle_exact
-            if os.environ.get("SPECFLOW_COMPARE") == "cycle_exact"
+            if self.compare_mode == "cycle_exact"
             else transactional
         )
 
@@ -919,7 +940,7 @@ class Env:
         (self.results_dir / f"{self.tp_uid}.trace.json").write_text(
             json.dumps({
                 "tp_uid": self.tp_uid,
-                "signals": _INTERNALS,
+                "signals": self.trace_internals,
                 "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
                 "edges": edges,
             }, indent=2, ensure_ascii=False, default=str) + "\n",
