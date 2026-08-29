@@ -1840,6 +1840,47 @@ def unexercised_against(held: dict, witness: str, contract: dict,
             for r in results if r.unexercised()}
 
 
+def _staged_element(tp_uid: str, req_uid: str, req: dict, shape: dict, *,
+                    stimulus: str) -> dict:
+    """A minted testpoint that passes S2's OWN gate -- which `--reuse` re-runs.
+
+    THE DEFECT THIS FIXES, and it is an ordering one. The staging loop appends
+    to `testplan` AFTER S2's gate has run, and nothing re-gates the artifact
+    afterwards, so the first thing ever to look at these elements was `--reuse`
+    on the NEXT run: `_reuse` (`integration.py:146`) re-runs `s2_testplan.gate`
+    and regenerates when it errors. d1-i2c's own testplan failed its own gate
+    with 106 errors over 53 elements, two each -- `expected_response: empty` and
+    `check_method: empty`. So a resumed run paid for S2 and S3 again every time,
+    and no experiment holding the testplan fixed could be run at all.
+
+    NOTHING HERE IS INVENTED, which is what decides the wording. Filling a field
+    with plausible prose to satisfy a gate would make the gate measure nothing --
+    the same failure as a vacuous check, one artifact up. `expected_response` is
+    the NORMALIZED EXPECTATION: the predicate the check was written from, already
+    stated over observable outputs, which is exactly what the field asks for.
+    `check_method` says what actually decides this testpoint -- the frozen check
+    for `req_uid`, over the recorded trace. A staged testpoint has no other check
+    and never had one.
+    """
+    expected = str(shape.get("expectation") or "").strip()
+    if not expected:
+        # No normalized expectation to quote. The requirement's own text is the
+        # weaker answer and still a TRUE one; that is the trade to make here.
+        expected = (str(req.get("text") or "").strip()
+                    or f"the behaviour {req_uid} describes")
+    ports = ", ".join(shape.get("observable") or ()) or "its observable outputs"
+    return {
+        "uid": tp_uid, "covers": [f"{req_uid}@1"],
+        "stimulus": stimulus,
+        "expected_response": expected,
+        "check_method": (
+            f"the frozen check for {req_uid} decides this trace, reading "
+            f"{ports}. It was staged because that check abstained on every "
+            f"testpoint it already named."),
+        "dimension": "D2_control_flow",
+    }
+
+
 def stage_unexercised(
     *,
     held: dict,
@@ -1941,11 +1982,9 @@ def stage_unexercised(
                 [str(t.get("uid", "")) for t in testplan]
                 + list(stimulus_by_tp), PREFIX_TESTPLAN))
             stimulus_by_tp[tp_uid] = steps
-            testplan.append({
-                "uid": tp_uid, "covers": [f"{uid}@1"],
-                "stimulus": _hint(req, shape, None, 0, reset_ports=reset_ports),
-                "expected_response": "", "dimension": "D2_control_flow",
-            })
+            testplan.append(_staged_element(
+                tp_uid, uid, req, shape,
+                stimulus=_hint(req, shape, None, 0, reset_ports=reset_ports)))
             added.append(tp_uid)
             if tp_uid not in oracle.tp_uids:
                 oracle.tp_uids.append(tp_uid)

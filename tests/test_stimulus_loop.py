@@ -46,7 +46,8 @@ ORACLE = '''def decide(trace):
     return (None, None, "a was never driven to 7")
 '''
 
-REQ = {"uid": "REQ-0000", "text": "when a is 7, q moves"}
+REQ = {"uid": "REQ-0000", "text": "when a is 7, q moves",
+       "needs": ["testplan", "refmodel"]}
 NORM = {"REQ-0000": {"activation": {"text": "a is 7", "inputs": {"a": 7}},
                      "observable": ["q"], "expectation": "q is non-zero"}}
 
@@ -501,3 +502,51 @@ def test_reset_and_arbitration_hints_do_not_exclude_each_other():
               {"activation": {"text": "rst is asserted high at a rising edge"},
                "observable": ["al"]}, None, 0)
     assert "ARBITRATION LOST" in h and "reset step" in h
+
+
+# ------------------------------------- the minted element passes S2's own gate
+
+
+def _gate_errors(elements: list[dict], requirements: list[dict]) -> list:
+    """The REAL S2 gate over a testplan, which is what `--reuse` re-runs."""
+    from specflow.s2_testplan import gate
+    from specflow.schema import TestplanOutput
+
+    out = TestplanOutput.model_validate({"elements": elements})
+    return [i for i in gate(requirements, out) if i.severity == "error"]
+
+
+def test_a_staged_testpoint_passes_the_gate_that_planned_the_others():
+    """THE LOAD-BEARING PIN, and the defect it fixes is an ORDERING one.
+
+    The staging loop appends to `testplan` after S2's gate has already run and
+    nothing re-gates it, so `--reuse` on the NEXT run was the first thing ever
+    to look at these elements -- and it rejected them, which forced S2 and S3 to
+    regenerate on every resumed run. Measured on d1-i2c: its own testplan failed
+    its own gate with 106 errors over the 53 elements the loop had minted.
+    """
+    gen = _Gen(HIT)
+    testplan: list[dict] = []
+    _run(gen, testplan=testplan)
+    assert len(testplan) == 1, "the loop staged nothing, so this pins nothing"
+    assert _gate_errors(testplan, [REQ]) == []
+
+
+def test_the_staged_element_quotes_the_normalized_expectation():
+    """Not invented prose. Filling a field to satisfy a gate would make the gate
+    measure nothing -- a vacuous check, one artifact up."""
+    el = O._staged_element("TP-0009", "REQ-0000", REQ, NORM["REQ-0000"],
+                           stimulus="drive a=7")
+    assert el["expected_response"] == "q is non-zero"
+    assert "REQ-0000" in el["check_method"] and "q" in el["check_method"]
+    assert el["covers"] == ["REQ-0000@1"] and el["stimulus"] == "drive a=7"
+
+
+def test_a_requirement_with_no_normalized_expectation_still_gates_clean():
+    """The weaker answer is the requirement's own text, and it is still TRUE.
+    An element that cannot say what is expected is what the gate exists to
+    reject, so falling through to an empty string is not an option."""
+    el = O._staged_element("TP-0009", "REQ-0000", REQ, {"observable": ["q"]},
+                           stimulus="drive a=7")
+    assert el["expected_response"] == REQ["text"]
+    assert _gate_errors([el], [REQ]) == []
