@@ -51,7 +51,8 @@ from .refmodel import trust
 from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
 from .refmodel.oracle_gen import run_oracle_gen
-from .refmodel.oracles import RequirementOracle, well_formed
+from .refmodel.oracles import (RequirementOracle, decide, replay,
+                               transactional_view, well_formed)
 from .schema import Issue
 
 logger = logging.getLogger(__name__)
@@ -510,6 +511,44 @@ def _liveness(held: dict, witness: str, contract: dict,
     except Exception as exc:  # noqa: BLE001
         logger.info("oracle liveness not measured (%r)", exc)
         return {}
+
+
+def _decides(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
+             *, base: str, transactional: bool = True) -> int:
+    """How many of this oracle's own testpoints it reaches a verdict on.
+
+    `decide` returns None exactly when the activation never occurred, so this
+    counts the testpoints where the check actually saw its case. Zero means it
+    decided nothing anywhere -- which is not a defect on its own (the stimulus
+    may simply not stage it) and IS a defect in a replacement, if the check it
+    replaces decided something.
+
+    WHY THIS EXISTS. The correspondence gate rejects overwhelmingly on the
+    TRIGGER -- 29 of 33 rejections on d1-i2c named it as the thing to fix, 20
+    calling a False path "unlicensed by the requirement". The author's only
+    move against that instruction is to narrow the activation, and a narrow
+    enough activation never fires. Measured on the same run: of the rejected
+    checks whose verdict moved across repair, six went from convicting to
+    ABSTAINING and three from passing to abstaining -- nine checks that stopped
+    deciding under an instruction to be more precise.
+
+    Nothing caught it. `verify_one` rejects for `malformed` and `vacuous` and
+    nothing else mechanical, and the post-repair call does not pass a
+    `review`, so correspondence -- the one leg that would notice -- sees a
+    replacement only at the TOP OF THE NEXT ROUND, which on the last round
+    never comes.
+    """
+    n = 0
+    for tp in oracle.tp_uids:
+        steps = stimulus_by_tp.get(tp)
+        if not steps:
+            continue
+        rep = replay(witness, contract, steps, base=base)
+        rows = transactional_view(rep.rows) if transactional else rep.rows
+        result = decide(oracle, rows)
+        if not result.broken and result.ok is not None:
+            n += 1
+    return n
 
 
 def _is_live(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
@@ -1159,6 +1198,46 @@ def run_oracle_stage(
                     repairs.setdefault(o.req_uid, []).append(
                         f"strengthening rejected -- {weaker}")
                     rejected.setdefault(o.req_uid, f"not-stronger: {weaker}")
+                    continue
+            # A REPLACEMENT THAT STOPPED DECIDING IS NOT A REPAIR.
+            #
+            # The correspondence gate rejects on the TRIGGER far more than on
+            # anything else, and the only move an author has against "your
+            # activation is too broad" is to narrow it. Narrow it enough and the
+            # check never fires -- it stops convicting, which reads like
+            # compliance, and stops deciding, which is the whole of its value.
+            #
+            # Nothing above catches that. `verify_one` rejects for `malformed`
+            # and `vacuous`; its one non-mechanical leg is the correspondence
+            # `review`, and THE CALL ABOVE PASSES NONE, because the review in
+            # hand is of the oracle being replaced, not of the replacement. So
+            # a replacement is judged by correspondence only at the top of the
+            # next round -- and on the last round there is no next round.
+            #
+            # Measured on d1-i2c: across the rejected set, six checks went from
+            # convicting to abstaining under repair and three from passing to
+            # abstaining. This is the leg that would have held them.
+            #
+            # Only a STRICT loss blocks. A replacement that decides as much as
+            # its predecessor is kept even if it decides differently -- deciding
+            # differently is what a repair is for. And a predecessor that
+            # already decided nothing sets a floor of zero, so this can never
+            # block the first check that starts working.
+            before = held.get(o.req_uid)
+            if before is not None:
+                was = _decides(before, witness, contract, stimulus_by_tp,
+                               base=base, transactional=transactional)
+                now = _decides(o, witness, contract, stimulus_by_tp,
+                               base=base, transactional=transactional)
+                if was and not now:
+                    logger.info("oracles: %s: the replacement decides nothing on "
+                                "any of its %d testpoint(s) where the previous "
+                                "check decided %d; the previous check stands",
+                                o.req_uid, len(o.tp_uids), was)
+                    repairs.setdefault(o.req_uid, []).append(
+                        f"repair rejected -- the replacement decided nothing on "
+                        f"any of its {len(o.tp_uids)} testpoint(s), where the "
+                        f"previous check decided {was}; the previous stands")
                     continue
             if o.req_uid in advisory_only and o.req_uid in dead_now and not _is_live(
                     o, witness, contract, stimulus_by_tp, base=base):

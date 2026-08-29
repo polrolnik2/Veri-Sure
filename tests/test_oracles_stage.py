@@ -1155,3 +1155,44 @@ def test_a_stale_requirement_set_still_discards_the_variants():
     src = Path("specflow/oracles_stage.py").read_text()
     rewrite = src[src.index("if rewrite and run_dir is not None:"):]
     assert '"variants.json"' in rewrite[:600]
+
+
+# ------------------- a replacement that stopped deciding is not a repair
+
+
+#: Decides on the one testpoint it names.
+DECIDES = """\
+def decide(trace):
+    for row in trace:
+        if row['inputs']['a'] == 1:
+            return row['outputs']['y'] == 1, row['edge'], 'a was high'
+    return None, None, 'a was never high'
+"""
+#: Same shape, activation narrowed until nothing matches -- which is what an
+#: author does when told its trigger is too broad.
+NARROWED = DECIDES.replace("row['inputs']['a'] == 1",
+                           "row['inputs']['a'] == 7")
+
+
+def test_decides_counts_the_testpoints_a_check_reaches_a_verdict_on():
+    assert O._decides(_oracle(DECIDES), WITNESS, CONTRACT, STIM, base="step") == 1
+    assert O._decides(_oracle(NARROWED), WITNESS, CONTRACT, STIM, base="step") == 0
+
+
+def test_a_check_that_decides_nothing_is_distinguishable_from_one_that_fails():
+    """The point of counting decisions rather than verdicts: `_decides` must
+    not confuse "said False" with "said nothing". Both are non-True."""
+    assert O._decides(_oracle(GOOD), WITNESS, CONTRACT, STIM, base="step") == 1
+    assert O._decides(_oracle(GOOD), BROKEN, CONTRACT, STIM, base="step") == 1
+
+
+def test_a_crashing_check_decides_nothing():
+    """A `decide` that raises has not decided, whatever it was going to say."""
+    boom = "def decide(trace):\n    return trace['nope']\n"
+    assert O._decides(_oracle(boom), WITNESS, CONTRACT, STIM, base="step") == 0
+
+
+def test_a_testpoint_with_no_stimulus_contributes_no_decision():
+    o = RequirementOracle(req_uid="REQ-0001", clause="c", source=DECIDES,
+                          tp_uids=["TP-0000", "TP-0404"])
+    assert O._decides(o, WITNESS, CONTRACT, STIM, base="step") == 1
