@@ -341,23 +341,7 @@ def build_artifacts(
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
-    #: Adequacy feedback rounds. 1 means: debug, mutate the shipped model, send
-    #: the oracles that caught nothing back to be strengthened, then debug ONCE
-    #: MORE against the strengthened set -- two reference models in total.
-    #:
-    #: Shipped at 1 rather than 0 because the alternative is measuring a set
-    #: and acting on none of it: n-i2c reported 46 CONFORMS of which only 6
-    #: could be shown to discriminate, and nothing was done about the other 40.
-    #:
-    #: Safe to default only now the illegal-mutant filter exists
-    #: (`adequacy._unbuildable`). Before it, 19 of n-i2c's 20 inadequacy
-    #: findings cited the same mutant putting the literal 2 on a one-bit port,
-    #: and a strengthening round would have rewritten 20 oracles to catch a
-    #: value no hardware can produce -- returning them over-strict, which the
-    #: over-strictness gate then rejects. Enabling this before that filter would
-    #: have realised the oscillation risk on the first round.
-    adequacy_rounds: int = 1,
-    #: Rounds of the relax-side feedback edge, separate from `adequacy_rounds`
+    #: Rounds of the relax-side feedback edge
     #: because the two pull opposite ways -- see `compose._closed_loop`.
     reconsider_rounds: int = 0,
     #: Blocking verdicts reported as `warning` rather than `error`. Only
@@ -720,7 +704,6 @@ def build_artifacts(
             control_source=refmodel_control,
             normalized=normalized_by_uid or None,
             oracle_set=oracle_set,
-            adequacy_rounds=adequacy_rounds,
             reconsider_rounds=reconsider_rounds,
             advisory_verdicts=advisory_verdicts,
         )
@@ -798,7 +781,6 @@ def build_artifacts(
                 control_source=refmodel_control,
                 normalized=normalized_by_uid or None,
                 oracle_set=oracle_set,
-                adequacy_rounds=adequacy_rounds,
             reconsider_rounds=reconsider_rounds,
             advisory_verdicts=advisory_verdicts,
             )

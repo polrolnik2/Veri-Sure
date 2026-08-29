@@ -268,7 +268,6 @@ def run_refmodel(
     #: something that could have read it.
     oracle_set=None,
     #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
-    adequacy_rounds: int = 1,
     reconsider_rounds: int = 0,
     advisory_verdicts: frozenset[str] = frozenset(),
 ) -> tuple[StageResult[RefModelOutput], str]:
@@ -326,7 +325,7 @@ def run_refmodel(
             oracle_rates=oracle_set.rates(),
             oracle_liveness=dict(oracle_set.liveness),
             witness_notes=dict(oracle_set.witness_notes),
-            oracle_set=oracle_set, adequacy_rounds=adequacy_rounds,
+            oracle_set=oracle_set,
             reconsider_rounds=reconsider_rounds,
             advisory_verdicts=advisory_verdicts,
         )
@@ -361,8 +360,7 @@ def _closed_loop(
     oracle_liveness: dict[str, str] | None = None,
     witness_notes: dict[str, str] | None = None,
     oracle_set=None,
-    adequacy_rounds: int = 1,
-    #: Rounds of the OTHER edge, counted separately from `adequacy_rounds` --
+    #: Rounds of the feedback edge --
     #: and separate because running both in one round makes them fight.
     #:
     #: Measured on t-i2c, which ran both: `strengthen` tightened 5 oracles and
@@ -394,10 +392,8 @@ def _closed_loop(
     the ORACLE, and the counterexample is in hand, so it goes back to the stage
     that owns oracle generation.
 
-    `adequacy_rounds=0` measures and acts on nothing, which is how this ships:
     the rate has to be known before it is allowed to spend calls.
     """
-    from .adequacy import assess, discrimination, inadequate, write
 
     # Normalised once. Both are optional so a caller predating the measurement
     # still works, and both are read below in set operations where None is not
@@ -405,7 +401,7 @@ def _closed_loop(
     oracle_liveness = dict(oracle_liveness or {})
     witness_notes = dict(witness_notes or {})
     issues: list[Issue] = []
-    feedback_rounds = max(0, int(adequacy_rounds), int(reconsider_rounds))
+    feedback_rounds = max(0, int(reconsider_rounds))
     for round_ in range(feedback_rounds + 1):
         source, issues = _debug_turns(
             source=source, contract=contract, contract_json=contract_json,
@@ -420,32 +416,8 @@ def _closed_loop(
         )
         if not oracles:
             break
-        report = assess(oracles, source, contract, stimulus_by_tp, base=base)
-        # The one number that says whether the set is an instrument at all.
-        # Measured on n-i2c: 70 oracles separated a model failing 138 of 168
-        # golden testpoints from one passing all 168 by THREE requirements, and
-        # neither arm produced a single VIOLATES. Every other figure about that
-        # run -- 46 CONFORMS, a converged loop, 70 verified oracles -- was true
-        # and meant nothing without this beside it. Reported, never a gate: the
-        # control is a proxy for the held-out grade.
-        apart = (discrimination(oracles, source, control_source, contract,
-                                stimulus_by_tp, base=base)
-                 if control_source else None)
-        if apart is not None:
-            logger.info(
-                "oracle set discriminates %d of %d requirement(s) between this "
-                "model and a known-good one%s", apart["discriminating"],
-                apart["oracles"],
-                f"; it FAILS the known-good design on {len(apart['control_violates'])}"
-                if apart["control_violates"] else "")
-        if run_dir is not None:
-            write(Path(run_dir), report, round_, discrimination=apart)
-        weak = inadequate(report)
-        logger.info("adequacy r%d: %d of %d oracle(s) a mutant got past",
-                    round_, len(weak), len(report))
 
-        # THE OTHER FEEDBACK EDGE. `weak` is a check something provably wrong
-        # got past. This is a check nothing could satisfy: the loop above just
+        # THE FEEDBACK EDGE. A check nothing could satisfy: the loop above just
         # spent its whole turn budget on it and a second implementation of the
         # same requirement fails it too.
         #
@@ -470,15 +442,13 @@ def _closed_loop(
                  for uid in sorted(still_violating & set(witness_notes))}
         if not int(reconsider_rounds) or round_ >= int(reconsider_rounds):
             stuck = {}
-        if not int(adequacy_rounds) or round_ >= int(adequacy_rounds):
-            weak = {}
         if stuck:
             logger.info(
                 "%d oracle(s) survived the turn budget and a second "
                 "implementation fails them too: %s", len(stuck),
                 ", ".join(sorted(stuck)))
 
-        if (not weak and not stuck) or oracle_set is None:
+        if not stuck or oracle_set is None:
             break
 
         from ..oracles_stage import run_oracle_stage
@@ -490,9 +460,9 @@ def _closed_loop(
             workdir=(Path(run_dir) / "specflow" if run_dir is not None
                      else Path("/tmp/specflow-oracles")),
             base=base, normalized=normalized, control_source=control_source,
-            run_dir=run_dir, strengthen=weak, reconsider=stuck,
+            run_dir=run_dir, reconsider=stuck,
             previous=oracle_set,
-            # The model these mutants came from, for the adequacy gate to
+            # The model this round is reacting to, for the record --
             # measure a replacement against. It GATES and is never quoted --
             # `run_oracle_stage.hardened` says why the two differ.
             hardened=source,

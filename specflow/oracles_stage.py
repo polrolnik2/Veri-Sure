@@ -832,16 +832,9 @@ def run_oracle_stage(
     repair_attempts: int = 2,
     transactional: bool = True,
     fanout: bool = True,
-    #: `{req_uid: why}` for oracles a LATER stage found inadequate -- a mutation
-    #: of the shipped model they could not catch. Only these are regenerated,
-    #: and `previous` supplies everything else unchanged. This is the feedback
-    #: edge: without it an oracle that proves nothing stays in the set forever,
-    #: because the only thing that could have told us was downstream of it.
-    strengthen: dict[str, str] | None = None,
-    #: The OTHER feedback edge, pointing the opposite way. `strengthen` handles
-    #: a check something provably wrong got past; this handles one that a debug
-    #: loop spent its whole budget on and could not satisfy, while a second
-    #: implementation of the same requirement fails it too.
+    #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
+    #: could not satisfy, while a second implementation of the same requirement
+    #: fails it too.
     #:
     #: Measured on s-i2c: the loop drove VIOLATES 15 -> 9, and 7 of the 9 left
     #: are checks the known-good control also fails. Those 7 block the gate,
@@ -856,18 +849,6 @@ def run_oracle_stage(
     #: Only the author can tell, and keeping the check is a valid answer.
     reconsider: dict[str, str] | None = None,
     previous: OracleSet | None = None,
-    #: The reference model a strengthening round is reacting to -- the design
-    #: whose mutants got past these checks. Supplied only on a scoped round,
-    #: where it exists by definition.
-    #:
-    #: IT GATES AND IT IS NEVER QUOTED. Running a design to decide whether a
-    #: check improved is what `verify_one` already does with the witness and the
-    #: control. Putting its trace in front of the oracle AUTHOR is a different
-    #: act and is the one this project has already paid for: quoting a design to
-    #: the author tunes the check against it, and the model is then tuned
-    #: against the check, so the held-out grade stops being held out. So this
-    #: reaches `_caught` below and never `conforming_source`.
-    hardened: str = "",
     #: Something upstream regenerated, so the frozen artifacts are about
     #: requirements that no longer exist. Written once means once PER REQUIREMENT
     #: SET, not once per directory -- without this the stage would spend its
@@ -891,7 +872,7 @@ def run_oracle_stage(
     requirement and are inherited, and the witness is read back from disk
     exactly as `_witness` already does for the same reason.
     """
-    scoped = set(strengthen or {}) | set(reconsider or {})
+    scoped = set(reconsider or {})
     if scoped and previous is not None:
         # INHERITED, not re-specified. A caller that forgets one of these does
         # not get a quieter round, it gets the same round.
@@ -905,11 +886,9 @@ def run_oracle_stage(
         feedback = {
             **{uid: [_reconsider_issue(uid, why)]
                for uid, why in (reconsider or {}).items()},
-            **{uid: [_inadequate_issue(uid, why)]
-               for uid, why in (strengthen or {}).items()},
         }
         standing = _standing({o.req_uid: o for o in previous.trusted}, scoped)
-        label = f"_strengthen{previous.rounds}"
+        label = f"_reconsider{previous.rounds}"
     else:
         only, feedback, standing, label = None, None, None, ""
 
@@ -1257,20 +1236,6 @@ def run_oracle_stage(
             # toward the grade transitively.
             if "control" in fresh and o.req_uid not in was_over_strict:
                 newly_over_strict.add(o.req_uid)
-            # THE ADEQUACY GATE, additional to the four `verify_one` runs and
-            # asked only where a strengthening round has a previous check to
-            # compare against. See `_caught`.
-            if only and o.req_uid in (strengthen or {}):
-                weaker = _caught(
-                    held[o.req_uid], o, hardened, contract, stimulus_by_tp,
-                    base=base, transactional=transactional)
-                if weaker:
-                    logger.info("oracles: %s: %s; the previous check stands",
-                                o.req_uid, weaker)
-                    repairs.setdefault(o.req_uid, []).append(
-                        f"strengthening rejected -- {weaker}")
-                    rejected.setdefault(o.req_uid, f"not-stronger: {weaker}")
-                    continue
             # A REPLACEMENT THAT STOPPED DECIDING IS NOT A REPAIR.
             #
             # The correspondence gate rejects on the TRIGGER far more than on
@@ -1394,7 +1359,7 @@ def run_oracle_stage(
         kept.update({o.req_uid: o for o in trusted})
         for uid in rejected:
             if uid in kept and uid not in {o.req_uid for o in trusted}:
-                reasons[uid] = (f"strengthening rejected -- {rejected[uid]}; "
+                reasons[uid] = (f"regeneration rejected -- {rejected[uid]}; "
                                 f"the previous oracle stands")
         merged_d = dict(previous.dispositions)
         merged_d.update({u: v for u, v in dispositions.items() if u in scoped})
@@ -1409,7 +1374,7 @@ def run_oracle_stage(
                     "reconsidered after a debug loop and a second "
                     "implementation both failed to satisfy it"
                     if uid in (reconsider or {})
-                    else "strengthened after a mutant got past it")
+                    else "regenerated")
         trusted = list(kept.values())
         dispositions, reasons = merged_d, merged_r
         abandoned = {**previous.abandoned, **abandoned}
@@ -2142,64 +2107,6 @@ def stage_unexercised(
                     "%d still unreached", len(added), len(record), len(abandoned))
     return abandoned, record
 
-
-
-def _caught(oracle: RequirementOracle, replacement: RequirementOracle,
-            hardened: str, contract: dict, stimulus_by_tp: dict, *,
-            base: str, transactional: bool) -> str:
-    """Did the replacement actually get stronger? `""` if it did.
-
-    THE ADEQUACY GATE, and it is a SEPARATE leg rather than a fifth reject path
-    inside `verify_one`, because it asks a different kind of question. The other
-    four are about the check in isolation -- malformed, off-target, vacuous,
-    unsatisfiable. This one is about the check RELATIVE TO THE ONE IT REPLACES,
-    and it can only be asked where there is a previous check to compare with.
-
-    Without it "strengthened" was a claim, not a fact: a replacement that
-    verified was promoted and recorded as strengthened whether or not it caught
-    anything the original missed. That is the same defect the stimulus loop had
-    -- an action reported as done because it was attempted -- and it is worse
-    here, because the feedback edge exists precisely to make this happen.
-
-    Measured against the same model the mutants came from, and only that: the
-    question is whether this check now discriminates where the old one did not,
-    which is a property of the pair and the design between them.
-
-    Strictly fewer survivors is the bar. Equal is not improvement, and the
-    round should say so rather than promote a rewrite that changed nothing --
-    an oracle rewritten every round without getting stronger is the oscillation
-    this edge is bounded to avoid, and it is only visible if it is measured.
-    """
-    if not hardened:
-        return ""
-    from .refmodel.adequacy import ADEQUATE, adequacy_of
-
-    try:
-        was = adequacy_of(oracle, hardened, contract, stimulus_by_tp,
-                          base=base, transactional=transactional)
-        now = adequacy_of(replacement, hardened, contract, stimulus_by_tp,
-                          base=base, transactional=transactional)
-    except Exception as exc:  # noqa: BLE001 -- a measurement, never the stage
-        logger.warning("oracles: adequacy gate could not run for %s: %r",
-                       oracle.req_uid, exc)
-        return ""
-    if now.verdict == ADEQUATE and was.verdict != ADEQUATE:
-        return ""
-    before, after = _survivor_count(was.detail), _survivor_count(now.detail)
-    if after is None or before is None:
-        return ""
-    if after < before:
-        return ""
-    return (f"it still lets {after} mutant(s) past, against {before} before -- "
-            f"the rewrite did not make it discriminate")
-
-
-def _survivor_count(detail: str) -> int | None:
-    """How many mutants a finding says got past, or None if it does not say."""
-    import re
-
-    m = re.search(r"(\d+)\s+of\s+\d+", detail or "")
-    return int(m.group(1)) if m else None
 
 
 def _decides_nothing(testplan: list[dict],

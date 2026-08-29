@@ -266,24 +266,7 @@ class TopAgentConfig:
     #: Requirement-only oracles drive the loop; the judge stops deciding.
     specflow_variants: bool = False
     specflow_correspondence: bool = False
-    #: Adequacy feedback rounds. 1 means: debug, mutate the shipped model, send
-    #: the oracles that caught nothing back to be strengthened, then debug ONCE
-    #: MORE against the strengthened set -- two reference models in total.
-    #:
-    #: Shipped at 1 rather than 0 because the alternative is measuring a set
-    #: and acting on none of it: n-i2c reported 46 CONFORMS of which only 6
-    #: could be shown to discriminate, and nothing was done about the other 40.
-    #:
-    #: Safe to default only now the illegal-mutant filter exists
-    #: (`adequacy._unbuildable`). Before it, 19 of n-i2c's 20 inadequacy
-    #: findings cited the same mutant putting the literal 2 on a one-bit port,
-    #: and a strengthening round would have rewritten 20 oracles to catch a
-    #: value no hardware can produce -- returning them over-strict, which the
-    #: over-strictness gate then rejects. Enabling this before that filter would
-    #: have realised the oscillation risk on the first round.
-    specflow_adequacy_rounds: int = 1
-    #: The relax-side feedback edge, counted apart from adequacy because the
-    #: two pull opposite ways -- see `compose._closed_loop`.
+    #: The relax-side feedback edge -- see `compose._closed_loop`.
     specflow_reconsider_rounds: int = 0
     #: Blocking verdicts reported as `warning` rather than `error`, so a build
     #: proceeds with them itemised. Only `verdict.DOWNGRADABLE` is honoured.
@@ -705,7 +688,6 @@ class TopAgent:
             refmodel_control=self.config.specflow_refmodel_control,
             variants=self.config.specflow_variants,
             correspondence=self.config.specflow_correspondence,
-            adequacy_rounds=self.config.specflow_adequacy_rounds,
             reconsider_rounds=self.config.specflow_reconsider_rounds,
             advisory_verdicts=self.config.specflow_advisory_verdicts,
         )

@@ -277,7 +277,6 @@ async def run_specflow_node(
     #: value no hardware can produce -- returning them over-strict, which the
     #: over-strictness gate then rejects. Enabling this before that filter would
     #: have realised the oscillation risk on the first round.
-    adequacy_rounds: int = 1,
     reconsider_rounds: int = 0,
     advisory_verdicts: frozenset[str] = frozenset(),
     extra_sources: Sequence[Path | str] = (),
@@ -325,7 +324,6 @@ async def run_specflow_node(
         ),
         variants=variants,
         correspondence=correspondence,
-        adequacy_rounds=adequacy_rounds,
         reconsider_rounds=reconsider_rounds,
         advisory_verdicts=advisory_verdicts,
     )

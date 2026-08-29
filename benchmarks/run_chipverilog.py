@@ -313,7 +313,6 @@ async def run(args: argparse.Namespace) -> dict:
             specflow_refmodel_control=control_model(top),
             specflow_variants=args.variants,
             specflow_correspondence=args.correspondence,
-            specflow_adequacy_rounds=args.adequacy_rounds,
             specflow_reconsider_rounds=args.reconsider_rounds,
             # Taken FROM `verdict.DOWNGRADABLE` rather than spelled again here.
             # Spelling it twice is how this flag became a no-op: DOWNGRADABLE
@@ -518,17 +517,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--reconsider-rounds", type=int, default=0,
         help="Rounds of the relax-side oracle feedback edge: re-ask a check "
              "the debug loop could not satisfy that a second implementation "
-             "also fails. Separate from --adequacy-rounds because the two pull "
-             "opposite ways; running both measured a net zero.",
-    )
-    p.add_argument(
-        "--adequacy-rounds", type=int, default=1,
-        help="After the debug loop converges, mutate the SHIPPED model, send "
-             "any oracle a mutant got past back to be strengthened, and debug "
-             "once more against the strengthened set. 1 is two reference "
-             "models in total. 0 measures adequacy and acts on nothing, which "
-             "was the default until the illegal-mutant filter made acting on "
-             "it safe.",
+             "also fails.",
     )
     p.add_argument(
         "--correspondence", action="store_true",
