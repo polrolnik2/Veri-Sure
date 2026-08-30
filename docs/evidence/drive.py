@@ -35,6 +35,17 @@ ap.add_argument("--no-staging", dest="staging", action="store_false")
 ap.add_argument("--timeout", type=float, default=7200.0)
 ap.add_argument("--resume", action="store_true",
                 help="keep the rendezvous and REPLAY every answer already in it")
+ap.add_argument("--reqs", default="",
+                help="JSON file with an `over_strict` list: AUTHOR only these. "
+                     "Default: all 43.")
+ap.add_argument("--siblings", default="",
+                help="JSON file with an `over_strict` list: the requirement set "
+                     "`correspondence` may resolve a `through_req` pointer INTO. "
+                     "Defaults to the authored set, which is what the full-43 run "
+                     "used. Set it to the 43 when authoring a subset, or the "
+                     "subset gets a THINNER sibling map than the baseline and "
+                     "the route block goes dark for reasons unrelated to the "
+                     "change under test.")
 a = ap.parse_args()
 
 EXP = S / "asrt" / a.name
@@ -45,10 +56,12 @@ if EXP.exists() and not a.resume:
 (RUN / "specflow").mkdir(parents=True, exist_ok=True)
 IO.mkdir(parents=True, exist_ok=True)
 
-over = json.load(open(S / "asrt/over_strict.json"))["over_strict"]
+ALL43 = json.load(open(S / "asrt/over_strict.json"))["over_strict"]
+over = json.load(open(a.reqs))["over_strict"] if a.reqs else ALL43
 if a.limit:
     over = over[:a.limit]
 want = set(over)
+sib_want = set(json.load(open(a.siblings))["over_strict"]) if a.siblings else want
 
 contract_json = (SRC / "contract.json").read_text()
 contract = json.loads(contract_json)
@@ -98,11 +111,27 @@ from specflow.refmodel import oracle_gen as _og, correspondence as _corr
 _og.run_fanout = _wide
 _corr.run_fanout = _wide
 
+# THE SIBLING MAP IS SEPARATE FROM THE AUTHORED SET. `run_oracle_stage` builds
+# `by_uid` from `requirements`, so filtering that list to a subset also shrinks
+# what `correspondence._through` can resolve a `through_req` pointer into --
+# and a reviewer handed a dangling pointer falls back to the requirement's own
+# sentence, which is the MECHANISM the route exists to get past. Widening it
+# here keeps a subset run's sibling context identical to the baseline's.
+if sib_want != want:
+    _sib = {r["uid"]: r for r in reqs_all if r.get("uid") in sib_want}
+    _real_review = _corr.review
+    def _review_wide(oracles, requirements, **kw):        # noqa: ANN001
+        return _real_review(oracles, {**_sib, **requirements}, **kw)
+    _corr.review = _review_wide
+    print(f"sibling map widened to {len(_sib)} requirements "
+          f"(authoring {len(want)})")
+
 from specflow.model_io import AgentPort, resumable
 from specflow.oracles_stage import run_oracle_stage
 
 (IO / "MANIFEST.json").write_text(json.dumps({
     "experiment": a.name, "requirements": sorted(want),
+    "siblings": sorted(sib_want),
     "correspondence": a.correspondence, "staging": a.staging,
     "repair_attempts": a.repair_attempts,
 }, indent=1))
