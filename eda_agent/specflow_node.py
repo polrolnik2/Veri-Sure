@@ -314,11 +314,21 @@ class SpecflowReviewer:
         """
         out: dict = {}
         suite = Path(self._built.suite_dir)
-        for wave in sorted(suite.glob("wave_*_test_TP*.vcd")):
-            mod = wave.stem.split("_", 2)[-1]          # wave_0_test_TP0007
+        found: dict = {}
+        for wave in suite.glob("wave_*_test_TP*.vcd"):
+            _, it, mod = wave.stem.split("_", 2)        # wave_0_test_TP0007
             digits = mod.replace("test_TP", "")
-            if digits.isdigit():
-                out[f"TP-{digits}"] = wave
+            if not (digits.isdigit() and it.isdigit()):
+                continue
+            uid = f"TP-{digits}"
+            # LATEST ITERATION WINS, compared as a NUMBER. Sorting the names as
+            # strings puts "wave_10_" before "wave_2_", so a tenth trial's
+            # waveform would silently lose to the second's -- and the agent
+            # would be shown a waveform eight commits out of date while every
+            # other field described the current design.
+            if int(it) >= found.get(uid, -1):
+                found[uid] = int(it)
+                out[uid] = wave
         return out
 
 

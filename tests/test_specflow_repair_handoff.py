@@ -428,3 +428,16 @@ def test_the_reviewer_maps_each_testpoints_waveform(tmp_path):
 def test_no_waveforms_is_an_empty_map_and_not_an_error(tmp_path):
     """A suite run with `trace=False` dumps nothing, which is a real state."""
     assert _reviewer(tmp_path, [], {})._waves_by_tp() == {}
+
+
+def test_the_wave_map_prefers_the_LATEST_iteration_numerically(tmp_path):
+    """Sorting names as strings puts "wave_10_" before "wave_2_".
+
+    A tenth trial's waveform would then silently lose to the second's, and the
+    agent would be shown a waveform eight commits out of date while every other
+    field in `explain` described the current design.
+    """
+    for it in (0, 2, 10):
+        (tmp_path / f"wave_{it}_test_TP0007.vcd").write_text("$end\n")
+    got = _reviewer(tmp_path, [], {})._waves_by_tp()
+    assert got["TP-0007"].name == "wave_10_test_TP0007.vcd"
