@@ -249,7 +249,7 @@ def _committable(tmp_path, results, *, syntax=(True, ""), multi=(), monkeypatch=
 def test_staging_runs_NO_simulation_and_commit_runs_exactly_one(tmp_path, monkeypatch):
     s = _committable(tmp_path, [(True, 0, "{}")], monkeypatch=monkeypatch)
     s.stage_replace("blk_assign", "assign b = ~a;")
-    s.stage_replace("blk_always", "always @(posedge clk) begin\n  c <= ~a;\nend")
+    s.stage_replace("blk_always", "always @(posedge clk) begin\n  c <= ~w;\nend")
     assert s.sim_reviewer.calls == 0, "staging must not simulate"
     assert s.action_calls == 0, "staging must not spend a trial"
     s.commit()
@@ -734,3 +734,79 @@ def test_pull_req_results_degrades_on_a_backend_that_cannot_decide(tmp_path):
     s._pull_req_results()
     assert s.req_results == {}
     assert s.vcd_path is None
+
+
+# ------------------------- the dry run has to say "this would be rejected"
+
+
+def _real_session(tmp_path):
+    """A session over RTL that ACTUALLY COMPILES.
+
+    The module-level fixture does not: `output c` driven from an `always` block
+    is not legal Verilog-2005, so `check_syntax` rejects it before and after any
+    edit. Every existing staging test is fine with that -- they assert on the
+    buffer, not on Verilator -- but a test about the COMMIT VERDICT has to run
+    against something a commit could accept, or it only measures the fixture.
+    """
+    from eda_agent.trace_slicer import RtlBlock
+    # `w` is driven by one block and READ BY THE OTHER, which is what makes the
+    # removal detectable: `undriven_signals` reports a lost driver only when a
+    # surviving block still reads the signal. A module output driven by the
+    # removed block and read by nothing is not a dangling read.
+    rtl = ("module m(input clk, input a, output reg c);\n"
+           "wire w;\n"
+           "assign w = a;\n"
+           "\n"
+           "always @(posedge clk) begin\n"
+           "  c <= w;\n"
+           "end\n"
+           "\n"
+           "endmodule\n")
+    path = tmp_path / "rtl.sv"
+    path.write_text(rtl)
+    s = _EditSession(tb_path=None, rtl_path=str(path), output_dir=str(tmp_path),
+                     last_mismatch_cnt=0, sim_reviewer=object(), max_trials=30)
+    s.blocks_by_id = {
+        "blk_assign": RtlBlock(id="blk_assign", kind="assign", start_line=3,
+                               end_line=3, clocking="", code="assign w = a;",
+                               writes=("w",), reads=("a",)),
+        "blk_always": RtlBlock(id="blk_always", kind="always", start_line=5,
+                               end_line=7, clocking="posedge clk",
+                               code="always @(posedge clk) begin\n  c <= w;\nend",
+                               writes=("c",), reads=("w",)),
+    }
+    return s
+
+
+def test_check_staged_reports_the_commit_verdict_not_only_findings(tmp_path):
+    """MEASURED on the first live run, and it cost the session its only trial.
+
+    The agent called `check_staged()`, was told "scl_oen, sda_chk, sda_oen,
+    state are still read but have LOST their last driver", committed anyway,
+    and the commit was rejected for exactly that. The information was there;
+    the SHAPE was not -- `commit` says "Commit rejected: ...", `check_staged`
+    returned the same fact as a bare string in a `warnings` list under a field
+    reading `is_syntax_correct: true`.
+    """
+    s = _real_session(tmp_path)
+    # Remove the block driving `w`, which the always block still reads.
+    s.stage_remove("blk_assign")
+    out = s.check_staged()
+    assert out["would_commit_be_rejected"] is True
+    assert "would be REJECTED" in out["verdict"]
+    assert "w" in out["verdict"]
+    # And the same batch IS actually rejected, so the free call and the paid one
+    # cannot disagree about the same buffer.
+    assert "removed their LAST driver" in (s.commit().get("error_msg") or "")
+
+
+def test_check_staged_on_a_clean_batch_says_a_commit_would_proceed(tmp_path):
+    """The other half of a verdict: silence is not an answer either."""
+    s = _real_session(tmp_path)
+    s.stage_replace("blk_always", "always @(posedge clk) begin\n  c <= ~w;\nend")
+    out = s.check_staged()
+    assert out["would_commit_be_rejected"] is False
+    assert "would proceed to simulation" in out["verdict"]
+    # Verilator's build report, and its DECLFILENAME warning about the scratch
+    # file's own name, are 900 characters of noise above the finding.
+    assert out["syntax_output"] == "clean"

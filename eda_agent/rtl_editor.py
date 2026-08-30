@@ -874,6 +874,46 @@ class _EditSession:
                             f"driver (Verilator)")
         return ok, out, warnings, multi
 
+    def would_commit_be_rejected(self, text: str) -> str:
+        """The rejection `commit` WOULD give this batch, or "".
+
+        One function so the free check and the paid one cannot drift.
+
+        MEASURED, and it is why this exists. On the first live run the agent
+        called `check_staged()`, was told "scl_oen, sda_chk, sda_oen, state are
+        still read but have LOST their last driver", committed anyway, and the
+        commit was rejected for exactly that -- spending the only trial it
+        landed all session on a question the free call had already answered.
+        The information was there; the SHAPE was not. `commit` says "Commit
+        rejected: ... Add the replacement driver to this batch"; `check_staged`
+        returned the same fact as a bare string in a `warnings` list, under a
+        field reading `is_syntax_correct: true` and nine hundred characters of
+        Verilator build report. A dry run whose answer has to be inferred from a
+        warnings list is one the agent will read past.
+        """
+        ok, _out, _warnings, multi = self._static_findings(text)
+        if not ok:
+            return ("the staged buffer does not compile, so a commit would be "
+                    "rejected and would cost a trial")
+        try:
+            pre = set(multidriven_signals(self.rtl_path))
+        except Exception:  # noqa: BLE001
+            pre = set()
+        introduced = sorted(set(multi) - pre)
+        if introduced:
+            return ("a commit would be REJECTED: the batch gives "
+                    + ", ".join(introduced) + " MORE THAN ONE continuous "
+                    "driver. Most often the replacement re-declares something "
+                    "that already exists outside the block it replaced.")
+        lost = self.undriven_signals(text)
+        if lost:
+            return ("a commit would be REJECTED: " + ", ".join(lost)
+                    + " are still read but the batch removed their LAST driver. "
+                    "Add the replacement driver to this batch, or restore the "
+                    "block you removed. Fixing it here costs nothing; "
+                    "committing as it stands costs a trial and changes nothing.")
+        return ""
+
     def check_staged(self) -> Dict[str, Any]:
         """Static only: syntax and drivers. No simulation, NO TRIAL.
 
@@ -884,8 +924,19 @@ class _EditSession:
         than charging a typo the same as a wrong design hypothesis.
         """
         self.check_calls += 1
-        ok, out, warnings, multi = self._static_findings(self.staged())
-        return {"is_syntax_correct": ok, "syntax_output": out,
+        staged = self.staged()
+        ok, out, warnings, multi = self._static_findings(staged)
+        blocker = self.would_commit_be_rejected(staged)
+        return {"would_commit_be_rejected": bool(blocker),
+                "verdict": blocker or ("a commit would proceed to simulation; "
+                                       "whether it LATCHES is what the trial "
+                                       "answers"),
+                "is_syntax_correct": ok,
+                # Verilator prints a build report and a DECLFILENAME warning
+                # about this scratch file's own NAME on every success. Nine
+                # hundred characters of that above the finding is how the
+                # finding gets read past.
+                "syntax_output": out if not ok else "clean",
                 "warnings": warnings, "multidriven": multi,
                 "staged": self.staged_rtl is not None,
                 "check_calls": self.check_calls}
@@ -1893,7 +1944,7 @@ class RTLEditor:
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_check_staged(self) -> ToolResponse:
-        """Syntax and driver check on the staged batch. Static only: no simulation and NO TRIAL, so it is free and unlimited."""
+        """Would a commit be rejected? Syntax and drivers on the staged batch, with a verdict. Static only: no simulation and NO TRIAL, so it is free and unlimited. Call it before every commit."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         result = await asyncio.to_thread(self._session.check_staged)
