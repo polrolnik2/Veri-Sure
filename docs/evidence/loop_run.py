@@ -9,7 +9,7 @@ to spend a trial on it:
     -> `SpecflowReviewer.review()` decides the frozen set on the recording
     -> `req_results`, `list_failing_requirements()`, `explain(uid)`
 
-Usage: loop_run.py <out_dir> <rtl.v> [n_testpoints]
+Usage: loop_run.py <out_dir> <rtl.v> [n_testpoints] [stimulus_hold]
 """
 import json
 import shutil
@@ -23,6 +23,13 @@ RUN = Path("/home/user/runs/c1-i2c")
 OUT = Path(sys.argv[1])
 RTL = Path(sys.argv[2])
 LIMIT = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+#: Stimulus step duration. The earlier golden recording this suite's over-
+#: strictness was measured against was rendered with `hold=60` (rtl_probe.py's
+#: default); the pipeline renders the stimulus as written. That is not a detail:
+#: a hold scales how long each step is driven, so it decides whether a command
+#: completes inside the window its check opens -- and the same 90 checks convict
+#: golden a DIFFERENT NUMBER OF TIMES under the two renderings. 0 = as written.
+HOLD = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 
 from repair5 import repaired_suite  # noqa: E402
 
@@ -48,6 +55,9 @@ tp = tp.get("elements") or tp.get("testplan") or tp
 cov = json.loads((RUN / "specflow/coverage_model.json").read_text())
 stim = json.loads((RUN / "specflow/stimulus.json").read_text())
 by_tp = {t["tp_uid"]: t["stimulus_steps"] for t in stim["testpoints"]}
+if HOLD > 1:
+    by_tp = {k: [dict(s, hold=HOLD) if "inputs" in s else s for s in v]
+             for k, v in by_tp.items()}
 
 # The testpoints the suite actually names, so a limit never drops one an
 # oracle points at while keeping one nothing reads.
