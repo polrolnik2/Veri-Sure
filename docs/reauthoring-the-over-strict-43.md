@@ -371,9 +371,28 @@ unrelated pulse slams the window shut before the design has acted:
   One catch in three looks.
 * **REQ-0055** was repaired after round 1, so rounds 2 and 3 both reviewed
   `b0b7d242`, and both passed. Zero catches in two looks -- and it ships TRUSTED,
-  convicting golden on TP-0133, where the window opens at edge 0, `al` pulses at
-  edge 7, and the design's correct START lands at edges 28 and 38, outside the
-  three-row window.
+  convicting golden on TP-0133, where the window opens at edge 0, closes on an
+  `al` pulse at edge 7, and the design's correct START lands at edges 28 and 38,
+  outside the three-row window.
+
+  **The defect is the window's OPENING, not its closing**, and two earlier
+  readings of this case are withdrawn. The golden RTL sets `al` from
+  `(sda_chk & ~sSDA & sda_oen) | (|c_state & sto_condition & ~cmd_stop)`. The
+  first term needs filtered SDA low and `sda_i` is 1 at every row, so the edge-7
+  pulse comes from the second -- an unexpected STOP detected while the FSM is
+  non-idle, which is precisely what the specification describes ("arbitration
+  loss OR an unexpected non-STOP STOP condition returns the FSM to idle").
+  Closing the window there is defensible. What is not defensible is opening it
+  at edge 0: `{cmd: 1, ena: 1, nReset: 1, rst: 0}` is a LEVEL, true the moment
+  cmd appears on the pins, whereas the same RTL decodes cmd only when the FSM is
+  idle and a `clk_en` tick permits it. So the check demands a command sequence's
+  evidence from before the design has accepted the command, and `strong=True`
+  converts the early close into a conviction.
+
+  Withdrawn with it: the reviewer's own ground on REQ-0063 -- "al is cleared only
+  by reset per the specification, so it can persist across unrelated, later
+  commands" -- is wrong on both counts here. `al` pulses in all 17 testpoints
+  where it fires, and the term that fires is not the arbitration one.
 
 Round 1's objection on REQ-0055 was a different and entirely correct finding --
 one undifferentiated window shared across START/STOP/READ/WRITE, which the author
