@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
+from . import encoding
 from .fanout import compose, json_block, shared_block
 from .model_io import ModelPort
 from .schema import Issue
@@ -112,7 +113,16 @@ class Activation(BaseModel):
     #: model, no replay, no doubt", which is only possible because every name
     #: here is something the stimulus drives. Conditions on outputs go in
     #: `opens_on`.
-    inputs: dict[str, int] = Field(default_factory=dict)
+    #:
+    #: A VALUE MAY BE A SYMBOL, and where the port declares an encoding it
+    #: should be: `{"cmd": "I2C_CMD_WRITE"}`. The specification names its
+    #: commands by symbol and never states the numbers, so a number written here
+    #: is a guess -- and it was guessed independently at four stages that never
+    #: compared answers. Measured on c1-i2c: "WRITE" came back as 4, 1, 2 AND 3
+    #: across the corpus, and seven requirements used a value the design decodes
+    #: as nothing. `specflow.encoding` resolves the symbol against the ONE table
+    #: on the contract, so the number stops being anybody's opinion.
+    inputs: dict[str, int | str] = Field(default_factory=dict)
     #: The rest of the opening condition, and this one MAY name outputs.
     #:
     #: A LIST OF ALTERNATIVES: any entry opening the window is enough, and every
@@ -469,6 +479,20 @@ entry and "and" is a second key:
   "during an accepted WRITE"          -> inputs {"cmd": 8}, until [{"cmd_ack": 1}]
   "at the start of the STOP sequence" -> inputs {"cmd": 2}, until [{"cmd_ack": 1}]
   "until the WRITE completes"          -> until [{"cmd_ack": 1}]
+
+NAME A VALUE BY ITS SYMBOL WHERE THE PORT DECLARES ONE. The contract's port
+list carries an `encoding` for any port whose values the design decodes by name:
+
+  "a WRITE command is issued"   -> inputs {"cmd": "I2C_CMD_WRITE"}
+
+NOT `{"cmd": 4}`. The specification names its commands and never states their
+numbers, so a number here is YOUR READING and nothing checks it. Measured on one
+design: "WRITE" came back as 4, 1, 2 and 3 across the requirement set, and seven
+requirements used a value the design decodes as nothing -- windows that can
+never open, which at decide time look exactly like a design that never did it.
+The symbol resolves against the contract, so it cannot be any of those things.
+
+Where a port declares NO encoding, write the number as before.
 
 ENDING AND VOIDING ARE DIFFERENT, AND `aborts_on` IS THE SECOND ONE.
 
@@ -1061,14 +1085,22 @@ def gate_one(
             issues.append(Issue("error", path,
                                 f"{name!r} is not a declared input port"))
             continue
-        try:
-            as_int = int(value)
-        except Exception:  # noqa: BLE001
-            issues.append(Issue("error", path, f"{name}={value!r} is not an integer"))
+        # RESOLVE THROUGH THE PORT'S ENCODING, when it declares one. Absent a
+        # table this is `int(value)` and the same width check as before, so
+        # every design without a shared constants header behaves as it did.
+        as_int, why = encoding.resolve(name, value, contract)
+        if as_int is None:
+            issues.append(Issue("error", path, why))
             continue
         if not (0 <= as_int < (1 << inputs[name])):
             issues.append(Issue("error", path,
                                 f"{name}={as_int} does not fit {inputs[name]} bit(s)"))
+            continue
+        # NO NUDGE HERE FOR A NUMBER THAT HAPPENS TO BE RIGHT. `Severity` is
+        # error|warning, and a warning on every correct numeric value would be
+        # 45 of them on c1-i2c -- enough to bury the findings that mean
+        # something. The prompt asks for the symbol; the gate only catches what
+        # is wrong. The 122 normalizations predating the table stay valid.
 
     # `opens_on`, `until` and `aborts_on` may name ANY declared port, unlike
     # `inputs`. A window closes on what the design does -- "until cmd_ack" --
@@ -1102,11 +1134,19 @@ def gate_one(
                 # `{scl_i: 0, scl_oen: 1}` -- a conjunction of levels, which
                 # also fires when scl_oen rises over an already-low scl_i.
                 if isinstance(value, str):
+                    table, _complete = encoding.encoding_for(contract, name)
+                    if value in table:
+                        # A SYMBOL, not an edge. These fields already carried
+                        # `int | str` for edge words, so the two share a slot
+                        # and the edge words win -- a port whose encoding
+                        # defined a symbol called "rise" would be pathological.
+                        continue
                     if value not in _EDGE_WORDS:
+                        legal = sorted(_EDGE_WORDS) + sorted(table)
                         issues.append(Issue(
                             "error", path,
                             f"{name}={value!r} is neither a value nor one of "
-                            f"{sorted(_EDGE_WORDS)}"))
+                            f"{legal}"))
                     elif value in ("rise", "fall") and width > 1:
                         # SVA's `$rose`/`$fell` are defined on the LSB;
                         # `temporal.edges` reads them as increased/decreased.

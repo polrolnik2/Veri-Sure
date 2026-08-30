@@ -189,6 +189,15 @@ describe the design it would convict, and point at the words that condemn it.
 If you cannot point at the words, that path convicts where the requirement is
 silent, and the answer is NO.
 
+AND A PORT'S ENCODING IS NOT YOURS TO DEDUCE. Where the interface above gives a
+port an `encoding`, that map is the only authority on what its values mean --
+read the number off it. Where it gives none, the specification does not state
+one, and a check keyed on a bare number is asserting something the requirement
+never says: object to THAT, and never propose a different number. Do not infer
+an encoding from another requirement's normalized form, from the ordering of
+names in prose, or from a reference design you recall. Every one of those has
+produced a confident wrong answer here.
+
 Note what the rule does NOT ask. It never asks whether the check demands
 ENOUGH. A check that convicts only where the requirement speaks, but does so
 weakly, is a YES.
@@ -490,7 +499,14 @@ def _ports(contract: dict) -> dict:
         row = {"name": port.get("name"), "direction": port.get("dir"),
                "width": port.get("width")}
         row = {k: v for k, v in row.items() if v is not None}
-        for extra in ("notes", "idle_value"):
+        # `encoding` IS THE ONE THING A REVIEWER MUST NOT INFER. Stripped from
+        # this projection, a reviewer asked whether `cmd == 4` matches a WRITE
+        # requirement has to reach for something -- and in one measured run it
+        # reached for ANOTHER requirement's wrong normalization, concluded
+        # "WRITE=3, READ=4", rejected a CORRECT check, and the repair round
+        # wrote the illegal value in. The table is small, it is interface, and
+        # its absence is what made that possible.
+        for extra in ("notes", "idle_value", "encoding"):
             if port.get(extra) is not None:
                 row[extra] = port[extra]
         if row.get("name"):
