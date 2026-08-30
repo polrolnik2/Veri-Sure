@@ -1196,3 +1196,35 @@ def test_a_testpoint_with_no_stimulus_contributes_no_decision():
     o = RequirementOracle(req_uid="REQ-0001", clause="c", source=DECIDES,
                           tp_uids=["TP-0000", "TP-0404"])
     assert O._decides(o, WITNESS, CONTRACT, STIM, base="step") == 1
+
+
+def test_every_path_that_discards_a_replacement_records_it():
+    """A discarded repair must leave a trace in `repairs`, not only in a log.
+
+    Three paths drop a replacement and keep the previous check: `verify_one`
+    calls it worse, it stopped deciding, or it was advisory and still cannot
+    fail. The third recorded nothing, and that cost real forensics. On the
+    affected23 run REQ-0055's round-1 replacement widened a trigger from
+    cmd==1 to all four commands; it was discarded, and NEITHER the round-2
+    author NOR any reviewer ever saw it -- confirmed by grepping the rendezvous
+    prompts, because the artifact held two objections and no discard. Round 2
+    restarted from the round-0 check, fixed a different defect, and the frozen
+    result was rejected for exactly the narrow trigger round 1 had corrected.
+
+    The artifact is what a later reader reconstructs the loop from. A path that
+    throws away an author's work and says so only to a logger makes the loop
+    unauditable from its own output.
+    """
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    # Every `the previous check stands` / `previous stands` outcome pairs with a
+    # `repairs.setdefault(...)` -- count the discards and the records together.
+    stands = src.count("the previous check stands") + src.count("the previous stands")
+    recorded = src.count('repairs.setdefault(o.req_uid, []).append')
+    assert recorded >= 3, (
+        f"only {recorded} discard paths record to `repairs`; a silent one is "
+        f"how a lost repair becomes invisible in the artifact")
+    assert stands >= recorded, "every record should describe a real stand-down"

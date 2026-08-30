@@ -1197,6 +1197,17 @@ def run_oracle_stage(
         # Only a replacement that actually arrived replaces anything. A round
         # that produced nothing leaves the previous oracle standing to be
         # rejected again, which is the honest outcome rather than a hole.
+        #
+        # EVERY DISCARD IS RECORDED IN `repairs`, and the third path below used
+        # to log and say nothing. That cost real forensics: on the affected23
+        # run REQ-0055's round-1 replacement widened a trigger from cmd==1 to
+        # all four commands, was discarded, and NEITHER the round-2 author nor
+        # any reviewer ever saw it -- so round 2 restarted from the round-0
+        # check, fixed a different defect, and the final check was rejected for
+        # the narrow trigger round 1 had already corrected. Reconstructing that
+        # took reading the rendezvous prompts, because the artifact recorded
+        # only two objections and no discard at all. A path that drops an
+        # author's work must say so where the artifact can be read.
         for o in again:
             # RE-VERIFY EVERY REPLACEMENT, not only the advisory ones.
             #
@@ -1295,6 +1306,9 @@ def run_oracle_stage(
                 logger.info("oracles: %s was re-asked because it cannot "
                             "fail and the replacement cannot either; the "
                             "previous check stands", o.req_uid)
+                repairs.setdefault(o.req_uid, []).append(
+                    "repair rejected -- the replacement still cannot fail; "
+                    "the previous stands")
                 continue
             held[o.req_uid] = o
 
