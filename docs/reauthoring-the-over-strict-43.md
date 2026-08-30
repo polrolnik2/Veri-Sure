@@ -333,9 +333,32 @@ check's FINAL form receives depends on how late it was last repaired:
 
 **20 of 43 checks had their final form reviewed exactly once, and 12 of those
 shipped TRUSTED on that single draw** -- against a reviewer measured at 67%
-self-agreement. The checks that needed the most repair get the fewest looks at
-what actually ships, which is backwards: a repair is precisely the event that
-invalidates every earlier review, since the old version is never seen again.
+self-agreement.
+
+**And that costs nothing measurable here; on this data it looks beneficial.**
+Of the 24 checks that shipped, scored against golden by how often the shipping
+version had been reviewed:
+
+| looks at final form | n | passes | CONVICTS golden | convict rate |
+|---|---|---|---|---|
+| 1 | 12 | 10 | 1 | **8%** |
+| 2 | 6 | 3 | 2 | 33% |
+| 3 | 6 | 2 | 3 | **50%** |
+
+The confound is exact rather than statistical: `looks = 3 - (accepted repairs)`,
+by construction, so "reviewed three times" IS "never repaired". The variable is
+repair count wearing review count's clothes, and what the table actually says is
+that a check nothing ever objected to is likelier to convict a correct design --
+which is the over-strictness the repair rounds exist to relax. It cannot be read
+as evidence about reviewing.
+
+So the argument for clearing a VERSION rather than a requirement is a COHERENCE
+one and not a quality one: a clearance that refers to code which no longer exists
+states nothing, whatever its effect on the outcome turns out to be. An earlier
+draft of this section claimed the under-reviewed checks were the risky ones. That
+claim is withdrawn -- it was an inference, the measurement contradicts it, and
+n = 12 / 6 / 6 with one to three convictions per cell is too small to support the
+reverse claim either.
 
 Worked, on two requirements carrying the SAME defect -- normalization's
 `until: [{cmd_ack: 1}, {al: 1}]`, where `al` is read as a level, so a stale or
