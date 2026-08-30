@@ -643,6 +643,13 @@ class _EditSession:
     #: The requirement `focus` last selected. `list_suspect_blocks` narrows to
     #: it, which is what keeps the slice a slice once many requirements fail.
     focused: str = ""
+    #: WHERE THE CURRENT SLICE CAME FROM. `focus` slices the STAGED buffer, so
+    #: its line numbers are what a commit would write; `_refresh_trace` slices
+    #: the last ACCEPTED RTL, so after staged edits its line numbers predate
+    #: them. Reporting one as the other is how an agent reads stale line numbers
+    #: as current ones -- and the note used to say "built from the last accepted
+    #: RTL" unconditionally, which became false the moment `focus` existed.
+    slice_from_staged: bool = False
     #: The port contract, for `ports_read` and for the perturbation's declared
     #: widths. Empty disables the perturbation half of `explain` and nothing else.
     contract: Dict[str, Any] = field(default_factory=dict)
@@ -748,13 +755,40 @@ class _EditSession:
         removing a driver would surface only as coverage quietly falling with
         nothing naming the cause.
         """
-        blocks = list((self.blocks_by_id or {}).values())
-        if not blocks:
+        from .trace_slicer import parse_rtl_blocks
+
+        # PARSE BOTH TEXTS. This used to classify by literal presence --
+        # `b.code in text` meant driven, `b.code not in text` meant lost -- and
+        # a REPLACEMENT necessarily removes the block's original text, so every
+        # `replace_block` reported that block's writes as undriven. Nothing put
+        # the replacement back into `driven`, because the new text is not any
+        # block's `b.code`.
+        #
+        # MEASURED, twice, on live runs. Adding a one-character comment to the
+        # i2c FSM block is reported as "scl_oen, sda_chk, sda_oen, state are
+        # still read but the batch removed their LAST driver". In the first
+        # session that false positive REJECTED the only commit the agent
+        # landed; in the third it cost four rounds, and only went away because
+        # `focus` happened to rebuild the block table from the staged buffer, so
+        # the entry then carried the new text.
+        #
+        # It was also slice-relative: `blocks_by_id` holds whatever the last
+        # `focus` sliced, so the same buffer could be judged differently
+        # depending on which requirement was in view. Parsing settles both --
+        # the question is what the TEXT drives, and the text is right there.
+        try:
+            before = parse_rtl_blocks(self.read_rtl())
+            after = parse_rtl_blocks(text)
+        except Exception:  # noqa: BLE001
             return []
-        driven = {w for b in blocks if b.code in text for w in b.writes}
-        read = {r for b in blocks if b.code in text for r in b.reads}
-        lost = {w for b in blocks if b.code not in text for w in b.writes}
-        return sorted(w for w in lost - driven if w in read)
+        if not before or not after:
+            return []
+        was_driven = {w for b in before for w in b.writes}
+        now_driven = {w for b in after for w in b.writes}
+        now_read = {r for b in after for r in b.reads}
+        # Only signals the ACCEPTED design drove: a module input is read and
+        # written by nothing, and is not a missing driver.
+        return sorted((was_driven - now_driven) & now_read)
 
     def driver_warnings(self) -> list[str]:
         """Driver hazards in the staged buffer. WARNINGS, never refusals.
@@ -795,7 +829,11 @@ class _EditSession:
             return {"is_action_executed": False, "error_msg": (
                 f"removed in this staged batch: {block_id}"
                 if block_id in self.retired_ids
-                else f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.")}
+                else f"Unknown block_id '{block_id}'. "
+                     + (f"The current slice holds: {sorted(self.blocks_by_id)}."
+                        if self.blocks_by_id else
+                        "No slice has been built yet -- call focus(req_uid) on a "
+                        "failing requirement, which is what populates it."))}
         body = new_code.rstrip("\n")
         res = self._splice(anchor, body, f"replace {block_id}")
         if res.get("is_action_executed"):
@@ -809,7 +847,11 @@ class _EditSession:
             return {"is_action_executed": False, "error_msg": (
                 f"removed in this staged batch: {block_id}"
                 if block_id in self.retired_ids
-                else f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.")}
+                else f"Unknown block_id '{block_id}'. "
+                     + (f"The current slice holds: {sorted(self.blocks_by_id)}."
+                        if self.blocks_by_id else
+                        "No slice has been built yet -- call focus(req_uid) on a "
+                        "failing requirement, which is what populates it."))}
         res = self._splice(anchor, "", f"remove {block_id}")
         if res.get("is_action_executed"):
             self.staged_text.pop(block_id, None)
@@ -973,6 +1015,7 @@ class _EditSession:
         blocks = focus_slice(self.staged(), view.ports)
         was = set(self.blocks_by_id or {})
         self.focused = req_uid
+        self.slice_from_staged = True
         # The slice is rebuilt from the STAGED buffer, so it describes what a
         # commit would compile rather than the last accepted design.
         self.blocks_by_id = {b.id: b for b in blocks} or self.blocks_by_id
@@ -1315,10 +1358,51 @@ class _EditSession:
             "sim_output_path": str(Path(self.output_dir, "debug_sim_output.json")),
         }
 
-    def list_suspect_blocks(self) -> list[dict[str, Any]]:
-        if not self.trace_report:
-            return []
-        return list(self.trace_report.get("suspect_blocks") or [])
+    def list_suspect_blocks(self) -> Dict[str, Any]:
+        """THE CURRENT SLICE -- the same blocks `read_block` resolves against.
+
+        It used to read `trace_report`, which ONLY `_refresh_trace` writes, and
+        that runs only after an ACCEPTED simulation. `focus` builds
+        `blocks_by_id`, and `read_block`/`replace_block` resolve against
+        `blocks_by_id` through `_anchor_for`. So the two tools disagreed about
+        what existed: MEASURED live, an agent focused a requirement, replaced a
+        block, was told the batch had removed every driver, called
+        `list_suspect_blocks()` to find its way back -- and got an empty list,
+        because no commit had ever been accepted.
+
+        Worse, the unknown-block-id error told it to do exactly that. The one
+        tool the error points at was the one guaranteed to be empty at that
+        moment. Same class of defect as `check_staged` and `commit` disagreeing
+        about the same buffer, and fixed the same way: one source of truth.
+
+        AND AN EMPTY SLICE SAYS WHY. Returning a bare `[]` reads as "this design
+        has no blocks", which is never the fact; the fact is that nothing has
+        been sliced yet.
+        """
+        blocks = self.blocks_by_id or {}
+        if blocks:
+            rows = [{"id": b.id, "kind": b.kind, "clocking": b.clocking,
+                     "start_line": b.start_line, "end_line": b.end_line,
+                     "writes": list(b.writes), "reads": list(b.reads)}
+                    for b in blocks.values()]
+            out: Dict[str, Any] = {"suspect_blocks": rows,
+                                   "focused": self.focused or None}
+            if self.retired_ids:
+                out["removed_in_this_batch"] = sorted(self.retired_ids)
+            if self.staged_rtl is not None and not self.slice_from_staged:
+                out["note"] = (
+                    "this slice was built from the last ACCEPTED RTL and does "
+                    "not include your staged edits; its line numbers predate "
+                    "them. read_block(id) shows the staged text at the line "
+                    "numbers a commit would write, and focus(req_uid) rebuilds "
+                    "the slice from the staged buffer.")
+            return out
+        return {"suspect_blocks": [], "focused": None,
+                "note": ("no slice has been built yet, so there is nothing to "
+                         "list -- this is not a design with no blocks. Call "
+                         "focus(req_uid) on a failing requirement first; that "
+                         "is what slices the design from that requirement's "
+                         "ports and populates this.")}
 
     def read_block(self, block_id: str) -> str:
         """The block AS STAGED, with the line numbers a commit would write.
@@ -1354,6 +1438,8 @@ class _EditSession:
             output_dir=Path(self.output_dir),
         )
         self.trace_report = report
+        # Built on the last ACCEPTED RTL, not on the staged buffer.
+        self.slice_from_staged = False
         self.blocks_by_id = {b.id: b for b in suspect_blocks} if suspect_blocks else None
         ft = report.get("fail_time")
         self.last_fail_time = int(ft) if isinstance(ft, int) else None
@@ -1874,21 +1960,11 @@ class RTLEditor:
         """List dynamically sliced suspect blocks (always/assign)."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
-        blocks = self._session.list_suspect_blocks()
-        # §12: the slice comes from a trace report built on the last ACCEPTED
-        # RTL, so after several staged edits it describes an older design. That
-        # is acceptable -- the slice is a hint, not an authority -- but it has
-        # to SAY so, or the agent reads stale line numbers as current ones.
-        if self._session.staged_rtl is not None:
-            payload = {
-                "note": ("This list was built from the last ACCEPTED RTL and "
-                         "does not include your staged edits. Line numbers here "
-                         "predate them; read_block(block_id) shows the staged "
-                         "text at the line numbers a commit would write."),
-                "blocks": blocks,
-            }
-        else:
-            payload = blocks
+        # §12's staleness note lives on the session now, because only the
+        # session knows WHERE the slice came from: `focus` slices the staged
+        # buffer, `_refresh_trace` slices the last accepted RTL. Asserting one
+        # unconditionally here was wrong for every focus-built slice.
+        payload = self._session.list_suspect_blocks()
         return ToolResponse(content=[{"type": "text", "text": json.dumps(payload, indent=2)}])
 
     async def _tool_read_block(self, block_id: str) -> ToolResponse:

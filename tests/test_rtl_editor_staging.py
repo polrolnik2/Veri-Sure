@@ -230,14 +230,15 @@ class _Reviewer:
         return self.results[min(self.calls - 1, len(self.results) - 1)]
 
 
-def _committable(tmp_path, results, *, syntax=(True, ""), multi=(), monkeypatch=None):
+def _committable(tmp_path, results, *, syntax=(True, ""), multi=(),
+                 monkeypatch=None, rtl=None):
     """A session whose commit path is stubbed down to the decisions under test.
 
     `check_syntax` and `multidriven_signals` shell out to Verilator; the point
     here is the accept/keep/latch bookkeeping around them, not Verilator.
     """
     import eda_agent.rtl_editor as mod
-    s = _session(tmp_path)
+    s = _session(tmp_path) if rtl is None else _session(tmp_path, rtl)
     s.sim_reviewer = _Reviewer(results)
     monkeypatch.setattr(mod, "check_syntax", lambda _p: syntax)
     monkeypatch.setattr(mod, "multidriven_signals",
@@ -339,10 +340,17 @@ def test_a_removed_last_driver_FAILS_THE_COMMIT(tmp_path, monkeypatch):
     not fail the build: the signal goes X, the oracle X-guard turns that into an
     abstention, and the defect would surface only as coverage quietly falling
     with nothing naming the cause."""
-    s = _committable(tmp_path, [(True, 0, "{}")], monkeypatch=monkeypatch)
+    # THE SOURCE MUST EXPRESS THE DEPENDENCY, not just the block table. This
+    # used to monkeypatch `blk_always`'s metadata to claim it reads `b` while
+    # the code said `c <= a` -- which passed only because the guard trusted the
+    # table. The guard now parses the text, so the fixture says what it means.
+    rtl = RTL.replace("c <= a;", "c <= b;")
+    body = B_ALWAYS.replace("c <= a;", "c <= b;")
+    s = _committable(tmp_path, [(True, 0, "{}")], monkeypatch=monkeypatch,
+                     rtl=rtl)
     s.blocks_by_id["blk_always"] = RtlBlock(
         id="blk_always", kind="always", start_line=4, end_line=6,
-        clocking="posedge clk", code=B_ALWAYS, writes=("c",), reads=("b",))
+        clocking="posedge clk", code=body, writes=("c",), reads=("b",))
     before = s.read_rtl()
     s.stage_remove("blk_assign")            # b loses its only driver
     res = s.commit()
@@ -1063,3 +1071,153 @@ def test_vcd_lookups_convert_the_traces_NANOSECONDS_to_waveform_ticks(tmp_path):
     bare.write_text("$date today $end\n")
     assert _vcd_ticks_per_ns(bare) == 1.0
     assert _vcd_ticks_per_ns(tmp_path / "missing.vcd") == 1.0
+
+
+# ------------- list_suspect_blocks and read_block must agree about what exists
+
+
+def test_list_suspect_blocks_shows_the_slice_read_block_resolves_against(tmp_path):
+    """They read DIFFERENT STATE, and the error message pointed at the empty one.
+
+    `list_suspect_blocks` read `trace_report`, which only `_refresh_trace`
+    writes -- and that runs only after an ACCEPTED simulation. `focus` builds
+    `blocks_by_id`, and `read_block`/`replace_block` resolve against
+    `blocks_by_id`. MEASURED live: an agent focused a requirement, replaced a
+    block, was told the batch had removed every driver, called
+    `list_suspect_blocks()` to find its way back, and got an empty list because
+    no commit had ever been accepted.
+    """
+    from eda_agent.explain import RequirementView
+
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="t",
+                                               ports=["b"])}
+    assert s.trace_report is None          # nothing has been simulated
+    s.focus("REQ-B")
+    out = s.list_suspect_blocks()
+    ids = {r["id"] for r in out["suspect_blocks"]}
+    assert ids, "focus built a slice and the listing must show it"
+    # The very ids read_block resolves.
+    for bid in ids:
+        assert not s.read_block(bid).startswith("ERROR")
+    assert out["focused"] == "REQ-B"
+
+
+def test_an_empty_slice_says_why_instead_of_returning_a_bare_list(tmp_path):
+    """`[]` reads as "this design has no blocks", which is never the fact."""
+    s = _session(tmp_path)
+    s.blocks_by_id = None
+    out = s.list_suspect_blocks()
+    assert out["suspect_blocks"] == []
+    assert "focus(req_uid)" in out["note"]
+
+
+def test_an_unknown_block_id_names_the_ids_that_do_exist(tmp_path):
+    """The old message said "Use list_suspect_blocks() first" -- pointing at the
+    one tool guaranteed to be empty at that moment."""
+    s = _session(tmp_path)
+    err = s.stage_replace("NOPE", "assign b = 1'b0;")["error_msg"]
+    assert "blk_assign" in err and "blk_always" in err
+    s.blocks_by_id = None
+    err2 = s.stage_replace("NOPE", "assign b = 1'b0;")["error_msg"]
+    assert "focus(req_uid)" in err2
+
+
+def test_the_staleness_note_appears_only_when_the_slice_really_is_stale(tmp_path):
+    """`focus` slices the STAGED buffer, so asserting "built from the last
+    accepted RTL" for every slice was false the moment `focus` existed."""
+    from eda_agent.explain import RequirementView
+
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="t",
+                                               ports=["b"])}
+    s.stage_replace("blk_always", B_ALWAYS.replace("c <= a", "c <= ~a"))
+    # Slice built from a trace report: stale relative to the staged edit.
+    s.slice_from_staged = False
+    assert "predate them" in s.list_suspect_blocks()["note"]
+    # Rebuilt by focus from the staged buffer: not stale, so no note.
+    s.focus("REQ-B")
+    assert "note" not in s.list_suspect_blocks()
+
+
+def test_replacing_a_block_is_not_removing_its_drivers(tmp_path):
+    """THE GUARD HAD A FALSE POSITIVE ON EVERY replace_block.
+
+    It classified by literal presence -- `b.code in text` meant driven,
+    `b.code not in text` meant lost -- and a replacement necessarily removes
+    the block's ORIGINAL text, so the block's writes landed in `lost` while
+    nothing put the replacement into `driven`.
+
+    MEASURED twice on live runs against the i2c FSM block: adding a
+    one-character comment is reported as "scl_oen, sda_chk, sda_oen, state are
+    still read but the batch removed their LAST driver". In the first session
+    that false positive REJECTED the only commit the agent landed; in the third
+    it cost four rounds and went away only because `focus` happened to rebuild
+    the block table from the staged buffer.
+    """
+    rtl = ("module m(input clk, input a, output reg c, output reg d);\n"
+           "wire w;\n"
+           "assign w = a;\n"
+           "\n"
+           "always @(posedge clk) begin\n"
+           "  c <= w;\n"
+           "  d <= ~w;\n"
+           "end\n"
+           "\n"
+           "endmodule\n")
+    from eda_agent.trace_slicer import RtlBlock
+    path = tmp_path / "rtl.sv"
+    path.write_text(rtl)
+    body = "always @(posedge clk) begin\n  c <= w;\n  d <= ~w;\nend"
+
+    def _s():
+        s = _EditSession(tb_path=None, rtl_path=str(path), output_dir=str(tmp_path),
+                         last_mismatch_cnt=0, sim_reviewer=object(), max_trials=30)
+        s.blocks_by_id = {
+            "blk_assign": RtlBlock(id="blk_assign", kind="assign", start_line=3,
+                                   end_line=3, clocking="", code="assign w = a;",
+                                   writes=("w",), reads=("a",)),
+            "blk_always": RtlBlock(id="blk_always", kind="always", start_line=5,
+                                   end_line=8, clocking="posedge clk", code=body,
+                                   writes=("c", "d"), reads=("w",)),
+        }
+        return s
+
+    # A replacement that still drives both c and d is CLEAN.
+    s = _s()
+    s.stage_replace("blk_always", body.replace("c <= w;", "c <= w;  // touched"))
+    assert s.undriven_signals(s.staged()) == []
+    assert s.would_commit_be_rejected(s.staged()) == ""
+
+    # Removing the block that drives `w`, still read, is CAUGHT.
+    s2 = _s()
+    s2.stage_remove("blk_assign")
+    assert "w" in s2.undriven_signals(s2.staged())
+
+
+def test_the_driver_guard_does_not_depend_on_which_requirement_is_focused(tmp_path):
+    """It read `blocks_by_id`, so the SAME buffer could be judged differently
+    depending on which requirement was in view. Parsing the text settles it."""
+    rtl = ("module m(input clk, input a, output reg c);\n"
+           "wire w;\n"
+           "assign w = a;\n"
+           "\n"
+           "always @(posedge clk) begin\n"
+           "  c <= w;\n"
+           "end\n"
+           "\n"
+           "endmodule\n")
+    from eda_agent.trace_slicer import RtlBlock
+    path = tmp_path / "rtl.sv"
+    path.write_text(rtl)
+    s = _EditSession(tb_path=None, rtl_path=str(path), output_dir=str(tmp_path),
+                     last_mismatch_cnt=0, sim_reviewer=object(), max_trials=30)
+    s.blocks_by_id = {"blk_assign": RtlBlock(
+        id="blk_assign", kind="assign", start_line=3, end_line=3, clocking="",
+        code="assign w = a;", writes=("w",), reads=("a",))}
+    s.stage_remove("blk_assign")
+    caught = s.undriven_signals(s.staged())
+    assert "w" in caught
+    # An empty slice must not silence it: the buffer is the same buffer.
+    s.blocks_by_id = {}
+    assert s.undriven_signals(s.staged()) == caught
