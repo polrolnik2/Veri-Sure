@@ -629,34 +629,40 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
 #:
 #: Emitted ONLY beside gate failures, so generation keeps the default and only a
 #: round that has something to answer is told the window is open to question.
+#:
+#: AND IT IS DELIBERATELY SMALL, because the failure it could cause is the
+#: silent one. Nothing gates a window that is too LOOSE: correspondence rejects
+#: unlicensed False paths, so a window widened on suspicion makes the check
+#: weaker rather than convicted, and the vacuity leg needs variants to see it.
+#: Over-correcting here costs nothing visible; under-correcting costs a
+#: rejection the author can read. So this says WHEN to change the window and
+#: what licenses the change, and it does not pronounce on how much normalization
+#: can be trusted in general -- an author told the block is unreliable has every
+#: reason to rewrite windows nothing objected to, which loses the comparability
+#: the default is there to buy and buys nothing back. The rationale for the
+#: change lives in this comment; the prompt carries the instruction alone.
 WINDOW_NOT_AUTHORITATIVE = """\
 <window_authority>
-THE WINDOW IN `normalized` IS NOT A SOURCE OF TRUTH.
+WHEN A GATE FAILURE ABOVE OBJECTS TO THE WINDOW, CHANGE THE WINDOW.
 
-The shared briefing tells you to transcribe `activation.opens_on` and
-`activation.until`. That is the default when nothing has objected, and it is
-there so that neighbouring requirements get comparable windows rather than one
-per author's taste. It is not a guarantee that this window is right.
-Normalization wrote it from the same sentence you can see; no gate checks it
-against that sentence; and it is never re-asked. A wrong window therefore
-reaches you as an instruction and leaves as your defect.
+`activation.opens_on` and `activation.until` are one reading of the same
+sentence you have, and nothing has checked that reading against it. So an
+objection to WHEN your window opens or closes is an objection to those fields,
+and transcribing them again will fail the same way.
 
-SO: if a gate failure above objects to WHEN the window opens or closes, the
-window is the thing it is objecting to, and transcribing it again will fail the
-same way. Change it.
+  - Drop a condition you cannot point at words in the requirement for. An
+    `until` that closes on reset, where the requirement never mentions reset,
+    is normalization's addition and not the requirement's.
+  - Add one the words do license, if the objection is that the window runs past
+    what the sentence governs.
+  - If the opening, the closing and the asserted effect are all the same
+    signal, no design can fail the check whatever you write. Re-derive the
+    window from the sentence.
 
-  - Drop a condition you cannot point at words in the requirement for. A
-    `until` that closes on reset, when the requirement never mentions reset, is
-    normalization's addition and not the requirement's.
-  - Add one the requirement's words do license, if the objection is that the
-    window runs past what the sentence governs.
-  - If opening, closing and the asserted effect are all the same signal, the
-    check cannot fail whatever you write. Say so and re-derive the window from
-    the sentence.
-
-In `reasoning`, name the condition you changed and quote the words that
-licensed it. And change nothing that was not objected to -- a window rewritten
-on suspicion alone loses the consistency the default is there to buy.
+Name the condition you changed in `reasoning` and quote the words that license
+it. Change nothing that was not objected to: the default is there so that
+neighbouring requirements get comparable windows, and a window rewritten on
+suspicion loses that for nothing.
 </window_authority>"""
 
 

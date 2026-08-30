@@ -373,10 +373,9 @@ def test_a_repair_round_is_told_the_window_may_be_wrong():
     can only reach the one party forbidden to act on it.
     """
     body = _repair_prompt()
-    assert "THE WINDOW IN `normalized` IS NOT A SOURCE OF TRUTH" in body
-    for phrase in ("no gate checks it", "never re-asked",
-                   "reaches you as an instruction and leaves as your defect",
-                   "window is the thing it is objecting to"):
+    for phrase in ("WHEN A GATE FAILURE ABOVE OBJECTS TO THE WINDOW",
+                   "nothing has checked that reading against it",
+                   "and transcribing them again will fail the same way"):
         assert phrase in body, phrase
 
 
@@ -400,8 +399,31 @@ def test_the_override_requires_words_not_taste():
     default exists to buy."""
     body = _repair_prompt()
     assert "Drop a condition you cannot point at words in the requirement for" in body
-    assert "quote the words that" in body
-    assert "change nothing that was not objected to" in body
+    assert "quote the words that license" in body
+    assert "Change nothing that was not objected to" in body
+
+
+def test_the_permission_is_conditional_and_never_a_blanket_distrust():
+    """THE CALIBRATION, and the risk this block carries.
+
+    Nothing gates a window that is too LOOSE. Correspondence rejects unlicensed
+    False paths, so a window widened on suspicion makes the check weaker rather
+    than convicted, and the vacuity leg needs variants to catch it. So the cost
+    of over-correcting here is silent, while the cost of under-correcting is a
+    visible rejection -- which is exactly the asymmetry that makes a general
+    "the window may be wrong" the wrong thing to say.
+
+    The instruction is therefore scoped to an objection that already exists: the
+    heading names the condition, and the closing sentence names the price of
+    going further.
+    """
+    body = _repair_prompt()
+    head = body.split("<window_authority>", 1)[1].strip().splitlines()[0]
+    assert head.startswith("WHEN A GATE FAILURE"), (
+        f"the permission must open on its condition, not on a verdict about "
+        f"normalization; got {head!r}")
+    assert "Change nothing that was not objected to" in body
+    assert "loses that for nothing" in body
 
 
 def test_the_tautology_case_is_named():
@@ -410,8 +432,8 @@ def test_the_tautology_case_is_named():
     it. That case has no repair inside the window and the author must be told it
     is allowed to re-derive one."""
     body = _repair_prompt()
-    assert "all the same signal, the" in body
-    assert "cannot fail whatever you write" in body
+    assert "no design can fail the check whatever you write" in body
+    assert "Re-derive the" in body
 
 
 def test_the_override_rides_with_the_normalized_block():
