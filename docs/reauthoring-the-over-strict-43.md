@@ -133,13 +133,20 @@ non-one-hot literal for a one-hot command field. `cmd=3` dies to that alone.
 
 ## Reproduce
 
+The three scripts are committed beside this write-up, in `docs/evidence/`:
+
 ```
-scratchpad/asrt/drive.py --name full43 --workers 24 --resume   # the stage
-scratchpad/asrt/score.py full43                                # vs golden
-scratchpad/asrt/separation.py                                  # both arms
+docs/evidence/drive.py --name full43 --workers 24 --resume   # the stage
+docs/evidence/score.py full43                                # vs golden
+docs/evidence/separation.py                                  # both arms
 ```
 
-`--resume` replays every banked answer by `(stage, round_)` and pays only for
-what is missing. This run survived four interruptions -- a wall-clock timeout, a
+They carry absolute paths to the scratchpad they were written for and to
+`/home/user/runs/c1-i2c`; re-running them elsewhere means repointing `S`, `RUN`
+and the rendezvous directory. They are committed as the RECORD of what produced
+the numbers above, not as a turnkey harness.
+
+`drive.py --resume` replays every banked answer by `(stage, round_)` and pays
+only for what is missing. This run survived four interruptions -- a wall-clock timeout, a
 deliberate restart to widen the fan-out, a usage-limit kill of all 20 workers,
 and a container restart -- without re-paying for a single answer.
