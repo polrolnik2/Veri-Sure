@@ -636,11 +636,101 @@ def test_list_failing_requirements_reports_requirements_not_check_ids(tmp_path):
     class R:
         ok: bool | None
         detail: str = ""
+        tp_uid: str = ""
     s = _session(tmp_path)
     s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="b follows a",
                                                ports=["b"])}
-    s.req_results = {"REQ-B": (R(False, "b fell early"), {})}
-    rows = s.list_failing_requirements()
-    assert rows == [{"req_uid": "REQ-B", "verdict": "FAILS",
-                     "requirement": "b follows a", "check_said": "b fell early",
-                     "ports": ["b"]}]
+    s.req_results = {"REQ-B": (R(False, "b fell early", "TP-0002"), {})}
+    out = s.list_failing_requirements()
+    assert out["failing"] == [{"req_uid": "REQ-B", "verdict": "FAILS",
+                               "requirement": "b follows a",
+                               "check_said": "b fell early",
+                               "testpoint": "TP-0002", "ports": ["b"]}]
+    assert out["uncovered"] == [] and out["passing_count"] == 0
+
+
+def test_list_failing_requirements_counts_passing_and_lists_uncovered(tmp_path):
+    """A pass is a number; a FAILS or an UNCOVERED is a row.
+
+    The frozen set is around ninety requirements and most of them pass. Listing
+    each would bury the handful that need work, and dropping the count entirely
+    would hide the one number a repair must not spend -- an edit that fixes one
+    requirement by breaking four is a regression the agent cannot otherwise see.
+    """
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None
+        detail: str = ""
+        tp_uid: str = ""
+    s = _session(tmp_path)
+    s.requirements = {u: RequirementView(req_uid=u, text=f"{u} text", ports=["b"])
+                      for u in ("REQ-A", "REQ-B", "REQ-C", "REQ-D")}
+    s.req_results = {
+        "REQ-A": (R(True, "held"), {}),
+        "REQ-B": (R(True, "held"), {}),
+        "REQ-C": (R(False, "b fell early", "TP-1"), {}),
+        "REQ-D": (R(None, "the activation never occurred"), {}),
+    }
+    out = s.list_failing_requirements()
+    assert out["passing_count"] == 2
+    assert [r["req_uid"] for r in out["failing"]] == ["REQ-C"]
+    assert [r["req_uid"] for r in out["uncovered"]] == ["REQ-D"]
+    # The passing ones are counted, never listed.
+    listed = {r["req_uid"] for r in out["failing"] + out["uncovered"]}
+    assert "REQ-A" not in listed and "REQ-B" not in listed
+
+
+# --------------------------------------- the link that was missing: req_results
+
+
+def test_pull_req_results_takes_the_reviewers_verdicts(tmp_path):
+    """`req_results` was read by two tools and written by nothing.
+
+    `_EditSession.req_results` has always existed, `explain` and
+    `list_failing_requirements` have always read it, and no code path anywhere
+    assigned to it -- so the requirement surface was registered as tools,
+    described in the prompt, and permanently empty. This is the assignment.
+    """
+    s = _session(tmp_path)
+
+    class _Reviewer:
+        req_results = {"REQ-A": ("result", {"tp_uid": "TP-0001"})}
+        vcd_path = tmp_path / "wave.vcd"
+
+    s.sim_reviewer = _Reviewer()
+    s._pull_req_results()
+    assert s.req_results == {"REQ-A": ("result", {"tp_uid": "TP-0001"})}
+    assert s.vcd_path == tmp_path / "wave.vcd"
+
+
+def test_pull_req_results_is_a_copy_not_the_reviewers_own_dict(tmp_path):
+    """Otherwise the next run mutates what `explain` is already holding."""
+    s = _session(tmp_path)
+
+    class _Reviewer:
+        req_results = {"REQ-A": ("first", {})}
+        vcd_path = None
+
+    rev = _Reviewer()
+    s.sim_reviewer = rev
+    s._pull_req_results()
+    rev.req_results["REQ-B"] = ("second", {})
+    assert list(s.req_results) == ["REQ-A"]
+
+
+def test_pull_req_results_degrades_on_a_backend_that_cannot_decide(tmp_path):
+    """The SystemVerilog reviewer has no oracle set, and that must not raise.
+
+    Duck-typed on purpose: a backend that decides per requirement publishes
+    `req_results`, one that cannot publishes nothing, and the surface stays
+    empty rather than the session failing.
+    """
+    s = _session(tmp_path)
+    s.sim_reviewer = object()
+    s._pull_req_results()
+    assert s.req_results == {}
+    assert s.vcd_path is None

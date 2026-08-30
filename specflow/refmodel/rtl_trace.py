@@ -27,6 +27,7 @@ only if these checks are ever emitted as real SVA.)
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from .oracles import (OracleResult, RequirementOracle, _worst, decide,
@@ -123,7 +124,7 @@ def decide_rtl(
             trace = traces_by_tp.get(tp)
             if trace is None:
                 results.append(OracleResult(
-                    oracle.req_uid, ok=None,
+                    oracle.req_uid, ok=None, tp_uid=tp,
                     detail=f"{tp} produced no trace, so it decided nothing"))
                 continue
             rows = rows_from(trace, side=side)
@@ -138,7 +139,13 @@ def decide_rtl(
                     detail=(f"the check failed, but the trace could not resolve "
                             f"{named} -- so this is not evidence about the "
                             f"design. Original detail: {result.detail}"))
-            results.append(result)
+            # WHICH testpoint's trace produced this. `decide` judges a row list
+            # and has no idea where it came from, so without stamping it here
+            # `_worst` folds several testpoints into one result that cannot say
+            # which one it is about -- and a caller wanting the recording behind
+            # a conviction (`explain`, every waveform tool) has to show all of
+            # them or guess.
+            results.append(replace(result, tp_uid=tp))
         out.append(_worst(oracle.req_uid, results))
     return out
 

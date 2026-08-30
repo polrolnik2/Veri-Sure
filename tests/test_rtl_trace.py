@@ -153,3 +153,35 @@ def test_the_fold_is_the_same_one_replay_uses():
               "TP-0001": _trace((0, 1, 0, 0, 0))}
     [res] = decide_rtl([o], traces, CONTRACT)
     assert res.ok is False, "failing on any testpoint is failing"
+
+
+# ------------------------------------------------ which testpoint said so
+
+
+def test_a_verdict_names_the_testpoint_whose_trace_produced_it():
+    """`decide` judges a row list and has no idea where it came from.
+
+    Without stamping it in the adapter, `_worst` folds several testpoints into
+    one result that cannot say which one it is about -- and every caller wanting
+    the recording behind a conviction has to show all of them or guess. The
+    editor's `explain` is exactly that caller: it pairs the result with the
+    trace it judged to turn an edge index into a simulator time.
+    """
+    src = ("def decide(trace):\n"
+           "    return all(r['outputs']['busy'] == 0 for r in trace)\n")
+    o = RequirementOracle(req_uid="REQ-0001", clause="c", source=src,
+                          tp_uids=["TP-0000", "TP-0001"])
+    quiet = _trace((0, 1, 0, 0, 0))
+    noisy = {**_trace((0, 1, 1, 0, 0)), "tp_uid": "TP-0001"}
+    [res] = decide_rtl([o], {"TP-0000": quiet, "TP-0001": noisy}, CONTRACT)
+    assert res.ok is False
+    assert res.tp_uid == "TP-0001"
+
+
+def test_a_missing_trace_also_names_the_testpoint_it_was_looking_for():
+    """"produced no trace" is only actionable if it says WHICH one did not."""
+    o = RequirementOracle(req_uid="REQ-0001", clause="c",
+                          source="def decide(trace):\n    return True\n",
+                          tp_uids=["TP-0404"])
+    [res] = decide_rtl([o], {}, CONTRACT)
+    assert res.ok is None and res.tp_uid == "TP-0404"

@@ -959,25 +959,49 @@ class _EditSession:
             contract=self.contract or {}, rtl_text=self.staged(),
             vcd_path=self.vcd_path, dut_instance=self.dut_instance)}
 
-    def list_failing_requirements(self) -> list[dict]:
-        """Every requirement the last run decided against, with its own words.
+    def list_failing_requirements(self) -> dict:
+        """What the last run decided, per REQUIREMENT rather than per check id.
 
-        Not check ids. The whole point of the view is that a finding arrives
-        naming the requirement it is about.
+        Two classes are actionable and both are listed in full: FAILS, where the
+        design did something the requirement forbids, and UNCOVERED, where the
+        check never saw its own scenario -- not an accusation, and no edit
+        discharges it (`add_stimulus` does).
+
+        THE PASSING ONES ARE COUNTED, NOT LISTED. On c1-i2c the frozen set is 90
+        requirements and around 60 of them pass; listing each would bury the
+        handful that need work under rows saying nothing happened. The count is
+        still reported because it is the thing a repair must not spend -- an
+        edit that fixes one requirement by breaking four is a regression, and
+        the agent cannot see that without knowing how many were passing.
         """
-        out = []
+        fails, uncovered, passing = [], [], 0
         for uid, found in sorted(self.req_results.items()):
             result = found[0] if isinstance(found, tuple) else found
             view = self.requirements.get(uid)
             ok = getattr(result, "ok", None)
-            out.append({
+            if ok is True:
+                passing += 1
+                continue
+            row = {
                 "req_uid": uid,
-                "verdict": "FAILS" if ok is False else ("passes" if ok else "UNCOVERED"),
+                "verdict": "FAILS" if ok is False else "UNCOVERED",
                 "requirement": (view.text if view else "")[:200],
                 "check_said": (getattr(result, "detail", "") or "")[:160],
+                "testpoint": getattr(result, "tp_uid", "") or "",
                 "ports": view.ports if view else [],
-            })
-        return out
+            }
+            (fails if ok is False else uncovered).append(row)
+        return {
+            "failing": fails,
+            "uncovered": uncovered,
+            "passing_count": passing,
+            "note": ("explain(req_uid) for the span, the boundary trace and what "
+                     "would have satisfied a FAILS; add_stimulus(req_uid, ...) is "
+                     "the only route for an UNCOVERED one. The passing ones are "
+                     "counted rather than listed -- keep that count from falling."
+                     if (fails or uncovered) else
+                     "nothing failing and nothing uncovered in the last run"),
+        }
 
     def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> Dict[str, Any]:
         """Stage a scenario the current stimulus never reaches. FREE, not a trial.
@@ -1170,8 +1194,29 @@ class _EditSession:
         self.write_rtl(self.best_rtl)
         return True
 
+    def _pull_req_results(self) -> None:
+        """Take the last run's per-requirement verdicts off the reviewer.
+
+        Duck-typed on purpose: a backend that decides per requirement publishes
+        `req_results` (and, when it dumped one, `vcd_path`), and one that cannot
+        publishes neither. That keeps this file backend-agnostic -- the
+        SystemVerilog reviewer has no oracle set and simply leaves the surface
+        empty, which is the honest state for it.
+
+        Called after EVERY `review()`. A stale set is worse than an empty one:
+        `explain` would answer about the design as it was two commits ago and
+        say nothing about being out of date.
+        """
+        got = getattr(self.sim_reviewer, "req_results", None)
+        if isinstance(got, dict):
+            self.req_results = dict(got)
+        vcd = getattr(self.sim_reviewer, "vcd_path", None)
+        if vcd:
+            self.vcd_path = vcd
+
     def run_simulation(self) -> Dict[str, Any]:
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
+        self._pull_req_results()
         # Persist full sim output for human inspection; provide excerpt to the agent.
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
@@ -1471,6 +1516,7 @@ class _EditSession:
                 return result
 
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
+        self._pull_req_results()
         result["is_sim_pass"] = is_sim_pass
         result["sim_mismatch_cnt"] = sim_mismatch_cnt
         try:
@@ -2001,6 +2047,12 @@ class RTLEditor:
             requirements=self._requirements,
             contract=self._contract,
         )
+        # The caller has ALREADY run the reviewer once -- that is where
+        # `sim_failed_log` and `sim_mismatch_cnt` came from. Without this the
+        # requirement surface stays empty until the agent's first commit, so
+        # the very first `list_failing_requirements()` -- the call the prompt
+        # tells it to start with -- would answer "nothing failing".
+        self._session._pull_req_results()
 
         if tb_text is not None:
             generated_tb = tb_text

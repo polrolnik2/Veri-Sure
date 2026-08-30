@@ -313,3 +313,97 @@ def test_trace_summary_reads_the_records_rather_than_a_log(tmp_path):
     ]
     assert tr["wave_vcd"].endswith("wave_0.vcd")
     assert sorted(tr["failing_testpoints"]) == ["TP-0001", "TP-0003"]
+
+
+# --------------------------- the per-requirement verdict the judge never carried
+
+
+def _reviewer(tmp_path, oracles, contract):
+    """A `SpecflowReviewer` with only what `_decide_requirements` reads."""
+    from types import SimpleNamespace
+
+    from eda_agent.specflow_node import SpecflowReviewer
+    return SpecflowReviewer(
+        built=SimpleNamespace(suite_dir=tmp_path, refmodel_path=None, bins=[]),
+        hdl_toplevel="dut", output_dir=tmp_path,
+        oracles=oracles, contract=contract)
+
+
+def _write_trace(results_dir, tp_uid, busy_by_edge):
+    import json as _json
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / f"{tp_uid}.trace.json").write_text(_json.dumps({
+        "tp_uid": tp_uid, "outputs": ["busy"],
+        "edges": [{"edge": i, "step": 0, "inputs": {"cmd": 1},
+                   "dut": {"busy": b}, "model": {"busy": b}}
+                  for i, b in enumerate(busy_by_edge)]}), encoding="utf-8")
+
+
+def test_the_reviewer_decides_the_frozen_oracles_on_the_recording(tmp_path):
+    """THE LINK THAT WAS MISSING, end to end on the reviewer.
+
+    `judge` answers per TESTPOINT and the debugger repairs per REQUIREMENT, and
+    nothing joined them: `_EditSession.req_results` was read by `explain` and
+    `list_failing_requirements` and written by no code path at all. Every input
+    already existed -- `Env.finish` writes `{tp}.trace.json` unconditionally and
+    the oracle set is frozen on disk -- so this is a join, not new evidence.
+    """
+    from specflow.refmodel.oracles import RequirementOracle
+    src = ("def decide(trace):\n"
+           "    return all(r['outputs']['busy'] == 0 for r in trace)\n")
+    o = RequirementOracle(req_uid="REQ-0001", clause="busy stays low",
+                          source=src, tp_uids=["TP-0000"])
+    contract = {"io": [{"name": "busy", "dir": "output", "width": 1}]}
+    _write_trace(tmp_path / "results", "TP-0000", [0, 1, 0])
+
+    rev = _reviewer(tmp_path, [o], contract)
+    got = rev._decide_requirements()
+    result, trace = got["REQ-0001"]
+    assert result.ok is False
+    assert result.tp_uid == "TP-0000"
+    # Paired with the trace it judged: `explain` reads simulator TIME out of it,
+    # and an OracleResult.edge is a row index, not a timestamp.
+    assert trace["tp_uid"] == "TP-0000"
+
+
+def test_no_oracles_costs_the_requirement_surface_and_not_the_run(tmp_path):
+    """A backend with no frozen set still returns its testpoint verdict.
+
+    Degrading is the point: the per-requirement surface goes quiet, which is
+    the state every run was in before this was wired, and the run continues.
+    """
+    assert _reviewer(tmp_path, [], {})._decide_requirements() == {}
+
+
+def test_a_build_that_never_simulated_says_so_rather_than_going_silent(tmp_path):
+    """No recording is an ABSTENTION that names the missing testpoint.
+
+    Not an empty dict: an empty surface and a surface saying "TP-0000 produced
+    no trace" are different facts, and the first one reads to the agent as
+    "nothing is wrong".
+    """
+    from specflow.refmodel.oracles import RequirementOracle
+    o = RequirementOracle(req_uid="REQ-0001", clause="c",
+                          source="def decide(trace):\n    return True\n",
+                          tp_uids=["TP-0000"])
+    result, trace = _reviewer(tmp_path, [o], {})._decide_requirements()["REQ-0001"]
+    assert result.ok is None
+    assert "TP-0000 produced no trace" in result.detail
+    assert trace == {}
+
+
+def test_frozen_oracles_load_from_the_run_directory(tmp_path):
+    """And a run with no `oracles.json` yields an empty list, never an error."""
+    import json as _json
+
+    from eda_agent.specflow_node import _frozen_oracles
+    assert _frozen_oracles(tmp_path) == []
+    (tmp_path / "specflow").mkdir()
+    (tmp_path / "specflow" / "oracles.json").write_text(_json.dumps({"oracles": [
+        {"req_uid": "REQ-0001", "clause": "c", "source": "def decide(t): ...",
+         "tp_uids": ["TP-0000"]},
+        {"req_uid": "REQ-0002"},  # malformed: no source, skipped not fatal
+    ]}), encoding="utf-8")
+    got = _frozen_oracles(tmp_path)
+    assert [o.req_uid for o in got] == ["REQ-0001"]
+    assert got[0].tp_uids == ["TP-0000"]

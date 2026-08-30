@@ -173,7 +173,8 @@ class SpecflowReviewer:
     def __init__(self, *, built, hdl_toplevel: str, output_dir: Path,
                  extra_sources: Sequence[Path | str] = (),
                  include_dirs: Sequence[Path | str] = (),
-                 stager: "SpecflowStimulusStager | None" = None):
+                 stager: "SpecflowStimulusStager | None" = None,
+                 oracles: Sequence[Any] = (), contract: dict | None = None):
         self._built = built
         self._top = hdl_toplevel
         self._dir = Path(output_dir)
@@ -187,6 +188,28 @@ class SpecflowReviewer:
         #: Published to after every run, so `add_stimulus`'s "must currently be
         #: uncovered" gate is never reading a stale set.
         self._stager = stager
+        #: THE FROZEN ORACLE SET, and the contract `ports_read` needs. Held here
+        #: because the per-requirement verdict has to be recomputed on the
+        #: recording each run writes, and this is the only object that knows a
+        #: run just happened.
+        self._oracles = list(oracles)
+        self._contract = dict(contract or {})
+        #: The waveform the LAST run dumped, when one was. Only `explain`'s
+        #: block-internals half needs it, so None degrades that half and
+        #: nothing else.
+        self.vcd_path = None
+        #: `{req_uid: (OracleResult, trace_dict)}` from the LAST run.
+        #:
+        #: THIS IS THE LINK THAT WAS MISSING. `_EditSession.req_results` has
+        #: always existed and `explain`/`list_failing_requirements` have always
+        #: read it, and nothing anywhere wrote it -- so the requirement surface
+        #: was registered as tools, described in the prompt, and permanently
+        #: empty: `list_failing_requirements()` returned `[]` however many
+        #: requirements were failing, and `explain(uid)` could only hand back
+        #: the requirement's text with "no per-requirement result is available".
+        #: The verdicts existed the whole time; the testpoint-level judge simply
+        #: never carried them across.
+        self.req_results: dict = {}
 
     def review(self) -> Tuple[bool, int, str]:
         from specflow.integration import failure_payload, judge, trace_summary
@@ -209,7 +232,9 @@ class SpecflowReviewer:
 
         payload = failure_payload(self._built.suite_dir)
         wave = info.get("wave_vcd")
+        self.vcd_path = Path(wave) if wave else None
         tr = trace_summary(self._built.suite_dir, Path(wave) if wave else None)
+        self.req_results = self._decide_requirements()
         stdout = format_failures(payload, trace=tr) or verdict.reason
 
         # A build failure is reported as such rather than as failing testpoints,
@@ -237,6 +262,62 @@ class SpecflowReviewer:
             indent=2,
         )
         return verdict.outcome == "ACCEPT", len(verdict.failing), sim_output
+
+    def _decide_requirements(self) -> dict:
+        """Decide the frozen oracle set on the recording this run just wrote.
+
+        `judge` answers per TESTPOINT; the debugger is asked to repair per
+        REQUIREMENT. `decide_rtl` is the join, and it needs nothing new: every
+        `{tp}.trace.json` is already written unconditionally by `Env.finish`,
+        and the oracle set is already frozen on disk.
+
+        Never raises. A missing recording, an oracle that will not import, a
+        contract that did not load -- each of those costs the requirement
+        surface and must not cost the run, because the testpoint-level verdict
+        this reviewer returns is correct with or without it.
+        """
+        if not self._oracles:
+            return {}
+        try:
+            from specflow.refmodel.rtl_trace import decide_rtl, load_traces
+            traces = load_traces(Path(self._built.suite_dir) / "results")
+        except Exception:  # noqa: BLE001
+            logger.debug("no traces to decide requirements against", exc_info=True)
+            return {}
+        try:
+            results = decide_rtl(self._oracles, traces, self._contract)
+        except Exception:  # noqa: BLE001
+            logger.debug("deciding the frozen oracles failed", exc_info=True)
+            return {}
+        # Paired with the trace it judged, because `explain` reads simulator
+        # TIME out of it -- an `OracleResult.edge` is a row index, and feeding
+        # an index to a filter over nanosecond timestamps collapses the VCD
+        # window to the start of the run with no error anywhere.
+        return {r.req_uid: (r, traces.get(r.tp_uid) or {}) for r in results}
+
+
+def _frozen_oracles(run_dir: Path | str) -> list:
+    """The frozen `RequirementOracle`s, or an empty list.
+
+    Degrades rather than raises: with no oracle set the reviewer still returns
+    its testpoint verdict, and only the per-requirement surface goes quiet --
+    which is the state every run was in before this was wired.
+    """
+    try:
+        from specflow.refmodel.oracles import RequirementOracle
+        data = json.loads((Path(run_dir) / "specflow" / "oracles.json")
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError, ImportError):
+        return []
+    out = []
+    for o in data.get("oracles") or []:
+        try:
+            out.append(RequirementOracle(
+                req_uid=str(o["req_uid"]), clause=str(o.get("clause") or ""),
+                source=str(o["source"]), tp_uids=list(o.get("tp_uids") or [])))
+        except (KeyError, TypeError):
+            continue
+    return out
 
 
 def _uncovered_requirements(not_exercised, suite_dir: Path) -> set[str]:
@@ -557,6 +638,9 @@ async def run_specflow_node(
         built=built, hdl_toplevel=top, output_dir=output_dir_per_run,
         extra_sources=extra_sources, include_dirs=include_dirs,
         stager=stager,
+        # The frozen checks, so every run also answers PER REQUIREMENT and the
+        # editor's requirement surface has something to read.
+        oracles=_frozen_oracles(output_dir_per_run), contract=contract,
     )
     remaining = int(debug_max_trials)
 
