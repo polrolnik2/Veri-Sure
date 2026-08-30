@@ -335,3 +335,94 @@ def test_the_temporal_flags_state_the_cost_of_setting_them():
     assert "BOTH FLAGS HAVE THE SAME BOUNDARY" in doc
     assert "may hold the value from before the activation" in doc
     assert "trades vacuity for over-strictness" in doc
+
+
+# ------------------------------------- the window is a default, not an authority
+
+
+def _repair_prompt(objection: str = "off-target: the window closes on al") -> str:
+    from specflow.assure import Issue
+    from specflow.refmodel import oracle_gen
+
+    return oracle_gen.build_prompt(
+        requirement={"uid": "REQ-0001", "text": "t"},
+        contract_json="{}", contract={"ports": []},
+        normalized={"activation": {"until": [{"al": 1}], "opens_on": []}},
+        issues=[Issue("error", "oracle.REQ-0001", objection)])
+
+
+def _generation_prompt() -> str:
+    from specflow.refmodel import oracle_gen
+
+    return oracle_gen.build_prompt(
+        requirement={"uid": "REQ-0001", "text": "t"},
+        contract_json="{}", contract={"ports": []},
+        normalized={"activation": {"until": [{"al": 1}], "opens_on": []}})
+
+
+def test_a_repair_round_is_told_the_window_may_be_wrong():
+    """MEASURED, and this pin is the fix for it. On the c1-i2c re-authoring run,
+    8 of the 9 checks rejected on well-formed, boundary-observable requirements
+    were rejected for a condition transcribed verbatim out of the normalized
+    block -- which `SYSTEM` orders the author to copy and never to invent.
+
+    Nothing establishes that window. `normalize.gate_one` checks parsing, one
+    block per requirement, that `clk` is absent and that port names are
+    declared; it never asks whether `opens_on`/`until` are licensed by the
+    requirement's words. And normalization is never re-invoked, so the objection
+    can only reach the one party forbidden to act on it.
+    """
+    body = _repair_prompt()
+    assert "THE WINDOW IN `normalized` IS NOT A SOURCE OF TRUTH" in body
+    for phrase in ("no gate checks it", "never re-asked",
+                   "reaches you as an instruction and leaves as your defect",
+                   "window is the thing it is objecting to"):
+        assert phrase in body, phrase
+
+
+def test_generation_keeps_the_transcribe_default():
+    """The default is not the defect. Copying the normalized window is what
+    makes neighbouring requirements' checks comparable rather than one window
+    per author's taste, so it stays -- and only a round with something to answer
+    is told the window is open to question."""
+    gen = _generation_prompt()
+    assert "TRANSCRIBE IT" in gen, "the default must survive"
+    assert "<window_authority>" not in gen, (
+        "a generation round has no objection to weigh and must not be invited "
+        "to second-guess the window")
+    assert "<window_authority>" in _repair_prompt()
+
+
+def test_the_override_requires_words_not_taste():
+    """The licence is the requirement's own sentence, and the instruction has to
+    say so both ways -- otherwise "the window may be wrong" reads as permission
+    to rewrite it however the author prefers, which is the consistency the
+    default exists to buy."""
+    body = _repair_prompt()
+    assert "Drop a condition you cannot point at words in the requirement for" in body
+    assert "quote the words that" in body
+    assert "change nothing that was not objected to" in body
+
+
+def test_the_tautology_case_is_named():
+    """REQ-0067's normalized form opens on `scl_oen` rising, closes on its
+    falling and declares `scl_oen` observable. Transcribed, no design can fail
+    it. That case has no repair inside the window and the author must be told it
+    is allowed to re-derive one."""
+    body = _repair_prompt()
+    assert "all the same signal, the" in body
+    assert "cannot fail whatever you write" in body
+
+
+def test_the_override_rides_with_the_normalized_block():
+    """It annotates a specific window, so it must not appear when there is no
+    window to annotate -- an issues-only prompt with no normalized block would
+    otherwise carry an instruction about a thing that is not there."""
+    from specflow.assure import Issue
+    from specflow.refmodel import oracle_gen
+
+    body = oracle_gen.build_prompt(
+        requirement={"uid": "REQ-0001", "text": "t"},
+        contract_json="{}", contract={"ports": []},
+        issues=[Issue("error", "oracle.REQ-0001", "off-target: x")])
+    assert "<window_authority>" not in body

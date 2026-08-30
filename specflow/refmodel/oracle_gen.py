@@ -598,6 +598,68 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
     )
 
 
+#: THE REPAIR-ROUND OVERRIDE, and it exists because the shared briefing is wrong
+#: about this one thing on exactly the rounds that matter.
+#:
+#: `SYSTEM` says "THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW.
+#: TRANSCRIBE IT. You are not inventing a window, you are copying one." That is
+#: a good default at generation: it keeps every check's window derived from one
+#: reading of the sentence rather than from the author's own, which is what
+#: makes two checks of neighbouring requirements comparable.
+#:
+#: It is NOT a claim that the window is correct, and nothing in the pipeline
+#: makes it one. `normalize.gate_one` checks that the response parsed, that
+#: there is one block, that `clk` is not in the window and that the port names
+#: are declared. It never asks whether `opens_on` and `until` are licensed by
+#: the requirement's own words -- which is precisely the question
+#: `correspondence` asks about the CHECK. And normalization is never re-invoked:
+#: `oracles_stage` imports it for two helper types and the repair loop's only
+#: outlet is another call to this author.
+#:
+#: So a wrong window arrives as an instruction and departs as the author's
+#: defect. Measured on the c1-i2c re-authoring run: of the nine rejected checks
+#: whose requirements were well-formed and boundary-observable, EIGHT were
+#: rejected for a condition transcribed verbatim out of `activation.opens_on` or
+#: `activation.until`. REQ-0067's normalized form opens on `scl_oen` rising,
+#: closes on `scl_oen` falling and declares `scl_oen` its observable, so
+#: transcribing it yields a check that cannot fail -- and the reviewer's ground
+#: was "there is no unlicensed False path; the check can never return False at
+#: all". No author at any strength can transcribe that window and produce a
+#: falsifiable check. The only way out is to change it.
+#:
+#: Emitted ONLY beside gate failures, so generation keeps the default and only a
+#: round that has something to answer is told the window is open to question.
+WINDOW_NOT_AUTHORITATIVE = """\
+<window_authority>
+THE WINDOW IN `normalized` IS NOT A SOURCE OF TRUTH.
+
+The shared briefing tells you to transcribe `activation.opens_on` and
+`activation.until`. That is the default when nothing has objected, and it is
+there so that neighbouring requirements get comparable windows rather than one
+per author's taste. It is not a guarantee that this window is right.
+Normalization wrote it from the same sentence you can see; no gate checks it
+against that sentence; and it is never re-asked. A wrong window therefore
+reaches you as an instruction and leaves as your defect.
+
+SO: if a gate failure above objects to WHEN the window opens or closes, the
+window is the thing it is objecting to, and transcribing it again will fail the
+same way. Change it.
+
+  - Drop a condition you cannot point at words in the requirement for. A
+    `until` that closes on reset, when the requirement never mentions reset, is
+    normalization's addition and not the requirement's.
+  - Add one the requirement's words do license, if the objection is that the
+    window runs past what the sentence governs.
+  - If opening, closing and the asserted effect are all the same signal, the
+    check cannot fail whatever you write. Say so and re-derive the window from
+    the sentence.
+
+In `reasoning`, name the condition you changed and quote the words that
+licensed it. And change nothing that was not objected to -- a window rewritten
+on suspicion alone loses the consistency the default is there to buy.
+</window_authority>"""
+
+
 def build_prompt(
     *,
     requirement: dict,
@@ -618,6 +680,8 @@ def build_prompt(
     parts = [json_block("requirement", requirement)]
     if normalized:
         parts.append(json_block("normalized", normalized))
+        if issues:
+            parts.append(WINDOW_NOT_AUTHORITATIVE)
     return compose(
         shared_prefix(contract_json, contract),
         "\n\n".join(parts),
