@@ -1,0 +1,114 @@
+[
+ {
+  "name": "A1",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "declared",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 3233,
+  "first_divergence": 0
+ },
+ {
+  "name": "A2",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "declared",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 3048,
+  "first_divergence": 0
+ },
+ {
+  "name": "A3",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "declared",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 2698,
+  "first_divergence": 0
+ },
+ {
+  "name": "A4",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 3,
+   "READ": 4
+  },
+  "how": "declared",
+  "encoding_correct": false,
+  "compiles": true,
+  "mismatches": 2936,
+  "first_divergence": 0
+ },
+ {
+  "name": "B1",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "macro",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 2599,
+  "first_divergence": 0
+ },
+ {
+  "name": "B2",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "macro",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 3205,
+  "first_divergence": 0
+ },
+ {
+  "name": "B3",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "macro",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 2949,
+  "first_divergence": 0
+ },
+ {
+  "name": "B4",
+  "encoding": {
+   "START": 1,
+   "STOP": 2,
+   "WRITE": 4,
+   "READ": 8
+  },
+  "how": "macro",
+  "encoding_correct": true,
+  "compiles": true,
+  "mismatches": 2644,
+  "first_divergence": 0
+ }
+]

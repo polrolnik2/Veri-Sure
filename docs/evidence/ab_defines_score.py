@@ -93,9 +93,21 @@ def _tb() -> str:
     }
 
 
-def encoding_of(src: str) -> dict[str, int | None]:
-    """START/STOP/WRITE/READ as this design declares them, however it declares
-    them -- `define, localparam or parameter."""
+def encoding_of(src: str) -> tuple[dict[str, int | None], str]:
+    """START/STOP/WRITE/READ as this design gets them, and HOW it gets them.
+
+    A design that REFERENCES `` `I2C_CMD_START `` rather than declaring its own
+    constant has the defines file's values by construction -- the preprocessor
+    substitutes them, and there is no number for it to have got wrong. Scoring
+    only declarations reported that as "no encoding found", which is a bug in
+    the measurement and not a property of the design: it made arm B look like
+    0/4 when arm B is right by not choosing at all. That IS the finding, so the
+    scorer has to be able to say it.
+    """
+    if re.search(r"`I2C_CMD_\w+", src) and not re.search(
+            r"(?:localparam|parameter|`define)\s*(?:\[[^\]]*\]\s*)?\w*CMD_"
+            r"(?:START|STOP|WRITE|READ)\b", src):
+        return dict(TRUE), "macro"
     out: dict[str, int | None] = {}
     for name in TRUE:
         m = re.search(rf"(?:`define|localparam|parameter)\s*(?:\[[^\]]*\]\s*)?"
@@ -105,14 +117,15 @@ def encoding_of(src: str) -> dict[str, int | None]:
             out[name] = int(m.group(3).replace("_", ""), base)
         else:
             out[name] = None
-    return out
+    return out, "declared"
 
 
 def run(cand: Path, work: Path) -> dict:
     work.mkdir(parents=True, exist_ok=True)
     src = cand.read_text()
-    row: dict = {"name": cand.stem, "encoding": encoding_of(src)}
-    row["encoding_correct"] = row["encoding"] == TRUE
+    enc, how = encoding_of(src)
+    row: dict = {"name": cand.stem, "encoding": enc, "how": how}
+    row["encoding_correct"] = enc == TRUE
 
     renamed = re.sub(r"\bmodule\s+i2c_master_bit_ctrl\b",
                      "module cand_i2c_master_bit_ctrl", src, count=1)
@@ -150,6 +163,7 @@ def main() -> int:
     for r in rows:
         e = r["encoding"]
         enc = " ".join(f"{k[0]}{'.' if e[k] is None else e[k]}" for k in TRUE)
+        enc = f"{enc}  ({r['how']})"
         print(f"{r['name']:<8}{r['name'][0]:<5}{str(r['compiles']):<10}{enc:<34}"
               f"{'Y' if r['encoding_correct'] else 'n':<4}"
               f"{r.get('mismatches', '-'):>9}{r.get('first_divergence', '-'):>7}")
