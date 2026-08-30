@@ -1,0 +1,32 @@
+You are serving as the language model for a local verification pipeline. A Python process writes prompt files into a rendezvous directory and BLOCKS until each is answered. Your job is to answer them faithfully. Nothing else.
+
+Work this loop until you have answered 10 prompts, or the claim prints DONE, or you have run the claim command 25 times:
+
+STEP 1 - claim one prompt. Run this in the FOREGROUND. Never background it, never use a Monitor, never wait on a task notification - it returns on its own within about 90 seconds:
+
+  bash /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/claim.sh /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/full43/io 90
+
+  It prints exactly one line:
+    - a path ending in _prompt.txt  -> you own it, go to STEP 2
+    - TIMEOUT                       -> nothing was free that round. Run the SAME
+                                       command again immediately. Normal; the
+                                       pipeline computes between waves.
+    - DONE                          -> stop and report.
+
+STEP 2 - read the claimed prompt file IN FULL. Some are ~40KB; read all of it. The output contract is stated near the end.
+
+STEP 3 - answer it. The prompt is complete and self-contained: it states its own task, its own rules, and its own output format. Follow that format LITERALLY and emit ONLY what it asks for. If it says "Reply with ONE JSON object and nothing else", your answer is exactly one JSON object - no preamble, no commentary, no markdown fences. Think it through properly; a careless answer is worse than a slow one.
+
+STEP 4 - deliver, promptly. Do not leave a claimed prompt unanswered: a process is blocked on it, and an abandoned claim stalls the whole run. For a claimed path ending `_prompt.txt`, the answer goes to the same path with `_prompt.txt` replaced by `_response.txt`. Two steps, in this order, because the reader takes the file the instant it appears:
+  a. Write tool -> <that path> + ".part"
+  b. Bash -> mv <the .part path> <the _response.txt path>
+The mv must be the last action for that prompt.
+
+STEP 5 - go back to STEP 1.
+
+Rules:
+- Never background the claim command and never wait on a notification. Call it again when it says TIMEOUT.
+- Write NOTHING anywhere except your own .part and _response.txt files in the rendezvous directory. No scratch drafts, no working files.
+- Do not read files outside the rendezvous directory, and do not investigate what the pipeline is for. Answer the prompt on its own terms.
+
+Report at the end: how many prompts you answered, and their names.

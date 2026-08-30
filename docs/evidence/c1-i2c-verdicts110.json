@@ -1,0 +1,1326 @@
+{
+ "golden": {
+  "REQ-0001": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 0 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0002": {
+   "ok": false,
+   "detail": "the sequence stalled at step 1 of 3, in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0003": {
+   "ok": true,
+   "detail": "observed WRITE bit cycles drive/release SDA according to din and toggle SCL open-drain enable",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0004": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 1 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0005": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0006": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 63",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0007": {
+   "ok": false,
+   "detail": "the invariant broke at edge 18, in the window opening at edge 1",
+   "tp": "",
+   "edge": 18
+  },
+  "REQ-0008": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 1002",
+   "tp": "",
+   "edge": 1002
+  },
+  "REQ-0009": {
+   "ok": true,
+   "detail": "all observed dout sampling events were backed by sda_i stable across two prior captures",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0010": {
+   "ok": true,
+   "detail": "1 single-sample input glitch(es) observed during activation with no immediate output reaction",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0011": {
+   "ok": true,
+   "detail": "scl_o and sda_o remained constant 0 and no oen contradictions were observed",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0012": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0013": {
+   "ok": null,
+   "detail": "no reset state observed to sample output-enable polarity",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0016": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 0",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0017": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0018": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0019": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0020": {
+   "ok": false,
+   "detail": "the forbidden condition occurred at edge 72, in the window opening at edge 66",
+   "tp": "",
+   "edge": 72
+  },
+  "REQ-0021": {
+   "ok": false,
+   "detail": "scl_oen did not change on or immediately after ena-fall at index 4, edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0022": {
+   "ok": false,
+   "detail": "the invariant broke at edge 4, in the window opening at edge 0",
+   "tp": "",
+   "edge": 4
+  },
+  "REQ-0023": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 460
+  },
+  "REQ-0024": {
+   "ok": null,
+   "detail": "no FSM-active (ena=1 and busy=1) period observed; cannot decide",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0025": {
+   "ok": false,
+   "detail": "cmd_ack never went to 1 in the window opening at edge 1",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0026": {
+   "ok": false,
+   "detail": "sequence began from idle but cmd_ack did not pulse for exactly one clock",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0027": {
+   "ok": true,
+   "detail": "1 START window(s): busy rose after each START and stayed asserted until close",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0028": {
+   "ok": false,
+   "detail": "al never asserted after SDA release and arbitration condition before reset",
+   "tp": "",
+   "edge": 64
+  },
+  "REQ-0029": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0030": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 826",
+   "tp": "",
+   "edge": 826
+  },
+  "REQ-0031": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 245
+  },
+  "REQ-0032": {
+   "ok": true,
+   "detail": "scl_o was 0 in all 240 observed state(s)",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0033": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0034": {
+   "ok": true,
+   "detail": "all observed cmd_ack pulses were aligned with scl_oen transitions",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0035": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0036": {
+   "ok": null,
+   "detail": "no scl_oen transitions observed in this activation window",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0039": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0042": {
+   "ok": false,
+   "detail": "no declared output changed on the clock where filtered SCL fell while released; no observable evidence of scl_sync",
+   "tp": "",
+   "edge": 61
+  },
+  "REQ-0043": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 145",
+   "tp": "",
+   "edge": 145
+  },
+  "REQ-0044": {
+   "ok": false,
+   "detail": "dout changed at row index 2 (edge 125) but not at an approximated sample row or its immediately preceding row",
+   "tp": "",
+   "edge": 125
+  },
+  "REQ-0045": {
+   "ok": true,
+   "detail": "dout captured SDA value 0 after SDA change at edge 300",
+   "tp": "",
+   "edge": 366
+  },
+  "REQ-0046": {
+   "ok": false,
+   "detail": "the invariant broke at edge 71, in the window opening at edge 60",
+   "tp": "",
+   "edge": 71
+  },
+  "REQ-0048": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 126
+  },
+  "REQ-0050": {
+   "ok": false,
+   "detail": "the invariant broke at edge 68, in the window opening at edge 7",
+   "tp": "",
+   "edge": 68
+  },
+  "REQ-0051": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 65
+  },
+  "REQ-0053": {
+   "ok": null,
+   "detail": "clk_en is internal/unobservable; observed output-change(s) at this edge could be a phase-advance but compliance cannot be determined from the trace",
+   "tp": "",
+   "edge": 4
+  },
+  "REQ-0054": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 78
+  },
+  "REQ-0055": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 0",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0056": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 118
+  },
+  "REQ-0057": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0058": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 73
+  },
+  "REQ-0059": {
+   "ok": false,
+   "detail": "the invariant broke at edge 65, in the window opening at edge 63",
+   "tp": "",
+   "edge": 65
+  },
+  "REQ-0060": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 609
+  },
+  "REQ-0061": {
+   "ok": null,
+   "detail": "activation never completed in this trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0062": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0063": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 126 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 126
+  },
+  "REQ-0064": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 69
+  },
+  "REQ-0065": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 139
+  },
+  "REQ-0066": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 1",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0067": {
+   "ok": false,
+   "detail": "the sequence stalled at step 1 of 2, in the window opening at edge 0",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0068": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 125
+  },
+  "REQ-0069": {
+   "ok": null,
+   "detail": "no cmd_ack observed in activation window",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0070": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0071": {
+   "ok": false,
+   "detail": "the invariant broke at edge 63, in the window opening at edge 60",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0072": {
+   "ok": true,
+   "detail": "no arbitration-detect in window starting at edge 60",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0073": {
+   "ok": false,
+   "detail": "the invariant broke at edge 73, in the window opening at edge 60",
+   "tp": "",
+   "edge": 73
+  },
+  "REQ-0075": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 0 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0076": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0077": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0078": {
+   "ok": null,
+   "detail": "reset (nReset low or rst high) never observed in this trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0079": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0080": {
+   "ok": false,
+   "detail": "the invariant broke at edge 473, in the window opening at edge 467",
+   "tp": "",
+   "edge": 473
+  },
+  "REQ-0081": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0082": {
+   "ok": false,
+   "detail": "cmd_ack never went to 1 in the window opening at edge 2",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0083": {
+   "ok": null,
+   "detail": "no nReset release seen in trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0085": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 57
+  },
+  "REQ-0086": {
+   "ok": false,
+   "detail": "the invariant broke at edge 5, in the window opening at edge 1",
+   "tp": "",
+   "edge": 5
+  },
+  "REQ-0087": {
+   "ok": false,
+   "detail": "the forbidden condition occurred at edge 4, in the window opening at edge 2",
+   "tp": "",
+   "edge": 4
+  },
+  "REQ-0088": {
+   "ok": true,
+   "detail": "scl_oen changed from 1 to 0 at edge 165",
+   "tp": "",
+   "edge": 165
+  },
+  "REQ-0089": {
+   "ok": false,
+   "detail": "scl_oen changes are not phase-aligned: successive change spacings [1, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3]",
+   "tp": "",
+   "edge": 12
+  },
+  "REQ-0090": {
+   "ok": true,
+   "detail": "scl_oen transitions spaced (cfg clk_cnt=3)",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0091": {
+   "ok": true,
+   "detail": "observed operational output change(s) at edge 5: cmd_ack 0->1, scl_oen 1->0",
+   "tp": "",
+   "edge": 5
+  },
+  "REQ-0092": {
+   "ok": true,
+   "detail": "no scl_oen-attributed FSM phase-advance observed while ena=1,nReset=1,rst=0",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0093": {
+   "ok": false,
+   "detail": "the forbidden condition occurred at edge 262, in the window opening at edge 260",
+   "tp": "",
+   "edge": 262
+  },
+  "REQ-0094": {
+   "ok": true,
+   "detail": "cmd_ack single-edge pulse at edge 4",
+   "tp": "",
+   "edge": 4
+  },
+  "REQ-0095": {
+   "ok": false,
+   "detail": "no sda_oen rise (0->1) into released state observed inside the stable-high WRITE window",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0096": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0097": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 260",
+   "tp": "",
+   "edge": 260
+  },
+  "REQ-0099": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 325
+  },
+  "REQ-0100": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 246
+  },
+  "REQ-0101": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 181",
+   "tp": "",
+   "edge": 181
+  },
+  "REQ-0102": {
+   "ok": false,
+   "detail": "the invariant broke at edge 3, in the window opening at edge 0",
+   "tp": "",
+   "edge": 3
+  },
+  "REQ-0103": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0105": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 68
+  },
+  "REQ-0106": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 23
+  },
+  "REQ-0107": {
+   "ok": false,
+   "detail": "the invariant broke at edge 10, in the window opening at edge 6",
+   "tp": "",
+   "edge": 10
+  },
+  "REQ-0108": {
+   "ok": null,
+   "detail": "trace ended before idle outputs (sda_oen/scl_oen) were observed after cmd_ack",
+   "tp": "",
+   "edge": 250
+  },
+  "REQ-0109": {
+   "ok": true,
+   "detail": "observed 1 cmd_ack rising edge(s), each a single-clock pulse",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0110": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0114": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0115": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 61
+  },
+  "REQ-0116": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0117": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 120",
+   "tp": "",
+   "edge": 120
+  },
+  "REQ-0118": {
+   "ok": false,
+   "detail": "the invariant broke at edge 5, in the window opening at edge 0",
+   "tp": "",
+   "edge": 5
+  },
+  "REQ-0119": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 83
+  },
+  "REQ-0120": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 64
+  },
+  "REQ-0121": {
+   "ok": false,
+   "detail": "multiple cmd_ack rising edges in this window",
+   "tp": "",
+   "edge": 65
+  },
+  "REQ-0122": {
+   "ok": true,
+   "detail": "scl_o and sda_o constant 0 and scl_oen/sda_oen legal (0/1) throughout trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0123": {
+   "ok": true,
+   "detail": "scl_o and sda_o were 0 on every observed state; scl_oen and sda_oen were binary",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0124": {
+   "ok": false,
+   "detail": "the invariant broke at edge 81, in the window opening at edge 69",
+   "tp": "",
+   "edge": 81
+  },
+  "REQ-0125": {
+   "ok": null,
+   "detail": "no SCL rising sample observed while sda_oen == 1",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0126": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 71
+  }
+ },
+ "candidate": {
+  "REQ-0001": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 0 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0002": {
+   "ok": false,
+   "detail": "the sequence stalled at step 1 of 3, in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0003": {
+   "ok": false,
+   "detail": "no WRITE bit cycle observed in this command window",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0004": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 1 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0005": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0006": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 2060",
+   "tp": "",
+   "edge": 2060
+  },
+  "REQ-0007": {
+   "ok": true,
+   "detail": "the forbidden condition never occurred",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0008": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 1002",
+   "tp": "",
+   "edge": 1002
+  },
+  "REQ-0009": {
+   "ok": false,
+   "detail": "dout changed to 1 at edge 190 but sda_i was not stable across two prior samples (idx-2.sda_i=0, idx-1.sda_i=1)",
+   "tp": "",
+   "edge": 190
+  },
+  "REQ-0010": {
+   "ok": true,
+   "detail": "1 single-sample input glitch(es) observed during activation with no immediate output reaction",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0011": {
+   "ok": true,
+   "detail": "scl_o and sda_o remained constant 0 and no oen contradictions were observed",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0012": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0013": {
+   "ok": null,
+   "detail": "no reset state observed to sample output-enable polarity",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0016": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 79
+  },
+  "REQ-0017": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0018": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0019": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0020": {
+   "ok": false,
+   "detail": "scl_oen changed from 0 to 1 at edge 604, in the window opening at edge 64",
+   "tp": "",
+   "edge": 604
+  },
+  "REQ-0021": {
+   "ok": null,
+   "detail": "no qualifying ena fall (1->0) with nReset=1, rst=0, busy=0 and supported cmd observed",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0022": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0023": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 460
+  },
+  "REQ-0024": {
+   "ok": false,
+   "detail": "clk_cnt==0 observed but minimal cmd_ack inter-event interval is 4, expected 1 (opportunities every clock)",
+   "tp": "",
+   "edge": 127
+  },
+  "REQ-0025": {
+   "ok": false,
+   "detail": "cmd_ack never went to 1 in the window opening at edge 1",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0026": {
+   "ok": false,
+   "detail": "sequence began from idle but cmd_ack did not pulse for exactly one clock",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0027": {
+   "ok": true,
+   "detail": "1 START window(s): busy rose after each START and stayed asserted until close",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0028": {
+   "ok": false,
+   "detail": "al never asserted after SDA release and arbitration condition before reset",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0029": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 266",
+   "tp": "",
+   "edge": 266
+  },
+  "REQ-0030": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 625",
+   "tp": "",
+   "edge": 625
+  },
+  "REQ-0031": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 244
+  },
+  "REQ-0032": {
+   "ok": true,
+   "detail": "scl_o was 0 in all 219 observed state(s)",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0033": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0034": {
+   "ok": false,
+   "detail": "cmd_ack rising at edge 15 is not coincident with a scl_oen transition",
+   "tp": "",
+   "edge": 15
+  },
+  "REQ-0035": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0036": {
+   "ok": null,
+   "detail": "no scl_oen transitions observed in this activation window",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0039": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0042": {
+   "ok": false,
+   "detail": "no declared output changed on the clock where filtered SCL fell while released; no observable evidence of scl_sync",
+   "tp": "",
+   "edge": 61
+  },
+  "REQ-0043": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 137",
+   "tp": "",
+   "edge": 137
+  },
+  "REQ-0044": {
+   "ok": false,
+   "detail": "dout changed at row index 2 (edge 124) but not at an approximated sample row or its immediately preceding row",
+   "tp": "",
+   "edge": 124
+  },
+  "REQ-0045": {
+   "ok": true,
+   "detail": "dout captured SDA value 0 after SDA change at edge 300",
+   "tp": "",
+   "edge": 365
+  },
+  "REQ-0046": {
+   "ok": false,
+   "detail": "the invariant broke at edge 69, in the window opening at edge 60",
+   "tp": "",
+   "edge": 69
+  },
+  "REQ-0048": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 67
+  },
+  "REQ-0050": {
+   "ok": false,
+   "detail": "the invariant broke at edge 66, in the window opening at edge 5",
+   "tp": "",
+   "edge": 66
+  },
+  "REQ-0051": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 64
+  },
+  "REQ-0053": {
+   "ok": null,
+   "detail": "clk_en is internal/unobservable; observed output-change(s) at this edge could be a phase-advance but compliance cannot be determined from the trace",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0054": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 70
+  },
+  "REQ-0055": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 0",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0056": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 115
+  },
+  "REQ-0057": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0058": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 71
+  },
+  "REQ-0059": {
+   "ok": false,
+   "detail": "the invariant broke at edge 62, in the window opening at edge 60",
+   "tp": "",
+   "edge": 62
+  },
+  "REQ-0060": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 303
+  },
+  "REQ-0061": {
+   "ok": null,
+   "detail": "activation never completed in this trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0062": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 65
+  },
+  "REQ-0063": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 123 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 123
+  },
+  "REQ-0064": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 66
+  },
+  "REQ-0065": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 119
+  },
+  "REQ-0066": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 2",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0067": {
+   "ok": false,
+   "detail": "the sequence stalled at step 1 of 2, in the window opening at edge 0",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0068": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 120
+  },
+  "REQ-0069": {
+   "ok": null,
+   "detail": "no cmd_ack observed in activation window",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0070": {
+   "ok": false,
+   "detail": "the invariant broke at edge 66, in the window opening at edge 60",
+   "tp": "",
+   "edge": 66
+  },
+  "REQ-0071": {
+   "ok": false,
+   "detail": "the invariant broke at edge 64, in the window opening at edge 60",
+   "tp": "",
+   "edge": 64
+  },
+  "REQ-0072": {
+   "ok": true,
+   "detail": "no arbitration-detect in window starting at edge 60",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0073": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0075": {
+   "ok": false,
+   "detail": "the expected response never occurred, and the window opening at edge 0 ran to the end of trace -- the obligation was never discharged",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0076": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0077": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0078": {
+   "ok": null,
+   "detail": "reset (nReset low or rst high) never observed in this trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0079": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0080": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0081": {
+   "ok": null,
+   "detail": "the activation never occurred",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0082": {
+   "ok": false,
+   "detail": "cmd_ack never went to 1 in the window opening at edge 2",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0083": {
+   "ok": null,
+   "detail": "no nReset release seen in trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0085": {
+   "ok": null,
+   "detail": "the invariant had no rows to hold over in the window opening at edge 4, so nothing was checked",
+   "tp": "",
+   "edge": 4
+  },
+  "REQ-0086": {
+   "ok": false,
+   "detail": "the invariant broke at edge 2, in the window opening at edge 1",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0087": {
+   "ok": false,
+   "detail": "the invariant broke at edge 2, in the window opening at edge 1",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0088": {
+   "ok": true,
+   "detail": "scl_oen changed from 1 to 0 at edge 174",
+   "tp": "",
+   "edge": 174
+  },
+  "REQ-0089": {
+   "ok": false,
+   "detail": "scl_oen changes are not phase-aligned: successive change spacings [2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1]",
+   "tp": "",
+   "edge": 6
+  },
+  "REQ-0090": {
+   "ok": false,
+   "detail": "scl_oen changed on consecutive distinct clock rows while clk_cnt=3",
+   "tp": "",
+   "edge": 84
+  },
+  "REQ-0091": {
+   "ok": true,
+   "detail": "observed operational output change(s) at edge 2: scl_oen 1->0",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0092": {
+   "ok": true,
+   "detail": "no scl_oen-attributed FSM phase-advance observed while ena=1,nReset=1,rst=0",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0093": {
+   "ok": true,
+   "detail": "sda_oen stayed at 0 throughout",
+   "tp": "",
+   "edge": 76
+  },
+  "REQ-0094": {
+   "ok": true,
+   "detail": "cmd_ack single-edge pulse at edge 3",
+   "tp": "",
+   "edge": 3
+  },
+  "REQ-0095": {
+   "ok": false,
+   "detail": "the invariant broke at edge 2, in the window opening at edge 0",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0096": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 271
+  },
+  "REQ-0097": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 61",
+   "tp": "",
+   "edge": 61
+  },
+  "REQ-0099": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 324
+  },
+  "REQ-0100": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 249
+  },
+  "REQ-0101": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 181",
+   "tp": "",
+   "edge": 181
+  },
+  "REQ-0102": {
+   "ok": false,
+   "detail": "the invariant broke at edge 2, in the window opening at edge 0",
+   "tp": "",
+   "edge": 2
+  },
+  "REQ-0103": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0105": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 60",
+   "tp": "",
+   "edge": 60
+  },
+  "REQ-0106": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 510
+  },
+  "REQ-0107": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 121
+  },
+  "REQ-0108": {
+   "ok": null,
+   "detail": "trace ended before idle outputs (sda_oen/scl_oen) were observed after cmd_ack",
+   "tp": "",
+   "edge": 187
+  },
+  "REQ-0109": {
+   "ok": true,
+   "detail": "observed 3 cmd_ack rising edge(s), each a single-clock pulse",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0110": {
+   "ok": true,
+   "detail": "the invariant held throughout",
+   "tp": "",
+   "edge": 1
+  },
+  "REQ-0114": {
+   "ok": false,
+   "detail": "the invariant broke at edge 3, in the window opening at edge 1",
+   "tp": "",
+   "edge": 3
+  },
+  "REQ-0115": {
+   "ok": false,
+   "detail": "the invariant broke at edge 102, in the window opening at edge 61",
+   "tp": "",
+   "edge": 102
+  },
+  "REQ-0116": {
+   "ok": false,
+   "detail": "the invariant broke at edge 64, in the window opening at edge 60",
+   "tp": "",
+   "edge": 64
+  },
+  "REQ-0117": {
+   "ok": false,
+   "detail": "the expected response never occurred in the window opening at edge 120",
+   "tp": "",
+   "edge": 120
+  },
+  "REQ-0118": {
+   "ok": null,
+   "detail": "the invariant held for every row seen, but the window opening at edge 0 ran to the end of trace without closing",
+   "tp": "",
+   "edge": 0
+  },
+  "REQ-0119": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 70
+  },
+  "REQ-0120": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 63
+  },
+  "REQ-0121": {
+   "ok": false,
+   "detail": "multiple cmd_ack rising edges in this window",
+   "tp": "",
+   "edge": 38
+  },
+  "REQ-0122": {
+   "ok": true,
+   "detail": "scl_o and sda_o constant 0 and scl_oen/sda_oen legal (0/1) throughout trace",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0123": {
+   "ok": true,
+   "detail": "scl_o and sda_o were 0 on every observed state; scl_oen and sda_oen were binary",
+   "tp": "",
+   "edge": null
+  },
+  "REQ-0124": {
+   "ok": false,
+   "detail": "the invariant broke at edge 84, in the window opening at edge 78",
+   "tp": "",
+   "edge": 84
+  },
+  "REQ-0125": {
+   "ok": true,
+   "detail": "the expected response occurred",
+   "tp": "",
+   "edge": 442
+  },
+  "REQ-0126": {
+   "ok": true,
+   "detail": "cmd_ack pulsed once for 1 edge(s)",
+   "tp": "",
+   "edge": 66
+  }
+ }
+}
