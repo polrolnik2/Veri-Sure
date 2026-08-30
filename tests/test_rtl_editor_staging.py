@@ -1324,3 +1324,109 @@ def test_a_wide_vector_is_readable_as_well_as_exact(tmp_path):
     assert _readable("0") == "0"
     assert _readable("xxxx") == "xxxx"
     assert _readable(None) is None
+
+
+# ------------------------- the small repair, which had no tool
+
+
+BIG = """\
+module m(input clk, input a, input [1:0] sel, output reg c, output reg d);
+always @(posedge clk) begin
+  case (sel)
+    2'd0: begin
+      c <= 1'b1;
+      d <= 1'b0;
+    end
+    2'd1: begin
+      c <= 1'b1;
+      d <= 1'b1;
+    end
+    default: begin
+      c <= 1'b0;
+      d <= 1'b0;
+    end
+  endcase
+end
+endmodule
+"""
+
+
+def _big_session(tmp_path):
+    from eda_agent.trace_slicer import RtlBlock
+    path = tmp_path / "rtl.sv"
+    path.write_text(BIG)
+    s = _EditSession(tb_path=None, rtl_path=str(path), output_dir=str(tmp_path),
+                     last_mismatch_cnt=0, sim_reviewer=object(), max_trials=30)
+    body = BIG[BIG.index("always"):BIG.index("endmodule")].rstrip("\n")
+    s.blocks_by_id = {"blk": RtlBlock(id="blk", kind="always", start_line=2,
+                                      end_line=17, clocking="posedge clk",
+                                      code=body, writes=("c", "d"),
+                                      reads=("sel",))}
+    return s
+
+
+def test_a_fragment_edit_changes_one_line_inside_a_large_block(tmp_path):
+    """THE UNIT OF EDIT WAS THE BLOCK, and one block is two thirds of the design.
+
+    Measured on both the i2c candidate and the golden design: fifteen blocks,
+    and the bit-controller FSM is 4713 of 7285 characters (65%) and 7159 of
+    10542 (68%). Every failing requirement's slice lands on it, so changing one
+    state's `scl_oen` assignment meant retyping all 4713 characters and any slip
+    anywhere in them broke the commit.
+    """
+    s = _big_session(tmp_path)
+    whole = s.blocks_by_id["blk"].code
+    res = s.stage_edit("    2'd1: begin\n      c <= 1'b1;",
+                       "    2'd1: begin\n      c <= 1'b0;")
+    assert res["is_action_executed"], res
+    staged = s.staged()
+    assert "2'd1: begin\n      c <= 1'b0;" in staged
+    # The OTHER arms are untouched -- this is the property a whole-block
+    # replacement cannot promise, because it retypes them all.
+    assert "2'd0: begin\n      c <= 1'b1;" in staged
+    assert staged.count("d <= 1'b0;") == BIG.count("d <= 1'b0;")
+    assert len("    2'd1: begin\n      c <= 1'b1;") < len(whole) // 4
+
+
+def test_an_ambiguous_fragment_is_refused_with_the_count(tmp_path):
+    """`c <= 1'b1;` appears twice here and thirteen times in the real FSM."""
+    s = _big_session(tmp_path)
+    res = s.stage_edit("c <= 1'b1;", "c <= 1'b0;")
+    assert not res["is_action_executed"]
+    assert "appears 2 times" in res["error_msg"]
+    assert "surrounding lines" in res["error_msg"]
+    assert s.staged_rtl is None, "an ambiguous edit must stage NOTHING"
+
+
+def test_a_fragment_that_is_not_there_is_refused(tmp_path):
+    s = _big_session(tmp_path)
+    res = s.stage_edit("c <= 1'bz;", "c <= 1'b0;")
+    assert not res["is_action_executed"]
+    assert "not in the buffer" in res["error_msg"]
+    assert s.staged_rtl is None
+
+
+def test_an_empty_fragment_is_refused(tmp_path):
+    res = _big_session(tmp_path).stage_edit("", "anything")
+    assert not res["is_action_executed"]
+    assert "empty" in res["error_msg"]
+
+
+def test_a_fragment_edit_moves_the_enclosing_blocks_staged_text(tmp_path):
+    """Otherwise the next `replace_block` on that block anchors on bytes the
+    buffer no longer holds, and is refused for an edit the agent itself made."""
+    s = _big_session(tmp_path)
+    s.stage_edit("    2'd1: begin\n      c <= 1'b1;",
+                 "    2'd1: begin\n      c <= 1'b0;")
+    assert "c <= 1'b0;" in s.staged_text["blk"]
+    # And a whole-block replace still resolves afterwards.
+    res = s.stage_replace("blk", s.staged_text["blk"].replace("d <= 1'b1;",
+                                                              "d <= 1'b0;"))
+    assert res["is_action_executed"], res
+
+
+def test_a_fragment_edit_is_free_and_spends_no_trial(tmp_path):
+    s = _big_session(tmp_path)
+    s.stage_edit("      d <= 1'b1;", "      d <= 1'b0;")
+    assert s.action_calls == 0
+    assert s.check_calls == 0

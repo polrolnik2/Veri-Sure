@@ -95,6 +95,7 @@ TOOLS = {
     "list_suspect_blocks": lambda: session.list_suspect_blocks(),
     "read_block": lambda block_id: session.read_block(block_id),
     "replace_block": lambda block_id, new_code: session.stage_replace(block_id, new_code),
+    "edit": lambda old_text, new_text: session.stage_edit(old_text, new_text),
     "add_block": lambda anchor_id, code: session.stage_add(anchor_id, code),
     "remove_block": lambda block_id: session.stage_remove(block_id),
     "check_staged": lambda: session.check_staged(),
@@ -172,7 +173,14 @@ TOOLS
   list_suspect_blocks()            the current slice.
   read_block(block_id)             its source, from the STAGED buffer.
 
-  replace_block(block_id, new_code)   FREE. Stages an edit. No compile, no run.
+  edit(old_text, new_text)            FREE. Replace an exact FRAGMENT, quoting
+                                      enough context to be unique. USE THIS for
+                                      a small change inside a large block --
+                                      the FSM here is two thirds of the design,
+                                      and retyping it to change one line is how
+                                      edits go wrong.
+  replace_block(block_id, new_code)   FREE. Replaces a WHOLE block. Right for a
+                                      small block, wasteful for a large one.
   add_block(anchor_id, code)          FREE. anchor_id is a block id, or
                                       "endmodule" for the module end.
   remove_block(block_id)              FREE.

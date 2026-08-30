@@ -859,6 +859,48 @@ class _EditSession:
             res["warnings"] = self.driver_warnings()
         return res
 
+    def stage_edit(self, old_text: str, new_text: str) -> Dict[str, Any]:
+        """Replace an exact FRAGMENT of the staged buffer. FREE, like the rest.
+
+        THE UNIT OF EDIT WAS THE BLOCK, AND ONE BLOCK IS TWO THIRDS OF THIS
+        DESIGN. Measured on both the ChipVerilog i2c candidate and the golden
+        design: fifteen blocks, and the bit-controller FSM is 4713 of 7285
+        characters (65%) and 7159 of 10542 (68%). It writes cmd_ack, scl_oen,
+        sda_chk, sda_oen and state, so every failing requirement's slice lands
+        on it. To change ONE state's `scl_oen` assignment an agent had to
+        `replace_block` and retype all 4713 characters, and any transcription
+        slip anywhere in them broke the commit. Four live sessions of
+        stage-check-discard were mostly that.
+
+        §7.1 added `add_block` and `remove_block` reasoning that "a repair
+        needing new declarations, or one whose fix is removal, is unreachable".
+        On a design shaped like this the unreachable repair is the SMALL one,
+        and this is the tool for it.
+
+        SAME DISCIPLINE AS EVERY OTHER EDIT, deliberately: a content anchor, a
+        uniqueness requirement, and an explicit refusal rather than a guess.
+        Line numbers are still never used -- §7.2's rule stands, and it is why
+        this reuses `_splice` rather than adding a second splice path. Nothing
+        downstream needs to know: the driver and multi-driver guards parse the
+        buffer, so a fragment edit is checked exactly as a block edit is.
+        """
+        if not old_text:
+            return {"is_action_executed": False, "error_msg": (
+                "old_text is empty. Quote the exact fragment to replace, with "
+                "enough surrounding lines to make it unique.")}
+        res = self._splice(old_text, new_text, "edit that fragment")
+        if not res.get("is_action_executed"):
+            return res
+        # A fragment can sit INSIDE a block whose whole text is a later anchor,
+        # so that block's staged text has to move with it -- otherwise the next
+        # `replace_block` on it anchors on bytes the buffer no longer holds.
+        for bid, block in (self.blocks_by_id or {}).items():
+            current = self.staged_text.get(bid, block.code)
+            if old_text in current:
+                self.staged_text[bid] = current.replace(old_text, new_text, 1)
+        res["warnings"] = self.driver_warnings()
+        return res
+
     def stage_remove(self, block_id: str) -> Dict[str, Any]:
         anchor = self._anchor_for(block_id)
         if anchor is None:
@@ -1929,6 +1971,7 @@ class RTLEditor:
         # trial. Without these registered the staged buffer is unreachable --
         # the methods exist on the session and no agent can call them.
         toolkit.register_tool_function(self._tool_replace_block)
+        toolkit.register_tool_function(self._tool_edit)
         toolkit.register_tool_function(self._tool_add_block)
         toolkit.register_tool_function(self._tool_remove_block)
         toolkit.register_tool_function(self._tool_check_staged)
@@ -2049,6 +2092,16 @@ class RTLEditor:
         result = await asyncio.to_thread(self._session.stage_add, anchor_id, code)
         self._session._record_trajectory("add_block", result=result, block_id=anchor_id,
                                          diff=code)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_edit(self, old_text: str, new_text: str) -> ToolResponse:
+        """Replace an exact FRAGMENT of the design, quoting enough context to be unique. Free: no compile, no simulation, no trial. Use this for a small change inside a large block instead of retyping the whole block."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.stage_edit, old_text, new_text)
+        self._session._record_trajectory("edit", result=result,
+                                         diff=f"- {old_text}\n+ {new_text}")
         self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
