@@ -154,9 +154,18 @@ def test_direction_is_asked_as_part_of_the_same_question():
                    "CONVICTS OUTSIDE THE CLAIM",
                    "THERE MUST BE A SENTENCE"):
         assert phrase in C.SYSTEM, phrase
-    # and it must still be ONE verdict, not a second field to hide behind
+    # The CHECK's verdict must still be ONE field, not several to hide behind:
+    # a reviewer that can pass the main question while flagging direction
+    # separately will do exactly that, and the rejection stops binding.
+    #
+    # `states_an_obligation` is admitted beside it, and the reason is the whole
+    # test of whether a field is allowed here: it is not a grade of the check at
+    # all. It accuses the SPECIFICATION and routes to spec authoring, so it
+    # cannot be folded into `tests_the_requirement` without sending a repair
+    # round to the author -- the one party that cannot act on it.
     assert set(C.Review.model_fields) == {
-        "reasoning", "tests_the_requirement", "what_is_missing"}
+        "reasoning", "states_an_obligation", "tests_the_requirement",
+        "what_is_missing"}
 
 
 def test_asserting_the_premise_is_not_a_WEAK_check():
@@ -573,3 +582,123 @@ def test_the_gate_is_told_it_can_convict_a_check_that_became_the_siblings():
     while `through_req` was a bare uid."""
     assert "has the check silently become THAT" in C.SYSTEM
     assert "testing the neighbour under a different uid" in C.SYSTEM
+
+
+# --------------------------------------- the prior question: is there anything
+#                                         to assert at all?
+
+
+def test_a_requirement_that_forbids_nothing_is_not_the_checks_fault():
+    """`not-assertable` and `off-target` accuse different parties.
+
+    The author cannot decline: handed a definition it produces the most
+    plausible check in the neighbourhood, and that check is well-formed. So the
+    finding must land on the SPECIFICATION, or a repair round goes to the one
+    party with no move.
+    """
+    from specflow.refmodel import verdict as V
+
+    out = C.rejects(C.Review(states_an_obligation=False,
+                             what_is_missing="defines cmd; states no effect"))
+    assert out.startswith("not-assertable:")
+    assert V.of_discard(out) == "NOT_ASSERTABLE"
+    assert V.ROUTE["NOT_ASSERTABLE"] == "return to spec authoring"
+    assert "NOT_ASSERTABLE" in V.BLOCKING, "a hollow requirement must not pass"
+
+
+def test_the_prior_question_wins_when_the_reply_says_both():
+    """A reply may reject on both counts. The requirement's defect is the one
+    that decides, because it is the one that ends the requirement rather than
+    buying it a repair round."""
+    out = C.rejects(C.Review(states_an_obligation=False,
+                             tests_the_requirement=False,
+                             what_is_missing="a scope statement"))
+    assert out.startswith("not-assertable:"), out
+
+
+def test_an_old_reply_without_the_field_is_not_a_rejection():
+    """The field defaults TRUE on purpose. A model that never saw section 3b
+    must not have its silence read as "this requirement is hollow" -- the
+    expensive error is rejecting a real requirement."""
+    assert C.rejects(C.Review(tests_the_requirement=True)) == ""
+    assert C.rejects(C.Review(tests_the_requirement=False,
+                              what_is_missing="x")).startswith("off-target:")
+
+
+def test_naming_an_internal_mechanism_is_not_grounds_on_its_own():
+    """The boundary that keeps section 3b from becoming the rejection section 7
+    forbids. Both examples must be IN the prompt, because the contrast is the
+    only thing separating "invisible mechanism" from "no obligation"."""
+    assert "3b. THE PRIOR QUESTION" in C.SYSTEM
+    assert "reloads the internal\n       counter cnt" in C.SYSTEM, (
+        "the OBLIGATION-despite-an-internal-mechanism example must survive")
+    assert "slave_wait condition indicates" in C.SYSTEM, (
+        "the NO-OBLIGATION counterpart must survive beside it")
+    assert "never \"can this be observed\"" in C.SYSTEM
+
+
+def test_the_stage_routes_a_hollow_requirement_to_spec_authoring(
+        tmp_path, monkeypatch):
+    """End to end: the disposition is NOT_ASSERTABLE, not ORACLE_INVALID."""
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(C, "review", lambda *a, **k: {
+        "REQ-0001": C.Review(states_an_obligation=False,
+                             what_is_missing="names a capability, no effect")})
+
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_GenPort([_gen_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, repair_attempts=0, want_correspondence=True)
+
+    assert got.dispositions["REQ-0001"] == "NOT_ASSERTABLE"
+    assert "no effect" in got.reasons["REQ-0001"]
+
+
+def test_a_hollow_requirement_never_costs_a_repair_round(tmp_path, monkeypatch):
+    """The saving that makes this cheaper than the gate it replaces: nothing the
+    author writes can add an obligation, so it is never re-asked."""
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(C, "review", lambda *a, **k: {
+        "REQ-0001": C.Review(states_an_obligation=False,
+                             what_is_missing="a definition")})
+
+    port = _GenPort([_gen_reply(GOOD)] * 6)
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", fanout=False,
+        max_repairs=0, repair_attempts=2, want_correspondence=True)
+
+    assert got.dispositions["REQ-0001"] == "NOT_ASSERTABLE"
+    assert not [s for s in port.stages if "fix" in s], (
+        f"a hollow requirement was re-asked: {port.stages}")
+
+
+def test_zero_hollow_requirements_is_not_reported_when_nobody_asked():
+    """The summary's own rule, applied to the new gate. Correspondence is the
+    only leg that can emit NOT_ASSERTABLE, so with it off a 0 would read as
+    "every requirement asserts something" when it means "not looked at" -- the
+    exact ambiguity that once had `over_strict: 0` read as a clean bill."""
+    off = O.OracleSet(dispositions={"REQ-0001": "TRUSTED"},
+                      tools={"correspondence": False})
+    assert off.rates()["NOT_ASSERTABLE"] is None
+
+    on = O.OracleSet(dispositions={"REQ-0001": "TRUSTED"},
+                     tools={"correspondence": True})
+    assert "NOT_ASSERTABLE" not in on.rates(), (
+        "with the gate on and nothing found, absence is a real zero")
+
+    found = O.OracleSet(dispositions={"REQ-0001": "NOT_ASSERTABLE"},
+                        tools={"correspondence": True})
+    assert found.rates()["NOT_ASSERTABLE"] == 1

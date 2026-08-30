@@ -374,11 +374,57 @@ rules run slightly conservative against the hand labels, so the true figure is a
 least that. Roughly a quarter of every requirement in the design is being turned
 into a check that cannot be a fair test of it.
 
-**This is a cheap gate and it belongs before oracle generation.** Assertability is
-a property of the requirement's own sentence: no design, no trace, no model call
-needed beyond the one that reads the text. Every requirement failing it should
-route to spec authoring -- "this sentence states no falsifiable obligation" -- and
-never reach an author who will dutifully invent one.
+### The gate, built: correspondence asks the prior question
+
+Assertability is now a rejection ground in the correspondence reviewer rather
+than a measurement in this document. Section `3b. THE PRIOR QUESTION` asks it
+before the fit question, because "for every False path there must be a sentence
+condemning it" has nothing to run on when the requirement condemns nothing:
+
+> CAN YOU DESCRIBE A DESIGN THAT THIS SENTENCE, IN ITS OWN WORDS, CALLS WRONG?
+
+Four things make it a different gate from the five that were already there.
+
+**It accuses the specification, not the check.** `Review.states_an_obligation`
+is a separate field from `tests_the_requirement` and `rejects()` gives it
+priority when a reply says both, because they route to different parties:
+`not-assertable:` maps to a new **`NOT_ASSERTABLE`** verdict whose
+`ROUTE` is *return to spec authoring*, beside `UNOBSERVABLE`. Folding it into
+`off-target:` would have sent a repair round to the author.
+
+**It never costs a repair round.** `verify_one` returns `may_quote=False` for
+this rejection, so the requirement is recorded and not re-asked. Nothing an
+author writes can add an obligation to a sentence that has none, and re-asking
+buys the same invention back at the price of a call.
+
+**The author's own check is the evidence, which is why this belongs here rather
+than in a pre-gate on the text.** The author cannot decline: handed a definition
+it produces the most plausible check in the neighbourhood -- usually an
+obligation borrowed from a sibling -- and that check is well-formed, satisfiable
+and confident. The reviewer is the only reader holding the sentence and the code
+side by side, so it is the only one positioned to see the invention.
+
+**The boundary is the whole risk, and it is pinned.** Section 7 forbids "it
+would need to observe an internal signal" as a rejection, because normalization
+once called 27 of 77 requirements unobservable by reading their mechanism. A
+"states no obligation" ground could reintroduce that failure exactly, so the
+prompt carries a contrast pair and a test asserts both survive: REQ-0093
+("reloads the internal counter cnt ... and normal command-FSM bit timing does not
+progress") names an invisible counter and IS an obligation, because a design
+whose outputs advanced while `ena` was low is condemned by its words; REQ-0086
+("the slave_wait condition indicates that another bus participant is holding
+SCL low") names an invisible signal and is not, because it says only what the
+condition means. The question is never "can this be observed" but "does this
+sentence forbid anything".
+
+`OracleSet.rates()` reports `NOT_ASSERTABLE: None` when correspondence is off,
+under the rule the summary already applies to `VACUOUS` and `ORACLE_INVALID`: a
+zero from a gate that did not run reads exactly like a clean bill.
+
+**Not yet measured.** The ground exists and is pinned by seven tests; what it
+actually rejects on a live run is unknown, because answering it needs the
+reviewer to run. The prediction on record is the twelve hand-labelled
+requirements above, of which five are the golden convictions still standing.
 
 ## The whole set, both arms
 

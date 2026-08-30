@@ -212,6 +212,12 @@ class OracleSet:
             out["VACUOUS"] = None
         if self.witness_kind == NO_BOUND:
             out["ORACLE_INVALID"] = out.get("ORACLE_INVALID")
+        # Same rule, for the gate that finds hollow requirements: correspondence
+        # is the only leg that can emit NOT_ASSERTABLE, so with it switched off
+        # a zero means "nobody asked whether these requirements assert
+        # anything", which reads in a report exactly like "they all do".
+        if not self.tools.get("correspondence"):
+            out["NOT_ASSERTABLE"] = out.get("NOT_ASSERTABLE")
         return out
 
     def decides_nothing(self) -> int:
@@ -346,7 +352,12 @@ def verify_one(
         # not strength.
         off = correspondence.rejects(review)
         if off:
-            return off, True, notes
+            # `may_quote` is what buys a repair round, and a requirement that
+            # states no obligation must not get one: the author cannot add an
+            # obligation to a sentence that has none, so re-asking spends a call
+            # to receive the same invention back. It is recorded and routed to
+            # spec authoring instead -- see `verdict.ROUTE["NOT_ASSERTABLE"]`.
+            return off, not off.startswith("not-assertable:"), notes
 
     if variants and replayable:
         level, detail, apart = variants_mod.must_fail(

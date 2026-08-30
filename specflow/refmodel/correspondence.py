@@ -81,6 +81,17 @@ PARSE_ERROR = "Parse Error: "
 
 class Review(BaseModel):
     reasoning: str = ""
+    #: THE PRIOR QUESTION. Does the requirement's own sentence condemn any
+    #: design at all? A definition ("cmd is the bit-level command") and a scope
+    #: statement ("the module begins with a reset sequence") name something
+    #: without saying what must happen, and no check of them can be a fair test
+    #: because there is nothing to be unfair to.
+    #:
+    #: Defaults TRUE, and that direction is deliberate: a reply from a model
+    #: that never saw this field must not silently become a rejection, and the
+    #: expensive error here is rejecting a real requirement, not missing a
+    #: hollow one.
+    states_an_obligation: bool = True
     #: Does the oracle decide the requirement it names?
     tests_the_requirement: bool = True
     #: On a no: what the check would have to do instead. The repair prompt.
@@ -164,6 +175,71 @@ silent, and the answer is NO.
 Note what the rule does NOT ask. It never asks whether the check demands
 ENOUGH. A check that convicts only where the requirement speaks, but does so
 weakly, is a YES.
+
+================================================================
+3b. THE PRIOR QUESTION: IS THERE AN OBLIGATION AT ALL?
+================================================================
+
+The rule above presupposes that the requirement CONTAINS sentences condemning a
+design. Some requirements do not, and for those the rule has nothing to run on.
+
+    CAN YOU DESCRIBE A DESIGN THAT THIS SENTENCE, IN ITS OWN WORDS, CALLS
+    WRONG?  If no such design exists, the requirement states no obligation.
+
+Two shapes fail it.
+
+  A DEFINITION says what something IS or MEANS.
+      "The cmd[3:0] input is the bit-level command provided by the byte-level
+       controller."
+      "The arbitration-lost output al indicates that the controller has
+       detected an arbitration loss."
+    Name the design these convict. There is none: they are true of every
+    implementation and false of none.
+
+  A SCOPE STATEMENT names a capability without saying what must happen.
+      "The module begins operation with a reset and initialization sequence."
+    Which design does it condemn? One with no reset -- but the sentence never
+    says what the sequence must DO, so no trace can contradict it.
+
+WHY THIS IS ASKED OF YOU AND NOT OF THE AUTHOR. The author was handed this
+sentence and told to write a check for it. It cannot decline. Faced with a
+definition it will produce the most plausible-looking check in the
+neighbourhood -- typically an obligation borrowed from a nearby requirement --
+and that check will be well-formed, satisfiable and confident. **A competent
+check is therefore not evidence that the requirement asked for one.** You are
+the only reader positioned to notice, because you hold the sentence and the
+code side by side.
+
+THE BOUNDARY, AND IT IS THE WHOLE RISK IN THIS SECTION. This is NOT the
+internal-signal rejection, which section 7 forbids outright and for good reason.
+A sentence may name an invisible mechanism and still state a real obligation:
+
+  OBLIGATION, despite naming an internal counter --
+      "When the core enable input ena is low, the module reloads the internal
+       counter cnt from clk_cnt and normal command-FSM bit timing does not
+       progress."
+    `cnt` is invisible and no check can watch it. But the sentence ALSO says
+    bit timing does not progress, and a design whose outputs advanced while ena
+    was low is condemned by those words. That is an obligation. Answer yes.
+
+  NO OBLIGATION --
+      "The slave_wait condition indicates that another bus participant is
+       holding the SCL line low."
+    Also names an invisible signal -- but says only what the condition MEANS.
+    No design is wrong by it. Answer no.
+
+So the question is never "can this be observed". It is "does this sentence
+forbid anything". Read past the mechanism to whatever the sentence claims must
+happen, and if you find a claim, there is an obligation.
+
+WHEN YOU ANSWER NO. Set `states_an_obligation` to false, say in
+`what_is_missing` which part is absent -- the trigger, the effect, or both --
+and do not labour the fit question: it is unanswerable when there is nothing to
+fit. This verdict does not go back to the check's author, because nothing the
+author writes can add an obligation to a sentence that has none. It goes to
+whoever wrote the specification. So a no here ENDS the requirement rather than
+spending a repair round on it, which is why it must be a reading of the
+sentence and never a complaint about the check.
 
 ================================================================
 4. HOW ENGLISH MAPS ONTO CODE
@@ -333,6 +409,9 @@ you can make.
 list is internal -- see section 7.
 
 PROCEDURE. In `reasoning`, in this order:
+  0. section 3b: name a design this sentence's own words call wrong. If you
+     cannot, say so and answer `states_an_obligation: false` -- the rest does
+     not apply;
   1. the requirement's TRIGGER and EFFECT, in its own words;
   2. the check's trigger and the check's assertion, read out of the code;
   3. each way the check can return False, and the sentence that licenses it,
@@ -347,8 +426,9 @@ Reply with ONE JSON object and nothing else:
 
 {
   "reasoning": "trigger and effect; the check's trigger and assertion; each False path and its licence",
+  "states_an_obligation": true,
   "tests_the_requirement": true,
-  "what_is_missing": "on false: which False path is unlicensed, and what the check's TRIGGER would have to become. Deleting the offending assertion is usually not the fix -- measured, the repairs that worked rebuilt the window."
+  "what_is_missing": "on either false: for states_an_obligation, which part the sentence lacks -- trigger, effect, or both. For tests_the_requirement, which False path is unlicensed and what the check's TRIGGER would have to become. Deleting the offending assertion is usually not the fix -- measured, the repairs that worked rebuilt the window."
 }
 """
 
@@ -564,7 +644,18 @@ def rejects(out: Review) -> str:
 
     A reply that could not be parsed is not a rejection: see `review_one`.
     """
-    if out.reasoning.startswith(PARSE_ERROR) or out.tests_the_requirement:
+    if out.reasoning.startswith(PARSE_ERROR):
         return ""
     detail = out.what_is_missing or out.reasoning or "(no detail)"
+    # THE PRIOR QUESTION WINS, including when the reply says both. "This
+    # sentence forbids nothing" and "your check is off-target" are not two
+    # grades of the same finding: the first accuses the specification and ends
+    # the requirement, the second accuses the check and buys it a repair round.
+    # Reporting the second when the first is true sends the author to fix
+    # something that is not theirs, which is the routing error this whole enum
+    # exists to prevent.
+    if not out.states_an_obligation:
+        return f"not-assertable: {detail}"
+    if out.tests_the_requirement:
+        return ""
     return f"off-target: {detail}"

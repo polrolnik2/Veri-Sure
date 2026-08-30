@@ -39,6 +39,7 @@ Verdict = Literal[
     "VIOLATES",        # activation fired, oracle failed
     "NOT_EXERCISED",   # the stimulus loop DID NOT RUN -- see ABANDONED
     "UNOBSERVABLE",    # the resolution pass DID NOT RUN -- see ABANDONED
+    "NOT_ASSERTABLE",  # the requirement's sentence forbids no design at all
     "ORACLE_INVALID",  # the check is wrong: over-strict, malformed, or self-contradicting
     "VACUOUS",         # the check demands nothing
     "UNDECIDED",       # nothing decided it, or the retry budget ran out
@@ -85,6 +86,12 @@ ROUTE: dict[str, str] = {
     "VIOLATES": "fix the implementation",
     "NOT_EXERCISED": "fix the stimulus",
     "UNOBSERVABLE": "return to spec authoring",
+    # The sentence forbids no design at all -- a definition, or a capability
+    # named without saying what must happen. Distinct from UNOBSERVABLE, which
+    # says the effect is real but invisible: here there is no effect claimed.
+    # Both route to the same party and for the same reason, that no agent
+    # downstream has a move.
+    "NOT_ASSERTABLE": "return to spec authoring",
     "ORACLE_INVALID": "regenerate the oracle",
     "VACUOUS": "regenerate the oracle",
     "UNDECIDED": "triage manually",
@@ -118,6 +125,13 @@ _DISCARD_PREFIX: tuple[tuple[str, str], ...] = (
     # is still a check that cannot discharge this requirement, so it goes back
     # to the party that wrote it.
     ("off-target:", "ORACLE_INVALID"),
+    # The REQUIREMENT states no obligation, so no check of it could have been a
+    # fair test. This must not be ORACLE_INVALID: the author was handed a
+    # sentence with nothing to check and produced the most plausible thing in
+    # the neighbourhood, which is the correct behaviour under the instruction it
+    # was given. Blaming the check would send a repair round to the one party
+    # that cannot fix it.
+    ("not-assertable:", "NOT_ASSERTABLE"),
     # The check decides nothing AND the stimulus loop was given its activation
     # and could not make it occur. Deliberately NOT `NOT_EXERCISED`, which means
     # "nobody reached it" and BLOCKS as a harness defect: here somebody did
