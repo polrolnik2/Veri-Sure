@@ -259,12 +259,42 @@ that.
 Separation differences of +-1 on 43 requirements are noise and none of these
 policies is distinguishable on it. The 6-vs-18 conviction gap is not.
 
-**What the data does support fixing** is the round-3 asymmetry: `verifications=3`
-should mean three repair rounds, not two judgments and a repair followed by a
-third judgment with no reply. That adds coverage without weakening the filter,
-because the fourteen checks discarded after passing would get to answer their
-final objection instead of being dropped on a single draw. Every other change
-measured here trades precision away for it.
+### The break is deliberate, and this write-up called it a defect
+
+An earlier draft of this section proposed "fixing the round-3 asymmetry" by
+moving the `break` past the re-ask. That was wrong twice over.
+
+**It is not an oversight.** `repair_attempts`' own docstring diagnoses it, and
+the parameter was renamed for exactly this reason:
+
+> REPAIR ATTEMPTS an oracle gets, not verification rounds. It was
+> `max_rounds: int = 2` and that name is why this sat wrong: the loop breaks at
+> `rounds == max_rounds` BEFORE re-asking, **because the last round has nothing
+> left to verify its answer**, so 2 rounds bought exactly ONE attempt.
+
+`verifications = repair_attempts + 1`, so `repair_attempts=2` delivers two repair
+attempts and a final unanswerable judgment BY DESIGN. Describing "three judgments,
+two repairs" as a defect was describing the parameter working as documented.
+
+**And the measurement above argues for the existing design, not against it.**
+The alternative to a terminal final-round rejection is keeping the last version
+that passed -- which selects the same set as `latch` (every requirement with an
+`O` anywhere; the two policies differ only in which accepted version they freeze,
+and only for the four `ORO` patterns). That is 18 golden convictions against 6.
+The reason the break looks harsh and is not: **a later rejection carries more
+information than an earlier acceptance, because the later round is judging a
+repaired check.** Averaging the rounds, or trusting the first accept, both throw
+that ordering away.
+
+**What is genuinely untested** is the thing the docstring worries about --
+accepting an unverified final-round repair. No round-3 repairs exist in this run,
+so there is nothing to score. It is unmeasured, not refuted, and measuring it
+means a run with `repair_attempts=3` to compare against this one at 2.
+
+**Confirmed against production.** Neither `integration.py:621` nor
+`refmodel/compose.py:456` passes `repair_attempts`, so both take the default of
+2, and `drive.py`'s default matches. Everything measured in this section is the
+pipeline's own behaviour at its own settings, not an artifact of the driver.
 
 ## The six that still convict golden are the same defect class
 
