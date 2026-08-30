@@ -73,6 +73,7 @@ from ..fanout import compose, json_block, shared_block
 from ..model_io import ModelPort
 from ..stage import run_fanout
 from .oracles import RequirementOracle
+from .temporal import OPERATOR_CONTRACT
 
 STAGE = "correspond"
 
@@ -177,6 +178,7 @@ until=closes)` builds the trigger windows. `throughout(w, p)` /
 check using them has a trigger and an effect exactly like the loop above; read
 them out of the combinator arguments.
 
+""" + OPERATOR_CONTRACT + """\
 ================================================================
 3. THE RULE
 ================================================================

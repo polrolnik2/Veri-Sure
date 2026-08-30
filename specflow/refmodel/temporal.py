@@ -713,3 +713,67 @@ def worst(verdicts: list[Verdict]) -> Verdict:
         if ok is None:
             return None, edge, detail
     return verdicts[-1]
+
+
+#: What these operators RETURN, for a reader who must judge a check written with
+#: them. Lives here because this module owns the semantics: an operator whose
+#: behaviour changes has this paragraph in the same file.
+#:
+#: WHO NEEDS IT. The oracle author's prompt states all of this at length. The
+#: correspondence reviewer's did not state any of it -- measured: `strong=True`
+#: and `stable` appeared ZERO times in the reviewer's system prompt against 6
+#: and 10 in the author's -- and yet the reviewer's whole job is to enumerate
+#: the paths on which a check returns False. It was judging code that calls
+#: operators whose return contract it had never been given, which is the same
+#: defect as normalisation guessing a port's encoding: a stage reasoning about
+#: something nobody handed it, and inventing the missing half.
+OPERATOR_CONTRACT = """\
+================================================================
+2b. WHAT THE OPERATORS RETURN
+================================================================
+
+Every operator returns `(ok, edge, detail)` and `ok` is THREE-VALUED:
+
+  True   the check held here
+  False  the check was CONTRADICTED -- a design did the wrong thing
+  None   NO VERDICT. Not a pass and not a failure.
+
+ONLY `False` IS A CONVICTION, so only `False` needs a sentence licensing it.
+A path that returns None is not a False path and is not your objection. Do not
+count it as one, and do not ask for it to be licensed.
+
+These return None, by design, and none of them is a defect in the check:
+
+  - the activation never occurred, so there is no window (`worst([])`)
+  - a weak window ran off the end of the trace before the response was due
+  - the window contains no rows to look at
+  - `pulse` found the port ALREADY active when it started looking
+  - `aborts=` discarded the attempt -- SVA's `disable iff`, and the abort is
+    tested BEFORE `until`, so a row satisfying both aborts rather than closes
+
+WHAT DOES CREATE A FALSE PATH, and therefore needs licensing:
+
+  `strong=True` on `eventually`, `until` or `sequence` converts "the trace
+  ended before the response came" from None into False. It is the caller
+  asserting that the requirement OBLIGES a response. That is a real claim about
+  the sentence and it is exactly your business.
+
+The rest, briefly:
+
+  after(trace, act, until=, aborts=)  one window per RISING activation, not one
+                                      per row the activation holds on
+  throughout(w, p) / never(w, p)      False on any row that violates; None over
+                                      an empty row set
+  eventually(w, p)                    False only when the window CLOSED without
+                                      it (or strong=True and the trace ended)
+  stable(w, port)                     False if the port changed anywhere in w
+  until(w, holds, release)            tests `release` FIRST, so `holds` need
+                                      not be true on the releasing row
+  worst([...])                        folds many windows: failure first, then
+                                      unknown, then pass
+
+`after_activation=True` excludes the trigger row. A check that reads the
+activation row itself, where the requirement's effect follows the trigger, is
+looking before the design could have acted -- that is a real defect, and it
+shows up as a False the requirement never licensed.
+"""

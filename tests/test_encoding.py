@@ -223,3 +223,112 @@ def test_the_AUTHOR_already_receives_the_whole_contract():
                         contract_json=json.dumps(_contract(_enc()), indent=2),
                         contract=_contract(_enc()))
     assert "I2C_CMD_WRITE" in body and '"encoding"' in body
+
+
+# ------------------------------------------------- the SPEC picks the symbols
+
+
+def test_the_SPEC_chooses_which_symbols_belong_to_a_port():
+    """The pipeline's selector, and it deliberately reads no design.
+
+    `referenced_by_decode` answers the same question from the RTL, which is
+    right for offline analysis and wrong for a contract: the golden design is
+    the scoring instrument and may not decide what a check looks at, even
+    indirectly. The specification already answers it -- i2c's `cmd` entry says
+    the field "is decoded as one of the supported commands" and lists all four
+    -- so the spec picks WHICH and the header supplies only the VALUES.
+    """
+    from specflow.encoding import symbols_in_spec
+    spec = (BENCH / "i2c_master_bit_ctrl/description.txt").read_text()
+    names = set(parse_defines(DEFINES.read_text()))
+    assert symbols_in_spec(spec, "cmd", names) == {
+        "I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_WRITE", "I2C_CMD_READ"}
+    # A port the spec names no symbols for gets none -- the paragraph scan must
+    # not bleed across port entries.
+    assert symbols_in_spec(spec, "din", names) == set()
+    assert symbols_in_spec(spec, "nosuchport", names) == set()
+
+
+def test_enrichment_touches_only_the_ports_the_spec_enumerates():
+    from specflow.encoding import enrich_contract, find_defines
+    spec = (BENCH / "i2c_master_bit_ctrl/description.txt").read_text()
+    found = find_defines(RTL)
+    assert [p.name for p in found] == ["i2c_master_defines.v"]
+
+    c = {"io": [{"name": "cmd", "dir": "input", "width": 4},
+                {"name": "din", "dir": "input", "width": 1},
+                {"name": "busy", "dir": "output", "width": 1}]}
+    notes = enrich_contract(c, spec=spec, defines=found)
+    assert notes and "cmd" in notes[0]
+    cmd, din, busy = c["io"]
+    assert cmd["encoding"] == TRUE and cmd["encoding_complete"] is True
+    assert cmd["encoding_source"]["file"] == "i2c_master_defines.v"
+    assert "encoding" not in din and "encoding" not in busy
+
+
+def test_enrichment_is_a_NO_OP_without_a_header_or_without_symbols():
+    """The inertness pin, one level up. A design with no shared constants file,
+    or a spec that names no symbols, must come out byte-identical."""
+    from specflow.encoding import enrich_contract
+    import copy
+    c = {"io": [{"name": "cmd", "dir": "input", "width": 4}]}
+    before = copy.deepcopy(c)
+    assert enrich_contract(c, spec="cmd[3:0]:a command\n", defines=[]) == []
+    assert c == before
+    spec_no_symbols = "cmd[3:0]:Bit-level command from the byte controller.\n"
+    assert enrich_contract(c, spec=spec_no_symbols, defines=[DEFINES]) == []
+    assert c == before
+
+
+def test_one_named_symbol_is_a_mention_not_an_enumeration():
+    """Closing the value space off a single name would reject every other value
+    the port legitimately takes, so two are required."""
+    from specflow.encoding import enrich_contract
+    c = {"io": [{"name": "cmd", "dir": "input", "width": 4}]}
+    one = "cmd[3:0]:issued as `I2C_CMD_START` when starting.\n"
+    assert enrich_contract(c, spec=one, defines=[DEFINES]) == []
+    assert "encoding" not in c["io"][0]
+
+
+def test_the_contract_builder_actually_calls_it():
+    """WIRED, not merely built. `extract_port_encoding` sat callable and unused
+    for a whole commit: the schema accepted symbols, the gate rejected illegal
+    values, the reviewer got the table -- and nothing populated it, so on every
+    real run the whole mechanism was inert."""
+    import inspect
+
+    from eda_agent.top_agent import TopAgent
+    src = inspect.getsource(TopAgent._build_contract_json)
+    assert "encoding.enrich_contract" in src
+    assert "encoding.find_defines" in src
+    # And it enriches the object that gets WRITTEN, not a discarded copy.
+    assert src.index("enrich_contract") < src.index('file_name="contract.json"')
+
+
+# --------------------------------------------- the reviewer knows the operators
+
+
+def test_the_REVIEWER_is_told_what_the_operators_RETURN():
+    """Measured before this existed: `strong=True` and `stable` appeared ZERO
+    times in the correspondence prompt, against 6 and 10 in the author's -- and
+    the reviewer's entire job is to enumerate the paths on which a check returns
+    False. It was judging code that calls operators whose return contract it had
+    never been given, which is the encoding defect in another costume.
+
+    The block lives in `temporal.py` so the semantics and the sentence
+    describing them cannot drift apart.
+    """
+    from specflow.refmodel.correspondence import SYSTEM
+    from specflow.refmodel.temporal import OPERATOR_CONTRACT
+
+    assert OPERATOR_CONTRACT in SYSTEM, "shared verbatim, not paraphrased"
+    for phrase in ("ONLY `False` IS A CONVICTION",
+                   "A path that returns None is not a False path",
+                   "strong=True",
+                   "tested BEFORE `until`",
+                   "one window per RISING activation"):
+        assert phrase in SYSTEM, phrase
+    # The author states all of this too; the point is that BOTH now do.
+    from specflow.refmodel.oracle_gen import SYSTEM as AUTHOR
+    for w in ("strong=True", "stable", "eventually"):
+        assert AUTHOR.count(w) and SYSTEM.count(w), w

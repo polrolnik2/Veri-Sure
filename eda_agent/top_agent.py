@@ -21,6 +21,8 @@ from .rtl_generator import RTLGenerator
 # is gone, and specflow builds the oracle instead. See
 # docs/specflow-migration.md.
 
+from specflow import encoding
+
 logger = logging.getLogger(__name__)
 
 # Verilator error text is sometimes too cryptic for the TB lint-repair loop to
@@ -583,6 +585,34 @@ class TopAgent:
                 golden_tb_path=golden_tb_path,
             )
             contract_json = revised.model_dump_json(indent=2, exclude_none=True) + "\n"
+
+        # THE PORT ENCODING, from a shared constants header if the design ships
+        # one. This is the same class of information `golden_tb_path` already
+        # brings in above and on the same terms -- it pins the INTERFACE and
+        # goes no further. A byte controller cannot issue a command without
+        # `cmd`'s encoding, so it is as much interface as the port's width.
+        #
+        # The SPEC decides which symbols belong to which port; the header
+        # supplies only their values. That keeps the selection inside
+        # `source_of_truth: "spec"` and keeps the design out of it.
+        #
+        # Direction of flow is what makes this a contract rather than
+        # contamination: frozen here, BEFORE any candidate exists, a design that
+        # decodes the port differently fails -- correctly, it violated the
+        # interface it was handed. Harvested from what a candidate emitted, that
+        # candidate would pass trivially.
+        try:
+            obj = json.loads(contract_json)
+            notes = encoding.enrich_contract(
+                obj, spec=spec,
+                defines=encoding.find_defines(golden_tb_path) if golden_tb_path else [])
+            if notes:
+                contract_json = json.dumps(obj, indent=2) + "\n"
+                logger.info("contract encodings: %s", "; ".join(notes))
+        except Exception:  # noqa: BLE001
+            # Never fail a run over an enrichment. Absent a table every gate
+            # behaves exactly as it did before this existed.
+            logger.warning("contract encoding enrichment skipped", exc_info=True)
 
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
         return contract_json

@@ -39,8 +39,16 @@ is whether an EXTERNAL agent must know the value to drive the module correctly.
 `cmd`'s encoding, yes -- the byte controller cannot function without it, and it
 is as much interface as the port's width. An FSM state encoding, no: that is
 implementation, and a requirement keyed on one is the internal-mechanism class
-`NOT_ASSERTABLE` exists to route away. `extract_port_encoding` enforces this
-mechanically by admitting only macros the design's own port decode references.
+`NOT_ASSERTABLE` exists to route away.
+
+TWO SELECTORS, AND THE PIPELINE USES THE SPEC ONE. `symbols_in_spec` picks the
+symbols the SPECIFICATION names under a port -- i2c's `cmd` entry reads "this
+field is decoded as one of the supported commands" and lists all four -- so the
+spec chooses WHICH symbols belong to the port and the header supplies only their
+VALUES. `referenced_by_decode` answers the same question from the RTL and is
+kept for offline analysis, but it must not drive a contract: the golden design
+is the scoring instrument and may not decide what a check looks at, even
+indirectly.
 
 WHY READING A DESIGN FILE IS NOT CONTAMINATION HERE, and exactly when it would
 be. The golden RTL may not gate (`control_source=None`), so the question is
@@ -60,6 +68,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from pathlib import Path
 
 #: `define NAME 4'b0001 / 4'd8 / 4'h8, and the bare-decimal form.
 _DEFINE = re.compile(
@@ -243,3 +252,101 @@ def annotate(inputs: dict, contract: dict) -> dict[str, int]:
         if as_int is not None:
             out[port] = as_int
     return out
+
+
+#: A port entry in a prose port list: `name`, an optional `[15:0]`, then a colon.
+_PORT_ENTRY = re.compile(r"^\s*(\w+)\s*(?:\[[^\]]*\])?\s*:", re.M)
+
+
+def symbols_in_spec(spec: str, port: str, names: set[str]) -> set[str]:
+    """The macro names the SPECIFICATION associates with this port.
+
+    THE SELECTOR THE PIPELINE USES, and it deliberately does not read a design.
+    `referenced_by_decode` answers the same question from the RTL, which is fine
+    for offline analysis but wrong here: the golden design is the scoring
+    instrument and may not decide what a check looks at, even indirectly. The
+    specification already answers it -- i2c's `cmd` entry reads "this field is
+    decoded as one of the supported commands" and then lists all four -- so the
+    spec picks WHICH symbols belong to the port and the header supplies only
+    their VALUES. `source_of_truth: "spec"` survives the selection intact.
+    """
+    m = next((m for m in _PORT_ENTRY.finditer(spec) if m.group(1) == port), None)
+    if m is None:
+        return set()
+    nxt = _PORT_ENTRY.search(spec, m.end())
+    para = spec[m.end():nxt.start() if nxt else len(spec)]
+    return {n for n in names if re.search(rf"\b{re.escape(n)}\b", para)}
+
+
+def find_defines(*roots: Path) -> list[Path]:
+    """Shared constants headers beside a design: `*defines*.v`, `*defs*.v`.
+
+    The same rule ChipVerilog's own harness uses to decide what to prepend to
+    every compile (`prefix_files_for_family`), which is why a candidate could
+    write `` `I2C_CMD_START `` and be correct for free -- and why the values are
+    interface rather than implementation.
+    """
+    out: list[Path] = []
+    for root in roots:
+        if root is None:
+            continue
+        d = Path(root)
+        d = d if d.is_dir() else d.parent
+        for cand in (d, d.parent):
+            if not cand.is_dir():
+                continue
+            for p in sorted(cand.glob("*.v")):
+                low = p.name.lower()
+                if ("defines" in low or "defs" in low) and p not in out:
+                    out.append(p)
+    return out
+
+
+def enrich_contract(contract: dict, *, spec: str, defines: list[Path]) -> list[str]:
+    """Attach an `encoding` to every port the spec names symbols for.
+
+    Mutates `contract` and returns one line per port enriched, for the log. A
+    no-op when no header is found or the spec names no symbols, which is the
+    inert default every design without a shared header keeps.
+    """
+    if not defines:
+        return []
+    table: dict[str, int] = {}
+    provenance: list[dict] = []
+    for path in defines:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        parsed = parse_defines(text)
+        if not parsed:
+            continue
+        table.update(parsed)
+        provenance.append({"file": path.name,
+                           "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()})
+    if not table:
+        return []
+
+    notes: list[str] = []
+    for port in (contract.get("io") or []):
+        name = str(port.get("name") or "")
+        if not name or port.get("encoding"):
+            continue
+        named = symbols_in_spec(spec, name, set(table))
+        if len(named) < 2:
+            # One symbol is a mention, not an enumeration, and calling the value
+            # space closed off a single name would reject every other value the
+            # port legitimately takes.
+            continue
+        prefix = _family(named)
+        admitted = set(named) | ({n for n in table if n.startswith(prefix)}
+                                 if prefix else set())
+        port["encoding"] = {n: table[n] for n in sorted(admitted)}
+        # The SPEC listed them as the values this field is decoded as, so the
+        # space is closed. That is what lets the gate reject a value no symbol
+        # names -- the seven `cmd=3` requirements on c1-i2c.
+        port["encoding_complete"] = True
+        port["encoding_source"] = provenance if len(provenance) > 1 else provenance[0]
+        notes.append(f"{name}: {len(port['encoding'])} symbols from "
+                     f"{provenance[0]['file']}")
+    return notes
