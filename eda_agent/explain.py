@@ -440,6 +440,63 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
     return out
 
 
+def _why_uncovered(view: RequirementView, trace: dict) -> dict:
+    """Why the check never fired, and what would make it.
+
+    AN ABSTENTION HAS NO WINDOW, and `explain` was inventing one anyway. With no
+    `edge` it fell back to `max(0, edge - span_pad)` -> 0 and reported a span
+    from edge 0 to edge 0, under a note reading "the interval this requirement
+    governs" -- which for a check that never fired is not merely unhelpful but
+    false. MEASURED on run 5's 27 uncovered requirements: TWENTY have no edge at
+    all, and every one of them got a fabricated span at the start of the trace.
+
+    The actionable question for an abstention is not "where did it go wrong" but
+    "why did the situation never arise, and what would produce it" -- which is
+    exactly what `add_stimulus` needs to be told. So: the activation the
+    requirement declares, and, per port it pins, the values the trace ACTUALLY
+    carried. "wants cmd=4, saw only 0 and 1" is a scenario request already
+    three-quarters written.
+    """
+    act = view.activation or {}
+    wanted = dict(act.get("inputs") or {})
+    rows = trace.get("edges") or []
+    seen: dict[str, list] = {}
+    for port in wanted:
+        vals = []
+        for r in rows:
+            v = (r.get("inputs") or {}).get(port,
+                 (r.get("dut") or {}).get(port))
+            if v is not None and v not in vals:
+                vals.append(v)
+            if len(vals) > 12:
+                break
+        seen[port] = vals
+    missing = {p: w for p, w in wanted.items()
+               if isinstance(w, int) and w not in (seen.get(p) or [])}
+    out = {
+        "why": "this check never fired, so it says NOTHING about the design",
+        "activation_needs": wanted,
+        "activation_text": act.get("text") or "",
+        "values_the_trace_carried": seen,
+        "closes_on": act.get("until") or [],
+    }
+    if missing:
+        out["never_reached"] = missing
+        out["what_to_ask_for"] = (
+            "the stimulus never drove "
+            + ", ".join(f"{p}={v}" for p, v in sorted(missing.items()))
+            + " on this testpoint. add_stimulus(req_uid, ...) with a scenario "
+              "that does is the route; no edit to the design can discharge an "
+              "uncovered requirement.")
+    else:
+        out["what_to_ask_for"] = (
+            "every pinned input value does appear somewhere in this trace, so "
+            "the activation is failing on TIMING or on a condition the trace "
+            "cannot show -- an ordering, an edge, or an output the design never "
+            "produced. Read `activation_text` and describe the sequence.")
+    return out
+
+
 def explain_failure(*, view: RequirementView, result, trace: dict,
                     contract: dict, rtl_text: str = "",
                     vcd_path: Path | None = None, dut_instance: str = "",
@@ -457,6 +514,14 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
                                source=view.source, tp_uids=view.tp_uids)
     rows = list(getattr(result, "rows", None) or [])
     edge = getattr(result, "edge", None)
+    # AN ABSTENTION IS A DIFFERENT QUESTION and must not be answered with a
+    # fabricated span. See `_why_uncovered`.
+    if getattr(result, "ok", None) is None:
+        return {"requirement": view.brief(),
+                "verdict": None,
+                "check_said": getattr(result, "detail", "") or "",
+                "testpoint": getattr(result, "tp_uid", "") or "",
+                "uncovered": _why_uncovered(view, trace)}
     opened = getattr(result, "window_start", None)
     if opened is None:
         opened = max(0, (edge - span_pad)) if isinstance(edge, int) else 0

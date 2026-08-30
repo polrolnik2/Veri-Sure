@@ -1563,3 +1563,81 @@ def test_the_clock_is_not_part_of_any_explanation(tmp_path):
     contract = {"io": [{"name": "clk"}, {"name": "nReset"}, {"name": "rst"},
                        {"name": "scl_oen"}, {"name": "cmd"}]}
     assert _clocks_and_resets(contract) == {"clk", "nReset", "rst"}
+
+
+def test_explain_on_an_uncovered_requirement_answers_a_different_question(tmp_path):
+    """AN ABSTENTION HAS NO WINDOW, and `explain` was inventing one.
+
+    With no `edge` it fell back to `max(0, edge - span_pad)` -> 0 and reported a
+    span from edge 0 to edge 0 under a note reading "the interval this
+    requirement governs" -- false for a check that never fired. MEASURED on run
+    5's 27 uncovered requirements: TWENTY have no edge at all and every one got
+    a fabricated span at the start of the trace.
+
+    The actionable question is not "where did it go wrong" but "why did the
+    situation never arise", which is what `add_stimulus` needs to be told.
+    """
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None = None
+        detail: str = "the activation never occurred"
+        edge: int | None = None
+        rows: list = None
+        tp_uid: str = "TP-0009"
+
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(
+        req_uid="REQ-B", text="on reset the outputs release",
+        activation={"text": "while in reset", "inputs": {"rst": 1, "ena": 1},
+                    "until": [{"rst": 0}]},
+        ports=["b"], source="")}
+    s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {"rst": 0, "ena": 1}, "dut": {"b": 0}},
+        {"edge": 1, "t": 20, "inputs": {"rst": 0, "ena": 1}, "dut": {"b": 1}}]})}
+    out = s.explain("REQ-B")
+
+    assert out["verdict"] is None
+    # NO fabricated span, and none of the failure-shaped fields.
+    assert "span" not in out and "boundary_ports" not in out
+    u = out["uncovered"]
+    assert u["activation_needs"] == {"rst": 1, "ena": 1}
+    # It says what the trace actually carried, per pinned port ...
+    assert u["values_the_trace_carried"]["rst"] == [0]
+    assert u["values_the_trace_carried"]["ena"] == [1]
+    # ... and names the one value that never appeared, which IS the scenario
+    # request add_stimulus needs.
+    assert u["never_reached"] == {"rst": 1}
+    assert "rst=1" in u["what_to_ask_for"]
+    assert "add_stimulus" in u["what_to_ask_for"]
+
+
+def test_an_activation_whose_values_all_appear_is_a_timing_problem(tmp_path):
+    """Then the stimulus is not missing a VALUE, and saying "drive rst=1" would
+    be wrong advice. It has to say so rather than inventing a target."""
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None = None
+        detail: str = "the activation never occurred"
+        edge: int | None = None
+        rows: list = None
+        tp_uid: str = "TP-0009"
+
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(
+        req_uid="REQ-B", text="t",
+        activation={"text": "cmd=4 while enabled", "inputs": {"cmd": 4, "ena": 1}},
+        ports=["b"], source="")}
+    s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {"cmd": 4, "ena": 0}, "dut": {}},
+        {"edge": 1, "t": 20, "inputs": {"cmd": 0, "ena": 1}, "dut": {}}]})}
+    u = s.explain("REQ-B")["uncovered"]
+    assert "never_reached" not in u
+    assert "TIMING" in u["what_to_ask_for"]

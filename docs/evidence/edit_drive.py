@@ -144,15 +144,40 @@ def budget(payload, limit: int = 14000) -> str:
     text = json.dumps(payload, indent=1, default=str)
     if len(text) <= limit:
         return text
-    if isinstance(payload, dict) and "uncovered" in payload:
-        n = len(payload["uncovered"])
-        payload = {**payload, "uncovered": [],
-                   "uncovered_count": n,
-                   "note": (payload.get("note", "") + f"  [{n} UNCOVERED rows "
-                            "omitted to fit; no edit discharges one]")}
+    # SHED DETAIL, NEVER THE IDENTIFIERS. This used to empty the `uncovered`
+    # list and keep a count, on the reasoning that the agent was told to ignore
+    # them. With `add_stimulus` wired that is exactly backwards: an uncovered
+    # requirement is now actionable and its UID is the argument. MEASURED on run
+    # 7 -- the run started to test `add_stimulus` -- the uncovered rows were
+    # dropped in all three payloads, so the agent knew "28 uncovered" as a
+    # number and could not name one, and the tool it had been given was
+    # unusable. A uid list is a few hundred characters; a count is a dead end.
+    if isinstance(payload, dict) and payload.get("uncovered"):
+        rows = payload["uncovered"]
+        payload = {**payload,
+                   "uncovered": [r.get("req_uid") if isinstance(r, dict) else r
+                                 for r in rows],
+                   "note": (payload.get("note", "")
+                            + "  [uncovered shown as UIDs only to fit; "
+                              "explain(uid) says why each never fired and "
+                              "add_stimulus(uid, ...) is the route]")}
         text = json.dumps(payload, indent=1, default=str)
         if len(text) <= limit:
             return text
+    # THEN SHORTEN THE PROSE INSIDE THE ROWS, still keeping every row. A
+    # requirement's text truncated to 140 characters still identifies it; a row
+    # replaced by "<omitted: 9500 chars>" identifies nothing. The generic
+    # fallback below does the second, and reached it because 19 failing rows of
+    # full requirement text do not fit however the uncovered half is encoded.
+    if isinstance(payload, dict) and isinstance(payload.get("failing"), list):
+        for cut in (200, 120, 60):
+            trimmed = [{k: (v[:cut] if isinstance(v, str) else v)
+                        for k, v in row.items()} if isinstance(row, dict) else row
+                       for row in payload["failing"]]
+            payload = {**payload, "failing": trimmed}
+            text = json.dumps(payload, indent=1, default=str)
+            if len(text) <= limit:
+                return text
     if isinstance(payload, dict):
         out, keys = dict(payload), sorted(payload, key=lambda k: -len(str(payload[k])))
         for k in keys:
