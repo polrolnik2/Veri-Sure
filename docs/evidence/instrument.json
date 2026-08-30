@@ -1,0 +1,70 @@
+{
+ "as written": {
+  "discriminating": [
+   "REQ-0003",
+   "REQ-0006",
+   "REQ-0042",
+   "REQ-0062",
+   "REQ-0064",
+   "REQ-0090",
+   "REQ-0099",
+   "REQ-0101",
+   "REQ-0102",
+   "REQ-0110",
+   "REQ-0114",
+   "REQ-0116",
+   "REQ-0119"
+  ],
+  "inverted": [
+   "REQ-0010",
+   "REQ-0030",
+   "REQ-0054",
+   "REQ-0059",
+   "REQ-0060",
+   "REQ-0068",
+   "REQ-0126"
+  ],
+  "both_fail": [
+   "REQ-0027",
+   "REQ-0088",
+   "REQ-0095",
+   "REQ-0105",
+   "REQ-0115"
+  ],
+  "candidate_only_evidence": [
+   "REQ-0029",
+   "REQ-0048",
+   "REQ-0096"
+  ]
+ },
+ "hold=60": {
+  "discriminating": [
+   "REQ-0003",
+   "REQ-0009",
+   "REQ-0042",
+   "REQ-0062",
+   "REQ-0064",
+   "REQ-0066",
+   "REQ-0070",
+   "REQ-0073",
+   "REQ-0090",
+   "REQ-0105",
+   "REQ-0110",
+   "REQ-0114",
+   "REQ-0115",
+   "REQ-0116",
+   "REQ-0119"
+  ],
+  "inverted": [
+   "REQ-0030"
+  ],
+  "both_fail": [
+   "REQ-0006",
+   "REQ-0095"
+  ],
+  "candidate_only_evidence": [
+   "REQ-0029",
+   "REQ-0096"
+  ]
+ }
+}

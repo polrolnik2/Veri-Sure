@@ -1,0 +1,10 @@
+                                  golden                   candidate                  
+                FAIL UNCOV  pass    rate   FAIL UNCOV  pass    rate   disc  inv   sep
+as written        12    27    51     87%     21    25    44     77%     13    7    +6
+hold=60            3    27    60     97%     19    25    46     79%     15    1   +14
+
+UNDER THE PACED STIMULUS -- what the editor is handed
+  15 sound targets:  REQ-0003 REQ-0009 REQ-0042 REQ-0062 REQ-0064 REQ-0066 REQ-0070 REQ-0073 REQ-0090 REQ-0105 REQ-0110 REQ-0114 REQ-0115 REQ-0116 REQ-0119
+   2 FALSE DEMANDS (fail golden too): REQ-0006 REQ-0095
+   2 fire only on the candidate (golden never reached them): REQ-0029 REQ-0096
+   1 convict golden alone: REQ-0030
