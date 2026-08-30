@@ -634,7 +634,46 @@ def test_naming_an_internal_mechanism_is_not_grounds_on_its_own():
         "the OBLIGATION-despite-an-internal-mechanism example must survive")
     assert "slave_wait condition indicates" in C.SYSTEM, (
         "the NO-OBLIGATION counterpart must survive beside it")
-    assert "never \"can this be observed\"" in C.SYSTEM
+    assert "a mechanism being invisible is never itself the objection" in C.SYSTEM
+
+
+def test_the_obligation_must_reach_the_boundary():
+    """A REFINEMENT, and the earlier wording was wrong about it. Section 3b used
+    to close "the question is never 'can this be observed'", which is true of the
+    MECHANISM and false of the whole: a check is handed a trace of declared ports
+    and nothing else, so an obligation whose condemned difference never reaches
+    one of them cannot be tested here however real it is.
+
+    Measured on the live run: 15 of the 16 requirements the gate let through
+    named declared ports unprompted, so this is codifying a habit rather than
+    introducing one -- but two of them (REQ-0055, REQ-0095) reached into another
+    spec paragraph for the consequence, and REQ-0095's was licensed by "spec
+    section 8" rather than by its own sentence. That is the neighbour-borrowing
+    failure the route test exists to catch, arriving through the obligation
+    question instead.
+    """
+    for phrase in ("BOTH LEGS, and neither on its own",
+                   "this sentence condemns some design, in its own words",
+                   "differ at a port in `interface`",
+                   "NAME THAT PORT in `reasoning`"):
+        assert phrase in C.SYSTEM, phrase
+
+
+def test_a_missing_observable_is_reported_apart_from_a_missing_obligation():
+    """They share a verdict and route to the same party, but they are different
+    asks -- "say what must happen" against "say where it shows" -- and only the
+    reason text carries which. Folding them silently would make a spec author
+    read one as the other."""
+    assert "it is the VISIBILITY that is missing and" in C.SYSTEM
+    assert "say where it shows" in C.SYSTEM
+
+
+def test_the_effect_may_not_be_borrowed_from_another_paragraph():
+    """The route test asks whether the CHECK became the neighbour's. This asks
+    the same of the REQUIREMENT, one step earlier: an obligation established out
+    of somebody else's sentence is somebody else's obligation."""
+    assert "AND THE WORDS HAVE TO BE THIS SENTENCE'S" in C.SYSTEM
+    assert "it is somewhere else's" in C.SYSTEM
 
 
 def test_the_stage_routes_a_hollow_requirement_to_spec_authoring(

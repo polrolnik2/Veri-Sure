@@ -81,11 +81,28 @@ PARSE_ERROR = "Parse Error: "
 
 class Review(BaseModel):
     reasoning: str = ""
-    #: THE PRIOR QUESTION. Does the requirement's own sentence condemn any
-    #: design at all? A definition ("cmd is the bit-level command") and a scope
-    #: statement ("the module begins with a reset sequence") name something
-    #: without saying what must happen, and no check of them can be a fair test
-    #: because there is nothing to be unfair to.
+    #: THE PRIOR QUESTION, in two legs. Does the requirement's own sentence
+    #: condemn any design at all, AND would that design differ from a correct
+    #: one at a DECLARED PORT? A definition ("cmd is the bit-level command") and
+    #: a scope statement ("the module begins with a reset sequence") fail the
+    #: first, and no check of them can be a fair test because there is nothing
+    #: to be unfair to.
+    #:
+    #: The second leg is not the internal-mechanism rejection section 7 forbids
+    #: -- naming an invisible signal is fine, and the prompt carries a worked
+    #: pair showing it. It is that a check is handed a trace of declared ports
+    #: and nothing else, so an obligation whose condemned difference never
+    #: reaches one of them cannot be tested here however real it is. Measured
+    #: live: 15 of 16 accepted requirements named ports unprompted, so this
+    #: codifies a habit -- but two reached into another spec paragraph for the
+    #: consequence, one of them licensed by "spec section 8" rather than by its
+    #: own sentence, which is the neighbour-borrowing the route test exists to
+    #: catch arriving through the obligation question instead.
+    #:
+    #: Both legs share this one field and one verdict. Which leg failed lives in
+    #: `what_is_missing`, because the ask differs -- "say what must happen"
+    #: against "say where it shows" -- and no measured case of the second exists
+    #: yet, so a separate disposition for it would be built on nothing.
     #:
     #: Defaults TRUE, and that direction is deliberate: a reply from a model
     #: that never saw this field must not silently become a rejection, and the
@@ -228,8 +245,24 @@ A sentence may name an invisible mechanism and still state a real obligation:
     Also names an invisible signal -- but says only what the condition MEANS.
     No design is wrong by it. Answer no.
 
-So the question is never "can this be observed". It is "does this sentence
-forbid anything". Read past the mechanism to whatever the sentence claims must
+So a mechanism being invisible is never itself the objection. But the DIFFERENCE
+the sentence condemns still has to show up in a trace of declared ports, because
+that trace is all a check is ever given. BOTH LEGS, and neither on its own:
+
+    1. this sentence condemns some design, in its own words; AND
+    2. that design and a correct one differ at a port in `interface`.
+
+NAME THAT PORT in `reasoning`. If you cannot -- if the sentence forbids
+something real but no declared port would look any different -- answer
+`states_an_obligation: false` and say it is the VISIBILITY that is missing and
+not the obligation. Those are different things for a specification author to fix
+("say what must happen" against "say where it shows"), and the reason text is
+the only place that difference survives.
+
+AND THE WORDS HAVE TO BE THIS SENTENCE'S. Reaching into another spec paragraph
+for the effect is how a check quietly becomes its neighbour's: if the
+consequence you are leaning on is stated somewhere else, it is somewhere else's
+obligation, and the route test in section 8 applies to it. Read past the mechanism to whatever the sentence claims must
 happen, and if you find a claim, there is an obligation.
 
 WHEN YOU ANSWER NO. Set `states_an_obligation` to false, say in
