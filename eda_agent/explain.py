@@ -27,6 +27,7 @@ CHECK instead -- which perturbation would have satisfied it.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -247,17 +248,74 @@ def _satisfying_perturbation(oracle, rows: list[dict], contract: dict,
             "wrong value at one edge.")
 
 
+#: Seconds per VCD time unit, for the units a `$timescale` may name.
+_VCD_UNITS = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "ns": 1e-9,
+              "ps": 1e-12, "fs": 1e-15}
+
+
+def _vcd_ticks_per_ns(vcd_path: Path) -> float:
+    """How many VCD time units make one nanosecond. 1.0 if it cannot be read.
+
+    THE TRACE AND THE WAVEFORM COUNT TIME IN DIFFERENT UNITS, and nothing
+    reconciled them. `Env._record` stamps each row with
+    `get_sim_time("ns")`; Verilator writes `$timescale 1ps`. MEASURED on the
+    second live editor run: the trace's last row is t=2440 and the waveform runs
+    to 2,440,000 -- the same instant, a thousand ticks apart -- so every
+    `_vcd_value_at(tv, 600)` was reading 600 PICOSECONDS into a 2.44-microsecond
+    run, i.e. the first 0.02% of it. All 53 signals in the slice therefore came
+    back holding their reset value, and the internals section was not merely
+    mis-selected but WRONG.
+
+    This is exactly the failure §5.6 predicted -- "silently collapses the window
+    to the start of the run" -- surviving in the units dimension after it was
+    fixed in the index dimension. There is no error at any point: a VCD lookup
+    for a time before the first change legitimately returns the initial value.
+
+    `vcdvcd` does not expose the timescale, so the header is read directly. A
+    file whose header cannot be parsed returns 1.0, which is the identity and
+    keeps a caller working on a waveform already in nanoseconds.
+    """
+    try:
+        head = Path(vcd_path).read_bytes()[:4096].decode("utf-8", "replace")
+    except OSError:
+        return 1.0
+    m = re.search(r"\$timescale\s*(\d+)\s*([munpf]?s)\s*\$end", head)
+    if not m:
+        return 1.0
+    seconds = int(m.group(1)) * _VCD_UNITS.get(m.group(2), 1e-9)
+    return (1e-9 / seconds) if seconds else 1.0
+
+
 def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
-                     times: list[int], *, dut_instance: str = "",
-                     max_signals: int = 12) -> dict[str, list]:
+                     times: list[int], *, dut_instance: str = "") -> dict:
     """The SUSPECT BLOCKS' internal signals across the span. What the VCD adds.
 
     §5.6 item 3, and the one thing that IMPROVES on a Verilog mismatch table:
     that table reports boundary ports only, so the agent had to guess what the
     implicated block was doing. The recorded trace says the boundary
-    misbehaved; the VCD says what the suspect blocks were doing while it did --
-    which is the question `read_block` leaves the agent to answer from source
-    alone.
+    misbehaved; the VCD says what the suspect blocks were doing while it did.
+
+    NOTHING IS SELECTED AWAY. This used to sample a dense grid -- every signal
+    at every window edge -- and cap the result at twelve signals chosen
+    ALPHABETICALLY. A block's `reads` include every localparam it mentions, and
+    ASCII puts CMD_START and ST_IDLE ahead of cnt, state and sda_chk: MEASURED
+    on the second live editor run, all twelve signals shown were constants,
+    twelve parameter definitions at fifteen identical samples each, and the
+    state register the failure was about never appeared.
+
+    Ranking the cap by transition count is not the fix, it is a different bias:
+    a `clk_en` toggling every cycle would win and an `sda_chk` that moves ONCE,
+    at exactly the deciding edge, would be cut -- and the second is the more
+    informative of the two for a temporal check. Any cap is a guess about
+    relevance made by the code rather than by the reader.
+
+    So the representation changes instead of the selection. A dense grid is
+    what made the payload big; TRANSITIONS are what a temporal check is about
+    (§5.6 item 4: "a temporal check is about edges, not levels, so the
+    transition list is the actionable datum"). A signal that never moves costs
+    one line, a signal that moves twice costs two -- so all 54 signals a slice
+    touches fit in less room than twelve did, and the caller is never silently
+    handed a subset.
     """
     if not vcd_path or not times or not blocks:
         return {}
@@ -272,21 +330,38 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
         vcd = VCDVCD(str(vcd_path), store_tvs=True)
     except Exception:  # noqa: BLE001
         return {}
-    names: list[str] = []
-    for b in blocks:
-        names.extend(list(b.writes) + list(b.reads))
-    out: dict[str, list] = {}
+
+    names = {n for b in blocks for n in list(b.writes) + list(b.reads) if n}
     prefer = [f".{dut_instance}."] if dut_instance else None
-    for leaf in sorted({n for n in names if n})[:max_signals]:
+    # `times` are the TRACE's nanoseconds; the waveform counts its own ticks.
+    scale = _vcd_ticks_per_ns(Path(vcd_path))
+    moved: dict[str, dict] = {}
+    held: dict[str, str] = {}
+    for leaf in sorted(names):
         try:
             full = _vcd_find_signal(vcd, leaf, prefer_substrings=prefer)
             if not full:
                 continue
             tv = _vcd_tv(vcd, full)
-            out[leaf] = [{"t": t, "v": _vcd_value_at(tv, t, inclusive=(t == 0))}
-                         for t in times]
+            series = [(t, _vcd_value_at(tv, int(round(t * scale)),
+                                        inclusive=(t == 0)))
+                      for t in times]
         except Exception:  # noqa: BLE001
             continue
+        if not series:
+            continue
+        changes = [{"t": t, "v": v} for (t, v), (_, prev)
+                   in zip(series[1:], series) if v != prev]
+        if changes:
+            moved[leaf] = {"at_window_start": series[0][1], "changed": changes}
+        else:
+            held[leaf] = series[0][1]
+    out: dict = dict(moved)
+    if held:
+        # Still reported, once each: losing them would hide the encoding a
+        # `case` arm compares against, which is exactly what a wrong-constant
+        # bug looks like from the outside.
+        out["__held_constant__"] = held
     return out
 
 
@@ -352,13 +427,22 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
     # -- so the agent spent the session reading boundary ports and source,
     # believing it had been shown everything. That is precisely the evidence
     # state B21 records the debugger inventing a timing theory from.
-    if not out["block_internals"]:
+    # `__held_constant__` alone is not internals: it means every signal the
+    # suspect blocks touch held still across the whole span, which for a
+    # temporal failure is itself the finding and must not read as a populated
+    # view.
+    if not {k for k in out["block_internals"] if k != "__held_constant__"}:
         out["internals_warning"] = (
             "NO INTERNAL SIGNALS ARE SHOWN. "
             + ("this run dumped no waveform, so what the suspect blocks were "
                "doing across the span could not be read -- you are seeing "
                "BOUNDARY PORTS ONLY, and the block sources, and nothing about "
                "internal state" if not vcd_path else
-               "the waveform carried none of the suspect blocks' signals under "
-               f"the instance name searched ({dut_instance or 'unset'})"))
+               ("every signal the suspect blocks touch was CONSTANT across this "
+                "span (listed under __held_constant__), which is itself a finding "
+                "for a temporal check: nothing in these blocks moved while the "
+                "requirement was being violated"
+                if out["block_internals"].get("__held_constant__") else
+                "the waveform carried none of the suspect blocks' signals under "
+                f"the instance name searched ({dut_instance or 'unset'})")))
     return out

@@ -917,3 +917,149 @@ def test_focus_says_which_block_ids_it_just_retired(tmp_path):
     assert out["is_action_executed"]
     assert "blk_gone" in out["ids_no_longer_in_scope"]
     assert "no longer resolve" in out["scope_note"]
+
+
+def test_block_internals_selects_nothing_away_and_reports_transitions(tmp_path):
+    """The cap was the bug, and a smarter cap would be a different bug.
+
+    A block's `reads` include every LOCALPARAM it mentions, and those are
+    constants. Taking `sorted(names)[:12]` took them FIRST, because ASCII puts
+    CMD_START and ST_IDLE ahead of cnt, state and sda_chk. MEASURED on the
+    second live editor run: all twelve signals `explain` showed were constants,
+    twelve parameter definitions at fifteen identical samples each, and the
+    state register the failure was about never appeared.
+
+    Ranking the cap by transition count would only move the bias: a `clk_en`
+    toggling every cycle would win and an `sda_chk` moving ONCE at exactly the
+    deciding edge would be cut -- and the second is the more informative for a
+    temporal check. So nothing is selected away; the REPRESENTATION changes
+    from a dense grid to transitions, which is what makes that affordable.
+    """
+    import sys
+    import types
+
+    from eda_agent import explain as _ex
+    from eda_agent.trace_slicer import RtlBlock
+
+    times = [10, 20, 30]
+    series = {
+        "CMD_START": ["1000", "1000", "1000"],   # a localparam
+        "ST_IDLE": ["0000", "0000", "0000"],     # another
+        "clk_en": ["0", "1", "0"],               # noisy: 2 transitions
+        "sda_chk": ["0", "0", "1"],              # ONE transition, and the point
+        "state": ["0001", "0010", "0011"],
+    }
+    fake = types.ModuleType("eda_agent.trace_report")
+    fake.__dict__.update({
+        "VCDVCD": lambda *a, **k: object(),
+        "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
+            leaf if leaf in series else ""),
+        "_vcd_tv": lambda vcd, full: full,
+        "_vcd_value_at": lambda tv, t, inclusive=False: series[tv][times.index(t)],
+    })
+    real = sys.modules.get("eda_agent.trace_report")
+    sys.modules["eda_agent.trace_report"] = fake
+    wave = tmp_path / "w.vcd"
+    wave.write_text("$enddefinitions $end\n")   # must EXIST; the reader is faked
+    try:
+        blocks = [RtlBlock(id="b", kind="always", start_line=1, end_line=2,
+                           clocking="posedge clk", code="",
+                           writes=("state", "sda_chk", "clk_en"),
+                           reads=("CMD_START", "ST_IDLE"))]
+        got = _ex._block_internals(wave, blocks, times)
+    finally:
+        if real is not None:
+            sys.modules["eda_agent.trace_report"] = real
+        else:
+            del sys.modules["eda_agent.trace_report"]
+
+    # EVERY signal that moved is present -- the one-transition one included.
+    assert set(got) - {"__held_constant__"} == {"clk_en", "sda_chk", "state"}
+    assert got["sda_chk"] == {"at_window_start": "0",
+                              "changed": [{"t": 30, "v": "1"}]}
+    # Constants are reported once each, not as N identical samples.
+    assert got["__held_constant__"] == {"CMD_START": "1000", "ST_IDLE": "0000"}
+
+
+def test_all_constant_internals_reads_as_a_finding_not_as_a_populated_view(tmp_path):
+    """Nothing in the suspect blocks moving IS the finding for a temporal check,
+    and it must not look like the internals half worked."""
+    import sys
+    import types
+
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None = False
+        detail: str = "d"
+        edge: int = 1
+        rows: list = None
+        tp_uid: str = "TP-0001"
+
+    series = {"CMD_START": ["1000", "1000"]}
+    fake = types.ModuleType("eda_agent.trace_report")
+    fake.__dict__.update({
+        "VCDVCD": lambda *a, **k: object(),
+        "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
+            leaf if leaf in series else ""),
+        "_vcd_tv": lambda vcd, full: full,
+        "_vcd_value_at": lambda tv, t, inclusive=False: series[tv][0],
+    })
+    real = sys.modules.get("eda_agent.trace_report")
+    sys.modules["eda_agent.trace_report"] = fake
+    wave = tmp_path / "w.vcd"
+    wave.write_text("$end\n")
+    try:
+        s = _session(tmp_path)
+        s.vcd_by_tp = {"TP-0001": wave}
+        s.requirements = {"REQ-B": RequirementView(
+            req_uid="REQ-B", text="t", ports=["b"],
+            source="def decide(trace):\n    return False\n")}
+        s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+            {"edge": 0, "t": 10, "inputs": {}, "dut": {"b": 0}},
+            {"edge": 1, "t": 20, "inputs": {}, "dut": {"b": 1}}]})}
+        out = s.explain("REQ-B")
+    finally:
+        if real is not None:
+            sys.modules["eda_agent.trace_report"] = real
+        else:
+            del sys.modules["eda_agent.trace_report"]
+    assert "NO INTERNAL SIGNALS ARE SHOWN" in out.get("internals_warning", "")
+
+
+def test_vcd_lookups_convert_the_traces_NANOSECONDS_to_waveform_ticks(tmp_path):
+    """THE TRACE AND THE WAVEFORM COUNT TIME IN DIFFERENT UNITS.
+
+    `Env._record` stamps each row with `get_sim_time("ns")`; Verilator writes
+    `$timescale 1ps`. MEASURED on the second live editor run: the trace's last
+    row is t=2440 and the waveform runs to 2,440,000 -- the same instant, a
+    thousand ticks apart. Every `_vcd_value_at(tv, 600)` was therefore reading
+    600 PICOSECONDS into a 2.44-microsecond run, so all 53 signals in the slice
+    came back holding their reset value and the internals section was not
+    mis-selected but WRONG.
+
+    Exactly the failure §5.6 predicted -- "silently collapses the window to the
+    start of the run" -- surviving in the units dimension after being fixed in
+    the index dimension. Nothing errors: a lookup before the first change
+    legitimately returns the initial value.
+    """
+    from eda_agent.explain import _vcd_ticks_per_ns
+
+    cases = {"1ps": 1000.0, "1ns": 1.0, "10ps": 100.0, "1us": 0.001,
+             "1fs": 1000000.0}
+    for header, want in cases.items():
+        p = tmp_path / f"{header}.vcd"
+        p.write_text(f"$date today $end\n$timescale {header} $end\n"
+                     "$scope module top $end\n")
+        assert _vcd_ticks_per_ns(p) == pytest.approx(want), header
+
+    # An unreadable or absent header is the IDENTITY, so a caller working on a
+    # waveform already in nanoseconds keeps working rather than being scaled
+    # by a guess.
+    bare = tmp_path / "bare.vcd"
+    bare.write_text("$date today $end\n")
+    assert _vcd_ticks_per_ns(bare) == 1.0
+    assert _vcd_ticks_per_ns(tmp_path / "missing.vcd") == 1.0
