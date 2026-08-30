@@ -133,7 +133,8 @@
   "states_an_obligation": false,
   "gate": "NOT_ASSERTABLE",
   "text": "The ena input is the core enable signal that gates normal timing and input filtering operation.",
-  "reviewer": "states_an_obligation is false: the sentence supplies neither a concrete trigger (it never says 'when ena is low/high', only labels ena as 'the core enable signal') nor a concrete effect (it never names a port or states what 'gates ... operation' looks like on any observable signal -- no hold, no suppressed pulse, nothing a trace could contradict). Both trigger and effect are missing in the sense that matters: the sentence describes ena's role/purpose rather than asserting an observable, violable behavior. Because there is no obligation in REQ-0020's own words, tests_the_requirement is answered false as a consequence -- the check's False paths (cmd_ack suppression, busy/dout/scl_oen/sda_oen stability) all come from Implementation Detail #2 / the ena Processing-Flow paragraph, not from this requirement's text, so the check is deciding an obligation this sentence never states. Per the briefing, this does not go back to the check's author to repair; it goes to whoever wrote the specification, since nothing the author writes can add an obligation to a sentence that has none."
+  "reviewer": "states_an_obligation is false: the sentence supplies neither a concrete trigger (it never says 'when ena is low/high', only labels ena as 'the core enable signal') nor a concrete effect (it never names a port or states what 'gates ... operation' looks like on any observable signal -- no hold, no suppressed pulse, nothing a trace could contradict). Both trigger and effect are missing in the sense that matters: the sentence describes ena's role/purpose rather than asserting an observable, violable behavior. Because there is no obligation in REQ-0020's own words, tests_the_requirement is answered false as a consequence -- the check's False paths (cmd_ack suppression, busy/dout/scl_oen/sda_oen stability) all come from Implementation Detail #2 / the ena Processing-Flow paragraph, not from this requirement's text, so the check is deciding an obligation this sentence never states. Per the briefing, this does not go back to the check's author to repair; it goes to whoever wrote the specification, since nothing the author writes can add an obligation to a sentence that has none.",
+  "CONFOUNDED": false
  },
  "REQ-0025": {
   "group": "positive control",
@@ -141,7 +142,9 @@
   "states_an_obligation": false,
   "gate": "NOT_ASSERTABLE",
   "text": "The cmd[3:0] input is the bit-level command provided by the byte-level controller.",
-  "reviewer": "Both trigger and effect are absent from the sentence. It defines what cmd is (its role and source) rather than asserting 'when/while X, the design must Y', so there is no situation-effect pair for any check to test and no False verdict this sentence could license. Because there is no obligation here, the check's False path (cmd_ack completing a window with no scl_oen/sda_oen movement) cannot be a test of THIS requirement -- it is in substance the obligation stated by the routed requirements REQ-0104 and REQ-0016 (which do state that a supported cmd must drive scl_oen/sda_oen through the sequence), reused under REQ-0025's uid. This verdict is a specification issue, not a check-repair issue: no rewrite of the check can add an obligation this sentence does not state."
+  "reviewer": "Both trigger and effect are absent from the sentence. It defines what cmd is (its role and source) rather than asserting 'when/while X, the design must Y', so there is no situation-effect pair for any check to test and no False verdict this sentence could license. Because there is no obligation here, the check's False path (cmd_ack completing a window with no scl_oen/sda_oen movement) cannot be a test of THIS requirement -- it is in substance the obligation stated by the routed requirements REQ-0104 and REQ-0016 (which do state that a supported cmd must drive scl_oen/sda_oen through the sequence), reused under REQ-0025's uid. This verdict is a specification issue, not a check-repair issue: no rewrite of the check can add an obligation this sentence does not state.",
+  "CONFOUNDED": true,
+  "note": "this sentence is quoted verbatim in section 3b as a worked example of what to reject; the answer measures nothing"
  },
  "REQ-0028": {
   "group": "positive control",
@@ -149,7 +152,9 @@
   "states_an_obligation": false,
   "gate": "NOT_ASSERTABLE",
   "text": "The arbitration-lost output al indicates that the controller has detected an arbitration loss.",
-  "reviewer": "Both trigger and effect are absent from the sentence. 'al indicates that the controller has detected an arbitration loss' only glosses what the al output MEANS -- it names no situation (trigger) in which al must assert, and states no required behavior (effect, e.g. stickiness or timing) that a trace could violate. Because there is no obligation here, the check's real trigger/effect (assert-on-arbitration-scenario, stay sticky until reset) cannot be a test of THIS requirement; it corresponds to the obligation stated by spec item 8 and the reset-clears-state language elsewhere, reused under REQ-0028's uid. This is a specification gap, not something a rewritten check can fix."
+  "reviewer": "Both trigger and effect are absent from the sentence. 'al indicates that the controller has detected an arbitration loss' only glosses what the al output MEANS -- it names no situation (trigger) in which al must assert, and states no required behavior (effect, e.g. stickiness or timing) that a trace could violate. Because there is no obligation here, the check's real trigger/effect (assert-on-arbitration-scenario, stay sticky until reset) cannot be a test of THIS requirement; it corresponds to the obligation stated by spec item 8 and the reset-clears-state language elsewhere, reused under REQ-0028's uid. This is a specification gap, not something a rewritten check can fix.",
+  "CONFOUNDED": true,
+  "note": "this sentence is quoted verbatim in section 3b as a worked example of what to reject; the answer measures nothing"
  },
  "REQ-0086": {
   "group": "positive control",
@@ -157,6 +162,8 @@
   "states_an_obligation": false,
   "gate": "NOT_ASSERTABLE",
   "text": "The slave_wait condition indicates that another bus participant is holding the SCL line low.",
-  "reviewer": "Both trigger and effect are absent from the sentence. 'slave_wait indicates that another bus participant is holding SCL low' only glosses what the internal slave_wait condition MEANS -- it names the situation but states no required behavior (no pausing, no freezing of cmd_ack/scl_oen, nothing) that a trace could violate. Because there is no obligation here, the check's actual trigger/effect (freeze cmd_ack while the slave_wait condition holds) cannot be a test of THIS requirement; it is the obligation stated by the routed requirement REQ-0087, reused under REQ-0086's uid. This is a specification gap -- no rewrite of the check can add an obligation this sentence does not state."
+  "reviewer": "Both trigger and effect are absent from the sentence. 'slave_wait indicates that another bus participant is holding SCL low' only glosses what the internal slave_wait condition MEANS -- it names the situation but states no required behavior (no pausing, no freezing of cmd_ack/scl_oen, nothing) that a trace could violate. Because there is no obligation here, the check's actual trigger/effect (freeze cmd_ack while the slave_wait condition holds) cannot be a test of THIS requirement; it is the obligation stated by the routed requirement REQ-0087, reused under REQ-0086's uid. This is a specification gap -- no rewrite of the check can add an obligation this sentence does not state.",
+  "CONFOUNDED": true,
+  "note": "this sentence is quoted verbatim in section 3b as a worked example of what to reject; the answer measures nothing"
  }
 }

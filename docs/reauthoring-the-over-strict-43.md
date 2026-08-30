@@ -429,12 +429,34 @@ answer.
 
 | | gate says NOT_ASSERTABLE | gate lets it through |
 |---|---|---|
-| **copular definitions** (4) | **4** | 0 |
+| copular definitions (4) -- **3 of them CONFOUNDED, see below** | 4 | 0 |
 | requirements hand-labelled assertable (10) | **0** | 10 |
 | requirements hand-labelled NOT assertable (6) | **0** | 6 |
 
-**It fires when it should and never when it should not** -- but the third row is
-a result against this document, not against the gate.
+**THE POSITIVE CONTROLS ARE MOSTLY CIRCULAR, and the worker that answered them
+said so before I noticed.** REQ-0025, REQ-0028 and REQ-0086 appear VERBATIM in
+section 3b as its worked examples of a definition and of a no-obligation
+sentence. Asking the reviewer to classify sentences its own instructions quote as
+canonical things to reject measures nothing. I mined the test set for the
+prompt's examples and then tested on the test set.
+
+**Only REQ-0020 is held out**, and it did fire, on reasoning that does not lean
+on the examples -- "the sentence supplies neither a concrete trigger ... nor a
+concrete effect ... no hold, no suppressed pulse, nothing a trace could
+contradict". So the true-positive evidence is **1 of 1, not 4 of 4**, and c1-i2c
+has no further held-out definition to offer: those four are the only copular,
+obligation-verb-free sentences in all 127 of its requirements.
+
+The false-positive result is unaffected -- none of the 10 assertable
+requirements appears in the prompt, and none was rejected.
+
+A real measurement needs definitions the prompt has never seen. Three exist in
+other runs: `a2-i2c` REQ-0020 ("The output al is the arbitration-lost
+indicator."), `a2-i2c` REQ-0038, and `d1-i2c` REQ-0006 ("The ena port is the core
+enable signal.").
+
+The third row below stands on its own -- it is a result against this document
+rather than against the gate, and nothing in it is confounded.
 
 **THE HAND LABELS WERE WRONG, and the reviewer's readings are better.** On all
 six it named a specific design the sentence condemns, which is exactly the test
