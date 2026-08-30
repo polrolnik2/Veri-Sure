@@ -252,6 +252,59 @@ states.
 43 -> 6" should be read as 43 -> 6 of which zero survive scrutiny, bought by 22 of
 43 requirements ceasing to decide anything.
 
+## How many of these requirements should have been asserted at all?
+
+Given that no gate asks, the size of the question is worth measuring. **The bar:
+a determinate CONDITION and a determinate EFFECT that lands on a port the
+contract declares.** Four ways to miss it -- DEFINITION (copular, nothing to
+falsify), INTERNAL (the effect named is not a declared port), SCOPE (a role or
+capability summary with no determinate effect), HEDGED (the effect qualified into
+indeterminacy: "at the appropriate timing phases").
+
+Of the 43, **32 have no `through_req`** -- the population the route-block ground
+cannot reach. Hand-labelled against that bar, **20 should be asserted and 12
+should not**. A text-only rule set in `docs/evidence/assertable.py` reproduces
+the hand labels on 29 of 32 (91%); its three misses are sentence conjunctions and
+vocabulary, so it is a screen rather than an oracle.
+
+What the split predicts, against golden:
+
+| | passes | CONVICTS golden | silent |
+|---|---|---|---|
+| **should be asserted** (20) | 9 | **1** | 10 |
+| **should NOT be asserted** (12) | 3 | **5** | 4 |
+
+**42% against 5%, an eight-fold difference.** Five of the six requirements still
+convicting golden -- REQ-0007, REQ-0020, REQ-0028, REQ-0055, REQ-0087 -- are
+requirements that should never have become checks. Only REQ-0057 is a real
+obligation convicting a correct design, and it carries the `idle_match` note.
+
+And the cost of dropping the twelve is **nothing**:
+
+| among the 32 | discriminating | inverted | separation |
+|---|---|---|---|
+| as frozen | REQ-0002, REQ-0117 | REQ-0007, REQ-0055, REQ-0087 | **-1** |
+| dropping the 12 | REQ-0002, REQ-0117 | none | **+2** |
+
+Every inverted check in this population -- golden convicted, candidate passed,
+the actively misleading kind -- is one that should not have been asserted. Every
+discriminating one is a real obligation. Dropping the twelve removes all three
+inversions and five of the six false convictions, and loses no discriminating
+power at all.
+
+**Scaled to the design.** 89 of c1-i2c's 122 normalized requirements have no
+`through_req`. The rules call **29 of the 89 (33%) non-assertable** -- 15
+INTERNAL, 5 SCOPE, 5 with no obligation verb, 2 HEDGED, 2 DEFINITION -- and the
+rules run slightly conservative against the hand labels, so the true figure is at
+least that. Roughly a quarter of every requirement in the design is being turned
+into a check that cannot be a fair test of it.
+
+**This is a cheap gate and it belongs before oracle generation.** Assertability is
+a property of the requirement's own sentence: no design, no trace, no model call
+needed beyond the one that reads the text. Every requirement failing it should
+route to spec authoring -- "this sentence states no falsifiable obligation" -- and
+never reach an author who will dutifully invent one.
+
 ## The whole set, both arms
 
 Splicing the re-authored 43 back into the frozen 110 -- a requirement whose check
@@ -376,6 +429,7 @@ docs/evidence/rescore.py     # the 43, with the staged testpoints' REAL traces
 docs/evidence/resep.py       # the whole-set fold, staged traces applied PER ORACLE
 docs/evidence/gate_audit.py  # re-asks per round, reviewer self-agreement,
                              # and whether the route block reached the reviewer
+docs/evidence/assertable.py  # the assertability bar, scored against hand labels
 ```
 
 `score.py` and `separation.py` are kept as the record of the first pass;
