@@ -305,6 +305,23 @@ which carries both `previous_answer` and `gate_failures`. Every round is an
 independent look, and a look at a REPAIRED check bears no relation to the looks
 before it.
 
+**This does not contradict "three rounds" above, and the two are easy to read as
+if it did.** Every requirement IS reviewed three times -- 129 responses, 43 x 3.
+What moves is the denominator: a repair replaces the thing being reviewed, so a
+check repaired at both rounds gets
+
+    round 1   review version A  -> reject -> repair -> version B
+    round 2   review version B  -> reject -> repair -> version C
+    round 3   review version C  -> verdict, and no repair is possible
+
+three reviews of the REQUIREMENT and exactly one of version C, which is what
+ships. A check never repaired gets all three reviews of the version that ships.
+The arithmetic ties out: 37 re-asked at round 1 of which 24 produced a genuinely
+new source, 24 re-asked at round 2 of which 20 did, and 0 at round 3. The 4-check
+gap at round 2 is replacements that were REJECTED -- "the replacement decided
+nothing on any of its testpoint(s); the previous stands" -- so those kept their
+round-2 source and got two looks at it.
+
 The loop does not account for that. It spends rounds, so how many reviews a
 check's FINAL form receives depends on how late it was last repaired:
 
