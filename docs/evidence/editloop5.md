@@ -82,3 +82,63 @@ REQ-0095 -- are the known filtered-bus latency residue from
 demands. The agent spent its last two trials on REQ-0030 and both attempts
 regressed, which is the expected outcome of chasing a check that a correct
 design also fails.
+
+---
+
+# Run 6: reproduced, independently, by a different edit
+
+A second session on the same candidate, same instrument, different agent
+instance. It reached **the same final score by a different route**, which is the
+first evidence any of this is reproducible rather than one good session.
+
+```
+              rounds  trials  commits(latched)   FAIL      passing  uncovered
+  run 5           34       4        4 (2)       19 -> 5    46 -> 58    25 -> 27
+  run 6           40       4        4 (4)       19 -> 5    46 -> 58    25 -> 27
+```
+
+Both end on exactly the same five: REQ-0009, REQ-0030, REQ-0042, REQ-0066,
+REQ-0095.
+
+## The same root cause, found twice, fixed two different ways
+
+Both sessions identified the reversed command encoding without ever seeing the
+defines file or the golden design. What they did about it differs:
+
+* **Run 5 relabelled the case arms.** It left the `localparam` values alone and
+  replaced `CMD_START:` / `CMD_STOP:` / `CMD_READ:` / `CMD_WRITE:` with the
+  literals `4'b0001` / `4'b0010` / `4'b1000` / `4'b0100`.
+* **Run 6 moved the bodies.** It left the case labels alone and rotated which
+  FSM entry each arm performs -- `ST_START_A` became `ST_READ_A`, `ST_STOP_A`
+  became `ST_WRITE_A`, and so on, including the `sda_oen <= din` that belongs
+  with a WRITE.
+
+Semantically equivalent, structurally unrelated. Two agents given the same
+evidence reached the same diagnosis and disagreed about the tidiest repair,
+which is what one would want.
+
+## What this does and does not establish
+
+It establishes that the result is not a fluke of one session, and that the
+diagnosis is reachable from the recorded traces and block sources alone.
+
+It does NOT establish that the newer evidence path helped. Run 6 had the VCD
+one-sample lag fixed and `edit(old_text, new_text)` available; run 5 had
+neither. Same 19 -> 5, same five survivors, same trial count. On this design and
+this defect the extra tooling changed nothing measurable, and saying otherwise
+would be reading a difference that is not there.
+
+Neither run moved coverage: 25 -> 27 both times, and both times the two that
+moved went from FAILING to UNCOVERED -- a check going quiet, not a repair.
+Neither had `add_stimulus`; it was named in `list_failing_requirements`' own
+note and absent from the tool table. That is fixed, and run 7 is the test of it.
+
+## REQ-0066 may be unsatisfiable, and that is a finding about the ORACLE
+
+Run 6's agent reports REQ-0066 as "very likely an inherently conflicting check
+-- its testpoint drives `cmd=4` expecting READ behavior, but satisfying that
+would break the now-passing WRITE requirements that also key off `cmd=4`". That
+is an agent's claim and is not verified here, but it is the right SHAPE of
+finding for this suite: two of the five survivors are already known false
+demands that convict the golden design, and a third being self-contradictory
+would fit. It is worth checking directly rather than spending more trials on it.
