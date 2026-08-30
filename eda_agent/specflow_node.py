@@ -198,6 +198,10 @@ class SpecflowReviewer:
         #: block-internals half needs it, so None degrades that half and
         #: nothing else.
         self.vcd_path = None
+        #: `{tp_uid: wave.vcd}` from the last run. Empty when nothing was
+        #: dumped. One waveform per testpoint, because that is how `run_suite`
+        #: writes them -- one simulator process each.
+        self.vcd_by_tp: dict = {}
         #: `{req_uid: (OracleResult, trace_dict)}` from the LAST run.
         #:
         #: THIS IS THE LINK THAT WAS MISSING. `_EditSession.req_results` has
@@ -289,11 +293,33 @@ class SpecflowReviewer:
         except Exception:  # noqa: BLE001
             logger.debug("deciding the frozen oracles failed", exc_info=True)
             return {}
+        # EACH TESTPOINT HAS ITS OWN WAVEFORM, so publish the map too. A single
+        # `session.vcd_path` cannot be right for every requirement -- `run_suite`
+        # writes `wave_{iteration}_{module}.vcd` per testpoint, one process each
+        # -- and reading the wrong testpoint's waveform is worse than reading
+        # none, because it looks like data. Same pairing the trace already gets.
+        self.vcd_by_tp = self._waves_by_tp()
         # Paired with the trace it judged, because `explain` reads simulator
         # TIME out of it -- an `OracleResult.edge` is a row index, and feeding
         # an index to a filter over nanosecond timestamps collapses the VCD
         # window to the start of the run with no error anywhere.
         return {r.req_uid: (r, traces.get(r.tp_uid) or {}) for r in results}
+
+    def _waves_by_tp(self) -> dict:
+        """`{tp_uid: wave.vcd}` for whatever this run dumped.
+
+        Empty when the suite ran with `trace=False`, which is a real state and
+        not an error -- `explain` says so rather than showing an empty
+        internals section as though the blocks had nothing to report.
+        """
+        out: dict = {}
+        suite = Path(self._built.suite_dir)
+        for wave in sorted(suite.glob("wave_*_test_TP*.vcd")):
+            mod = wave.stem.split("_", 2)[-1]          # wave_0_test_TP0007
+            digits = mod.replace("test_TP", "")
+            if digits.isdigit():
+                out[f"TP-{digits}"] = wave
+        return out
 
 
 def _frozen_oracles(run_dir: Path | str) -> list:

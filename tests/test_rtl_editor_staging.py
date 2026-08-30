@@ -810,3 +810,110 @@ def test_check_staged_on_a_clean_batch_says_a_commit_would_proceed(tmp_path):
     # Verilator's build report, and its DECLFILENAME warning about the scratch
     # file's own name, are 900 characters of noise above the finding.
     assert out["syntax_output"] == "clean"
+
+
+# ------------------- what the first live run showed the agent was NOT told
+
+
+def test_explain_says_when_there_is_no_waveform_at_all(tmp_path):
+    """An empty internals section and a missing waveform are DIFFERENT facts.
+
+    MEASURED on the first live editor run: all five `explain` calls came back
+    with `block_internals: {}` because the suite had been run with
+    `trace=False`, and nothing in the payload said so -- so the agent spent the
+    session reading boundary ports and source believing it had been shown
+    everything. That is the evidence state B21 records the debugger inventing a
+    timing theory from.
+    """
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None = False
+        detail: str = "b fell early"
+        edge: int = 3
+        rows: list = None
+        tp_uid: str = "TP-0001"
+
+    s = _session(tmp_path)
+    s.requirements = {"REQ-B": RequirementView(
+        req_uid="REQ-B", text="b follows a", ports=["b"],
+        source="def decide(trace):\n    return False\n")}
+    s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {"a": 1}, "dut": {"b": 0}}]})}
+    out = s.explain("REQ-B")
+    assert out["block_internals"] == {}
+    assert "NO INTERNAL SIGNALS ARE SHOWN" in out["internals_warning"]
+    assert "dumped no waveform" in out["internals_warning"]
+
+
+def test_explain_uses_THIS_requirements_testpoint_waveform(tmp_path):
+    """One waveform per testpoint, because that is how the suite writes them.
+
+    A single session-wide `vcd_path` cannot be right for every requirement, and
+    reading the wrong testpoint's waveform is worse than reading none: it looks
+    like data.
+    """
+    from dataclasses import dataclass as _dc
+
+    from eda_agent.explain import RequirementView
+
+    @_dc
+    class R:
+        ok: bool | None = False
+        detail: str = "b fell early"
+        edge: int = 0
+        rows: list = None
+        tp_uid: str = "TP-0007"
+
+    s = _session(tmp_path)
+    mine = tmp_path / "wave_0_test_TP0007.vcd"
+    other = tmp_path / "wave_0_test_TP0000.vcd"
+    for p in (mine, other):
+        p.write_text("$enddefinitions $end\n")
+    s.vcd_path = other
+    s.vcd_by_tp = {"TP-0007": mine, "TP-0000": other}
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="t",
+                                               ports=["b"], source="")}
+    s.req_results = {"REQ-B": (R(rows=[]), {"edges": []})}
+
+    seen = {}
+    import eda_agent.explain as _ex
+    real = _ex.explain_failure
+
+    def _spy(**kw):
+        seen["vcd"] = kw.get("vcd_path")
+        return real(**kw)
+    _ex.explain_failure = _spy
+    try:
+        s.explain("REQ-B")
+    finally:
+        _ex.explain_failure = real
+    assert seen["vcd"] == mine
+
+
+def test_focus_says_which_block_ids_it_just_retired(tmp_path):
+    """Focusing NARROWS the slice, and that was silent.
+
+    MEASURED on the first live editor run: the agent read block C3
+    successfully, focused a different requirement four rounds later, and its
+    `replace_block("C3")` nine rounds after that came back "Unknown block_id" --
+    which reads as the agent having invented an id it had in fact been given.
+    """
+    from eda_agent.explain import RequirementView
+    from eda_agent.trace_slicer import RtlBlock
+
+    s = _session(tmp_path)
+    s.blocks_by_id = {**(s.blocks_by_id or {}),
+                      "blk_gone": RtlBlock(id="blk_gone", kind="assign",
+                                           start_line=99, end_line=99,
+                                           clocking="", code="assign z = 1'b0;",
+                                           writes=("z",), reads=())}
+    s.requirements = {"REQ-B": RequirementView(req_uid="REQ-B", text="t",
+                                               ports=["b"])}
+    out = s.focus("REQ-B")
+    assert out["is_action_executed"]
+    assert "blk_gone" in out["ids_no_longer_in_scope"]
+    assert "no longer resolve" in out["scope_note"]

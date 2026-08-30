@@ -653,6 +653,11 @@ class _EditSession:
     #: DUT instance name inside the testbench hierarchy, so a VCD lookup prefers
     #: the copy inside the design over a same-named wire in the harness.
     dut_instance: str = ""
+    #: `{tp_uid: wave.vcd}`. One waveform per testpoint, because that is how the
+    #: suite writes them -- one simulator process each -- so a single
+    #: `vcd_path` cannot be right for every requirement, and showing the wrong
+    #: testpoint's waveform is worse than showing none: it looks like data.
+    vcd_by_tp: Dict[str, Any] = field(default_factory=dict)
 
     #: `check_staged()` calls. Unbounded (it is static and costs about a second)
     #: but COUNTED and reported: fifty dry runs against two commits is a finding
@@ -966,13 +971,27 @@ class _EditSession:
                 f"to slice from. Its evidence is indirect -- see its "
                 f"requirement text via explain({req_uid!r}).")}
         blocks = focus_slice(self.staged(), view.ports)
+        was = set(self.blocks_by_id or {})
         self.focused = req_uid
         # The slice is rebuilt from the STAGED buffer, so it describes what a
         # commit would compile rather than the last accepted design.
         self.blocks_by_id = {b.id: b for b in blocks} or self.blocks_by_id
+        # AND IT NARROWS, so ids from the previous focus stop resolving. That
+        # was silent, and it misleads: MEASURED on the first live editor run,
+        # the agent read block C3 successfully, focused a different requirement
+        # four rounds later, and its `replace_block("C3")` nine rounds after
+        # that came back "Unknown block_id" -- which reads as the agent having
+        # invented an id it had in fact been given.
+        dropped = sorted(was - set(self.blocks_by_id))
         return {
             "is_action_executed": True, "focused": req_uid,
             "ports": view.ports,
+            **({"ids_no_longer_in_scope": dropped,
+                "scope_note": (
+                    "focusing narrowed the slice: " + ", ".join(dropped)
+                    + " came from the previous focus and no longer resolve. "
+                    "Re-focus that requirement to reach them again.")}
+               if dropped else {}),
             "suspect_blocks": [
                 {"id": b.id, "kind": b.kind, "clocking": b.clocking,
                  "start_line": b.start_line, "end_line": b.end_line,
@@ -1005,10 +1024,14 @@ class _EditSession:
                              "and no perturbation -- only what this requirement "
                              "asks for.")}
         result, trace = found
+        # THIS requirement's testpoint's waveform, not the session's. Falling
+        # back to `vcd_path` keeps the SystemVerilog backend working, where
+        # there is one run and one wave.
+        wave = self.vcd_by_tp.get(getattr(result, "tp_uid", "")) or self.vcd_path
         return {"is_action_executed": True, **explain_failure(
             view=view, result=result, trace=trace or {},
             contract=self.contract or {}, rtl_text=self.staged(),
-            vcd_path=self.vcd_path, dut_instance=self.dut_instance)}
+            vcd_path=wave, dut_instance=self.dut_instance)}
 
     def list_failing_requirements(self) -> dict:
         """What the last run decided, per REQUIREMENT rather than per check id.
@@ -1264,6 +1287,9 @@ class _EditSession:
         vcd = getattr(self.sim_reviewer, "vcd_path", None)
         if vcd:
             self.vcd_path = vcd
+        by_tp = getattr(self.sim_reviewer, "vcd_by_tp", None)
+        if isinstance(by_tp, dict):
+            self.vcd_by_tp = dict(by_tp)
 
     def run_simulation(self) -> Dict[str, Any]:
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()

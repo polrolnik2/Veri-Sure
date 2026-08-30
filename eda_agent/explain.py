@@ -344,4 +344,21 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
             "this trace carries no recorded simulator time, so the VCD window "
             "could not be built. Edge indices are NOT timestamps -- see "
             "`Env._record`'s time stamp; a run predating it cannot be windowed.")
+    # A MISSING HALF MUST SAY SO. `_block_internals` returns {} both when the
+    # suspect blocks had nothing worth showing and when there is NO WAVEFORM AT
+    # ALL, and those are different facts. MEASURED on the first live editor run:
+    # all five `explain` calls came back with `block_internals: {}` because the
+    # suite had been run with `trace=False`, and nothing in the payload said so
+    # -- so the agent spent the session reading boundary ports and source,
+    # believing it had been shown everything. That is precisely the evidence
+    # state B21 records the debugger inventing a timing theory from.
+    if not out["block_internals"]:
+        out["internals_warning"] = (
+            "NO INTERNAL SIGNALS ARE SHOWN. "
+            + ("this run dumped no waveform, so what the suspect blocks were "
+               "doing across the span could not be read -- you are seeing "
+               "BOUNDARY PORTS ONLY, and the block sources, and nothing about "
+               "internal state" if not vcd_path else
+               "the waveform carried none of the suspect blocks' signals under "
+               f"the instance name searched ({dut_instance or 'unset'})"))
     return out

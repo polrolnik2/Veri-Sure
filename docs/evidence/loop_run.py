@@ -81,7 +81,15 @@ shutil.copy(RTL, OUT / "rtl.sv")
 
 res = run_suite(rtl_path=OUT / "rtl.sv", hdl_toplevel="i2c_master_bit_ctrl",
                 suite_dir=suite, refmodel_path=OUT / "ref_model.py",
-                iteration=0, coverage=False, trace=False,
+                # trace=True DUMPS A WAVEFORM, and `explain`'s block-internals
+                # half is dark without one. The first live editor run had
+                # trace=False: all five `explain` calls returned
+                # `block_internals: {}`, so the agent saw boundary ports and
+                # source and nothing about internal state -- the exact evidence
+                # poverty B21 records the debugger inventing a timing theory
+                # from. It is the one half of the annotation that a Verilog
+                # mismatch table never had.
+                iteration=0, coverage=False, trace=True,
                 include_dirs=[str(RTL.parent), str(RTL.parent.parent)])
 print("build_ok:", res.build_ok, flush=True)
 if not res.build_ok:

@@ -407,3 +407,24 @@ def test_frozen_oracles_load_from_the_run_directory(tmp_path):
     got = _frozen_oracles(tmp_path)
     assert [o.req_uid for o in got] == ["REQ-0001"]
     assert got[0].tp_uids == ["TP-0000"]
+
+
+def test_the_reviewer_maps_each_testpoints_waveform(tmp_path):
+    """`run_suite` writes `wave_{iteration}_{module}.vcd`, one per testpoint.
+
+    Publishing the map is what lets `explain` show the waveform belonging to
+    the testpoint that actually produced the conviction, rather than whichever
+    one the session happened to hold.
+    """
+    (tmp_path / "wave_0_test_TP0007.vcd").write_text("$end\n")
+    (tmp_path / "wave_0_test_TP0223.vcd").write_text("$end\n")
+    (tmp_path / "wave_0_test_NOTATP.vcd").write_text("$end\n")
+    rev = _reviewer(tmp_path, [], {})
+    got = rev._waves_by_tp()
+    assert set(got) == {"TP-0007", "TP-0223"}
+    assert got["TP-0007"].name == "wave_0_test_TP0007.vcd"
+
+
+def test_no_waveforms_is_an_empty_map_and_not_an_error(tmp_path):
+    """A suite run with `trace=False` dumps nothing, which is a real state."""
+    assert _reviewer(tmp_path, [], {})._waves_by_tp() == {}
