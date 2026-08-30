@@ -253,6 +253,20 @@ _VCD_UNITS = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "ns": 1e-9,
               "ps": 1e-12, "fs": 1e-15}
 
 
+def _readable(value: str | None) -> str | None:
+    """A wide vector as binary AND decimal. `cnt` is a 16-bit counter.
+
+    Verilator writes vectors as bit strings, so a counter reads
+    `0000000000000011` -- correct, and hard to compare against the `clk_cnt=3`
+    a requirement talks about. Narrow values stay as they are: `state` as
+    `1011` is what a `case` arm is written against, and rendering it 11 would
+    be worse.
+    """
+    if not value or len(value) <= 4 or set(value) - {"0", "1"}:
+        return value
+    return f"{value} ({int(value, 2)})"
+
+
 def _vcd_ticks_per_ns(vcd_path: Path) -> float:
     """How many VCD time units make one nanosecond. 1.0 if it cannot be read.
 
@@ -335,6 +349,7 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
     prefer = [f".{dut_instance}."] if dut_instance else None
     # `times` are the TRACE's nanoseconds; the waveform counts its own ticks.
     scale = _vcd_ticks_per_ns(Path(vcd_path))
+    lo, hi = min(times), max(times)
     moved: dict[str, dict] = {}
     held: dict[str, str] = {}
     for leaf in sorted(names):
@@ -343,19 +358,30 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
             if not full:
                 continue
             tv = _vcd_tv(vcd, full)
-            series = [(t, _vcd_value_at(tv, int(round(t * scale)),
-                                        inclusive=(t == 0)))
-                      for t in times]
+            # THE WAVEFORM'S OWN TRANSITION LIST, not one derived from a sample
+            # grid. Deriving it was wrong twice over. It LAGGED: values were
+            # read with `inclusive=False`, so a sample at t returned the value
+            # strictly BEFORE t and a change first appeared one sample later --
+            # measured on the i2c design, `scl_oen` falls at 640ns and was
+            # reported at 650, `state` enters 1011 at 640 and was reported at
+            # 650. Every transition in every window was systematically one
+            # sample late, which is exactly the error that makes a debugger
+            # invent a timing theory. And it was BLIND between samples: a pulse
+            # shorter than the grid vanished entirely.
+            #
+            # `tv` already holds every change with its exact time. Reading it
+            # directly is both more accurate and less code.
+            start = _vcd_value_at(tv, int(round(lo * scale)), inclusive=True)
+            changes = [{"t": int(round(t / scale)), "v": _readable(v)}
+                       for t, v in tv
+                       if lo * scale < t <= hi * scale]
         except Exception:  # noqa: BLE001
             continue
-        if not series:
-            continue
-        changes = [{"t": t, "v": v} for (t, v), (_, prev)
-                   in zip(series[1:], series) if v != prev]
         if changes:
-            moved[leaf] = {"at_window_start": series[0][1], "changed": changes}
+            moved[leaf] = {"at_window_start": _readable(start),
+                           "changed": changes}
         else:
-            held[leaf] = series[0][1]
+            held[leaf] = _readable(start)
     out: dict = dict(moved)
     if held:
         # Still reported, once each: losing them would hide the encoding a

@@ -927,21 +927,19 @@ def test_focus_says_which_block_ids_it_just_retired(tmp_path):
     assert "no longer resolve" in out["scope_note"]
 
 
-def test_block_internals_selects_nothing_away_and_reports_transitions(tmp_path):
+def test_block_internals_selects_nothing_away(tmp_path):
     """The cap was the bug, and a smarter cap would be a different bug.
 
-    A block's `reads` include every LOCALPARAM it mentions, and those are
-    constants. Taking `sorted(names)[:12]` took them FIRST, because ASCII puts
-    CMD_START and ST_IDLE ahead of cnt, state and sda_chk. MEASURED on the
-    second live editor run: all twelve signals `explain` showed were constants,
-    twelve parameter definitions at fifteen identical samples each, and the
-    state register the failure was about never appeared.
+    A block's `reads` include every LOCALPARAM it mentions, and
+    `sorted(names)[:12]` took those first because ASCII puts CMD_START and
+    ST_IDLE ahead of cnt, state and sda_chk. MEASURED on the second live editor
+    run: all twelve signals shown were constants, and the state register the
+    failure was about never appeared.
 
-    Ranking the cap by transition count would only move the bias: a `clk_en`
-    toggling every cycle would win and an `sda_chk` moving ONCE at exactly the
-    deciding edge would be cut -- and the second is the more informative for a
-    temporal check. So nothing is selected away; the REPRESENTATION changes
-    from a dense grid to transitions, which is what makes that affordable.
+    Ranking that cap by transition count would only move the bias -- a `clk_en`
+    toggling every cycle would win, an `sda_chk` moving ONCE at the deciding
+    edge would be cut, and the second is the more informative. So nothing is
+    selected away; the representation changed instead.
     """
     import sys
     import types
@@ -949,43 +947,43 @@ def test_block_internals_selects_nothing_away_and_reports_transitions(tmp_path):
     from eda_agent import explain as _ex
     from eda_agent.trace_slicer import RtlBlock
 
-    times = [10, 20, 30]
-    series = {
-        "CMD_START": ["1000", "1000", "1000"],   # a localparam
-        "ST_IDLE": ["0000", "0000", "0000"],     # another
-        "clk_en": ["0", "1", "0"],               # noisy: 2 transitions
-        "sda_chk": ["0", "0", "1"],              # ONE transition, and the point
-        "state": ["0001", "0010", "0011"],
+    tv = {
+        "CMD_START": [(0, "1000")],                    # a localparam
+        "ST_IDLE": [(0, "0000")],                      # another
+        "clk_en": [(0, "0"), (610000, "1"), (620000, "0")],
+        "sda_chk": [(0, "0"), (630000, "1")],          # ONE change, and the point
+        "state": [(0, "0001"), (610000, "0010")],
     }
     fake = types.ModuleType("eda_agent.trace_report")
     fake.__dict__.update({
         "VCDVCD": lambda *a, **k: object(),
         "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
-            leaf if leaf in series else ""),
-        "_vcd_tv": lambda vcd, full: full,
-        "_vcd_value_at": lambda tv, t, inclusive=False: series[tv][times.index(t)],
+            leaf if leaf in tv else ""),
+        "_vcd_tv": lambda vcd, full: tv[full],
+        "_vcd_value_at": lambda series, t, inclusive=False: next(
+            (v for tt, v in reversed(series)
+             if (tt <= t if inclusive else tt < t)), None),
     })
     real = sys.modules.get("eda_agent.trace_report")
     sys.modules["eda_agent.trace_report"] = fake
     wave = tmp_path / "w.vcd"
-    wave.write_text("$enddefinitions $end\n")   # must EXIST; the reader is faked
+    wave.write_text("$timescale 1ps $end\n")
     try:
         blocks = [RtlBlock(id="b", kind="always", start_line=1, end_line=2,
                            clocking="posedge clk", code="",
                            writes=("state", "sda_chk", "clk_en"),
                            reads=("CMD_START", "ST_IDLE"))]
-        got = _ex._block_internals(wave, blocks, times)
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640])
     finally:
         if real is not None:
             sys.modules["eda_agent.trace_report"] = real
         else:
             del sys.modules["eda_agent.trace_report"]
 
-    # EVERY signal that moved is present -- the one-transition one included.
+    # Every signal that moved is present -- the one-transition one included.
     assert set(got) - {"__held_constant__"} == {"clk_en", "sda_chk", "state"}
-    assert got["sda_chk"] == {"at_window_start": "0",
-                              "changed": [{"t": 30, "v": "1"}]}
-    # Constants are reported once each, not as N identical samples.
+    assert got["sda_chk"]["changed"] == [{"t": 630, "v": "1"}]
+    # Constants reported once each, not as N identical samples.
     assert got["__held_constant__"] == {"CMD_START": "1000", "ST_IDLE": "0000"}
 
 
@@ -1262,3 +1260,67 @@ def test_the_splice_preserves_the_anchors_boundary_whitespace(tmp_path):
     s.stage_replace("blk", "always @(posedge clk) begin\n  c <= ~a;\nend\n")
     assert s.staged().endswith("end\nendmodule\n")
     assert "\n\n\nendmodule" not in s.staged()
+
+
+def test_internals_report_the_waveforms_own_transition_times(tmp_path):
+    """Deriving transitions from a sample grid was wrong twice over.
+
+    IT LAGGED: values were read with `inclusive=False`, so a sample at t
+    returned the value strictly BEFORE t and a change first appeared one sample
+    later. MEASURED on the i2c design: `scl_oen` falls at 640ns and was reported
+    at 650; `state` enters 1011 at 640 and was reported at 650. Every transition
+    in every window was systematically one sample late -- exactly the error that
+    makes a debugger invent a timing theory.
+
+    AND IT WAS BLIND BETWEEN SAMPLES: a pulse shorter than the grid vanished.
+    """
+    import sys
+    import types
+
+    from eda_agent import explain as _ex
+    from eda_agent.trace_slicer import RtlBlock
+
+    # ticks are ps, the grid is every 10ns, and `s` pulses BETWEEN grid points.
+    tv = {"s": [(0, "0"), (615000, "1"), (617000, "0")],
+          "q": [(0, "0"), (640000, "1")]}
+    fake = types.ModuleType("eda_agent.trace_report")
+    fake.__dict__.update({
+        "VCDVCD": lambda *a, **k: object(),
+        "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
+            leaf if leaf in tv else ""),
+        "_vcd_tv": lambda vcd, full: tv[full],
+        "_vcd_value_at": lambda series, t, inclusive=False: next(
+            (v for tt, v in reversed(series)
+             if (tt <= t if inclusive else tt < t)), None),
+    })
+    real = sys.modules.get("eda_agent.trace_report")
+    sys.modules["eda_agent.trace_report"] = fake
+    wave = tmp_path / "w.vcd"
+    wave.write_text("$timescale 1ps $end\n")
+    try:
+        blocks = [RtlBlock(id="b", kind="always", start_line=1, end_line=2,
+                           clocking="posedge clk", code="",
+                           writes=("s", "q"), reads=())]
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640, 650])
+    finally:
+        if real is not None:
+            sys.modules["eda_agent.trace_report"] = real
+        else:
+            del sys.modules["eda_agent.trace_report"]
+
+    # EXACT times, not the next grid point after them.
+    assert [c["t"] for c in got["q"]["changed"]] == [640]
+    # And the sub-grid pulse survives, both edges of it.
+    assert [c["t"] for c in got["s"]["changed"]] == [615, 617]
+
+
+def test_a_wide_vector_is_readable_as_well_as_exact(tmp_path):
+    """`cnt` is 16 bits, and `0000000000000011` is hard to compare against the
+    `clk_cnt=3` a requirement talks about. Narrow values stay as they are --
+    `state` as `1011` is what a `case` arm is written against."""
+    from eda_agent.explain import _readable
+    assert _readable("0000000000000011") == "0000000000000011 (3)"
+    assert _readable("1011") == "1011"
+    assert _readable("0") == "0"
+    assert _readable("xxxx") == "xxxx"
+    assert _readable(None) is None
