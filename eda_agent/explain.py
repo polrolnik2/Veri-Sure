@@ -300,36 +300,45 @@ def _vcd_ticks_per_ns(vcd_path: Path) -> float:
     return (1e-9 / seconds) if seconds else 1.0
 
 
+def _clocks_and_resets(contract: dict) -> set[str]:
+    """Ports that are in every chain and explain nothing."""
+    try:
+        from specflow.ports import is_clock, is_reset
+    except Exception:  # noqa: BLE001
+        return set()
+    return {str(p.get("name")) for p in (contract.get("io") or [])
+            if p.get("name") and (is_clock(p["name"]) or is_reset(p["name"]))}
+
+
 def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
-                     times: list[int], *, dut_instance: str = "") -> dict:
-    """The SUSPECT BLOCKS' internal signals across the span. What the VCD adds.
+                     times: list[int], *, dut_instance: str = "",
+                     roots: list[str] | None = None,
+                     skip: set[str] | None = None) -> dict:
+    """TRACE THE FAILING SIGNAL BACKWARDS, with every intermediate value.
 
-    §5.6 item 3, and the one thing that IMPROVES on a Verilog mismatch table:
-    that table reports boundary ports only, so the agent had to guess what the
-    implicated block was doing. The recorded trace says the boundary
-    misbehaved; the VCD says what the suspect blocks were doing while it did.
+    §5.6 item 3 asked for "the INTERNALS of the implicated blocks" and got a
+    flat bag: `suspect_blocks` was a list of bare ids, `block_internals` a dict
+    of signals, and nothing said which drove which or how any of them reached
+    the signal that failed. The agent had to call `focus` separately and rebuild
+    the dataflow by hand from `writes`/`reads` lists.
 
-    NOTHING IS SELECTED AWAY. This used to sample a dense grid -- every signal
-    at every window edge -- and cap the result at twelve signals chosen
-    ALPHABETICALLY. A block's `reads` include every localparam it mentions, and
-    ASCII puts CMD_START and ST_IDLE ahead of cnt, state and sda_chk: MEASURED
-    on the second live editor run, all twelve signals shown were constants,
-    twelve parameter definitions at fifteen identical samples each, and the
-    state register the failure was about never appeared.
+    `dynamic_slice` already walks the driver graph outward from the failing
+    signals by depth -- and then throws the structure away, returning a flat set
+    of blocks. This keeps it. The result is the chain a person actually reads a
+    waveform along:
 
-    Ranking the cap by transition count is not the fix, it is a different bias:
-    a `clk_en` toggling every cycle would win and an `sda_chk` that moves ONCE,
-    at exactly the deciding edge, would be cut -- and the second is the more
-    informative of the two for a temporal check. Any cap is a guess about
-    relevance made by the code rather than by the reader.
+        depth 0   scl_oen   driven by A4   1, then 0 at 640, 1 at 720
+        depth 1   state     driven by A4   0000, then 1011 at 640 ...   feeds scl_oen
+        depth 1   cnt       driven by A2   3, then 2 at 610 ...         feeds scl_oen
+        depth 2   clk_cnt   input                                       feeds cnt
 
-    So the representation changes instead of the selection. A dense grid is
-    what made the payload big; TRANSITIONS are what a temporal check is about
-    (§5.6 item 4: "a temporal check is about edges, not levels, so the
-    transition list is the actionable datum"). A signal that never moves costs
-    one line, a signal that moves twice costs two -- so all 54 signals a slice
-    touches fit in less room than twelve did, and the caller is never silently
-    handed a subset.
+    Every value is the waveform's own, at the waveform's own times. A signal is
+    listed once, at the SHALLOWEST depth it was reached, because that is the
+    shortest explanation of how it bears on the failure.
+
+    `roots` are the signals the check convicted the design on -- its outputs.
+    Falling back to every port it reads keeps a check with no declared output
+    working, just with a wider root set.
     """
     if not vcd_path or not times or not blocks:
         return {}
@@ -345,48 +354,88 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
     except Exception:  # noqa: BLE001
         return {}
 
-    names = {n for b in blocks for n in list(b.writes) + list(b.reads) if n}
-    prefer = [f".{dut_instance}."] if dut_instance else None
-    # `times` are the TRACE's nanoseconds; the waveform counts its own ticks.
+    drivers: dict[str, list[RtlBlock]] = {}
+    for b in blocks:
+        for w in b.writes:
+            drivers.setdefault(w, []).append(b)
     scale = _vcd_ticks_per_ns(Path(vcd_path))
     lo, hi = min(times), max(times)
-    moved: dict[str, dict] = {}
-    held: dict[str, str] = {}
-    for leaf in sorted(names):
+    prefer = [f".{dut_instance}."] if dut_instance else None
+
+    def sample(leaf: str):
+        """`(value at window start, transitions inside it)` or None."""
         try:
             full = _vcd_find_signal(vcd, leaf, prefer_substrings=prefer)
             if not full:
-                continue
+                return None
             tv = _vcd_tv(vcd, full)
-            # THE WAVEFORM'S OWN TRANSITION LIST, not one derived from a sample
-            # grid. Deriving it was wrong twice over. It LAGGED: values were
-            # read with `inclusive=False`, so a sample at t returned the value
-            # strictly BEFORE t and a change first appeared one sample later --
-            # measured on the i2c design, `scl_oen` falls at 640ns and was
-            # reported at 650, `state` enters 1011 at 640 and was reported at
-            # 650. Every transition in every window was systematically one
-            # sample late, which is exactly the error that makes a debugger
-            # invent a timing theory. And it was BLIND between samples: a pulse
-            # shorter than the grid vanished entirely.
-            #
-            # `tv` already holds every change with its exact time. Reading it
-            # directly is both more accurate and less code.
-            start = _vcd_value_at(tv, int(round(lo * scale)), inclusive=True)
-            changes = [{"t": int(round(t / scale)), "v": _readable(v)}
-                       for t, v in tv
-                       if lo * scale < t <= hi * scale]
+            return (_vcd_value_at(tv, int(round(lo * scale)), inclusive=True),
+                    [{"t": int(round(t / scale)), "v": _readable(v)}
+                     for t, v in tv if lo * scale < t <= hi * scale])
         except Exception:  # noqa: BLE001
-            continue
-        if changes:
-            moved[leaf] = {"at_window_start": _readable(start),
-                           "changed": changes}
-        else:
-            held[leaf] = _readable(start)
-    out: dict = dict(moved)
+            return None
+
+    # THE CLOCK IS IN EVERY CHAIN AND EXPLAINS NOTHING. Every sequential block
+    # reads it, so it enters at depth 1 of every walk and brings one transition
+    # per edge -- 28 of them in a 140ns window, which is the noise that buries
+    # the six signals that matter. Reset is the same. `skip` carries them from
+    # the contract rather than guessing from names here.
+    avoid = set(skip or ())
+    known = {n for b in blocks for n in list(b.writes) + list(b.reads)
+             if n and n not in avoid}
+    frontier = [r for r in (roots or []) if r in known] or sorted(known)
+    seen: set[str] = set(frontier)
+    feeds: dict[str, str] = {}
+    chain: list[dict] = []
+    held: dict[str, dict] = {}
+    depth = 0
+    while frontier and depth < 8:
+        nxt: list[str] = []
+        for leaf in frontier:
+            got = sample(leaf)
+            who = [b.id for b in drivers.get(leaf, [])]
+            row: dict = {"depth": depth, "signal": leaf,
+                         "driven_by": (who[0] if len(who) == 1 else who or None)}
+            if leaf in feeds:
+                row["feeds"] = feeds[leaf]
+            if got is None:
+                # A `reads` set is extracted from identifiers, so it also holds
+                # function names and macros that were never signals. One with
+                # no waveform entry is a parse artefact, not a finding, and
+                # listing it as "not present" only adds a row to read past.
+                continue
+            if got[1]:
+                row["at_window_start"], row["changed"] = _readable(got[0]), got[1]
+                if not who:
+                    row["note"] = ("no block drives it and it MOVED, so the "
+                                   "stimulus did: an input, not the design's doing")
+                chain.append(row)
+            else:
+                # Constant across the window: no part of the explanation, but
+                # worth having once -- a wrong localparam looks exactly like
+                # this from the outside.
+                entry = {"value": _readable(got[0]),
+                         "driven_by": row["driven_by"]}
+                if not who:
+                    # Held still AND undriven says only that: it may be a
+                    # localparam, or an input the stimulus never moved, and the
+                    # block table cannot tell them apart. Claiming "input" here
+                    # would assert more than is known.
+                    entry["note"] = ("no block drives it and it never moved "
+                                     "here: a constant, or an input the "
+                                     "stimulus held")
+                held[leaf] = entry
+            for b in drivers.get(leaf, []):
+                for r in b.reads:
+                    if r and r not in seen and r not in avoid:
+                        seen.add(r)
+                        feeds[r] = leaf
+                        nxt.append(r)
+        frontier, depth = sorted(nxt), depth + 1
+    out: dict = {}
+    if chain:
+        out["chain"] = chain
     if held:
-        # Still reported, once each: losing them would hide the encoding a
-        # `case` arm compares against, which is exactly what a wrong-constant
-        # bug looks like from the outside.
         out["__held_constant__"] = held
     return out
 
@@ -433,9 +482,18 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
         },
         "boundary_ports": boundary,
         "transitions": _transitions(boundary, view.ports),
-        "suspect_blocks": [b.id for b in blocks],
-        "block_internals": _block_internals(vcd_path, blocks, times,
-                                            dut_instance=dut_instance),
+        # Not bare ids: what each block DRIVES, so the list can be read against
+        # `block_internals` without a second tool call.
+        "suspect_blocks": [{"id": b.id, "writes": list(b.writes)}
+                           for b in blocks],
+        # ROOTED AT WHAT THE CHECK CONVICTED THE DESIGN ON. A requirement reads
+        # its activation's inputs too, and rooting the walk at those would trace
+        # backwards from the STIMULUS, which explains nothing about the design.
+        "block_internals": _block_internals(
+            vcd_path, blocks, times, dut_instance=dut_instance,
+            roots=[p["name"] for p in (contract.get("io") or [])
+                   if p.get("dir") == "output" and p.get("name") in view.ports],
+            skip=_clocks_and_resets(contract)),
     }
     if rows:
         out["what_would_satisfy_it"] = _satisfying_perturbation(
@@ -457,7 +515,7 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
     # suspect blocks touch held still across the whole span, which for a
     # temporal failure is itself the finding and must not read as a populated
     # view.
-    if not {k for k in out["block_internals"] if k != "__held_constant__"}:
+    if not (out["block_internals"].get("chain") or []):
         out["internals_warning"] = (
             "NO INTERNAL SIGNALS ARE SHOWN. "
             + ("this run dumped no waveform, so what the suspect blocks were "

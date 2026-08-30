@@ -954,6 +954,7 @@ def test_block_internals_selects_nothing_away(tmp_path):
         "sda_chk": [(0, "0"), (630000, "1")],          # ONE change, and the point
         "state": [(0, "0001"), (610000, "0010")],
     }
+    # `state` is the root; the others reach it because the block READS them.
     fake = types.ModuleType("eda_agent.trace_report")
     fake.__dict__.update({
         "VCDVCD": lambda *a, **k: object(),
@@ -970,10 +971,10 @@ def test_block_internals_selects_nothing_away(tmp_path):
     wave.write_text("$timescale 1ps $end\n")
     try:
         blocks = [RtlBlock(id="b", kind="always", start_line=1, end_line=2,
-                           clocking="posedge clk", code="",
-                           writes=("state", "sda_chk", "clk_en"),
-                           reads=("CMD_START", "ST_IDLE"))]
-        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640])
+                           clocking="posedge clk", code="", writes=("state",),
+                           reads=("CMD_START", "ST_IDLE", "sda_chk", "clk_en"))]
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640],
+                                   roots=["state"])
     finally:
         if real is not None:
             sys.modules["eda_agent.trace_report"] = real
@@ -981,10 +982,15 @@ def test_block_internals_selects_nothing_away(tmp_path):
             del sys.modules["eda_agent.trace_report"]
 
     # Every signal that moved is present -- the one-transition one included.
-    assert set(got) - {"__held_constant__"} == {"clk_en", "sda_chk", "state"}
-    assert got["sda_chk"]["changed"] == [{"t": 630, "v": "1"}]
-    # Constants reported once each, not as N identical samples.
-    assert got["__held_constant__"] == {"CMD_START": "1000", "ST_IDLE": "0000"}
+    moved = {r["signal"]: r for r in got["chain"]}
+    assert set(moved) == {"clk_en", "sda_chk", "state"}
+    assert moved["sda_chk"]["changed"] == [{"t": 630, "v": "1"}]
+    # Constants reported once each, not as N identical samples, and each says
+    # what drives it (here: nothing -- they are localparams).
+    held = got["__held_constant__"]
+    assert set(held) == {"CMD_START", "ST_IDLE"}
+    assert held["CMD_START"]["value"] == "1000"
+    assert held["CMD_START"]["driven_by"] is None
 
 
 def test_all_constant_internals_reads_as_a_finding_not_as_a_populated_view(tmp_path):
@@ -1283,6 +1289,7 @@ def test_internals_report_the_waveforms_own_transition_times(tmp_path):
     # ticks are ps, the grid is every 10ns, and `s` pulses BETWEEN grid points.
     tv = {"s": [(0, "0"), (615000, "1"), (617000, "0")],
           "q": [(0, "0"), (640000, "1")]}
+    # `q` is the root and reads `s`, so the walk reaches both.
     fake = types.ModuleType("eda_agent.trace_report")
     fake.__dict__.update({
         "VCDVCD": lambda *a, **k: object(),
@@ -1299,19 +1306,21 @@ def test_internals_report_the_waveforms_own_transition_times(tmp_path):
     wave.write_text("$timescale 1ps $end\n")
     try:
         blocks = [RtlBlock(id="b", kind="always", start_line=1, end_line=2,
-                           clocking="posedge clk", code="",
-                           writes=("s", "q"), reads=())]
-        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640, 650])
+                           clocking="posedge clk", code="", writes=("q",),
+                           reads=("s",))]
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630, 640, 650],
+                                   roots=["q"])
     finally:
         if real is not None:
             sys.modules["eda_agent.trace_report"] = real
         else:
             del sys.modules["eda_agent.trace_report"]
 
+    rows = {r["signal"]: r for r in got["chain"]}
     # EXACT times, not the next grid point after them.
-    assert [c["t"] for c in got["q"]["changed"]] == [640]
+    assert [c["t"] for c in rows["q"]["changed"]] == [640]
     # And the sub-grid pulse survives, both edges of it.
-    assert [c["t"] for c in got["s"]["changed"]] == [615, 617]
+    assert [c["t"] for c in rows["s"]["changed"]] == [615, 617]
 
 
 def test_a_wide_vector_is_readable_as_well_as_exact(tmp_path):
@@ -1430,3 +1439,127 @@ def test_a_fragment_edit_is_free_and_spends_no_trial(tmp_path):
     s.stage_edit("      d <= 1'b1;", "      d <= 1'b0;")
     assert s.action_calls == 0
     assert s.check_calls == 0
+
+
+def test_internals_name_the_block_that_drives_each_signal(tmp_path):
+    """`suspect_blocks` was a list of bare ids and `block_internals` a list of
+    signals, side by side and UNJOINED -- the agent had to call `focus`
+    separately to learn that A4 is what writes `state`.
+
+    And a signal the design does not drive at all sat in the same list as the
+    ones it does. That distinction is the first thing a debugger needs: it
+    separates what the design DID from what was done TO it.
+    """
+    import sys
+    import types
+
+    from eda_agent import explain as _ex
+    from eda_agent.trace_slicer import RtlBlock
+
+    tv = {"state": [(0, "00"), (610000, "01")],   # driven by the block
+          "cmd": [(0, "0000"), (620000, "0001")],  # moved, driven by nothing
+          "K": [(0, "1010")]}                      # held, driven by nothing
+    fake = types.ModuleType("eda_agent.trace_report")
+    fake.__dict__.update({
+        "VCDVCD": lambda *a, **k: object(),
+        "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
+            leaf if leaf in tv else ""),
+        "_vcd_tv": lambda vcd, full: tv[full],
+        "_vcd_value_at": lambda series, t, inclusive=False: next(
+            (v for tt, v in reversed(series)
+             if (tt <= t if inclusive else tt < t)), None),
+    })
+    real = sys.modules.get("eda_agent.trace_report")
+    sys.modules["eda_agent.trace_report"] = fake
+    wave = tmp_path / "w.vcd"
+    wave.write_text("$timescale 1ps $end\n")
+    try:
+        blocks = [RtlBlock(id="A4", kind="always", start_line=1, end_line=2,
+                           clocking="posedge clk", code="", writes=("state",),
+                           reads=("cmd", "K"))]
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630],
+                                   roots=["state"])
+    finally:
+        if real is not None:
+            sys.modules["eda_agent.trace_report"] = real
+        else:
+            del sys.modules["eda_agent.trace_report"]
+
+    rows = {r["signal"]: r for r in got["chain"]}
+    # The walk STARTS at the failing signal and reaches its inputs at depth 1,
+    # each saying what it feeds -- that is the chain, not a bag.
+    assert rows["state"]["driven_by"] == "A4" and rows["state"]["depth"] == 0
+    assert "feeds" not in rows["state"], "the root is not fed by anything shown"
+    assert rows["cmd"]["depth"] == 1 and rows["cmd"]["feeds"] == "state"
+    # Moved with no driver: the stimulus did it, and it says so.
+    assert rows["cmd"]["driven_by"] is None
+    assert "input" in rows["cmd"]["note"]
+    # Held with no driver could be a localparam OR an unmoved input, and the
+    # block table cannot tell them apart -- so it must not claim either.
+    k = got["__held_constant__"]["K"]
+    assert k["driven_by"] is None
+    assert "constant, or an input" in k["note"]
+    assert "input, not the design" not in k["note"]
+
+
+def test_the_chain_is_rooted_at_the_outputs_not_at_the_stimulus(tmp_path):
+    """A requirement reads its ACTIVATION's inputs too, and rooting the walk at
+    those would trace backwards from the stimulus -- which explains nothing
+    about the design. The roots are the outputs the check convicted it on."""
+    import sys
+    import types
+
+    from eda_agent import explain as _ex
+    from eda_agent.trace_slicer import RtlBlock
+
+    tv = {"out": [(0, "0"), (620000, "1")],
+          "mid": [(0, "0"), (610000, "1")],
+          "stim": [(0, "0"), (605000, "1")]}
+    fake = types.ModuleType("eda_agent.trace_report")
+    fake.__dict__.update({
+        "VCDVCD": lambda *a, **k: object(),
+        "_vcd_find_signal": lambda vcd, leaf, prefer_substrings=None: (
+            leaf if leaf in tv else ""),
+        "_vcd_tv": lambda vcd, full: tv[full],
+        "_vcd_value_at": lambda series, t, inclusive=False: next(
+            (v for tt, v in reversed(series)
+             if (tt <= t if inclusive else tt < t)), None),
+    })
+    real = sys.modules.get("eda_agent.trace_report")
+    sys.modules["eda_agent.trace_report"] = fake
+    wave = tmp_path / "w.vcd"
+    wave.write_text("$timescale 1ps $end\n")
+    try:
+        blocks = [
+            RtlBlock(id="A", kind="always", start_line=1, end_line=2,
+                     clocking="posedge clk", code="", writes=("out",),
+                     reads=("mid",)),
+            RtlBlock(id="B", kind="assign", start_line=3, end_line=3,
+                     clocking="", code="", writes=("mid",), reads=("stim",)),
+        ]
+        got = _ex._block_internals(wave, blocks, [600, 610, 620, 630],
+                                   roots=["out"])
+    finally:
+        if real is not None:
+            sys.modules["eda_agent.trace_report"] = real
+        else:
+            del sys.modules["eda_agent.trace_report"]
+
+    chain = got["chain"]
+    assert [(r["depth"], r["signal"]) for r in chain] == [
+        (0, "out"), (1, "mid"), (2, "stim")], chain
+    # Each step says what it feeds, so the chain reads as one explanation.
+    assert chain[1]["feeds"] == "out" and chain[2]["feeds"] == "mid"
+    assert chain[0]["driven_by"] == "A" and chain[1]["driven_by"] == "B"
+    # The one nothing drives is named as the stimulus's doing.
+    assert chain[2]["driven_by"] is None and "input" in chain[2]["note"]
+
+
+def test_the_clock_is_not_part_of_any_explanation(tmp_path):
+    """Every sequential block reads it, so it enters at depth 1 of every walk
+    and brings one transition per edge -- 28 in a 140ns window on the real
+    design, which is the noise that buries the signals that matter."""
+    from eda_agent.explain import _clocks_and_resets
+    contract = {"io": [{"name": "clk"}, {"name": "nReset"}, {"name": "rst"},
+                       {"name": "scl_oen"}, {"name": "cmd"}]}
+    assert _clocks_and_resets(contract) == {"clk", "nReset", "rst"}
