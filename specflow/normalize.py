@@ -154,8 +154,27 @@ class Activation(BaseModel):
     #: shape as the stimulus schema's own `until`, and it feeds
     #: `temporal.after(trace, applies, until=closes)` directly.
     until: list[dict[str, int | str]] = Field(default_factory=list)
+    #: SVA's `disable iff`: conditions that DISCARD the attempt rather than
+    #: close it. Same shape as `until` and a different claim.
+    #:
+    #: `until` says the span ENDED, so whatever the requirement promised should
+    #: have appeared by then. `aborts_on` says the span was CUT SHORT by
+    #: something that makes the promise moot -- reset, or an arbitration loss
+    #: that returns the FSM to idle -- and nothing is owed. Folded into `until`
+    #: the two are indistinguishable, and a strong obligation over the second
+    #: convicts a design for not doing what it was never asked to do. Measured
+    #: on c1-i2c: 13 requirements close on reset and 40 on `al`, and REQ-0055
+    #: convicts the known-good RTL because an `al` pulse the design is right to
+    #: emit ends its window at edge 7, and the START it checks does not drive
+    #: sda_oen low until edge 28 or ack until edge 38.
+    #:
+    #: NOT DERIVABLE, so it is asked rather than inferred: on 11 of those 40,
+    #: `al` is the requirement's own declared observable -- the response it
+    #: exists to check -- and rewriting those to aborts would delete the check.
+    #: Whether a condition ends a span or voids it is a reading of the sentence.
+    aborts_on: list[dict[str, int | str]] = Field(default_factory=list)
 
-    @field_validator("opens_on", "until", mode="before")
+    @field_validator("opens_on", "until", "aborts_on", mode="before")
     @classmethod
     def _one_alternative_is_still_a_list(cls, v):
         """A bare dict is the single-alternative case. Accepted rather than
@@ -449,14 +468,42 @@ entry and "and" is a second key:
 
   "during an accepted WRITE"          -> inputs {"cmd": 8}, until [{"cmd_ack": 1}]
   "at the start of the STOP sequence" -> inputs {"cmd": 2}, until [{"cmd_ack": 1}]
-  "until the WRITE completes or
-   arbitration is lost"               -> until [{"cmd_ack": 1}, {"al": 1}]
+  "until the WRITE completes"          -> until [{"cmd_ack": 1}]
 
-Getting that wrong is not cosmetic. `[{"al": 1, "cmd_ack": 1}]` is ONE entry
-naming two ports, so it asks for both AT THE SAME ROW -- and arbitration loss
-drives the FSM to idle and clears `cmd_ack`, so it can never happen. The window
-then opens, runs off the end of the trace and decides nothing. Six of one run's
-28 windows were exactly this.
+ENDING AND VOIDING ARE DIFFERENT, AND `aborts_on` IS THE SECOND ONE.
+
+`until` says the span ENDED, so whatever the requirement promised should have
+appeared by then. `aborts_on` says it was CUT SHORT by something that makes the
+promise moot, and nothing is owed:
+
+  "until the WRITE completes"          -> until     [{"cmd_ack": 1}]
+  "...unless arbitration is lost"      -> aborts_on [{"al": 1}]
+  "...or reset intervenes"             -> aborts_on [{"nReset": 0}, {"rst": 1}]
+
+This is SVA's `disable iff`, and putting an abort in `until` is the single
+costliest error this field has made. Measured on one design: 40 requirements
+closed on `al` and 13 on reset, all as `until`. One of them, "each command
+sequence drives the enables", convicted the KNOWN-GOOD RTL. An `al` pulse the
+design is right to emit -- one row, at edge 7 -- ended its window, and the START
+it was checking does not drive sda_oen low until edge 28 or ack until edge 38.
+The check reported the response as never coming.
+
+RESET IS ALWAYS AN ABORT, never a close. A design held in reset owes no
+sequence, and a requirement whose text does not mention reset does not license
+convicting one that was reset mid-command.
+
+BUT AN ABORT IS A READING, NOT A RULE. On 11 of those 40, `al` was the
+requirement's OWN observable -- "the module asserts al when arbitration is
+lost" -- and there `al` is the response being checked, not an abort. Ask what
+the sentence promises: if the condition is what the requirement is ABOUT, it
+belongs in `observable`; if it is what stops the design owing the promise, it
+belongs here.
+
+Getting the list shape wrong is not cosmetic either.
+`[{"al": 1, "cmd_ack": 1}]` is ONE entry naming two ports, so it asks for both
+AT THE SAME ROW -- and arbitration loss drives the FSM to idle and clears
+`cmd_ack`, so it can never happen. The window then opens, runs off the end of
+the trace and decides nothing. Six of one run's 28 windows were exactly this.
 
 `opens_on` takes the same list-of-alternatives shape, for the same reason:
 "an output-enable (scl_oen or sda_oen) is driven low" is
@@ -527,7 +574,8 @@ Reply with ONE JSON object and nothing else:
         "text": "a START command is issued while the core is enabled",
         "inputs": {"cmd": 1, "ena": 1},
         "opens_on": [],
-        "until": [{"cmd_ack": 1}, {"al": 1}]
+        "until": [{"cmd_ack": 1}],
+        "aborts_on": [{"al": 1}, {"nReset": 0}]
       },
       "observable": ["cmd_ack", "busy"],
       "unobservable_reason": "",
@@ -1022,10 +1070,13 @@ def gate_one(
             issues.append(Issue("error", path,
                                 f"{name}={as_int} does not fit {inputs[name]} bit(s)"))
 
-    # `opens_on` and `until` may name ANY declared port, unlike `inputs`. A
-    # window closes on what the design does -- "until cmd_ack" -- and a
-    # requirement can be activated by an output. Same width and integer checks.
-    for field in ("opens_on", "until"):
+    # `opens_on`, `until` and `aborts_on` may name ANY declared port, unlike
+    # `inputs`. A window closes on what the design does -- "until cmd_ack" --
+    # and a requirement can be activated by an output. Same width and integer
+    # checks, and `aborts_on` earns them for the same reason the other two do:
+    # an abort on an undeclared port is a window that can never be discarded,
+    # which is exactly as silent as one that can never close.
+    for field in ("opens_on", "until", "aborts_on"):
         alternatives = getattr(norm.activation, field) or []
         for alt in alternatives:
             for name, value in (alt or {}).items():

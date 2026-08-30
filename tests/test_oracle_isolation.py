@@ -448,3 +448,47 @@ def test_the_override_rides_with_the_normalized_block():
         contract_json="{}", contract={"ports": []},
         issues=[Issue("error", "oracle.REQ-0001", "off-target: x")])
     assert "<window_authority>" not in body
+
+
+def test_the_author_is_told_that_an_abort_is_not_a_close():
+    """`strong=True` and `aborts` are the same lever pulled in opposite
+    directions, and the author has to be handed both together or the first one
+    is a trap. A strong obligation over a CUT-SHORT attempt reads "the response
+    never came" when the response was never owed -- which is precisely how
+    REQ-0055 convicted the known-good i2c RTL: an `al` pulse the design is
+    right to emit ended its window at edge 7, and the START it checks does not
+    drive sda_oen low until edge 28 or ack until edge 38.
+
+    So the prompt must do three things, and this pins all three: name the
+    field, say what a window it discards RETURNS, and say when to pass it. The
+    third matters most -- `aborts_on` is inert unless the author threads it
+    through, and the normalized block carrying a field the author silently
+    drops is the same defect as not having the field.
+    """
+    body = _author_prompt()
+    assert "activation.aborts_on" in body, "the field must be named"
+    assert "disable iff" in body, "the SVA name is what an author reaches for"
+    assert "aborts=voided" in body, "the call shape, not just the concept"
+    assert "returns UNKNOWN from every" in body
+    assert "Pass `aborts_on` whenever it is non-empty" in body, "when to pass it"
+
+
+def test_the_repair_override_says_MOVE_a_reset_close_not_DROP_it():
+    """The bullet this pins used to read "drop a condition you cannot point at
+    words in the requirement for -- an `until` that closes on reset, where the
+    requirement never mentions reset, is normalization's addition", and that
+    advice became wrong the moment `aborts_on` existed.
+
+    Dropping a reset close does not fix the check, it inverts the defect: the
+    window then runs STRAIGHT THROUGH the reset and asserts a response across
+    a span the design was held in reset for. The repair prompt is the one place
+    an author is explicitly licensed to change the window, so it is the one
+    place this has to be right.
+    """
+    from specflow.refmodel.oracle_gen import WINDOW_NOT_AUTHORITATIVE as w
+
+    assert "MOVE a condition that VOIDS the attempt" in w
+    assert "Moving is\n    not dropping" in w, "the contrast has to be explicit"
+    assert "Reset is\n    always one" in w
+    # And the counter-case survives: `al` is sometimes the response itself.
+    assert "unless\n    the requirement is ABOUT that loss" in w

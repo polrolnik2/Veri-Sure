@@ -520,3 +520,91 @@ def test_the_two_untils_state_one_release_rule_between_them():
     assert [r["edge"] for r in w.rows] == [0, 2, 4], "the release AT 0 is skipped"
     assert until(w, lambda r: True, _b)[1] == 0, "the operator reads row 0"
     assert until(w, lambda r: True, _b, after_activation=True)[1] == 4
+
+
+# ------------------------------------------------- `disable iff`: aborts_on
+
+
+def _rows(at=None, n=8):
+    """`at` maps edge -> {port: value} on outputs."""
+    out = []
+    for i in range(n):
+        o = {"al": 0, "rst": 0, "x": 0}
+        o.update((at or {}).get(i, {}))
+        out.append({"edge": i, "inputs": {"cmd": 1}, "outputs": o})
+    return out
+
+
+def _cmd(r):
+    return r["inputs"]["cmd"] == 1
+
+
+def test_an_aborted_window_decides_nothing():
+    """SVA's `disable iff`, and the whole point of the field. A command cut
+    short by reset or arbitration loss owes nothing, so every operator returns
+    UNKNOWN over it -- not a pass, which would hide a real defect, and not a
+    failure, which convicts a design for not doing what it was never asked."""
+    rows = _rows(at={3: {"al": 1}})
+    w = after(rows, _cmd, until=lambda r: False,
+                aborts=lambda r: r["outputs"]["al"] == 1)[0]
+    assert w.aborted and w.closed
+    # EVERY operator that takes a Window. Listed exhaustively rather than
+    # spot-checked: the guard is one line per operator and the failure mode of
+    # forgetting one is a single check that silently keeps convicting.
+    for verdict in (eventually(w, lambda r: r["outputs"]["x"] == 1, strong=True),
+                    throughout(w, lambda r: r["outputs"]["x"] == 1),
+                    never(w, lambda r: r["outputs"]["x"] == 0),
+                    stable(w, "x"),
+                    pulse(w, "x"),
+                    nexttime(w, lambda r: r["outputs"]["x"] == 1),
+                    sequence(w, lambda r: r["outputs"]["x"] == 1, strong=True),
+                    until(w, lambda r: r["outputs"]["x"] == 1,
+                          lambda r: False, strong=True)):
+        assert verdict[0] is None, verdict
+        assert "aborted" in verdict[2], verdict
+
+    import inspect
+
+    from specflow.refmodel import temporal as _t
+    takes_a_window = {
+        n for n, f in vars(_t).items()
+        if not n.startswith("_") and inspect.isfunction(f)
+        and list(inspect.signature(f).parameters)[:1] == ["w"]}
+    assert takes_a_window == {"eventually", "throughout", "stable", "pulse",
+                              "never", "nexttime", "sequence", "until"}, (
+        "a new Window operator needs an `if w.aborted` guard and a line "
+        f"above: {takes_a_window}")
+
+
+def test_the_abort_row_is_reported_not_swallowed():
+    """`ok is None` covers two different facts -- "the scenario never occurred"
+    and "it occurred and was cut short" -- which route to different parties.
+    The edge is what tells them apart in a report."""
+    rows = _rows(at={3: {"rst": 1}})
+    w = after(rows, _cmd, until=lambda r: False,
+                aborts=lambda r: r["outputs"]["rst"] == 1)[0]
+    ok, edge, detail = eventually(w, lambda r: False, strong=True)
+    assert (ok, edge) == (None, 3), (ok, edge)
+    assert "edge 3" in detail
+
+
+def test_an_abort_beats_a_close_on_the_same_row():
+    """They describe one instant from two sides -- "it stopped" and "it
+    finished" -- and reading it as a finish is what makes a cut-short attempt
+    look like a missing response. The abort wins, so the ambiguity resolves
+    toward saying nothing rather than toward convicting."""
+    rows = _rows(at={3: {"al": 1, "x": 0}})
+    same = lambda r: r["outputs"]["al"] == 1          # noqa: E731
+    w = after(rows, _cmd, until=same, aborts=same)[0]
+    assert w.aborted, "a row that both closes and aborts must abort"
+    assert eventually(w, lambda r: r["outputs"]["x"] == 1, strong=True)[0] is None
+
+
+def test_without_aborts_nothing_changes():
+    """The field is inert until used. Every frozen check predates it and must
+    decide exactly as before."""
+    rows = _rows(at={3: {"al": 1}})
+    w = after(rows, _cmd, until=lambda r: r["edge"] == 5)[0]
+    assert not w.aborted
+    ok, _e, _d = eventually(w, lambda r: r["outputs"]["x"] == 1, strong=True)
+    assert ok is False, "a real close with no evidence is still a conviction"

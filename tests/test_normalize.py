@@ -335,9 +335,14 @@ def test_the_activation_can_express_a_WINDOW_and_an_output_trigger():
     # disjunction. Six of 28 activations came back {al: 1, cmd_ack: 1}, which
     # is unsatisfiable: arbitration loss drives the FSM to idle and clears
     # cmd_ack. Those windows opened, ran off the end and decided nothing.
-    either = Activation(text="until the WRITE completes or arbitration is lost",
-                        inputs={"cmd": 8}, until=[{"cmd_ack": 1}, {"al": 1}])
-    assert either.until == [{"cmd_ack": 1}, {"al": 1}]
+    # The example this test was first written with -- "until the WRITE completes
+    # OR ARBITRATION IS LOST" -- is no longer a two-way close, and D9 in
+    # docs/sva-divergence.md is why: an arbitration loss VOIDS the attempt, it
+    # does not end it, so it belongs in `aborts_on`. The list shape is still
+    # any-of; only the example moved.
+    either = Activation(text="until the transfer completes or the bus goes idle",
+                        inputs={"cmd": 8}, until=[{"cmd_ack": 1}, {"busy": 0}])
+    assert either.until == [{"cmd_ack": 1}, {"busy": 0}]
     # A bare dict is the single-alternative case, accepted rather than rejected:
     # refusing the common shape would spend a repair round on punctuation.
     assert Activation(text="x", until={"cmd_ack": 1}).until == [{"cmd_ack": 1}]
@@ -514,7 +519,7 @@ def test_an_edge_on_the_CLOCK_is_rejected():
     the clock's, which reads natural and is empty.
     """
     clocked = {**CONTRACT, "clocking": {"clock": {"name": "clk", "edge": "posedge"}}}
-    for field in ("opens_on", "until"):
+    for field in ("opens_on", "until", "aborts_on"):
         out = _out(observable=["busy"],
                    activation=Activation(text="on the rising edge of clk",
                                          inputs={"ena": 1}, **{field: [{"clk": "rise"}]}))
@@ -558,3 +563,83 @@ def test_an_observable_no_route_explains_is_reported_not_shipped_silently():
     # A requirement with NO observable is a different finding with a different
     # cause, and `unobservable` already reports it.
     assert "REQ-0000" not in got
+
+
+# --------------------------------------------- `disable iff`: aborts_on
+
+
+def test_an_abort_is_not_a_close_and_the_schema_keeps_them_apart():
+    """The costliest confusion this field has made, and D9 in
+    docs/sva-divergence.md holds the measurement: on c1-i2c 13 requirements
+    closed on reset and 40 on `al`, every one of them written as `until`.
+
+    Folded together the two are indistinguishable -- and a strong obligation
+    over a cut-short attempt convicts a design for not doing what it was never
+    asked. REQ-0055 convicted the KNOWN-GOOD RTL that way: an `al` pulse the
+    design is right to emit ended its window at edge 7, and the START it checks
+    does not drive sda_oen low until edge 28 or ack until edge 38.
+    """
+    a = Activation(text="during a WRITE, unless arbitration is lost",
+                   inputs={"cmd": 8}, until=[{"cmd_ack": 1}],
+                   aborts_on=[{"al": 1}, {"nReset": 0}])
+    assert a.until == [{"cmd_ack": 1}]
+    assert a.aborts_on == [{"al": 1}, {"nReset": 0}]
+
+    # Same any-of list shape as `until`, same bare-dict tolerance -- refusing
+    # the common single-alternative form would spend a repair round on
+    # punctuation.
+    assert Activation(text="x", aborts_on={"nReset": 0}).aborts_on == [{"nReset": 0}]
+
+    # DEFAULTS EMPTY, and every frozen check predates the field. An oracle
+    # written before it must decide exactly as it did.
+    assert Activation(text="x").aborts_on == []
+
+    # `windowed` still reads `until` ALONE. An abort is subtractive: it says
+    # what makes the promise moot, never that there is a span to govern. A
+    # requirement with aborts and no close is an instant that can be voided,
+    # and calling it windowed would send it down the span path with no close
+    # condition to run to.
+    assert not Activation(text="x", inputs={"cmd": 8},
+                          aborts_on=[{"nReset": 0}]).windowed
+
+
+def test_aborts_on_ports_are_checked_like_until_ports():
+    """An abort on an undeclared port is a window that can never be
+    discarded -- exactly as silent as one that can never close, and it fails
+    the same way: the check runs, decides, and nobody learns the guard was
+    never armed."""
+    ok = _out(observable=["busy"],
+              activation=Activation(text="during a WRITE", inputs={"cmd": 8},
+                                    until=[{"cmd_ack": 1}],
+                                    aborts_on=[{"nReset": 0}]))
+    assert not [i for i in gate_one(REQ, ok, CONTRACT) if i.severity == "error"]
+
+    bad = _out(observable=["busy"],
+               activation=Activation(text="x", inputs={"cmd": 8},
+                                     aborts_on=[{"al": 1}]))
+    issues = gate_one(REQ, bad, CONTRACT)
+    assert any("not a declared port" in i.message for i in issues), issues
+    assert any("aborts_on" in i.path for i in issues), issues
+
+    # The clock is rejected here too -- pinned in the clock test above, which
+    # now runs its loop over all three fields.
+
+
+def test_the_prompt_tells_the_author_that_reset_is_an_abort():
+    """The prompt used to carry the bug as a worked example -- `until
+    [{"cmd_ack": 1}, {"al": 1}]`, the exact folded form -- so the field was
+    being taught to make the error. What replaced it has to state the
+    distinction, and it has to leave room for the counter-case: on 11 of the 40
+    `al` requirements, `al` IS the declared observable, and rewriting those to
+    aborts would delete the check.
+    """
+    from specflow.normalize import SYSTEM
+
+    assert "aborts_on" in SYSTEM
+    assert "disable iff" in SYSTEM
+    for fragment in ("ENDING AND VOIDING ARE DIFFERENT",
+                     "RESET IS ALWAYS AN ABORT",
+                     "AN ABORT IS A READING, NOT A RULE"):
+        assert fragment in SYSTEM, fragment
+    # And the example that taught the defect is gone.
+    assert '[{"cmd_ack": 1}, {"al": 1}]' not in SYSTEM

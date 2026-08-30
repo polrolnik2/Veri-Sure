@@ -81,6 +81,19 @@ class Window:
     #: history: `$past(sig, 3)` is a cycle count and Phases 3-6 severed those.
     #: `$past(sig)` -- "what it was before this happened" -- is not.
     prev: dict | None = None
+    #: SVA's `disable iff`: the attempt was DISCARDED, not completed. Every
+    #: operator returns UNKNOWN over such a window -- not a pass, not a failure.
+    #:
+    #: `until` and this are different claims and merging them is what convicts a
+    #: correct design. A window that ends because the thing finished is evidence
+    #: the obligation should have been met by then; one that ends because the
+    #: command was aborted is no evidence at all, and `strong=True` over the
+    #: second reads "the response never came" when the response was never owed.
+    #: Measured on c1-i2c: REQ-0055 convicts the known-good RTL on TP-0133
+    #: exactly here -- its window closes on an `al` pulse the design is right to
+    #: emit for a single row at edge 7, while the START it is checking does not
+    #: drive sda_oen low until edge 28 and does not ack until edge 38.
+    aborted: bool = False
 
     @property
     def edge(self) -> int | None:
@@ -188,6 +201,7 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
 
 
 def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
+          aborts: Pred | None = None,
           max_windows: int = 64, overlap: bool = False) -> list[Window]:
     """Every window the requirement applies over.
 
@@ -212,6 +226,14 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
     rising test above runs in both modes, so this is NOT SVA's attempt model --
     SVA opens an attempt at every tick the antecedent holds, and this opens one
     per rise, in both modes. See `docs/sva-divergence.md`, D4.
+
+    `aborts` IS SVA's `disable iff`, AND IT IS TESTED BEFORE `until`. A row that
+    satisfies both ends the window as ABORTED, because the two describe the same
+    instant from different sides -- "the command stopped" and "the command
+    finished" -- and reading it as a finish is what makes an aborted attempt
+    look like a missing response. The window still carries its rows, so the
+    abort is reportable rather than silently absent; what changes is that every
+    operator over it returns UNKNOWN.
     """
     out: list[Window] = []
     i, n = 0, len(trace)
@@ -228,6 +250,10 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
         j = i + 1
         while j < n:
             w.rows.append(trace[j])
+            # Abort first: a row that satisfies both is an abort, not a close.
+            if aborts is not None and aborts(trace[j]):
+                w.closed = w.aborted = True
+                break
             if until is not None:
                 if until(trace[j]):
                     w.closed = True
@@ -239,6 +265,20 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
         out.append(w)
         i = i + 1 if overlap else j + 1
     return out
+
+
+def _discarded(w: Window) -> Verdict:
+    """The verdict over an aborted attempt: UNKNOWN, and it says why.
+
+    SVA's `disable iff` yields neither a pass nor a failure, and the tri-state
+    already has the value for that. Reporting the abort row rather than a bare
+    None is what lets a reader tell "the command was stopped here" from "the
+    scenario never occurred", which are the two things `ok is None` covers and
+    which route to different parties -- the first to nobody, the second to the
+    stimulus.
+    """
+    edge = w.rows[-1].get("edge") if w.rows else w.edge
+    return (None, edge, f"the attempt was aborted at edge {edge}")
 
 
 def eventually(w: Window, holds: Pred, *, strong: bool = False,
@@ -277,6 +317,8 @@ def eventually(w: Window, holds: Pred, *, strong: bool = False,
     answering that question trades vacuity for over-strictness one check at a
     time.
     """
+    if w.aborted:
+        return _discarded(w)
     rows = w.body if after_activation else w.rows
     for row in rows:
         if holds(row):
@@ -313,6 +355,8 @@ def throughout(w: Window, holds: Pred, *, after_activation: bool = False,
     `throughout` or `never` with `after_activation=`, so this was reachable by
     a third of the check set.
     """
+    if w.aborted:
+        return _discarded(w)
     rows = w.body if after_activation else w.rows
     if not rows:
         return None, w.edge, (
@@ -343,6 +387,8 @@ def stable(w: Window, port: str, *, after_activation: bool = False) -> Verdict:
     which also makes the baseline value the one AFTER the activation settled,
     not the one it was caught mid-transition at.
     """
+    if w.aborted:
+        return _discarded(w)
     rows = w.body if after_activation else w.rows
     if not rows:
         return None, w.edge, f"{port} had no rows to hold over"
@@ -369,6 +415,8 @@ def pulse(w: Window, port: str, *, active: int = 1, width: int = 1,
     check, and getting any of the three wrong produces a check that passes
     everything.
     """
+    if w.aborted:
+        return _discarded(w)
     # WIDTH IS IN EDGES, AND ROWS ARE NOT EDGES. The trace an oracle sees is
     # state-compressed: consecutive edges with identical inputs AND outputs are
     # one entry carrying `held`. A one-edge pulse is therefore ONE row with
@@ -459,6 +507,8 @@ def never(w: Window, holds: Pred, *, after_activation: bool = False,
     the defect and the reasoning. "It never happened" over zero rows is not
     evidence that it never happens.
     """
+    if w.aborted:
+        return _discarded(w)
     rows = w.body if after_activation else w.rows
     if not rows:
         return None, w.edge, (
@@ -501,6 +551,8 @@ def nexttime(w: Window, holds: Pred, *, after_activation: bool = True,
     a specification -- not "one clock later", which the specification does not
     state and Phases 3-6 stopped this pipeline from asserting.
     """
+    if w.aborted:
+        return _discarded(w)
     body = w.body
     if not body:
         return None, w.edge, (
@@ -543,6 +595,8 @@ def sequence(w: Window, *steps: Pred, strong: bool = False,
     cannot be satisfied by the activation row itself -- the same vacuity
     `eventually` guards against, one operator along.
     """
+    if w.aborted:
+        return _discarded(w)
     if not steps:
         return None, w.edge, "no steps given, so there is nothing to decide"
     rows = w.body if after_activation else w.rows
@@ -592,6 +646,8 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     where `release` fires, because `release` is tested first. There is no
     `until_with` here -- see `docs/sva-divergence.md`, D8.
     """
+    if w.aborted:
+        return _discarded(w)
     for row in (w.body if after_activation else w.rows):
         if release(row):
             return True, row.get("edge"), (

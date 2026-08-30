@@ -316,8 +316,19 @@ matching something far broader than the requirement.
 
 THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
 `activation.inputs` and `activation.opens_on` are what OPENS it;
-`activation.until` is what CLOSES it. You are not inventing a window, you are
-copying one. Every construct below is built the same way:
+`activation.until` is what CLOSES it; `activation.aborts_on` is what DISCARDS
+it. You are not inventing a window, you are copying one.
+
+    windows = after(trace, applies, until=closes, aborts=voided)
+
+`aborts` IS SVA's `disable iff`. A window it ends returns UNKNOWN from every
+operator -- not a pass, not a failure -- because the attempt was cut short by
+something that makes the requirement's promise moot: reset, or an arbitration
+loss that returns the FSM to idle. `strong=True` over such a window would read
+"the response never came" when the response was never owed, and that is how a
+check convicts a correct design. Pass `aborts_on` whenever it is non-empty and
+`after` handles the rest -- no operator needs a guard of its own. Every
+construct below is built the same way:
 
     from specflow.refmodel.temporal import (after, eventually, throughout,
                                             stable, pulse, worst)
@@ -330,9 +341,9 @@ copying one. Every construct below is built the same way:
                 for k, v in cond.items())
         return p
 
-    # `opens_on` and `until` are LISTS OF ALTERNATIVES: any entry is enough,
-    # and every port within one entry holds together. So this is the one you
-    # want for both of them.
+    # `opens_on`, `until` and `aborts_on` are LISTS OF ALTERNATIVES: any entry
+    # is enough, and every port within one entry holds together. So this is the
+    # one you want for all three.
     def _any(alts):
         preds = [_holds(a) for a in alts]
         return lambda row: any(p(row) for p in preds)
@@ -610,8 +621,8 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
 #: It is NOT a claim that the window is correct, and nothing in the pipeline
 #: makes it one. `normalize.gate_one` checks that the response parsed, that
 #: there is one block, that `clk` is not in the window and that the port names
-#: are declared. It never asks whether `opens_on` and `until` are licensed by
-#: the requirement's own words -- which is precisely the question
+#: are declared. It never asks whether `opens_on`, `until` and `aborts_on` are
+#: licensed by the requirement's own words -- which is precisely the question
 #: `correspondence` asks about the CHECK. And normalization is never re-invoked:
 #: `oracles_stage` imports it for two helper types and the repair loop's only
 #: outlet is another call to this author.
@@ -650,9 +661,15 @@ sentence you have, and nothing has checked that reading against it. So an
 objection to WHEN your window opens or closes is an objection to those fields,
 and transcribing them again will fail the same way.
 
-  - Drop a condition you cannot point at words in the requirement for. An
-    `until` that closes on reset, where the requirement never mentions reset,
-    is normalization's addition and not the requirement's.
+  - Drop a condition you cannot point at words in the requirement for, and
+    cannot read as an abort either.
+  - MOVE a condition that VOIDS the attempt rather than ending it. Reset is
+    always one; so is an arbitration loss that returns the FSM to idle, unless
+    the requirement is ABOUT that loss. Those belong in `aborts=`, and passing
+    them to `until=` instead is the error that convicts a correct design: the
+    window ends as though the sequence completed, and a strong obligation then
+    reports a response that was never owed as one that never came. Moving is
+    not dropping -- drop it and the window runs straight through the reset.
   - Add one the words do license, if the objection is that the window runs past
     what the sentence governs.
   - If the opening, the closing and the asserted effect are all the same

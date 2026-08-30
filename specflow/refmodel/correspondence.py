@@ -193,6 +193,17 @@ Note what the rule does NOT ask. It never asks whether the check demands
 ENOUGH. A check that convicts only where the requirement speaks, but does so
 weakly, is a YES.
 
+AND A DISCARDED ATTEMPT IS NOT A MISSING CONVICTION. `activation.aborts_on`
+carries conditions that VOID a window rather than close it -- reset, or an
+arbitration loss that returns the FSM to idle -- and a check passing them to
+`after(aborts=...)` returns UNKNOWN there rather than a verdict. That is SVA's
+`disable iff` and it is correct: the requirement promised nothing about a
+command that was cut short. Do not read it as a False path the check failed to
+take. What you SHOULD object to is the opposite -- an abort condition sitting in
+`until`, where it ends the window as though the sequence had completed and a
+strong obligation then convicts a design that was reset or lost arbitration
+mid-command.
+
 ================================================================
 3b. THE PRIOR QUESTION: IS THERE AN OBLIGATION AT ALL?
 ================================================================

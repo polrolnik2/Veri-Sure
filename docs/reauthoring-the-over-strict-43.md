@@ -437,6 +437,80 @@ states.
 43 -> 6" should be read as 43 -> 6 of which zero survive scrutiny, bought by 22 of
 43 requirements ceasing to decide anything.
 
+### REQ-0055 measured: `aborts_on` removes the conviction, and it costs coverage
+
+The frozen check's window is `until [{"cmd_ack": 1}, {"al": 1}]` with
+`strong=True` -- the folded form, where an abort and a close are one field. On
+TP-0133 that is the whole defect, and the trace says so without inference
+(`docs/evidence/abort55.py`, re-runnable against the golden suite):
+
+| | window | verdict |
+|---|---|---|
+| frozen: `until=al\|ack` | opens at edge 0, closes at edge **7** | **False** -- "the expected response never occurred" |
+| split: `until=ack, aborts=al` | opens at edge 0, aborted at edge **7** | **None** -- "the attempt was aborted at edge 7" |
+
+`al` is high on **2 of 173 rows**, at edges 7 and 1009 -- a one-row pulse, not a
+sticky state. The START it is checking drives `sda_oen` low at edge **28**,
+`scl_oen` low at edge **38**, and acks at edge **38**. So the check closed its
+window 21 edges before the first thing it was looking for, and `strong=True`
+read that as a design failure. Golden RTL is right to pulse `al` there; the
+check was wrong to call the pulse an ending.
+
+**It does not become a pass, and that is correct.** The verdict moves False ->
+UNKNOWN, not False -> True. The window was genuinely cut short, so there is no
+evidence either way, and the tri-state has a value for exactly that.
+
+**The cost is real and is the point of reporting both metrics.** Across all 331
+traces, with `al` moved:
+
+| | pass | UNKNOWN | fail |
+|---|---|---|---|
+| `until=al\|ack` | 173 | 120 | 38 |
+| `until=ack, aborts=al` | 135 | 191 | **5** |
+
+33 of 38 convictions go away -- and 38 passes go with them. That is #99's thesis
+in one table: over-strictness and vacuity are one expressiveness defect with two
+signs, and a fix that only ever moves the count one way is a fix that is lying
+about one of them. It is also why `assertion_coverage` has to be reported
+alongside `pass_rate` and neither may be quoted alone.
+
+### And the other five: measured, not assumed
+
+I first wrote here that none of the other five folds an abort into `until`.
+**That was wrong** -- three of them do. `docs/evidence/abort6.py` applies the
+same split to all six by rewriting the `closes = _any([...])` literal and
+re-deciding against the golden traces:
+
+| req | did the rewrite reach it? | frozen | split |
+|---|---|---|---|
+| REQ-0055 | yes -- `al` moved | **False** | **None** |
+| REQ-0057 | yes -- `al` moved | False | **False**, unchanged |
+| REQ-0087 | yes -- `{nReset:0}`, `{rst:1}` moved | False | **False**, unchanged |
+| REQ-0007 | no -- `al` is in a hand-built `_closes`, not a literal | False | unmeasured |
+| REQ-0020 | no -- no close list at all | False | unmeasured |
+| REQ-0028 | no -- `al` IS its declared observable, so it must not move | False | unmeasured |
+
+**One of the three reachable checks moves.** REQ-0057 and REQ-0087 fold an abort
+into `until` exactly as REQ-0055 does, and splitting it changes nothing: their
+convictions have some other cause, and the folded window was a real defect that
+simply was not the binding one. Three are reported as **unmeasured** rather than
+unaffected -- the rewrite could not reach them, and an unmeasured case written up
+as a negative result is how a claim like the one I just withdrew gets made.
+
+The script fails loudly on this: an earlier version patched REQ-0087's close list
+but silently matched no `after` call site (`[^)]*` cannot cross the `)` in
+`lambda r: base(r) and opens(r)`), and still printed a verdict for the
+"rewritten" check. It now prints `n/a` unless a call site was actually patched.
+
+**So `aborts_on` closes one of the six, and REQ-0055 keeps its other defect.**
+Its text -- "asserts the **internal** sda_chk" -- puts it in the
+internal-mechanism class too, which is NOT_ASSERTABLE's problem, not
+`disable iff`'s. Whether `al` is an abort is a READING of the sentence, and on
+11 of the 40 `al`-closing requirements it is the declared observable -- the
+response the check exists to test. Those must not be rewritten, which is why
+`aborts_on` is a normalisation field the author fills in and not a rule the
+runtime applies.
+
 ## How many of these requirements should have been asserted at all?
 
 Given that no gate asks, the size of the question is worth measuring. **The bar:

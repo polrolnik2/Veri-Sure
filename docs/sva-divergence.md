@@ -176,10 +176,42 @@ one-line variant to add when a requirement needs it.
 D2's rationale does not cover it. It is simply not built. Recorded here rather
 than left to look like a principled absence.
 
-### D9 · No `disable iff`
+### D9 · `disable iff` exists, as `aborts_on`, and an aborted attempt is UNKNOWN
 
-Reset exclusion goes in the activation predicate, by hand. This is the construct
-an SVA-fluent author reaches for and does not find.
+**This was an absence, and it cost checks.** Reset exclusion went in the
+activation predicate by hand, or — far more often — it did not go anywhere, and
+the abort was written as a close. `until` and an abort are indistinguishable
+once folded together, so a strong obligation over a cut-short attempt convicts a
+design for not doing what it was never asked. Measured on c1-i2c: **13
+requirements closed on reset and 40 on `al`, all as `until`**, and REQ-0055
+convicts the known-good RTL because an `al` pulse the design is *right* to emit
+ended its window at edge 7 -- and the START it checks drives `sda_oen` low at
+edge 28 and acks at edge 38.
+
+**Now:** `Activation.aborts_on` carries it, `after(..., aborts=)` applies it, and
+`Window.aborted` records it. Three semantics, each a deliberate choice:
+
+* **An abort returns `None`, not `True`.** SVA's `disable iff` makes the attempt
+  *never have happened*; here it is a fact worth reporting, so the verdict is
+  UNKNOWN with the abort edge named. Same reasoning as D1 and D5 — "could not
+  answer" stays separate from a verdict — and it keeps an aborted attempt out of
+  the coverage numerator, where a silent pass would inflate it.
+* **An abort BEATS a close on the same row.** A row satisfying both `until` and
+  `aborts_on` is one instant read from two sides. The ambiguity resolves toward
+  saying nothing rather than toward convicting.
+* **It is a row predicate, not a continuously-evaluated expression.** SVA
+  evaluates the `disable iff` condition at every tick of the attempt including
+  the clocking block's own; `aborts` is tested per recorded row inside `after`'s
+  scan, which is the same granularity every other operator here works at (D3).
+
+**What is NOT derivable, and so is asked rather than inferred:** on 11 of those
+40, `al` is the requirement's own declared observable — the response the check
+exists to test. Rewriting those to aborts would delete the check. Whether a
+condition ends a span or voids it is a reading of the sentence, which is why it
+is a normalisation field and not a rule in this module.
+
+Pins: `tests/test_temporal.py` under "`disable iff`: aborts_on";
+`tests/test_normalize.py` for the schema and the gate.
 
 ### D10 · Sampling is post-edge on both sides; SVA samples preponed
 
