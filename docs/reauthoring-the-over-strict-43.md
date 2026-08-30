@@ -107,15 +107,150 @@ So the reachable ceiling for a stronger author on this set is **24 + 9 = 33 of
 * **The `cmd` encoding was invented (2).** REQ-0066 and REQ-0121 -- see the
   section on the defect re-authoring cannot fix.
 
-Indirect routing predicts rejection without determining it: **7 of 11 routed
-requirements were rejected (64%) against 12 of 32 direct (38%)**. REQ-0042,
-REQ-0044, REQ-0082 and REQ-0089 are routed and trusted, so the route is a
-handicap rather than a wall.
+### What actually decided a rejection, and a statistic withdrawn
+
+The correspondence prompt offers five rejection grounds -- convicts on missing
+evidence, triggers on the wrong situation, asserts the trigger instead of the
+effect, convicts on unmentioned ports, convicts outside the claim's scope. Every
+one asks whether the CHECK fits the REQUIREMENT. **None asks whether the
+requirement states an obligation at all**, and the prompt separately FORBIDS the
+ground that would catch an internal subject -- *"'It would need to observe
+&lt;internal signal&gt;' is NEVER a valid rejection"* -- for the documented reason
+that normalization once called 27 of 77 requirements unobservable by reading
+their mechanism.
+
+So a hollow requirement has exactly one way to be caught, and the prompt marks it
+as unique: *"has the check silently become THAT requirement's check? ... That is
+a NO, and it is a rejection only you can make."* It is answerable only from the
+`route_requirements` block, which `correspondence._through()` builds from
+`normalized.observed_via[].through_req`. No `through_req`, no block, no ground.
+
+The four definitional requirements in the 43 split on exactly that:
+
+| req | routes in normalization | route block | verdicts r1-r3 | final |
+|---|---|---|---|---|
+| REQ-0028 | none at all | absent | O O O | TRUSTED |
+| REQ-0020 | 5 routes, every `through_req` empty | absent | O R O | TRUSTED |
+| REQ-0025 | -> REQ-0104 / REQ-0016 / REQ-0056 | present | R O R | ORACLE_INVALID |
+| REQ-0086 | -> REQ-0087 | present | R R R | ORACLE_INVALID |
+
+REQ-0086's recorded ground is that instruction firing verbatim: "the sentence
+that actually forbids the pulse belongs to REQ-0087." The block decides whether a
+ground EXISTS; the flip rate below decides whether it fires in the round that
+counts.
+
+**A statistic is withdrawn here.** This write-up previously read "7 of 11 routed
+requirements were rejected (64%) against 12 of 32 direct (38%)". That was
+confounded by a defect in the driver, not a property of the pipeline:
+`correspondence.review` builds its sibling map from the `requirements` dict it is
+handed, and `docs/evidence/drive.py` filters that list to the 43 -- so a
+`through_req` pointing outside the 43 resolved to nothing and `_through` omitted
+the block silently. Seven of the eleven routed requirements lost it that way
+(REQ-0008, 0042, 0043, 0044, 0046, 0082, 0089, all pointing at REQ-0051 / 0053 /
+0047 / 0096, none of which is in the 43). This is the same class of error as the
+filtered testplan above: an input the stage indexes by uid, filtered.
+
+| | TRUSTED | ORACLE_INVALID | reject rate |
+|---|---|---|---|
+| route block reached the reviewer | 0 | 4 | **100%** |
+| no route block | 24 | 15 | 38% |
+| ... of which the driver suppressed | 4 | 3 | 43% |
+
+The seven suppressed reject at 43%, indistinguishable from the 38% base rate,
+which is consistent with the block being the active ingredient rather than the
+routing itself.
+
+**The fix is not a better author.** A definitional requirement cannot be repaired
+into a check, and the gate is not permitted to ask about it. REQ-0020 and
+REQ-0028 are TRUSTED and convicting golden because nothing in the reviewer's
+remit could reject them; REQ-0025 and REQ-0086 were rejected only because
+normalization happened to leave a sibling pointer. Both outcomes are wrong and
+both come from the same hole: nothing between S1 and the frozen set asks whether
+a requirement states a falsifiable obligation.
 
 This classification reads each rejection's **stated ground** and checks it for
 internal consistency against the requirement text and the port list. It does not
 re-derive whether each alleged false path actually occurs in the golden trace;
 that is a separate pass.
+
+## The loop judges three times and repairs twice
+
+`oracles_stage.py:1146` breaks before the re-ask on the final round:
+
+```python
+for rounds in range(1, verifications + 1):     # verifications = 3
+    ...review -> verify -> reject...
+    if rounds == verifications:
+        break                                   # the last round JUDGES, never REPAIRS
+    ...re-ask the author...
+```
+
+The IO record confirms it: 37 re-asks at round 1, 24 at round 2, and
+**zero at round 3**. So the objection recorded against every one of the 19
+rejections -- including the nine with a one-line repair -- is the one the author
+was never given a chance to answer.
+
+That would be defensible on its own; somebody has to judge last. This is not:
+**the reviewer agrees with itself 67% of the time on a byte-identical prompt.**
+Of 42 adjacent round-pairs whose prompt was unchanged, 14 changed verdict.
+
+```
+verdict pattern across the 3 rounds (O = passes correspondence, R = rejected)
+  OOO  9    ORR  6    RRO  6    ROO  5
+  RRR  5    OOR  5    ORO  4    ROR  3
+```
+
+* **8 of the 19 rejections passed correspondence at round 2 and died at round 3**
+  -- REQ-0008, 0025, 0046, 0063, 0066, 0093, 0095, 0097. Seven of the eight on a
+  byte-identical prompt. REQ-0093 flipped twice on the same prompt: R -> O -> R.
+* It cuts both ways. REQ-0020 and REQ-0089 were rejected on an identical prompt
+  at round 2 and rescued at round 3; they are TRUSTED because the coin landed the
+  other way on the last throw. Ten TRUSTED checks were rejected in some round.
+* Only the five `RRR` are unambiguous rejections.
+
+The genuinely stuck ones look different: the objection RECURS. REQ-0021 (3
+rounds, same ground), REQ-0080 (5 objections), REQ-0086 (4) -- all three in the
+not-justified bucket. For all nine justified rejections the objection MOVED each
+round, a different and narrower ground; REQ-0006 burned all three rounds on three
+distinct grounds and was still descending when the loop stopped.
+
+Three fixes, in value order: make `verifications=3` mean three repair rounds
+(move the `break` past `_fix`); take the reviewer's verdict as a MAJORITY over
+the rounds it ran rather than the last one -- at 67% self-agreement the majority
+is the better estimator, and it would readmit the five `OOR` and drop the six
+`RRO`; and treat a lone REJ on a check that previously passed with no intervening
+edit as a re-roll rather than a finding.
+
+## The six that still convict golden are the same defect class
+
+| req | subject of the requirement | |
+|---|---|---|
+| REQ-0007 | "holding the **timing counter**" | internal |
+| REQ-0020 | "The ena input **is the** core enable signal that gates normal timing and input filtering" | definition; both mechanisms internal |
+| REQ-0028 | "al **indicates that** the controller has detected an arbitration loss" | definition |
+| REQ-0055 | "asserts the **internal sda_chk** arbitration-check signal" | the text says "internal" itself |
+| REQ-0087 | "**slave_wait** ... pauses the **timing counter** ... prevents the FSM from advancing" | internal |
+| REQ-0057 | "The START sequence releases the SDA open-drain output enable" | the only clean one |
+
+Five of the six are the internal-mechanism / definition class -- identical in kind
+to the ten rejected above. Same defect, opposite outcome: rejected means coverage
+falls, survived means golden gets convicted, and which one happens is decided by
+the routing pointer and the flip, not by the requirement.
+
+Two independent instrument signals say the check is at fault rather than the
+design. **The witness fails REQ-0020 and REQ-0057 too** (`instrument_notes`:
+REQ-0020 "fails it at edge 25 -- scl_oen changed from 1 to 0 at edge 25") -- a
+check that convicts golden RTL AND the known-executable Python witness is
+convicting everything. And REQ-0057 carries an `idle_match` note: "judged at edge
+2, before any of al, cmd_ack, sda_oen had moved off its reset value -- and
+cmd_ack, sda_oen moves later in this same trace, so the scenario had not happened
+yet." REQ-0028's complaint -- "al dropped before reset cleared it; the
+arbitration-lost indication is not sticky" -- is an obligation its text never
+states.
+
+**So none of the six is a clean statement about the design.** "Over-strictness
+43 -> 6" should be read as 43 -> 6 of which zero survive scrutiny, bought by 22 of
+43 requirements ceasing to decide anything.
 
 ## The whole set, both arms
 
@@ -239,6 +374,8 @@ docs/evidence/separation.py                                  # both arms (uncorr
 docs/evidence/restage.py     # re-render the 8 staged testpoints against golden
 docs/evidence/rescore.py     # the 43, with the staged testpoints' REAL traces
 docs/evidence/resep.py       # the whole-set fold, staged traces applied PER ORACLE
+docs/evidence/gate_audit.py  # re-asks per round, reviewer self-agreement,
+                             # and whether the route block reached the reviewer
 ```
 
 `score.py` and `separation.py` are kept as the record of the first pass;
