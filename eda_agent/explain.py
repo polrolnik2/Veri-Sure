@@ -61,6 +61,11 @@ class RequirementView:
             "requirement": self.text,
             "when": act.get("text") or "",
             "activation_inputs": act.get("inputs") or {},
+            # WITHOUT THIS the agent cannot see that an activation waits on an
+            # OUTPUT, which is what makes an uncovered requirement a design
+            # accusation rather than a stimulus gap. Eight of run 8's 25
+            # uncovered requirements gate on one.
+            "activation_opens_on": act.get("opens_on") or [],
             "window_closes_on": act.get("until") or [],
             "then": self.expectation,
             "observable_at": self.ports,
@@ -440,60 +445,168 @@ def _block_internals(vcd_path: Path | None, blocks: list[RtlBlock],
     return out
 
 
-def _why_uncovered(view: RequirementView, trace: dict) -> dict:
-    """Why the check never fired, and what would make it.
+def _why_uncovered(view: RequirementView, trace: dict, contract: dict) -> dict:
+    """Why the check never fired, WHICH TOOL DISCHARGES IT, and what to say.
 
-    AN ABSTENTION HAS NO WINDOW, and `explain` was inventing one anyway. With no
-    `edge` it fell back to `max(0, edge - span_pad)` -> 0 and reported a span
-    from edge 0 to edge 0, under a note reading "the interval this requirement
-    governs" -- which for a check that never fired is not merely unhelpful but
-    false. MEASURED on run 5's 27 uncovered requirements: TWENTY have no edge at
-    all, and every one of them got a fabricated span at the start of the trace.
+    AN ABSTENTION HAS NO WINDOW, and `explain` was inventing one anyway -- with
+    no `edge` the span fell back to 0..0 under a note reading "the interval this
+    requirement governs". Twenty of run 5's 27 uncovered requirements have no
+    edge at all.
 
-    The actionable question for an abstention is not "where did it go wrong" but
-    "why did the situation never arise, and what would produce it" -- which is
-    exactly what `add_stimulus` needs to be told. So: the activation the
-    requirement declares, and, per port it pins, the values the trace ACTUALLY
-    carried. "wants cmd=4, saw only 0 and 1" is a scenario request already
-    three-quarters written.
+    AN UNCOVERED REQUIREMENT IS NOT AUTOMATICALLY A STIMULUS GAP. This said "no
+    edit to the design can discharge an uncovered requirement", which is wrong
+    whenever the activation is conditioned on an OUTPUT: if the check opens on
+    `cmd_ack` changing and the design never changes `cmd_ack`, the check is
+    silent BECAUSE THE DESIGN IS BROKEN, and no stimulus can move an output.
+    Routing that to `add_stimulus` files a design bug as an evidence gap -- the
+    #98 failure mode, which plan §6.4 already names one layer up ("dropping
+    those would have locked the bug in"). Eight of run 8's 25 uncovered
+    requirements condition on an output; they were invisible because this read
+    `activation.inputs`, and output triggers live in `opens_on`.
+
+    THE TWO FIELDS HAVE DIFFERENT LOGIC AND MUST NOT BE POOLED.
+    `inputs` is a CONJUNCTION that has to hold AT ONE EDGE -- checking each port
+    separately says "cmd=4 appears, ena=1 appears" about a trace where they
+    never once held together, which is precisely the scenario add_stimulus
+    exists to request. `opens_on` is a DISJUNCTION of events: any one of them
+    opens the window, so it is a blocker only when NONE of them ever happens.
+    Pooling them into one flat dict of demands, as the first version did, gets
+    both wrong and reported "unclear" for 17 of the 25.
     """
     act = view.activation or {}
-    wanted = dict(act.get("inputs") or {})
-    rows = trace.get("edges") or []
-    seen: dict[str, list] = {}
-    for port in wanted:
-        vals = []
+    direction = {str(p.get("name")): (p.get("direction") or p.get("dir") or "")
+                 for p in (contract.get("io") or [])}
+
+    # RESHAPE THE ROWS THE WAY THE ORACLES SEE THEM. A raw trace row carries the
+    # design's outputs under `dut`; `temporal._val` reads `outputs`, and
+    # `decide_rtl` bridges the two with `rows_from(trace, side="dut")`. Reading
+    # the raw rows here made `_val` return None for EVERY output, so
+    # `edges(...)` came back empty for all of them and every output-triggered
+    # activation looked permanently dead -- a false "the design never produced
+    # it" on requirements whose outputs move perfectly well. Same reshape, same
+    # answer as the verdict being explained.
+    from specflow.refmodel.rtl_trace import rows_from
+    from specflow.refmodel.temporal import _val as _clause_val
+
+    try:
+        rows = rows_from(trace, side="dut")
+    except Exception:  # noqa: BLE001
+        rows = trace.get("edges") or []
+
+    def _values(port: str) -> list:
+        vals: list = []
         for r in rows:
-            v = (r.get("inputs") or {}).get(port,
-                 (r.get("dut") or {}).get(port))
+            v = _clause_val(r, port)
             if v is not None and v not in vals:
                 vals.append(v)
             if len(vals) > 12:
                 break
-        seen[port] = vals
-    missing = {p: w for p, w in wanted.items()
-               if isinstance(w, int) and w not in (seen.get(p) or [])}
+        return vals
+
+    pins = {k: v for k, v in (act.get("inputs") or {}).items()}
+    opens = [c for c in (act.get("opens_on") or []) if isinstance(c, dict)]
+    watched = set(pins) | {p for c in opens for p in c}
+    seen = {p: _values(p) for p in watched}
+
+    # --- the conjunction, evaluated AT EACH EDGE rather than port by port
+    never_together = bool(pins) and not any(
+        all(_clause_val(r, p) == v for p, v in pins.items()) for r in rows)
+    absent = {p: v for p, v in pins.items() if v not in (seen.get(p) or [])}
+
+    # --- the disjunction: satisfied if ANY clause EVER HOLDS IN FULL.
+    #
+    # A CLAUSE IS ITSELF A CONJUNCTION, at one edge. `opens_on [{"scl_i":
+    # "fall", "scl_oen": 1}]` means SCL fell WHILE scl_oen was 1, and the first
+    # version returned True if EITHER held anywhere, which makes a dead window
+    # look alive. And the edge words are a real vocabulary -- `rise`, `fall`,
+    # `change` (`normalize._EDGE_WORDS`), 29 of the 90 requirements' opens_on
+    # clauses use one -- so "is `want` among the values seen" is not the test:
+    # `"rise"` is never a VALUE, it is a TRANSITION, and treating it as a value
+    # made every rise-triggered activation look permanently unsatisfied.
+    #
+    # `temporal.edges` is the evaluator the ORACLES themselves run on. Using it
+    # here rather than a second reading is the whole point: a divergence
+    # between them would make this function confidently wrong about the very
+    # thing the check is deciding.
+    from specflow.refmodel.temporal import EDGES, _val, edges as _edge_set
+
+    def _edges_where(port: str, want) -> set[int]:
+        if isinstance(want, str) and want in EDGES:
+            return _edge_set(rows, port, want)
+        return {int(r.get("edge", -1)) for r in rows if _val(r, port) == want} - {-1}
+
+    def _clause_happened(c: dict) -> bool:
+        met: set[int] | None = None
+        for port, want in c.items():
+            e = _edges_where(port, want)
+            met = e if met is None else (met & e)
+            if not met:
+                return False
+        return bool(met)
+
+    opens_dead = bool(opens) and not any(_clause_happened(c) for c in opens)
+    dead_ports = {p: w for c in opens for p, w in c.items()} if opens_dead else {}
+    dead_outputs = {p: w for p, w in dead_ports.items()
+                    if direction.get(p) == "output"}
+
+    def _phrase(d: dict) -> str:
+        return ", ".join(f"{p} never changed" if w == "change" else f"{p}={w}"
+                         for p, w in sorted(d.items(), key=lambda kv: kv[0]))
+
     out = {
-        "why": "this check never fired, so it says NOTHING about the design",
-        "activation_needs": wanted,
+        "why": "this check never fired, so it says NOTHING about the design yet",
         "activation_text": act.get("text") or "",
+        "activation_needs_all_of": pins,
+        "activation_opens_on_any_of": opens,
         "values_the_trace_carried": seen,
         "closes_on": act.get("until") or [],
     }
-    if missing:
-        out["never_reached"] = missing
+
+    if dead_outputs:
+        # THE DESIGN IS THE SUSPECT. Every way this window could open runs
+        # through an output the design never produced.
+        out["never_reached"] = dead_ports
+        out["discharged_by"] = "EDIT"
         out["what_to_ask_for"] = (
-            "the stimulus never drove "
-            + ", ".join(f"{p}={v}" for p, v in sorted(missing.items()))
-            + " on this testpoint. add_stimulus(req_uid, ...) with a scenario "
-              "that does is the route; no edit to the design can discharge an "
-              "uncovered requirement.")
+            "every way this activation could open runs through "
+            + _phrase(dead_outputs) + ", and "
+            + ("those are OUTPUTS" if len(dead_outputs) > 1 else "that is an OUTPUT")
+            + " -- the DESIGN never produced " + ("them" if len(dead_outputs) > 1
+                                                  else "it") + ", so no stimulus "
+            "can make this check fire and add_stimulus cannot help. This is a "
+            "design accusation wearing an abstention's clothes. focus(req_uid) "
+            "slices from this requirement's ports; work out why nothing drives "
+            "it and EDIT.")
+    elif opens_dead:
+        out["never_reached"] = dead_ports
+        out["discharged_by"] = "add_stimulus"
+        out["what_to_ask_for"] = (
+            "the window opens on any of " + _phrase(dead_ports) + " and none "
+            "of them ever happened. They are INPUTS, so the design is not "
+            "implicated: add_stimulus(req_uid, ...) with a scenario that "
+            "produces one of them.")
+    elif never_together:
+        out["discharged_by"] = "add_stimulus"
+        detail = ("none of them ever appeared" if len(absent) == len(pins)
+                  else (f"{_phrase(absent)} never appeared at all" if absent
+                        else "each value appears somewhere, but never all at "
+                             "the same edge"))
+        out["what_to_ask_for"] = (
+            "the activation needs " + _phrase(pins) + " to hold TOGETHER at one "
+            "edge, and this trace never had that -- " + detail + ". Every port "
+            "it waits on is an INPUT, so the design is not implicated: "
+            "add_stimulus(req_uid, ...) asking for exactly that combination.")
+        if absent:
+            out["never_reached"] = absent
     else:
+        out["discharged_by"] = "unclear -- read activation_text"
         out["what_to_ask_for"] = (
-            "every pinned input value does appear somewhere in this trace, so "
-            "the activation is failing on TIMING or on a condition the trace "
-            "cannot show -- an ordering, an edge, or an output the design never "
-            "produced. Read `activation_text` and describe the sequence.")
+            "the conjunction does hold somewhere and the window's opening "
+            "event does occur, so this is failing on something the port values "
+            "cannot show -- an ORDERING, a phase, or a condition that has to "
+            "persist. Read `activation_text`: if it describes a sequence, "
+            "add_stimulus with that sequence spelled out; if it describes a "
+            "state the design should have entered, the design is the suspect.")
     return out
 
 
@@ -521,7 +634,7 @@ def explain_failure(*, view: RequirementView, result, trace: dict,
                 "verdict": None,
                 "check_said": getattr(result, "detail", "") or "",
                 "testpoint": getattr(result, "tp_uid", "") or "",
-                "uncovered": _why_uncovered(view, trace)}
+                "uncovered": _why_uncovered(view, trace, contract)}
     opened = getattr(result, "window_start", None)
     if opened is None:
         opened = max(0, (edge - span_pad)) if isinstance(edge, int) else 0

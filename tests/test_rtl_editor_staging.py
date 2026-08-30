@@ -10,9 +10,11 @@ introduces.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 import pytest
 
+from eda_agent.explain import RequirementView
 from eda_agent.rtl_editor import _EditSession
 from eda_agent.sim_reviewer import overdriven_signals
 from eda_agent.trace_slicer import RtlBlock, parse_rtl_blocks
@@ -43,6 +45,17 @@ end
 
 endmodule
 """
+
+@dataclass
+class _Uncovered:
+    """An OracleResult that abstained: ok is None and there is no edge."""
+
+    ok: bool | None = None
+    detail: str = "the activation never occurred"
+    edge: int | None = None
+    rows: list | None = None
+    tp_uid: str = "TP-0009"
+
 
 B_ASSIGN = "assign b = a;"
 B_ALWAYS = "always @(posedge clk) begin\n  c <= a;\nend"
@@ -1587,32 +1600,22 @@ def test_explain_on_an_uncovered_requirement_answers_a_different_question(tmp_pa
 
     With no `edge` it fell back to `max(0, edge - span_pad)` -> 0 and reported a
     span from edge 0 to edge 0 under a note reading "the interval this
-    requirement governs" -- false for a check that never fired. MEASURED on run
-    5's 27 uncovered requirements: TWENTY have no edge at all and every one got
-    a fabricated span at the start of the trace.
+    requirement governs" -- false for a check that never fired. Twenty of run
+    5's 27 uncovered requirements have no edge at all.
 
-    The actionable question is not "where did it go wrong" but "why did the
-    situation never arise", which is what `add_stimulus` needs to be told.
+    Here every port the activation waits on is an INPUT, so the design is not
+    implicated and add_stimulus IS the route.
     """
-    from dataclasses import dataclass as _dc
-
-    from eda_agent.explain import RequirementView
-
-    @_dc
-    class R:
-        ok: bool | None = None
-        detail: str = "the activation never occurred"
-        edge: int | None = None
-        rows: list = None
-        tp_uid: str = "TP-0009"
-
     s = _session(tmp_path)
+    s.contract = {"io": [{"name": "rst", "direction": "input"},
+                         {"name": "ena", "direction": "input"},
+                         {"name": "b", "direction": "output"}]}
     s.requirements = {"REQ-B": RequirementView(
         req_uid="REQ-B", text="on reset the outputs release",
         activation={"text": "while in reset", "inputs": {"rst": 1, "ena": 1},
                     "until": [{"rst": 0}]},
         ports=["b"], source="")}
-    s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+    s.req_results = {"REQ-B": (_Uncovered(rows=[]), {"edges": [
         {"edge": 0, "t": 10, "inputs": {"rst": 0, "ena": 1}, "dut": {"b": 0}},
         {"edge": 1, "t": 20, "inputs": {"rst": 0, "ena": 1}, "dut": {"b": 1}}]})}
     out = s.explain("REQ-B")
@@ -1621,43 +1624,137 @@ def test_explain_on_an_uncovered_requirement_answers_a_different_question(tmp_pa
     # NO fabricated span, and none of the failure-shaped fields.
     assert "span" not in out and "boundary_ports" not in out
     u = out["uncovered"]
-    assert u["activation_needs"] == {"rst": 1, "ena": 1}
-    # It says what the trace actually carried, per pinned port ...
     assert u["values_the_trace_carried"]["rst"] == [0]
-    assert u["values_the_trace_carried"]["ena"] == [1]
-    # ... and names the one value that never appeared, which IS the scenario
-    # request add_stimulus needs.
     assert u["never_reached"] == {"rst": 1}
+    assert u["discharged_by"] == "add_stimulus"
     assert "rst=1" in u["what_to_ask_for"]
     assert "add_stimulus" in u["what_to_ask_for"]
 
 
-def test_an_activation_whose_values_all_appear_is_a_timing_problem(tmp_path):
-    """Then the stimulus is not missing a VALUE, and saying "drive rst=1" would
-    be wrong advice. It has to say so rather than inventing a target."""
-    from dataclasses import dataclass as _dc
+def test_an_uncovered_requirement_gated_on_an_output_is_a_DESIGN_accusation(tmp_path):
+    """AN EDIT CAN DISCHARGE AN UNCOVERED CHECK when its trigger is an output.
 
-    from eda_agent.explain import RequirementView
+    This function used to say, flatly, "no edit to the design can discharge an
+    uncovered requirement". That is false whenever the activation waits on an
+    OUTPUT: if the check opens on `cmd_ack` changing and the design never
+    changes `cmd_ack`, the check is silent BECAUSE THE DESIGN IS BROKEN. No
+    stimulus can move an output, so routing that to add_stimulus files a design
+    bug as an evidence gap -- the #98 failure mode, which plan §6.4 already
+    names one layer up ("dropping those would have locked the bug in").
 
-    @_dc
-    class R:
-        ok: bool | None = None
-        detail: str = "the activation never occurred"
-        edge: int | None = None
-        rows: list = None
-        tp_uid: str = "TP-0009"
-
+    MEASURED on run 8's baseline: EIGHT of 25 uncovered requirements condition
+    on an output. They were invisible because the old code read
+    `activation.inputs` and the output triggers live in `opens_on`.
+    """
     s = _session(tmp_path)
+    s.contract = {"io": [{"name": "ena", "direction": "input"},
+                         {"name": "cmd_ack", "direction": "output"}]}
+    s.requirements = {"REQ-C": RequirementView(
+        req_uid="REQ-C", text="each command is acknowledged once",
+        activation={"text": "the FSM advances a phase", "inputs": {"ena": 1},
+                    "opens_on": [{"cmd_ack": "change"}]},
+        ports=["cmd_ack"], source="")}
+    s.req_results = {"REQ-C": (_Uncovered(rows=[]), {"edges": [
+        # ena is driven, so the STIMULUS did its job. cmd_ack never moves.
+        {"edge": 0, "t": 10, "inputs": {"ena": 1}, "dut": {"cmd_ack": 0}},
+        {"edge": 1, "t": 20, "inputs": {"ena": 1}, "dut": {"cmd_ack": 0}}]})}
+    u = s.explain("REQ-C")["uncovered"]
+
+    assert u["never_reached"] == {"cmd_ack": "change"}
+    assert u["discharged_by"] == "EDIT", "an output trigger accuses the DESIGN"
+    said = u["what_to_ask_for"]
+    assert "OUTPUT" in said and "cmd_ack never changed" in said
+    assert "add_stimulus cannot help" in said
+    # And the requirement summary must SHOW the output trigger, or the agent
+    # cannot see why the routing went that way.
+    assert s.requirements["REQ-C"].brief()["activation_opens_on"] == [
+        {"cmd_ack": "change"}]
+
+
+def test_values_that_appear_but_never_together_are_a_stimulus_gap(tmp_path):
+    """THE CONJUNCTION IS THE QUESTION, not the ports one at a time.
+
+    `inputs` has to hold AT ONE EDGE. Checking each port separately says
+    "cmd=4 appears, ena=1 appears" about a trace where they never once held
+    together -- which is exactly the scenario add_stimulus exists to request,
+    reported as if nothing were missing. On run 8's baseline this distinction
+    moves requirements out of "unclear" and into an actionable route.
+    """
+    s = _session(tmp_path)
+    s.contract = {"io": [{"name": "cmd", "direction": "input"},
+                         {"name": "ena", "direction": "input"}]}
     s.requirements = {"REQ-B": RequirementView(
         req_uid="REQ-B", text="t",
         activation={"text": "cmd=4 while enabled", "inputs": {"cmd": 4, "ena": 1}},
         ports=["b"], source="")}
-    s.req_results = {"REQ-B": (R(rows=[]), {"edges": [
+    s.req_results = {"REQ-B": (_Uncovered(rows=[]), {"edges": [
         {"edge": 0, "t": 10, "inputs": {"cmd": 4, "ena": 0}, "dut": {}},
         {"edge": 1, "t": 20, "inputs": {"cmd": 0, "ena": 1}, "dut": {}}]})}
     u = s.explain("REQ-B")["uncovered"]
+    assert u["discharged_by"] == "add_stimulus"
+    assert "TOGETHER at one edge" in u["what_to_ask_for"]
+    assert "never all at the same edge" in u["what_to_ask_for"]
+    # Neither value is individually absent, so nothing may be reported as unseen.
     assert "never_reached" not in u
-    assert "TIMING" in u["what_to_ask_for"]
+
+
+def test_a_rise_trigger_is_a_transition_not_a_value(tmp_path):
+    """`rise`/`fall`/`change` are the normalizer's edge vocabulary
+    (`normalize._EDGE_WORDS`), used by 29 of the 90 requirements' opens_on
+    clauses. Asking "is 'rise' among the values the trace carried" is always
+    no, which made every edge-triggered activation look permanently dead and
+    would have reported a working design as broken.
+
+    `temporal.edges` is the evaluator THE ORACLES THEMSELVES run, so using it
+    here is what stops this function disagreeing with the verdict it explains.
+    """
+    s = _session(tmp_path)
+    s.contract = {"io": [{"name": "scl_oen", "direction": "output"}]}
+    view = RequirementView(
+        req_uid="REQ-D", text="t",
+        activation={"text": "SCL is released", "opens_on": [{"scl_oen": "rise"}]},
+        ports=["scl_oen"], source="")
+    s.requirements = {"REQ-D": view}
+
+    # scl_oen DOES rise -- so the window can open and the design is not accused.
+    s.req_results = {"REQ-D": (_Uncovered(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {}, "dut": {"scl_oen": 0}},
+        {"edge": 1, "t": 20, "inputs": {}, "dut": {"scl_oen": 1}}]})}
+    assert s.explain("REQ-D")["uncovered"]["discharged_by"].startswith("unclear")
+
+    # It never rises -- now it IS the design, and only an edit can move it.
+    s.req_results = {"REQ-D": (_Uncovered(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {}, "dut": {"scl_oen": 0}},
+        {"edge": 1, "t": 20, "inputs": {}, "dut": {"scl_oen": 0}}]})}
+    assert s.explain("REQ-D")["uncovered"]["discharged_by"] == "EDIT"
+
+
+def test_a_clause_is_a_conjunction_and_the_list_is_the_disjunction(tmp_path):
+    """`opens_on [{"scl_i": "fall", "scl_oen": 1}]` means SCL fell WHILE
+    scl_oen was 1 -- one clause, both conditions, at the same edge. Returning
+    "satisfied" because either held somewhere makes a dead window look alive.
+    Across clauses it is any-of: one live clause opens the window."""
+    s = _session(tmp_path)
+    s.contract = {"io": [{"name": "scl_i", "direction": "input"},
+                         {"name": "scl_oen", "direction": "output"}]}
+    s.requirements = {"REQ-E": RequirementView(
+        req_uid="REQ-E", text="t",
+        activation={"text": "SCL falls while released",
+                    "opens_on": [{"scl_i": "fall", "scl_oen": 1}]},
+        ports=["scl_i"], source="")}
+    # scl_i falls at edge 1, but scl_oen is 0 there and 1 only at edge 2.
+    # Never both at once -> the clause never holds.
+    s.req_results = {"REQ-E": (_Uncovered(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {"scl_i": 1}, "dut": {"scl_oen": 0}},
+        {"edge": 1, "t": 20, "inputs": {"scl_i": 0}, "dut": {"scl_oen": 0}},
+        {"edge": 2, "t": 30, "inputs": {"scl_i": 0}, "dut": {"scl_oen": 1}}]})}
+    assert s.explain("REQ-E")["uncovered"]["discharged_by"] != "unclear -- read activation_text"
+
+    # Move the fall to where scl_oen is high: the clause holds, window opens.
+    s.req_results = {"REQ-E": (_Uncovered(rows=[]), {"edges": [
+        {"edge": 0, "t": 10, "inputs": {"scl_i": 1}, "dut": {"scl_oen": 1}},
+        {"edge": 1, "t": 20, "inputs": {"scl_i": 0}, "dut": {"scl_oen": 1}}]})}
+    assert s.explain("REQ-E")["uncovered"]["discharged_by"].startswith("unclear")
 
 
 def test_two_assigns_to_one_wire_are_caught_though_verilator_is_silent(tmp_path):
