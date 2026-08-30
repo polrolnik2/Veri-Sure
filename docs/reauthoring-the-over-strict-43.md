@@ -214,12 +214,57 @@ not-justified bucket. For all nine justified rejections the objection MOVED each
 round, a different and narrower ground; REQ-0006 burned all three rounds on three
 distinct grounds and was still descending when the loop stopped.
 
-Three fixes, in value order: make `verifications=3` mean three repair rounds
-(move the `break` past `_fix`); take the reviewer's verdict as a MAJORITY over
-the rounds it ran rather than the last one -- at 67% self-agreement the majority
-is the better estimator, and it would readmit the five `OOR` and drop the six
-`RRO`; and treat a lone REJ on a check that previously passed with no intervening
-edit as a re-roll rather than a finding.
+### 14 of the 19 rejections had ALREADY passed correspondence
+
+Only five were never accepted in any round -- REQ-0006, 0022, 0043, 0080, 0086,
+the `RRR` group. The other fourteen passed the reviewer and were then rejected by
+a later round, and **six of them are frozen holding the byte-identical check that
+had passed**: REQ-0008, 0021, 0025, 0046, 0063, 0093. Nothing about those checks
+changed; only the draw did.
+
+`correspondence.review(list(held.values()), ...)` re-reviews EVERY held oracle
+every round. There is no "already accepted" filter, and the disposition is taken
+from the last round's `rejected` alone.
+
+### So what if it stopped at the first accepted attempt?
+
+`docs/evidence/repair_policy.py` reconstructs the check as it stood at each round
+-- the correspondence prompt carries `{"clause", "source"}` -- and decides four
+policies against both held-out arms. It is validated by `last` reproducing the
+frozen result exactly (15 / 6 / 22).
+
+| policy | kept | calls | passes | CONVICTS golden | silent | disc | inv | sep |
+|---|---|---|---|---|---|---|---|---|
+| **last** (what the run did) | 24 | 129 | 15 | **6** | 22 | 3 | 3 | **+0** |
+| majority of 3 | 23 | 129 | 11 | 9 | 23 | 2 | 3 | -1 |
+| **latch on first pass** | 38 | **73** | 14 | **18** | 11 | 2 | 3 | -1 |
+| unanimous (any R is fatal) | 9 | 129 | 4 | 3 | 36 | 0 | 1 | -1 |
+
+Latching is 43% cheaper and nearly halves the silent count -- and **triples the
+false convictions, 6 to 18**. Conviction rate among checks that decide: last 29%,
+majority 45%, latch 56%. The reviewer never sees the control, so its later
+rejections are independent evidence, and they correlate with over-strictness
+strongly enough that re-reviewing an already-accepted check is doing real
+filtering work rather than burning budget.
+
+**A recommendation made earlier in this document is withdrawn.** It argued for
+taking the verdict as a majority over the rounds, on the reasoning that a 67%
+self-agreement rate makes the majority the better estimator. Measured, majority
+is WORSE than the last-verdict rule it would replace -- 9 golden convictions
+against 6, and separation -1 against +0. The reasoning ignored that the draws are
+not independent samples of one truth: a later round sees a repaired check, so
+later rejections carry more information than earlier ones, and averaging discards
+that.
+
+Separation differences of +-1 on 43 requirements are noise and none of these
+policies is distinguishable on it. The 6-vs-18 conviction gap is not.
+
+**What the data does support fixing** is the round-3 asymmetry: `verifications=3`
+should mean three repair rounds, not two judgments and a repair followed by a
+third judgment with no reply. That adds coverage without weakening the filter,
+because the fourteen checks discarded after passing would get to answer their
+final objection instead of being dropped on a single draw. Every other change
+measured here trades precision away for it.
 
 ## The six that still convict golden are the same defect class
 
@@ -430,6 +475,8 @@ docs/evidence/resep.py       # the whole-set fold, staged traces applied PER ORA
 docs/evidence/gate_audit.py  # re-asks per round, reviewer self-agreement,
                              # and whether the route block reached the reviewer
 docs/evidence/assertable.py  # the assertability bar, scored against hand labels
+docs/evidence/repair_policy.py # last / majority / latch / unanimous, scored on
+                             # both arms; `last` reproduces the frozen result
 ```
 
 `score.py` and `separation.py` are kept as the record of the first pass;
