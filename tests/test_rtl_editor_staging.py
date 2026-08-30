@@ -1221,3 +1221,44 @@ def test_the_driver_guard_does_not_depend_on_which_requirement_is_focused(tmp_pa
     # An empty slice must not silence it: the buffer is the same buffer.
     s.blocks_by_id = {}
     assert s.undriven_signals(s.staged()) == caught
+
+
+def test_the_splice_preserves_the_anchors_boundary_whitespace(tmp_path):
+    """A block's `code` can SWALLOW the newline that ended it, and welding the
+    replacement's last token to the next one is silent until Verilator.
+
+    MEASURED on the i2c FSM block: the anchor ends "    end\\nend\\n", the text
+    right after it is "endmodule\\n", and the agent's replacement ends "end"
+    with no trailing newline -- the natural way to write a block. The splice
+    produced "endendmodule", one identifier where two keywords belonged, and
+    the error came back "syntax error, unexpected end of file" 145 lines from
+    the edit. Every replacement of that block in the fourth live run failed
+    this way: correct Verilog in, broken buffer out.
+    """
+    from eda_agent.trace_slicer import RtlBlock
+
+    rtl = ("module m(input clk, input a, output reg c);\n"
+           "always @(posedge clk) begin\n"
+           "  c <= a;\n"
+           "end\n"
+           "endmodule\n")
+    path = tmp_path / "rtl.sv"
+    path.write_text(rtl)
+    s = _EditSession(tb_path=None, rtl_path=str(path), output_dir=str(tmp_path),
+                     last_mismatch_cnt=0, sim_reviewer=object(), max_trials=30)
+    # The anchor CARRIES its trailing newline, as the real parser's does.
+    anchor = "always @(posedge clk) begin\n  c <= a;\nend\n"
+    assert anchor in rtl
+    s.blocks_by_id = {"blk": RtlBlock(id="blk", kind="always", start_line=2,
+                                      end_line=4, clocking="posedge clk",
+                                      code=anchor, writes=("c",), reads=("a",))}
+    # A replacement written WITHOUT a trailing newline.
+    s.stage_replace("blk", "always @(posedge clk) begin\n  c <= ~a;\nend")
+    staged = s.staged()
+    assert "endendmodule" not in staged
+    assert staged.endswith("end\nendmodule\n"), repr(staged[-24:])
+    # And a replacement WITH one does not double it.
+    s.discard_staged()
+    s.stage_replace("blk", "always @(posedge clk) begin\n  c <= ~a;\nend\n")
+    assert s.staged().endswith("end\nendmodule\n")
+    assert "\n\n\nendmodule" not in s.staged()

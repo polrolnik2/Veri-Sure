@@ -742,7 +742,25 @@ class _EditSession:
                 f"Cannot {what}: its text appears {found} times in the staged "
                 f"buffer, so a substitution would be ambiguous. Include "
                 f"surrounding lines to make it unique.")}
-        self.staged_rtl = buf.replace(anchor, replacement, 1)
+        # PRESERVE THE ANCHOR'S BOUNDARY WHITESPACE, or tokens weld together.
+        #
+        # A block's `code` can swallow the newline that ended it. MEASURED on
+        # the i2c FSM block: the anchor ends "    end\nend\n", the text right
+        # after it is "endmodule\n", and an agent's replacement ends "end" with
+        # no trailing newline -- the natural way to write a block. The splice
+        # then produced "endendmodule", one identifier where two keywords
+        # belonged, and Verilator reported "syntax error, unexpected end of
+        # file" 145 lines away from the edit.
+        #
+        # Every replacement of that block in the fourth live run failed this
+        # way. The agent was writing correct Verilog and being handed a broken
+        # buffer, so it discarded and retried and discarded again. §7.2 promised
+        # a content anchor would refuse a MISS explicitly; this is the other
+        # case, where the anchor is found and the splice is still wrong.
+        lead = anchor[:len(anchor) - len(anchor.lstrip("\n"))]
+        trail = anchor[len(anchor.rstrip("\n")):]
+        body = replacement.strip("\n")
+        self.staged_rtl = buf.replace(anchor, lead + body + trail, 1)
         return {"is_action_executed": True}
 
     def undriven_signals(self, text: str) -> list[str]:
