@@ -34,6 +34,10 @@ ap.add_argument("--trials", type=int, default=6)
 ap.add_argument("--rounds", type=int, default=40, help="tool calls, not trials")
 ap.add_argument("--timeout", type=float, default=3600.0)
 ap.add_argument("--include", default="")
+ap.add_argument("--reuse-baseline", action="store_true",
+                help="decide the frozen set on the recording `loop_run.py` "
+                     "already wrote instead of re-running the whole suite for "
+                     "a result that is already on disk")
 ap.add_argument("--script", default="",
                 help="JSON file of tool calls to replay INSTEAD of asking an "
                      "agent -- a plumbing smoke test, not an experiment")
@@ -61,9 +65,20 @@ reviewer = SpecflowReviewer(
     include_dirs=incs,
     oracles=_frozen_oracles(RUN), contract=contract)
 
-print("baseline run ...", flush=True)
+print("baseline ...", flush=True)
 t0 = time.time()
-is_pass, failing, sim_output = reviewer.review()
+if a.reuse_baseline:
+    # `loop_run.py` has already simulated THIS rtl.sv against THIS suite and
+    # left every `{tp}.trace.json` on disk. Re-running costs a full suite --
+    # twenty minutes on the paced stimulus -- to recompute a result that is
+    # already there. The failing count is read off the same records.
+    reviewer.req_results = reviewer._decide_requirements()
+    failing = sum(1 for p in sorted((RUN / "suite/results").glob("*.json"))
+                  if not p.name.endswith(".trace.json")
+                  and json.loads(p.read_text()).get("status") == "FAIL")
+    is_pass = failing == 0
+else:
+    is_pass, failing, sim_output = reviewer.review()
 print(f"  {time.time()-t0:.0f}s  pass={is_pass}  failing testpoints={failing}",
       flush=True)
 
