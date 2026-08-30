@@ -1,0 +1,88 @@
+{
+ "failing": [
+  {
+   "req_uid": "REQ-0006",
+   "verdict": "FAILS",
+   "requirement": "The module detects arbitration loss and signals it by asserting al when the controller expects SDA to be high but the filtered SDA is observed low or when an unexpected STOP occurs during an active co",
+   "check_said": "the expected response never occurred in the window opening at edge 190",
+   "testpoint": "TP-0014",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0030",
+   "verdict": "FAILS",
+   "requirement": "The arbitration-lost output al is asserted when a STOP condition is detected on the filtered bus while the bit-level controller is executing a command and the detected STOP was not requested by this c",
+   "check_said": "the expected response never occurred in the window opening at edge 826",
+   "testpoint": "TP-0073",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0095",
+   "verdict": "FAILS",
+   "requirement": "The module shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level.",
+   "check_said": "the expected response never occurred in the window opening at edge 0",
+   "testpoint": "TP-0223",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "scl_oen",
+    "sda_i"
+   ]
+  }
+ ],
+ "uncovered": [
+  "REQ-0004",
+  "REQ-0012",
+  "REQ-0013",
+  "REQ-0017",
+  "REQ-0018",
+  "REQ-0019",
+  "REQ-0024",
+  "REQ-0029",
+  "REQ-0033",
+  "REQ-0035",
+  "REQ-0036",
+  "REQ-0053",
+  "REQ-0061",
+  "REQ-0069",
+  "REQ-0076",
+  "REQ-0077",
+  "REQ-0078",
+  "REQ-0079",
+  "REQ-0081",
+  "REQ-0083",
+  "REQ-0089",
+  "REQ-0096",
+  "REQ-0097",
+  "REQ-0101",
+  "REQ-0108",
+  "REQ-0118",
+  "REQ-0125"
+ ],
+ "passing_count": 60
+}
