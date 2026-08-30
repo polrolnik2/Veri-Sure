@@ -296,6 +296,57 @@ means a run with `repair_attempts=3` to compare against this one at 2.
 2, and `drive.py`'s default matches. Everything measured in this section is the
 pipeline's own behaviour at its own settings, not an artifact of the driver.
 
+### A review clears a VERSION; the loop spends ROUNDS
+
+The correspondence reviewer is STATELESS: its prompt carries `system`,
+`specification`, `interface`, `requirement`, `normalized` and `oracle` and
+nothing else -- no previous answer, no prior objection, unlike the author's,
+which carries both `previous_answer` and `gate_failures`. Every round is an
+independent look, and a look at a REPAIRED check bears no relation to the looks
+before it.
+
+The loop does not account for that. It spends rounds, so how many reviews a
+check's FINAL form receives depends on how late it was last repaired:
+
+| reviews of the final source | TRUSTED | ORACLE_INVALID |
+|---|---|---|
+| **1** | **12** | 8 |
+| 2 | 6 | 5 |
+| 3 | 6 | 6 |
+
+**20 of 43 checks had their final form reviewed exactly once, and 12 of those
+shipped TRUSTED on that single draw** -- against a reviewer measured at 67%
+self-agreement. The checks that needed the most repair get the fewest looks at
+what actually ships, which is backwards: a repair is precisely the event that
+invalidates every earlier review, since the old version is never seen again.
+
+Worked, on two requirements carrying the SAME defect -- normalization's
+`until: [{cmd_ack: 1}, {al: 1}]`, where `al` is read as a level, so a stale or
+unrelated pulse slams the window shut before the design has acted:
+
+* **REQ-0063** was never repaired, so all three rounds reviewed the identical
+  source `c58824ff`. Verdicts pass, pass, REJECT, and the objection names it
+  exactly -- "it fires on any row where al happens to read 1 ... That lets the
+  window close instantly, before the STOP sequence's own release phase can run".
+  One catch in three looks.
+* **REQ-0055** was repaired after round 1, so rounds 2 and 3 both reviewed
+  `b0b7d242`, and both passed. Zero catches in two looks -- and it ships TRUSTED,
+  convicting golden on TP-0133, where the window opens at edge 0, `al` pulses at
+  edge 7, and the design's correct START lands at edges 28 and 38, outside the
+  three-row window.
+
+Round 1's objection on REQ-0055 was a different and entirely correct finding --
+one undifferentiated window shared across START/STOP/READ/WRITE, which the author
+fixed by branching per command. Nothing was masked or carried between rounds; the
+revised check simply drew twice and lost twice.
+
+**The rule this argues for:** a review clears a VERSION of a check, not the
+requirement, so a rewritten check should not inherit its predecessor's
+clearances, and the budget should spend reviews-of-the-current-source rather than
+rounds. Not built -- it changes what `verifications` means and the
+per-requirement call budget with it, and `docs/evidence/repair_policy.py` can
+simulate it offline from the recorded rounds before anything is wired.
+
 ## The six that still convict golden are the same defect class
 
 | req | subject of the requirement | |
