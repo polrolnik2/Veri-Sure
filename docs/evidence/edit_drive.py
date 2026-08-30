@@ -50,6 +50,7 @@ IO.mkdir(parents=True, exist_ok=True)
 from eda_agent.explain import load_requirement_views       # noqa: E402
 from eda_agent.rtl_editor import _EditSession              # noqa: E402
 from eda_agent.specflow_node import (SpecflowReviewer,     # noqa: E402
+                                     SpecflowStimulusStager,
                                      _frozen_oracles)
 from specflow.model_io import AgentPort                    # noqa: E402
 
@@ -57,12 +58,25 @@ contract = json.loads((RUN / "contract.json").read_text())
 cov = json.loads((RUN / "specflow/coverage_model.json").read_text())
 incs = [p for p in a.include.split(",") if p]
 
+# THE STIMULUS ROUTE. Without it an UNCOVERED requirement reaches the agent as a
+# finding it cannot act on -- and `list_failing_requirements` says in its own
+# note that `add_stimulus` "is the only route for an UNCOVERED one", so omitting
+# the tool made the harness name a remedy it did not provide. Measured on run 5:
+# that note was shown five times, the tool was absent, and 27 requirements
+# stayed uncovered from first round to last.
+#
+# `AgentPort` IS the `Port` shape `model_port` wants, so the same rendezvous --
+# the same agent -- answers the stimulus-generation prompt. No second model.
+stager = SpecflowStimulusStager(
+    run_dir=RUN, contract=contract, bins=cov.get("bins") or [],
+    suite_dir=RUN / "suite", model_port=AgentPort(root=IO, timeout=a.timeout))
+
 reviewer = SpecflowReviewer(
     built=SimpleNamespace(suite_dir=RUN / "suite",
                           refmodel_path=RUN / "ref_model.py",
                           bins=cov.get("bins") or []),
     hdl_toplevel="i2c_master_bit_ctrl", output_dir=RUN,
-    include_dirs=incs,
+    include_dirs=incs, stager=stager,
     oracles=_frozen_oracles(RUN), contract=contract)
 
 print("baseline ...", flush=True)
@@ -77,6 +91,11 @@ if a.reuse_baseline:
                   if not p.name.endswith(".trace.json")
                   and json.loads(p.read_text()).get("status") == "FAIL")
     is_pass = failing == 0
+    # `review()` is what normally publishes this, and the reuse path skips it.
+    # An EMPTY uncovered set is a refusal, not a waiver, so without this
+    # `add_stimulus` would decline every request as "not currently uncovered".
+    stager.uncovered = {u for u, (r, _t) in reviewer.req_results.items()
+                        if getattr(r, "ok", None) is None}
 else:
     is_pass, failing, sim_output = reviewer.review()
 print(f"  {time.time()-t0:.0f}s  pass={is_pass}  failing testpoints={failing}",
@@ -85,7 +104,8 @@ print(f"  {time.time()-t0:.0f}s  pass={is_pass}  failing testpoints={failing}",
 session = _EditSession(
     tb_path=None, rtl_path=str(RUN / "rtl.sv"), output_dir=str(RUN),
     last_mismatch_cnt=failing, sim_reviewer=reviewer, max_trials=a.trials,
-    requirements=load_requirement_views(RUN, contract), contract=contract)
+    requirements=load_requirement_views(RUN, contract), contract=contract,
+    stimulus_stager=stager)
 session._pull_req_results()
 
 TOOLS = {
@@ -100,6 +120,8 @@ TOOLS = {
     "remove_block": lambda block_id: session.stage_remove(block_id),
     "check_staged": lambda: session.check_staged(),
     "discard_staged": lambda: session.discard_staged(),
+    "add_stimulus": lambda req_uid, what_the_scenario_needs: session.add_stimulus(
+        req_uid, what_the_scenario_needs),
     "commit": lambda: session.commit(),
 }
 
@@ -187,6 +209,16 @@ TOOLS
   check_staged()                      FREE and unlimited: syntax and driver
                                       checks on the batch. No simulation.
   discard_staged()                    FREE. Back to the last accepted RTL.
+
+  add_stimulus(req_uid,               FREE, and the ONLY route for an UNCOVERED
+               what_the_scenario_needs) requirement -- one whose check never saw
+                                      its own situation. You describe in PROSE
+                                      what must happen ("issue a WRITE and hold
+                                      it until cmd_ack"); the harness generates
+                                      the vectors and APPENDS a testpoint, so
+                                      nothing existing changes. It cannot
+                                      discharge a FAILING requirement and will
+                                      refuse one.
 
   commit()                            THE TRIAL. Compiles and runs the WHOLE
                                       suite. Improved -> latched. Not improved
