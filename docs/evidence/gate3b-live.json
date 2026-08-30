@@ -1,0 +1,162 @@
+{
+ "REQ-0001": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The i2c_master_bit_ctrl module shall receive simple bit commands from the byte-level controller on the cmd input and translate each received command into timed SCL and SDA open-drain control sequences by driving scl_oen, sda_oen (with scl_o and sda_o as constant low drive values).",
+  "reviewer": "0. Obligation test: the sentence says the module SHALL translate each received command into a timed scl_oen/sda_oen open-drain control sequence, with scl_o/sda_o constant low. A design that receives a supported command and never moves scl_oen/sda_oen from their released level, or that ever drives scl_o/sda_o non-zero, is condemned by these words -- this is a real obligation, not a definition or scope statement. 1. TRIGGER (per normalized.activation): ena=1, nReset=1, rst=0, i.e. a command may be processed, open until cmd_ack=1 or al=1. EFFECT: scl_o/sda_o stay 0 throughout the window; if the window closes via cmd_ack (a genuine completed sequence, since cmd_ack only pulses at the end of a real START/STOP/READ/WRITE sequence per impl. detail 10), at least one of scl_oen/sda_oen goes low somewhere in it. 2. CODE: applies = {ena:1,nReset:1,rst:0} (exactly normalized.activation.inputs, cmd not included), closes = cmd_ack:1 or al:1, windows = after(...,until=closes). For each window: throughout(scl_o==0 and sda_o==0); and, only when the window closed on cmd_ack==1, eventually(scl_oen==0 or sda_oen==0, strong). 3. False paths: (i) throughout fails on any row in the window where scl_o!=0 "
+ },
+ "REQ-0002": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The module generates I2C START and STOP conditions on the bus by driving and releasing the SDA and SCL lines according to I2C timing.",
+  "reviewer": "0. Obligation: 'generates I2C START and STOP conditions ... by driving and releasing SDA and SCL according to I2C timing' condemns a design that, given a START/STOP command, drives/releases the lines in the wrong order or wrong relative-to-SCL state (e.g. pulls SDA low while SCL is still low, or never actually toggles the lines) -- a nameable wrong design exists, so this is a real obligation, not a definition or scope statement. 1. Requirement TRIGGER: a START (cmd==1) or STOP (cmd==2) command issued while ena==1; EFFECT: scl_oen/sda_oen sequence through the I2C-legal START/STOP ordering (START: SDA driven low while SCL is released/high, then SCL driven low; STOP: SDA driven low, then SCL released/high, then SDA released while SCL is high) while scl_o/sda_o stay the constant-0 data wires; PORT: sda_oen, scl_oen, sda_o, scl_o. 2. Check's trigger: windows = after(trace, cmd==1&ena==1 OR cmd==2&ena==1, until=cmd_ack==1 or al==1) -- matches the activation text ('a START or STOP command...') rather than the narrower structured activation.inputs snapshot, and correctly covers both encodings the text names. Check's assertion per window: worst(zero_ok, ordering) where zero_ok requires scl_"
+ },
+ "REQ-0006": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "ORACLE_INVALID",
+  "text": "The module detects arbitration loss and signals it by asserting al when the controller expects SDA to be high but the filtered SDA is observed low or when an unexpected STOP occurs during an active command.",
+  "reviewer": "Both open-conditions need the 'active command' qualifier rebuilt into the TRIGGER, not just the effect. Case 2 (_unexpected_stop) currently only excludes self-caused releases (edge in rose_sda_oen); it must additionally require that this controller currently has a command in progress, so an SDA rise-while-SCL-high produced by other bus traffic while this controller is idle does not open the window at all. Case 1 (_write_arbitration_check) currently treats din==1 & scl_i==1 & sda_i==0 as sufficient on its own; it must additionally require that a WRITE bit's stable-high/arbitration-check phase is actually underway, not merely that din happens to read 1 outside any command. As written, the oracle deliberately declined to gate on cmd (no fixed encoding available) but supplied no substitute observable proxy for 'active command', leaving both paths open on rows the requirement's 'during an active command' / expects-high-during-a-write language never covers -- deleting the assertion is not the fix, the window itself needs to be narrowed to command-active rows."
+ },
+ "REQ-0016": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The i2c_master_bit_ctrl module implements the Bit Command Controller role: the module accepts bit-level commands on cmd from the Byte Command Controller and generates the corresponding START, STOP, READ and WRITE bit-level SCL/SDA open-drain control sequences while providing command completion and status via cmd_ack, busy, al and providing sampled read bits via dout.",
+  "reviewer": "0. Obligation: the clause says the module 'accepts bit-level commands on cmd ... and generates the corresponding START, STOP, READ and WRITE ... sequences while providing command completion and status via cmd_ack, busy, al and providing sampled read bits via dout.' A design that received a supported command and never resolved it (no cmd_ack pulse and no al) is condemned by 'providing command completion ... via cmd_ack ... al'; a design that ever drove scl_o or sda_o high is condemned by the open-drain constant-low semantics this clause invokes for its SCL/SDA sequences. Real obligations exist, so states_an_obligation is true. 1. Requirement trigger/effect: TRIGGER = a supported bit command presented on cmd while ena=1, nReset=1, rst=0 (idle FSM implied); EFFECT = the module runs the command's open-drain SCL/SDA sequence, eventually resolves via a one-clock cmd_ack pulse or via al, with scl_o/sda_o held constant 0 the whole time. 2. Check trigger/assertion: `_activates` opens a window on cmd==1 & ena==1 & nReset==1 & rst==0, matching normalized activation.inputs exactly; `_closes` ends it at cmd_ack==1 or al==1, matching normalized 'until'. Inside each window it asserts (strong) eve"
+ },
+ "REQ-0026": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "When the command FSM is in the idle state, the controller decodes the cmd input as one of the supported commands I2C_CMD_START, I2C_CMD_STOP, I2C_CMD_WRITE, or I2C_CMD_READ, and any unsupported or idle value leaves the FSM in the idle state.",
+  "reviewer": "Not applicable -- both fields are true. (Note only: the check tests solely at the cmd_ack route and never asserts that busy/scl_oen/sda_oen themselves stay released for the unsupported/idle case, which is weaker than the full expectation text describes, but that is a demand-strength question for a different gate, not a correspondence defect.)"
+ },
+ "REQ-0050": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The busy flag remains set until a STOP condition is detected on the filtered I2C bus.",
+  "reviewer": "0. Obligation: 'the busy flag remains set until a STOP condition is detected on the filtered I2C bus' condemns a design where busy drops to 0 (or never gets set) before any filtered STOP has occurred -- a nameable wrong design (premature/spurious clearing) exists, so this is a real obligation. 1. Requirement TRIGGER: busy has become set (a filtered START has occurred); EFFECT: busy stays 1 on every subsequent row until a filtered STOP (or reset) is detected; PORT: busy. 2. Check's trigger: windows = after(trace, opens, until=closes) where opens = busy rises (edge in rose_busy) while ena==1, matching normalized.activation.opens_on/inputs exactly; closes = (sda_i rises while scl_i==1) OR nReset==0 OR rst==1 -- a proxy for 'filtered STOP is detected', built from the two raw declared ports (sda_i, scl_i) since the true sSDA/sSCL filtered signals and sto_condition are internal and not in the trace, plus the reset closers from normalized.activation.until. Assertion: throughout(w, busy==1, after_activation=True) -- exactly the effect the requirement names, checked only on rows after activation as 'effect_follows' calls for. 3. False paths: the only way throughout() returns False is a row "
+ },
+ "REQ-0055": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "Each command sequence drives the scl_oen and sda_oen open-drain output enables and asserts the internal sda_chk arbitration-check signal at the appropriate I2C timing phases.",
+  "reviewer": "0. Obligation: 'Each command sequence drives the scl_oen and sda_oen open-drain output enables ... at the appropriate I2C timing phases' condemns a design that, while running an accepted command, never drives scl_oen or sda_oen low at the phase the command requires (e.g. one that leaves both released the whole sequence). That is a real obligation on scl_oen/sda_oen (sda_chk is internal and outside the port list, so no check can speak to it, but the enable-driving half of the sentence is a testable claim). 1. Requirement trigger/effect: TRIGGER = an accepted, running command sequence (a supported cmd issued while ena=1, nReset=1, rst=0, from acceptance until cmd_ack or al closes it); EFFECT = scl_oen and sda_oen are driven low at the phase(s) that command type calls for, per the per-command behavior in spec sections 11-14. 2. Check trigger/assertion: for each supported cmd code (1=START, 2=STOP, 4=WRITE, 8=READ) it opens a window on cmd==<code> & ena==1 & nReset==1 & rst==0, closing at cmd_ack==1 or al==1 -- an exact match to normalized activation.inputs/until, generalized across the four command codes the clause's 'each command sequence' covers. Inside each window it asserts (event"
+ },
+ "REQ-0059": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The START sequence then pulls the SDA line low while the SCL line is observed high to create a valid I2C START condition.",
+  "reviewer": "0. Obligation: 'The START sequence then pulls the SDA line low while the SCL line is observed high to create a valid I2C START condition' condemns a design that, during a START command, never pulls SDA low while SCL is observed high (or pulls it low only while SCL is still low, or lets SDA bounce back high before the phase ends) -- that design would not produce a valid START. This is a real obligation on sda_oen, not a definition. 1. Requirement trigger/effect: TRIGGER = the START sequence reaching its SDA-pull-low step while SCL is observed high (per spec sec.11: 'releases SDA and SCL, then pulls SDA low while SCL is high'), i.e. the moment sda_oen transitions low with scl_i already 1 during an active START command; EFFECT = sda_oen stays low for the rest of that SCL-high phase (until the sequence moves on and pulls SCL low). 2. Check trigger/assertion: `applies` opens the window at a row where sda_oen has a falling edge (from the precomputed `fell` set) and, at that same row, cmd==1, ena==1, scl_i==1 all hold -- an exact match to normalized `opens_on`/`activation.inputs`. The requirement's own wording ('releases ... then pulls ... low') describes a sequenced action, not a static "
+ },
+ "REQ-0066": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "ORACLE_INVALID",
+  "text": "The READ command sequence releases the SDA line so that the external slave can drive the data bit.",
+  "reviewer": "The unlicensed path is the eventually() False inside a window opened purely on cmd==4 & ena==1, with no confirmation that the FSM actually entered the READ sequence at that row -- cmd's value is only meaningful when sampled by an idle FSM, so a window can open (and close on an unrelated scl_oen fall) while a different command is still executing and sda_oen is legitimately 0 for that other command's own reasons. The TRIGGER needs to anchor window-open to the actual entry into the READ phase using observable ports available for this -- e.g. cmd==4 sampled specifically at the row following a cmd_ack pulse (or trace start/reset), which marks the FSM's idle decode point -- rather than any row where cmd merely happens to equal 4 while ena is high, regardless of what command is currently executing."
+ },
+ "REQ-0071": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "During the WRITE bit high phase the controller must release SCL by deasserting scl_oen high so the external pull-up can drive the SCL line high.",
+  "reviewer": "Not applicable -- both fields are true."
+ },
+ "REQ-0080": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "ORACLE_INVALID",
+  "text": "The controller disables arbitration checking.",
+  "reviewer": "The check's TRIGGER must become reset being active (nReset==0 or rst==1), not din==0/ena==1 during a WRITE bit -- that WRITE-bit condition has no support in this requirement's own quoted text (from the reset paragraph of Processing Flow) and instead silently tests a different, WRITE-arbitration-checking claim. The window needs rebuilding around the reset trigger, asserting that arbitration-checking's only port-visible effect (al) is not driven by arbitration comparison while reset holds, rather than around a WRITE bit's low-driving phase."
+ },
+ "REQ-0093": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "ORACLE_INVALID",
+  "text": "When the core enable input ena is low, the module reloads the internal counter cnt from clk_cnt and normal command-FSM bit timing does not progress.",
+  "reviewer": "The scl_oen/sda_oen `stable(...)` assertions are unlicensed on any row where the value change is caused by reset (nReset==0 or rst==1) rather than by bit-timing progressing -- the requirement (and the normalized expectation's own 'no timing-driven changes' wording) never forbids a reset-driven change. The check's TRIGGER (window-open condition, and ideally the window's continuation/close condition too) would need to become ena==0 AND nReset==1 AND rst==0 -- i.e. 'disabled and not in reset' -- so rows where reset is simultaneously active are excluded from the must-stay-stable claim, matching how the sibling checks in this spec gate on nReset/rst. Simply dropping the stability assertions is not the fix, since that would remove the genuine (non-reset) coverage this requirement calls for; the window needs to be rebuilt to exclude the reset-overlap case."
+ },
+ "REQ-0095": {
+  "group": "sample",
+  "hand_label": "not-assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The module shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level.",
+  "reviewer": "0. Obligation: 'shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level' commands a mandatory action. The mechanism (sda_chk) is internal, but its consequence is not: spec section 8 says arbitration checking that finds SDA released-high-but-observed-low asserts al, and by implication a check that finds SDA high must NOT assert al on that basis. A design that never samples/never reacts (al stuck 0 on a low sample, or al spuriously set with no low sample) is condemned. normalized.observed_via names al and sda_oen as the licensed observation route for this internal mechanism, per section 8's 'decide at the route's port' standard, so despite naming an invisible signal (sda_chk) this is a real obligation. states_an_obligation = true. 1. Requirement trigger/effect: TRIGGER = the stable high phase of a WRITE bit where din=1 (SDA is expected released-high) -- exactly normalized.activation.inputs {cmd:4,din:1,ena:1,nReset:1,rst:0,scl_i:1}, open until scl_oen falls / al=1 / cmd_ack=1 (activation.until). EFFECT (observed_via): sda_oen=1 throughout, and al=1 iff the sampled SDA is observed low, al=0 (not freshl"
+ },
+ "REQ-0101": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "During READ commands, the module presents the sampled SDA bit on dout for the byte-level controller to use as the received data bit.",
+  "reviewer": "0. Obligation: 'during READ commands, the module presents the sampled SDA bit on dout ... as the received data bit' condemns a design that, during a completed READ, shows a value on dout other than the bit actually present on SDA for that READ -- a nameable wrong design (dout reporting the wrong received bit). Real obligation, not a bare definition. 1. TRIGGER: a READ command is active (cmd==8, ena==1), from issue until it closes (cmd_ack==1) or arbitration is lost (al==1). EFFECT: dout carries the sampled SDA bit for that READ. PORT: dout. 2. Check's trigger: windows = after(trace, cmd==8 & ena==1, until=cmd_ack==1 or al==1) -- matches normalized.activation exactly. Check's assertion, per window: only proceed to assert anything when (i) the window actually closed via cmd_ack (a completed READ, not one cut off by arbitration loss or end-of-trace), (ii) sda_i was held at one constant value for the entire window (so the READ's actual received bit is unambiguous regardless of exactly when/how the internal filter samples it), and (iii) dout did not already equal that constant before the window opened (so a stale, never-updated register can't be mistaken for a fresh correct sample); onl"
+ },
+ "REQ-0117": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The FSM releases SCL (deasserts scl_oen to allow SCL to be pulled high) as the WRITE bit enters its stable high phase.",
+  "reviewer": "0. Obligation: 'The FSM releases SCL (deasserts scl_oen to allow SCL to be pulled high) as the WRITE bit enters its stable high phase' claims a required action, not a definition -- a design that keeps scl_oen driven low (0) throughout a WRITE bit, never releasing it, is condemned by these words. states_an_obligation = true. 1. Requirement TRIGGER = a WRITE bit is underway (cmd=4, ena=1, per normalized.activation.inputs); EFFECT = scl_oen transitions to released (1) at some point as that bit reaches its high phase -- observed_via names scl_oen as the sole port and describes exactly a release action ('scl_oen=1... when it does not hold, scl_oen may be 0 or otherwise not released'), i.e. a transition/edge claim, matching the verb 'releases'. 2. Check's trigger/assertion: opens at any row satisfying cmd==4 and ena==1 (the literal activation.inputs), closes at cmd_ack==1, al==1, rst==1, or nReset==0 -- i.e. one window per WRITE-bit command, from acceptance through completion/abort/reset. Inside each window it asserts eventually(scl_oen rises). It explicitly skips (treats as no-evidence) any window that closed via reset before a release was ever observed, rather than convicting it. 3. Fa"
+ },
+ "REQ-0121": {
+  "group": "sample",
+  "hand_label": "assertable",
+  "states_an_obligation": true,
+  "gate": "TRUSTED",
+  "text": "The FSM pulses cmd_ack for one system clock cycle to acknowledge completion of the WRITE command.",
+  "reviewer": "0. Obligation: 'The FSM pulses cmd_ack for one system clock cycle to acknowledge completion of the WRITE command' claims a required pulse WIDTH -- a design whose cmd_ack stays high for two or more cycles at a WRITE completion is condemned by 'for one system clock cycle'. states_an_obligation = true. 1. Requirement TRIGGER = a WRITE command completes (the WRITE-command context holding at the completion event -- normalized.activation.inputs: cmd=1, ena=1, nReset=1, rst=0, effect_follows=false, i.e. an in-place property, not a later window); EFFECT = cmd_ack is high for exactly that one row, then returns to 0 (observed_via: 'asserted high for exactly one system-clock row... a single-cycle 1 then returns to 0'). Since cmd_ack's own assertion is the module's only observable definition of 'completion' (per the port note, it IS the completion signal), the width claim is the only obligation a trace can test. 2. Check's trigger/assertion: examines every row where cmd_ack==1 and the qualifying WRITE context holds (cmd=1, ena=1, nReset=1, rst=0 -- the literal activation.inputs), additionally dropping any such row where al==1 (a concurrent arbitration-lost abort, which the spec never calls a '"
+ },
+ "REQ-0020": {
+  "group": "positive control",
+  "hand_label": "definition (control)",
+  "states_an_obligation": false,
+  "gate": "NOT_ASSERTABLE",
+  "text": "The ena input is the core enable signal that gates normal timing and input filtering operation.",
+  "reviewer": "states_an_obligation is false: the sentence supplies neither a concrete trigger (it never says 'when ena is low/high', only labels ena as 'the core enable signal') nor a concrete effect (it never names a port or states what 'gates ... operation' looks like on any observable signal -- no hold, no suppressed pulse, nothing a trace could contradict). Both trigger and effect are missing in the sense that matters: the sentence describes ena's role/purpose rather than asserting an observable, violable behavior. Because there is no obligation in REQ-0020's own words, tests_the_requirement is answered false as a consequence -- the check's False paths (cmd_ack suppression, busy/dout/scl_oen/sda_oen stability) all come from Implementation Detail #2 / the ena Processing-Flow paragraph, not from this requirement's text, so the check is deciding an obligation this sentence never states. Per the briefing, this does not go back to the check's author to repair; it goes to whoever wrote the specification, since nothing the author writes can add an obligation to a sentence that has none."
+ },
+ "REQ-0025": {
+  "group": "positive control",
+  "hand_label": "definition (control)",
+  "states_an_obligation": false,
+  "gate": "NOT_ASSERTABLE",
+  "text": "The cmd[3:0] input is the bit-level command provided by the byte-level controller.",
+  "reviewer": "Both trigger and effect are absent from the sentence. It defines what cmd is (its role and source) rather than asserting 'when/while X, the design must Y', so there is no situation-effect pair for any check to test and no False verdict this sentence could license. Because there is no obligation here, the check's False path (cmd_ack completing a window with no scl_oen/sda_oen movement) cannot be a test of THIS requirement -- it is in substance the obligation stated by the routed requirements REQ-0104 and REQ-0016 (which do state that a supported cmd must drive scl_oen/sda_oen through the sequence), reused under REQ-0025's uid. This verdict is a specification issue, not a check-repair issue: no rewrite of the check can add an obligation this sentence does not state."
+ },
+ "REQ-0028": {
+  "group": "positive control",
+  "hand_label": "definition (control)",
+  "states_an_obligation": false,
+  "gate": "NOT_ASSERTABLE",
+  "text": "The arbitration-lost output al indicates that the controller has detected an arbitration loss.",
+  "reviewer": "Both trigger and effect are absent from the sentence. 'al indicates that the controller has detected an arbitration loss' only glosses what the al output MEANS -- it names no situation (trigger) in which al must assert, and states no required behavior (effect, e.g. stickiness or timing) that a trace could violate. Because there is no obligation here, the check's real trigger/effect (assert-on-arbitration-scenario, stay sticky until reset) cannot be a test of THIS requirement; it corresponds to the obligation stated by spec item 8 and the reset-clears-state language elsewhere, reused under REQ-0028's uid. This is a specification gap, not something a rewritten check can fix."
+ },
+ "REQ-0086": {
+  "group": "positive control",
+  "hand_label": "definition (control)",
+  "states_an_obligation": false,
+  "gate": "NOT_ASSERTABLE",
+  "text": "The slave_wait condition indicates that another bus participant is holding the SCL line low.",
+  "reviewer": "Both trigger and effect are absent from the sentence. 'slave_wait indicates that another bus participant is holding SCL low' only glosses what the internal slave_wait condition MEANS -- it names the situation but states no required behavior (no pausing, no freezing of cmd_ack/scl_oen, nothing) that a trace could violate. Because there is no obligation here, the check's actual trigger/effect (freeze cmd_ack while the slave_wait condition holds) cannot be a test of THIS requirement; it is the obligation stated by the routed requirement REQ-0087, reused under REQ-0086's uid. This is a specification gap -- no rewrite of the check can add an obligation this sentence does not state."
+ }
+}

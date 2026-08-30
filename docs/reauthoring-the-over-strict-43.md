@@ -421,10 +421,76 @@ sentence forbid anything".
 under the rule the summary already applies to `VACUOUS` and `ORACLE_INVALID`: a
 zero from a gate that did not run reads exactly like a clean bill.
 
-**Not yet measured.** The ground exists and is pinned by seven tests; what it
-actually rejects on a live run is unknown, because answering it needs the
-reviewer to run. The prediction on record is the twelve hand-labelled
-requirements above, of which five are the golden convictions still standing.
+### Measured live, on 20 requirements -- and it overturns the count above
+
+The ground was put in front of a live reviewer on c1-i2c's own requirements,
+with the real oracle each one got. `docs/evidence/gate3b-live.json` carries every
+answer.
+
+| | gate says NOT_ASSERTABLE | gate lets it through |
+|---|---|---|
+| **copular definitions** (4) | **4** | 0 |
+| requirements hand-labelled assertable (10) | **0** | 10 |
+| requirements hand-labelled NOT assertable (6) | **0** | 6 |
+
+**It fires when it should and never when it should not** -- but the third row is
+a result against this document, not against the gate.
+
+**THE HAND LABELS WERE WRONG, and the reviewer's readings are better.** On all
+six it named a specific design the sentence condemns, which is exactly the test
+section 3b poses:
+
+* REQ-0001 -- "a design that receives a supported command and never moves
+  scl_oen/sda_oen from their released level, or that ever drives scl_o/sda_o
+  non-zero, is condemned by these words". Called a SCOPE statement above; it is
+  not.
+* REQ-0055 -- "sda_chk is internal and outside the port list, so no check can
+  speak to it, **but the enable-driving half of the sentence is a testable
+  claim**". The boundary rule applied correctly to a mixed sentence, where this
+  document had rejected the whole for one internal conjunct.
+* REQ-0080 -- "the bare text has no trigger of its own, **but its spec_span sits
+  squarely inside the reset paragraph**". It recovered the antecedent from
+  evidence the hand pass did not use.
+* REQ-0016, REQ-0026, REQ-0095 -- same shape.
+
+So the bar in this document ("a determinate condition and a determinate effect
+landing on a declared port") is stricter than 3b's ("can you describe a design
+this sentence calls wrong"), and 3b's is the right one, because it is the test
+that maps onto whether a check can exist at all.
+
+**WITHDRAWN: "20 should be asserted and 12 should not", and the 33%-of-89
+extrapolation drawn from it.** The defensible class is narrower and cleaner --
+the copular definition, which states what something IS or MEANS:
+
+```
+REQ-0025  "The cmd[3:0] input is the bit-level command provided by the
+           byte-level controller."
+REQ-0028  "The arbitration-lost output al indicates that the controller has
+           detected an arbitration loss."
+REQ-0086  "The slave_wait condition indicates that another bus participant is
+           holding the SCL line low."
+REQ-0020  "The ena input is the core enable signal that gates normal timing and
+           input filtering operation."
+```
+
+Four of the 43, and the reviewer's ground on each is the same sentence: "both
+trigger and effect are absent". On REQ-0025 and REQ-0086 it goes further and
+names the sibling whose obligation the check actually borrowed -- REQ-0104 /
+REQ-0016, and REQ-0087.
+
+**What it is worth, stated at the size the evidence supports.** REQ-0020 and
+REQ-0028 are TRUSTED today and both convict golden, so the gate removes **2 of
+the 6 remaining false convictions** -- not the five this document previously
+projected. REQ-0025 and REQ-0086 were already ORACLE_INVALID; the gate re-routes
+them from "the author's check is off-target" to "the specification states no
+obligation", which ends them instead of spending a repair round on a party that
+cannot act. Of the other four golden convictions, REQ-0055 was tested and let
+through, and REQ-0007, REQ-0057 and REQ-0087 were not tested.
+
+**Caveat on the instrument.** The reviewer here is the same model family as the
+author whose work it judges, and the hand labels it overturned are the same
+author's too. What this measures is whether the PROMPT elicits the judgement,
+not whether an independent party agrees.
 
 ## The whole set, both arms
 
