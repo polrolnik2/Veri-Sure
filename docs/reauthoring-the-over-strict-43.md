@@ -458,6 +458,31 @@ enable signal.").
 The third row below stands on its own -- it is a result against this document
 rather than against the gate, and nothing in it is confounded.
 
+**Two riders on the one held-out case, one weakening it and one worth keeping.**
+
+REQ-0020's answer reasons by ANALOGY to the prompt's examples -- "closely
+paralleling the briefing's own 'no obligation' examples". Its sentence is not in
+the prompt, so this is not the circularity above; but it is generalisation from
+given examples rather than an independent reading, which is a weaker thing to
+have measured than the bare 1-of-1 suggests.
+
+Against that: REQ-0020 was answered against the OLD section 3b -- no two-leg bar,
+no borrowing rule, both added afterwards in the commit that followed -- and the
+reviewer raised BOTH unprompted. It rejected for want of "a concrete trigger-value
+or port-level effect", which is the second leg; and it flagged the check as
+testing "obligations ... drawn from a different part of the spec (Implementation
+Detail #2 / the processing-flow paragraph), not from REQ-0020's own words", which
+is the borrowing rule. Those two additions codify what a careful reader already
+does, which is the claim that commit made from the 15-of-16 port-naming count,
+supported here on a second and independent line.
+
+**And an observation about S1 rather than about the gate.** REQ-0020's
+`spec_span` "stops just before the sentence that actually supplies the
+trigger+effect". Compare REQ-0080, where the span DID reach the reset paragraph
+and the reviewer recovered the antecedent from it. The same extraction step
+decides, by where it cuts, whether a requirement is repairable from its own
+provenance or not -- and nothing measures that.
+
 **THE HAND LABELS WERE WRONG, and the reviewer's readings are better.** On all
 six it named a specific design the sentence condemns, which is exactly the test
 section 3b poses:
