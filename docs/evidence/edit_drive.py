@@ -102,6 +102,50 @@ TOOLS = {
     "commit": lambda: session.commit(),
 }
 
+def budget(payload, limit: int = 14000) -> str:
+    """Fit an observation to `limit` WITHOUT cutting JSON in half.
+
+    Slicing a serialised dict at a character count produces an unparseable
+    fragment ending mid-string, which is a worse thing to hand a model than a
+    shorter but complete object. Measured on round 0 of the first live run: the
+    seeded `list_failing_requirements()` payload was cut inside REQ-0035's
+    requirement text.
+
+    So: strings slice (that is what they are), and structures SHED WHOLE
+    ELEMENTS. For the failing-requirements payload the uncovered rows go first,
+    because the agent is told to ignore them, and a note records what was
+    dropped rather than letting the list look complete.
+    """
+    if isinstance(payload, str):
+        return payload[:limit]
+    text = json.dumps(payload, indent=1, default=str)
+    if len(text) <= limit:
+        return text
+    if isinstance(payload, dict) and "uncovered" in payload:
+        n = len(payload["uncovered"])
+        payload = {**payload, "uncovered": [],
+                   "uncovered_count": n,
+                   "note": (payload.get("note", "") + f"  [{n} UNCOVERED rows "
+                            "omitted to fit; no edit discharges one]")}
+        text = json.dumps(payload, indent=1, default=str)
+        if len(text) <= limit:
+            return text
+    if isinstance(payload, dict):
+        out, keys = dict(payload), sorted(payload, key=lambda k: -len(str(payload[k])))
+        for k in keys:
+            out[k] = f"<omitted: {len(str(payload[k]))} chars>"
+            text = json.dumps(out, indent=1, default=str)
+            if len(text) <= limit:
+                return text
+    if isinstance(payload, list):
+        for keep in range(len(payload) - 1, 0, -1):
+            text = json.dumps(payload[:keep] + [f"<{len(payload)-keep} more omitted>"],
+                              indent=1, default=str)
+            if len(text) <= limit:
+                return text
+    return text[:limit]
+
+
 RULES = """You are debugging a Verilog design against a frozen set of checks written
 from its specification. You do NOT have the specification and you do NOT have a
 reference design. What you have is the requirement each check came from, in the
@@ -159,7 +203,7 @@ def render(obs: str) -> str:
 
 port = AgentPort(root=IO, timeout=a.timeout)
 scripted = json.loads(Path(a.script).read_text()) if a.script else None
-obs = json.dumps(session.list_failing_requirements(), indent=1)[:12000]
+obs = budget(session.list_failing_requirements(), 12000)
 log = []
 for rnd in range(a.rounds):
     if scripted is not None:
@@ -201,7 +245,7 @@ for rnd in range(a.rounds):
                 if not isinstance(out, str) else out[:4000]})
     if name == "commit":
         session._pull_req_results()
-    obs = (out if isinstance(out, str) else json.dumps(out, indent=1, default=str))[:14000]
+    obs = budget(out)
     if session.action_calls >= session.max_trials:
         obs += ("\n\nTRIAL BUDGET SPENT. No further commit is possible. "
                 "Reply {\"done\": \"...\"} saying what you found.")
