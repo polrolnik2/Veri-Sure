@@ -619,47 +619,27 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
     )
 
 
-def _is_live(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
-             *, base: str) -> bool:
-    """Whether ONE replacement can fail. Unknown counts as live.
+def _cannot_fail(detail: str) -> str:
+    """The rejection reason for a check no legal value can move.
 
-    An oracle this cannot decide about must not be discarded on that account --
-    the same asymmetry `verify_one` uses, where an instrument that could not
-    answer never convicts.
+    A REASON STRING, not an `Issue`, because this is now blocking: it flows
+    through `rejected`/`quotable` like `malformed:` and `off-target:`, buys a
+    repair round on the same terms, and leaves the check VACUOUS if it stays
+    dead. It was an advisory `Issue` until the loop was measured losing work to
+    it -- see the note at the `dead_now` fold.
+
+    The text is the old advisory's, minus its offer to decline. A blocking gate
+    cannot invite the author to keep the check as-is. What survives is the one
+    escape that is not a decline: if the requirement constrains nothing
+    observable, saying so is the right answer, and it routes to spec authoring
+    rather than back to the author.
     """
-    record = _liveness({oracle.req_uid: oracle}, witness, contract,
-                       stimulus_by_tp, base=base).get(oracle.req_uid)
-    return not record or record.get("verdict") != _L.DEAD_ORACLE
-
-
-def _dead_advisory(req_uid: str, detail: str) -> Issue:
-    """The check cannot fail. Unlike gate 1, this is not one reader's opinion.
-
-    Gate 1's note is a disagreement between two same-author readings, so
-    declining it is a real answer. This is a fact about the check itself,
-    established mechanically: every declared output it names was set to every
-    other legal value, near and far, everywhere and at single points, and the
-    verdict never moved. There is no design that this check distinguishes from
-    any other.
-
-    It is still an ADVISORY and not a rejection, and the reason is the rate
-    rather than the reasoning. Its false-positive rate is known on one design.
-    This stage has twice turned a number into a refusal before knowing what it
-    rejected -- gate 1's blanket "met" discarded 30 requirements, and the
-    correspondence gate rejected 56 of 70 on a miscalibration -- and both times
-    the damage was invisible until a later gate could not see past it. So: one
-    attempt, and the previous check stands if the attempt is not better.
-
-    What the author is NOT told is which design was used. The counterexample is
-    the perturbation, which is derived from the trace's own declared widths, not
-    from any implementation's behaviour.
-    """
-    return Issue(
-        "warning", f"oracle.{req_uid}.cannot_fail",
-        f"This check cannot fail. {detail}. Every declared output it names was "
-        f"driven to every other legal value -- one step away and at both ends "
-        f"of the range, across the whole trace and at single edges -- and the "
-        f"verdict did not change once.\n\n"
+    lead = f"{detail}. " if detail else ""
+    return (
+        f"vacuous: this check cannot fail. {lead}Every declared output it names "
+        f"was driven to every other legal value -- one step away and at both "
+        f"ends of the range, across the whole trace and at single edges -- and "
+        f"the verdict did not change once.\n\n"
         f"That usually means one of three things. The check reads a port to "
         f"find its activation window but never ASSERTS on any port. Its "
         f"comparison is true for every value the port can carry, so it restates "
@@ -667,9 +647,9 @@ def _dead_advisory(req_uid: str, detail: str) -> Issue:
         f"fire, so the body it guards never runs.\n\n"
         f"Rewrite it so there is some legal output value it rejects, and name "
         f"that value in `reasoning`. If the requirement genuinely constrains "
-        f"nothing observable at the boundary, say THAT instead and keep the "
-        f"check as it is -- a requirement with no observable is a finding about "
-        f"the specification, not something to invent an assertion for.")
+        f"nothing observable at the boundary, say THAT instead -- a requirement "
+        f"with no observable is a finding about the specification, not "
+        f"something to invent an assertion for.")
 
 
 def _reconsider_issue(req_uid: str, why: str) -> Issue:
@@ -1143,14 +1123,57 @@ def run_oracle_stage(
             for uid, record in alive.items()
             if record.get("verdict") == _L.DEAD_ORACLE
         }
-        # Gate 1 and the liveness note each earn an attempt -- "try to make it
-        # pass" -- but only one each, and only where nothing else is already
-        # re-asking. Both are advisory: see `_advisory` and `_dead_advisory`.
+        # A CHECK THAT CANNOT FAIL IS REJECTED, like every other defect this
+        # stage can establish mechanically.
+        #
+        # It used to be advisory: re-asked once, and a replacement that was
+        # still inert was silently dropped. That is the one gate whose finding
+        # did not route anywhere, so an unfalsifiable check could be frozen
+        # TRUSTED -- and it made the loop non-monotone, because dropping the
+        # replacement wholesale threw away corrections it had made on axes
+        # liveness cannot see. REQ-0055 lost a widened trigger that way and was
+        # rejected two rounds later for the narrow one.
+        #
+        # `vacuous:` is the existing prefix for "this check passes everything",
+        # and `verdict.ROUTE` already sends it to "regenerate the oracle". So a
+        # dead check now buys a repair round on the same terms as `malformed:`
+        # or `off-target:`, and ends VACUOUS rather than TRUSTED if it stays
+        # dead. That also gives the vacuity finding an owner that does not need
+        # the variants leg: `_liveness` runs on every round regardless, whereas
+        # `vacuity_checked` is False whenever `want_variants` is off -- which is
+        # the default, and which is how "the check can never return False for
+        # any design" reached a correspondence reviewer instead of a gate.
+        #
+        # THE CAUTION THIS OVERRIDES, kept because it was measured and is not
+        # answered. `_dead_advisory` argued for staying advisory on RATE, not on
+        # reasoning: its false-positive rate is known on exactly one design, and
+        # this stage has twice turned a number into a refusal before knowing
+        # what that refusal cost -- gate 1's blanket "met" discarded 30
+        # requirements, and the correspondence gate rejected 56 of 70 on a
+        # miscalibration. Both times the damage was invisible until a later gate
+        # could not see past it.
+        #
+        # What is different here: the finding is mechanical rather than one
+        # reader's opinion. Every declared output the check names was driven to
+        # every other legal value, near and far, at points and throughout, and
+        # the verdict never moved -- so there is no design this check tells
+        # apart from any other. A false positive would mean the perturbation
+        # missed a value the check does distinguish, which is a bug in
+        # `liveness`, not a judgement call. The rate still wants measuring on a
+        # second design before this is load-bearing.
+        for uid, detail in dead_now.items():
+            if uid in rejected:
+                continue
+            why = _cannot_fail(detail)
+            rejected[uid] = quotable[uid] = why
+            repairs.setdefault(uid, []).append(why)
+        # Gate 1 earns an attempt -- "try to make it pass" -- but only one, and
+        # only where nothing else is already re-asking. It stays advisory: it is
+        # a disagreement between two same-author readings, so declining it is a
+        # real answer. See `_advisory`.
         advisory_only = {
             uid for uid, note in disagreements.items()
             if "witness" in note and uid not in quotable and uid not in advised
-        } | {
-            uid for uid in dead_now if uid not in quotable and uid not in advised
         }
         ask = set(quotable) | advisory_only
 
@@ -1182,8 +1205,6 @@ def run_oracle_stage(
             # call and applies no pressure on its own.
             feedback={
                 uid: _witness_note(uid, disagreements.get(uid, {}))
-                     + ([_dead_advisory(uid, dead_now[uid])]
-                        if uid in dead_now else [])
                      + ([_repair_issue(
                             uid, quotable[uid],
                             disagreements.get(uid, {}).get("vacuity", ""))]
@@ -1298,18 +1319,36 @@ def run_oracle_stage(
                         f"any of its {len(o.tp_uids)} testpoint(s), where the "
                         f"previous check decided {was}; the previous stands")
                     continue
-            if o.req_uid in advisory_only and o.req_uid in dead_now and not _is_live(
-                    o, witness, contract, stimulus_by_tp, base=base):
-                # A replacement that still cannot fail is not an
-                # improvement, and swapping one inert check for another
-                # loses the reasoning already recorded against this uid.
-                logger.info("oracles: %s was re-asked because it cannot "
-                            "fail and the replacement cannot either; the "
-                            "previous check stands", o.req_uid)
-                repairs.setdefault(o.req_uid, []).append(
-                    "repair rejected -- the replacement still cannot fail; "
-                    "the previous stands")
-                continue
+            # THERE IS NO THIRD GUARD, and the one that used to be here was
+            # dropped rather than narrowed.
+            #
+            # It discarded a replacement when the check had been re-asked for
+            # being unable to fail and the replacement still could not fail --
+            # on the reasoning that swapping one inert check for another loses
+            # the reasoning already recorded against the uid. It did exactly
+            # that, and the cost is measured. REQ-0055 on the affected23 run:
+            #
+            #   round 0   trigger cmd==1, `al` folded into `until`   _is_live False
+            #   round 1   trigger WIDENED to all four commands       _is_live False  -> DISCARDED
+            #   round 2   restarted from ROUND 0, fixed the abort    _is_live True   -> kept
+            #
+            # and correspondence then rejected the frozen check for narrowing
+            # "each command sequence" to cmd==1 -- the defect round 1 had
+            # already corrected. Two repair rounds spent, one correction thrown
+            # away, and the requirement lost.
+            #
+            # The guard treated liveness as the only axis of improvement.
+            # Round 1's replacement was better on a different one -- trigger
+            # coverage -- which neither `_is_live` nor `_decides` can see, so
+            # the guard could not distinguish an improved-but-still-dead
+            # replacement from an unimproved one. A predicate that cannot see
+            # the dimension a repair moved must not be the thing that decides
+            # whether the repair survives.
+            #
+            # The churn it prevented is cheaper than the work it destroyed. The
+            # two guards above stay: they reject a replacement that VERIFIES
+            # worse, or that stopped deciding -- both measurable losses, both
+            # recorded.
             held[o.req_uid] = o
 
     # EVERY UNEXERCISED ORACLE GETS STAGING ATTEMPTS, before anything is frozen

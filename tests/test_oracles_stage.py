@@ -658,10 +658,11 @@ def test_an_oracle_that_cannot_fail_is_reported(tmp_path, monkeypatch):
     got = _run(_Port([_reply(INERT)]), workdir=tmp_path, run_dir=tmp_path)
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
-    live = blob["oracle_liveness"]
-    assert live["counts"]["dead-oracle"] == 1
-    assert live["dead_oracle"] == ["REQ-0001"]
-    assert got.dispositions["REQ-0001"] == O.TRUSTED, (
+    # `oracle_liveness` reports on the TRUSTED set, and a check that cannot fail
+    # is no longer in it -- the finding moved from a report to a rejection, so
+    # the artifact now says "no trusted oracle is dead" and means it.
+    assert blob["oracle_liveness"] == {}
+    assert got.dispositions["REQ-0001"] == "VACUOUS", (
         "reported, not gated -- this stage has twice turned a number into a "
         "refusal before knowing what it rejects")
 
@@ -717,7 +718,12 @@ def test_an_oracle_that_cannot_fail_is_re_asked_with_the_counterexample(
     asked = [p for p in port.prompts if "cannot fail" in p]
     assert asked, "the author is never told"
     assert "driven to every other legal value" in asked[0]
-    assert "you may decline" in asked[0].lower() or "keep the check" in asked[0].lower()
+    # NO OFFER TO DECLINE. It is a rejection now, not an advisory, and a
+    # blocking gate cannot invite the author to keep the check as it is. The one
+    # escape that is not a decline survives: a requirement constraining nothing
+    # observable is a finding about the specification.
+    assert "you may decline" not in asked[0].lower()
+    assert "finding about the specification" in asked[0].lower()
 
     assert got.dispositions["REQ-0001"] == O.TRUSTED
     assert "y" in got.trusted[0].source, "the working replacement was taken"
@@ -727,14 +733,31 @@ def test_an_oracle_that_cannot_fail_is_re_asked_with_the_counterexample(
         "the artifact must report what the LAST round saw, not the first")
 
 
-def test_a_replacement_that_still_cannot_fail_does_not_displace_the_original(
+def test_a_still_inert_replacement_is_KEPT_because_liveness_is_not_the_only_axis(
         tmp_path, monkeypatch):
-    """Advice must not become a way to lose a check.
+    """REVERSED, deliberately. This used to assert the opposite.
 
-    Same rule the witness advisory follows: an attempt that is not better
-    leaves the previous one standing. Here "not better" includes "still cannot
-    fail", which `verify_one` cannot see -- every gate it runs passes an inert
-    check.
+    The rule was "advice must not become a way to lose a check": a replacement
+    that still cannot fail left the previous one standing. It read as the same
+    asymmetry the witness advisory uses, and it is not -- because `_is_live` is
+    a ONE-BIT verdict, and a repair can improve a check without moving it.
+
+    Measured, REQ-0055 on the affected23 run:
+
+        round 0  trigger cmd==1, `al` folded into `until`   cannot fail
+        round 1  trigger WIDENED to all four commands       cannot fail -> DROPPED
+        round 2  restarted from ROUND 0, fixed the abort    can fail    -> kept
+
+    and correspondence then rejected the frozen check for narrowing "each
+    command sequence" to cmd==1 -- the defect round 1 had already corrected.
+    Two repair rounds spent, one correction destroyed, the requirement lost.
+    Neither `_is_live` nor `_decides` can see trigger coverage, so the guard
+    could not tell an improved-but-still-inert replacement from an unimproved
+    one and discarded both.
+
+    The churn the guard prevented is cheaper than the work it destroyed. The two
+    remaining guards still bite, and both are measurable losses that get
+    recorded: a replacement that VERIFIES worse, and one that stopped deciding.
     """
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
     other_inert = INERT.replace("concluded nothing", "concluded nothing again")
@@ -745,14 +768,23 @@ def test_a_replacement_that_still_cannot_fail_does_not_displace_the_original(
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
         fanout=False, max_repairs=0, repair_attempts=1)
 
-    assert got.dispositions["REQ-0001"] == O.TRUSTED, "still not a rejection"
-    assert "again" not in got.trusted[0].source, (
-        "an equally inert replacement must not overwrite the original")
+    assert got.dispositions["REQ-0001"] == "VACUOUS", (
+        "a check that still cannot fail is rejected, not frozen TRUSTED")
+    assert not got.trusted, "nothing inert survives into the trusted set"
 
 
-def test_the_advisory_is_asked_once_and_not_repeated(tmp_path, monkeypatch):
-    """Re-asking a question already answered is pressure by repetition, which
-    is what turned the over-strictness gate into a compliance ratchet."""
+def test_a_dead_check_is_re_asked_every_round_like_any_other_rejection(
+        tmp_path, monkeypatch):
+    """CHANGED WITH THE GATE, and the old rationale does not carry over.
+
+    This asserted the question was asked ONCE -- "re-asking a question already
+    answered is pressure by repetition, which is what turned the over-strictness
+    gate into a compliance ratchet". That reasoning is about ADVISORIES, where
+    declining is a real answer and repetition is coercion. A blocking gate has
+    no such reading: `malformed:` and `off-target:` are re-put every round until
+    fixed or the rounds run out, and "cannot fail" is now the same kind of
+    finding, so it gets the same treatment. Homogeneity is the point.
+    """
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
     port = _Port([_reply(INERT)])
     O.run_oracle_stage(
@@ -760,7 +792,7 @@ def test_the_advisory_is_asked_once_and_not_repeated(tmp_path, monkeypatch):
         contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
         fanout=False, max_repairs=0, repair_attempts=2)
-    assert len([p for p in port.prompts if "cannot fail" in p]) == 1
+    assert len([p for p in port.prompts if "cannot fail" in p]) >= 1
 
 
 def test_unobservable_keeps_the_reason_its_oracle_was_rejected_for():
@@ -1224,7 +1256,13 @@ def test_every_path_that_discards_a_replacement_records_it():
     # `repairs.setdefault(...)` -- count the discards and the records together.
     stands = src.count("the previous check stands") + src.count("the previous stands")
     recorded = src.count('repairs.setdefault(o.req_uid, []).append')
-    assert recorded >= 3, (
+    assert recorded >= 2, (
         f"only {recorded} discard paths record to `repairs`; a silent one is "
         f"how a lost repair becomes invisible in the artifact")
     assert stands >= recorded, "every record should describe a real stand-down"
+    # AND THE THIRD GUARD IS GONE, not merely made to record itself. It
+    # discarded a replacement whose check still could not fail, which threw away
+    # REQ-0055's widened trigger and cost the requirement. Liveness was the only
+    # axis it could see, and the repair had moved a different one.
+    assert "_is_live(" not in src, (
+        "the liveness discard is dropped; a helper left behind gets re-wired")
