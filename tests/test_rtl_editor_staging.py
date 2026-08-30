@@ -14,11 +14,28 @@ import json
 import pytest
 
 from eda_agent.rtl_editor import _EditSession
-from eda_agent.trace_slicer import RtlBlock
+from eda_agent.sim_reviewer import overdriven_signals
+from eda_agent.trace_slicer import RtlBlock, parse_rtl_blocks
 
 RTL = """\
 module m(input clk, input a, output b, output c);
 assign b = a;
+
+always @(posedge clk) begin
+  c <= a;
+end
+
+endmodule
+"""
+
+# The fixture above is deliberately loose -- most pins never lint it, and
+# `output c` driven procedurally is a PROCASSWIRE error the staging tests do not
+# care about. The two driver pins DO lint, so they get a module that compiles.
+LINTABLE = """\
+module m(input clk, input a, output b, output reg c);
+wire w;
+assign w = a;
+assign b = w;
 
 always @(posedge clk) begin
   c <= a;
@@ -1641,3 +1658,110 @@ def test_an_activation_whose_values_all_appear_is_a_timing_problem(tmp_path):
     u = s.explain("REQ-B")["uncovered"]
     assert "never_reached" not in u
     assert "TIMING" in u["what_to_ask_for"]
+
+
+def test_two_assigns_to_one_wire_are_caught_though_verilator_is_silent(tmp_path):
+    """THE GUARD SEES PORTS AND GOES BLIND INSIDE THE MODULE.
+
+    Verilator's MULTIDRIVEN -- all `multidriven_signals` is a regex over --
+    fires for two combinational drivers on an OUTPUT PORT and for procedural
+    drivers with DIFFERENT CLOCKING. Measured on 5.038 under `check_syntax`'s
+    exact flags, it is SILENT (exit 0, no warning) for two `assign`s to an
+    internal wire, and for two same-clock always blocks. That is where the
+    editor works.
+
+    It latched, too. Three live editor sessions committed an i2c design with
+    `assign scl_sync` twice -- `wire scl_sync`, internal, and the candidate they
+    started from has one driver. In the sixth run the two came to DISAGREE
+    (`scl_oen & ~sSCL & dSCL` against `cSCL[1] & ~scl_i & scl_oen`), which
+    resolves to X, and `scl_sync` feeds the clock divider's reload condition.
+    The agent had spent two rounds refining the two copies separately, taking
+    them for one expression, because no tool it could call would say otherwise.
+    """
+    src = ("module m(input a, input b, output c);\n"
+           "  wire w;\n"
+           "  assign w = a;\n"
+           "  assign w = b;\n"
+           "  assign c = w;\n"
+           "endmodule\n")
+    assert overdriven_signals(src) == {"w"}
+    # Verilator, on that same text, says nothing -- the reason this exists.
+    path = tmp_path / "m.sv"
+    path.write_text(src)
+    from eda_agent.sim_reviewer import multidriven_signals
+    assert multidriven_signals(str(path)) == set()
+
+    # One block writing a signal in two branches has ONE driver, not two.
+    ok = ("module m(input a, input clk, output reg c);\n"
+          "  always @(posedge clk) begin\n"
+          "    if (a) c <= 1'b1; else c <= 1'b0;\n"
+          "  end\n"
+          "endmodule\n")
+    assert overdriven_signals(ok) == set()
+
+
+def test_a_batch_that_duplicates_a_driver_is_refused_at_commit(tmp_path):
+    """And the refusal names the signal, so the fix is one search away."""
+    s = _session(tmp_path, LINTABLE)
+    s.stage_add("endmodule", "assign w = ~a;")
+    verdict = s.would_commit_be_rejected(s.staged())
+    assert "w" in verdict and "MORE THAN ONE driver" in verdict
+
+
+def test_a_preexisting_duplicate_does_not_block_every_commit(tmp_path):
+    """The ChipVerilog candidate these sessions start from ALREADY ships
+    `scl_sync` with two drivers. An absolute check would refuse every commit for
+    a defect the agent did not cause -- so the REJECTION is what the batch
+    introduced, while the pre-existing one is still surfaced as its own
+    sentence, because a wire resolving to X poisons everything reading it."""
+    s = _session(tmp_path, LINTABLE.replace(
+        "assign b = w;", "assign w = ~a;\nassign b = w;"))
+    assert s.would_commit_be_rejected(s.staged()) == ""   # not this batch's doing
+    warned = " ".join(s.driver_warnings())
+    assert "w" in warned and "ALREADY" in warned          # but not silent either
+
+
+def test_an_edit_anchor_may_differ_from_the_buffer_in_whitespace(tmp_path):
+    """WHITESPACE IS NOT THE AGENT'S TO GUESS.
+
+    `read_block` renders line-number prefixes, so no tool returns a verbatim
+    substring: the agent retypes the indentation and must be right to the
+    character. In the seventh live run its anchor was one space wider than the
+    file (25 against 24), was refused, and it then degraded to `state <= ...`,
+    `state\\t<= ...`, `state<=` -- none of which could match `state   <= `.
+    That cost eleven of forty-five rounds and the run's outcome; the sixth run,
+    same model and same tool, transcribed it correctly and made seven edits
+    with no errors.
+
+    A token-sequence match is not the ambiguity pin 7 guards against: a
+    destroyed anchor still matches nothing, and a repeated one is still refused.
+    """
+    s = _session(tmp_path)
+    b = max(parse_rtl_blocks(s.read_rtl()), key=lambda x: len(x.code))
+    sloppy = "\n".join("  " + ln.strip() for ln in b.code.strip().splitlines())
+    assert sloppy not in s.read_rtl(), "fixture must actually differ in whitespace"
+    out = s.stage_edit(sloppy, "// gone")
+    assert out["is_action_executed"] is True
+    assert "matched_on" in out
+    assert "// gone" in s.staged()
+
+
+def test_whitespace_tolerance_does_not_weaken_the_two_refusals(tmp_path):
+    """Pin 7 still holds: absent tokens are refused, and so is a repeat."""
+    s = _session(tmp_path)
+    out = s.stage_edit("no_such_identifier_anywhere <= 1;", "x")
+    assert out["is_action_executed"] is False
+    # The message must not send the agent back to fix indentation it already
+    # got right -- that is the loop run 7 spent eleven rounds in.
+    assert "whitespace was already ignored" in out["error_msg"].lower()
+
+    (tmp_path / "b").mkdir()
+    s2 = _session(tmp_path / "b")
+    s2.write_rtl(s2.read_rtl().replace(
+        "endmodule", "wire d1, d2;\nassign d1 = 1'b0;\nassign d2 = 1'b0;\nendmodule", 1))
+    s2.staged_rtl = None
+    out2 = s2.stage_edit("1'b0;", "1'b1;")
+    assert out2["is_action_executed"] is False    # two matches: still refused
+    assert "ambiguous" in out2["error_msg"]
+    out3 = s2.stage_edit("assign  d1  =  1'b0;", "assign d1 = 1'b1;")
+    assert out3["is_action_executed"] is True     # unique under normalization

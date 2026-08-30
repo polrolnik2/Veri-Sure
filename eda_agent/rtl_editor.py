@@ -18,7 +18,8 @@ from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .sim_reviewer import SimReviewer, check_syntax, multidriven_signals
+from .sim_reviewer import (SimReviewer, check_syntax, multidriven_signals,
+                           overdriven_signals)
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
 from .utils import (
@@ -725,6 +726,36 @@ class _EditSession:
         """
         buf = self.staged()
         found = buf.count(anchor)
+        loose = False
+        if found == 0:
+            # WHITESPACE IS NOT THE AGENT'S TO GUESS. `read_block` renders the
+            # buffer with line-number prefixes, so there is no tool that returns
+            # a verbatim substring -- the agent has to retype the indentation and
+            # be right to the character.
+            #
+            # MEASURED, and it cost a whole session. In the seventh live run the
+            # anchor was one space wider than the file (25 leading spaces against
+            # 24) and was refused; the agent then degraded to shorter and
+            # shorter guesses -- `state <= ST_STOP_A;`, `state\t<= ST_READ_A;`,
+            # `state<=` -- none of which could match, because the file has
+            # `state   <= ` with three spaces. It burned eleven of forty-five
+            # rounds on that, made two probe edits purely to discover what the
+            # buffer contained, gave up on `edit` entirely and retyped the whole
+            # block. The sixth run, same model and same tool, transcribed the
+            # indentation correctly and made seven edits with no errors. That is
+            # the difference between the two runs' outcomes.
+            #
+            # So: match on the TOKEN SEQUENCE, and let whitespace between tokens
+            # be any whitespace. That is not the ambiguity §7.2's pin 7 guards
+            # against -- a destroyed anchor still matches nothing, and a token
+            # sequence occurring twice is still refused below. It is reported in
+            # the response rather than applied silently.
+            spans = self._loose_spans(buf, anchor)
+            if len(spans) == 1:
+                s, e = spans[0]
+                anchor, found, loose = buf[s:e], 1, True
+            elif len(spans) > 1:
+                found = len(spans)
         if found == 0:
             # TWO causes, and naming only one of them sends the agent looking in
             # the wrong place. Within a batch it means an earlier staged edit
@@ -732,11 +763,13 @@ class _EditSession:
             # table still describes the design from before that commit, which
             # `_refresh_trace` only rebuilds when the run still has mismatches.
             return {"is_action_executed": False, "error_msg": (
-                f"Cannot {what}: its text is not in the buffer. Either an earlier "
-                f"staged edit overlapped it, or a commit has latched since the "
-                f"block list was built. read_block({what.split()[-1]!r}) shows "
-                f"what is actually there; list_suspect_blocks() rebuilds the "
-                f"list against the accepted design.")}
+                f"Cannot {what}: its text is not in the buffer -- and whitespace "
+                f"was already ignored, so this is not an indentation mismatch. "
+                f"The tokens themselves are not there, in that order. Either an "
+                f"earlier staged edit overlapped it, or a commit has latched "
+                f"since the block list was built. read_block({what.split()[-1]!r}) "
+                f"shows what is actually there; list_suspect_blocks() rebuilds "
+                f"the list against the accepted design.")}
         if found > 1:
             return {"is_action_executed": False, "error_msg": (
                 f"Cannot {what}: its text appears {found} times in the staged "
@@ -761,7 +794,28 @@ class _EditSession:
         trail = anchor[len(anchor.rstrip("\n")):]
         body = replacement.strip("\n")
         self.staged_rtl = buf.replace(anchor, lead + body + trail, 1)
-        return {"is_action_executed": True}
+        res: Dict[str, Any] = {"is_action_executed": True}
+        if loose:
+            res["matched_on"] = (
+                "the token sequence, not the exact characters -- your anchor's "
+                "whitespace differed from the buffer's. Applied to the one region "
+                "that matches; the text now in the buffer is your new_text.")
+        return res
+
+    @staticmethod
+    def _loose_spans(buf: str, anchor: str) -> list[tuple[int, int]]:
+        r"""Where `anchor` occurs in `buf` if any whitespace matches any whitespace.
+
+        Token sequence only: every run of whitespace in the anchor becomes
+        `\s+`, so indentation width, tabs-vs-spaces and line wrapping stop
+        mattering while the tokens themselves still have to be present in order.
+        An anchor that is entirely whitespace matches nothing.
+        """
+        toks = [t for t in re.split(r"\s+", anchor.strip()) if t]
+        if not toks:
+            return []
+        pat = re.compile(r"\s+".join(re.escape(t) for t in toks))
+        return [(m.start(), m.end()) for m in pat.finditer(buf)]
 
     def undriven_signals(self, text: str) -> list[str]:
         """Signals a still-read name has lost its last driver for.
@@ -816,25 +870,38 @@ class _EditSession:
         the workflow staging exists for. `commit` rejects what is still
         unresolved once the batch is claimed complete.
 
-        PURE PYTHON, from the block table, because this runs on EVERY staged
-        edit. `multidriven_signals` shells out to Verilator and costs about a
-        second, which is fine once per `check_staged` and far too much per
-        keystroke -- so the multi-driver half here is the cheap approximation
-        (a signal two surviving blocks both write) and the authoritative check
-        runs where it is affordable.
+        PURE PYTHON, from the staged TEXT, because this runs on EVERY staged
+        edit -- and because parsing is the only thing that can answer it. This
+        half used to count writers among `blocks_by_id`, which is whatever the
+        last `focus` sliced, so the same buffer was judged differently depending
+        on which requirement was in view and a duplicate outside the slice was
+        invisible. That is the identical defect `undriven_signals` was fixed
+        for, and it is fixed the same way. It also only counted `kind ==
+        "assign"`, so two always blocks driving one reg passed.
         """
         text = self.staged()
-        blocks = list((self.blocks_by_id or {}).values())
         out = []
-        writers: Dict[str, int] = {}
-        for b in blocks:
-            if b.code in text and b.kind == "assign":
-                for w in b.writes:
-                    writers[w] = writers.get(w, 0) + 1
-        multi = sorted(w for w, n in writers.items() if n > 1)
+        # Report only what THIS BATCH introduced. The docstring of
+        # `multidriven_signals` states the rule and it applies with more force
+        # here: the ChipVerilog candidate these sessions start from already ships
+        # `scl_sync` with two drivers, so an absolute check would refuse every
+        # commit for a defect the agent did not cause. Pre-existing duplicates
+        # are still surfaced -- as pre-existing, which is a different sentence.
+        try:
+            pre = overdriven_signals(self.read_rtl())
+        except Exception:  # noqa: BLE001
+            pre = set()
+        now = overdriven_signals(text)
+        multi = sorted(now - pre)
         if multi:
-            out.append(f"{', '.join(multi)} look to have MORE THAN ONE "
-                       f"continuous driver (confirm with check_staged)")
+            out.append(f"{', '.join(multi)} now have MORE THAN ONE driver, which "
+                       f"this batch introduced")
+        stale = sorted(now & pre)
+        if stale:
+            out.append(f"{', '.join(stale)} have MORE THAN ONE driver, and ALREADY "
+                       f"DID in the accepted design -- not caused by this batch, "
+                       f"but they resolve to X wherever the drivers disagree, so "
+                       f"anything reading them is unreliable")
         gone = self.undriven_signals(text)
         if gone:
             out.append(f"{', '.join(gone)} are still read but have LOST their "
@@ -972,13 +1039,19 @@ class _EditSession:
         # The AUTHORITATIVE multi-driver check, which `driver_warnings` only
         # approximates because it cannot afford Verilator per edit.
         warnings = list(self.driver_warnings())
+        # THE UNION, because neither source sees the other's case. Verilator's
+        # MULTIDRIVEN is only "multiple driving blocks with different clocking";
+        # two `assign`s to one wire, and two same-clock always blocks, are both
+        # silent under it (verified on 5.038 with these exact flags). The text
+        # check is the reverse: it sees any two writing blocks but cannot reason
+        # about clocking it never parsed.
         try:
-            multi = sorted(multidriven_signals(str(scratch)))
+            multi = sorted(set(multidriven_signals(str(scratch)))
+                           | overdriven_signals(text))
         except Exception:  # noqa: BLE001
             multi = []
         if multi:
-            warnings.append(f"{', '.join(multi)} have MORE THAN ONE continuous "
-                            f"driver (Verilator)")
+            warnings.append(f"{', '.join(multi)} have MORE THAN ONE driver")
         return ok, out, warnings, multi
 
     def would_commit_be_rejected(self, text: str) -> str:
@@ -1003,15 +1076,17 @@ class _EditSession:
             return ("the staged buffer does not compile, so a commit would be "
                     "rejected and would cost a trial")
         try:
-            pre = set(multidriven_signals(self.rtl_path))
+            pre = (set(multidriven_signals(self.rtl_path))
+                   | overdriven_signals(self.read_rtl()))
         except Exception:  # noqa: BLE001
             pre = set()
         introduced = sorted(set(multi) - pre)
         if introduced:
             return ("a commit would be REJECTED: the batch gives "
-                    + ", ".join(introduced) + " MORE THAN ONE continuous "
-                    "driver. Most often the replacement re-declares something "
-                    "that already exists outside the block it replaced.")
+                    + ", ".join(introduced) + " MORE THAN ONE driver. Most "
+                    "often the replacement re-declares something that already "
+                    "exists outside the block it replaced -- search the whole "
+                    "buffer for the signal's name before adding a driver for it.")
         lost = self.undriven_signals(text)
         if lost:
             return ("a commit would be REJECTED: " + ", ".join(lost)
@@ -1264,7 +1339,8 @@ class _EditSession:
 
         accepted = self.read_rtl()
         staged = self.staged_rtl
-        pre_multi = set(multidriven_signals(self.rtl_path))
+        pre_multi = (set(multidriven_signals(self.rtl_path))
+                     | overdriven_signals(self.read_rtl()))
 
         ok, syntax_out, warnings, multi = self._static_findings(staged)
         result["is_syntax_correct"] = ok
@@ -1677,7 +1753,8 @@ class _EditSession:
         # nit, and check_syntax is deliberately permissive about warnings so it
         # sails through. Reject BEFORE simulating: the sim would either mask it
         # (last-writer-wins) or blame the datapath for an X.
-        new_multi = multidriven_signals(self.rtl_path)
+        new_multi = (set(multidriven_signals(self.rtl_path))
+                     | overdriven_signals(self.read_rtl()))
         introduced = new_multi - (pre_multidriven or set())
         if introduced:
             self.write_rtl(old_file_content)
@@ -1686,7 +1763,7 @@ class _EditSession:
             result["error_msg"] = (
                 "Edit rolled back: it gave "
                 + ", ".join(sorted(introduced))
-                + " MORE THAN ONE continuous driver. Your replacement text re-declares "
+                + " MORE THAN ONE driver. Your replacement text re-declares "
                 "assignments that already exist OUTSIDE the block you replaced, so the "
                 "splice duplicated them. Replace ONLY the lines inside the block, and do "
                 "not repeat assignments that live elsewhere in the module."

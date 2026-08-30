@@ -180,6 +180,59 @@ def multidriven_signals(rtl_path: str) -> set[str]:
     return set(_MULTIDRIVEN_SIGNAL_RE.findall(text))
 
 
+
+def overdriven_signals(text: str) -> set[str]:
+    r"""Signals more than one block in THIS TEXT drives. Pure Python, no Verilator.
+
+    `multidriven_signals` is a regex over Verilator's MULTIDRIVEN warning, and
+    THAT WARNING STOPS AT THE MODULE BOUNDARY. Measured against Verilator 5.038
+    under the exact flags `check_syntax` uses (`--lint-only --sv --timing -Wall
+    -Wno-fatal --assert`):
+
+        output c;  assign c = a; assign c = ~a;   fires ("multiple
+                                                  combinational drivers")
+        always @(posedge clk1) c <= a;            fires ("different clocking")
+        always @(posedge clk2) c <= b;
+
+        wire w;  assign w = a; assign w = b;      SILENT. exit 0, no warning
+        always @(posedge clk) c <= a;             SILENT. exit 0, no warning
+        always @(posedge clk) c <= b;
+
+    So the guard sees duplicate drivers on PORTS and goes blind on INTERNAL
+    signals -- which is where the editor does its work. §7.1 describes it as
+    catching "an edit giving a signal a SECOND continuous driver"; for an
+    internal wire, the commonest shape of that edit, it cannot.
+
+    MEASURED, and it latched. Across three live editor sessions the committed
+    i2c design carried `assign scl_sync` TWICE (the ChipVerilog candidate it
+    started from has one). `scl_sync` is read by the clock divider's reload
+    condition, and in the sixth session the two drivers came to disagree --
+    `scl_oen & ~sSCL & dSCL` against `cSCL[1] & ~scl_i & scl_oen` -- which in
+    Verilog resolves to X wherever they differ. Every commit passed the guard.
+    Worse, the agent spent two rounds editing the two copies SEPARATELY,
+    refining what it took to be one expression, because nothing it could call
+    would say the signal had two drivers.
+
+    Parsing the text settles it, the same way `undriven_signals` settles the
+    mirror question, and costs nothing -- so this can run on every staged edit
+    rather than only where a Verilator call is affordable.
+
+    Multiple writes from ONE block are not a finding: a reg assigned in two
+    branches of a single always block has one driver.
+    """
+    from .trace_slicer import parse_rtl_blocks
+
+    try:
+        blocks = parse_rtl_blocks(text)
+    except Exception:  # noqa: BLE001
+        return set()
+    n: dict[str, int] = {}
+    for b in blocks:
+        for w in set(b.writes):
+            n[w] = n.get(w, 0) + 1
+    return {w for w, c in n.items() if c > 1}
+
+
 def sim_review_mismatch_cnt(stdout: str) -> int:
     mismatch_cnt = 0
     if "SIMULATION FAILED" in stdout:
