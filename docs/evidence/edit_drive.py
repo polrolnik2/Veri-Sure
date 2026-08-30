@@ -220,11 +220,16 @@ TOOLS
   list_suspect_blocks()            the current slice.
   read_block(block_id)             its source, from the STAGED buffer.
 
-  edit(old_text, new_text)            FREE. Replace an exact FRAGMENT, quoting
-                                      enough context to be unique. USE THIS for
-                                      a small change inside a large block --
-                                      the FSM here is two thirds of the design,
-                                      and retyping it to change one line is how
+  edit(old_text, new_text)            FREE. Replace a FRAGMENT, quoting enough
+                                      context to be unique. WHITESPACE DOES NOT
+                                      HAVE TO MATCH -- indentation, tabs and
+                                      line breaks are ignored, only the tokens
+                                      matter, so do not spend calls tuning it.
+                                      If it says the text is not there, the
+                                      TOKENS are not there. USE THIS for a small
+                                      change inside a large block -- the FSM
+                                      here is two thirds of the design, and
+                                      retyping it to change one line is how
                                       edits go wrong.
   replace_block(block_id, new_code)   FREE. Replaces a WHOLE block. Right for a
                                       small block, wasteful for a large one.

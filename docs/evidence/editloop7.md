@@ -93,8 +93,11 @@ Verilator's MULTIDRIVEN, and on 5.038 under `check_syntax`'s exact flags:
 
 The guard sees the module boundary and goes blind inside it, which is where the
 editor edits. **All three sessions latched an i2c design carrying `assign
-scl_sync` twice** — internal wire, and the ChipVerilog candidate they start from
-has one driver. In run 6 the two came to disagree:
+scl_sync` twice** — internal wire, and the ChipVerilog candidate they start
+from (`Result/codex/i2c_master_bit_ctrl/i2c_master_bit_ctrl_t1.v`, confirmed by
+rebuilding run 8's baseline from it and reproducing 19 failing / 25 uncovered /
+46 passing exactly) has one driver, and `overdriven_signals` reports nothing on
+it. In run 6 the two came to disagree:
 
 ```
 line  82   assign scl_sync = scl_oen & ~sSCL & dSCL;
@@ -111,6 +114,8 @@ nothing it could call would tell it there were two.
 **Fixed** (commit 6b8d9f2): `overdriven_signals(text)` counts writing blocks from
 the parsed text — the mirror of `undriven_signals`. It finds `scl_sync` in all
 three latched designs and nothing in the pristine candidate or the golden RTL.
+Run 4's latched RTL is also clean, so the duplication entered at run 2 and again,
+independently, at run 5.
 
 ## Honest reading
 
