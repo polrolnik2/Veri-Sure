@@ -1,0 +1,26 @@
+req        class            cand   gold   requirement
+REQ-0006   INVERTED         True   False  The module detects arbitration loss and signals it by asserting 
+REQ-0030   INVERTED         True   False  The arbitration-lost output al is asserted when a STOP condition
+REQ-0042   DISCRIMINATING   False  True   The module shall assert scl_sync when a falling edge occurs on t
+REQ-0048   DISCRIMINATING   False  True   The module detects an I2C STOP condition when the filtered SDA t
+REQ-0088   DISCRIMINATING   False  True   If the external SCL line falls while this master has released it
+REQ-0095   INVERTED         True   False  The module shall enable arbitration checking during the stable h
+REQ-0099   DISCRIMINATING   False  True   The module performs read-data sampling from the filtered SDA lin
+REQ-0119   DISCRIMINATING   False  True   The FSM pulls SCL low again (asserts scl_oen to drive SCL low) t
+
+    5  DISCRIMINATING
+    3  INVERTED
+
+PROVEN UNSATISFIABLE (golden fails them too): 0  []
+REACHABLE BY THE LOOP (golden passes them)  : 5
+UNKNOWN -- golden never exercised them, so no verdict either way: 0  []
+
+                           candidate   golden
+passing (the objective)           61       60
+agrees with golden             77/90    90/90
+passes what golden FAILS           3        0   ['REQ-0006', 'REQ-0030', 'REQ-0095']
+broke what golden passes           5        0   ['REQ-0042', 'REQ-0048', 'REQ-0088', 'REQ-0099', 'REQ-0119']
+
+  ! the candidate scores ABOVE the reference design. That is not
+    a better design -- it is a design shaped to satisfy checks the
+    reference violates. Read `agrees with golden`, not `passing`.

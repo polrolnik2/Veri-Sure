@@ -74,6 +74,21 @@ def main(cand_dir: str, gold_dir: str) -> int:
         if cls:
             rows.append((u, cls, c, g, text.get(u, "")[:64]))
 
+    # AGREEMENT, not pass count. The loop optimises PASSING on the frozen set,
+    # and that is not the same quantity as correctness: a check the reference
+    # design FAILS is a wrong check, so a candidate that passes it has been
+    # shaped to satisfy an error. Run 10 scored 61 passing against golden's 60
+    # -- above the reference -- while agreeing with the reference on FEWER
+    # requirements than run 8, which scored 58. Exceeding the reference score is
+    # the signature of that, not evidence of quality, so both numbers get
+    # printed side by side and neither is reported alone.
+    agree = sum(1 for u in gold if cand.get(u) == gold[u])
+    inverted_uids = sorted(u for u in gold
+                           if cand.get(u) is True and gold[u] is False)
+    broke = sorted(u for u in gold if gold[u] is True and cand.get(u) is False)
+    passing = sum(1 for v in cand.values() if v is True)
+    gpassing = sum(1 for v in gold.values() if v is True)
+
     by = collections.Counter(r[1] for r in rows)
     print(f"{'req':<11}{'class':<17}{'cand':<7}{'gold':<7}requirement")
     for u, cls, c, g, t in rows:
@@ -92,7 +107,21 @@ def main(cand_dir: str, gold_dir: str) -> int:
           f"{sum(1 for r in rows if r[1] == 'DISCRIMINATING')}")
     print(f"UNKNOWN -- golden never exercised them, so no verdict either way: "
           f"{len(unknown)}  {unknown}")
-    json.dump({"rows": rows, "unsatisfiable": unsat, "unknown": unknown},
+    print(f"\n{'':<26}{'candidate':>10}{'golden':>9}")
+    print(f"{'passing (the objective)':<26}{passing:>10}{gpassing:>9}")
+    print(f"{'agrees with golden':<26}{agree:>7}/90{90:>6}/90")
+    print(f"{'passes what golden FAILS':<26}{len(inverted_uids):>10}{0:>9}"
+          f"   {inverted_uids}")
+    print(f"{'broke what golden passes':<26}{len(broke):>10}{0:>9}   {broke}")
+    if passing > gpassing:
+        print("\n  ! the candidate scores ABOVE the reference design. That is not"
+              "\n    a better design -- it is a design shaped to satisfy checks the"
+              "\n    reference violates. Read `agrees with golden`, not `passing`.")
+
+    json.dump({"rows": rows, "unsatisfiable": unsat, "unknown": unknown,
+               "passing": passing, "golden_passing": gpassing,
+               "agrees_with_golden": agree, "inverted": inverted_uids,
+               "broke_what_golden_passes": broke},
               open(Path(cand_dir) / "satisfiable.json", "w"), indent=1)
     return 0
 
