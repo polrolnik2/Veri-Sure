@@ -38,6 +38,13 @@ ap.add_argument("--reuse-baseline", action="store_true",
                 help="decide the frozen set on the recording `loop_run.py` "
                      "already wrote instead of re-running the whole suite for "
                      "a result that is already on disk")
+ap.add_argument("--keep-regressions", action="store_true",
+                help="rollback_on_regression=False. A greedy filter is a good "
+                     "default and is also exactly a hill-climber: a repair "
+                     "needing several parts to land together must pass through "
+                     "a worse state. With this on, a commit that does not "
+                     "improve STANDS as the working baseline and `restore_best` "
+                     "returns the best point at the end.")
 ap.add_argument("--script", default="",
                 help="JSON file of tool calls to replay INSTEAD of asking an "
                      "agent -- a plumbing smoke test, not an experiment")
@@ -105,7 +112,8 @@ session = _EditSession(
     tb_path=None, rtl_path=str(RUN / "rtl.sv"), output_dir=str(RUN),
     last_mismatch_cnt=failing, sim_reviewer=reviewer, max_trials=a.trials,
     requirements=load_requirement_views(RUN, contract), contract=contract,
-    stimulus_stager=stager)
+    stimulus_stager=stager,
+    rollback_on_regression=not a.keep_regressions)
 session._pull_req_results()
 
 TOOLS = {
@@ -194,6 +202,19 @@ def budget(payload, limit: int = 14000) -> str:
     return text[:limit]
 
 
+#: What a non-improving commit DOES, which depends on the guard. Saying
+#: "untouched" when the run keeps regressions would be a lie about the one thing
+#: the agent needs to plan its next round around.
+_COMMIT_TAIL = (
+    "Not improved -> the accepted RTL STAYS AS YOU COMMITTED IT and becomes "
+    "the working baseline, so a repair that needs several parts can pass "
+    "through a worse state to reach a better one. The session returns the "
+    "BEST-scoring version it saw, so wandering costs trials, never the result."
+    if a.keep_regressions else
+    "Not improved -> the accepted RTL is untouched AND YOUR STAGED EDITS "
+    "SURVIVE, so adjust them rather than starting over."
+)
+
 RULES = """You are debugging a Verilog design against a frozen set of checks written
 from its specification. You do NOT have the specification and you do NOT have a
 reference design. What you have is the requirement each check came from, in the
@@ -251,19 +272,31 @@ TOOLS
                                       refuse one.
 
   commit()                            THE TRIAL. Compiles and runs the WHOLE
-                                      suite. Improved -> latched. Not improved
-                                      -> the accepted RTL is untouched AND YOUR
-                                      STAGED EDITS SURVIVE, so adjust them
-                                      rather than starting over.
+                                      suite, then re-decides all 90 checks.
+                                      IT LATCHES WHEN *PASSING* REQUIREMENTS
+                                      RISE -- not when failing falls. Those are
+                                      different: a check going FAILING ->
+                                      UNCOVERED lowers the failing count and is
+                                      evidence LOST, not a requirement met, so
+                                      it buys nothing. The response names what
+                                      was repaired, what broke, and what went
+                                      dark.
+                                      __COMMIT_TAIL__
 
 Staging is free; only commit costs a trial. Settle syntax and drivers with
-check_staged() before spending one. An UNCOVERED requirement is not an
-accusation against the design and no edit discharges it -- do not chase one.
+check_staged() before spending one.
+
+An UNCOVERED requirement needs a different tool from a FAILING one, and
+explain(uid) says which in `discharged_by`: `add_stimulus` when every port its
+activation waits on is an INPUT the stimulus never drove in the right
+combination; `EDIT` when it waits on an OUTPUT the design never produced, since
+no stimulus can move an output and that is a design bug wearing an abstention's
+clothes.
 """
 
 
 def render(obs: str) -> str:
-    return (RULES
+    return (RULES.replace('__COMMIT_TAIL__', _COMMIT_TAIL)
             + f"\n\nTRIALS USED {session.action_calls} of {session.max_trials}."
             + f"  check_staged calls {session.check_calls}."
             + f"  staged: {'yes' if session.staged_rtl is not None else 'no'}\n\n"
