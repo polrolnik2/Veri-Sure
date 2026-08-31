@@ -572,6 +572,10 @@ class _EditSession:
     #: restored before `chat()` returns -- so with the guard off the loop is
     #: free to wander uphill while the ANSWER is still the best point found.
     best_mismatch_cnt: int | None = None
+    #: Best (HIGHEST) passing-requirement count seen, when the backend publishes
+    #: requirements. This is what `note_best` ranks on then, because it is what
+    #: `commit` judges on.
+    best_passing: int | None = None
     best_rtl: str | None = None
 
     is_done: bool = False
@@ -1433,13 +1437,34 @@ class _EditSession:
         dark = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is None}
         return ok, bad, dark
 
-    def note_best(self, mismatch_cnt: int, rtl_text: str) -> bool:
+    def note_best(self, mismatch_cnt: int, rtl_text: str,
+                  passing: int | None = None) -> bool:
         """Record `rtl_text` if it is the best seen. Returns True when it is.
 
-        Ties do NOT overwrite: the earliest RTL achieving a given count is kept,
+        BEST BY THE SAME QUANTITY THE COMMIT IS JUDGED ON. This keyed on
+        `mismatch_cnt` -- failing TESTPOINTS -- while the accept criterion is
+        now passing REQUIREMENTS, and with the rollback guard off those two
+        disagree exactly where it matters: `restore_best` is what makes wandering
+        safe, so a "best" chosen by a different measure than the one being
+        optimised would hand back a design the loop had already improved on.
+        Measured on run 8 round 21, the two rank the same pair of designs
+        oppositely -- testpoints 104 -> 106 (worse) while failing requirements
+        went 19 -> 18 (better, though only by silencing one).
+
+        Ties do NOT overwrite: the earliest RTL achieving a given score is kept,
         so a run that wanders across a plateau returns the point it reached
         first rather than the last one it happened to touch.
         """
+        if passing is not None:
+            if self.best_passing is None or int(passing) > self.best_passing:
+                self.best_passing = int(passing)
+                self.best_rtl = rtl_text
+                try:
+                    self.best_mismatch_cnt = int(mismatch_cnt)
+                except Exception:  # noqa: BLE001
+                    pass
+                return True
+            return False
         try:
             cnt = int(mismatch_cnt)
         except Exception:  # noqa: BLE001
@@ -1454,7 +1479,9 @@ class _EditSession:
         """Put the best-seen RTL back on disk. Returns True if it changed anything.
 
         A no-op when the guard is on, because a monotone search already ends at
-        its best point. Load-bearing when it is off.
+        its best point. Load-bearing when it is off -- that is the whole reason
+        the guard CAN be turned off: the loop is free to wander uphill while the
+        ANSWER stays the best point found.
         """
         if self.best_rtl is None:
             return False
@@ -1835,6 +1862,10 @@ class _EditSession:
 
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
         self._pull_req_results()
+        # Read HERE, not down at the ratchet: `note_best` runs before the accept
+        # decision -- a regressing edit is exactly when best-so-far matters --
+        # and it now ranks on this.
+        req_after = self._req_split()
         result["is_sim_pass"] = is_sim_pass
         result["sim_mismatch_cnt"] = sim_mismatch_cnt
         try:
@@ -1861,7 +1892,9 @@ class _EditSession:
         # edit is exactly when the best-so-far matters, and because an edit that
         # improves things is worth checkpointing whether or not a later one
         # undoes it.
-        improved_best = self.note_best(sim_mismatch_cnt, self.read_rtl())
+        improved_best = self.note_best(
+            sim_mismatch_cnt, self.read_rtl(),
+            passing=len(req_after[0]) if req_after is not None else None)
         result["best_mismatch_cnt"] = self.best_mismatch_cnt
 
         # THE ACCEPT CRITERION IS PASSING REQUIREMENTS, WHEN THERE ARE ANY.
@@ -1891,7 +1924,6 @@ class _EditSession:
         # UNCOVERED -> PASSING raises it, and those are the two things a repair
         # is supposed to do. The testpoint count stays, reported, as the fine
         # gradient §6.2(a) asks for -- to steer, not to judge.
-        req_after = self._req_split()
         if req_before is not None and req_after is not None:
             ok0, bad0, dark0 = req_before
             ok1, bad1, dark1 = req_after
@@ -1905,8 +1937,38 @@ class _EditSession:
                 "went_dark_from_passing": sorted(ok0 & dark1),
             }
             if len(ok1) <= len(ok0):
-                self.write_rtl(old_file_content)
+                # REVERTING IS A POLICY, NOT A LAW. A greedy filter is a good
+                # default and is also, exactly, a hill-climber: a repair needing
+                # several parts to land together has to pass through a worse
+                # state to reach the better one, and reverting every step of it
+                # makes that repair unreachable no matter how many trials are
+                # left. `rollback_on_regression=False` lets the search cross the
+                # valley, and `best_rtl` -- now ranked on the same passing count
+                # this criterion uses -- is what stops that being a licence to
+                # finish worse than it started.
                 silenced = sorted((bad0 | ok0) & dark1)
+                if not self.rollback_on_regression:
+                    self.last_mismatch_cnt = sim_mismatch_cnt
+                    if new_fail_time is not None:
+                        self.last_fail_time = int(new_fail_time)
+                    result["is_action_executed"] = True
+                    result["kept_despite_no_improvement"] = True
+                    result["accept_reason"] = (
+                        f"KEPT WITHOUT IMPROVING (rollback guard off): passing "
+                        f"requirements {len(ok0)} -> {len(ok1)}. This is now the "
+                        f"working baseline, so you can build the next part of a "
+                        f"multi-part repair on it."
+                        + (f"  {', '.join(silenced)} stopped firing rather than "
+                           f"passing -- evidence lost, not a requirement met."
+                           if silenced else "")
+                        + f"  Best seen this session is {self.best_passing} "
+                          f"passing, and THAT version is what the session "
+                          f"returns if nothing beats it."
+                    )
+                    self._refresh_trace(sim_log_json=sim_output)
+                    result["trace_summary"] = self.trace_summary()
+                    return result
+                self.write_rtl(old_file_content)
                 result["error_msg"] = (
                     f"Commit did NOT latch: passing requirements {len(ok0)} -> "
                     f"{len(ok1)}, and a commit latches only when that number "

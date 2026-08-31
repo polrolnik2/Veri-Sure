@@ -1936,3 +1936,52 @@ def test_a_failed_build_cannot_latch_by_leaving_no_verdicts(tmp_path):
     ok1, bad1, _ = _split(s)
     assert len(bad1) == 0, "a build failure produces no FAILING testpoints"
     assert len(ok1) < len(ok0), "but passing collapses, so it cannot latch"
+
+
+def test_reverting_is_a_policy_not_a_law(tmp_path):
+    """A GREEDY FILTER IS EXACTLY A HILL-CLIMBER.
+
+    A repair needing several parts to land together has to pass through a worse
+    state to reach the better one. Reverting every step of it makes that repair
+    unreachable however many trials remain, so `rollback_on_regression=False`
+    has to let a non-improving commit STAND as the working baseline -- otherwise
+    the flag exists and does nothing on the path that matters.
+    """
+    s = _session(tmp_path)
+    assert s.rollback_on_regression is True, "greedy stays the default"
+    s.rollback_on_regression = False
+    assert s.rollback_on_regression is False
+
+
+def test_best_is_ranked_on_the_same_quantity_the_commit_is_judged_on(tmp_path):
+    """`note_best` keyed on failing TESTPOINTS while `commit` judges PASSING
+    REQUIREMENTS, and with the guard off those two disagree exactly where it
+    matters: `restore_best` is what makes wandering safe, so a best chosen by a
+    different measure hands back a design the loop had already improved on.
+
+    Run 8 round 21 ranks the same pair oppositely -- testpoints 104 -> 106
+    (worse) against failing requirements 19 -> 18 (better, by silencing).
+    """
+    s = _session(tmp_path)
+    # Passing rises while the testpoint count also rises: the old key would
+    # refuse to record this, the new one must take it.
+    assert s.note_best(104, "rtl-A", passing=46) is True
+    assert s.best_passing == 46 and s.best_rtl == "rtl-A"
+    assert s.note_best(106, "rtl-B", passing=48) is True, (
+        "more passing IS better, whatever the testpoint count did")
+    assert s.best_rtl == "rtl-B"
+    # Fewer passing never wins, however good the testpoint count looks.
+    assert s.note_best(1, "rtl-C", passing=47) is False
+    assert s.best_rtl == "rtl-B"
+    # Ties do not overwrite.
+    assert s.note_best(0, "rtl-D", passing=48) is False
+    assert s.best_rtl == "rtl-B"
+
+
+def test_without_requirements_best_still_ranks_on_the_testpoint_count(tmp_path):
+    """The fallback every non-specflow caller has always used."""
+    s = _session(tmp_path)
+    assert s.note_best(50, "rtl-A") is True
+    assert s.note_best(40, "rtl-B") is True
+    assert s.note_best(60, "rtl-C") is False
+    assert s.best_rtl == "rtl-B" and s.best_mismatch_cnt == 40
