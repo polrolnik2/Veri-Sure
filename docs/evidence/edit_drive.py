@@ -359,10 +359,31 @@ for rnd in range(a.rounds):
         obs += ("\n\nTRIAL BUDGET SPENT. No further commit is possible. "
                 "Reply {\"done\": \"...\"} saying what you found.")
 
+# RESTORE THE BEST POINT SEEN. `--keep-regressions` is only safe because of
+# this, and it was never called here: `RTLEditor.chat()` does it before
+# returning, this driver hand-rolls the loop and did not, so the flag's help
+# text and the agent's own prompt both promised "the session returns the
+# BEST-scoring version it saw" while the run in fact ended wherever it happened
+# to stop. MEASURED on run 9: the loop wandered to 16 passing / 70 uncovered --
+# far below the 46 it started from -- and with no restore that is what the run
+# would have delivered.
+before_restore = session.list_failing_requirements()["passing_count"]
+restored = session.restore_best()
+if restored:
+    # The accepted RTL changed under us, so the verdicts on disk describe the
+    # design we just discarded. Re-decide, or the summary reports the wandering
+    # point's score against the restored point's RTL.
+    reviewer.review()
+    session._pull_req_results()
+
 final = session.list_failing_requirements()
 summary = {
     "trials_used": session.action_calls, "check_staged_calls": session.check_calls,
     "rounds": len(log),
+    "kept_regressions": bool(a.keep_regressions),
+    "passing_when_the_loop_stopped": before_restore,
+    "restored_to_best": bool(restored),
+    "best_passing_seen": session.best_passing,
     "failing_before": [r["req_uid"] for r in json.loads(
         (RUN / "surface.json").read_text())["failing"]] if (RUN / "surface.json").exists() else None,
     "failing_after": [r["req_uid"] for r in final["failing"]],

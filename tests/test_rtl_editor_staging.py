@@ -2091,3 +2091,32 @@ def test_find_signal_on_an_unknown_name_lists_what_there_is(tmp_path):
     assert out["driver_count"] == 0
     assert "nothing drives or reads" in out["note"]
     assert "'b'" in out["note"] and "'c'" in out["note"]
+
+
+def test_restore_best_is_what_makes_keeping_regressions_safe(tmp_path):
+    """WITHOUT THE RESTORE, `--keep-regressions` IS JUST A WAY TO END UP WORSE.
+
+    The flag lets a non-improving commit stand so a multi-part repair can cross
+    a valley; `restore_best` is the entire reason that is not a licence to
+    finish below where you started. `RTLEditor.chat()` calls it before
+    returning. The hand-rolled driver did not, while its help text and the
+    agent's own prompt both promised "the session returns the BEST-scoring
+    version it saw".
+
+    MEASURED on run 9: the loop wandered to 16 passing / 70 uncovered, well
+    below the 46 it began from, and with no restore that is what the run would
+    have delivered.
+    """
+    s = _session(tmp_path)
+    good = s.read_rtl()
+    s.note_best(0, good, passing=46)
+
+    # The loop wanders somewhere much worse and leaves it on disk.
+    s.write_rtl(good.replace("assign b = a;", "assign b = 1'b0;"))
+    assert s.read_rtl() != good
+    s.note_best(0, s.read_rtl(), passing=16)          # never becomes best
+    assert s.best_passing == 46
+
+    assert s.restore_best() is True
+    assert s.read_rtl() == good, "the session must end at its best point"
+    assert s.restore_best() is False, "already there: nothing to do"
