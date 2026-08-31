@@ -122,6 +122,7 @@ TOOLS = {
     "focus": lambda req_uid: session.focus(req_uid),
     "list_suspect_blocks": lambda: session.list_suspect_blocks(),
     "read_block": lambda block_id: session.read_block(block_id),
+    "find_signal": lambda name: session.find_signal(name),
     "replace_block": lambda block_id, new_code: session.stage_replace(block_id, new_code),
     "edit": lambda old_text, new_text: session.stage_edit(old_text, new_text),
     "add_block": lambda anchor_id, code: session.stage_add(anchor_id, code),
@@ -240,6 +241,11 @@ TOOLS
                                    ports. Do this before reading blocks.
   list_suspect_blocks()            the current slice.
   read_block(block_id)             its source, from the STAGED buffer.
+  find_signal(name)                WHERE A SIGNAL IS DRIVEN AND READ, by name.
+                                   Use this instead of guessing block ids: it
+                                   searches the WHOLE staged buffer, is not
+                                   narrowed by focus, and names the block_id so
+                                   read_block can follow up.
 
   edit(old_text, new_text)            FREE. Replace a FRAGMENT, quoting enough
                                       context to be unique. WHITESPACE DOES NOT

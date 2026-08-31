@@ -2034,3 +2034,60 @@ def test_the_manifest_fallback_survives_testpoints_listed_as_strings(tmp_path):
     (suite / "manifest.json").write_text(_json.dumps(
         {"testpoints": ["TP-0002", "TP-0003"], "modules": []}))
     assert _uncovered_requirements(["TP-0002"], suite) == set()
+
+
+def test_find_signal_answers_what_read_block_cannot(tmp_path):
+    """THERE WAS NO WAY TO ASK WHERE A SIGNAL COMES FROM.
+
+    `read_block` takes a block ID and `list_suspect_blocks` shows whatever the
+    last `focus` sliced, so an agent holding a signal NAME had only the id space
+    to brute-force. MEASURED on run 8: seventeen consecutive rounds reading
+    C1..C11 and A1..A3 one after another, plus five rounds calling
+    `read_block("scl_sync")` and `read_block("assign scl_sync")` -- using the
+    block reader as a search tool. Half a 45-round session, in a run whose round
+    cap bound before its trial budget did.
+    """
+    s = _session(tmp_path)
+    out = s.find_signal("b")
+    assert out["signal"] == "b"
+    assert out["driver_count"] == 1
+    assert "assign b = a;" in out["driven_by"][0]["code"]
+    assert out["driven_by"][0]["block_id"] == "blk_assign", (
+        "when the block IS in the slice, name it so read_block can follow up")
+
+    # A signal read but never driven is a module input or a lost driver, and
+    # saying so is the whole point -- that is the silent-X case.
+    assert s.find_signal("a")["driver_count"] == 0
+    assert "nothing drives it" in s.find_signal("a")["note"]
+
+
+def test_find_signal_is_not_narrowed_by_focus(tmp_path):
+    """A signal's driver is frequently OUTSIDE the failing requirement's slice,
+    which is exactly when the question is hard. It reads the STAGED BUFFER, so
+    it sees pending edits and every block, not `blocks_by_id`."""
+    s = _session(tmp_path)
+    s.blocks_by_id = {}           # as if focus had narrowed to nothing
+    out = s.find_signal("c")
+    assert out["driver_count"] == 1, "still found, though no slice holds it"
+    assert out["driven_by"][0]["block_id"] == "(not in the current slice)"
+
+    # And a staged edit is visible before any commit.
+    s.stage_edit("assign b = a;", "assign b = ~a;")
+    assert "~a" in s.find_signal("b")["driven_by"][0]["code"]
+
+
+def test_find_signal_names_a_duplicate_driver(tmp_path):
+    """The internal-wire case Verilator will not warn about."""
+    s = _session(tmp_path, LINTABLE)
+    s.stage_add("endmodule", "assign w = ~a;")
+    out = s.find_signal("w")
+    assert out["driver_count"] == 2
+    assert "2 DRIVERS" in out["note"] and "resolve to X" in out["note"]
+
+
+def test_find_signal_on_an_unknown_name_lists_what_there_is(tmp_path):
+    s = _session(tmp_path)
+    out = s.find_signal("no_such_signal")
+    assert out["driver_count"] == 0
+    assert "nothing drives or reads" in out["note"]
+    assert "'b'" in out["note"] and "'c'" in out["note"]

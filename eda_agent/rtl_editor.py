@@ -1537,6 +1537,74 @@ class _EditSession:
             "sim_output_path": str(Path(self.output_dir, "debug_sim_output.json")),
         }
 
+    def find_signal(self, name: str) -> Dict[str, Any]:
+        """Every block in the STAGED buffer that drives or reads `name`.
+
+        THERE WAS NO WAY TO ASK WHERE A SIGNAL COMES FROM. `read_block` takes a
+        block ID, `list_suspect_blocks` shows whatever the last `focus` sliced,
+        and neither answers "what drives scl_sync" -- so an agent holding a
+        signal name and needing its logic had only the id space to brute-force.
+
+        MEASURED on run 8: seventeen consecutive rounds (12-28) reading C1, C2,
+        C3, C4, C5, C6, C7, C8, C10, C11, A1, A2, A3 one after another, and five
+        more rounds spent calling `read_block("scl_sync")` and
+        `read_block("assign scl_sync")` -- using the block reader as a search
+        tool because nothing else would answer. That is half of a 45-round
+        session, in a run whose round cap bound before its trial budget did.
+
+        Reads the STAGED buffer, not the slice, so it sees pending edits and is
+        never narrowed by `focus`: a signal's driver is frequently OUTSIDE the
+        failing requirement's slice, which is exactly when the question is hard.
+        """
+        want = (name or "").strip()
+        if not want:
+            return {"error": "find_signal needs a signal name."}
+        from .trace_slicer import parse_rtl_blocks
+
+        try:
+            blocks = parse_rtl_blocks(self.staged())
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"could not parse the staged buffer: {exc}"}
+
+        # Keyed on NORMALISED text: the slice's copy of a block and a fresh
+        # parse of the same source differ in trailing whitespace, so an exact
+        # key silently reported every block as outside the slice -- turning the
+        # one field that lets `read_block` follow up into a constant.
+        def _key(code: str) -> str:
+            return " ".join((code or "").split())
+
+        ids = {_key(b.code): bid for bid, b in (self.blocks_by_id or {}).items()}
+        drivers, readers = [], []
+        for b in blocks:
+            row = {"block_id": ids.get(_key(b.code), "(not in the current slice)"),
+                   "kind": b.kind,
+                   "code": b.code if len(b.code) <= 400 else b.code[:400] + " ...",
+                   }
+            if want in set(b.writes):
+                drivers.append(row)
+            elif want in set(b.reads):
+                readers.append({k: v for k, v in row.items() if k != "code"})
+
+        out: Dict[str, Any] = {
+            "signal": want,
+            "driven_by": drivers,
+            "read_by": readers,
+            "driver_count": len(drivers),
+        }
+        if not drivers and not readers:
+            names = sorted({w for b in blocks for w in b.writes})
+            out["note"] = (f"nothing drives or reads {want!r}. Signals this "
+                           f"module drives: {names}")
+        elif not drivers:
+            out["note"] = (f"{want} is READ but nothing drives it -- it is a "
+                           f"module input, or its driver was removed.")
+        elif len(drivers) > 1:
+            out["note"] = (f"{want} has {len(drivers)} DRIVERS. Two continuous "
+                           f"assignments to one wire resolve to X wherever they "
+                           f"disagree, and Verilator does not warn for an "
+                           f"internal signal.")
+        return out
+
     def list_suspect_blocks(self) -> Dict[str, Any]:
         """THE CURRENT SLICE -- the same blocks `read_block` resolves against.
 
@@ -2192,6 +2260,7 @@ class RTLEditor:
         toolkit.register_tool_function(self._tool_focus)
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
+        toolkit.register_tool_function(self._tool_find_signal)
         # The STAGING surface. Edits are free and latch nothing; `commit` is the
         # trial. Without these registered the staged buffer is unreachable --
         # the methods exist on the session and no agent can call them.
@@ -2258,6 +2327,18 @@ class RTLEditor:
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         return ToolResponse(content=[{"type": "text", "text": self._session.read_block(block_id)}])
+
+    async def _tool_find_signal(self, name: str) -> ToolResponse:
+        """Where a SIGNAL is driven and read, by name. Free.
+
+        Answers the question `read_block` cannot: `read_block` takes a block id,
+        so an agent holding a signal name had only the id space to search. Reads
+        the staged buffer, so it sees pending edits and is not narrowed by focus.
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        return ToolResponse(content=[{"type": "text",
+                                      "text": json.dumps(self._session.find_signal(name), indent=1, default=str)}])
 
     async def _tool_run_simulation(self) -> ToolResponse:
         """Run simulation for current rtl.sv + tb.sv; returns pass/fail and mismatch count."""
