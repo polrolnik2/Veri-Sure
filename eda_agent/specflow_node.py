@@ -230,15 +230,45 @@ class SpecflowReviewer:
         )
         self._iteration += 1
 
-        if self._stager is not None:
-            self._stager.uncovered = _uncovered_requirements(
-                verdict.not_exercised, self._built.suite_dir)
-
         payload = failure_payload(self._built.suite_dir)
         wave = info.get("wave_vcd")
         self.vcd_path = Path(wave) if wave else None
         tr = trace_summary(self._built.suite_dir, Path(wave) if wave else None)
         self.req_results = self._decide_requirements()
+
+        # THE SET `add_stimulus` GATES ON MUST BE THE SET THE AGENT IS SHOWN.
+        #
+        # This used to come from `_uncovered_requirements(verdict.not_exercised,
+        # ...)`, and `gate.evaluate` returns on its FIRST matching branch:
+        #
+        #     if failing:
+        #         return GateVerdict("REPAIR_RTL", failing=failing, ...)
+        #
+        # -- with `not_exercised` left at its default. A debug session has
+        # failing testpoints by definition, so that branch always wins,
+        # `not_exercised` is always empty, and `_uncovered_requirements` returns
+        # an empty set every round. `add_stimulus` was therefore REFUSING EVERY
+        # REQUEST for the whole of any session it could be useful in; it could
+        # only have worked once nothing failed, when there is nothing to stage.
+        #
+        # MEASURED on run 8, the first run whose agent ever reached the tool:
+        # four calls, four refusals -- REQ-0076 twice, REQ-0078, REQ-0004, all
+        # of them uids `list_failing_requirements` had just listed as UNCOVERED
+        # in the same session. The agent was handed a list and told every entry
+        # on it was "not currently uncovered".
+        #
+        # `req_results` is the per-requirement tri-state the whole surface
+        # already reports, and it is what `_uncovered_requirements`'s own
+        # docstring called "the exact answer" it could not reach. It can now.
+        # The old testpoint fold stays only as a fallback for a backend that
+        # decides nothing per requirement.
+        if self._stager is not None:
+            self._stager.uncovered = (
+                {u for u, (r, _t) in (self.req_results or {}).items()
+                 if getattr(r, "ok", None) is None}
+                or _uncovered_requirements(verdict.not_exercised,
+                                           self._built.suite_dir))
+
         stdout = format_failures(payload, trace=tr) or verdict.reason
 
         # A build failure is reported as such rather than as failing testpoints,
@@ -386,6 +416,12 @@ def _uncovered_requirements(not_exercised, suite_dir: Path) -> set[str]:
         return set()
     covers: dict[str, list[str]] = {}
     for entry in manifest.get("testpoints") or manifest.get("elements") or []:
+        # A manifest may list testpoints as bare uid STRINGS, which carry no
+        # `covers` and so cannot be joined at all. `entry.get` raised
+        # AttributeError on those -- out of `review()`, out of `commit()` -- so
+        # the fallback was not merely useless on that shape but fatal.
+        if not isinstance(entry, dict):
+            continue
         tp = entry.get("tp_uid") or entry.get("uid") or ""
         for c in entry.get("covers") or []:
             covers.setdefault(str(c).split("@")[0], []).append(tp)

@@ -1985,3 +1985,52 @@ def test_without_requirements_best_still_ranks_on_the_testpoint_count(tmp_path):
     assert s.note_best(40, "rtl-B") is True
     assert s.note_best(60, "rtl-C") is False
     assert s.best_rtl == "rtl-B" and s.best_mismatch_cnt == 40
+
+
+def test_add_stimulus_gates_on_the_set_the_agent_is_shown(tmp_path):
+    """`gate.evaluate` RETURNS ON ITS FIRST MATCHING BRANCH:
+
+        if failing:
+            return GateVerdict("REPAIR_RTL", failing=failing, ...)
+
+    with `not_exercised` left at its default. A debug session has failing
+    testpoints by definition, so that branch always wins and the set derived
+    from it is always empty -- meaning `add_stimulus` refused EVERY request for
+    the whole of any session it could have been useful in. It could only have
+    worked once nothing failed, when there is nothing to stage.
+
+    MEASURED on run 8, the first run whose agent ever reached the tool: four
+    calls, four refusals, on uids `list_failing_requirements` had listed as
+    UNCOVERED in the same session.
+    """
+    from specflow.gate import evaluate
+
+    class _R:
+        def __init__(self, status):
+            self.status = status
+
+    class _Rep:
+        undisposed = ()
+
+    v = evaluate(results={"TP-1": _R("FAIL"), "TP-2": _R("NOT_EXERCISED")},
+                 report=_Rep(), build_ok=True)
+    assert v.outcome == "REPAIR_RTL"
+    assert v.not_exercised == (), (
+        "this is the upstream behaviour the reviewer must not depend on: a "
+        "genuinely unexercised testpoint is invisible whenever anything fails")
+
+
+def test_the_manifest_fallback_survives_testpoints_listed_as_strings(tmp_path):
+    """`_uncovered_requirements` did `entry.get(...)` over
+    `manifest["testpoints"]`, which this suite writes as bare uid STRINGS. That
+    raises AttributeError -- out of `review()`, out of `commit()` -- so on this
+    shape the fallback was not merely useless but fatal."""
+    import json as _json
+
+    from eda_agent.specflow_node import _uncovered_requirements
+
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "manifest.json").write_text(_json.dumps(
+        {"testpoints": ["TP-0002", "TP-0003"], "modules": []}))
+    assert _uncovered_requirements(["TP-0002"], suite) == set()
