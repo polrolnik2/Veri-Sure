@@ -1417,6 +1417,22 @@ class _EditSession:
             judged["staged_kept"] = True
         return judged
 
+    def _req_split(self) -> tuple[set, set, set] | None:
+        """(passing, failing, uncovered) requirement uids, or None if unknown.
+
+        None rather than three empty sets: "no requirement data" and "nothing
+        passes" must not be the same value, or a backend that publishes no
+        requirements would silently look like total failure and reject every
+        commit.
+        """
+        rr = self.req_results or {}
+        if not rr:
+            return None
+        ok = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is True}
+        bad = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is False}
+        dark = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is None}
+        return ok, bad, dark
+
     def note_best(self, mismatch_cnt: int, rtl_text: str) -> bool:
         """Record `rtl_text` if it is the best seen. Returns True when it is.
 
@@ -1741,6 +1757,8 @@ class _EditSession:
         result = self._base_result()
         prev_mismatch_cnt = int(self.last_mismatch_cnt)
         prev_fail_time = self.last_fail_time
+        # Snapshot the requirement picture BEFORE `review()` overwrites it.
+        req_before = self._req_split()
         is_syntax_correct, syntax_output = check_syntax(self.rtl_path)
         result["is_syntax_correct"] = is_syntax_correct
         result["syntax_output"] = syntax_output
@@ -1846,9 +1864,77 @@ class _EditSession:
         improved_best = self.note_best(sim_mismatch_cnt, self.read_rtl())
         result["best_mismatch_cnt"] = self.best_mismatch_cnt
 
-        if sim_mismatch_cnt > prev_mismatch_cnt:
-            # Sometimes fixing an early-cycle issue can expose additional later-cycle mismatches.
-            # Allow a small mismatch increase only if the FIRST mismatch time moves later.
+        # THE ACCEPT CRITERION IS PASSING REQUIREMENTS, WHEN THERE ARE ANY.
+        #
+        # Two things were wrong with judging on `sim_mismatch_cnt`, which counts
+        # failing TESTPOINTS.
+        #
+        # It is the wrong VOCABULARY. Everything the agent is shown -- what
+        # `list_failing_requirements` returns, what `explain` explains -- is per
+        # REQUIREMENT: "19 failing, 25 uncovered, 46 passing". The rejection then
+        # arrives as "prev=104, new=106", a quantity it has never seen anywhere
+        # else and cannot connect to any edit it could make.
+        #
+        # And NEITHER COUNT CAN TELL A REPAIR FROM A SILENCING. A requirement has
+        # three states, so "fewer failing" is satisfied just as well by
+        # FAILING -> PASSING as by FAILING -> UNCOVERED, and the second means the
+        # check stopped firing -- the design did not get better, the evidence
+        # went away. That is defect #93 ("the debug agent is scored on failing
+        # count, so un-exercising a requirement reads as progress"), and it is
+        # not hypothetical: MEASURED on run 8 round 21, `dout <= sSDA` ->
+        # `dout <= dSDA` moved the frozen 90 from 19/25/46 to 18/26/46. Failing
+        # fell by one and PASSING DID NOT MOVE -- REQ-0009 went dark. A
+        # failing-count ratchet at requirement granularity would have latched it.
+        #
+        # PASSING is immune to both. Silencing leaves it flat by construction, so
+        # it can never buy a latch; only FAILING -> PASSING or
+        # UNCOVERED -> PASSING raises it, and those are the two things a repair
+        # is supposed to do. The testpoint count stays, reported, as the fine
+        # gradient §6.2(a) asks for -- to steer, not to judge.
+        req_after = self._req_split()
+        if req_before is not None and req_after is not None:
+            ok0, bad0, dark0 = req_before
+            ok1, bad1, dark1 = req_after
+            result["requirements"] = {
+                "passing": f"{len(ok0)} -> {len(ok1)}",
+                "failing": f"{len(bad0)} -> {len(bad1)}",
+                "uncovered": f"{len(dark0)} -> {len(dark1)}",
+                "repaired": sorted(bad0 & ok1),
+                "broken": sorted(ok0 & bad1),
+                "silenced": sorted(bad0 & dark1),
+                "went_dark_from_passing": sorted(ok0 & dark1),
+            }
+            if len(ok1) <= len(ok0):
+                self.write_rtl(old_file_content)
+                silenced = sorted((bad0 | ok0) & dark1)
+                result["error_msg"] = (
+                    f"Commit did NOT latch: passing requirements {len(ok0)} -> "
+                    f"{len(ok1)}, and a commit latches only when that number "
+                    f"RISES. The accepted RTL is unchanged and your staged "
+                    f"edits are kept -- adjust them and commit again."
+                    + (f"  Note what happened: {', '.join(silenced)} stopped "
+                       f"firing altogether rather than passing. A check that "
+                       f"goes dark is evidence LOST, not a requirement met, "
+                       f"which is why the failing count fell without this "
+                       f"counting as progress." if silenced else "")
+                    + (f"  It did repair {', '.join(sorted(bad0 & ok1))}, so the "
+                       f"idea is not wrong -- something else in the batch costs "
+                       f"more than it gains." if bad0 & ok1 else "")
+                    + f"  (failing testpoints {prev_mismatch_cnt} -> "
+                      f"{sim_mismatch_cnt}, for direction only.)"
+                )
+                return result
+            result["accept_reason"] = (
+                f"LATCHED: passing requirements {len(ok0)} -> {len(ok1)}"
+                + (f", repairing {', '.join(sorted(bad0 & ok1))}" if bad0 & ok1 else "")
+                + (f"; but {', '.join(sorted(ok0 & bad1))} BROKE" if ok0 & bad1 else "")
+                + (f"; and {', '.join(sorted(bad0 & dark1))} went dark rather "
+                   f"than passing" if bad0 & dark1 else "")
+            )
+        elif sim_mismatch_cnt > prev_mismatch_cnt:
+            # NO REQUIREMENT DATA -- a backend that does not publish any. Falls
+            # back to the testpoint ratchet, which is what every non-specflow
+            # caller has always used.
             increase = int(sim_mismatch_cnt) - int(prev_mismatch_cnt)
             max_increase = min(5, max(1, int(0.1 * max(1, int(prev_mismatch_cnt)))))
             allow = (

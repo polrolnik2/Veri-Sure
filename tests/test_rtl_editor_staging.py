@@ -1862,3 +1862,77 @@ def test_whitespace_tolerance_does_not_weaken_the_two_refusals(tmp_path):
     assert "ambiguous" in out2["error_msg"]
     out3 = s2.stage_edit("assign  d1  =  1'b0;", "assign d1 = 1'b1;")
     assert out3["is_action_executed"] is True     # unique under normalization
+
+
+class _ReqStub:
+    """An OracleResult with only the field the ratchet reads."""
+
+    def __init__(self, ok):
+        self.ok = ok
+
+
+def _split(session):
+    return session._req_split()
+
+
+def test_a_silenced_requirement_is_not_progress(tmp_path):
+    """FAILING -> UNCOVERED IS EVIDENCE LOST, NOT A REQUIREMENT MET.
+
+    A requirement has three states, so "fewer failing" is satisfied just as well
+    by FAILING -> PASSING as by FAILING -> UNCOVERED. The second means the check
+    stopped firing: the design did not improve, the evidence went away. Defect
+    #93, and it is not hypothetical -- MEASURED on run 8 round 21, where
+    `dout <= sSDA` -> `dout <= dSDA` moved the frozen 90 from 19 failing / 25
+    uncovered / 46 passing to 18/26/46. Failing fell by one and PASSING DID NOT
+    MOVE: REQ-0009 went dark. A failing-count ratchet would have latched it.
+
+    PASSING is immune by construction -- silencing leaves it flat.
+    """
+    s = _session(tmp_path)
+    before = {"REQ-A": (_ReqStub(True), {}), "REQ-B": (_ReqStub(False), {})}
+    after_silenced = {"REQ-A": (_ReqStub(True), {}), "REQ-B": (_ReqStub(None), {})}
+    after_repaired = {"REQ-A": (_ReqStub(True), {}), "REQ-B": (_ReqStub(True), {})}
+
+    s.req_results = before
+    ok0, bad0, dark0 = _split(s)
+    assert (len(ok0), len(bad0), len(dark0)) == (1, 1, 0)
+
+    # Silencing: failing falls 1 -> 0, and passing does NOT rise.
+    s.req_results = after_silenced
+    ok1, bad1, dark1 = _split(s)
+    assert len(bad1) < len(bad0), "a failing-count ratchet would call this progress"
+    assert len(ok1) == len(ok0), "but passing is flat, so it must not latch"
+
+    # A real repair moves passing.
+    s.req_results = after_repaired
+    ok2, _b2, _d2 = _split(s)
+    assert len(ok2) > len(ok0)
+
+
+def test_no_requirement_data_is_not_the_same_as_nothing_passing(tmp_path):
+    """`_req_split` returns None, not three empty sets.
+
+    A backend that publishes no requirements would otherwise look like total
+    failure -- passing 0, never rising -- and every commit would be refused for
+    a reason that is about the harness, not the design. None routes to the
+    testpoint ratchet every non-specflow caller has always used.
+    """
+    s = _session(tmp_path)
+    s.req_results = {}
+    assert s._req_split() is None
+    s.req_results = {"REQ-A": (_ReqStub(None), {})}
+    assert s._req_split() == (set(), set(), {"REQ-A"})
+
+
+def test_a_failed_build_cannot_latch_by_leaving_no_verdicts(tmp_path):
+    """If the suite fails to build, every requirement abstains -- so passing
+    goes to zero and the commit cannot latch. Under the old testpoint ratchet
+    an empty results dict reads as ZERO failing testpoints, which beats any
+    positive previous count and would have latched RTL that does not build."""
+    s = _session(tmp_path)
+    s.req_results = {"REQ-A": (_ReqStub(True), {}), "REQ-B": (_ReqStub(True), {})}
+    ok0, _, _ = _split(s)
+    s.req_results = {"REQ-A": (_ReqStub(None), {}), "REQ-B": (_ReqStub(None), {})}
+    ok1, bad1, _ = _split(s)
+    assert len(bad1) == 0, "a build failure produces no FAILING testpoints"
+    assert len(ok1) < len(ok0), "but passing collapses, so it cannot latch"
