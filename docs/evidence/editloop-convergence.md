@@ -262,3 +262,58 @@ The net: the over-strictness repair removed the check with this flaw that was
 *also* the only guard on the filter, and kept the check with the same flaw that
 guards nothing. Both decisions were made on soundness, neither on coverage —
 nothing in the pipeline asks what a rejected check was the last guard for.
+
+## No — the framework cannot express this property at all
+
+The question behind both REQ-0010 and REQ-0046 is whether a *correct* oracle for
+the filter was ever writable. It was not, and the reason is structural.
+
+A `decide(trace)` row exposes exactly the module boundary:
+
+```
+inputs  : clk clk_cnt cmd din ena nReset rst scl_i sda_i
+outputs : al busy cmd_ack dout scl_o scl_oen sda_o sda_oen
+```
+
+`trace['signals']` is `[]`. Searching a whole trace file for `sSCL`, `sSDA`,
+`fSCL`, `fSDA`, `cSCL`, `filter_cnt`, `state` finds **none of them**.
+
+REQ-0046's text is *"Majority voting over the three-sample histories must produce
+the filtered signals sSCL and sSDA"* — it names four internal signals, and an
+oracle can see none of them. The property is **not expressible as stated**, so
+the author had no option but a behavioural proxy.
+
+And the only available proxy is unsound by construction. To say "this output
+change was caused by the glitch" you must know what the output would have done
+*without* the glitch — a **counterfactual**, requiring two traces. `decide(trace)`
+receives one. So no single-trace check can distinguish "reacted to the glitch"
+from "the FSM advanced on its own schedule", which is exactly the failure both
+checks exhibit: REQ-0046's re-author diagnosed it and rejected the check;
+REQ-0010's author did not, and it survived to invert.
+
+**This is not a one-off.** 25 of the frozen 90 — 28% — name at least one signal
+the trace does not carry:
+
+| requirement | names | visible? |
+|---|---|---|
+| REQ-0010 | `majority` | no |
+| REQ-0024 | `cnt`, `clk_en`, `filter_cnt` | no |
+| REQ-0034/0035 | `cnt`, `clk_en` | no |
+| REQ-0042 | `scl_sync` | no |
+| REQ-0045 | `cnt`, `fSCL`, `fSDA` | no |
+
+Every one of those is either a proxy (unsound, like these two) or vacuous.
+
+### The fix is nearly free, and already half-built
+
+Plan §5.6 item 3 already samples the suspect blocks' **internal** signals from
+the VCD for the editor's `explain`. The data is on disk and parsed; `decide`
+simply never receives it. Putting the internals a requirement names into the
+trace row would make REQ-0046 direct and trivial —
+`sSCL[i] == majority(fSCL[i])` — rather than an unsound latency proxy, and would
+retire the whole "proxy an internal property through boundary timing" class that
+these two checks are instances of.
+
+That reframes the stop condition. The 12 checks that convict golden are not
+simply badly written; a quarter of the set is being asked to test properties the
+observation model cannot see.
