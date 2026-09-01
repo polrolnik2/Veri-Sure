@@ -244,6 +244,41 @@ def test_a_directly_observable_requirement_must_still_give_a_ROUTE():
     assert any("no route given" in i.message for i in issues), issues
 
 
+def test_no_route_given_shows_the_SHAPE_not_just_prose():
+    """Measured live, or1200_ctrl REQ-0001: told only this prose (no JSON), the
+    author guessed a dict keyed by port name -- a defensible reading of a
+    sentence that never shows what a route actually looks like. The message
+    now carries the shape it is asking for."""
+    out = NormalizeOutput(normalized=[NormalizedRequirement(
+        req_uid="REQ-0000", activation=Activation(text="a START is issued"),
+        expectation="e", observable=["cmd_ack"], observed_via=[])])
+    issues = gate_one(REQ, out, CONTRACT)
+    msg = next(i.message for i in issues if "no route given" in i.message)
+    assert "LIST of objects" in msg
+    assert '"port"' in msg and '"shows"' in msg
+
+
+def test_a_shape_mistake_on_observed_via_does_not_lose_the_shape():
+    """The failure mode the test above guards the FIRST round against: a
+    round that guessed wrong and failed to PARSE used to fall through to the
+    raw pydantic error alone, with the shape explanation gone -- so the next
+    round had nothing to correct toward and emptied the field instead,
+    reproducing the original error one round later. A parse failure naming
+    `observed_via` now carries the same reminder."""
+    bad = ('{"reasoning": "x", "normalized": [{"req_uid": "REQ-0000", '
+           '"observed_via": {"cmd_ack": {"through_req": "", "when": "w", '
+           '"shows": "s"}}}]}')
+    out = parse_response(bad)
+    assert out.reasoning.startswith("Parse Error: ")
+    assert "LIST of objects" in out.reasoning
+
+    # And a parse failure unrelated to this field stays exactly as terse as
+    # before -- the reminder is not owed to every malformed response.
+    unrelated = "not json at all"
+    out2 = parse_response(unrelated)
+    assert "LIST of objects" not in out2.reasoning
+
+
 def test_a_one_sided_shows_is_rejected():
     out = _out(observable=["cmd_ack"])
     out.normalized[0].observed_via[0].shows = "cmd_ack is observable"

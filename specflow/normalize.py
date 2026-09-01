@@ -958,12 +958,60 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
     return issues
 
 
+#: The direct pass's only explanation of `observed_via` -- WHAT it is asking
+#: for and WHAT SHAPE the answer takes -- repeated verbatim at both points
+#: where a model can reach here without ever having seen it. `INDIRECT_SYSTEM`
+#: carries a worked example; the direct pass's own `SYSTEM` text
+#: (`shared_prefix`) does not, even though `gate_one` below demands the field
+#: -- the check was added to the base case without the explanation following
+#: it.
+#:
+#: Measured live, or1200_ctrl REQ-0001: told only the task prose (below) with
+#: no shape shown, round 1 guessed a dict keyed by port name -- a defensible
+#: reading of that sentence alone. The parse failure it produced
+#: short-circuits `gate_one` to the raw pydantic error (`observed_via` must be
+#: a list) before line ~1052 ever runs, so round 2 saw a DIFFERENT, narrower
+#: message than round 1 did -- the task sentence was gone, not just the shape
+#: -- and, with nothing to imitate, emptied the field back to the base case,
+#: which reproduces round 0's error and round 3 would see the identical
+#: message round 1 did. Two wrong shapes trading places, not a near-miss one
+#: round away. Both pieces are carried at both trigger points now, so a round
+#: reached through either path sees the same complete explanation.
+_OBSERVED_VIA_TASK = (
+    "Give one route naming that port, leaving `through_req` empty, and say "
+    "in `shows` what the port does when this requirement holds and what it "
+    "does when it does not."
+)
+_OBSERVED_VIA_SHAPE = (
+    "`observed_via` is a LIST of objects, one per route -- not a dict keyed by "
+    "port name. Each entry:\n"
+    '  {"port": <output port>, "through_req": "", '
+    '"when": <when this port carries this requirement\'s effect>, '
+    '"shows": <what the port does when this requirement holds, AND when it '
+    "does not>}\n"
+    "Example:\n"
+    '  "observed_via": [\n'
+    '    {"port": "busy", "through_req": "", '
+    '"when": "after a START-shaped edge on sda_i while scl_i is high", '
+    '"shows": "busy stays low for a glitch narrower than the filter depth, '
+    'and rises for one at or above it"}\n'
+    "  ]"
+)
+
+
 def parse_response(text: str) -> NormalizeOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
         return NormalizeOutput.model_validate(obj)
     except Exception as exc:  # noqa: BLE001
-        return NormalizeOutput(reasoning=f"{PARSE_ERROR}{exc}")
+        detail = f"{PARSE_ERROR}{exc}"
+        # Otherwise a shape mistake on THIS field loses its only explanation
+        # the moment it stops parsing -- see `_OBSERVED_VIA_TASK`/`_SHAPE`
+        # above. Both pieces, matching what the base "no route given" case
+        # in `gate_one` says, not a narrower message this path invents.
+        if "observed_via" in str(exc):
+            detail += f"\n\n{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"
+        return NormalizeOutput(reasoning=detail)
 
 
 def _ports(contract: dict, direction: str) -> dict[str, int]:
@@ -1054,9 +1102,7 @@ def gate_one(
             issues.append(Issue(
                 "error", f"normalize.{uid}.observed_via",
                 f"observable at {sorted(norm.observable)} but no route given. "
-                f"Give one naming that port, leaving `through_req` empty, and "
-                f"say in `shows` what the port does when this requirement holds "
-                f"and what it does when it does not"))
+                f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"))
         for i, route in enumerate(norm.observed_via):
             path = f"normalize.{uid}.observed_via[{i}]"
             if route.through_req:
