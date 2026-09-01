@@ -473,6 +473,8 @@ down are the ones that will bite you:
   never(w, p)                   `not p` anywhere in it
   until(w, p, q)                `p until q`   (strong=True -> `s_until`)
   sequence(w, p, q, r)          `p ##[1:$] q ##[1:$] r` -- ORDER, no counts
+  nth(w, p, n)                  `p[->n]` -- the nth OCCURRENCE. Counting
+                                events, where `runs` measures duration
   nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
   runs(t, port, value=v,        `(port==v)[*N:$]` -- and with `at_most`,
        at_least=N, at_most=M)   `(port==v)[*1:M] ##1 (port!=v)`, since

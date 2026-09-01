@@ -216,8 +216,22 @@ where `release` fires, because the release is tested first. `until_with` is a
 one-line variant to add when a requirement needs it.
 
 **`[->n]` goto repetition — "the nth occurrence" — is NOT a cycle count**, so
-D2's rationale does not cover it. It is simply not built. Recorded here rather
-than left to look like a principled absence.
+D2's rationale does not cover it.
+
+**CORRECTED: it was built all along, and only unnamed.** `sequence` steps are
+`##[1:$]` and each strictly advances, so `sequence(w, p, p, p, p)` *is* `p[->4]`
+— verified on a trace pulsing four times: four steps pass, five stall. The
+claim that it was "simply not built" was made from the operator table, where it
+does not appear, rather than from the semantics, where it does. It is now
+`nth(w, holds, n)`, sugar over exactly that.
+
+**It counts OCCURRENCES where `runs` measures DURATION**, and they are the two
+distinct cycle-accurate axes — neither substitutes for the other. The worked
+case for this one is not in `i2c_master_bit_ctrl` at all: its FSM's observable
+effects are output pulses, covered by `pulse(width=1)`, and its internal state
+sequence has no port. It is the BYTE controller, where `dcnt` loads 7 and
+decrements per shift, so "all eight data bits have been transmitted" and "the
+ninth ACK/NACK bit" are `core_ack[->8]` and `[->9]`.
 
 ### D9 · `disable iff` exists, as `aborts_on`, and an aborted attempt is UNKNOWN
 

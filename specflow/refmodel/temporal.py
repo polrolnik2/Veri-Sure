@@ -722,6 +722,33 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     return True, w.edge, f"{what} held and was never released"
 
 
+def nth(w: Window, holds: Pred, n: int, *, strong: bool = False,
+        after_activation: bool = False) -> Verdict:
+    """The `n`th time `holds` becomes true in the window -- SVA's `holds[->n]`.
+
+    Sugar over `sequence`, and named because the spelling was not discoverable:
+    `sequence(w, p, p, p, p)` already IS `p[->4]`, since sequence steps are
+    `##[1:$]` and each strictly advances. Nobody was going to find that by
+    reading the operator table, and `sva-divergence.md` D8 recorded `[->n]` as
+    "simply not built" on the strength of it not being named.
+
+    THIS COUNTS OCCURRENCES; `runs` MEASURES DURATION. They are the two
+    cycle-accurate axes and neither substitutes for the other. "the eighth
+    READ completes" is this; "a low shorter than the filter window" is `runs`.
+    The i2c byte controller is the worked case for this one -- `dcnt` loads 7
+    and decrements per shift, so "all eight data bits have been transmitted"
+    and "the ninth ACK/NACK bit" are `core_ack[->8]` and `[->9]`.
+
+    `strong=True` requires the nth occurrence to have happened by the end of
+    the window; weak lets an unclosed window abstain, the same split every
+    other operator here makes.
+    """
+    if n < 1:
+        raise ValueError(f"nth() needs a positive occurrence index, not {n}")
+    return sequence(w, *([holds] * n), strong=strong,
+                    after_activation=after_activation)
+
+
 def first_match(windows: list[Window]) -> list[Window]:
     """Only the first window -- SVA `first_match`.
 
