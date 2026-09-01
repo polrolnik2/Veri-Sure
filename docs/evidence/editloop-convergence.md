@@ -217,3 +217,48 @@ the edit that satisfies REQ-0045 (machinery still ticks), satisfies REQ-0010
 dead code is what makes it invisible: a checker that asks "does the filter run"
 sees yes, and only a checker asking "does anything use the filter's output"
 would see no.
+
+### Why REQ-0010 inverted, and why REQ-0046 was dropped — the same flaw, opposite outcomes
+
+**REQ-0046 was rejected for a sound reason.** Its check verified the filter
+*indirectly*, by demanding a minimum latency between an `scl_i`/`sda_i` toggle
+and a `busy` transition. The re-author's recorded reason:
+
+> a legitimate busy transition, correctly delayed by roughly the true filter
+> latency from its actual causal excitation, lands within `period` edges of a
+> DIFFERENT, unrelated scl_i/sda_i toggle … and the check cannot tell that apart
+> from "busy reacted too fast to this toggle".
+
+That is a real unsoundness — the check convicts correct designs — and
+ORACLE_INVALID was the right call *on the check as written*. The deeper problem
+is that the filter's actual property (`sSCL` is the majority of the last three
+samples) is **internal**, and this oracle framework observes only boundary
+ports, so every boundary proxy for it is attribution-ambiguous.
+
+**REQ-0010 has the identical flaw and survived.** Its check scans for a
+single-sample `A,B,A` glitch on `sda_i`/`scl_i` and then demands that *no output
+at all* change across those three rows. Run against both designs:
+
+```
+GOLDEN (has the filter)    FAIL
+   sda_i single-sample glitch at rows 0,1,2 caused output 'dout' change 0 -> 1
+
+RUN 10 (filter bypassed)   PASS
+   1 single-sample input glitch(es) observed during activation
+   with no immediate output reaction
+```
+
+Golden fails because `dout` makes a **legitimate data capture** in a window that
+happens to contain an injected glitch, and the check attributes the capture to
+the glitch — precisely the coincidence-attribution error REQ-0046 was rejected
+for. Run 10 passes because its `dout` does not move in that window, which is a
+consequence of its *different, wrong* `dout` behaviour, not of any filtering.
+
+So the inversion has nothing to do with filtering. **The check convicts golden
+for doing its job and acquits run 10 for not doing it**, and the property it was
+supposed to guard is untested either way.
+
+The net: the over-strictness repair removed the check with this flaw that was
+*also* the only guard on the filter, and kept the check with the same flaw that
+guards nothing. Both decisions were made on soundness, neither on coverage —
+nothing in the pipeline asks what a rejected check was the last guard for.
