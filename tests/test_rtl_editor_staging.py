@@ -2265,3 +2265,36 @@ def test_an_activation_can_state_a_repetition_the_spec_gives():
         Sustain(port="sda_i", value=0)
     with pytest.raises(Exception):
         Sustain(port="sda_i", value=0, at_least=3, at_most=1)
+
+
+def test_no_normalized_form_means_no_oracle():
+    """NORMALIZATION'S GATE WORKED; THE ORACLE STAGE IGNORED THE RESULT.
+
+    `gate_one` raises an Issue on a Parse Error, `run_stage` spends the whole
+    repair budget, and the merge loop drops the requirement under "A REQUIREMENT
+    WHOSE NORMALIZED FORM NEVER PASSED ITS OWN GATE DOES NOT SHIP". All correct.
+    But the oracle stage iterates `requirements` and reads the shape as
+    `(normalized or {}).get(uid) or {}`, so a requirement with NO record was
+    silently an empty activation and got a check anyway -- the mirror of the bug
+    normalization had closed: stopping "a REJECTED form ships" left "NO form
+    ships" open.
+
+    Five did on c1-i2c. REQ-0010's resulting check later INVERTED, passing a
+    design that had deleted its input filter and convicting the golden one.
+    """
+    import inspect
+
+    import specflow.oracles_stage as os_
+
+    src = inspect.getsource(os_)
+    assert "NO NORMALIZED FORM, NO ORACLE" in src, "the gate must exist"
+    # It must reject INTO the same channels the rest of the stage reads, or the
+    # requirement would be dropped without appearing in the denominator.
+    seg = src[src.index("NO NORMALIZED FORM, NO ORACLE"):]
+    seg = seg[:seg.index("\n\n", seg.index("if normalized is not None"))]
+    assert "rejected[_uid] = abandoned[_uid]" in seg, (
+        "a requirement nobody could write a check for is a FINDING; dropping it "
+        "silently is how coverage comes to look better than it is")
+    assert "malformed:" in seg
+    # And it must not fire when normalization was simply not run at all.
+    assert "if normalized is not None" in seg
