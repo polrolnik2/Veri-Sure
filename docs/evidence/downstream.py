@@ -60,7 +60,29 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-dir", default="/home/user/runs/n1-i2c")
     ap.add_argument("--max-repairs", type=int, default=3)
-    ap.add_argument("--model", default="gpt-5-mini")
+    ap.add_argument("--model", default="gpt-5-mini",
+                    help="S2, S3 and stimulus: the model c1-i2c recorded")
+    #: THE CHECK AUTHOR GETS ITS OWN MODEL, and only it.
+    #:
+    #: `PortSettings.deep_effort_stages` already names `oracle` as the stage
+    #: worth spending more on, and records why: eleven oracles [O] could not
+    #: make non-vacuous were re-authored at full strength and "one of the first
+    #: five produced a check `gpt-5-mini`/medium could not write... So authoring
+    #: quality is a real lever." Its cheap arm -- raise effort, keep the model
+    #: -- ships disabled (`deep_effort` defaults to None) and is unmeasured.
+    #: This is the expensive arm, run deliberately.
+    #:
+    #: TWO COSTS, both known. `gpt-5.6-luna` caches on EXACT INPUT rather than
+    #: on a prefix, so a fan-out gets no shared-prefix discount and every call
+    #: pays its whole prompt. And this buys the REPAIR rounds as well as
+    #: generation, which is where a stronger author was already measured to
+    #: help -- `run_stage` takes one port for both, so they cannot be split
+    #: without changing it.
+    ap.add_argument("--oracle-model", default="gpt-5.6-luna")
+    ap.add_argument("--oracle-effort", default="medium",
+                    choices=["low", "medium", "high", "xhigh"],
+                    help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
+                         "and the measured stream deaths were at 9000")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--skip", default="", help="comma list: s2,s3,stimulus,oracles")
     a = ap.parse_args()
@@ -87,6 +109,12 @@ def main() -> int:
                             small_model=a.model, small_effort=a.effort)
     port = resumable(make_port("api", run_dir / "agent_io", settings=settings),
                      run_dir / "agent_io")
+    oracle_settings = PortSettings(
+        model=a.oracle_model, effort=a.oracle_effort,
+        small_model=a.oracle_model, small_effort=a.oracle_effort)
+    oracle_port = resumable(
+        make_port("api", run_dir / "agent_io", settings=oracle_settings),
+        run_dir / "agent_io")
     t0 = time.time()
 
     # --- S2 ------------------------------------------------------------------
@@ -152,7 +180,7 @@ def main() -> int:
                 (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
         oracle_set = run_oracle_stage(
             requirements=reqs, contract_json=contract_json, contract=contract,
-            testplan=tps, stimulus_by_tp=stim_by_tp, port=port,
+            testplan=tps, stimulus_by_tp=stim_by_tp, port=oracle_port,
             workdir=sf, base=choose_base(contract),
             normalized=normalized_by_uid, spec=spec,
             control_source=None,          # the golden RTL never reaches here
