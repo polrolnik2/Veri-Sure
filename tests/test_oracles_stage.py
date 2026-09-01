@@ -1266,3 +1266,35 @@ def test_every_path_that_discards_a_replacement_records_it():
     # axis it could see, and the repair had moved a different one.
     assert "_is_live(" not in src, (
         "the liveness discard is dropped; a helper left behind gets re-wired")
+
+
+def test_every_operator_the_author_is_told_about_is_importable_and_shown():
+    """The prompt must not name an operator its own import line omits.
+
+    This is the third instance of one pattern in this stage: `observed_via`
+    had a gate with no shape, `sustains` had a schema field with no prompt,
+    and `runs`/`nth` were described in prose while the import statement the
+    author copies listed neither. A check calling one would have raised
+    NameError at decide time and been recorded as a broken oracle -- blaming
+    the author for a line the prompt told it to write.
+
+    Pins the direction that matters: everything IMPORTED must exist, and
+    everything DESCRIBED must be imported.
+    """
+    import re
+
+    from specflow.refmodel import temporal
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    shown = set()
+    for m in re.finditer(r"from \S*temporal import \(([^)]*)\)", SYSTEM, re.S):
+        shown |= {n.strip(" ,") for n in m.group(1).split()}
+    assert shown, "the prompt shows no temporal import at all"
+
+    for name in sorted(shown):
+        assert hasattr(temporal, name), f"prompt imports {name}, which does not exist"
+
+    # And the two cycle-accurate operators specifically: described in prose,
+    # so they must also be reachable.
+    for name in ("runs", "nth"):
+        assert name in shown, f"{name} is described but not in the import line"

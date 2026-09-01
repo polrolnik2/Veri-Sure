@@ -281,8 +281,9 @@ Six of the last run's fourteen vacuous checks were exactly this. And a check
 that instead waits a FIXED number of edges is the opposite failure, pinning a
 count the specification never gave.
 
-    from specflow.refmodel.temporal import (after, edges, eventually,
-                                            throughout, stable, pulse, worst)
+    from specflow.refmodel.temporal import (after, edges, eventually, nth,
+                                            runs, throughout, stable, pulse,
+                                            worst)
 
     def decide(trace):
         windows = after(trace,
@@ -300,6 +301,9 @@ count the specification never gave.
                                            `port == value` BEGINS, bounded in
                                            EDGES. The opener for
                                            `activation.sustains`.
+  nth(w, holds, n)                      -> Verdict; the nth time `holds`
+                                           becomes true -- OCCURRENCES,
+                                           where `runs` is duration
   pulse(w, port, width=1, active=1)     -> Verdict; active for exactly `width`
                                            EDGES, exactly once
   worst(verdicts)                       -> Verdict; folds many, failure first
@@ -356,8 +360,8 @@ check convicts a correct design. Pass `aborts_on` whenever it is non-empty and
 `after` handles the rest -- no operator needs a guard of its own. Every
 construct below is built the same way:
 
-    from specflow.refmodel.temporal import (after, eventually, throughout,
-                                            stable, pulse, worst)
+    from specflow.refmodel.temporal import (after, eventually, nth, runs,
+                                            throughout, stable, pulse, worst)
 
     # `{port: value}` straight out of the normalized block -> a row predicate.
     def _holds(cond):
