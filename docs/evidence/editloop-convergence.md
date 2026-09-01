@@ -292,7 +292,7 @@ internal visibility needed, no counterfactual needed. My claim that neither was
 avoidable was wrong — a differential comparison sidesteps the attribution
 problem, which is exactly why the normalizer specified one.
 
-**The authored check ignored that recipe.** REQ-0046's frozen oracle opens a
+**The authored check did NOT ignore that recipe — it implemented the ACTIVATION, and the activation is where the recipe was lost.** (See the section below; this sentence originally read "the authored check ignored that recipe", which the activation schema shows to be unfair.) REQ-0046's frozen oracle opens a
 window on *any* `scl_i`/`sda_i` change and demands `busy`, `dout` and `al` do not
 change:
 
@@ -335,3 +335,62 @@ side of it:
 The second is load-bearing: the pipeline generates a precise, sound experimental
 design and then never checks that the oracle performs it.
 
+
+## The activation could not say what the requirement means
+
+The check faithfully implements the activation it was given:
+
+```
+activation.opens_on : [{'scl_i': 'change'}, {'sda_i': 'change'}]
+the check opens on  : (r['edge'] in scl_changes) or (r['edge'] in sda_changes)
+```
+
+So the author did not ignore anything. **The activation flattened "a short
+GLITCH on scl_i or sda_i" into "ANY CHANGE on scl_i or sda_i"** — and the
+glitch's defining property, its duration of fewer than 2 of 3 filter samples, is
+simply not in it.
+
+That is not an authoring slip. `Activation` cannot carry it. Its three fields are
+all per-row predicates — `inputs` a conjunction over one row, `opens_on` a
+disjunction over one row, `until` a closing condition — and the schema documents
+the exclusion in terms:
+
+> **"A CONDITION, NEVER A COUNT.** `until cmd_ack` is expressible; `for 12 edges`
+> is a guess at pacing this specification does not state, and Phases 3-6 severed
+> pacing from latency for exactly that reason."
+
+The policy is right in general and wrong here. For a majority-of-three filter the
+count **is** the specification — "fewer than 2 of 3 samples" is stated by the
+design's own structure, not guessed at from prose — so the one rule protecting
+the pipeline from invented pacing is what stops it expressing a real,
+spec-given repetition.
+
+**The check language does not share the limitation.** `temporal.pulse` already
+takes a width:
+
+```python
+def pulse(w, port, *, active=1, width=1, after_activation=False):
+    """`port` must go active for exactly `width` consecutive rows, once."""
+```
+
+So repetition is expressible where the oracle runs, and inexpressible where the
+oracle is specified. The `observed_via` prose describes the differential
+experiment correctly and has no structured counterpart, so an author working
+from the structure — which is what the structure is for — cannot arrive at it.
+
+### Corrected chain of custody for REQ-0046
+
+| stage | what happened | fault? |
+|---|---|---|
+| requirement | "Majority voting … so that short glitches are suppressed" | sound |
+| normalize → `observed_via` | three correct differential recipes, in prose | sound |
+| normalize → `activation` | glitch duration dropped; `opens_on` = any edge | **schema cannot express a count** |
+| oracle author | implements the activation faithfully | sound, given its input |
+| resulting check | "no output may change on any input edge" | convicts every design |
+| re-author | ORACLE_INVALID, diagnosing attribution ambiguity | correct on the symptom |
+| `base_suite()` | rejected check contributes nothing → dropped | correct rule |
+| run 10 | deletes the filter; nothing left to notice | — |
+
+Every stage behaved correctly under its own contract. The property was lost at
+the one point where a duration had to survive into a structured form and could
+not.
