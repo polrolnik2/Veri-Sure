@@ -24,15 +24,23 @@ recorded fixture, so a stage driven once by hand replays forever. Given that
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
 from eda_agent import stream_policy as _policy
+
+#: `fanout.PREFIX_SENTINEL`, duplicated rather than imported: `fanout` imports
+#: `stage` and `stage` imports THIS module, so importing it here would close the
+#: cycle. `test_the_prefix_sentinel_cannot_drift` pins the two together, the
+#: same discipline `_MIDSTREAM_DROP` gets one level down.
+_PREFIX_SENTINEL = "\n</shared_context>\n"
 
 logger = logging.getLogger(__name__)
 
@@ -406,6 +414,49 @@ class PortSettings:
     effort_chunk: dict[str, int] = field(
         default_factory=lambda: dict(_policy.EFFORT_CHUNK))
 
+    #: Send the shared prefix once and carry it server-side, for models whose
+    #: cache is keyed on EXACT INPUT rather than on a prefix.
+    #:
+    #: OFF, AND UNPROVEN. It does not currently solve the problem it was built
+    #: for, and the honest state is recorded here rather than in a commit
+    #: message nobody reads at the call site.
+    #:
+    #: WHAT IS SOLID (`docs/evidence/luna-cache.md`), one 16k-token prefix,
+    #: calls sharing a cache-key family:
+    #:
+    #:                              same prefix, new suffix | byte-identical
+    #:     gpt-5-mini                                   99% |           99%
+    #:     gpt-5.6-luna                                  0% |          100%
+    #:
+    #: `store`, `prompt_cache_key`, and the absence of each, were tried in five
+    #: combinations and every one read 0% on luna. No request-shape change makes
+    #: it cache a prefix. At run scale, matched for warm-up position: 5% over
+    #: f1-i2c's first 20 oracle calls against gpt-5-mini's 46%, and mini reaches
+    #: 80% over 225.
+    #:
+    #: THE IDEA HERE was to reach the exact-input hit instead: seed the shared
+    #: prefix once with `store=True`, then give every item
+    #: `previous_response_id` so the carried context is a byte-identical
+    #: server-side object.
+    #:
+    #: WHAT REFUTED IT. A first A/B read 100% cached and 12 full-price tokens
+    #: over four items -- against a prefix already sent about ten times by
+    #: earlier probes, so the gateway held it warm for reasons that had nothing
+    #: to do with seeding. Repeated with a NONCE-prefixed, never-before-seen
+    #: prefix: **0% on all six items**. The seed does not populate the cache.
+    #:
+    #: One real finding survives and is applied below where the id is set:
+    #: `prompt_cache_key` alongside `previous_response_id` costs the hit
+    #: outright, 100% -> 0%, because both are routing hints and they disagree.
+    #: That is why the key is dropped on the seeded path -- it matters the
+    #: moment seeding works, and it is silent when it does not.
+    #:
+    #: DO NOT TURN THIS ON expecting a saving. Whether the carried context warms
+    #: with elapsed time is the open question; until that is answered this
+    #: changes the prompt shape -- the model reads the prefix as a prior turn
+    #: plus its own acknowledgement -- for no measured benefit.
+    prefix_seed: bool = False
+
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
     #: applies before a response starts.
     stream_retries: int = 2
@@ -631,6 +682,11 @@ class ApiPort:
     #: defaults -- NOT the environment, which is what let a caller's `--env-file`
     #: be silently overridden by whichever file a stage happened to re-read.
     settings: PortSettings = field(default_factory=PortSettings)
+    #: Seeded shared prefixes, per (cache key, prefix hash) -- see
+    #: `_seed_id`. An empty value is a REMEMBERED FAILURE, so a gateway that
+    #: cannot carry context is asked once per stage rather than once per item.
+    _seeds: dict = field(default_factory=dict)
+    _seed_lock: object = field(default_factory=threading.Lock)
     #: Stages the override must NOT touch. The docstring above has always said
     #: "the whole-artifact stages keep the configured one", and the code did not
     #: do it: `make_port` attaches the override to the single port the whole run
@@ -898,7 +954,31 @@ class ApiPort:
         body["max_output_tokens"] = min(chunk, total)
 
         client = self._client()
+
+        # The shared prefix, sent once and carried server-side -- see
+        # `PortSettings.prefix_seed`. Falls back to the flat prompt on any
+        # failure, so a gateway that refuses `previous_response_id` costs one
+        # wasted seed call and nothing else.
         conversation: list = [{"role": "user", "content": prompt}]
+        seed_id = self._seed_id(client, cfg, stage=stage, prompt=prompt)
+        if seed_id:
+            body["previous_response_id"] = seed_id
+            # AND THE ROUTING HINT MUST GO. Both are routing mechanisms and
+            # they disagree: the seed lives on the backend that served it, while
+            # `prompt_cache_key` sends the request to the backend that key
+            # hashes to. Measured on gpt-5.6-luna, one seed, two continuations:
+            #
+            #   previous_response_id alone .................... 100% cached
+            #   + include reasoning.encrypted_content ......... 100%
+            #   + streaming ................................... 100%
+            #   + prompt_cache_key ............................   0%
+            #
+            # Streaming and the encrypted reasoning items are both harmless.
+            # The key alone costs the whole hit, and silently -- the request
+            # succeeds and simply pays full price.
+            body.pop("prompt_cache_key", None)
+            conversation = [{"role": "user",
+                             "content": prompt.split(_PREFIX_SENTINEL, 1)[1].lstrip("\n")}]
         parts: list[str] = []
         final = None
         spent = 0
@@ -1078,6 +1158,53 @@ class ApiPort:
         raise last  # type: ignore[misc]
 
     # ------------------------------------------------------------------- call
+    def _seed_id(self, client, cfg, *, stage: str, prompt: str) -> str | None:
+        """The stored response holding this stage's shared prefix, or None.
+
+        One seed per (cache key, prefix), created on first use and reused by
+        every item of the fan-out -- so the prefix is sent once per stage rather
+        than once per item. Thread-safe because the fan-out runs four workers
+        against the same port and two racing seeds would leave half the calls
+        pointing at a prefix the other half never warmed.
+
+        RETURNS NONE RATHER THAN RAISING, on every failure path: no sentinel in
+        the prompt (a whole-artifact stage has no shared prefix to hoist), the
+        setting off, or the gateway refusing. The caller then sends the flat
+        prompt, which is exactly what it did before this existed.
+        """
+        if not getattr(self.settings, "prefix_seed", False):
+            return None
+        if _PREFIX_SENTINEL not in prompt:
+            return None
+        shared = prompt.split(_PREFIX_SENTINEL, 1)[0] + _PREFIX_SENTINEL
+        key = (f"{_cache_key(cfg, stage)}:"
+               f"{hashlib.sha256(shared.encode('utf-8')).hexdigest()[:16]}")
+        with self._seed_lock:
+            if key in self._seeds:
+                return self._seeds[key]
+            try:
+                seed = client.responses.create(
+                    model=cfg.model,
+                    input=(shared + "\nAcknowledge that you have read the "
+                           "material above. Reply with exactly: READY"),
+                    # The one stored object in this transport, and the whole
+                    # point: an exact-input cache can only hit on something it
+                    # already holds.
+                    store=True,
+                    reasoning={"effort": "low", "summary": "auto"},
+                    max_output_tokens=2000,
+                )
+                self._seeds[key] = seed.id
+                logger.info("%s: seeded shared prefix (%d chars) as %s",
+                            stage, len(shared), seed.id)
+            except Exception as exc:  # noqa: BLE001
+                # Cached as a miss so a gateway that cannot do this is asked
+                # once per stage, not once per item.
+                self._seeds[key] = ""
+                logger.warning("%s: prefix seeding unavailable (%r); sending "
+                               "the flat prompt", stage, exc)
+            return self._seeds[key] or None
+
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
         cfg = self.config(stage)
         prompt_path, response_path = _paths(Path(self.root), stage, round_)

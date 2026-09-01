@@ -117,3 +117,42 @@ def test_deep_effort_never_overrides_an_explicit_caller_effort():
     # `small_effort` alone is enough of a tier to raise.
     effort_only = PortSettings(small_effort="low", deep_effort="high")
     assert effort_only.for_stage("oracle_REQ-0001") == (None, "high")
+
+
+def test_the_prefix_sentinel_cannot_drift():
+    """`model_io` duplicates `fanout.PREFIX_SENTINEL` instead of importing it.
+
+    It has to: `fanout` imports `stage` and `stage` imports `model_io`, so the
+    import would close a cycle. A duplicated constant that silently diverges
+    would make `_seed_id` split the prompt in the wrong place -- or, more
+    likely, never find a boundary and quietly do nothing.
+    """
+    from specflow.fanout import PREFIX_SENTINEL
+    from specflow.model_io import _PREFIX_SENTINEL
+
+    assert _PREFIX_SENTINEL == PREFIX_SENTINEL
+
+
+def test_prefix_seeding_is_off_and_inert_by_default():
+    """It is unproven -- see `PortSettings.prefix_seed` -- so it must not fire.
+
+    `_seed_id` returns None without touching the client on every path that
+    should not seed, which is what lets the flag ship dark: the transport sends
+    the flat prompt exactly as it did before the code existed.
+    """
+    from pathlib import Path
+
+    from specflow.fanout import PREFIX_SENTINEL
+    from specflow.model_io import ApiPort, PortSettings
+
+    with_sentinel = f"shared{PREFIX_SENTINEL}\n\nitem"
+    off = ApiPort(root=Path("/tmp"), settings=PortSettings())
+    assert off.settings.prefix_seed is False
+    # A client of None proves it is never called: any use would raise.
+    assert off._seed_id(None, None, stage="oracle_REQ-0001",
+                        prompt=with_sentinel) is None
+
+    # On, but a whole-artifact prompt has no shared prefix to hoist.
+    on = ApiPort(root=Path("/tmp"), settings=PortSettings(prefix_seed=True))
+    assert on._seed_id(None, None, stage="refmodel",
+                       prompt="no sentinel here") is None

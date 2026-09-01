@@ -75,3 +75,58 @@ misses exact-input caching too.
 The exact-input hit is not useless — a retry after a dropped stream, and
 `ResumePort`'s replay, both resend byte-identical prompts. Neither is the
 fan-out.
+
+
+## The attempted fix, and its retraction
+
+`previous_response_id` looked like the way to reach the exact-input hit: seed
+the shared prefix once with `store=True`, then send each item with only its own
+text, so the carried context is a byte-identical server-side object.
+
+**A first A/B said it worked and it was wrong.** Four items on luna:
+
+| | input | cached | full-price |
+|---|---|---|---|
+| flat | 33,752 | 0 | 33,752 |
+| seeded | 33,860 | 33,848 | **12** |
+
+The prefix in that test had already been sent about ten times by earlier probes
+in this session, so the gateway held it warm for reasons that had nothing to do
+with seeding. Repeating it with a nonce-prefixed, **never-before-seen** prefix:
+
+    item 1  input=11989  cached=0   (0%)
+    item 2  input=11989  cached=0   (0%)
+    ...
+    item 6  input=11989  cached=0   (0%)
+
+**Seeding does not populate the cache.** The claim is withdrawn, and
+`PortSettings.prefix_seed` ships off with the refutation in its own docstring
+rather than in a commit message. Whether the carried context warms with elapsed
+time is the open question and is being measured separately.
+
+### One real finding survives
+
+With `previous_response_id` set, sending `prompt_cache_key` costs the cache hit
+outright. Same seed, two continuations, everything else held:
+
+| request | cached |
+|---|---|
+| `previous_response_id` alone | 100% |
+| + `include: reasoning.encrypted_content` | 100% |
+| + streaming | 100% |
+| **+ `prompt_cache_key`** | **0%** |
+
+Both are routing hints and they disagree: the seed lives on the backend that
+served it, and the key sends the request to whichever backend it hashes to.
+Streaming and the encrypted reasoning items are harmless. The transport drops
+the key on the seeded path -- it matters the moment seeding works, and is
+silent when it does not.
+
+### Methodological note
+
+Two probes in this sequence were wrong before they were right, both the same
+way: an earlier identical request had warmed something. The first named three
+calls in three different stage families, so each got its own cache key and BOTH
+models read 0%, which would have exonerated luna. The second reused a hot
+prefix, which would have shipped a no-op as a fix. **A cache measurement is only
+valid against an input the backend has never seen** -- hence the nonce.
