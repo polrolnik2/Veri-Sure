@@ -1300,30 +1300,46 @@ def test_every_operator_the_author_is_told_about_is_importable_and_shown():
         assert name in shown, f"{name} is described but not in the import line"
 
 
-def test_a_threshold_in_the_requirement_TEXT_is_reachable_without_sustains():
-    """The author has `runs`; it was also told not to use it.
+def test_counting_guidance_is_general_and_names_no_design():
+    """The author has `runs`/`nth`; it was also told not to invent a window.
 
-    Two things gated the one requirement class the operator was built for.
-    The prompt's own `sustains` paragraph opened with "When it is present",
-    and the older rule says "You are not inventing a window, you are copying
-    one" -- so with `sustains: []` the author holds the tool and an
-    instruction against reaching for it.
+    Two things gated the requirement class the operators were built for. The
+    `sustains` paragraph opened with "When it is present", and the older rule
+    says "You are not inventing a window, you are copying one" -- so with
+    `sustains: []` the author holds the tool and an instruction against
+    reaching for it.
 
-    Measured: after teaching normalization the field, 1 of 127 requirements
-    populated it, and REQ-0010, REQ-0045 and REQ-0046 -- the filter cluster it
-    exists for -- all came back empty. Normalization is RIGHT to decline: the
-    spec states a sample DEPTH ("a majority of the three-sample histories"),
-    not a duration on a port, and `stated_by` cannot quote a phrase that does
-    not exist. The author reads the same sentence and can do the arithmetic.
+    Normalization is RIGHT to leave it empty in that case: it can only quote a
+    phrase naming the port's own duration, and a spec often states the number
+    in other units. The author reads the same sentence and can do the
+    arithmetic, so the permission belongs here.
 
-    The exception must stay narrow, so this pins both halves: the door is open
-    for a threshold in the requirement's own words, and the rule it sits under
-    is still stated.
+    THE FIRST VERSION OF THIS WAS OVERFITTED. It was written as an exception
+    under the window rule with i2c's own filter as the worked example -- the
+    port name, the sample count and the resulting bound all inlined -- which
+    teaches pattern-matching on one design instead of the rule. This pins the
+    general form: one section, both operators, the transcribe-or-invent test
+    stated once, and no design in it.
     """
     from specflow.refmodel.oracle_gen import SYSTEM
 
-    assert "ONE EXCEPTION, AND ONLY THIS ONE" in SYSTEM
+    start = SYSTEM.find("COUNTS AND DURATIONS")
+    assert start > 0, "the counting guidance must be its own section"
+    block = SYSTEM[start:SYSTEM.find("COUNT IN EDGES AND LET")]
+
+    # Both axes, named together, since confusing them inverts the property.
+    assert "runs(trace, port" in block and "nth(w, holds, n)" in block
+    # The test that licenses a number, and the record that proves it was applied.
+    assert "whether you can quote it" in block.lower()
+    assert "QUOTE THE PHRASE IN YOUR DETAIL STRING" in block
+    # The arithmetic clause -- the whole reason an empty `sustains` is not a
+    # statement that the requirement is countless.
+    assert "ARITHMETIC ON A STATED NUMBER IS STILL TRANSCRIPTION" in block
+
+    # NO DESIGN IN IT. This is the regression the first version was.
+    for token in ("sda_i", "scl_i", "three-sample", "filter window", "cmd_ack"):
+        assert token not in block, f"{token!r} overfits the prompt to one design"
+
+    # And the rule it is an opening in must still stand, elsewhere.
     assert "not inventing a window, you are copying one" in SYSTEM
-    # The evidence trail the exception is licensed by.
-    assert "QUOTE THE PHRASE" in SYSTEM
-    assert "at_most=1" in SYSTEM
+

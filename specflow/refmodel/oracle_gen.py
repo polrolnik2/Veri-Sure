@@ -323,21 +323,59 @@ blames the design for a testpoint that does not exist.
 `after` returns at most 64 windows. If you hit that on a long trace you are
 matching something far broader than the requirement.
 
-`activation.sustains` IS A WINDOW OPENER, NOT AN OBLIGATION. When it is
-present the requirement's activation includes a DURATION the specification
-states -- "a majority of the three samples", "shorter than the filter window" --
-and `runs` turns it into edges you can open on:
+COUNTS AND DURATIONS -- the one place a number may enter a check.
 
-    # normalized: sustains [{"port": "sda_i", "value": 0, "at_most": 1}]
-    short = runs(trace, "sda_i", value=0, at_most=1)
+TWO OPERATORS, TWO DIFFERENT QUESTIONS, and neither substitutes for the other:
+
+  runs(trace, port, value=v, at_least=N, at_most=M)
+      HOW LONG a level is held. Returns the edges where a qualifying run
+      begins, so it opens a window.
+  nth(w, holds, n)
+      HOW MANY TIMES something happens. Returns a verdict on the nth
+      occurrence.
+
+THE TEST FOR WHETHER A NUMBER MAY BE USED IS WHETHER YOU CAN QUOTE IT. A
+requirement that states a number -- a duration, a sample count, an occurrence
+index, a width -- licenses that number. A requirement that states none does
+not, and asserting one there is the invented pacing this prompt forbids
+everywhere else: it fails correct designs whose timing the specification left
+open.
+
+ARITHMETIC ON A STATED NUMBER IS STILL TRANSCRIPTION. A count is often given
+in units the ports do not directly carry -- a number of samples, a number of
+stages, a threshold over a history -- and converting it into a bound you can
+check is reading, not inventing. If the specification fixes a quantity and
+simple arithmetic turns it into an edge count or an occurrence index, that
+bound is licensed. What is NOT licensed is a number that appears nowhere and
+is chosen because it happens to fit.
+
+    # requirement text: "<the phrase stating the number>"
+    short = runs(trace, PORT, value=V, at_most=K)     # below the stated threshold
+    long_ = runs(trace, PORT, value=V, at_least=K+1)  # at or above it
+
+A REQUIREMENT STATING BOTH SIDES OF A THRESHOLD GIVES TWO ACTIVATIONS OF ONE
+CHECK -- below it the design must not react, at or above it it must. Convict on
+the first arm only when the second shows the outputs can move at all; otherwise
+a design that ignores the port entirely passes the quiet arm for the wrong
+reason.
+
+QUOTE THE PHRASE IN YOUR DETAIL STRING. `activation.sustains` records the same
+thing in `stated_by` when normalization was able to fill it, and it is often
+empty even where the requirement does state a number -- normalization can only
+quote a phrase that names the port's own duration. Your detail string is where
+a reader checks whether a number was read off the specification or chosen to
+fit, so name the words it came from either way.
+
+`activation.sustains` IS A WINDOW OPENER, NOT AN OBLIGATION. When normalization
+filled it, the duration is already transcribed for you and `runs` turns it into
+edges to open on -- the entry's `port`, `value` and bounds map across directly:
+
+    # normalized: sustains [{"port": P, "value": V, "at_most": K}]
+    short   = runs(trace, P, value=V, at_most=K)
     windows = after(trace, lambda r: r["edge"] in short)
 
-A requirement stating BOTH sides of a threshold gives two entries, and they are
-two different activations of the same check -- the short one is where the
-design must NOT react, the long one where it must. Build both, and let the
-short arm convict only when the long arm shows the outputs can move at all;
-otherwise a design that ignores the port entirely passes the short arm for the
-wrong reason.
+An empty `sustains` is not evidence the requirement states no duration; see
+COUNTS AND DURATIONS above for when you may read one out of the text yourself.
 
 COUNT IN EDGES AND LET `runs` DO IT. The trace is state-compressed, so a
 five-edge level is one row carrying `held: 5`; a hand-written scan that counts
@@ -349,24 +387,9 @@ THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
 `activation.until` is what CLOSES it; `activation.aborts_on` is what DISCARDS
 it. You are not inventing a window, you are copying one.
 
-ONE EXCEPTION, AND ONLY THIS ONE: A THRESHOLD THE REQUIREMENT'S OWN TEXT
-STATES. If `activation.sustains` is EMPTY but the requirement says a duration
-in words -- "a majority of the three consecutive samples", "shorter than the
-filter window", "for one clock cycle" -- you may open on it with `runs`, and
-you should. Normalization declines these when the number is about a SAMPLE
-DEPTH rather than a port's duration, because it cannot quote a phrase saying
-how long the port was held; you are reading the same sentence and can do the
-arithmetic it declined to do. A run that cannot win a majority of three
-consecutive samples is a run of at most one.
-
-    # requirement text: "a majority function over the three-sample histories"
-    short = runs(trace, "sda_i", value=0, at_most=1)     # cannot win 3-sample majority
-    long_ = runs(trace, "sda_i", value=0, at_least=2)    # can
-
-QUOTE THE PHRASE IN YOUR DETAIL STRING when you do this, exactly as
-`stated_by` would have. A number you can point at in the specification is a
-transcription; one you cannot is the invented pacing the rule above forbids,
-and the detail string is where a reader checks which of the two you did.
+A DURATION OR AN OCCURRENCE COUNT IS NOT A WINDOW YOU INVENT -- see
+COUNTS AND DURATIONS below, which is the one place a number may enter
+a check, and states the test for whether it was transcribed.
 
     windows = after(trace, applies, until=closes, aborts=voided)
 
