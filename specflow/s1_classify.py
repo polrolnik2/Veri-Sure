@@ -147,10 +147,11 @@ For the unit, decide:
                       that completes the sentence before it. A unit that states
                       its own behaviour is NOT a continuation even when it
                       refers back: resolve the reference in your restatement,
-                      which is what `text` is for. A continuation is folded into
-                      the previous requirement and its obligations are dropped,
-                      so claiming it for a unit that says something is how a
-                      requirement gets lost.
+                      which is what `text` is for. Setting it never costs you a
+                      requirement: every obligation you return is still one
+                      requirement, and all the flag does is widen their spans
+                      backwards to include the unit that introduces them, so a
+                      reader of the requirement can see what it refers to.
 
   obligations         for a behavioural unit, one entry per atomic requirement.
                       An atomic requirement is ONE thing that could be

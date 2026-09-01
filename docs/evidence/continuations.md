@@ -107,7 +107,7 @@ Named among the 42 recovered:
 * `al` asserts on a STOP detected while the FSM is active on a non-STOP command
 * `din` determines SDA drive state during WRITE bit operations
 
-## And on the new division, it fires zero times
+## On the new division it fires zero times -- and that reading is CONFOUNDED
 
 n3-i2c, 168 sentence-floor units on gpt-5-mini/medium:
 
@@ -117,9 +117,22 @@ n3-i2c, 168 sentence-floor units on gpt-5-mini/medium:
 | claiming `continues_previous` | **14 (28%)** | **0 (0%)** |
 | obligations at risk of the fold | 42 | 0 |
 
-All 28 continuations n3-i2c's classifier declared landed on `interface` or
-`scaffolding` units, which emit no obligations either way. Sentence-sized units
-stand alone, so the fix above changes nothing on this spec — which is the right
-outcome for a safety net. It stays load-bearing for c1-i2c's shape, and for any
-specification whose paragraphs the divider cannot separate into standalone
-sentences.
+**This does NOT establish that sentence-sized units stand alone, and it was
+first reported here as though it did. It is withdrawn.**
+
+The prompt n3-i2c ran carried a gloss written when the fold still dropped
+obligations:
+
+> "A continuation is folded into the previous requirement and its obligations
+> are dropped, so claiming it for a unit that says something is how a
+> requirement gets lost."
+
+That is a warning against setting the flag, and it was left in place after the
+fold stopped dropping anything. So 0 of 129 is consistent with two different
+worlds -- sentence units genuinely standing alone, or a model declining a flag
+it was told would cost it requirements -- and this run cannot separate them.
+
+The gloss now describes what the flag actually does: it widens spans backwards
+and never costs a requirement. **Re-running S1 on the same 168-unit partition
+under the corrected prompt is what would separate the two**, and until that is
+done the fix above is measured only on c1-i2c, where it recovers 42 obligations.
