@@ -83,3 +83,45 @@ disturbance and passes a short one, which is what an absent filter does.
 **The general lesson is about S1, not about oracles.** A requirement whose span
 does not contain the numbers its text depends on cannot be made checkable
 downstream, and no gate in the current pipeline asks whether it does.
+
+
+## Blast radius, measured — and my whole-unit proposal is wrong
+
+I proposed requiring every `spec_span` to be a union of whole `divide()` units,
+on the reasoning that this restores "granularity stops being the model's to
+pick". Measured on c1-i2c's 127 requirements against the 65 units `divide()`
+produces:
+
+| rule | flagged |
+|---|---|
+| span must be a union of WHOLE units | **121 of 127** |
+| span must not BEGIN MID-SENTENCE | **41 of 127** |
+
+**The whole-unit rule is unenforceable.** Only 6 requirements satisfy it.
+Subdivision is not an occasional slip, it is the dominant mode, and a rule that
+rejects 95% of the set is a rule nobody can adopt.
+
+**And the reason is visible in the first ten offenders.** REQ-0002 through
+REQ-0010 are ONE SENTENCE cut at its commas:
+
+    REQ-0002  "The module supports generation of I2C START and STOP conditions,"
+    REQ-0003  "single-bit WRITE cycles, "
+    REQ-0004  "single-bit READ cycles, "
+    REQ-0005  "bus-busy detection, "
+    ...
+    REQ-0010  " and glitch filtering."
+
+Nine "requirements" that are NOUN PHRASES. None of them asserts anything, and
+REQ-0010 -- the one that produced an inverted check -- is fragment nine of a
+feature list. Its text describes the whole majority-filter mechanism because a
+requirement had to be written and the fragment gave nothing to write from.
+
+**The enforceable rule is the one `divide.py` already holds itself to.**
+`splits_a_sentence` flags 41 of 127, and it catches every requirement in this
+story: REQ-0010, REQ-0045, REQ-0046 and REQ-0083 are all flagged. 32% is a real
+cost, but it is a cost against a check that `divide()` passes by construction
+and S1 was simply never asked to pass.
+
+That is the proposal, corrected: not "spans must be whole units" but "a span may
+not begin mid-sentence", applied to `requirements.json` rather than only to
+`divide()`'s own output in its tests.
