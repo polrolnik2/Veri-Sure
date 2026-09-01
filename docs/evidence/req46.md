@@ -148,3 +148,46 @@ correctly. What is left is a **stimulus** problem: the suite almost never stages
 a sub-threshold glitch and a sustained change in the same quiet window, so the
 differential `observed_via` prescribes has nowhere to run. That is `add_stimulus`
 work with a concrete target, not another authoring round.
+
+
+## Was the golden conviction attributable to a missing requirement?
+
+Asked directly: the re-authored check failed golden only on a reset artifact --
+could that be because REQ-0010 was not in the set?
+
+**The instinct is right about a missing normalization and wrong about which
+one.** REQ-0010 was never absent from the frozen SUITE -- it is the INVERTED
+check, present and passing run 10 -- and none of REQ-0046's three
+`observed_via` routes points at it (they name REQ-0047, REQ-0051, REQ-0096). Its
+absence from `normalized.json` cannot reach REQ-0046's authoring.
+
+What WAS missing is REQ-0046's own abort. Comparing the two normalizations:
+
+| | `activation.aborts_on` |
+|---|---|
+| c1-i2c (what the subagent was given) | **`None`** |
+| n1-i2c (after the fixes) | `[{nReset: 0}, {rst: 1}]` |
+
+So a reset guard really was absent from the material, and the new run supplies
+it.
+
+**And it would not have helped.** No golden trace contains a reset condition at
+all -- **0 of 334** show `nReset=0` or `rst=1` anywhere, because the harness
+applies reset before edge 0 and the recording starts after deassertion. On
+TP-0024 every row reads `nReset=1, rst=0, ena=1`, including the rows that
+convict. An abort expressed over INPUT VALUES cannot exclude a window that no
+input marks.
+
+The conviction is the filter pipeline still settling after a reset the trace
+never shows: `rst` forced `cSCL` low, and on release the majority filter shifts
+that low out over the next several edges, producing one filtered-SCL rise and
+one `dout` capture around edge 4.
+
+So the exclusion this needs is *"the filter has not settled since reset"* -- a
+COUNT of edges from the start of the recording, not a condition on any port.
+That is the same class of gap `sustains` was added to close, reappearing on the
+reset side, and `Activation` has no term for it.
+
+**A prediction for the re-run**, worth checking rather than assuming: the newly
+authored REQ-0046 will carry the reset abort and should still convict golden on
+TP-0024, because the abort cannot fire.
