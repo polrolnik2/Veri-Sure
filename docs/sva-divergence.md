@@ -269,6 +269,47 @@ either one. An assertion ported to real SVA would see different values.
 
 ---
 
+### D11 · `$past(p, n)` for n > 1 is absent, and on a compressed trace that is a FEATURE
+
+`Window.past(port)` is depth 1 — the row before the activation — and there is
+no `$past(p, 2)`. That looks like the obvious gap for a sample-history
+requirement, because the canonical SVA transcription of the i2c glitch filter
+is not a repetition at all:
+
+    $countones({s, $past(s), $past(s,2)}) >= 2
+
+**Measured against the requirement set, this is the only cycle-accurate axis
+that pays.** Scanning all 127 c1-i2c requirements for what each absent SVA
+feature would serve:
+
+| absent feature | requirements that would use it |
+|---|---|
+| `[->n]` goto repetition, "the nth occurrence" (D8) | **0** |
+| `##[n:m]` bounded delay (D2) | **0** |
+| sample-history depth — `$past(p, n)` | **5** — REQ-0010, 0045, 0046, 0047, 0048 |
+
+So D2's and D8's absences are vindicated rather than gaps: this specification
+states no latencies and counts no occurrences. Every cycle-accurate requirement
+it has is the same cluster, and they are all the majority filter.
+
+**And a depth-n past is the wrong primitive HERE, for D3's reason.** `$past(p, 2)`
+means two TICKS ago. The trace is state-compressed, so two rows back can be
+forty edges back, and two edges back can be inside the row you are standing on.
+An edge-accurate lookback would have to walk backwards summing `held` and split
+a row to land mid-run — reintroducing exactly the index arithmetic the operator
+set exists to keep out of checks, in the one place it is hardest to get right.
+
+`runs` expresses the same property without that. "A majority of three
+consecutive samples" and "a run shorter than the filter window" are the same
+statement seen from two sides: SVA counts the samples because its trace is
+ticks, and `runs` measures the duration because ours is states. The count is
+recoverable from the duration; the duration is not cleanly recoverable from a
+row-indexed past.
+
+Left absent deliberately, then, and recorded here so it does not look like an
+oversight — with the note that a design whose spec DID state "the nth
+occurrence" would need `[->n]`, and nothing in the operator set approximates it.
+
 ## What to do when a requirement needs something absent
 
 Say so in the check's `reasoning` rather than approximating it. A check that
