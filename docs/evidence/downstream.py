@@ -96,13 +96,24 @@ def main() -> int:
     #: says is still owed: real oracle prompts, real fan-out concurrency, 225
     #: calls rather than 4 filler ones.
     ap.add_argument("--oracle-model", default="gpt-5.6-luna")
-    #: VARIANTS GET THEIR OWN MODEL, and it is the cheapest one that can write a
-    #: wrong implementation. A variant is deliberately WRONG -- the must-fail leg
-    #: that proves a check is not vacuous -- so what it needs is breadth over the
-    #: five kinds, not the authoring care an oracle needs. They ran on the oracle
-    #: port because `run_oracle_stage` passed its own `port` through, which is
-    #: also the confound that contaminated the c1-vs-n2 keeper-rate comparison.
-    ap.add_argument("--variant-model", default="gpt-5-nano")
+    #: VARIANTS GET THEIR OWN MODEL. A variant is deliberately WRONG -- the
+    #: must-fail leg that proves a check is not vacuous -- so what it needs is
+    #: breadth over the five kinds, not the authoring care an oracle needs. They
+    #: ran on the oracle port because `run_oracle_stage` passed its own `port`
+    #: through, which is also the confound that contaminated the c1-vs-n2
+    #: keeper-rate comparison.
+    #:
+    #: NOT the cheapest model, though: that was the reasoning behind nano and it
+    #: is REFUTED by measurement on n4-i2c. Per usable variant, output tokens ran
+    #: nano 13,138 / mini 4,332 / luna 2,875, because 87% of nano's output is
+    #: reasoning tokens (mini 73%, luna 62%) and 6% of its first-pass responses
+    #: came back headless -- the opening brace lost at a continuation boundary,
+    #: vs 1% on mini and 0% on luna -- so 12% of nano's repair rounds bought
+    #: nothing but recovery from a transport artefact. Yield fell with the spend:
+    #: 239 usable variants over 86 requirements, against mini's 335 over 104 and
+    #: luna's 311 over 102. Mini is the default because it is the cheapest model
+    #: MEASURED to cover the requirement set, which is not the same thing.
+    ap.add_argument("--variant-model", default="gpt-5-mini")
     ap.add_argument("--variant-effort", default="medium")
     ap.add_argument("--oracle-effort", default="medium",
                     choices=["low", "medium", "high", "xhigh"],
