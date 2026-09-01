@@ -264,10 +264,15 @@ def test_a_shape_mistake_on_observed_via_does_not_lose_the_shape():
     raw pydantic error alone, with the shape explanation gone -- so the next
     round had nothing to correct toward and emptied the field instead,
     reproducing the original error one round later. A parse failure naming
-    `observed_via` now carries the same reminder."""
+    `observed_via` now carries the same reminder.
+
+    A dict-keyed-by-port guess (the shape actually measured live) is no
+    longer a parse failure at all -- `_accept_the_shapes_the_model_actually_
+    returns` coerces it losslessly, landed independently the same day. This
+    uses a shape that coercion cannot recover (a bare string), so it still
+    exercises the path this test is for."""
     bad = ('{"reasoning": "x", "normalized": [{"req_uid": "REQ-0000", '
-           '"observed_via": {"cmd_ack": {"through_req": "", "when": "w", '
-           '"shows": "s"}}}]}')
+           '"observed_via": "not a route at all"}]}')
     out = parse_response(bad)
     assert out.reasoning.startswith("Parse Error: ")
     assert "LIST of objects" in out.reasoning
