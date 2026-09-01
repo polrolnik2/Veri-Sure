@@ -263,57 +263,75 @@ The net: the over-strictness repair removed the check with this flaw that was
 guards nothing. Both decisions were made on soundness, neither on coverage —
 nothing in the pipeline asks what a rejected check was the last guard for.
 
-## No — the framework cannot express this property at all
+## RETRACTED: "the framework cannot express this property"
 
-The question behind both REQ-0010 and REQ-0046 is whether a *correct* oracle for
-the filter was ever writable. It was not, and the reason is structural.
+*The section that stood here argued the filter property was inexpressible — that
+observing it needed either internal signal visibility or a two-trace
+counterfactual, and that `decide(trace)` could do neither. That is wrong, and the
+artifact that disproves it is one I had not read: the normalized record.*
 
-A `decide(trace)` row exposes exactly the module boundary:
+## The normalization was right. The oracle authoring was not.
+
+`normalized.json` for REQ-0046 does not mark it unobservable. It says:
 
 ```
-inputs  : clk clk_cnt cmd din ena nReset rst scl_i sda_i
-outputs : al busy cmd_ack dout scl_o scl_oen sda_o sda_oen
+observable   : ['al', 'busy', 'dout']
+observed_via : 3 recipes, e.g. through busy (via REQ-0047) --
+   when : "apply an SDA or SCL input pulse that is SHORTER than the
+           majority-filter window (appears on fewer than 2 of 3 filter samples)
+           AND COMPARE WITH a sustained input change that occupies at least
+           2 of 3 samples"
+   shows: "filter holds -> busy unchanged; filter violated -> busy changes
+           per the filtered event"
 ```
 
-`trace['signals']` is `[]`. Searching a whole trace file for `sSCL`, `sSDA`,
-`fSCL`, `fSDA`, `cSCL`, `filter_cnt`, `state` finds **none of them**.
+That is a **differential test**, and it is expressible in a single trace: one
+trace containing both a sub-threshold pulse and a supra-threshold change, with
+the check requiring the outputs to move for the second and not the first. No
+internal visibility needed, no counterfactual needed. My claim that neither was
+avoidable was wrong — a differential comparison sidesteps the attribution
+problem, which is exactly why the normalizer specified one.
 
-REQ-0046's text is *"Majority voting over the three-sample histories must produce
-the filtered signals sSCL and sSDA"* — it names four internal signals, and an
-oracle can see none of them. The property is **not expressible as stated**, so
-the author had no option but a behavioural proxy.
+**The authored check ignored that recipe.** REQ-0046's frozen oracle opens a
+window on *any* `scl_i`/`sda_i` change and demands `busy`, `dout` and `al` do not
+change:
 
-And the only available proxy is unsound by construction. To say "this output
-change was caused by the glitch" you must know what the output would have done
-*without* the glitch — a **counterfactual**, requiring two traces. `decide(trace)`
-receives one. So no single-trace check can distinguish "reacted to the glitch"
-from "the FSM advanced on its own schedule", which is exactly the failure both
-checks exhibit: REQ-0046's re-author diagnosed it and rejected the check;
-REQ-0010's author did not, and it survived to invert.
+```python
+windows = after(trace, lambda r: inputs_active(r) and opens(r))   # ANY input edge
+# ... require busy, dout, al unchanged at the activation
+```
 
-**This is not a one-off.** 25 of the frozen 90 — 28% — name at least one signal
-the trace does not carry:
+Grepping it for the distinction the recipe is built on — *sustained*, *majority*,
+*2 of 3* — finds nothing. So it asserts that no output may ever change on any
+input edge, which convicts every correct design, golden included. The re-author's
+later ORACLE_INVALID diagnosis described the symptom (coincidence-attribution)
+accurately without noticing the check had simply not implemented the specified
+experiment.
 
-| requirement | names | visible? |
-|---|---|---|
-| REQ-0010 | `majority` | no |
-| REQ-0024 | `cnt`, `clk_en`, `filter_cnt` | no |
-| REQ-0034/0035 | `cnt`, `clk_en` | no |
-| REQ-0042 | `scl_sync` | no |
-| REQ-0045 | `cnt`, `fSCL`, `fSDA` | no |
+**REQ-0010 had no recipe to ignore.** It has an oracle in the frozen 90 and *no
+normalized record at all*. It is one of five: REQ-0010, REQ-0017, REQ-0048,
+REQ-0078, REQ-0100.
 
-Every one of those is either a proxy (unsound, like these two) or vacuous.
+122 requirements were normalized and 109 carry an `observed_via` recipe, 75 of
+them inside the frozen 90 — so the indirect-observation machinery is populated
+and largely unused. REQ-0010's naive check is what authoring without it looks
+like, and REQ-0048 and REQ-0100 are in the same class, both among run 10's
+failures.
 
-### The fix is nearly free, and already half-built
+Also: **`unobservable` is empty — zero requirements were ever marked so.** The
+mechanism exists and has never fired on this run.
 
-Plan §5.6 item 3 already samples the suspect blocks' **internal** signals from
-the VCD for the editor's `explain`. The data is on disk and parsed; `decide`
-simply never receives it. Putting the internals a requirement names into the
-trace row would make REQ-0046 direct and trivial —
-`sSCL[i] == majority(fSCL[i])` — rather than an unsound latency proxy, and would
-retire the whole "proxy an internal property through boundary timing" class that
-these two checks are instances of.
+### So, to the question directly
 
-That reframes the stop condition. The 12 checks that convict golden are not
-simply badly written; a quarter of the set is being asked to test properties the
-observation model cannot see.
+The activations are not the problem. REQ-0046's activation is reasonable and its
+observation strategy is sound and implementable. The defects sit one layer either
+side of it:
+
+1. **Five oracles were authored for requirements normalization never processed**,
+   so their authors had no activation and no observation recipe.
+2. **Where a recipe existed, the author did not implement it** — and no gate
+   compares an authored check against the `observed_via` it was given.
+
+The second is load-bearing: the pipeline generates a precise, sound experimental
+design and then never checks that the oracle performs it.
+
