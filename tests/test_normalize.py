@@ -757,3 +757,27 @@ def test_restating_the_activation_is_an_acceptable_when():
               observed_via=[{**_route("busy"),
                              "when": "whenever the activation holds"}])
     assert not [i for i in gate_one(REQ, ok, CONTRACT) if i.severity == "error"]
+
+
+def test_both_prompts_ask_for_when_now_that_the_gate_demands_it():
+    """The gate must never demand a field the instruction does not ask for.
+
+    That is the defect the `observed_via` SHAPE fix closed one layer up, and
+    the empty-`when` check reintroduced it: the direct pass's task text named
+    `shows` and never `when`, and `INDIRECT_SYSTEM` glossed `when` purely as
+    telling THIS requirement's effect apart from the OTHER requirement's --
+    vacuous on a direct route, where `through_req` is empty and there is no
+    other requirement. 76% of the frozen set's routes came back empty.
+    """
+    from specflow.normalize import (
+        INDIRECT_SYSTEM,
+        _OBSERVED_VIA_SHAPE,
+        _OBSERVED_VIA_TASK,
+    )
+
+    assert "`when`" in _OBSERVED_VIA_TASK
+    assert "when" in _OBSERVED_VIA_SHAPE
+    # And the low bar is stated where the author reads it, not only in the gate.
+    assert "the activation" in _OBSERVED_VIA_TASK
+    # The indirect gloss has to cover the direct route it also governs.
+    assert "DIRECT route" in INDIRECT_SYSTEM

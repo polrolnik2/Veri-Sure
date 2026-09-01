@@ -1,0 +1,16 @@
+{
+ "normalized": [
+  "REQ-0010",
+  "REQ-0017",
+  "REQ-0048"
+ ],
+ "gate_failed": [],
+ "empty_when": 0,
+ "total_routes": 12,
+ "rounds": {
+  "REQ-0010": null,
+  "REQ-0017": null,
+  "REQ-0048": null
+ },
+ "seconds": 128.10701870918274
+}

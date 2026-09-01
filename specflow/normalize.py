@@ -811,8 +811,14 @@ Answer the one the item block asks for, or say plainly that you cannot.
 OBSERVATION -- `observed_via`, a list of ALTERNATIVES, any one sufficient.
   port         a declared OUTPUT port, named by the OTHER requirement
   through_req  that requirement's uid
-  when         the condition under which that port carries THIS requirement's
-               effect rather than the other requirement's own
+  when         the phase, edge or window in which a reading of that port is
+               evidence about THIS requirement -- rather than about the other
+               requirement's own behaviour, or about anything else the design
+               happens to be doing at the same time. REQUIRED, and required on
+               a DIRECT route too, where there is no other requirement to be
+               told apart from: an unscoped route makes a check that watches
+               the port everywhere and blames this requirement for whatever it
+               sees. Restating the activation is a fine answer; empty is not
   shows        what the port does when this requirement HOLDS, **and what it
                does when it does not**
 
@@ -1136,9 +1142,14 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
 #: round away. Both pieces are carried at both trigger points now, so a round
 #: reached through either path sees the same complete explanation.
 _OBSERVED_VIA_TASK = (
-    "Give one route naming that port, leaving `through_req` empty, and say "
-    "in `shows` what the port does when this requirement holds and what it "
-    "does when it does not."
+    "Give one route naming that port, leaving `through_req` empty. Say in "
+    "`shows` what the port does when this requirement holds and what it does "
+    "when it does not, and say in `when` the phase, edge or window in which a "
+    "reading of that port is evidence about THIS requirement rather than about "
+    "something else the design is doing at the same time. If the answer is "
+    "simply the activation, say that -- what cannot stand is leaving `when` "
+    "empty, because a check written over an unscoped route watches the port "
+    "everywhere and blames this requirement for whatever it sees."
 )
 _OBSERVED_VIA_SHAPE = (
     "`observed_via` is a LIST of objects, one per route -- not a dict keyed by "
