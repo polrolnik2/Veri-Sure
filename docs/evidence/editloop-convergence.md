@@ -136,3 +136,51 @@ The comparison *between* runs is unaffected by that caveat, because all three
 candidates are measured against the same reference on the same stimulus. That
 comparison is the finding: **more oracle-set optimisation, no closer to the
 design.**
+
+## Timing or logic? Per output, and the answer differs
+
+Cycle-exact co-simulation punishes a phase shift as hard as a wrong function, so
+the raw 79% needs decomposing. If a difference is pure timing, shifting run 10's
+stream by k cycles drives the mismatch rate to ~0. Sweeping k over [-40, +40]:
+
+| output | at k=0 | best | at k | verdict |
+|---|---|---|---|---|
+| `dout` | 15.1% | **0.5%** | −4 | **TIMING** — recoverable |
+| `scl_oen` | 44.5% | **38.8%** | −5 | **LOGIC** — irreducible |
+| `cmd_ack` | 4.6% | 4.0% | −5 | mostly agrees |
+
+So the edge-4 `dout` divergence that started this — the one the first-divergence
+number pointed at — **is a timing artifact**. Run 10's `dout` leads golden's by
+four cycles and is then 99.5% identical. `scl_oen`, which contributes the largest
+share of the 79%, is not: no shift in an 81-cycle window rescues it.
+
+### The cause is one edit, and it is a functional regression
+
+Both designs sample identically — `if (sSCL & ~dSCL) dout <= sSDA;`, textually
+the same. The difference is what feeds `sSCL`/`sSDA`:
+
+```verilog
+// GOLDEN, and the BASELINE run 10 started from
+assign sSCL = majority3(fSCL);      // 3-deep filter, filter_cnt-paced
+assign sSDA = majority3(fSDA);
+
+// RUN 10
+assign sSCL = cSCL[1];              // raw 2-stage synchroniser
+assign sSDA = cSDA[1];
+```
+
+**Run 10 bypassed the glitch filter.** `fSCL`/`fSDA` are still shifted every
+cycle and `majority3` is still declared — the filter is computed and thrown
+away.
+
+That explains both columns. Dropping the filter removes ~4 cycles of latency,
+which is exactly `dout`'s recoverable offset; and it removes spike rejection,
+which is a functional requirement of I²C, not a timing preference. Golden's own
+comment says what it is for: *"filter SCL and SDA signals; (attempt to) remove
+glitches"*.
+
+So the answer to "is it only cycle-accuracy" is **no**. Even where the observable
+symptom is a clean 4-cycle shift, the edit that produced it deleted a required
+function. And it is the kind of edit the loop is rewarded for: less latency means
+responses land sooner and more windows close in time, which is how a design that
+deleted a filter scored 61 against golden's 51.
