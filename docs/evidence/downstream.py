@@ -174,7 +174,22 @@ def main() -> int:
         # `activation.text` and `expectation` (never `observed_via` or `when`),
         # and `build_prompt` carries the form as context. `kinds_delta` below
         # checks the first empirically rather than trusting the reading.
-        for name in ("_witness", "witness.py", "variants.json", "exercised.json"):
+        # VARIANTS ARE REDRAWN AFTER ALL, and `kinds_delta.py` is why. The
+        # reuse argument was that a variant is a wrong implementation of a
+        # requirement and the requirement has not changed -- true -- plus a
+        # reading of `kinds_for` as depending only on fields my changes do not
+        # touch. That reading was WRONG: it scans the requirement text joined
+        # with `activation.text` and `expectation`, both of which the new
+        # normalization rewrites, and 49 of 127 requirements come out with a
+        # different kind set (+duration, -threshold, and so on).
+        #
+        # Reusing wholesale would leave 39% of the set with a must-fail leg
+        # testing clause kinds the requirement no longer presents. Partial
+        # reuse is not available -- `run_oracle_stage` regenerates only when
+        # `variants` is EMPTY, with no gap-filling -- so the coherent choices
+        # are all or nothing, and the instrument-stability argument only holds
+        # if the WHOLE set holds still. It does not.
+        for name in ("_witness", "witness.py", "exercised.json"):
             src, dst = SRC / "specflow" / name, sf / name
             if src.exists() and not dst.exists():
                 (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)

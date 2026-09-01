@@ -44,8 +44,11 @@ def main() -> int:
     reqs = json.loads((SRC / "specflow/requirements.json").read_text())["requirements"]
     old = _forms(SRC / "specflow/normalized.json")
     new = _forms(Path(a.run_dir) / "specflow/normalized.json")
+    # `variants.json` is {"variants": [...]}, not a bare list -- and a bare
+    # list is what an earlier read of it assumed.
+    _raw = json.loads((SRC / "specflow/variants.json").read_text())
     have = {v.get("req_uid") for v in
-            json.loads((SRC / "specflow/variants.json").read_text())}
+            (_raw.get("variants") if isinstance(_raw, dict) else _raw) or []}
 
     moved, gained, same = [], [], 0
     for r in reqs:
