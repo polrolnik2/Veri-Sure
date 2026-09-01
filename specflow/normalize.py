@@ -1037,6 +1037,38 @@ def shows_issue(path: str, shows: str) -> Issue | None:
         f"than turned into a check.")
 
 
+def when_issue(path: str, when: str) -> Issue | None:
+    """`shows` says WHAT the port does; `when` says WHERE it is allowed to say it.
+
+    A route with an empty `when` tells the check author to watch a port with no
+    scope, and an unscoped observation cannot tell a response to this
+    requirement apart from anything else the design does in the same window.
+    That is not a hypothetical: REQ-0046's re-authored check watched
+    `(busy, dout, al)` at every edge of its window, because all three of its
+    routes arrived with `when` empty. It convicted the golden design twice over
+    -- once on an unreset `dout` making its power-on capture (180 of 311 golden
+    testpoints, with no glitch present at all), and once on a legitimate
+    filtered response that merely shared the window. Restoring the two
+    when-clauses the routes SHOULD have carried stopped both.
+
+    The bar is deliberately low. Restating the activation is a fine answer --
+    "whenever the activation holds" scopes the observation exactly as much as
+    this requirement does. What is rejected is saying nothing, because an empty
+    string is not that claim; it is the absence of one.
+    """
+    if when.strip():
+        return None
+    return Issue(
+        "error", path,
+        "`when` is empty. Say when this port carries THIS requirement's "
+        "effect -- the phase, the edge, or the window in which a reading of it "
+        "is evidence about this requirement and not about something else the "
+        "design is doing at the same time. If the answer is simply the "
+        "activation, say that; what cannot stand is no answer, because a check "
+        "written over an unscoped route watches the port everywhere and blames "
+        "this requirement for whatever it sees.")
+
+
 def gate_indirect(out: NormalizeOutput, *, uid: str,
                   contract: dict, known: set[str]) -> list[Issue]:
     """A route has to be usable, or it is worse than no route at all.
@@ -1068,6 +1100,9 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                                 "itself -- that is the direct case, and the "
                                 "first pass already said there is none"))
         bad = shows_issue(path, route.shows)
+        if bad is not None:
+            issues.append(bad)
+        bad = when_issue(path, route.when)
         if bad is not None:
             issues.append(bad)
     for i, hop in enumerate(norm.activated_via):
@@ -1125,7 +1160,31 @@ _OBSERVED_VIA_SHAPE = (
 def parse_response(text: str) -> NormalizeOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
-        return NormalizeOutput.model_validate(obj)
+        out = NormalizeOutput.model_validate(obj)
+        # BOTH fields carry defaults, so ANY object validates -- including a
+        # fragment `extract_json_object` scraped out of the middle of a broken
+        # response. The result is an empty `NormalizeOutput` that is
+        # indistinguishable from a model which answered nothing, and `gate_one`
+        # then complains about CONTENT ("observable at [...] but no route
+        # given") when the response was never read at all. The model is asked
+        # to fix a field it did supply.
+        #
+        # Measured live, c1-i2c REQ-0048 r1: the model wrote `until
+        # [{"busy":0}]` inside its `reasoning` STRING with the inner quotes
+        # unescaped, which ends the JSON string early and breaks the document.
+        # Recovery found the balanced `{"busy":0}` fragment, validated it to an
+        # empty output, and all four rounds were spent on a content complaint
+        # about a response whose only defect was one unescaped quote.
+        if not out.normalized and not out.reasoning.strip():
+            keys = sorted(obj)[:8] if isinstance(obj, dict) else []
+            raise ValueError(
+                "the response is not valid JSON, and the object recovered from "
+                f"it carries neither `normalized` nor `reasoning` (its keys "
+                f"were {keys}). Return ONE JSON object with those two "
+                "top-level fields, and ESCAPE every quote that appears inside "
+                'a string value -- write \\" for a quote you want in the text, '
+                "or describe the shape in prose without quoting JSON at all.")
+        return out
     except Exception as exc:  # noqa: BLE001
         detail = f"{PARSE_ERROR}{exc}"
         # Otherwise a shape mistake on THIS field loses its only explanation
@@ -1240,6 +1299,9 @@ def gate_one(
                     f"{route.port!r} is not among the ports this requirement "
                     f"is observable at ({sorted(norm.observable)})"))
             bad = shows_issue(path, route.shows)
+            if bad is not None:
+                issues.append(bad)
+            bad = when_issue(path, route.when)
             if bad is not None:
                 issues.append(bad)
 

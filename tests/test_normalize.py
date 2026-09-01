@@ -683,3 +683,77 @@ def test_the_prompt_tells_the_author_that_reset_is_an_abort():
         assert fragment in SYSTEM, fragment
     # And the example that taught the defect is gone.
     assert '[{"cmd_ack": 1}, {"al": 1}]' not in SYSTEM
+
+
+def test_a_scraped_fragment_is_a_parse_error_not_an_empty_answer():
+    """Both `NormalizeOutput` fields carry defaults, so ANY object validates.
+
+    That makes a fragment scraped out of a broken response indistinguishable
+    from a model that answered nothing, and the next round is then handed a
+    complaint about CONTENT -- "observable at [...] but no route given" -- for
+    a response whose only defect was one unescaped quote. The model is asked to
+    fix a field it did supply, which is the same short-circuit the
+    `observed_via` shape gate exists to prevent, one layer up.
+
+    Measured live: c1-i2c REQ-0048 round 1 wrote `until [{"busy":0}]` inside
+    its `reasoning` STRING with the inner quotes unescaped. Recovery found the
+    balanced `{"busy":0}`, validated it to an empty output, and all four
+    rounds went on the wrong complaint. 3 of that run's 348 recorded responses
+    took this path.
+    """
+    from specflow.normalize import PARSE_ERROR
+
+    out = parse_response('{"reasoning": "I set until [{"busy":0}] here"}')
+    assert not out.normalized
+    assert out.reasoning.startswith(PARSE_ERROR), out.reasoning
+    # It must name what was actually recovered, so the round can see that its
+    # JSON broke rather than guessing at its content.
+    assert "['busy']" in out.reasoning, out.reasoning
+    assert "ESCAPE" in out.reasoning, out.reasoning
+
+
+def test_an_empty_normalization_WITH_reasoning_is_still_a_real_answer():
+    """The counter-case, and the reason the guard tests both fields.
+
+    A model may legitimately return no normalized requirement and say why --
+    that is an answer, and turning it into a parse error would destroy the one
+    honest way to report that a requirement cannot be normalized.
+    """
+    from specflow.normalize import PARSE_ERROR
+
+    out = parse_response('{"reasoning": "this span is a port-table gloss"}')
+    assert not out.normalized
+    assert not out.reasoning.startswith(PARSE_ERROR)
+    assert out.reasoning == "this span is a port-table gloss"
+
+
+def test_a_route_with_no_when_is_rejected():
+    """`shows` says WHAT the port does; `when` says WHERE it may say it.
+
+    The gate checked `port`, `through_req` and `shows` and never `when`, so
+    76% of the frozen c1-i2c set's routes (180 of 238, across 76 of 122
+    requirements) carry an empty one. An unscoped route cannot tell a response
+    to this requirement apart from anything else happening in the same window:
+    REQ-0046's re-authored check watched all three of its observables at every
+    edge, because all three routes arrived with `when` empty, and it convicted
+    the golden design on an unreset `dout`'s power-on capture.
+    """
+    bad = _out(observable=["busy"],
+               observed_via=[{**_route("busy"), "when": "   "}])
+    issues = [i for i in gate_one(REQ, bad, CONTRACT) if i.severity == "error"]
+    assert any("`when` is empty" in i.message for i in issues), issues
+    assert any("observed_via[0]" in i.path for i in issues), issues
+
+
+def test_restating_the_activation_is_an_acceptable_when():
+    """The bar is deliberately low, and this is the pin that keeps it low.
+
+    A requirement whose effect is visible for exactly as long as its activation
+    holds has nothing sharper to say, and rejecting that answer would push the
+    author to invent a narrower window the specification never states -- which
+    is the over-strictness this pipeline spends its budget preventing.
+    """
+    ok = _out(observable=["busy"],
+              observed_via=[{**_route("busy"),
+                             "when": "whenever the activation holds"}])
+    assert not [i for i in gate_one(REQ, ok, CONTRACT) if i.severity == "error"]
