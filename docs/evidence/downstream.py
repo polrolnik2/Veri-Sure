@@ -96,6 +96,14 @@ def main() -> int:
     #: says is still owed: real oracle prompts, real fan-out concurrency, 225
     #: calls rather than 4 filler ones.
     ap.add_argument("--oracle-model", default="gpt-5.6-luna")
+    #: VARIANTS GET THEIR OWN MODEL, and it is the cheapest one that can write a
+    #: wrong implementation. A variant is deliberately WRONG -- the must-fail leg
+    #: that proves a check is not vacuous -- so what it needs is breadth over the
+    #: five kinds, not the authoring care an oracle needs. They ran on the oracle
+    #: port because `run_oracle_stage` passed its own `port` through, which is
+    #: also the confound that contaminated the c1-vs-n2 keeper-rate comparison.
+    ap.add_argument("--variant-model", default="gpt-5-nano")
+    ap.add_argument("--variant-effort", default="medium")
     ap.add_argument("--oracle-effort", default="medium",
                     choices=["low", "medium", "high", "xhigh"],
                     help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
@@ -150,6 +158,13 @@ def main() -> int:
         developer_role_prefix=True)
     oracle_port = resumable(
         make_port("api", run_dir / "agent_io", settings=oracle_settings),
+        run_dir / "agent_io")
+    variant_settings = PortSettings(
+        model=a.variant_model, effort=a.variant_effort,
+        small_model=a.variant_model, small_effort=a.variant_effort,
+        developer_role_prefix=True)
+    variant_port = resumable(
+        make_port("api", run_dir / "agent_io", settings=variant_settings),
         run_dir / "agent_io")
     t0 = time.time()
 
@@ -232,6 +247,7 @@ def main() -> int:
         oracle_set = run_oracle_stage(
             requirements=reqs, contract_json=contract_json, contract=contract,
             testplan=tps, stimulus_by_tp=stim_by_tp, port=oracle_port,
+            variant_port=variant_port,
             workdir=sf, base=choose_base(contract),
             normalized=normalized_by_uid, spec=spec,
             control_source=None,          # the golden RTL never reaches here

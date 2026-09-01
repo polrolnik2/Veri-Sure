@@ -753,6 +753,13 @@ def run_oracle_stage(
     testplan: list[dict],
     stimulus_by_tp: dict[str, list[dict]],
     port: ModelPort,
+    #: The variant author, when it should not be the oracle author. Variants are
+    #: WRONG implementations of a requirement -- the must-fail leg of the vacuity
+    #: check -- so the job is breadth, not the care an oracle needs, and paying
+    #: oracle-grade inference for ~700 of them is the largest avoidable cost in
+    #: this stage. Defaults to `port`, which is what every caller did implicitly
+    #: before this existed.
+    variant_port: ModelPort | None = None,
     workdir: Path,
     base: str = "step",
     normalized: dict[str, dict] | None = None,
@@ -939,7 +946,7 @@ def run_oracle_stage(
             requirements=requirements, contract_json=contract_json,
             contract=contract, conforming_source=witness,
             stimulus_by_tp=stimulus_by_tp,
-            tp_by_req=by_requirement(testplan), port=port,
+            tp_by_req=by_requirement(testplan), port=variant_port or port,
             normalized=normalized, base=base, fanout=fanout,
         )
         logger.info("oracles: %d variant(s) for %d requirement(s)",
