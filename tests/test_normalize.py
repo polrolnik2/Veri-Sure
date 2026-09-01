@@ -781,3 +781,28 @@ def test_both_prompts_ask_for_when_now_that_the_gate_demands_it():
     assert "the activation" in _OBSERVED_VIA_TASK
     # The indirect gloss has to cover the direct route it also governs.
     assert "DIRECT route" in INDIRECT_SYSTEM
+
+
+def test_the_prompt_teaches_sustains_now_that_the_schema_has_it():
+    """A field the schema accepts and the prompt never names is a dark field.
+
+    `sustains` was added so an activation could state a repetition the
+    specification gives -- the majority-filter threshold that REQ-0046's check
+    could not express, and without which it convicted every design. Measured on
+    the first run after it landed: **0 of 127** normalized requirements
+    populated it, and `SYSTEM` did not contain the word. That is the same
+    defect as `observed_via`'s missing shape one layer over: the gate and the
+    model disagree because only one of them was told.
+
+    The rule it sits beside must survive: `until` is still a condition and
+    never a count, and `sustains` is the narrow exception for a count the spec
+    STATES rather than one the model invents -- which is what `stated_by` is
+    for.
+    """
+    from specflow.normalize import SYSTEM
+
+    assert "sustains" in SYSTEM
+    for fragment in ("at_least", "at_most", "stated_by",
+                     "A CONDITION, NEVER A COUNT",
+                     "LEAVE IT EMPTY unless the specification supplies"):
+        assert fragment in SYSTEM, fragment

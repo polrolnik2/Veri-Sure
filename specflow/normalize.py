@@ -661,6 +661,30 @@ A CONDITION, NEVER A COUNT. "until cmd_ack" is expressible; "for 12 edges" is a
 guess at pacing this specification does not state, and a check that asserts one
 either fails correct designs or asserts nothing.
 
+`sustains` IS WHERE A COUNT GOES WHEN THE SPECIFICATION ITSELF STATES ONE, and
+it is the one exception to the line above. The rule there forbids INVENTING
+pacing; it does not forbid transcribing a duration the spec gives you. A
+requirement whose whole content is a threshold -- "a majority of the three
+consecutive samples", "at least two clocks", "shorter than the filter window" --
+cannot be checked at all without it, because the property IS the count.
+
+    "sustains": [
+      {"port": "sda_i", "value": 0, "at_most":  1,
+       "stated_by": "a majority of the three-sample history"},
+      {"port": "sda_i", "value": 0, "at_least": 2,
+       "stated_by": "a majority of the three-sample history"}
+    ]
+
+`port` and `value` say what is held; `at_least` / `at_most` bound how long, in
+EDGES; `stated_by` quotes the words of the specification that give the number.
+Give at least one bound -- an entry with neither constrains nothing and is
+rejected. Two entries, one short and one long, are how a threshold requirement
+states both sides of its own boundary.
+
+LEAVE IT EMPTY unless the specification supplies the number. `stated_by` is the
+test: if you cannot quote the phrase the count comes from, you are guessing
+pacing, and the rule above applies instead.
+
 Leave `until` EMPTY when the activation condition is itself co-extensive with
 the span -- "while ena is low", "during reset". Those hold at every row they
 govern, so the condition already delimits the window and a close condition would
