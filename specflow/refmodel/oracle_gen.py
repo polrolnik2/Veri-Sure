@@ -295,6 +295,11 @@ count the specification never gave.
   eventually(w, holds)                  -> Verdict; holds at SOME row of w
   throughout(w, holds)                  -> Verdict; holds at EVERY row of w
   stable(w, port)                       -> Verdict; port never changes in w
+  runs(trace, port, value=0, at_least=N, at_most=M)
+                                        -> set of `edge` numbers where a run of
+                                           `port == value` BEGINS, bounded in
+                                           EDGES. The opener for
+                                           `activation.sustains`.
   pulse(w, port, width=1, active=1)     -> Verdict; active for exactly `width`
                                            EDGES, exactly once
   worst(verdicts)                       -> Verdict; folds many, failure first
@@ -313,6 +318,27 @@ blames the design for a testpoint that does not exist.
 
 `after` returns at most 64 windows. If you hit that on a long trace you are
 matching something far broader than the requirement.
+
+`activation.sustains` IS A WINDOW OPENER, NOT AN OBLIGATION. When it is
+present the requirement's activation includes a DURATION the specification
+states -- "a majority of the three samples", "shorter than the filter window" --
+and `runs` turns it into edges you can open on:
+
+    # normalized: sustains [{"port": "sda_i", "value": 0, "at_most": 1}]
+    short = runs(trace, "sda_i", value=0, at_most=1)
+    windows = after(trace, lambda r: r["edge"] in short)
+
+A requirement stating BOTH sides of a threshold gives two entries, and they are
+two different activations of the same check -- the short one is where the
+design must NOT react, the long one where it must. Build both, and let the
+short arm convict only when the long arm shows the outputs can move at all;
+otherwise a design that ignores the port entirely passes the short arm for the
+wrong reason.
+
+COUNT IN EDGES AND LET `runs` DO IT. The trace is state-compressed, so a
+five-edge level is one row carrying `held: 5`; a hand-written scan that counts
+ROWS calls it a one-edge glitch, which inverts exactly the distinction the
+requirement is about.
 
 THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
 `activation.inputs` and `activation.opens_on` are what OPENS it;

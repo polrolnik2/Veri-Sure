@@ -608,3 +608,61 @@ def test_without_aborts_nothing_changes():
     assert not w.aborted
     ok, _e, _d = eventually(w, lambda r: r["outputs"]["x"] == 1, strong=True)
     assert ok is False, "a real close with no evidence is still a conviction"
+
+
+def _row(edge, p, held=None):
+    r = {"edge": edge, "inputs": {"p": p}, "outputs": {}}
+    if held is not None:
+        r["held"] = held
+    return r
+
+
+def test_runs_selects_by_length_in_EDGES_not_rows():
+    """`runs` is `sustains`'s window opener, and `held` is the whole subtlety.
+
+    The trace is state-compressed, so a 5-edge low is ONE row carrying
+    `held: 5`. Counting rows would call it a one-edge glitch -- which is
+    exactly backwards for a majority filter, where the short run is the one
+    that must be suppressed and the long one the one that must get through.
+    """
+    from specflow.refmodel.temporal import runs
+
+    trace = [_row(0, 1), _row(1, 1), _row(2, 0), _row(3, 1),
+             _row(4, 1), _row(5, 0), _row(6, 0), _row(7, 0), _row(8, 1)]
+    assert runs(trace, "p", value=0, at_most=1) == {2}
+    assert runs(trace, "p", value=0, at_least=2) == {5}
+
+    # One row, five edges: long, and emphatically not short.
+    packed = [_row(0, 0, held=5), _row(1, 1)]
+    assert runs(packed, "p", value=0, at_least=2) == {0}
+    assert runs(packed, "p", value=0, at_most=1) == set()
+
+
+def test_a_run_still_open_at_the_end_of_trace_cannot_be_called_SHORT():
+    """Its length is a lower bound, not a measurement.
+
+    Admitting it under `at_most` would let the trace running out masquerade as
+    a glitch the design was supposed to suppress -- a false activation, which
+    is the failure mode that produces a check convicting a correct design.
+    Under `at_least` it is fine: what was already seen clears the floor.
+    """
+    from specflow.refmodel.temporal import runs
+
+    trailing = [_row(0, 1), _row(1, 0)]
+    assert runs(trailing, "p", value=0, at_most=1) == set()
+    assert runs(trailing, "p", value=0, at_least=1) == {1}
+
+
+def test_runs_refuses_to_select_everything():
+    """No bound is not a wide net, it is a missing statement.
+
+    Same rule `normalize.Sustain` enforces on the schema side: an entry with
+    neither bound constrains nothing, and silently matching every run would
+    hand the author an activation that fires constantly.
+    """
+    import pytest
+
+    from specflow.refmodel.temporal import runs
+
+    with pytest.raises(ValueError, match="neither at_least nor at_most"):
+        runs([_row(0, 0)], "p", value=0)

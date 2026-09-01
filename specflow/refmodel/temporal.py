@@ -200,6 +200,61 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
     return out
 
 
+def runs(trace: list[dict], port: str, *, value: int = 0,
+         at_least: int | None = None, at_most: int | None = None) -> set[int]:
+    """The `edge` numbers where a run of `port == value` BEGINS, bounded in edges.
+
+    The counterpart of `edges` for `normalize.Activation.sustains`, and it
+    returns the same shape for the same reason: an `edge` number drops straight
+    into an activation predicate.
+
+        short = runs(trace, "sda_i", value=0, at_most=1)
+        after(trace, lambda r: r["edge"] in short)
+
+    WHY THIS IS A WINDOW OPENER AND NOT A VERDICT. `sustains` lives in the
+    ACTIVATION, so a duration it states is part of WHEN the requirement
+    applies, never part of what the requirement then demands. "a glitch shorter
+    than the filter window" selects the occasions to look at; the obligation is
+    what the outputs do afterwards. A combinator returning a verdict would put
+    the count on the wrong side of the window.
+
+    RUN LENGTH IS IN EDGES, AND ROWS ARE NOT EDGES -- the same trap `pulse`
+    documents. The trace is state-compressed: consecutive edges with identical
+    inputs and outputs collapse into one row carrying `held`. A run that spans
+    several rows because something unrelated changed mid-run must still sum
+    `held` across them, and counting rows would call a 40-edge level a
+    one-cycle glitch. This is the single subtlety that makes hand-rolling the
+    scan go wrong, which is the reason it is a primitive.
+
+    A run still open at the end of the trace is EXCLUDED when `at_most` is
+    given and included when only `at_least` is: its true length is unknown, so
+    it cannot be shown to be short, and it is already long enough if the part
+    seen already clears the floor.
+    """
+    if at_least is None and at_most is None:
+        raise ValueError(
+            "runs() with neither at_least nor at_most selects every run and "
+            "says nothing; give the bound the specification states")
+    out: set[int] = set()
+    run, began = 0, None
+    for row in trace:
+        if _val(row, port) == value:
+            if not run:
+                began = row.get("edge")
+            run += int(row.get("held", 1) or 1)
+            continue
+        if run:
+            if (at_least is None or run >= at_least) and \
+                    (at_most is None or run <= at_most):
+                out.add(began)
+            run, began = 0, None
+    # The trailing run: closed by the end of the trace rather than by the port
+    # leaving `value`, so its length is a LOWER BOUND, not a measurement.
+    if run and at_most is None and (at_least is None or run >= at_least):
+        out.add(began)
+    return out
+
+
 def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
           aborts: Pred | None = None,
           max_windows: int = 64, overlap: bool = False) -> list[Window]:
