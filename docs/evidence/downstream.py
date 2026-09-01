@@ -72,13 +72,22 @@ def main() -> int:
     #: -- ships disabled (`deep_effort` defaults to None) and is unmeasured.
     #: This is the expensive arm, run deliberately.
     #:
-    #: TWO COSTS, both known. `gpt-5.6-luna` caches on EXACT INPUT rather than
-    #: on a prefix, so a fan-out gets no shared-prefix discount and every call
-    #: pays its whole prompt. And this buys the REPAIR rounds as well as
-    #: generation, which is where a stronger author was already measured to
-    #: help -- `run_stage` takes one port for both, so they cannot be split
-    #: without changing it.
-    ap.add_argument("--oracle-model", default="gpt-5.6-luna")
+    #: IT DEFAULTS TO THE SMALL MODEL, and the switch is kept because the
+    #: stage is still the right place to spend -- just not this way.
+    #:
+    #: `gpt-5.6-luna` caches on EXACT INPUT and not on a prefix, and nothing in
+    #: the request shape changes that: `store`, `prompt_cache_key` and their
+    #: absence all read 0%, seeding the prefix with `previous_response_id`
+    #: reads 0% on a cold prefix, and it is still 0% four minutes later
+    #: (`docs/evidence/luna-cache.md`). So a fan-out on luna pays its whole
+    #: prompt on all 225 calls.
+    #:
+    #: The affordable shape is luna on the REPAIRS ONLY -- 13 of those 225
+    #: calls, 6% -- which is also where a stronger author was already measured
+    #: to help. `run_stage` takes one port for the first pass and every repair
+    #: round alike, so that split does not exist yet and is the change worth
+    #: making.
+    ap.add_argument("--oracle-model", default="gpt-5-mini")
     ap.add_argument("--oracle-effort", default="medium",
                     choices=["low", "medium", "high", "xhigh"],
                     help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
