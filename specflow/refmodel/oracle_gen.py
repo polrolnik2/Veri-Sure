@@ -474,6 +474,11 @@ down are the ones that will bite you:
   until(w, p, q)                `p until q`   (strong=True -> `s_until`)
   sequence(w, p, q, r)          `p ##[1:$] q ##[1:$] r` -- ORDER, no counts
   nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
+  runs(t, port, value=v,        `(port==v)[*N:$]` -- and with `at_most`,
+       at_least=N, at_most=M)   `(port==v)[*1:M] ##1 (port!=v)`, since
+                                bounding a run ABOVE needs its end seen.
+                                ANCHORED AT THE RUN'S START, not where
+                                the match completes as `|->` would be
   stable(w, port)               `$stable(port)` across it
   pulse(w, port)                `$rose` then `$fell` one state later
 

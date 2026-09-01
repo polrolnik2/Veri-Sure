@@ -109,7 +109,7 @@ every gate, and `NOT_EXERCISED` exists to refuse exactly this. A vacuous pass is
 a false green, and false greens are the failure class the project is built
 against.
 
-### D2 · No `##[n:m]`, no `[*n]` — cycle counts are absent on purpose
+### D2 · No `##[n:m]`; `[*n:m]` exists ONLY where the spec states the number
 
 Phases 3–6 severed pacing from latency and stopped `latency_cycles` gating,
 because the specification does not state edge counts. A check asserting one
@@ -118,6 +118,49 @@ either fails correct designs or asserts nothing.
 `##1` (`nexttime`) survives because a row is a state, so "the next row" means
 "the next time anything changed" — which is what "then" means in a
 specification.
+
+**AMENDED: consecutive repetition is now present, as `runs`.** The ban above is
+on *inventing* pacing, and it was over-read as a ban on transcribing a duration
+the specification gives. A requirement whose entire content is a threshold —
+"a majority of the three consecutive samples" — cannot be checked at all
+without one, because the property *is* the count. `normalize.Sustain` carries
+`stated_by` for exactly this: if you cannot quote the phrase the number comes
+from, D2's original rule still applies and you are guessing.
+
+    runs(t, port, value=v, at_least=N)    (port == v)[*N:$]
+    runs(t, port, value=v, at_most=M)     (port == v)[*1:M] ##1 (port != v)
+    runs(t, port, value=v, at_least=N,
+                          at_most=M)      (port == v)[*N:M] ##1 (port != v)
+
+Three differences from the SVA it corresponds to, and none is incidental:
+
+**The anchor is the START of the run, not the end.** SVA's `|->` fires where
+the antecedent match *completes*, so `sig[*3] |-> p` evaluates `p` after the
+third tick. `runs` returns the `edge` where the run BEGAN, and `after` opens
+the window there. That is the useful anchor for a `sustains` activation — the
+question is what the design did *in response to* the glitch, and the response
+starts when the glitch does — but it is not `|->`'s anchor and a check
+transcribed as if it were will read the outputs several edges early.
+
+**The upper bound needs the terminator; the lower bound does not.** `[*1:1]`
+alone matches the first tick of a run of any length, so bounding a run ABOVE
+requires witnessing it end: `##1 !sig`. That is why a run still open at the end
+of the trace is excluded under `at_most` and admitted under `at_least` — its
+length is a lower bound, not a measurement. In SVA's vocabulary an upper bound
+is a *strong* obligation and a lower bound is a weak one, and the asymmetry is
+forced there for the same reason it is forced here. Admitting the trailing run
+under `at_most` would let the trace running out masquerade as a short glitch,
+which is a false activation, which is how a check convicts a correct design.
+
+**It counts EDGES, and D3 bites hardest here.** `[*n]` counts clock ticks;
+`runs` sums `held` over a state-compressed trace. A five-edge level is one row,
+so a row count would call it a one-edge glitch — inverting precisely the
+short-against-long distinction a majority filter is about.
+
+One non-difference worth stating: SVA's `[*n:$]` is nondeterministic and is
+usually wrapped in `first_match`. `runs` returns EVERY qualifying start, so
+each opens its own window — which is `after`'s existing behaviour under D4, not
+a new choice.
 
 ### D3 · A row is a STATE, not a clock tick
 
