@@ -101,8 +101,8 @@ with seeding. Repeating it with a nonce-prefixed, **never-before-seen** prefix:
 
 **Seeding does not populate the cache.** The claim is withdrawn, and
 `PortSettings.prefix_seed` ships off with the refutation in its own docstring
-rather than in a commit message. Whether the carried context warms with elapsed
-time is the open question and is being measured separately.
+rather than in a commit message. The warm-up hypothesis is dead as well: seeded once, then queried
+at t+0, +60s, +120s and +240s against the same seed, **0% at every one**.
 
 ### One real finding survives
 
@@ -130,3 +130,33 @@ calls in three different stage families, so each got its own cache key and BOTH
 models read 0%, which would have exonerated luna. The second reused a hot
 prefix, which would have shipped a no-op as a fix. **A cache measurement is only
 valid against an input the backend has never seen** -- hence the nonce.
+
+
+## So how DO you run Luna on this pipeline?
+
+Not on the fan-out. The affordable place is the repairs, and the numbers say so
+plainly. Counting c1-i2c's recorded calls by round:
+
+| stage | calls | first pass | repairs |
+|---|---|---|---|
+| oracle | 225 | 212 | **13 (6%)** |
+| normalize | 309 | 127 | 182 (59%) |
+| whole run | 2578 | 1801 | 777 (30%) |
+
+**The oracle stage's repairs are 13 calls.** Putting luna there instead of
+across all 225 is a 17x reduction in luna traffic, and it aims the spend exactly
+where the standing finding already places the benefit -- a stronger author helps
+on REPAIR, not on generation. The uncached-prefix penalty is then paid 13 times
+rather than 225.
+
+What it needs: `run_stage` takes ONE port and uses it for the first pass and
+every repair round alike, so the split does not exist yet. That is the change
+worth making, and it is smaller than anything attempted above.
+
+Two levers deliberately not taken. **Trimming the shared prefix** would cut the
+cost on every model but changes what the author is told, which is an instrument
+change dressed as an optimisation. **Batching k items per call** amortises the
+prefix k-fold and is model-agnostic, but this pipeline has already measured
+monolithic per-item calls degrading badly at scale -- on 167 testpoints, three
+rounds returned stimulus for ten of them and the fourth returned all 167 with
+one step each.

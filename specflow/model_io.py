@@ -451,10 +451,16 @@ class PortSettings:
     #: That is why the key is dropped on the seeded path -- it matters the
     #: moment seeding works, and it is silent when it does not.
     #:
-    #: DO NOT TURN THIS ON expecting a saving. Whether the carried context warms
-    #: with elapsed time is the open question; until that is answered this
-    #: changes the prompt shape -- the model reads the prefix as a prior turn
-    #: plus its own acknowledgement -- for no measured benefit.
+    #: AND THE LAST HYPOTHESIS IS DEAD TOO. Whether the carried context warms
+    #: with elapsed time: seeded once, then queried at t+0, +60s, +120s and
+    #: +240s against the same seed -- 0% at every one. Seeding does not populate
+    #: this gateway's cache at any delay.
+    #:
+    #: DO NOT TURN THIS ON. It buys nothing and it changes the prompt shape --
+    #: the model reads the prefix as a prior turn plus its own acknowledgement
+    #: -- so an artifact made under it is not comparable with one made without.
+    #: It is kept, dark and tested, only because the routing conflict below is
+    #: real and would otherwise have to be rediscovered.
     prefix_seed: bool = False
 
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
