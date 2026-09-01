@@ -129,8 +129,24 @@ def main() -> int:
 
     # --- [O] the oracles -----------------------------------------------------
     if "oracles" not in skip:
-        # Hold the over-strictness instrument still.
-        for name in ("_witness", "witness.py"):
+        # HOLD THE TWO INSTRUMENTS STILL: the witness, which bounds
+        # over-strictness, and the variants, which are the must-fail leg.
+        #
+        # `variants.json` carries 335 wrong implementations over 104 of the 127
+        # requirements. The requirement set here is byte-identical to c1-i2c's,
+        # and `run_oracle_stage` states the rule itself: "GENERATED ONCE, FROM
+        # THE WITNESS, AND THEN NEVER AGAIN... A variant is a wrong
+        # implementation of ONE requirement, and the requirement does not
+        # change." Regenerating is not merely 335 calls -- it is a DIFFERENT
+        # DRAW, so "an oracle can be convicted vacuous this round and cleared
+        # the next for no reason anyone could name".
+        #
+        # The normalized form does reach variants, in two narrow places, and
+        # neither is touched by what changed: `kinds_for` scans only
+        # `activation.text` and `expectation` (never `observed_via` or `when`),
+        # and `build_prompt` carries the form as context. `kinds_delta` below
+        # checks the first empirically rather than trusting the reading.
+        for name in ("_witness", "witness.py", "variants.json", "exercised.json"):
             src, dst = SRC / "specflow" / name, sf / name
             if src.exists() and not dst.exists():
                 (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
@@ -141,7 +157,15 @@ def main() -> int:
             normalized=normalized_by_uid, spec=spec,
             control_source=None,          # the golden RTL never reaches here
             want_variants=True, want_correspondence=True,
-            run_dir=run_dir, fanout=True, rewrite=True)
+            run_dir=run_dir, fanout=True,
+            # NOT rewrite=True. It unlinks variants.json AND witness.py, so the
+            # two files copied above would be deleted and regenerated -- the
+            # exact opposite of holding them still. The flag exists for a
+            # CHANGED REQUIREMENT SET, where old variants describe requirements
+            # that no longer exist; this run reuses c1-i2c's requirements.json
+            # unchanged, so it does not apply. A fresh run dir has no
+            # oracles.json, so nothing stale is reused either.
+            rewrite=False)
         print(f"[O]: {len(oracle_set.trusted)} trusted "
               f"({time.time()-t0:.0f}s)", flush=True)
 
