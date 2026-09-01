@@ -72,22 +72,30 @@ def main() -> int:
     #: -- ships disabled (`deep_effort` defaults to None) and is unmeasured.
     #: This is the expensive arm, run deliberately.
     #:
-    #: IT DEFAULTS TO THE SMALL MODEL, and the switch is kept because the
-    #: stage is still the right place to spend -- just not this way.
+    #: LUNA, and affordable again now that the fan-out caches.
     #:
-    #: `gpt-5.6-luna` caches on EXACT INPUT and not on a prefix, and nothing in
-    #: the request shape changes that: `store`, `prompt_cache_key` and their
-    #: absence all read 0%, seeding the prefix with `previous_response_id`
-    #: reads 0% on a cold prefix, and it is still 0% four minutes later
-    #: (`docs/evidence/luna-cache.md`). So a fan-out on luna pays its whole
-    #: prompt on all 225 calls.
+    #: The earlier "luna cannot cache a prefix, so put it only on the 13 repair
+    #: calls" reasoning rested on a premise that is retracted: every probe
+    #: behind it varied routing hints and transport hardening while holding one
+    #: thing constant -- `input` as a flat `user` string. Sent instead as a
+    #: `developer`-role item for the shared prefix plus a `user` item for the
+    #: item text, luna caches at parity with gpt-5-mini.
     #:
-    #: The affordable shape is luna on the REPAIRS ONLY -- 13 of those 225
-    #: calls, 6% -- which is also where a stronger author was already measured
-    #: to help. `run_stage` takes one port for the first pass and every repair
-    #: round alike, so that split does not exist yet and is the change worth
-    #: making.
-    ap.add_argument("--oracle-model", default="gpt-5-mini")
+    #: Verified independently through this very port, nonce prefix per arm so
+    #: no arm can warm another, four items each:
+    #:
+    #:     luna, flat `user`            item 1 0.0%  then 0.0%, 0.0%, 0.0%
+    #:     luna, developer + user       item 1 0.0%  then 99.8%, 99.8%, 99.8%
+    #:     gpt-5-mini, either shape     unchanged -- the switch is neutral
+    #:
+    #: So the cold miss is ONE call in a 225-call fan-out, not 225 of them.
+    #: `developer_role_prefix` is set on both ports below for that reason, and
+    #: because it is a no-op on a prompt with no `shared_block` sentinel.
+    #:
+    #: THIS RUN IS THE RUN-SCALE MEASUREMENT that the switch's own docstring
+    #: says is still owed: real oracle prompts, real fan-out concurrency, 225
+    #: calls rather than 4 filler ones.
+    ap.add_argument("--oracle-model", default="gpt-5.6-luna")
     ap.add_argument("--oracle-effort", default="medium",
                     choices=["low", "medium", "high", "xhigh"],
                     help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
@@ -124,12 +132,14 @@ def main() -> int:
     print(f"normalized forms in hand: {len(normalized_by_uid)}", flush=True)
 
     settings = PortSettings(model=a.model, effort=a.effort,
-                            small_model=a.model, small_effort=a.effort)
+                            small_model=a.model, small_effort=a.effort,
+                            developer_role_prefix=True)
     port = resumable(make_port("api", run_dir / "agent_io", settings=settings),
                      run_dir / "agent_io")
     oracle_settings = PortSettings(
         model=a.oracle_model, effort=a.oracle_effort,
-        small_model=a.oracle_model, small_effort=a.oracle_effort)
+        small_model=a.oracle_model, small_effort=a.oracle_effort,
+        developer_role_prefix=True)
     oracle_port = resumable(
         make_port("api", run_dir / "agent_io", settings=oracle_settings),
         run_dir / "agent_io")
