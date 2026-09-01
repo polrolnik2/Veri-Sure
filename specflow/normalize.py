@@ -503,6 +503,30 @@ inferring their own version of it.
 You are not judging the requirement, rewriting it, or deciding whether a design
 meets it. You are saying what it is about, in a form a script can check.
 
+THE REQUIREMENT BLOCK. `obligation` is the requirement: one span, the text this
+requirement IS, and the only text anything will ever be checked against.
+Normalise THAT.
+
+`spec_spans` beside it is CONTEXT -- spans the obligation cannot be read
+without. USE THEM. That is what they are for, and the fields they legitimately
+supply are exactly the ones the obligation tends to leave open:
+
+  * the ACTIVATION, when the obligation says what must hold but the condition
+    it holds under is stated in the sentence that introduces it;
+  * the OBSERVABILITY route, when the obligation names an internal signal and
+    a context span says which port it reaches;
+  * a DEFINITION -- the value of a term, the encoding of a command, the width
+    of a field -- that the obligation uses without restating.
+
+The ONE field a context span may never supply is the EXPECTATION. What must be
+true is what `obligation` says, and only that. If a context span states a
+behaviour of its own, that behaviour is a DIFFERENT requirement with its own
+uid, listed in `supports`, and it is being normalised separately -- taking it
+here would check the same thing twice under one name and leave the obligation
+you were given unchecked.
+
+`unit_kind` and `supportive` are bookkeeping from an earlier stage. Ignore them.
+
 ACTIVATION. Give `text` always: the precondition in one clause. Additionally
 give `inputs` -- a map of input port name to the value that must hold.
 

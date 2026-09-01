@@ -32,7 +32,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from .ids import PREFIX_TESTCASE, mint, next_index
 from .model_io import ModelPort
 from .ports import classify
-from .schema import Issue
+from .schema import Issue, all_spans
 from .tb.runtime import is_reset_step, normalise_step, reset_ports
 from .fanout import compose, json_block, shared_block
 from .stage import (
@@ -751,7 +751,10 @@ def spec_quotes_for(element: dict, requirements: list[dict] | None) -> list[str]
     quotes: list[str] = []
     for ref in element.get("covers") or []:
         req = by_uid.get(str(ref).split("@", 1)[0])
-        for span in (req or {}).get("spec_spans") or []:
+        # Provenance: the obligation first, then the context it is read with.
+        # Stimulus is aimed at what the requirement rests on, so both belong --
+        # unlike a CHECK, which may only ever answer to the obligation.
+        for span in all_spans(req or {}):
             quote = (span or {}).get("quote")
             if quote and quote not in quotes:
                 quotes.append(quote)

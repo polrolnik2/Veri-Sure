@@ -190,6 +190,7 @@ def _run_divided_s1(
     of a cache hit.
     """
     from .divide import coverage as unit_coverage
+    from .schema import core_span
     from .s1_classify import divide_and_classify
 
     out_dir = Path(run_dir) / "specflow"
@@ -227,9 +228,13 @@ def _run_divided_s1(
                 "spec_chars": total,
                 "unit_chars": covered,
                 "word_carrying_gaps": len(gaps),
+                # The CORE span only. A supporting span belongs to the
+                # requirement it was linked from, and counting it here would
+                # report "the largest thing any requirement cites" under a name
+                # that says "the largest requirement".
                 "largest_requirement_chars": max(
-                    (s["end"] - s["start"] for r in reqs for s in r["spec_spans"]),
-                    default=0,
+                    ((core_span(r).get("end", 0) - core_span(r).get("start", 0))
+                     for r in reqs), default=0,
                 ),
                 "issues": [
                     {"severity": i.severity, "path": i.path, "message": i.message,

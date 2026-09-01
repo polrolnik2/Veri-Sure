@@ -587,8 +587,12 @@ def mint_requirements(spec: str, units: list[Unit]) -> list[dict]:
             "uid": mint(PREFIX_REQUIREMENT, i),
             "rev": 1,
             "kind": "function",
-            "spec_spans": [{"start": u.start, "end": u.end,
-                            "quote": text[u.start:u.end], "role": "core"}],
+            #: THE OBLIGATION. Singular by type, so "two cores" is not a
+            #: state this schema can express.
+            "obligation": {"start": u.start, "end": u.end,
+                           "quote": text[u.start:u.end]},
+            #: Context only. Classify may append; nothing here is ever checked.
+            "spec_spans": [],
             "text": "",
             "ports": [],
             "needs": ["testplan", "refmodel"],
@@ -624,7 +628,7 @@ def attach_classification(
         req["unit_kind"] = out.unit_kind
         for start in out.supporting_units or []:
             u = by_start.get(start)
-            if u is None or start == req["spec_spans"][0]["start"]:
+            if u is None or start == req["obligation"]["start"]:
                 continue
             req["spec_spans"].append({
                 "start": u.start, "end": u.end,

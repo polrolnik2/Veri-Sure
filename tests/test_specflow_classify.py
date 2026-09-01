@@ -269,10 +269,10 @@ def test_every_unit_becomes_one_requirement_spanning_exactly_that_unit():
                  _ok("The cout output is a and b.", ("cout",)))
     assert [r["uid"] for r in reqs] == ["REQ-0000", "REQ-0001"]
     for r, u in zip(reqs, units):
-        core = r["spec_spans"][0]
-        assert core["role"] == "core"
+        core = r["obligation"]
         assert (core["start"], core["end"]) == (u.start, u.end)
         assert core["quote"] == u.text(SPEC)
+        assert r["spec_spans"] == [], "context only, and there is none here"
 
 
 def test_a_unit_that_requires_nothing_STILL_becomes_a_requirement():
@@ -299,10 +299,12 @@ def test_classify_cannot_move_or_replace_the_core_span():
     reqs = _reqs(SPEC, units,
                  _ok(supporting_units=[units[1].start]),
                  _ok("The cout output is a and b.", ("cout",)))
-    spans = reqs[0]["spec_spans"]
-    assert [s0["role"] for s0 in spans] == ["core", "supporting"]
-    assert (spans[0]["start"], spans[0]["end"]) == (units[0].start, units[0].end)
-    assert (spans[1]["start"], spans[1]["end"]) == (units[1].start, units[1].end)
+    ob = reqs[0]["obligation"]
+    assert (ob["start"], ob["end"]) == (units[0].start, units[0].end)
+    # The core is a FIELD, not an entry in a list that could hold two of them.
+    context = reqs[0]["spec_spans"]
+    assert len(context) == 1
+    assert (context[0]["start"], context[0]["end"]) == (units[1].start, units[1].end)
 
 
 def test_a_supporting_unit_is_linked_as_an_obligation_never_asserted_on():
@@ -313,8 +315,9 @@ def test_a_supporting_unit_is_linked_as_an_obligation_never_asserted_on():
                  _ok(supporting_units=[units[1].start]),
                  _ok("The cout output is a and b.", ("cout",)))
     assert reqs[0]["supports"] == ["REQ-0001"]
-    cores = [s0 for s0 in reqs[0]["spec_spans"] if s0["role"] == "core"]
-    assert len(cores) == 1, "exactly one span is what a check must satisfy"
+    from specflow.schema import core_span, supporting_spans
+    assert core_span(reqs[0])["start"] == units[0].start
+    assert [s0["start"] for s0 in supporting_spans(reqs[0])] == [units[1].start]
 
 
 def test_a_requirement_marks_which_of_its_fields_are_supportive():
@@ -329,7 +332,7 @@ def test_a_unit_cannot_support_itself():
     reqs = _reqs(SPEC, units,
                  _ok(supporting_units=[units[0].start]),
                  _ok("The cout output is a and b.", ("cout",)))
-    assert [s0["role"] for s0 in reqs[0]["spec_spans"]] == ["core"]
+    assert reqs[0]["spec_spans"] == [], "a self-link adds no context span"
     assert reqs[0]["supports"] == []
 
 
@@ -411,8 +414,8 @@ def test_a_continuation_merges_the_units_and_classify_sees_the_whole_block():
         f"classify_{merged[0].start}_{merged[0].end}",
     ]
     assert len(reqs) == 1
-    span = reqs[0]["spec_spans"][0]
-    assert (span["start"], span["end"]) == (units[0].start, units[1].end)
+    ob = reqs[0]["obligation"]
+    assert (ob["start"], ob["end"]) == (units[0].start, units[1].end)
 
 
 def test_nothing_chaining_leaves_the_scaffold_and_classifies_it_once():

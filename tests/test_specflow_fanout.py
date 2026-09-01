@@ -309,7 +309,9 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
     # Same artifact shape as the generative arm.
     reqs = json.loads((run_dir / "specflow" / "requirements.json").read_text())
     assert [r["uid"] for r in reqs["requirements"]] == ["REQ-0000", "REQ-0001"]
-    assert all(r["spec_spans"][0]["quote"] for r in reqs["requirements"])
+    # The core is `obligation`, a field. `spec_spans` beside it is context and
+    # is legitimately empty when a requirement needs none.
+    assert all(r["obligation"]["quote"] for r in reqs["requirements"])
 
     # The number that says the catch-all is gone: no requirement claims the spec.
     gate = json.loads((run_dir / "specflow" / "s1_gate.json").read_text())

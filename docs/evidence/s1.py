@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import re
 import json
 import sys
 import time
@@ -76,39 +77,39 @@ def main() -> int:
     )
     dt = time.time() - t0
 
-    # --- what the classifier said about the units ----------------------------
+    # --- what the two stages said ------------------------------------------
     gate = json.loads((run_dir / "specflow" / "s1_gate.json").read_text())
-    by_kind: collections.Counter[str] = collections.Counter()
-    conts = 0
-    for p in sorted((run_dir / "agent_io").glob("classify_*_r*_response.txt")):
-        try:
-            obj = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            continue
-        by_kind[str(obj.get("kind", "?"))] += 1
-        conts += bool(obj.get("continues_previous"))
+    aio = run_dir / "agent_io"
 
-    # --- the property the change exists to create ----------------------------
-    starts = {u.start for u in units}
-    ends = {u.end for u in units}
-    whole = sum(
-        1 for r in reqs
-        for s in r["spec_spans"][:1]
-        if s["start"] in starts and s["end"] in ends
-    )
+    def final(stage):
+        rs = sorted((int(m.group(1)), q)
+                    for q in aio.glob(f"{stage}_r*_response.txt")
+                    if (m := re.search(r"_r(\d+)_response\.txt$", q.name)))
+        for _, q in reversed(rs):
+            try:
+                return json.loads(q.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+        return {}
 
-    print(f"\nunits           {len(units)}  (c1-i2c: 65)")
-    print(f"requirements    {len(reqs)}  (c1-i2c: 127)")
-    print(f"gate ok         {gate['ok']}, issues {len(issues)}")
-    kinds = collections.Counter(
-        (i.kind or "-") for i in issues)
-    for k, n in kinds.most_common():
+    merged = json.loads((run_dir / "specflow" / "requirements.json").read_text())
+    reqs = merged["requirements"]
+    kinds = collections.Counter(r.get("unit_kind", "?") for r in reqs)
+    linked = sum(1 for r in reqs if r.get("supports"))
+    ctx = sum(len(r.get("spec_spans") or []) for r in reqs)
+    merges = len(units) - len(reqs) if len(units) >= len(reqs) else 0
+
+    print(f"\nscaffold units   {len(units)}")
+    print(f"requirements     {len(reqs)}  (c1-i2c: 127, n3-i2c: 214)")
+    print(f"  merged away    {merges} unit(s) joined by the boundary pass")
+    print(f"gate ok          {gate['ok']}, issues {len(issues)}")
+    for k, n in collections.Counter((i.kind or "-") for i in issues).most_common():
         print(f"  issue {k:<12} {n}")
-    print(f"classified      {dict(by_kind)}")
-    print(f"continues_prev  {conts} of {sum(by_kind.values())} responses")
-    print(f"spans on unit boundaries  {whole} of {len(reqs)}  (c1-i2c: 6 of 127)")
-    print(f"word-carrying gaps        {gate['word_carrying_gaps']}")
-    print(f"largest requirement span  {gate['largest_requirement_chars']} chars")
+    print(f"unit_kind        {dict(kinds)}")
+    print(f"with context     {linked} requirement(s) link {ctx} supporting span(s)")
+    print(f"largest core     {gate['largest_requirement_chars']} chars"
+          f"   (c1-i2c: 1450)")
+    print(f"word-carrying gaps {gate['word_carrying_gaps']}")
     print(f"\ndone in {dt:.0f}s")
     return 0
 

@@ -33,6 +33,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..schema import core_span, supporting_spans
 from ..ids import PREFIX_TESTPLAN, mint, next_index
 from ..obligation import FIRED, Obligation, check_static
 from .oracles import (
@@ -613,9 +614,12 @@ class DebugSession:
             return {
                 "req_uid": req_uid,
                 "requirement": req.get("text", ""),
-                "specification_quoted": [
-                    s.get("quote", "") for s in (req.get("spec_spans") or [])
-                ],
+                "specification_quoted": [core_span(req).get("quote", "")],
+                # Context the obligation cannot be read without, and NOT part
+                # of what it requires. Presented separately because merging the
+                # two reads as one quotation and invites a check on text this
+                # requirement is not answerable for.
+                "read_with": [s.get("quote", "") for s in supporting_spans(req)],
                 "judge_verdict": self.verdicts.get(req_uid, ""),
                 "judge_reasoning": self.reasons.get(req_uid, {}),
                 "methods_claimed_to_implement_it": self.covers.get(req_uid, []),
@@ -629,9 +633,8 @@ class DebugSession:
         return {
             "req_uid": req_uid,
             "requirement": req.get("text", ""),
-            "specification_quoted": [
-                s.get("quote", "") for s in (req.get("spec_spans") or [])
-            ],
+            "specification_quoted": [core_span(req).get("quote", "")],
+            "read_with": [s.get("quote", "") for s in supporting_spans(req)],
             "judge_verdict": self.verdicts.get(req_uid, ""),
             "judge_reasoning": self.reasons.get(req_uid, {}),
             "methods_claimed_to_implement_it": self.covers.get(req_uid, []),
