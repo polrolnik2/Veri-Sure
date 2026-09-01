@@ -13,10 +13,13 @@ entirely -- a faithful 14,842-character quote was rejected earlier for two
 missing spaces of list indentation, and no amount of care makes transcription of
 that length reliable.
 
-**The model cannot choose the top-level granularity.** It may divide a unit
-further and may chain adjacent units, but an obligation may never span
-non-adjacent units. The catch-all that claimed 100% of the spec on both real
-runs is unavailable rather than discouraged.
+**The model cannot choose granularity at all.** It may read one unit as several
+obligations and may chain adjacent units, but a requirement's span is always the
+whole unit -- `divide` cuts at sentence ends, so that is the smallest text that
+can still be read as a claim. The catch-all that claimed 100% of the spec on
+both real runs is unavailable rather than discouraged, and so is its mirror: on
+c1-i2c the model subdivided 121 of 127 spans, 41 of them beginning mid-sentence,
+and attributed a filter-window requirement to `" and glitch filtering."`.
 
 **Context is preserved and it is nearly free.** The whole specification sits in
 the shared, cached prefix -- measured at 97% cache hit -- so a unit-level call
@@ -70,11 +73,19 @@ Kind = Literal["behavioural", "interface", "scaffolding"]
 
 
 class Obligation(BaseModel):
-    """One atomic requirement, located by offsets *within its unit*.
+    """One atomic requirement of a unit.
+
+    `start` and `end` are offsets *within the unit* and they are an ACCOUNTING
+    DEVICE, not the requirement's span. They exist so `_tiling_issues` can ask
+    whether every character of the unit was accounted for -- which is the only
+    thing in the chain that punishes under-splitting, and on c1-i2c it was 13 of
+    the 20 issues the gate raised. What the requirement RECORDS as its
+    provenance is the whole unit, because a span narrower than the unit is a
+    fragment of a sentence: REQ-0010 shipped with the span `" and glitch
+    filtering."` and asserted a mechanism those 22 characters do not contain.
 
     Relative rather than absolute on purpose: the numbers stay small and local,
-    so a model cannot wander into another part of the document, and the
-    conversion to absolute offsets is arithmetic this module owns.
+    so a model cannot wander into another part of the document.
     """
 
     start: int = 0
@@ -108,12 +119,20 @@ class UnitClassification(BaseModel):
 SYSTEM = """\
 You divide ONE unit of a hardware specification into atomic requirements.
 
-The unit is a paragraph, list item, heading or table row -- a boundary the
-specification's author drew. Your job is everything below that boundary.
+The unit is a SENTENCE, list item, heading or table row -- a boundary the
+specification's author drew, or the end of one of their sentences. Your job is
+everything below that boundary.
 
-You NEVER quote the specification. You return OFFSETS into the unit, and the
-harness slices the text itself. Offsets are 0-based and relative to the unit,
-where 0 is its first character.
+You NEVER quote the specification, and you never choose what text a requirement
+is attributed to. THE WHOLE UNIT IS THE SPAN OF EVERY REQUIREMENT YOU RETURN
+FROM IT. That is deliberate: a span narrower than a sentence is a fragment, and
+a requirement resting on a fragment asserts more than its evidence says.
+
+You still return OFFSETS into the unit, and they are ACCOUNTING: together they
+must show that every character of the unit was read by some obligation, which is
+how a unit stating two things cannot be answered with one. They do not narrow
+what the requirement is attributed to. Offsets are 0-based and relative to the
+unit, where 0 is its first character.
 
 For the unit, decide:
 
@@ -122,9 +141,16 @@ For the unit, decide:
                       widths or names; "scaffolding" for titles, cross-
                       references and prose that constrains nothing.
 
-  continues_previous  true if this unit cannot stand alone because it continues
-                      the previous one -- a list whose stem is the paragraph
-                      above, or a sentence whose subject is named there.
+  continues_previous  true ONLY if this unit states no obligation of its own
+                      and merely continues the previous unit's -- a list item
+                      under the stem that introduces it, or a trailing clause
+                      that completes the sentence before it. A unit that states
+                      its own behaviour is NOT a continuation even when it
+                      refers back: resolve the reference in your restatement,
+                      which is what `text` is for. A continuation is folded into
+                      the previous requirement and its obligations are dropped,
+                      so claiming it for a unit that says something is how a
+                      requirement gets lost.
 
   obligations         for a behavioural unit, one entry per atomic requirement.
                       An atomic requirement is ONE thing that could be
@@ -135,7 +161,9 @@ For the unit, decide:
 
 Each obligation carries:
   start, end   offsets within this unit. Together they must TILE the unit:
-               no overlap, no gap other than whitespace.
+               no overlap, no gap other than whitespace. They are accounting,
+               not attribution -- the requirement's span is the whole unit
+               either way.
   text         your restatement, ONE sentence, SELF-CONTAINED. It must not
                begin with "it", "this", "also", "otherwise" or any other
                reference to something outside itself -- name the subject. You
@@ -392,6 +420,20 @@ def to_requirements(
 ) -> list[dict]:
     """Absolute-offset requirements, in document order, uids minted in sequence.
 
+    **A requirement's span is the WHOLE UNIT it came from**, never the
+    obligation's own offsets. Those offsets tile the unit so the gate can see
+    that nothing went unread (`_tiling_issues`), and they stop there. Attributing
+    a requirement to a slice of a sentence is what put `" and glitch filtering."`
+    on REQ-0010: 22 characters that name a feature and state no behaviour, from
+    which the pipeline then authored a check about a three-sample filter window.
+    Since `divide` cuts at sentence ends, the unit is the smallest span that can
+    still be read as a claim.
+
+    Two obligations from one unit therefore share a span, and that is correct
+    rather than a collision -- "the output is the sum, saturating on overflow" is
+    two requirements resting on one sentence. A distinct-span ban was tried and
+    reverted for exactly this case.
+
     `continues_previous` chains a unit onto the one before it, so a list stem and
     its items become one requirement group rather than an orphaned fragment. The
     chain only ever reaches *adjacent* units: that restriction is what keeps a
@@ -405,12 +447,17 @@ def to_requirements(
         if out.kind != "behavioural":
             continue
         for ob in out.obligations:
-            start, end = unit.start + ob.start, unit.start + ob.end
+            start, end = unit.start, unit.end
             if out.continues_previous and reqs and i > 0 and units[i - 1].end <= start:
-                # Extend the previous requirement's span backwards to include the
-                # unit it depends on, rather than leaving a fragment that reads
-                # as a standalone claim it is not.
-                reqs[-1]["spec_spans"][-1]["end"] = end
+                # Extend the previous requirement's span forwards to include the
+                # unit that depends on it, rather than leaving a fragment that
+                # reads as a standalone claim it is not. The quote moves with the
+                # end offset: `assure` locates a span by its quote and never
+                # reads `end`, so extending one without the other would leave
+                # this unit's text unattributed at G1.
+                prev = reqs[-1]["spec_spans"][-1]
+                prev["end"] = end
+                prev["quote"] = text[prev["start"]:end]
                 continue
             reqs.append({
                 "uid": mint(PREFIX_REQUIREMENT, n),

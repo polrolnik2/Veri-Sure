@@ -235,6 +235,58 @@ def test_requirements_carry_absolute_offsets_and_sequential_uids():
         assert text[span["start"]:span["end"]] == span["quote"]
 
 
+def test_a_requirements_span_is_the_whole_unit_not_the_obligation():
+    """Obligations account for the unit; they never narrow what it is attributed to.
+
+    REQ-0010 shipped with the span `" and glitch filtering."` -- a noun phrase
+    from a feature list -- and the pipeline authored a check about a
+    three-sample filter window from it. Offsets are the tiling gate's input and
+    nothing else; the span recorded is the unit.
+    """
+    spec = "The counter counts up and it saturates on overflow.\n"
+    units = divide(spec)
+    assert len(units) == 1
+    unit = units[0]
+    results = [type("R", (), {"output": _ok(
+        unit.length,
+        Obligation(start=0, end=21, text="The counter counts up.", ports=[]),
+        Obligation(start=21, end=unit.length,
+                   text="The counter saturates on overflow.", ports=[]),
+    )})()]
+    reqs = to_requirements(spec, units, results)
+    assert len(reqs) == 2
+    for r in reqs:
+        span = r["spec_spans"][0]
+        assert (span["start"], span["end"]) == (unit.start, unit.end)
+        assert span["quote"] == unit.text(spec)
+
+
+def test_a_continuation_moves_the_quote_with_the_end_offset():
+    """`assure` locates a span by its QUOTE and never reads `end`.
+
+    Extending one without the other left the continuation unit's text
+    unattributed at G1, which is a hard error there -- silently, because the
+    offsets still looked right.
+    """
+    spec = "The FSM accepts:\n\n  - a START condition\n"
+    units = divide(spec)
+    results = [
+        type("R", (), {"output": UnitClassification(
+            kind="behavioural",
+            obligations=[Obligation(start=0, end=units[0].length,
+                                    text="The FSM accepts commands.", ports=[])])})(),
+        type("R", (), {"output": UnitClassification(
+            kind="behavioural", continues_previous=True,
+            obligations=[Obligation(start=0, end=units[1].length,
+                                    text="The FSM accepts a START.", ports=[])])})(),
+    ]
+    from specflow.s1_requirements import normalize_spec
+    text = normalize_spec(spec)
+    span = to_requirements(spec, units, results)[0]["spec_spans"][0]
+    assert span["quote"] == text[span["start"]:span["end"]]
+    assert "START condition" in span["quote"]
+
+
 def test_continues_previous_extends_the_earlier_requirement():
     """A list stem and its items are one requirement group, not an orphan."""
     spec = "The FSM accepts:\n\n  - a START condition\n"
