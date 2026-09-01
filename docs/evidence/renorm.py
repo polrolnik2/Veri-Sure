@@ -46,8 +46,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="0 = every requirement")
     ap.add_argument("--reqs", default="",
                     help="requirements.json; default is the run dir's own")
-    ap.add_argument("--max-repairs", type=int, default=3,
-                    help="3 gives r0..r3, the four rounds c1-i2c recorded")
+    ap.add_argument("--max-repairs", type=int, default=5,
+                    help="5 gives r0..r5; 3 was one round short of REQ-0014 on n4-i2c")
     ap.add_argument("--model", default="gpt-5-mini")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--resume", action="store_true")

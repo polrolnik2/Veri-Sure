@@ -1496,7 +1496,7 @@ def run_normalize_fanout(
     contract_json: str,
     contract: dict,
     port: ModelPort,
-    max_repairs: int = 2,
+    max_repairs: int = 5,
     fanout: bool = True,
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """One small call per requirement. Requirements do not constrain each other.
@@ -1610,7 +1610,7 @@ def resolve_indirect(
     contract_json: str,
     contract: dict,
     port: ModelPort,
-    max_repairs: int = 2,
+    max_repairs: int = 5,
     fanout: bool = True,
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """Ask the blind requirements the second question. Returns the merged set.

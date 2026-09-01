@@ -252,7 +252,7 @@ class TopAgentConfig:
     #: from a judge rather than a script, and it converges: 8 -> 4 -> 3 -> 2
     #: blocking verdicts over four rounds on i2c_master_bit_ctrl, still
     #: descending when the budget ran out.
-    specflow_max_repairs: int = 3
+    specflow_max_repairs: int = 5
     specflow_refmodel_max_repairs: int = 6
     #: Edit attempts per debug turn on the reference model. 0 disables the
     #: agentic path and falls back to prose-driven regeneration.

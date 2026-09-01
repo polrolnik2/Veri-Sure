@@ -304,7 +304,16 @@ def build_artifacts(
     spec: str,
     contract_json: str,
     model_port: str = "replay",
-    max_repairs: int = 3,
+    #: Rounds of gate-fed repair per item, so 5 gives r0..r5.
+    #:
+    #: Was 3. Measured on n4-i2c: of 111 requirements exactly one exhausted the
+    #: budget, and it was CONVERGING when it ran out -- REQ-0014 went from no
+    #: routes, to eight routes without discriminating `shows`, to six of eight
+    #: discriminating. Two more of a shape it had already got right six times.
+    #: A budget that stops a converging item one round short buys nothing: the
+    #: cost is paid per FAILING item, which is now ~1%, while the failure it
+    #: prevents is a whole requirement dropped from the set.
+    max_repairs: int = 5,
     #: The reference model gets its own budget, and a larger default. Its repair
     #: round is the only one whose feedback comes from RUNNING the artifact
     #: rather than from a script checking its shape, and that feedback converges
