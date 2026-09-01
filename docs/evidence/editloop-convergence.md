@@ -184,3 +184,36 @@ symptom is a clean 4-cycle shift, the edit that produced it deleted a required
 function. And it is the kind of edit the loop is rewarded for: less latency means
 responses land sooner and more windows close in time, which is how a design that
 deleted a filter scored 61 against golden's 51.
+
+## Why nothing caught the filter deletion
+
+Three requirements govern the filter run 10 bypassed. Each failed to catch it in
+a *different* way, and none of them was merely uncovered.
+
+| requirement | in the 90? | verdict | why it missed |
+|---|---|---|---|
+| **REQ-0046** "Majority voting over the three-sample histories must produce sSCL and sSDA so that short glitches … are suppressed" | **NO — dropped** | — | the check that literally forbids this edit is not in the set |
+| **REQ-0010** "reduces short glitches by … a majority function over the three-sample histories" | yes | **INVERTED**: run 10 **PASSES**, golden **FAILS** | the surviving check *rewards* the deletion |
+| **REQ-0045** "a filter counter … must trigger periodic sample-shift events that move the synchronized samples into fSCL/fSDA" | yes | both PASS | run 10 still shifts `fSCL`/`fSDA` every cycle — it only stopped *reading* them. The check watches the machinery run and cannot see the output discarded |
+
+### REQ-0046's provenance, which is the uncomfortable part
+
+It was in the frozen 110 with disposition **TRUSTED**. It was then classified
+**over-strict**, sent for re-authoring, and the re-author returned
+**ORACLE_INVALID** — so `base_suite()`'s rule that a rejected check contributes
+nothing (rather than silently keeping the stale one) dropped it from the 90.
+
+That rule is right in general: keeping a check the author has rejected would
+score a lost check as if it survived. But the consequence here is that the
+one requirement whose violation *is* this defect was removed from the set by the
+over-strictness repair — and the pipeline has no way to notice that what it
+discarded was the only guard on a real property.
+
+### The shape of the trap
+
+Run 10 left the filter *computed* and stopped *consuming* it. That is precisely
+the edit that satisfies REQ-0045 (machinery still ticks), satisfies REQ-0010
+(which is inverted anyway), and violates only REQ-0046 (not in the set). The
+dead code is what makes it invisible: a checker that asks "does the filter run"
+sees yes, and only a checker asking "does anything use the filter's output"
+would see no.
