@@ -1,11 +1,12 @@
-"""D2 + G1': per-unit classification and the atomicity gate.
+"""S1 below the divider: the boundary pass, the freeze, and the glue.
 
 THE UNIT IS THE REQUIREMENT. `divide` cuts, the boundary pass enlarges by
-merging with the unit before, and the classifier says what the unit requires --
-nothing else may move the line. That is what makes the 100%-of-spec catch-all
-structurally impossible rather than merely penalised, and it is why G1' is small:
-tiling, span-containment and "two obligations in one restatement" all policed a
-freedom the classifier no longer has.
+merging with the unit before, `mint_requirements` freezes one requirement per
+unit, and classify fills supportive fields on requirements that already exist.
+That is what makes the 100%-of-spec catch-all structurally impossible rather
+than merely penalised, and it is why G1' is small: tiling, span-containment and
+"two obligations in one restatement" all policed freedoms the classifier no
+longer has.
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ from specflow.s1_classify import (
     gate_unit,
     parse_response,
     shared_prefix,
-    to_requirements,
+    attach_classification,
+    mint_requirements,
 )
 from specflow.schema import has_errors
 
@@ -41,8 +43,16 @@ def _unit(spec=SPEC, i=0):
     return divide(spec)[i]
 
 
-def _ok(text="The sum output is a xor b.", ports=("sum",)):
-    return UnitClassification(kind="behavioural", text=text, ports=list(ports))
+def _ok(text="The sum output is a xor b.", ports=("sum",), **kw):
+    return UnitClassification(unit_kind="behavioural", text=text,
+                              ports=list(ports), **kw)
+
+
+def _reqs(spec, units, *classifications):
+    """Mint first, classify after -- the order the pipeline uses."""
+    reqs = mint_requirements(spec, units)
+    results = [type("R", (), {"output": c})() for c in classifications]
+    return attach_classification(spec, units, reqs, results)
 
 
 
@@ -105,14 +115,36 @@ def test_a_port_the_contract_does_not_declare_is_an_error():
     assert has_errors(issues)
 
 
-def test_a_non_behavioural_unit_stating_a_requirement_is_an_error():
-    out = UnitClassification(kind="scaffolding", text="The sum output is driven.")
-    assert has_errors(gate_unit(out, unit=_unit(), spec=SPEC,
-                                contract=json.loads(CONTRACT)))
+def test_unit_kind_never_blocks_anything():
+    """It records how the unit reads and decides nothing.
+
+    A `scaffolding` unit that states a requirement is not a contradiction the
+    gate should resolve -- the classification is advisory, and whether the
+    obligation can be checked is settled by trying, at the oracle stage.
+    """
+    out = UnitClassification(unit_kind="scaffolding",
+                             text="The sum output is driven to a xor b.",
+                             ports=["sum"])
+    assert gate_unit(out, unit=_unit(), spec=SPEC,
+                     contract=json.loads(CONTRACT)) == []
+
+
+def test_a_supporting_unit_that_is_not_a_unit_is_an_error():
+    """The vocabulary is the frozen partition, which is what stops this being a
+    way to claim arbitrary text."""
+    units = divide(SPEC)
+    starts = frozenset(u.start for u in units)
+    out = _ok(supporting_units=[99999])
+    issues = gate_unit(out, unit=units[0], spec=SPEC,
+                       contract=json.loads(CONTRACT), unit_starts=starts)
+    assert has_errors(issues)
+    assert gate_unit(_ok(supporting_units=[units[1].start]), unit=units[0],
+                     spec=SPEC, contract=json.loads(CONTRACT),
+                     unit_starts=starts) == []
 
 
 def test_a_behavioural_unit_stating_nothing_is_an_error():
-    out = UnitClassification(kind="behavioural", text="   ")
+    out = UnitClassification(unit_kind="behavioural", text="   ")
     issues = gate_unit(out, unit=_unit(), spec=SPEC,
                        contract=json.loads(CONTRACT))
     assert has_errors(issues)
@@ -173,16 +205,16 @@ def test_the_prompt_carries_the_neighbouring_units():
     """What makes splitting below a paragraph safe: the referent is in view."""
     units = divide(SPEC)
     p = build_prompt(spec=SPEC, contract_json=CONTRACT, unit=units[1], index=1, units=units)
-    assert "<previous_unit>" in p and "The sum output is a xor b." in p
+    assert "<previous_unit start=" in p and "The sum output is a xor b." in p
     assert "<next_unit>" not in p, "there is no unit after the last one"
 
 
 def test_the_prompt_never_asks_for_spec_text_back():
     p = shared_prefix(SPEC, CONTRACT)
-    assert "NEVER quote" in p
-    # And it no longer asks for offsets at all: the unit IS the requirement, so
-    # there is no sub-span for the model to compute or to get wrong.
-    assert "OFFSETS" not in p and "0-based" not in p
+    # The unit IS the requirement, minted before this call, so there is no span
+    # for the model to quote, compute, or get wrong.
+    assert "cannot create a requirement" in p
+    assert "0-based" not in p
 
 
 def test_a_response_that_lost_its_opening_is_a_parse_error_not_scaffolding():
@@ -202,7 +234,7 @@ def test_a_response_that_lost_its_opening_is_a_parse_error_not_scaffolding():
     # its absence is a truncated response and never a verdict.
     headless = (
         '"reasoning": "The unit states two observable actions.",\n'
-        '  "detail": {"text": "The FSM stalls.", "ports": []}\n}'
+        '  "detail": {"note": "The FSM stalls.", "ports": []}\n}'
     )
     out = parse_response(headless)
     assert out.reasoning.startswith("Parse Error: "), out
@@ -216,8 +248,9 @@ def test_a_response_that_lost_its_opening_is_a_parse_error_not_scaffolding():
 def test_a_genuine_scaffolding_verdict_still_parses():
     """The guard keys on `kind`, which the prompt always asks for, so an honest
     'this unit constrains nothing' answer is untouched."""
-    out = parse_response('{"reasoning": "A heading.", "kind": "scaffolding"}')
-    assert out.kind == "scaffolding"
+    out = parse_response('{"reasoning": "A heading.", "unit_kind": "scaffolding",'
+                         ' "text": "Section 3 introduces the bit-level FSM."}')
+    assert out.unit_kind == "scaffolding"
     assert not out.reasoning.startswith("Parse Error")
     assert gate_unit(out, unit=divide(SPEC)[0], spec=SPEC, contract=None) == []
 
@@ -229,57 +262,75 @@ def _res(*classifications):
     return [type("R", (), {"output": c})() for c in classifications]
 
 
-def test_one_behavioural_unit_makes_one_requirement_spanning_that_unit():
+def test_every_unit_becomes_one_requirement_spanning_exactly_that_unit():
     units = divide(SPEC)
-    reqs = to_requirements(SPEC, units, _res(
-        _ok("The sum output is a xor b.", ("sum",)),
-        _ok("The cout output is a and b.", ("cout",))))
+    reqs = _reqs(SPEC, units,
+                 _ok("The sum output is a xor b.", ("sum",)),
+                 _ok("The cout output is a and b.", ("cout",)))
     assert [r["uid"] for r in reqs] == ["REQ-0000", "REQ-0001"]
-    from specflow.s1_requirements import normalize_spec
-    text = normalize_spec(SPEC)
     for r, u in zip(reqs, units):
-        span = r["spec_spans"][0]
-        assert (span["start"], span["end"]) == (u.start, u.end)
-        assert span["quote"] == text[u.start:u.end] == u.text(SPEC)
+        core = r["spec_spans"][0]
+        assert core["role"] == "core"
+        assert (core["start"], core["end"]) == (u.start, u.end)
+        assert core["quote"] == u.text(SPEC)
 
 
-def test_no_requirement_span_is_ever_a_fragment_of_a_unit():
-    """The defect the whole design closes.
+def test_a_unit_that_requires_nothing_STILL_becomes_a_requirement():
+    """Whether an obligation can be asserted is not knowable here.
 
-    REQ-0010 shipped with the span `" and glitch filtering."` -- 22 characters
-    naming a feature and stating no behaviour -- and the pipeline authored a
-    check about a three-sample filter window from it. c1-i2c's REQ-0083 was the
-    mirror: 1,369 characters of span stating one sentence's worth of it.
+    It is knowable once something has tried, which is the oracle stage and its
+    dispositions. Deciding it at S1 is how 49 of n3-i2c's 168 units produced
+    nothing at all -- silently, because the divide arm runs no
+    unattributed-text check that would have noticed.
     """
     units = divide(SPEC)
-    reqs = to_requirements(SPEC, units, _res(_ok(), _ok("The cout output is a and b.", ("cout",))))
-    bounds = {(u.start, u.end) for u in units}
-    for r in reqs:
-        s0 = r["spec_spans"][0]
-        assert (s0["start"], s0["end"]) in bounds
+    reqs = _reqs(SPEC, units,
+                 UnitClassification(unit_kind="scaffolding",
+                                    text="This heading introduces the adder."),
+                 _ok("The cout output is a and b.", ("cout",)))
+    assert len(reqs) == 2
+    assert reqs[0]["unit_kind"] == "scaffolding"
+    assert reqs[0]["text"] == "This heading introduces the adder."
 
 
-def test_scaffolding_units_produce_no_requirements():
+def test_classify_cannot_move_or_replace_the_core_span():
+    """It may APPEND a supporting span; the core is never rewritten."""
     units = divide(SPEC)
-    results = _res(*[UnitClassification(kind="scaffolding") for _ in units])
-    assert to_requirements(SPEC, units, results) == []
+    reqs = _reqs(SPEC, units,
+                 _ok(supporting_units=[units[1].start]),
+                 _ok("The cout output is a and b.", ("cout",)))
+    spans = reqs[0]["spec_spans"]
+    assert [s0["role"] for s0 in spans] == ["core", "supporting"]
+    assert (spans[0]["start"], spans[0]["end"]) == (units[0].start, units[0].end)
+    assert (spans[1]["start"], spans[1]["end"]) == (units[1].start, units[1].end)
 
 
-def test_a_behavioural_unit_with_an_empty_restatement_produces_nothing():
-    """It is a gate error, and `to_requirements` must not mint an empty
-    requirement from it either -- the gate blocks the run, but this function is
-    also called directly by the evidence scripts."""
+def test_a_supporting_unit_is_linked_as_an_obligation_never_asserted_on():
+    """Every unit is a requirement, so a supporting span is also a supporting
+    OBLIGATION -- recorded as a link, and never a second thing to check."""
     units = divide(SPEC)
-    assert to_requirements(SPEC, units, _res(
-        UnitClassification(kind="behavioural", text="  "),
-        _ok("The cout output is a and b.", ("cout",)))) == [
-    ][:0] + to_requirements(SPEC, units, _res(
-        UnitClassification(kind="behavioural", text="  "),
-        _ok("The cout output is a and b.", ("cout",))))
-    reqs = to_requirements(SPEC, units, _res(
-        UnitClassification(kind="behavioural", text="  "),
-        _ok("The cout output is a and b.", ("cout",))))
-    assert len(reqs) == 1 and reqs[0]["uid"] == "REQ-0000"
+    reqs = _reqs(SPEC, units,
+                 _ok(supporting_units=[units[1].start]),
+                 _ok("The cout output is a and b.", ("cout",)))
+    assert reqs[0]["supports"] == ["REQ-0001"]
+    cores = [s0 for s0 in reqs[0]["spec_spans"] if s0["role"] == "core"]
+    assert len(cores) == 1, "exactly one span is what a check must satisfy"
+
+
+def test_a_requirement_marks_which_of_its_fields_are_supportive():
+    units = divide(SPEC)
+    reqs = _reqs(SPEC, units, _ok(), _ok("The cout output is a and b.", ("cout",)))
+    assert set(reqs[0]["supportive"]) == {"text", "ports", "unit_kind", "supports"}
+    assert "spec_spans" not in reqs[0]["supportive"], "the core is not supportive"
+
+
+def test_a_unit_cannot_support_itself():
+    units = divide(SPEC)
+    reqs = _reqs(SPEC, units,
+                 _ok(supporting_units=[units[0].start]),
+                 _ok("The cout output is a and b.", ("cout",)))
+    assert [s0["role"] for s0 in reqs[0]["spec_spans"]] == ["core"]
+    assert reqs[0]["supports"] == []
 
 
 def test_divide_and_classify_runs_every_unit(monkeypatch):

@@ -1,32 +1,42 @@
-"""D2 + G1': classify one authorial unit, and gate the partition it produces.
+"""S1 below the divider: settle the boundaries, freeze the obligations, glue.
 
-`divide.py` cuts the specification where its author cut it and stops. This module
-does everything below that boundary: for one unit it decides whether the unit
-states behaviour, divides it into atomic obligations, and restates each one
-self-containedly. Every stage that follows consumes those obligations.
+`divide.py` cuts the specification where its author cut it, and at sentence
+ends, and stops. That is a SCAFFOLD -- the best guess available before anything
+has read the text. This module does the rest, in an order that matters:
 
-Three properties, each of which is a defect in the generative S1 this replaces:
+    boundary    one short call per unit: does a requirement's statement straddle
+                the cut between this unit and the one before it? Chains of yes
+                are merged.
+    FREEZE      `mint_requirements` mints one requirement per final unit,
+                against that unit's own span. The obligations exist from here on
+                and nothing may add, remove, split or move one.
+    classify    one call per requirement, filling SUPPORTIVE fields only: the
+                restatement, the ports, links to units it cannot be read
+                without. Glue, not authorship.
 
-**The model emits offsets, never spec text.** A requirement's span is arithmetic
-over the unit it came from. That removes verbatim quotation as a failure mode
-entirely -- a faithful 14,842-character quote was rejected earlier for two
-missing spaces of list indentation, and no amount of care makes transcription of
-that length reliable.
+Four properties, each of which was a measured defect in something earlier:
 
-**The model cannot choose granularity at all.** It may read one unit as several
-obligations and may chain adjacent units, but a requirement's span is always the
-whole unit -- `divide` cuts at sentence ends, so that is the smallest text that
-can still be read as a claim. The catch-all that claimed 100% of the spec on
-both real runs is unavailable rather than discouraged, and so is its mirror: on
-c1-i2c the model subdivided 121 of 127 spans, 41 of them beginning mid-sentence,
-and attributed a filter-window requirement to `" and glitch filtering."`.
+**The model never quotes the specification and never names a span.** The core
+span is arithmetic over a partition built by code. A faithful 14,842-character
+quote was once rejected for two missing spaces of list indentation; that failure
+mode is gone rather than mitigated.
+
+**The model cannot choose granularity, at all.** Not the top level -- `divide`
+owns it; not below -- there is one restatement per unit, not a list. The
+catch-all that claimed 100% of the spec on two real runs is unreachable, and so
+is its mirror: on c1-i2c the classifier subdivided 121 of 127 spans, 41 of them
+beginning mid-sentence, and attributed a filter-window requirement to
+`" and glitch filtering."`.
+
+**Whether an obligation can be ASSERTED is not decided here.** It is not
+knowable before something has tried, and that is the oracle stage. Every unit
+becomes a requirement, including a heading that requires nothing. Deciding it
+here is how 49 of n3-i2c's 168 units produced nothing at all, silently.
 
 **Context is preserved and it is nearly free.** The whole specification sits in
 the shared, cached prefix -- measured at 97% cache hit -- so a unit-level call
-reads the entire document while paying ~3% of it, and the neighbouring units are
-marked explicitly so a back-reference has its referent in view. That is what
-makes splitting below the paragraph safe here when a script doing the same thing
-severed a link one time in five.
+reads the entire document while paying a fraction of it, and the neighbouring
+units are marked explicitly so a back-reference has its referent in view.
 """
 
 from __future__ import annotations
@@ -94,29 +104,37 @@ class BoundaryDecision(BaseModel):
 
 
 class UnitClassification(BaseModel):
-    """One unit, one requirement. There is no obligation list, ON PURPOSE.
+    """What classify is allowed to say. EVERY FIELD HERE IS SUPPORTIVE.
 
-    **The unit IS the obligation granularity.** `divide` cuts, the boundary pass
-    enlarges by merging with the unit before, and nothing else may move the
-    line. A classifier that could return several obligations for one unit was
-    choosing granularity again through a smaller door: on n3-i2c one feature-list
-    sentence became nine requirements sharing one span, and one reset sentence
-    became seven. Whether those are one requirement or nine is a judgement the
-    divider and the boundary pass are supposed to have already made.
+    The obligation is already frozen when this arrives: `divide` cut, the
+    boundary pass merged, and `mint_requirements` minted a uid against the
+    unit's own span. Classify is glue -- it puts the context needed to read that
+    obligation in one place. It cannot create a requirement, cannot remove one,
+    and cannot move one's core span.
 
-    So the restatement is a field of the classification, not an element of a
-    list. The rule is enforced by the SHAPE of the answer rather than by a gate,
-    which is the difference between a model that cannot break it and a model
-    that is told not to.
+    `unit_kind` in particular is ADVISORY AND NEVER A FILTER. Whether a
+    requirement can be asserted is not knowable here; it is knowable after
+    something has tried, which is the oracle stage and its dispositions. A
+    heading classified `scaffolding` still becomes a requirement and still goes
+    downstream -- it will fail to yield an oracle, and that is where the fact
+    belongs. The previous design dropped it here instead, silently: 49 of
+    n3-i2c's 168 units produced nothing, and the divide arm runs no
+    unattributed-text check that would have noticed.
     """
 
     reasoning: str = ""
-    kind: Kind = "scaffolding"
-    #: The requirement this unit states, restated in one self-contained
-    #: sentence. Empty for a non-behavioural unit.
+    #: Advisory. Recorded on the requirement, read by nobody as a filter.
+    unit_kind: Kind = "scaffolding"
+    #: The obligation restated in one self-contained sentence -- context
+    #: gathered into one place, not a new requirement.
     text: str = ""
-    #: The port names this unit's requirement constrains.
+    #: The port names this obligation constrains.
     ports: list[str] = Field(default_factory=list)
+    #: OTHER UNITS this obligation cannot be read without, named by their start
+    #: offset. They become SUPPORTING spans beside the core one. Naming units
+    #: rather than free offsets is what keeps this from becoming a way to claim
+    #: arbitrary text: the vocabulary is the partition, which is already frozen.
+    supporting_units: list[int] = Field(default_factory=list)
     #: The spec is silent or ambiguous here. An honest "it does not say" is worth
     #: more than a guess, which becomes a wrong oracle that fails correct designs.
     underdetermined: list[str] = Field(default_factory=list)
@@ -132,41 +150,62 @@ class UnitClassification(BaseModel):
         return v
 
 
+#: The fields on a requirement that classify authors. Everything else is core:
+#: minted from the frozen partition and never touched afterwards. Written into
+#: each requirement as `supportive` so the distinction survives into the
+#: artifact rather than living only here.
+SUPPORTIVE_FIELDS = ("text", "ports", "unit_kind", "supports")
+
+
 SYSTEM = """\
-You divide ONE unit of a hardware specification into atomic requirements.
+You are given ONE unit of a hardware specification. It is ALREADY a requirement:
+a script cut the specification into units, a reader joined the ones a
+requirement ran across, and a uid was minted for this one before you were
+asked. You cannot create a requirement, remove one, split one or move one.
 
-The unit is a SENTENCE, list item, heading or table row -- a boundary the
-specification's author drew, or the end of one of their sentences -- or several
-of those JOINED, when an earlier pass found a requirement whose statement runs
-across them. Either way it is one unit and you treat it as one. Your job is
-everything below that boundary.
+What you do is GLUE. The obligation is here; the things needed to read it may be
+elsewhere. You gather them into one place.
 
-You NEVER quote the specification and you NEVER choose where a requirement
-begins or ends. THE UNIT IS THE REQUIREMENT. It was cut by a script and, where a
-requirement ran across two of those cuts, joined by an earlier pass; by the time
-it reaches you the granularity is settled. You say what it requires.
-
-For the unit, decide:
-
-  kind                "behavioural" if it states observable behaviour a design
-                      must exhibit; "interface" if it only declares ports,
-                      widths or names; "scaffolding" for titles, cross-
-                      references and prose that constrains nothing.
-
-  text                for a behavioural unit, the requirement it states,
-                      restated as ONE self-contained sentence. Not a list: this
-                      unit is one requirement, and if it reads as two things
-                      then the specification states them in one breath and they
-                      are verified together.
-
+  text                the obligation, restated as ONE self-contained sentence.
                       SELF-CONTAINED means it must not begin with "it", "this",
                       "also", "otherwise" or any other reference to something
                       outside itself -- name the subject. You can see the whole
-                      specification and the unit before this one, so resolve the
-                      reference rather than inheriting it.
+                      specification, so resolve the reference rather than
+                      inheriting it.
 
-  ports               the port names this requirement constrains, exactly as the
-                      contract declares them.
+                      Restate what this unit says. Do not add a requirement it
+                      does not state, and do not drop one it does. If it reads
+                      as two things, the specification states them in one breath
+                      and they are verified together.
+
+                      A unit that requires nothing -- a heading, a title, a
+                      cross-reference -- is still restated, as the nothing it
+                      says. Say so plainly; do not invent an obligation to fill
+                      the field.
+
+  ports               the port names this obligation constrains, exactly as the
+                      contract declares them. Empty if it constrains none.
+
+  supporting_units    the START OFFSETS of other units this obligation cannot
+                      be read without -- a definition it uses, the stem of the
+                      list it belongs to. Each unit's offset is given in the
+                      item block. They are attached as SUPPORTING evidence
+                      beside this unit's own span, which is never replaced.
+
+                      Every unit is a requirement, so naming one links its
+                      obligation to this one AS CONTEXT. It is never a
+                      second thing this requirement is checked against --
+                      exactly one span, this unit's own, is what a check
+                      must satisfy. Empty is the normal answer.
+
+  unit_kind           "behavioural" if this unit states observable behaviour a
+                      design must exhibit; "interface" if it only declares
+                      ports, widths or names; "scaffolding" for titles,
+                      cross-references and prose that constrains nothing.
+
+                      ADVISORY. It records how the unit reads, and it does not
+                      decide anything: whether this obligation can be checked is
+                      settled later, by trying.
 
 If the specification does not determine a behaviour here, do not invent one:
 record the question in `underdetermined`.
@@ -175,9 +214,10 @@ Reply with ONE JSON object and nothing else:
 
 {
   "reasoning": "...",
-  "kind": "behavioural",
+  "unit_kind": "behavioural",
   "text": "The sum output equals a xor b.",
   "ports": ["sum"],
+  "supporting_units": [],
   "underdetermined": []
 }
 """
@@ -227,14 +267,16 @@ def build_prompt(
 
     item = []
     if before is not None:
-        item.append(f"<previous_unit>\n{text[before.start:before.end]}\n</previous_unit>")
+        item.append(f'<previous_unit start="{before.start}">\n'
+                    f"{text[before.start:before.end]}\n</previous_unit>")
     item.append(
-        f'<unit kind="{unit.kind}" length="{unit.length}">\n'
+        f'<unit start="{unit.start}" shape="{unit.kind}" length="{unit.length}">\n'
         + text[unit.start:unit.end]
         + "\n</unit>"
     )
     if after is not None:
-        item.append(f"<next_unit>\n{text[after.start:after.end]}\n</next_unit>")
+        item.append(f'<next_unit start="{after.start}">\n'
+                    f"{text[after.start:after.end]}\n</next_unit>")
     return compose(
         shared_prefix(spec, contract_json), "\n\n".join(item),
         issues=issues, previous=previous,
@@ -304,7 +346,8 @@ def boundary_prompt(
     before = units[index - 1] if index > 0 else None
     item = []
     if before is not None:
-        item.append(f"<previous_unit>\n{text[before.start:before.end]}\n</previous_unit>")
+        item.append(f'<previous_unit start="{before.start}">\n'
+                    f"{text[before.start:before.end]}\n</previous_unit>")
     else:
         item.append("<previous_unit>\n(none -- this is the first unit)\n</previous_unit>")
     item.append(f"<unit>\n{text[unit.start:unit.end]}\n</unit>")
@@ -373,7 +416,7 @@ def run_boundary(
 def parse_response(text: str) -> UnitClassification:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
-        if isinstance(obj, dict) and "kind" not in obj:
+        if isinstance(obj, dict) and "unit_kind" not in obj and "text" not in obj:
             # A RESPONSE THAT LOST ITS HEAD, RECOVERED AS A FRAGMENT. Measured
             # on n3-i2c: 6 of 168 responses arrived with their first output-text
             # delta missing, so the text began at `"reasoning": "...` or even
@@ -394,7 +437,7 @@ def parse_response(text: str) -> UnitClassification:
             # as the one in `normalize.parse_response`.
             keys = sorted(obj)[:8]
             raise ValueError(
-                "the response carries no `kind` (the object recovered "
+                "the response carries neither `unit_kind` nor `text` (the "
                 f"from it had keys {keys}), which means its "
                 "opening was lost in transport. Return ONE complete JSON "
                 "object, starting with `{` and with `kind` as a top-level "
@@ -408,24 +451,22 @@ def parse_response(text: str) -> UnitClassification:
 
 
 def gate_unit(
-    out: UnitClassification, *, unit: Unit, spec: str, contract: dict | None
+    out: UnitClassification, *, unit: Unit, spec: str, contract: dict | None,
+    unit_starts: frozenset[int] | None = None,
 ) -> list[Issue]:
-    """G1', for one unit. Pure code.
+    """G1', for one unit. Pure code, and small.
 
-    Deliberately SMALL, and it shrank when the unit became the requirement.
-    Three checks went away because the freedom they policed no longer exists:
-    obligations cannot overlap or leave a gap when there is exactly one and it
-    is the unit; a span cannot fall outside the unit when it IS the unit; and
-    "more than one obligation in a restatement" was a defence against a model
-    claiming a wide span with a crammed sentence, which is not a move it can
-    make now that the divider and the boundary pass own the extent. Keeping that
-    last one would have been actively wrong: a merged block or a sentence that
-    states two things in one breath MUST be restated as both, and the check
-    would have rejected the only correct answer, round after round.
+    It shrank twice. First when the unit became the requirement: tiling and
+    span-containment are vacuous with one obligation that IS the unit, and
+    "two obligations in one restatement" had to go outright -- it defended
+    against a model claiming a wide span with a crammed sentence, and with the
+    extent frozen its only remaining effect would be to reject the correct
+    answer for a merged block. Then again when the requirement stopped being
+    classify's to create or destroy.
 
-    What remains is what code can still know: a parse failure is a failure, a
-    behavioural unit has to say something, a non-behavioural one must not, the
-    restatement has to stand on its own, and a port has to exist.
+    **`unit_kind` is not checked against anything and never blocks.** Whether
+    an obligation can be asserted is not knowable here. It is knowable once
+    something has tried, which is the oracle stage.
     """
     issues: list[Issue] = []
     path = f"unit[{unit.start}:{unit.end}]"
@@ -434,21 +475,14 @@ def gate_unit(
     if out.reasoning.startswith("Parse Error: "):
         return [Issue("error", path, out.reasoning)]
 
-    if out.kind != "behavioural":
-        if restated:
-            issues.append(
-                Issue("error", path,
-                      f"kind is {out.kind!r} but a requirement was stated: "
-                      f"{restated!r}")
-            )
-        return issues
-
     if not restated:
-        return [Issue("error", path, "behavioural unit states no requirement",
-                      "uncovered")]
+        # Every unit is a requirement now, so every unit has to be restated --
+        # including one that states nothing, which is restated as the nothing it
+        # states and is left for the oracle stage to fail to assert.
+        return [Issue("error", path, "the unit was not restated", "uncovered")]
 
-    # The 15-28% failure mode, checked on the restatement -- which the model
-    # authors -- rather than on spec text, which it must not touch.
+    # The 15-28% failure mode, checked on the restatement the model authors
+    # rather than on spec text, which it must not touch.
     m = _BACKREF.match(restated)
     if m:
         issues.append(
@@ -466,6 +500,18 @@ def gate_unit(
                 Issue("error", f"{path}.ports",
                       f"{port!r} is not a port in the contract")
             )
+
+    # A supporting span must be a UNIT, which is what stops this becoming a way
+    # to claim arbitrary text once the partition is frozen.
+    for start in out.supporting_units or []:
+        if unit_starts is not None and start not in unit_starts:
+            issues.append(
+                Issue("error", f"{path}.supporting_units",
+                      f"{start} is not the start of any unit"))
+        elif start == unit.start:
+            issues.append(
+                Issue("error", f"{path}.supporting_units",
+                      "a unit cannot support itself; it is already the core span"))
     return issues
 
 
@@ -507,60 +553,89 @@ def run_unit(
             units=units, issues=issues, previous=previous,
         ),
         parse=parse_response,
-        gate=lambda out: gate_unit(out, unit=unit, spec=spec, contract=contract),
+        gate=lambda out: gate_unit(out, unit=unit, spec=spec, contract=contract,
+                                   unit_starts=frozenset(u.start for u in units)),
         max_repairs=max_repairs,
     )
 
 
-def to_requirements(
-    spec: str, units: list[Unit], results: list[StageResult[UnitClassification]]
-) -> list[dict]:
-    """One behavioural unit, one requirement, spanning exactly that unit.
+def mint_requirements(spec: str, units: list[Unit]) -> list[dict]:
+    """THE FREEZE. One requirement per final unit, core fields only.
 
-    Mechanical by construction. Everything that could once move the line has
-    been moved earlier: `divide` cuts, the boundary pass enlarges by merging
-    with the unit before, and the classifier says what the unit requires. There
-    is nothing here to fold, widen, split or drop.
+    Called after `divide` and the boundary pass and BEFORE any classification,
+    because that is where the obligation is settled: a script cut the text, a
+    reader said which cuts a requirement ran across, and what is left is what
+    the design must do. Nothing downstream may add a requirement, remove one, or
+    move one's core span.
 
-    Four designs reached this shape, and each earlier one lost or blurred
-    something (`docs/evidence/continuations.md`):
+    The core is deliberately thin -- a uid and the span the obligation is. How
+    to activate it, where to observe it, which ports it touches: none of that is
+    the obligation, and none of it is decided here. Classify attaches the
+    reading context; `normalize` attaches activation and observation. Both are
+    marked `supportive` on the requirement so the distinction survives into the
+    artifact.
 
-      * folding a continuation into the previous requirement DELETED its
-        obligations -- 42 of 169 on c1-i2c, silently, because the span survived
-        and `assure` checks spans. Among them the sentence stating the filter's
-        sampling interval as `clk_cnt >> 2`, which is why that cluster had no
-        threshold to quote and scored INVERTED against golden RTL;
-      * widening spans instead kept the text but left two classifications
-        standing, one per half of a thought, with no call having seen the whole;
-      * merging inside the classifier meant every merged block was classified at
-        a granularity the same call had just declared wrong;
-      * a LIST of obligations per unit let the classifier choose granularity
-        again through a smaller door -- one feature-list sentence became nine
-        requirements sharing one span.
-
-    What is left is a partition built by code and a boundary judgement made once,
-    so a requirement's extent is never the model's to invent and never a
-    fragment of a sentence. c1-i2c's REQ-0083 carried 1,369 characters and stated
-    one sentence's worth of them; that shape is now unreachable.
+    **Every unit becomes a requirement, including one that states nothing.**
+    Whether an obligation can be asserted is not knowable before something has
+    tried to assert it, and that is the oracle stage. Deciding it here is how 49
+    of n3-i2c's 168 units produced nothing at all, silently -- the divide arm
+    runs no unattributed-text check that would have caught it.
     """
     text = normalize_spec(spec)
-    reqs: list[dict] = []
-    n = 0
-    for unit, res in zip(units, results):
-        out = res.output
-        if out.kind != "behavioural" or not (out.text or "").strip():
-            continue
-        reqs.append({
-            "uid": mint(PREFIX_REQUIREMENT, n),
+    return [
+        {
+            "uid": mint(PREFIX_REQUIREMENT, i),
             "rev": 1,
-            "text": out.text.strip(),
             "kind": "function",
-            "spec_spans": [{"start": unit.start, "end": unit.end,
-                            "quote": text[unit.start:unit.end]}],
-            "ports": list(out.ports or []),
+            "spec_spans": [{"start": u.start, "end": u.end,
+                            "quote": text[u.start:u.end], "role": "core"}],
+            "text": "",
+            "ports": [],
             "needs": ["testplan", "refmodel"],
-        })
-        n += 1
+            #: Other requirements this one is READ WITH and never checked
+            #: against. Filled by classify; see `attach_classification`.
+            "supports": [],
+            "supportive": list(SUPPORTIVE_FIELDS),
+        }
+        for i, u in enumerate(units)
+    ]
+
+
+def attach_classification(
+    spec: str,
+    units: list[Unit],
+    reqs: list[dict],
+    results: list[StageResult[UnitClassification]],
+) -> list[dict]:
+    """Fill the supportive fields on requirements that already exist.
+
+    Mutates in place and returns the same list, because the identity of each
+    requirement was fixed before this ran and must not depend on what a
+    classification said. A supporting span is APPENDED beside the core one and
+    marked as such; the core is never rewritten.
+    """
+    text = normalize_spec(spec)
+    by_start = {u.start: u for u in units}
+    uid_by_start = {u.start: r["uid"] for u, r in zip(units, reqs)}
+    for req, res in zip(reqs, results):
+        out = res.output
+        req["text"] = (out.text or "").strip()
+        req["ports"] = list(out.ports or [])
+        req["unit_kind"] = out.unit_kind
+        for start in out.supporting_units or []:
+            u = by_start.get(start)
+            if u is None or start == req["spec_spans"][0]["start"]:
+                continue
+            req["spec_spans"].append({
+                "start": u.start, "end": u.end,
+                "quote": text[u.start:u.end], "role": "supporting"})
+            # Every unit is a requirement, so a supporting span is also a
+            # supporting OBLIGATION. Recorded as a link, never as a second thing
+            # to assert: `role="core"` marks the one span this requirement is
+            # checked against, and there is exactly one of those.
+            uid = uid_by_start.get(start)
+            if uid and uid not in req["supports"]:
+                req["supports"].append(uid)
     return reqs
 
 
@@ -658,10 +733,13 @@ def divide_and_classify(
         groups = _chains([d.output.continues_previous for d in decisions])
         units = [_merge(units, g) for g in groups]
 
+    reqs = mint_requirements(spec, units)   # THE FREEZE
+
     results = spread(
         list(enumerate(units)),
         lambda pair: run_unit(
             spec=spec, contract_json=contract_json, unit=pair[1],
             index=pair[0], units=units, port=port, max_repairs=max_repairs),
     )
-    return units, results, to_requirements(spec, units, results)
+    return units, results, attach_classification(spec, units, reqs, results)
+
