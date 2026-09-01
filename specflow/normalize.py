@@ -39,7 +39,8 @@ import logging
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import (BaseModel, Field, computed_field, field_validator,
+                      model_validator)
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
@@ -90,6 +91,71 @@ _WINDOW_WORDS = re.compile(
 
 def _names_a_window(text: str) -> bool:
     return bool(_WINDOW_WORDS.search(text or ""))
+
+
+class Sustain(BaseModel):
+    """How long an opening condition must HOLD, in consecutive sampled rows.
+
+    `until` bans counts on purpose -- "for 12 edges" is a guess at pacing the
+    specification does not state, and Phases 3-6 severed pacing from latency
+    for exactly that reason. That rule is right about PACING and wrong about a
+    count the design's own structure fixes.
+
+    MEASURED, and it cost the filter. REQ-0046 is "majority voting over the
+    THREE-SAMPLE histories must produce sSCL and sSDA so that short glitches are
+    suppressed". Its `observed_via` correctly prescribed the discriminating
+    experiment -- "apply a pulse SHORTER than the majority-filter window (fewer
+    than 2 of 3 samples) AND COMPARE WITH a sustained change occupying at least
+    2 of 3" -- and no field could carry it. The activation came back
+    `opens_on: [{scl_i: change}, {sda_i: change}]`, which is "any edge", and the
+    authored check faithfully implemented that: "no output may change on any
+    input edge". It convicts every design including golden, was correctly judged
+    ORACLE_INVALID, and was dropped -- leaving nothing to notice when a debug run
+    later deleted the filter outright and scored ABOVE golden for it.
+
+    "Fewer than 2 of 3 samples" is not a pacing guess. It is the filter's own
+    arity, stated by the requirement. A count that comes from the specification
+    is expressible here; one invented to describe latency still is not, and
+    `until` remains the place for conditions.
+
+    `temporal.pulse(w, port, active=, width=)` already evaluates exactly this --
+    "port must go active for exactly `width` consecutive rows, once" -- so the
+    capability existed where the oracle RUNS and was missing where it is
+    SPECIFIED.
+    """
+
+    #: The port whose run-length is bounded.
+    port: str = ""
+    #: The value it must hold for that run. A symbol where the port has an
+    #: encoding, resolved by `specflow.encoding` like everywhere else.
+    value: int | str = 0
+    #: Inclusive bounds on the run, in CONSECUTIVE SAMPLED ROWS. `at_most=1` is
+    #: a glitch narrower than a 3-sample majority; `at_least=2` is one wide
+    #: enough to survive it. Either may be omitted; both omitted is not a
+    #: constraint and is rejected rather than silently ignored.
+    at_least: int | None = None
+    at_most: int | None = None
+    #: Why this count is the specification's rather than the author's, quoting
+    #: the span it came from. Required, because the whole reason `until` refuses
+    #: counts is that an unattributed one is a guess.
+    stated_by: str = ""
+
+    @model_validator(mode="after")
+    def _one_bound_at_least(self):
+        """A `field_validator` on `at_most` does NOT run when the field is left
+        at its default, which is precisely the unbounded case it exists to
+        reject -- so written that way the guard was inert. Caught by testing the
+        rejection rather than the acceptance."""
+        if self.at_least is None and self.at_most is None:
+            raise ValueError(
+                "a Sustain with neither at_least nor at_most constrains "
+                "nothing; give a bound or drop the entry")
+        if (self.at_least is not None and self.at_most is not None
+                and self.at_least > self.at_most):
+            raise ValueError(
+                f"at_least={self.at_least} exceeds at_most={self.at_most}, so "
+                f"no run length satisfies this entry")
+        return self
 
 
 class Activation(BaseModel):
@@ -164,6 +230,16 @@ class Activation(BaseModel):
     #: shape as the stimulus schema's own `until`, and it feeds
     #: `temporal.after(trace, applies, until=closes)` directly.
     until: list[dict[str, int | str]] = Field(default_factory=list)
+    #: RUN-LENGTH BOUNDS on the opening condition -- the one count `until`
+    #: refuses and a requirement can legitimately state. See `Sustain`: the
+    #: filter requirement REQ-0046 needs "fewer than 2 of 3 samples", which is
+    #: the filter's arity and not a pacing guess, and without this field the
+    #: activation could only say "any edge".
+    #:
+    #: ALTERNATIVES, like `opens_on`: any entry satisfied opens the window, so a
+    #: requirement discriminating short from sustained gives both and the check
+    #: compares them. Empty is the norm; most activations are about an instant.
+    sustains: list[Sustain] = Field(default_factory=list)
     #: SVA's `disable iff`: conditions that DISCARD the attempt rather than
     #: close it. Same shape as `until` and a different claim.
     #:
@@ -347,6 +423,53 @@ class NormalizedRequirement(BaseModel):
     #: Prerequisites, ALL required, one hop each. Empty when the activation is
     #: `input_only` -- there is nothing to reach, the values are simply driven.
     activated_via: list[Reach] = Field(default_factory=list)
+
+    @field_validator("observed_via", "activated_via", mode="before")
+    @classmethod
+    def _accept_the_shapes_the_model_actually_returns(cls, v):
+        """Coerce a losslessly-equivalent shape instead of losing the record.
+
+        THIS DISCARDED FIVE REQUIREMENTS' NORMALIZATION ENTIRELY. Pydantic
+        rejects the whole `NormalizeOutput` on one field's shape, and the stage
+        recorded a Parse Error and moved on -- so REQ-0010, REQ-0017, REQ-0048,
+        REQ-0078 and REQ-0100 reached the oracle author with NO activation and NO
+        observation route, and a check was written for each of them anyway.
+        REQ-0010's is the naive "no output may change on any input edge", which
+        is what authoring with no normalized form looks like; it went on to
+        INVERT, passing a design that deleted the input filter while convicting
+        the golden one.
+
+        The returned content was complete every time. Only its shape differed:
+
+            {"busy": {through_req: ...}, "al": {...}}   dict KEYED BY PORT
+            {"port": "cmd_ack", "through_req": ...}     a single route, unwrapped
+
+        Both carry strictly more than enough to build the list, so refusing them
+        loses information the model successfully produced. A keyed dict supplies
+        `port` from its key; a bare dict is a list of one.
+
+        Deliberately NOT permissive about content -- an entry that is neither a
+        mapping nor a `Route` still fails, and `_check_routes` still demands
+        `shows` name both cases. This widens the accepted SHAPE, not the standard.
+        """
+        if isinstance(v, dict):
+            # Keyed by port: {"busy": {...}} -> [{"port": "busy", ...}]
+            if v and all(isinstance(x, dict) for x in v.values()):
+                return [{"port": k, **x} for k, x in v.items()]
+            # A single route returned unwrapped.
+            return [v]
+        return v
+
+    @field_validator("observable", mode="before")
+    @classmethod
+    def _observable_may_arrive_as_routes(cls, v):
+        """`observable` is a list of PORT NAMES, and REQ-0048's came back as a
+        list of route objects -- `{"port": "busy", "through_req": ...}`. The port
+        is right there under its own key; taking it costs nothing and keeps the
+        requirement, where refusing cost REQ-0048 its entire normalization."""
+        if isinstance(v, list):
+            return [x.get("port", "") if isinstance(x, dict) else x for x in v]
+        return v
 
     @property
     def unobservable(self) -> bool:

@@ -970,6 +970,42 @@ def run_oracle_stage(
     #: nothing has been attempted yet, and nothing may be discarded on that
     #: basis. Step 2 of the plan fills it from the stimulus loop.
     abandoned: dict[str, str] = {}
+
+    # NO NORMALIZED FORM, NO ORACLE.
+    #
+    # Normalization already refuses to ship a requirement whose form failed its
+    # own gate: `gate_one` raises an Issue on a Parse Error, `run_stage` spends
+    # the whole repair budget on it, and the merge loop drops it under "A
+    # REQUIREMENT WHOSE NORMALIZED FORM NEVER PASSED ITS OWN GATE DOES NOT
+    # SHIP." That is right, and it fired.
+    #
+    # THIS STAGE THEN AUTHORED A CHECK ANYWAY. It iterates `requirements` and
+    # reads the shape as `(normalized or {}).get(uid) or {}`, so a requirement
+    # with NO record is silently an empty activation and nothing says so. It is
+    # the mirror of the bug normalization already closed: stopping "a REJECTED
+    # form ships" left "NO form ships" open.
+    #
+    # MEASURED on c1-i2c: five requirements -- REQ-0010, REQ-0017, REQ-0048,
+    # REQ-0078, REQ-0100 -- reached the author with no activation and no
+    # observation route, and every one got a check. REQ-0010's is the naive "no
+    # output may change on any input edge", which is what authoring from the
+    # text alone looks like; it later INVERTED, passing a design that had
+    # deleted its input filter and convicting the golden one.
+    #
+    # They leave as MALFORMED rather than quietly absent, because the
+    # denominator has to show them: a requirement nobody could write a check
+    # for is a finding, and dropping it silently is how coverage comes to look
+    # better than it is.
+    if normalized is not None:
+        for _uid in sorted(by_uid):
+            if _uid and _uid not in normalized:
+                rejected[_uid] = abandoned[_uid] = (
+                    "malformed: normalization produced no form for this "
+                    "requirement -- it failed its own gate and exhausted its "
+                    "repair budget -- so there is no activation, no observable "
+                    "and no observation route to write a check from. The one "
+                    "measured case convicted the known-good design while "
+                    "passing a candidate that had deleted the behaviour")
     #: What the stimulus loop staged, per requirement. Declared here because the
     #: loop that fills it now runs inside the verify rounds.
     staging: dict[str, dict] = {}

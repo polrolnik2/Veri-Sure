@@ -2120,3 +2120,181 @@ def test_restore_best_is_what_makes_keeping_regressions_safe(tmp_path):
     assert s.restore_best() is True
     assert s.read_rtl() == good, "the session must end at its best point"
     assert s.restore_best() is False, "already there: nothing to do"
+
+
+def test_add_stimulus_adds_ONE_testpoint_not_the_whole_stimulus_file(tmp_path):
+    """`stimulus.json` and `testplan.json` are the FULL artifacts; a run may be
+    built over a SUBSET of them. Re-rendering from the full set means adding one
+    testpoint silently restores every testpoint the run excluded.
+
+    MEASURED on run 10: three add_stimulus calls took the suite from 224
+    testpoints to 334 -- the 331 in the stimulus file plus the 3 added. Its pass
+    and coverage counts were therefore taken on a LARGER suite than its own
+    baseline, than run 8, and than the golden reference, so no comparison across
+    that boundary means anything. That invalidated a published comparison before
+    it was caught.
+    """
+    import json as _json
+
+    from eda_agent.specflow_node import SpecflowStimulusStager
+
+    run = tmp_path / "run"
+    (run / "specflow").mkdir(parents=True)
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    # The suite holds TWO testpoints; the artifacts on disk describe FIVE.
+    (suite / "manifest.json").write_text(_json.dumps(
+        {"testpoints": ["TP-0001", "TP-0002"], "modules": []}))
+    full = [f"TP-{i:04d}" for i in range(1, 6)]
+    (run / "specflow/testplan.json").write_text(_json.dumps(
+        {"elements": [{"uid": u, "tp_uid": u, "covers": []} for u in full]}))
+    (run / "specflow/stimulus.json").write_text(_json.dumps(
+        {"testpoints": [{"tp_uid": u, "stimulus_steps": [{"drive": {"ena": 1}}]}
+                        for u in full]}))
+    (run / "specflow/requirements.json").write_text(_json.dumps(
+        {"requirements": [{"uid": "REQ-0001", "text": "t"}]}))
+    (run / "specflow/coverage_model.json").write_text(_json.dumps({"checks": []}))
+
+    rendered = {}
+
+    def _fake_render(**kw):
+        rendered["n"] = len(kw["stimulus_by_tp"])
+        rendered["uids"] = sorted(kw["stimulus_by_tp"])
+
+    stager = SpecflowStimulusStager(
+        run_dir=run, contract={"io": []}, bins=[], suite_dir=suite,
+        model_port=object())
+    stager.uncovered = {"REQ-0001"}
+    stager._checks = []
+
+    import eda_agent.specflow_node as sn
+    import specflow.tb.render as render_mod
+    import specflow.testcase_agent as tca
+    orig_render, orig_stim = render_mod.render_suite, tca.stimulus_for_scenario
+    render_mod.render_suite = _fake_render
+    tca.stimulus_for_scenario = lambda **kw: [{"drive": {"ena": 1, "cmd": 4}}]
+    try:
+        out = stager.add_stimulus("REQ-0001", "drive a WRITE")
+    finally:
+        render_mod.render_suite, tca.stimulus_for_scenario = orig_render, orig_stim
+    assert sn is not None
+
+    assert "added" in out, out
+    assert rendered["n"] == 3, (
+        f"the suite had 2 testpoints and one was added, so the render must see "
+        f"3 -- not {rendered['n']}, which would restore the excluded ones")
+    assert rendered["uids"][:2] == ["TP-0001", "TP-0002"]
+
+
+def test_normalization_accepts_the_shapes_that_lost_five_requirements():
+    """PYDANTIC REJECTED THE WHOLE RECORD OVER ONE FIELD'S SHAPE.
+
+    Five requirements -- REQ-0010, REQ-0017, REQ-0048, REQ-0078, REQ-0100 --
+    reached the oracle author with NO activation and NO observation route,
+    because the model returned `observed_via` or `observable` in a
+    losslessly-equivalent but differently-shaped form and the stage recorded a
+    Parse Error and moved on. A check was then written for each anyway.
+    REQ-0010's is the naive "no output may change on any input edge", which went
+    on to INVERT: it passes a design that deleted the input filter and convicts
+    the golden one.
+    """
+    from specflow.normalize import NormalizedRequirement
+
+    # REQ-0010 / REQ-0017: observed_via keyed BY PORT instead of a list.
+    n = NormalizedRequirement.model_validate({
+        "req_uid": "REQ-0010", "observable": ["busy"],
+        "observed_via": {"busy": {"through_req": "REQ-0047", "when": "w",
+                                  "shows": "holds: low; violated: high"}}})
+    assert [r.port for r in n.observed_via] == ["busy"]
+    assert n.observed_via[0].through_req == "REQ-0047"
+
+    # REQ-0078 / REQ-0100: a single route returned unwrapped.
+    n = NormalizedRequirement.model_validate({
+        "req_uid": "REQ-0078", "observable": ["cmd_ack"],
+        "observed_via": {"port": "cmd_ack", "through_req": "",
+                         "shows": "holds: pulses; violated: silent"}})
+    assert [r.port for r in n.observed_via] == ["cmd_ack"]
+
+    # REQ-0048: `observable` given as route objects rather than port names.
+    n = NormalizedRequirement.model_validate({
+        "req_uid": "REQ-0048",
+        "observable": [{"port": "busy", "through_req": "REQ-0049"}]})
+    assert n.observable == ["busy"]
+
+
+def test_an_activation_can_state_a_repetition_the_spec_gives():
+    """THE FILTER REQUIREMENT NEEDED A COUNT AND NO FIELD COULD CARRY ONE.
+
+    REQ-0046 is "majority voting over the THREE-SAMPLE histories ... so that
+    short glitches are suppressed", and its `observed_via` correctly prescribed
+    comparing a pulse on fewer than 2 of 3 samples against one on at least 2.
+    `inputs`, `opens_on` and `until` are all per-row predicates and `until`
+    documents "A CONDITION, NEVER A COUNT", so the activation came back
+    `opens_on: [{scl_i: change}]` -- any edge -- and the authored check
+    faithfully implemented that, convicting every design including golden.
+
+    The ban is right about PACING and wrong about an arity the requirement
+    states. `temporal.pulse(width=)` already evaluates run lengths, so the
+    capability existed where the oracle RUNS and not where it is SPECIFIED.
+    """
+    from specflow.normalize import Activation, Sustain
+
+    a = Activation(
+        text="a short glitch on sda_i during normal operation",
+        inputs={"nReset": 1, "rst": 0, "ena": 1},
+        opens_on=[{"sda_i": "change"}],
+        sustains=[
+            Sustain(port="sda_i", value=0, at_most=1,
+                    stated_by="majority function over the three-sample histories"),
+            Sustain(port="sda_i", value=0, at_least=2,
+                    stated_by="majority function over the three-sample histories"),
+        ])
+    assert [(s.at_least, s.at_most) for s in a.sustains] == [(None, 1), (2, None)]
+    assert all(s.stated_by for s in a.sustains), (
+        "an unattributed count is exactly the pacing guess `until` refuses")
+
+    # It survives the JSON round trip every stage downstream reads through.
+    import json as _json
+    back = Activation.model_validate(_json.loads(a.model_dump_json()))
+    assert [(s.port, s.at_most) for s in back.sustains][0] == ("sda_i", 1)
+
+    # An entry constraining nothing is refused rather than silently ignored --
+    # and this must be checked by REJECTION, because a field_validator on
+    # `at_most` never runs when the field is left at its default.
+    with pytest.raises(Exception):
+        Sustain(port="sda_i", value=0)
+    with pytest.raises(Exception):
+        Sustain(port="sda_i", value=0, at_least=3, at_most=1)
+
+
+def test_no_normalized_form_means_no_oracle():
+    """NORMALIZATION'S GATE WORKED; THE ORACLE STAGE IGNORED THE RESULT.
+
+    `gate_one` raises an Issue on a Parse Error, `run_stage` spends the whole
+    repair budget, and the merge loop drops the requirement under "A REQUIREMENT
+    WHOSE NORMALIZED FORM NEVER PASSED ITS OWN GATE DOES NOT SHIP". All correct.
+    But the oracle stage iterates `requirements` and reads the shape as
+    `(normalized or {}).get(uid) or {}`, so a requirement with NO record was
+    silently an empty activation and got a check anyway -- the mirror of the bug
+    normalization had closed: stopping "a REJECTED form ships" left "NO form
+    ships" open.
+
+    Five did on c1-i2c. REQ-0010's resulting check later INVERTED, passing a
+    design that had deleted its input filter and convicting the golden one.
+    """
+    import inspect
+
+    import specflow.oracles_stage as os_
+
+    src = inspect.getsource(os_)
+    assert "NO NORMALIZED FORM, NO ORACLE" in src, "the gate must exist"
+    # It must reject INTO the same channels the rest of the stage reads, or the
+    # requirement would be dropped without appearing in the denominator.
+    seg = src[src.index("NO NORMALIZED FORM, NO ORACLE"):]
+    seg = seg[:seg.index("\n\n", seg.index("if normalized is not None"))]
+    assert "rejected[_uid] = abandoned[_uid]" in seg, (
+        "a requirement nobody could write a check for is a FINDING; dropping it "
+        "silently is how coverage comes to look better than it is")
+    assert "malformed:" in seg
+    # And it must not fire when normalization was simply not run at all.
+    assert "if normalized is not None" in seg
