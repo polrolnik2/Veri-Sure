@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -45,21 +44,38 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-dir", default="/home/user/runs/n1-i2c")
     ap.add_argument("--limit", type=int, default=0, help="0 = every requirement")
+    ap.add_argument("--reqs", default="",
+                    help="requirements.json; default is the run dir's own")
     ap.add_argument("--max-repairs", type=int, default=3,
                     help="3 gives r0..r3, the four rounds c1-i2c recorded")
     ap.add_argument("--model", default="gpt-5-mini")
     ap.add_argument("--effort", default="medium")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--fresh", action="store_true",
+                    help="delete THIS stage's artifact first; never the run dir")
     ap.add_argument("--no-indirect", action="store_true",
                     help="skip the second pass; the gate question is in the first")
     a = ap.parse_args()
 
     run_dir = Path(a.run_dir)
-    if run_dir.exists() and not a.resume:
-        shutil.rmtree(run_dir)
+    # NEVER rmtree the run directory. It used to, on any run without --resume,
+    # which was survivable while a run dir held nothing but normalization --
+    # and destroyed 344 recorded S1 calls the first time one held S1's output
+    # too. A stage may only ever delete its OWN artifact.
+    if a.fresh:
+        for name in ("normalized.json",):
+            (run_dir / "specflow" / name).unlink(missing_ok=True)
     (run_dir / "specflow").mkdir(parents=True, exist_ok=True)
 
-    reqs = json.loads((SRC / "specflow/requirements.json").read_text())["requirements"]
+    # The run's OWN requirements by default. It used to read c1-i2c's
+    # unconditionally, which was right while normalization was the only thing
+    # being re-run and is wrong now that S1 produces a different set.
+    reqs_path = Path(a.reqs) if a.reqs else (
+        Path(a.run_dir) / "specflow" / "requirements.json")
+    if not reqs_path.is_file():
+        reqs_path = SRC / "specflow" / "requirements.json"
+    print(f"requirements from {reqs_path}", flush=True)
+    reqs = json.loads(reqs_path.read_text())["requirements"]
     if a.limit:
         keep = {u for u in LOST}
         reqs = [r for r in reqs if r.get("uid") in keep][:a.limit] or reqs[:a.limit]
