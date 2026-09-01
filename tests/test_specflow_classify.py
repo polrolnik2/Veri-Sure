@@ -261,12 +261,14 @@ def test_a_requirements_span_is_the_whole_unit_not_the_obligation():
         assert span["quote"] == unit.text(spec)
 
 
-def test_a_continuation_moves_the_quote_with_the_end_offset():
-    """`assure` locates a span by its QUOTE and never reads `end`.
+def test_a_continuation_keeps_its_requirement_and_widens_the_span():
+    """The fold used to DELETE the continuation's obligations.
 
-    Extending one without the other left the continuation unit's text
-    unattributed at G1, which is a hard error there -- silently, because the
-    offsets still looked right.
+    Measured on c1-i2c, that discarded 42 of the 169 obligations the classifier
+    authored -- 25% -- including the one sentence that stated the filter's
+    sampling interval as `clk_cnt >> 2`, which is why the filter cluster had no
+    threshold to quote. The span survived, so `assure` saw nothing missing and
+    the loss was silent. See docs/evidence/continuations.md.
     """
     spec = "The FSM accepts:\n\n  - a START condition\n"
     units = divide(spec)
@@ -282,28 +284,42 @@ def test_a_continuation_moves_the_quote_with_the_end_offset():
     ]
     from specflow.s1_requirements import normalize_spec
     text = normalize_spec(spec)
-    span = to_requirements(spec, units, results)[0]["spec_spans"][0]
-    assert span["quote"] == text[span["start"]:span["end"]]
-    assert "START condition" in span["quote"]
+    reqs = to_requirements(spec, units, results)
+
+    assert [r["text"] for r in reqs] == [
+        "The FSM accepts commands.", "The FSM accepts a START."]
+    stem, item = (r["spec_spans"][0] for r in reqs)
+    # The stem is untouched; the item reaches back to it.
+    assert (stem["start"], stem["end"]) == (units[0].start, units[0].end)
+    assert (item["start"], item["end"]) == (units[0].start, units[1].end)
+    for sp in (stem, item):
+        assert sp["quote"] == text[sp["start"]:sp["end"]]
 
 
-def test_continues_previous_extends_the_earlier_requirement():
-    """A list stem and its items are one requirement group, not an orphan."""
-    spec = "The FSM accepts:\n\n  - a START condition\n"
+def test_a_chain_of_continuations_anchors_on_the_unit_that_stands_alone():
+    """Three in a row all reach back to the stem, not each to the one before.
+
+    Anchoring one unit back would leave the third continuation's span starting
+    inside the chain, where its subject is not named -- which is the fragment
+    problem the widening exists to prevent.
+    """
+    spec = "The FSM accepts:\n\n  - START\n  - STOP\n  - a WRITE of one bit\n"
     units = divide(spec)
+    assert len(units) == 4
     results = [
         type("R", (), {"output": UnitClassification(
-            kind="behavioural",
-            obligations=[Obligation(start=0, end=units[0].length,
-                                    text="The FSM accepts commands.", ports=[])])})(),
-        type("R", (), {"output": UnitClassification(
+            kind="scaffolding")})(),          # the stem states nothing itself
+        *(type("R", (), {"output": UnitClassification(
             kind="behavioural", continues_previous=True,
-            obligations=[Obligation(start=0, end=units[1].length,
-                                    text="The FSM accepts a START condition.", ports=[])])})(),
+            obligations=[Obligation(start=0, end=u.length,
+                                    text=f"The FSM accepts {i}.", ports=[])])})()
+          for i, u in enumerate(units[1:])),
     ]
     reqs = to_requirements(spec, units, results)
-    assert len(reqs) == 1, "the continuation became a standalone requirement"
-    assert reqs[0]["spec_spans"][0]["end"] == units[1].end
+    assert len(reqs) == 3
+    for r, u in zip(reqs, units[1:]):
+        span = r["spec_spans"][0]
+        assert (span["start"], span["end"]) == (units[0].start, u.end)
 
 
 def test_scaffolding_units_produce_no_requirements():

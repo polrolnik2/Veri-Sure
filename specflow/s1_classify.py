@@ -434,31 +434,45 @@ def to_requirements(
     two requirements resting on one sentence. A distinct-span ban was tried and
     reverted for exactly this case.
 
-    `continues_previous` chains a unit onto the one before it, so a list stem and
-    its items become one requirement group rather than an orphaned fragment. The
-    chain only ever reaches *adjacent* units: that restriction is what keeps a
-    span from covering the whole document.
+    `continues_previous` WIDENS a requirement's span backwards to the unit that
+    opens the chain; it never removes the requirement. That is a correction, and
+    the measurement is in `docs/evidence/continuations.md`: the fold used to
+    extend the PREVIOUS requirement's span and drop the continuation's
+    obligations, and on c1-i2c that discarded **42 of the 169 obligations the
+    classifier authored -- 25%**. Because the span survived, `assure`'s
+    unattributed-spec-text check saw nothing missing, so the loss was silent.
+
+    Among the discarded: "the filter counter `filter_cnt` derives its sampling
+    interval from the prescale value `clk_cnt` shifted right by two bits". No
+    surviving requirement stated that number, which is why the whole filter
+    cluster had no threshold to quote and scored INVERTED against golden RTL.
+    Also gone were `busy` set on START and cleared on STOP, the FSM's return to
+    idle on arbitration loss, and the release of both output enables with it.
+
+    Dropping was never the intent -- including the referent was. An obligation
+    is a SELF-CONTAINED restatement, which `_BACKREF` in `gate_unit` enforces, so
+    it is a requirement whatever unit it sits in; what it needs from the chain is
+    provenance, and a wider span gives it that. The anchor is the last unit that
+    did NOT continue, so a run of three continuations all reach back to the unit
+    that can actually be read as their subject, and the chain still cannot span
+    the document: it closes at the first unit that stands alone.
     """
     text = normalize_spec(spec)
     reqs: list[dict] = []
     n = 0
+    #: Start of the last unit that stood on its own. Advanced for EVERY unit
+    #: that does not continue, whatever its kind, because a list stem is
+    #: routinely `scaffolding` and is exactly the referent its items need.
+    anchor = units[0].start if units else 0
     for i, (unit, res) in enumerate(zip(units, results)):
         out = res.output
+        chained = bool(out.continues_previous) and i > 0
+        if not chained:
+            anchor = unit.start
         if out.kind != "behavioural":
             continue
         for ob in out.obligations:
-            start, end = unit.start, unit.end
-            if out.continues_previous and reqs and i > 0 and units[i - 1].end <= start:
-                # Extend the previous requirement's span forwards to include the
-                # unit that depends on it, rather than leaving a fragment that
-                # reads as a standalone claim it is not. The quote moves with the
-                # end offset: `assure` locates a span by its quote and never
-                # reads `end`, so extending one without the other would leave
-                # this unit's text unattributed at G1.
-                prev = reqs[-1]["spec_spans"][-1]
-                prev["end"] = end
-                prev["quote"] = text[prev["start"]:end]
-                continue
+            start, end = (anchor if chained else unit.start), unit.end
             reqs.append({
                 "uid": mint(PREFIX_REQUIREMENT, n),
                 "rev": 1,
