@@ -156,3 +156,40 @@ def test_prefix_seeding_is_off_and_inert_by_default():
     on = ApiPort(root=Path("/tmp"), settings=PortSettings(prefix_seed=True))
     assert on._seed_id(None, None, stage="refmodel",
                        prompt="no sentinel here") is None
+
+
+def test_split_shared_prefix_finds_the_sentinel_boundary():
+    """The one splitter shared by `_responses_body`'s `developer_role_prefix`
+    (the fix) and `_seed_id` (the dead attempt that predates it) -- see
+    `docs/evidence/luna-cache.md` for the measurement this exists for."""
+    from specflow.fanout import PREFIX_SENTINEL
+    from specflow.model_io import _split_shared_prefix
+
+    prompt = f"shared stuff{PREFIX_SENTINEL}\n\nitem text"
+    assert _split_shared_prefix(prompt) == (
+        f"shared stuff{PREFIX_SENTINEL}", "item text")
+    assert _split_shared_prefix("no sentinel here") is None
+
+
+def test_complete_responses_reads_the_conversation_from_body_not_from_prompt():
+    """Regression: `conversation` used to be rebuilt independently from
+    `prompt` -- always one flat `{"role": "user", ...}` item regardless of
+    what `_responses_body` had just decided -- which is exactly the shape
+    `developer_role_prefix` needs NOT to be silently overwritten back to.
+    Pinned by source shape because exercising `_complete_responses` end to
+    end needs a live network call.
+    """
+    import inspect
+
+    from specflow.model_io import ApiPort
+
+    src = inspect.getsource(ApiPort._complete_responses)
+    assert 'body["input"]' in src, (
+        "conversation must be read off body[\"input\"], the one place that "
+        "decides the shape"
+    )
+    assert '[{"role": "user", "content": prompt}]' not in src, (
+        "conversation must not be rebuilt independently from `prompt` -- "
+        "that is the duplication that let developer_role_prefix be silently "
+        "overwritten"
+    )

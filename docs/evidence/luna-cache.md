@@ -1,7 +1,89 @@
-# Luna caches on exact input, not on a prefix — measured, not inferred
+# RETRACTED IN PART: Luna caches a prefix fine — it needs a `developer`-role item, not a flat string
 
-The claim was carried as a finding with no experiment attached. It is correct,
-and here is the experiment.
+Everything below through "So how DO you run Luna on this pipeline?" measured
+real, correct numbers under a request shape nobody had varied: `input` sent as
+one flat `user` string (or one flat `user` item in a list — tried too, see
+below). Every conclusion drawn from that shape is retracted as a description
+of Luna's cache; it stands only as a description of *that shape's* cache
+behaviour, which turned out not to be the one that matters.
+
+**The missed variable.** `eda_agent`'s ReAct agents never showed this problem
+because they never sent that shape: `to_responses_input` maps the agent's
+`system` role to Responses' `developer` role on every turn, so their shared,
+stable content (system prompt + tool schema) has always gone out as its own
+`developer`-role item, separate from the `user` turn. `specflow`'s stages
+build one string (`shared_block(...) + item_text`) and send it whole. Nobody
+had isolated "structured `input`" from "`developer`-role item" as two
+different things until asked to check specifically whether what already works
+for eda_agent's multi-turn agents would work here.
+
+**The clean isolation**, live, nonce prefix never seen before, matched
+cache-key family, `gpt-5.6-luna` only, one variable changed at a time:
+
+| shape | cached |
+|---|---|
+| flat `user` string (what `specflow` sends today) | 0% |
+| structured list, one `user` item (prefix+suffix combined) | 0% |
+| + streamed + `include: reasoning.encrypted_content`, still one `user` item | 0% |
+| `developer` item (prefix) + `user` item (suffix), nothing else changed | **99.6%** |
+
+Streaming and `include` are not the fix -- they read 0% on their own, same as
+the flat string. The `developer`/`user` role split, alone, with NONE of
+eda_agent's other machinery, is what reads 99.6%, on the same nonce
+discipline that read a clean 0% every time before this. Full sequence,
+`effort=low`, no tools, `prompt_cache_key` matched to one family per
+condition:
+
+    -- split_roles ONLY (no stream, no include) --
+    call 0: input=6080 cached=0     (0.0%)
+    call 1: input=6080 cached=6057  (99.6%)
+    call 2: input=6080 cached=6057  (99.6%)
+
+    -- stream+include ONLY (single user item) --
+    call 0: input=6075 cached=0  (0.0%)
+    call 1: input=6075 cached=0  (0.0%)
+    call 2: input=6075 cached=0  (0.0%)
+
+Confirmed once more end to end through the real `eda_agent` transport
+(`SafeReActAgent` + `OpenAIResponsesModel`, WITH a live tool schema, WITH
+streaming) before the isolation above traced it down to the role split alone:
+0% cold, then 99.7% / 99.7% on a fresh nonce system prompt.
+
+**What retracts, what survives:**
+
+* RETRACTED: "Luna does not cache a shared prefix on this gateway... nothing
+  left to test client-side" (this doc's own prior conclusion, one commit
+  before this one). It caches at parity with gpt-5-mini once the shared part
+  is a `developer` item.
+* RETRACTED as a general claim, survives as a shape-specific measurement: "Luna
+  caches on exact input, not on a prefix" (this doc's title until this
+  section). True of a flat `user` string; false of a `developer`+`user` split.
+  The exact-input numbers (row B, byte-identical, 100%) are unaffected --
+  those were never about prefix vs. developer-role, just about repeats.
+* SURVIVES UNCHANGED: the seeding retraction (`previous_response_id` does not
+  populate the cache at any delay) and the routing-key conflict finding
+  (`prompt_cache_key` alongside `previous_response_id` costs the hit). Neither
+  experiment touched the role of the shared content, so neither is affected
+  by this correction.
+* REOPENED, NOT ANSWERED: "So how DO you run Luna on this pipeline?" below
+  recommends scoping Luna to the 13 repair calls specifically *because*
+  caching a 225-call fan-out looked impossible. That premise no longer holds.
+  Whether Luna belongs back on the full fan-out is a run-scale question this
+  doc does not answer -- the numbers above are a ~6k-token nonce prefix with
+  filler content and 3 calls, not a 225-call run against real oracle prompts
+  under real fan-out concurrency. Re-measure at run scale before reversing
+  that recommendation.
+
+**The fix, shipped**: `PortSettings.developer_role_prefix` (`specflow/model_io.py`),
+off by default pending the run-scale re-measurement above. When on, a prompt
+built with `fanout.shared_block`'s sentinel is split at that boundary into a
+`developer` item and a `user` item instead of sent as one flat string; a
+prompt with no sentinel (a whole-artifact stage) is untouched. `_seed_id`'s
+dead-but-kept splitting logic now shares the same splitter
+(`_split_shared_prefix`) so the two ways of finding the boundary cannot drift
+apart.
+
+---
 
 ## The discriminating probe
 
@@ -168,13 +250,18 @@ it. That is exactly the failure mode `_responses_body`'s own comment predicts
 this one has none of. Clearing `OPENAI_EXTRA_BODY` for the run above is what
 made mini answer at all.
 
-**Conclusion stands, now confirmed on the actual hardened transport rather
-than an unreproducible probe.** gpt-5.6-luna does not cache a shared prefix on
-this gateway, under `/v1/responses`, streamed, chunked, at low effort, with a
-verified-working harness. Nothing left to test client-side changes the
-request shape further than this without changing what is actually sent in
-production. The remaining lever is not code: ask whoever operates the SDC LLM
-Gateway whether prefix caching is implemented for the luna deployment at all.
+**What this run actually established, kept after the correction at the top of
+this document:** the 0% is not an artifact of an unreproducible probe or a
+broken harness -- mini's 98.3% positive control, in the same run, on the same
+transport, proves the measurement apparatus is sound. What it does NOT
+establish, and what the paragraph that used to stand here claimed, is that
+"nothing left to test client-side" and that luna cannot cache a shared prefix
+at all. It cannot cache *this shape* of shared prefix -- one flat `user`
+item, whether a bare string or a single-item list, streamed and chunked or
+not. See the retraction at the top of this document for the shape that
+reads 99.6%. The `OPENAI_EXTRA_BODY`/`xhigh` finding above is unaffected by
+the correction and stands as a genuine operational trap for any container
+launched without `.env.local`.
 
 ## So how DO you run Luna on this pipeline?
 

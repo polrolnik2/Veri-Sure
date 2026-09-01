@@ -45,6 +45,21 @@ _PREFIX_SENTINEL = "\n</shared_context>\n"
 logger = logging.getLogger(__name__)
 
 
+def _split_shared_prefix(prompt: str) -> tuple[str, str] | None:
+    """(developer content, user content), or `None` if `prompt` has no
+    shared-prefix boundary to split at.
+
+    One splitter, used by both the working `developer_role_prefix` path in
+    `_responses_body` and `_seed_id`'s dead-but-kept seeding path, so the two
+    ways of finding the boundary cannot drift apart the way `_MIDSTREAM_DROP`
+    and `_PREFIX_SENTINEL` are already guarded against drifting.
+    """
+    if _PREFIX_SENTINEL not in prompt:
+        return None
+    shared, _, rest = prompt.partition(_PREFIX_SENTINEL)
+    return shared + _PREFIX_SENTINEL, rest.lstrip("\n")
+
+
 class PendingResponse(Exception):
     """Raised by `FilePort` when the prompt has been emitted but no response
     exists yet. The CLI turns this into a clean exit, not a traceback: it is the
@@ -463,6 +478,38 @@ class PortSettings:
     #: real and would otherwise have to be rediscovered.
     prefix_seed: bool = False
 
+    #: Send the shared prefix as its own `developer`-role input item instead
+    #: of folding it into one flat `user` string. THIS IS THE FIX
+    #: `prefix_seed` WAS LOOKING FOR, found by testing the one axis every
+    #: probe above held constant: the SHAPE of `input`, not what routing hint
+    #: rides alongside it.
+    #:
+    #: MEASURED (`docs/evidence/luna-cache.md`), a nonce prefix never seen
+    #: before, same cache-key family, no seeding, no streaming, no
+    #: `include`, NO TOOLS:
+    #:
+    #:     single flat `user` item (the shape above sends today)  ->  0%
+    #:     `developer` item (prefix) + `user` item (suffix)       ->  99.6%
+    #:
+    #: Isolated one variable at a time against luna, in this order: a
+    #: structured `input` list with everything in one `user` item still read
+    #: 0% -- structure alone is not it. Streaming plus
+    #: `include: reasoning.encrypted_content` with everything still in one
+    #: `user` item ALSO read 0% -- the eda_agent transport's OTHER hardening
+    #: is not it either. Splitting `developer` from `user`, alone, with none
+    #: of the above, is what reads 99.6%. `eda_agent`'s ReAct agents already
+    #: get this for free, because `to_responses_input` maps their `system`
+    #: role to `developer` on every turn -- which is why they were never
+    #: seen to have this problem and `specflow`'s flat-string stages were.
+    #:
+    #: OFF BY DEFAULT because it has not yet been measured at run scale
+    #: (fan-out concurrency, real oracle prompts rather than filler, gpt-5-mini
+    #: unaffected) the way the 0% finding it corrects was. `_split_shared_prefix`
+    #: only fires on a prompt built with `fanout.shared_block`'s sentinel, so
+    #: turning this on for a stage with no such prefix is a no-op, not a
+    #: regression.
+    developer_role_prefix: bool = False
+
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
     #: applies before a response starts.
     stream_retries: int = 2
@@ -577,7 +624,8 @@ def _cache_key(cfg, stage: str) -> str:
 
 
 def _responses_body(cfg, prompt: str, default_cap: int = 48000,
-                    stage: str | None = None) -> dict:
+                    stage: str | None = None,
+                    developer_role_prefix: bool = False) -> dict:
     """The request body for `/v1/responses`, built where it can be tested.
 
     Pure on purpose: the two bugs this had were both invisible from the outside
@@ -596,10 +644,26 @@ def _responses_body(cfg, prompt: str, default_cap: int = 48000,
     would pool families whose prefixes differ -- which is the mistake `family()`
     already records, where splitting `normalize_indirect_REQ-0002` at the first
     underscore pooled two passes with different system text.
+
+    `developer_role_prefix` -- see `PortSettings.developer_role_prefix` for the
+    measurement -- splits `prompt` at its `shared_block` sentinel into a
+    `developer`-role item and a `user`-role item, instead of one flat `user`
+    string. `input` is then a LIST, not a string; `_complete_responses` reads
+    it back out rather than rebuilding its own, so there is exactly one place
+    that decides the shape.
     """
+    input_value: str | list = prompt
+    if developer_role_prefix:
+        split = _split_shared_prefix(prompt)
+        if split is not None:
+            developer_content, user_content = split
+            input_value = [
+                {"role": "developer", "content": developer_content},
+                {"role": "user", "content": user_content},
+            ]
     body: dict = {
         "model": cfg.model,
-        "input": prompt,
+        "input": input_value,
         "reasoning": {"effort": cfg.reasoning_effort or "medium", "summary": "auto"},
     }
     if stage:
@@ -920,8 +984,9 @@ class ApiPort:
         model. 223s total, maximum gap under 10s, effort never lowered.
         """
         effort = cfg.reasoning_effort or "medium"
-        body = _responses_body(cfg, prompt, self.settings.max_output_tokens,
-                               stage=stage)
+        body = _responses_body(
+            cfg, prompt, self.settings.max_output_tokens, stage=stage,
+            developer_role_prefix=self.settings.developer_role_prefix)
         total = int(body.pop("max_output_tokens"))
         chunk = self.settings.chunk_for(effort)
 
@@ -961,11 +1026,21 @@ class ApiPort:
 
         client = self._client()
 
+        # Read the shape `_responses_body` already decided, rather than
+        # rebuilding a second, independent one from `prompt` here -- the two
+        # used to disagree by construction: this line always sent one flat
+        # `user` item regardless of what `body["input"]` had just computed,
+        # which is exactly the shape `developer_role_prefix` needs NOT to be
+        # silently overwritten back to.
+        conversation: list = (
+            body["input"] if isinstance(body["input"], list)
+            else [{"role": "user", "content": body["input"]}]
+        )
+
         # The shared prefix, sent once and carried server-side -- see
         # `PortSettings.prefix_seed`. Falls back to the flat prompt on any
         # failure, so a gateway that refuses `previous_response_id` costs one
         # wasted seed call and nothing else.
-        conversation: list = [{"role": "user", "content": prompt}]
         seed_id = self._seed_id(client, cfg, stage=stage, prompt=prompt)
         if seed_id:
             body["previous_response_id"] = seed_id
@@ -983,8 +1058,10 @@ class ApiPort:
             # The key alone costs the whole hit, and silently -- the request
             # succeeds and simply pays full price.
             body.pop("prompt_cache_key", None)
-            conversation = [{"role": "user",
-                             "content": prompt.split(_PREFIX_SENTINEL, 1)[1].lstrip("\n")}]
+            # `_seed_id` only returned non-None after `_split_shared_prefix`
+            # itself succeeded, so the sentinel is guaranteed present here.
+            _, user_content = _split_shared_prefix(prompt)  # type: ignore[misc]
+            conversation = [{"role": "user", "content": user_content}]
         parts: list[str] = []
         final = None
         spent = 0
@@ -1180,9 +1257,10 @@ class ApiPort:
         """
         if not getattr(self.settings, "prefix_seed", False):
             return None
-        if _PREFIX_SENTINEL not in prompt:
+        split = _split_shared_prefix(prompt)
+        if split is None:
             return None
-        shared = prompt.split(_PREFIX_SENTINEL, 1)[0] + _PREFIX_SENTINEL
+        shared, _ = split
         key = (f"{_cache_key(cfg, stage)}:"
                f"{hashlib.sha256(shared.encode('utf-8')).hexdigest()[:16]}")
         with self._seed_lock:
