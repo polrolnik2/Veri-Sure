@@ -109,30 +109,45 @@ Named among the 42 recovered:
 
 ## On the new division it fires zero times -- and that reading is CONFOUNDED
 
-n3-i2c, 168 sentence-floor units on gpt-5-mini/medium:
+n3-i2c, 168 sentence-floor units on gpt-5-mini/medium: **0 of 129 behavioural
+units claimed `continues_previous`**, against 14 of 50 (28%) on c1-i2c.
 
-| | c1-i2c | n3-i2c |
+**That does NOT establish that sentence-sized units stand alone, and it was
+first reported here as though it did. It is withdrawn.** The prompt n3-i2c ran
+carried a gloss written when the fold still dropped obligations -- "claiming it
+for a unit that says something is how a requirement gets lost" -- which is a
+warning against setting the flag. Zero is equally consistent with a model
+declining a flag it was told would cost it requirements.
+
+## What the flag now means: MERGE, not fold and not widen
+
+Three designs passed through, and the third is the one that matches what the
+divider is for.
+
+| | what `continues_previous` did | what was wrong with it |
 |---|---|---|
-| behavioural units | 50 | 129 |
-| claiming `continues_previous` | **14 (28%)** | **0 (0%)** |
-| obligations at risk of the fold | 42 | 0 |
+| original | folded the unit into the previous requirement's span and **deleted its obligations** | 42 of 169 obligations discarded on c1-i2c, silently |
+| intermediate | kept the obligations, **widened their spans** backwards | no loss, but TWO independent classifications stand -- one per half of a thought, and no call ever saw the whole |
+| now | **merges the two units and re-reads them as one** | -- |
 
-**This does NOT establish that sentence-sized units stand alone, and it was
-first reported here as though it did. It is withdrawn.**
+`divide` produces a **scaffold**, not the answer: it cuts where the author cut
+and at sentence ends, which is the best guess available before anything has
+read the text. A requirement can straddle one of those boundaries, and only a
+reader can tell. So pass one classifies every unit alone and is read only for
+the flag; chains of it become merged units; pass two re-classifies each merged
+block as a single unit. A requirement spanning two sentences is then authored
+once, from both of them, by a model looking at the whole of it.
 
-The prompt n3-i2c ran carried a gloss written when the fold still dropped
-obligations:
+Nothing is dropped and nothing is widened after the fact. **Linking** a
+requirement to context it refers to but does not extend is a separate concern,
+and deliberately not this flag: the test the prompt gives the model is whether
+the previous unit's words are *part of the requirement*, or only part of how it
+found the subject.
 
-> "A continuation is folded into the previous requirement and its obligations
-> are dropped, so claiming it for a unit that says something is how a
-> requirement gets lost."
+Cost is one extra call per merged block, not per unit, and when nothing chains
+the second pass is skipped entirely.
 
-That is a warning against setting the flag, and it was left in place after the
-fold stopped dropping anything. So 0 of 129 is consistent with two different
-worlds -- sentence units genuinely standing alone, or a model declining a flag
-it was told would cost it requirements -- and this run cannot separate them.
-
-The gloss now describes what the flag actually does: it widens spans backwards
-and never costs a requirement. **Re-running S1 on the same 168-unit partition
-under the corrected prompt is what would separate the two**, and until that is
-done the fix above is measured only on c1-i2c, where it recovers 42 obligations.
+**Still unmeasured live.** n3-i2c ran the intermediate design under the
+discouraging prompt. Re-running S1 on the same partition with the corrected
+prompt is what shows how often the flag actually fires and what the merged
+units look like.

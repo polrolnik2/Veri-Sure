@@ -141,17 +141,26 @@ For the unit, decide:
                       widths or names; "scaffolding" for titles, cross-
                       references and prose that constrains nothing.
 
-  continues_previous  true ONLY if this unit states no obligation of its own
-                      and merely continues the previous unit's -- a list item
-                      under the stem that introduces it, or a trailing clause
-                      that completes the sentence before it. A unit that states
-                      its own behaviour is NOT a continuation even when it
-                      refers back: resolve the reference in your restatement,
-                      which is what `text` is for. Setting it never costs you a
-                      requirement: every obligation you return is still one
-                      requirement, and all the flag does is widen their spans
-                      backwards to include the unit that introduces them, so a
-                      reader of the requirement can see what it refers to.
+  continues_previous  true if this unit and the previous one are really ONE
+                      unit -- a requirement whose statement STRADDLES the
+                      boundary between them. The boundaries you are given are a
+                      first guess made before anyone read the text; this is how
+                      you correct it.
+
+                      What happens then: the two are joined and you are asked
+                      again, with the WHOLE joined text as one unit, so a
+                      requirement spanning both gets written once from all of
+                      it. Nothing is discarded and no requirement is lost, so
+                      say true whenever the previous unit is part of what this
+                      unit states.
+
+                      Say false when this unit merely REFERS to the previous
+                      one without extending it. A reference you can resolve in
+                      your restatement -- naming the subject instead of writing
+                      "it" -- is not a continuation; that is what `text` is for.
+                      The test is whether the previous unit's words are part of
+                      the requirement, or only part of how you found its
+                      subject.
 
   obligations         for a behavioural unit, one entry per atomic requirement.
                       An atomic requirement is ONE thing that could be
@@ -420,19 +429,15 @@ def run_unit(
 ) -> StageResult[UnitClassification]:
     """One unit, one bounded agent-plus-gate loop.
 
-    The stage name carries the unit's offset rather than its index so a rerun
-    over a re-divided spec cannot silently collide with a recorded fixture from a
-    different partition.
-
-    **That safeguard is one-sided, and the gate is what closes it.** The name is
-    the unit's START, so a divider change that only moves a unit's END -- which
-    is what widening `_SENTENCE_CUT` did: 168 units to 172, every existing start
-    unchanged -- reuses the recorded response of a LONGER unit. It is not
-    silent: those obligations tile the old body, so at least one runs past the
-    new `unit.length` and `gate_unit` rejects it as "span is not inside the
-    unit", forcing a fresh call. Relying on that is still worse than not
-    colliding, so **re-divide into a fresh run directory** rather than resuming
-    one recorded under a different partition.
+    The stage name carries the unit's offsets rather than its index, so a rerun
+    over a re-divided spec cannot silently collide with a recorded fixture from
+    a different partition. BOTH offsets: naming by the start alone was
+    one-sided, and widening `_SENTENCE_CUT` is the case that showed it -- 168
+    units became 172 with every existing START unchanged, so a resume would have
+    replayed a longer unit's response for the four that split. The gate caught
+    it, because those obligations run past the new `unit.length`, but a name
+    that cannot collide is better than a gate that notices afterwards. It also
+    gives a merged block (§`_chains`) a name of its own.
     """
     try:
         contract = json.loads(contract_json) if contract_json.strip() else {}
@@ -440,7 +445,7 @@ def run_unit(
         contract = {}
 
     return run_stage(
-        stage=f"{STAGE}_{unit.start}",
+        stage=f"{STAGE}_{unit.start}_{unit.end}",
         port=port,
         build_prompt=lambda issues, previous: build_prompt(
             spec=spec, contract_json=contract_json, unit=unit, index=index,
@@ -471,45 +476,39 @@ def to_requirements(
     two requirements resting on one sentence. A distinct-span ban was tried and
     reverted for exactly this case.
 
-    `continues_previous` WIDENS a requirement's span backwards to the unit that
-    opens the chain; it never removes the requirement. That is a correction, and
-    the measurement is in `docs/evidence/continuations.md`: the fold used to
-    extend the PREVIOUS requirement's span and drop the continuation's
-    obligations, and on c1-i2c that discarded **42 of the 169 obligations the
-    classifier authored -- 25%**. Because the span survived, `assure`'s
-    unattributed-spec-text check saw nothing missing, so the loss was silent.
+    **`continues_previous` is resolved before this function runs.** It merges
+    two units into one and `divide_and_classify` re-classifies the merged block,
+    so by the time obligations arrive here every unit is already as wide as the
+    classifier thinks a requirement's text needs to be, and the span is just the
+    unit. Nothing here folds, widens or drops.
 
-    Among the discarded: "the filter counter `filter_cnt` derives its sampling
-    interval from the prescale value `clk_cnt` shifted right by two bits". No
-    surviving requirement stated that number, which is why the whole filter
-    cluster had no threshold to quote and scored INVERTED against golden RTL.
-    Also gone were `busy` set on START and cleared on STOP, the FSM's return to
-    idle on arbitration loss, and the release of both output enables with it.
+    That is a correction, and the measurement is in
+    `docs/evidence/continuations.md`: the original fold extended the PREVIOUS
+    requirement's span and DROPPED the continuation's obligations, and on
+    c1-i2c that discarded **42 of the 169 obligations the classifier authored --
+    25%**. Because the span survived, `assure`'s unattributed-spec-text check
+    saw nothing missing, so the loss was silent. Among the discarded: "the
+    filter counter `filter_cnt` derives its sampling interval from the prescale
+    value `clk_cnt` shifted right by two bits", which no surviving requirement
+    stated -- which is why the filter cluster had no threshold to quote and
+    scored INVERTED against golden RTL. Also gone were `busy` set on START and
+    cleared on STOP, and the FSM's return to idle on arbitration loss.
 
-    Dropping was never the intent -- including the referent was. An obligation
-    is a SELF-CONTAINED restatement, which `_BACKREF` in `gate_unit` enforces, so
-    it is a requirement whatever unit it sits in; what it needs from the chain is
-    provenance, and a wider span gives it that. The anchor is the last unit that
-    did NOT continue, so a run of three continuations all reach back to the unit
-    that can actually be read as their subject, and the chain still cannot span
-    the document: it closes at the first unit that stands alone.
+    The intermediate fix -- keep the obligations, widen their spans backwards --
+    stopped the loss but left TWO independent classifications standing, one per
+    half of a thought, with no call having seen the whole. Merging the units and
+    re-reading them is what makes a requirement spanning two sentences get
+    authored once, from both.
     """
     text = normalize_spec(spec)
     reqs: list[dict] = []
     n = 0
-    #: Start of the last unit that stood on its own. Advanced for EVERY unit
-    #: that does not continue, whatever its kind, because a list stem is
-    #: routinely `scaffolding` and is exactly the referent its items need.
-    anchor = units[0].start if units else 0
-    for i, (unit, res) in enumerate(zip(units, results)):
+    for unit, res in zip(units, results):
         out = res.output
-        chained = bool(out.continues_previous) and i > 0
-        if not chained:
-            anchor = unit.start
         if out.kind != "behavioural":
             continue
         for ob in out.obligations:
-            start, end = (anchor if chained else unit.start), unit.end
+            start, end = unit.start, unit.end
             reqs.append({
                 "uid": mint(PREFIX_REQUIREMENT, n),
                 "rev": 1,
@@ -523,6 +522,30 @@ def to_requirements(
     return reqs
 
 
+def _chains(results: list[StageResult[UnitClassification]]) -> list[list[int]]:
+    """Maximal runs of units the classifier read as ONE, as index groups.
+
+    A unit that sets `continues_previous` joins the run its predecessor is in,
+    so three consecutive continuations make one group of four. Index 0 can never
+    continue -- there is nothing before it -- and a group is always contiguous,
+    which is what keeps a merged unit from reaching across the document.
+    """
+    groups: list[list[int]] = []
+    for i, res in enumerate(results):
+        if i and res.output.continues_previous and groups:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    return groups
+
+
+def _merge(units: list[Unit], group: list[int]) -> Unit:
+    """One unit spanning a whole group. Its kind comes from the first member,
+    which is the one that can be read on its own; pass two re-decides it."""
+    first, last = units[group[0]], units[group[-1]]
+    return Unit(first.start, last.end, first.kind)
+
+
 def divide_and_classify(
     *,
     spec: str,
@@ -530,21 +553,75 @@ def divide_and_classify(
     port: ModelPort,
     max_repairs: int = 2,
     fanout: bool = True,
+    merge: bool = True,
 ) -> tuple[list[Unit], list[StageResult[UnitClassification]], list[dict]]:
-    """The whole of the new S1: divide, classify every unit, assemble.
+    """The whole of the new S1: divide, classify, MERGE what spans units, assemble.
+
+    **`divide` produces a scaffold, not the answer.** It cuts where the author
+    cut and at sentence ends, which is the best guess available before anything
+    has read the text -- but a requirement can straddle two of those boundaries,
+    and only a reader can tell. `continues_previous` is how the classifier says
+    so, and it means *these two units are one unit*.
+
+    So there are two passes. The first classifies every unit alone and is read
+    ONLY for that flag. Chains of it become merged units, and the second pass
+    re-classifies each merged block **as a single unit**, so a requirement
+    spanning two sentences is authored once, from both of them, by a model
+    looking at the whole of it. Units nobody merged keep their first-pass result
+    and cost no second call.
+
+    That is the difference between merging and linking, and it is why this is
+    not just a wider span. Widening leaves TWO independent classifications
+    standing: unit A authored an obligation from half the thought and unit B
+    authored one from the other half, and no call ever saw the whole. Merging
+    re-reads. Linking a requirement to context it refers to but does not extend
+    is a separate concern and is deliberately not this flag.
+
+    Cost is one extra call per merged block, not per unit. The merge is applied
+    ONCE: a block that declares continuation again in pass two is left alone,
+    because a fixed point here would cost a call per round for a case the first
+    pass -- which already absorbs consecutive flags -- has no evidence of.
 
     `fanout=False` runs serially, which is what a `ReplayPort` wants -- fixtures
     are deterministic and a thread pool only adds nondeterminism to a test.
+    `merge=False` returns the scaffold partition unmerged, which is what a test
+    pinning one pass wants.
     """
     from .stage import run_fanout
 
     units = divide(spec)
-    work = list(enumerate(units))
+
+    def classify(all_units: list[Unit]):
+        work = list(enumerate(all_units))
+
+        def one(pair):
+            i, unit = pair
+            return run_unit(spec=spec, contract_json=contract_json, unit=unit,
+                            index=i, units=all_units, port=port,
+                            max_repairs=max_repairs)
+
+        return run_fanout(work, one) if fanout else [one(p) for p in work]
+
+    results = classify(units)
+    if not merge:
+        return units, results, to_requirements(spec, units, results)
+
+    groups = _chains(results)
+    merged = [_merge(units, g) for g in groups]
+    if len(merged) == len(units):
+        # Nothing chained. The partition is unchanged, so pass two would re-ask
+        # every unit the identical question -- skip it entirely.
+        return units, results, to_requirements(spec, units, results)
+
+    # Only the blocks that actually merged are re-read; the rest keep pass one.
+    todo = [(i, merged[i]) for i, g in enumerate(groups) if len(g) > 1]
 
     def one(pair):
         i, unit = pair
         return run_unit(spec=spec, contract_json=contract_json, unit=unit,
-                        index=i, units=units, port=port, max_repairs=max_repairs)
+                        index=i, units=merged, port=port, max_repairs=max_repairs)
 
-    results = run_fanout(work, one) if fanout else [one(p) for p in work]
-    return units, results, to_requirements(spec, units, results)
+    fresh = dict(zip((i for i, _ in todo),
+                     run_fanout(todo, one) if fanout else [one(p) for p in todo]))
+    final = [fresh.get(i, results[g[0]]) for i, g in enumerate(groups)]
+    return merged, final, to_requirements(spec, merged, final)

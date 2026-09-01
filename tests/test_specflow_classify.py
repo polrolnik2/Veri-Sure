@@ -298,65 +298,40 @@ def test_a_requirements_span_is_the_whole_unit_not_the_obligation():
         assert span["quote"] == unit.text(spec)
 
 
-def test_a_continuation_keeps_its_requirement_and_widens_the_span():
-    """The fold used to DELETE the continuation's obligations.
+def test_to_requirements_neither_folds_nor_widens_nor_drops():
+    """Merging is resolved upstream, so this function is now purely mechanical.
 
-    Measured on c1-i2c, that discarded 42 of the 169 obligations the classifier
-    authored -- 25% -- including the one sentence that stated the filter's
-    sampling interval as `clk_cnt >> 2`, which is why the filter cluster had no
-    threshold to quote. The span survived, so `assure` saw nothing missing and
-    the loss was silent. See docs/evidence/continuations.md.
+    Three designs have passed through here. The original FOLDED a continuation
+    into the previous requirement and deleted its obligations -- 42 of 169 on
+    c1-i2c, 25%, silently, because the span survived and `assure` checks spans.
+    The second kept the obligations and WIDENED their spans backwards, which
+    stopped the loss but left two independent classifications standing, one per
+    half of a thought, with no call having seen the whole. The third merges the
+    UNITS and re-reads them, which happens in `divide_and_classify` before this
+    is called.
+
+    So a `continues_previous` still set on a result reaching here changes
+    nothing: every unit is already as wide as it should be.
     """
-    spec = "The FSM accepts:\n\n  - a START condition\n"
+    spec = "The FSM accepts a START.\n\nIt then drives SCL low.\n"
     units = divide(spec)
+    assert len(units) == 2
     results = [
-        type("R", (), {"output": UnitClassification(
-            kind="behavioural",
-            obligations=[Obligation(start=0, end=units[0].length,
-                                    text="The FSM accepts commands.", ports=[])])})(),
+        type("R", (), {"output": _ok(units[0].length, Obligation(
+            start=0, end=units[0].length,
+            text="The FSM accepts a START condition.", ports=[]))})(),
         type("R", (), {"output": UnitClassification(
             kind="behavioural", continues_previous=True,
             obligations=[Obligation(start=0, end=units[1].length,
-                                    text="The FSM accepts a START.", ports=[])])})(),
-    ]
-    from specflow.s1_requirements import normalize_spec
-    text = normalize_spec(spec)
-    reqs = to_requirements(spec, units, results)
-
-    assert [r["text"] for r in reqs] == [
-        "The FSM accepts commands.", "The FSM accepts a START."]
-    stem, item = (r["spec_spans"][0] for r in reqs)
-    # The stem is untouched; the item reaches back to it.
-    assert (stem["start"], stem["end"]) == (units[0].start, units[0].end)
-    assert (item["start"], item["end"]) == (units[0].start, units[1].end)
-    for sp in (stem, item):
-        assert sp["quote"] == text[sp["start"]:sp["end"]]
-
-
-def test_a_chain_of_continuations_anchors_on_the_unit_that_stands_alone():
-    """Three in a row all reach back to the stem, not each to the one before.
-
-    Anchoring one unit back would leave the third continuation's span starting
-    inside the chain, where its subject is not named -- which is the fragment
-    problem the widening exists to prevent.
-    """
-    spec = "The FSM accepts:\n\n  - START\n  - STOP\n  - a WRITE of one bit\n"
-    units = divide(spec)
-    assert len(units) == 4
-    results = [
-        type("R", (), {"output": UnitClassification(
-            kind="scaffolding")})(),          # the stem states nothing itself
-        *(type("R", (), {"output": UnitClassification(
-            kind="behavioural", continues_previous=True,
-            obligations=[Obligation(start=0, end=u.length,
-                                    text=f"The FSM accepts {i}.", ports=[])])})()
-          for i, u in enumerate(units[1:])),
+                                    text="The FSM drives SCL low.", ports=[])])})(),
     ]
     reqs = to_requirements(spec, units, results)
-    assert len(reqs) == 3
-    for r, u in zip(reqs, units[1:]):
+    assert len(reqs) == 2, "no requirement may be dropped"
+    for r, u in zip(reqs, units):
         span = r["spec_spans"][0]
-        assert (span["start"], span["end"]) == (units[0].start, u.end)
+        assert (span["start"], span["end"]) == (u.start, u.end), "no widening"
+        assert span["quote"] == u.text(spec)
+
 
 
 def test_scaffolding_units_produce_no_requirements():
@@ -389,6 +364,99 @@ def test_divide_and_classify_runs_every_unit(monkeypatch):
     assert len(seen) == len(units) == 2
     assert all(r.ok for r in results), [r.issues for r in results]
     assert len(reqs) == 2
-    # The stage name is keyed by offset, not index: a re-division cannot collide
-    # with a fixture recorded against a different partition.
-    assert seen == [f"classify_{u.start}" for u in units]
+    # The stage name is keyed by BOTH offsets, not by index: a re-division
+    # cannot collide with a fixture recorded against a different partition, and
+    # naming by the start alone was one-sided -- a divider change that moves
+    # only a unit's END would have replayed the longer unit's response.
+    assert seen == [f"classify_{u.start}_{u.end}" for u in units]
+
+
+# ------------------------------------------------------- merging units
+
+
+def _merging_port(flags, recorded):
+    """A port that declares `continues_previous` for the units named in `flags`
+    and records every stage it is asked for."""
+    import re as _re
+
+    class _P:
+        def complete(self, *, stage, round_, prompt):
+            recorded.append(stage)
+            length = int(_re.search(r'<unit kind="[^"]*" length="(\d+)"', prompt).group(1))
+            return json.dumps({
+                "kind": "behavioural",
+                "continues_previous": stage in flags,
+                "obligations": [{"start": 0, "end": length,
+                                 "text": "The sum output is driven.",
+                                 "ports": ["sum"]}],
+            })
+    return _P()
+
+
+def test_a_continuation_merges_the_two_units_and_is_re_read_as_one():
+    """The scaffold is a first guess; `continues_previous` corrects it.
+
+    The point is not a wider span. Widening leaves TWO classifications
+    standing, one per half of a thought, with no call having seen the whole.
+    Merging joins the units and asks again over the joined text, so a
+    requirement straddling the boundary is authored once, from all of it.
+    """
+    units = divide(SPEC)
+    assert len(units) == 2
+    seen: list[str] = []
+    # The SECOND unit says it continues the first.
+    port = _merging_port({f"classify_{units[1].start}_{units[1].end}"}, seen)
+
+    merged, results, reqs = divide_and_classify(
+        spec=SPEC, contract_json=CONTRACT, port=port, fanout=False)
+
+    assert len(merged) == 1, [u for u in merged]
+    assert (merged[0].start, merged[0].end) == (units[0].start, units[1].end)
+    # Pass one asked both units; pass two asked the merged block ONCE more.
+    assert seen == [
+        f"classify_{units[0].start}_{units[0].end}",
+        f"classify_{units[1].start}_{units[1].end}",
+        f"classify_{merged[0].start}_{merged[0].end}",
+    ]
+    assert len(reqs) == 1
+    span = reqs[0]["spec_spans"][0]
+    assert (span["start"], span["end"]) == (units[0].start, units[1].end)
+
+
+def test_nothing_chaining_costs_no_second_pass():
+    """The merge is not a tax on the common case: with no continuation the
+    partition is unchanged, so re-asking would repeat the identical question."""
+    seen: list[str] = []
+    units, results, reqs = divide_and_classify(
+        spec=SPEC, contract_json=CONTRACT, port=_merging_port(set(), seen),
+        fanout=False)
+    assert len(units) == 2
+    assert len(seen) == 2, seen
+    assert len(reqs) == 2
+
+
+def test_a_run_of_continuations_becomes_ONE_merged_unit():
+    """Three consecutive continuations make one block of four, not three pairs.
+
+    The chain is what keeps a merged unit contiguous, and it closes at the first
+    unit that stands on its own -- so a merge can never reach across the
+    document, which is the property the catch-all ban rests on.
+    """
+    from specflow.s1_classify import UnitClassification, _chains
+
+    def r(flag):
+        return type("R", (), {"output": UnitClassification(
+            kind="behavioural", continues_previous=flag)})()
+
+    assert _chains([r(False), r(True), r(True), r(False), r(True)]) == [
+        [0, 1, 2], [3, 4]]
+    # Index 0 can never continue: there is nothing before it.
+    assert _chains([r(True), r(False)]) == [[0], [1]]
+
+
+def test_merge_false_returns_the_scaffold_untouched():
+    seen: list[str] = []
+    units, _, reqs = divide_and_classify(
+        spec=SPEC, contract_json=CONTRACT, fanout=False, merge=False,
+        port=_merging_port({f"classify_{u.start}_{u.end}" for u in divide(SPEC)}, seen))
+    assert len(units) == 2 and len(seen) == 2 and len(reqs) == 2
