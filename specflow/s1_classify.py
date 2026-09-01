@@ -250,6 +250,32 @@ def build_prompt(
 def parse_response(text: str) -> UnitClassification:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
+        if isinstance(obj, dict) and "kind" not in obj and "obligations" not in obj:
+            # A RESPONSE THAT LOST ITS HEAD, RECOVERED AS A FRAGMENT. Measured
+            # on n3-i2c: 6 of 168 responses arrived with their first output-text
+            # delta missing, so the text began at `"reasoning": "...` or even
+            # `": "...` with no opening brace. `extract_json_object` then
+            # scraped the innermost complete object it could find -- the LAST
+            # OBLIGATION, `{start, end, text, ports}` -- and every field of
+            # `UnitClassification` fell to its default, which means
+            # `kind="scaffolding"` and no obligations. `gate_unit` passes a
+            # scaffolding unit with no obligations without a word, so six
+            # behavioural units silently produced nothing while the gate read
+            # `ok=True, issues 0`. One of them was the unit stating that `busy`
+            # is set on START and cleared on STOP.
+            #
+            # `kind` is the field that decides everything and the prompt always
+            # asks for it, so its absence is a truncated response and never a
+            # verdict. Raising here turns a silent scaffolding into a gate error
+            # and a repair round. This is the same guard, for the same reason,
+            # as the one in `normalize.parse_response`.
+            keys = sorted(obj)[:8]
+            raise ValueError(
+                "the response carries neither `kind` nor `obligations` (the "
+                f"object recovered from it had keys {keys}), which means its "
+                "opening was lost in transport. Return ONE complete JSON "
+                "object, starting with `{` and with `kind` as a top-level "
+                "field.")
         return UnitClassification.model_validate(obj)
     except Exception as exc:  # noqa: BLE001
         return UnitClassification(reasoning=f"Parse Error: {exc}")

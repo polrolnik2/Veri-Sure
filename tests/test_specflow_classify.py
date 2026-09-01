@@ -20,6 +20,7 @@ from specflow.s1_classify import (
     build_prompt,
     divide_and_classify,
     gate_unit,
+    parse_response,
     shared_prefix,
     to_requirements,
 )
@@ -214,6 +215,42 @@ def test_the_prompt_carries_the_neighbouring_units():
 def test_the_prompt_never_asks_for_spec_text_back():
     p = shared_prefix(SPEC, CONTRACT)
     assert "OFFSETS" in p and "NEVER quote" in p
+
+
+def test_a_response_that_lost_its_opening_is_a_parse_error_not_scaffolding():
+    """The silent one: 6 of 168 responses on n3-i2c arrived with no head.
+
+    The first output-text delta went missing, so the text began at
+    `"reasoning": "...` with no `{`. `extract_json_object` scraped the last
+    OBLIGATION out of the remainder -- `{start, end, text, ports}` -- every
+    field fell to its default, and `kind` defaulted to "scaffolding". A
+    scaffolding unit with no obligations passes `gate_unit` without a word, so
+    six behavioural units produced nothing while the gate read ok=True with
+    zero issues. One stated that `busy` is set on START and cleared on STOP.
+    """
+    headless = (
+        '"reasoning": "The unit states two observable actions.",\n'
+        '  "kind_was_here_before_truncation": 1,\n'
+        '  "obligations_list": [\n'
+        '    {"start": 0, "end": 12, "text": "The FSM stalls.", "ports": []}\n'
+        "  ]\n}"
+    )
+    out = parse_response(headless)
+    assert out.reasoning.startswith("Parse Error: "), out
+    assert "opening was lost in transport" in out.reasoning
+    # ...and the gate must then BLOCK, so a repair round happens.
+    u = divide(SPEC)[0]
+    issues = gate_unit(out, unit=u, spec=SPEC, contract=None)
+    assert any(i.severity == "error" for i in issues), issues
+
+
+def test_a_genuine_scaffolding_verdict_still_parses():
+    """The guard keys on `kind`, which the prompt always asks for, so an honest
+    'this unit constrains nothing' answer is untouched."""
+    out = parse_response('{"reasoning": "A heading.", "kind": "scaffolding"}')
+    assert out.kind == "scaffolding"
+    assert not out.reasoning.startswith("Parse Error")
+    assert gate_unit(out, unit=divide(SPEC)[0], spec=SPEC, contract=None) == []
 
 
 # -------------------------------------------------------------- assembly
