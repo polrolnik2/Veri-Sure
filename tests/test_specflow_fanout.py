@@ -205,15 +205,18 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
     units = divide(spec)
 
     def reply(stage, round_):
+        if stage.startswith("boundary_"):
+            # Every unit stands alone here, so the partition the classifier
+            # sees is the scaffold `divide` produced.
+            return json.dumps({"reasoning": "-", "continues_previous": False})
         if stage.startswith("classify_"):
             start = int(stage.split("_")[1])
             unit = next(u for u in units if u.start == start)
             port = "sum" if "sum" in unit.text(spec) else "cout"
             return json.dumps({
                 "kind": "behavioural",
-                "obligations": [{"start": 0, "end": unit.length,
-                                 "text": f"The {port} output is driven as specified.",
-                                 "ports": [port]}],
+                "text": f"The {port} output is driven as specified.",
+                "ports": [port],
             })
         if stage.startswith("s2_"):
             uid = stage.split("_", 1)[1]

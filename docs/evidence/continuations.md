@@ -119,35 +119,48 @@ for a unit that says something is how a requirement gets lost" -- which is a
 warning against setting the flag. Zero is equally consistent with a model
 declining a flag it was told would cost it requirements.
 
-## What the flag now means: MERGE, not fold and not widen
+## What the flag now means, and where it is decided
 
-Three designs passed through, and the third is the one that matches what the
-divider is for.
+Four designs passed through. The fourth is the one where the ORDER is right.
 
-| | what `continues_previous` did | what was wrong with it |
-|---|---|---|
-| original | folded the unit into the previous requirement's span and **deleted its obligations** | 42 of 169 obligations discarded on c1-i2c, silently |
-| intermediate | kept the obligations, **widened their spans** backwards | no loss, but TWO independent classifications stand -- one per half of a thought, and no call ever saw the whole |
-| now | **merges the two units and re-reads them as one** | -- |
+| | `continues_previous` | decided by | what was wrong |
+|---|---|---|---|
+| original | folded the unit into the previous requirement's span and **deleted its obligations** | the classifier | 42 of 169 obligations discarded on c1-i2c, silently |
+| second | kept the obligations, **widened their spans** backwards | the classifier | no loss, but two independent classifications stood, one per half of a thought |
+| third | **merged the units**, then re-classified the block | the classifier | every merged block had been classified at a granularity the same call had just declared wrong, and that work was thrown away |
+| now | **merged the units**, then classified | a **separate, earlier stage** | -- |
 
-`divide` produces a **scaffold**, not the answer: it cuts where the author cut
-and at sentence ends, which is the best guess available before anything has
-read the text. A requirement can straddle one of those boundaries, and only a
-reader can tell. So pass one classifies every unit alone and is read only for
-the flag; chains of it become merged units; pass two re-classifies each merged
-block as a single unit. A requirement spanning two sentences is then authored
-once, from both of them, by a model looking at the whole of it.
+`divide` produces a **scaffold**. A requirement can straddle one of its
+boundaries and only a reader can tell, so S1 now runs three steps in this order:
 
-Nothing is dropped and nothing is widened after the fact. **Linking** a
-requirement to context it refers to but does not extend is a separate concern,
-and deliberately not this flag: the test the prompt gives the model is whether
-the previous unit's words are *part of the requirement*, or only part of how it
-found the subject.
+    divide      a script cuts at authorial boundaries and sentence ends
+    boundary    one short call per unit: is this unit and the one before it a
+                single unit? Chains of yes are merged
+    classify    one call per FINAL unit: kind, obligations, ports
 
-Cost is one extra call per merged block, not per unit, and when nothing chains
-the second pass is skipped entirely.
+**Classification runs once, at the granularity that survives.** That is why the
+boundary question is its own stage rather than a field on the classifier's
+answer: when one call decided both, `ports`, the obligation split and every
+other relational field were authored against a fragment and then discarded
+wherever the same call said "merge".
 
-**Still unmeasured live.** n3-i2c ran the intermediate design under the
-discouraging prompt. Re-running S1 on the same partition with the corrected
-prompt is what shows how often the flag actually fires and what the merged
-units look like.
+The two stages share the S1 cache shape -- whole specification and contract in a
+byte-identical prefix -- but never share a cache key, because their system text
+differs in the first bytes. The boundary answer is a sentence and a boolean, so
+the pass is short where it counts: output tokens dominate latency.
+
+**Cost, stated plainly.** Boundary is N calls, classify is M <= N. Against a
+single classify pass this is not free: where nothing merges it is N extra cheap
+calls for an unchanged partition. That is the price of never classifying at a
+granularity that is about to be revised, and it is paid whether or not the
+revision happens.
+
+**The chain is unbounded, and that is the one way the catch-all could return.**
+If every flag after the first were set, all units would merge into a single unit
+spanning the whole specification -- the exact answer this subsystem exists to
+make unavailable. A cap is deliberately not imposed (a number standing in for a
+property is what `MIN_SPAN_CHARS` and the distinct-span ban were both reverted
+for); the largest merged block wants reporting in `s1_gate.json` the way
+`word_carrying_gaps` is reported.
+
+**Still unmeasured live.** Every i2c number on record predates this stage.
