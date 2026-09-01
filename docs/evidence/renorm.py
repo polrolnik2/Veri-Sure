@@ -112,10 +112,19 @@ def main() -> int:
         f"{u}={'OK' if u in by_uid else 'FAIL'}" for u in LOST))
     if still_failing:
         print(f"\nstill failing: {' '.join(sorted(x for x in still_failing if x))}")
-    json.dump({"normalized": sorted(by_uid), "gate_failed": sorted(
-        x for x in still_failing if x), "empty_when": empty_when,
-        "total_routes": total_routes, "rounds": rounds, "seconds": time.time() - t0},
-        open(Path(__file__).parent / "renorm.json", "w"), indent=1)
+    # NAMED AFTER THE RUN. A single `renorm.json` meant the second run silently
+    # destroyed the first one's measurement -- which is exactly the comparison
+    # the second run exists to make.
+    out = Path(__file__).parent / f"renorm-{run_dir.name}.json"
+    json.dump({"run": run_dir.name, "model": a.model, "effort": a.effort,
+               "normalized": sorted(by_uid),
+               "gate_failed": sorted(x for x in still_failing if x),
+               "empty_when": empty_when, "total_routes": total_routes,
+               "sustains_used": sorted(
+                   n.req_uid for n in normalized if n.activation.sustains),
+               "rounds": rounds, "seconds": time.time() - t0},
+              open(out, "w"), indent=1)
+    print(f"\nwrote {out.name}")
     return 0
 
 
