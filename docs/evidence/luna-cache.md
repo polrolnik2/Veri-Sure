@@ -131,6 +131,50 @@ models read 0%, which would have exonerated luna. The second reused a hot
 prefix, which would have shipped a no-op as a fix. **A cache measurement is only
 valid against an input the backend has never seen** -- hence the nonce.
 
+## Reconfirmed live, through `ApiPort._complete_responses` itself
+
+The open question after the above was whether the 0% was a property of luna, or
+an artifact of whatever ad-hoc script produced the earlier numbers -- neither is
+checked in, so neither could be re-run. This time the measurement goes through
+the actual production transport, unmodified: `specflow.model_io.ApiPort` with
+`api_flavor="responses"`, which is `_complete_responses` -- streamed, chunked,
+`reasoning.encrypted_content` carried on continuation, the exact same
+`stream_policy` module `eda_agent`'s multi-turn ReAct agents share. Not a
+simplified stand-in for the hardened path; the hardened path itself.
+
+Same discipline as before -- one nonce per run, one stage name per condition (no
+per-item suffix, so `family()` cannot split it and every call in a condition
+shares one `prompt_cache_key`), 2 warm-up + 3 measured calls, `effort="low"`:
+
+    nonce=1454eeab359daeb3  prefix chars=26895
+
+    stage                      model          calls  input   cached  hit%
+    liveprobe2_mini_responses  gpt-5-mini         5  40,360  31,744  98.3%
+    liveprobe2_luna_responses  gpt-5.6-luna       5  40,360       0   0.0%
+
+mini's 98.3% is the positive control: it lands within a point of the original
+99%, on the same transport, in the same run, so the harness is not the reason
+luna reads zero. luna's 0.0% is exact -- not a small residual, zero cached
+tokens out of 40,360 measured, across all 5 calls including the two nominal
+"warm-up" ones. The endpoint question (does luna cache over `/v1/chat/completions`
+instead) is now moot for a different reason than expected: this session's
+ambient `OPENAI_EXTRA_BODY` carries `reasoning.effort="xhigh"`, which
+`_responses_body`'s deep-merge (by design, see its docstring) always lets win
+over whatever effort a caller passes -- and `gpt-5-mini` rejects `xhigh` on
+chat-completions ("`Unsupported value: 'xhigh'`"), while luna silently accepts
+it. That is exactly the failure mode `_responses_body`'s own comment predicts
+("this container is launched with exactly that value... harmless because
+`.env.local` clears the key") for a container with no `.env.local` -- which
+this one has none of. Clearing `OPENAI_EXTRA_BODY` for the run above is what
+made mini answer at all.
+
+**Conclusion stands, now confirmed on the actual hardened transport rather
+than an unreproducible probe.** gpt-5.6-luna does not cache a shared prefix on
+this gateway, under `/v1/responses`, streamed, chunked, at low effort, with a
+verified-working harness. Nothing left to test client-side changes the
+request shape further than this without changing what is actually sent in
+production. The remaining lever is not code: ask whoever operates the SDC LLM
+Gateway whether prefix caching is implemented for the luna deployment at all.
 
 ## So how DO you run Luna on this pipeline?
 
