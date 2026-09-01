@@ -1,16 +1,16 @@
-DIFFERENTIAL CO-SIMULATION vs GOLDEN -- 4000 shared-stimulus clock edges
+DIFFERENTIAL CO-SIMULATION vs GOLDEN -- 4000 shared-stimulus edges, X-tolerant
 
 design                       mismatching edges       %  first
 golden vs golden (control)                   0    0.0%     -1
-baseline (loop input)                     3241   81.0%      0
-run 8                                     3065   76.6%      0
-run 10 (loop output)                      3165   79.1%      0
+baseline (loop input)                     3237   80.9%      4
+run 8                                     3061   76.5%      4
+run 10 (loop output)                      3161   79.0%      4
 
-port        baseline    run 8   run 10   direction
+port        baseline    run 8   run 10
 al               345      357      343   better
 busy            1068     1068     1257   worse
 cmd_ack          191      177      183   better
-dout             315      315      607   worse
+dout             311      311      603   worse
 scl_o              0        0        0   same
 scl_oen         1742     1739     1781   worse
 sda_o              0        0        0   same

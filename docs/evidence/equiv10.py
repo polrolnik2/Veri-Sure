@@ -85,9 +85,23 @@ def _tb(edges: int) -> str:
         "edges": edges,
         "refports": ",".join(f".{o}(r_{o})" for o in OUTS),
         "dutports": ",".join(f".{o}(d_{o})" for o in OUTS),
-        "cmp": " || ".join(f"(r_{o} !== d_{o})" for o in OUTS),
+        # X-TOLERANT. `!==` counts X-vs-0 as a divergence, and the GOLDEN
+        # design has an unreset register: `dout` is written by
+        # `always @(posedge clk) if (sSCL & ~dSCL) dout <= sSDA;` with no reset
+        # branch, so it holds X until the first SCL rise. A candidate that DOES
+        # reset dout to 0 -- which is the safer design -- therefore "diverged"
+        # at edge 0 against a reference that simply had no value yet.
+        #
+        # That is not a behavioural disagreement, and reporting it as the first
+        # divergence said the designs differ immediately when they in fact agree
+        # on every other output for at least the first eight edges. A mismatch
+        # is counted only where BOTH sides carry a known value.
+        "cmp": " || ".join(
+            f"(!(^r_{o} === 1'bx) && !(^d_{o} === 1'bx) && r_{o} !== d_{o})"
+            for o in OUTS),
         "pertally": "\n      ".join(
-            f"if (r_{o} !== d_{o}) n_{o} = n_{o} + 1;" for o in OUTS),
+            f"if (!(^r_{o} === 1'bx) && !(^d_{o} === 1'bx) && r_{o} !== d_{o}) "
+            f"n_{o} = n_{o} + 1;" for o in OUTS),
         "perfmt": " ".join(f"{o}=%0d" for o in OUTS),
         "perargs": ", ".join(f"n_{o}" for o in OUTS),
     }
