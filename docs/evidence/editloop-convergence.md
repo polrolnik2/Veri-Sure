@@ -87,3 +87,52 @@ requirement author, not the RTL debugger.
 | multi-driver guard blind to internal wires | 3 runs latched `assign scl_sync` twice, disagreeing in run 6 → X |
 | no signal search | run 8 swept 13 block ids and called `read_block("scl_sync")` |
 | `restore_best` never called by the driver | run 9 wandered to 16 passing with nothing to return it |
+
+---
+
+# Equivalence check: the oracle score and the design have come apart
+
+Everything above is measured through the frozen 90 checks, and 12 of those
+provably convict golden — so the numbers describe the checks as much as the
+design. Differential co-simulation asks a question the checks cannot corrupt:
+driven by the **same stimulus**, do the two designs produce the **same outputs**?
+No reference model, no activation, no window, nothing to abstain.
+
+`docs/evidence/equiv10.py`, 4000 shared-stimulus clock edges:
+
+| design | mismatching edges | % | first divergence |
+|---|---|---|---|
+| **golden vs golden (control)** | **0** | **0.0%** | none — equivalent |
+| baseline (loop input) | 3241 | 81.0% | edge 0 |
+| **run 8** | 3065 | **76.6%** | edge 0 |
+| **run 10** (loop output) | 3165 | **79.1%** | edge 0 |
+
+The control is exact, so the harness is sound.
+
+## Two things this settles
+
+**1. The loop's objective is anti-correlated with correctness here.** Run 10
+scores *higher* on the oracle set than run 8 (61 vs 58 passing) and is *further
+from golden* (79.1% vs 76.6% mismatching). This measurement is independent of
+suite size, of which testpoints were rendered, and of the oracle set entirely —
+so unlike the earlier comparison it cannot be an artifact of the 224/334 split.
+It is the same ordering the agreement metric gave, arrived at by a route that
+shares none of its assumptions.
+
+**2. "Convergence" was never behavioural.** The loop moved the design 81.0% →
+79.1% mismatching: **1.9 points** over five trials, while the oracle score went
+46 → 61 of 90. Run 8 did better on both counts with one trial (4.4 points).
+Per port, run 10 made `dout` almost twice as wrong (315 → 607 mismatching edges)
+and `busy` worse (1068 → 1257), buying that with `sda_oen` (1873 → 1343).
+
+## What this does not say
+
+Cycle-exact co-simulation punishes a *timing* difference as hard as a logic
+error, and this design has a clock divider — a candidate that interpreted the
+prescaler differently would mismatch heavily while being defensible. So 79%
+is **not** "79% wrong"; it is "not cycle-equivalent, and far from it".
+
+The comparison *between* runs is unaffected by that caveat, because all three
+candidates are measured against the same reference on the same stimulus. That
+comparison is the finding: **more oracle-set optimisation, no closer to the
+design.**
