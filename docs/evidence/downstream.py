@@ -116,7 +116,15 @@ def main() -> int:
 
     run_dir = Path(a.run_dir)
     sf = run_dir / "specflow"
-    reqs = json.loads((SRC / "specflow/requirements.json").read_text())["requirements"]
+    # The run's OWN requirements when it has them. Reading c1-i2c's while the
+    # normalized forms come from the run dir pairs 127 requirements with a
+    # different set's normalizations -- silently, because both are keyed by uid
+    # and the uids collide. Same defect renorm.py had.
+    reqs_path = sf / "requirements.json"
+    if not reqs_path.is_file():
+        reqs_path = SRC / "specflow" / "requirements.json"
+    print(f"requirements from {reqs_path}", flush=True)
+    reqs = json.loads(reqs_path.read_text())["requirements"]
     contract_json = (SRC / "contract.json").read_text()
     contract = json.loads(contract_json)
     spec = (SRC / "prompt.txt").read_text()
