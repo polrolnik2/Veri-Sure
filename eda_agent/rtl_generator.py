@@ -397,9 +397,34 @@ class RTLGenerator:
         clear_memory_safely(self._agent)
 
     def _new_agent(self, *, name: str, composition: bool = False) -> SafeReActAgent:
+        # `composition` picks the SYSTEM PROMPT (GLUE_SYSTEM_PROMPT vs
+        # SYSTEM_PROMPT), and `cache_key` has to follow it: a leaf call and a
+        # composition call are two genuinely different prefixes, diverging
+        # from the first sentence of the system prompt. Pooling them under
+        # one key is exactly what `make_openai_model`'s own docstring warns a
+        # module must not do when it "grows a second, differently prefixed
+        # agent" -- route both to one key and each interleaved call sends
+        # the OTHER prompt's traffic to a backend holding the wrong head, a
+        # miss even though a warm cache for that exact request exists
+        # somewhere, just not on the backend this key happened to route to.
+        #
+        # Two full `make_openai_model` call sites, deliberately, rather than
+        # one call with the key chosen by a ternary: `tests/test_cache_key.py`
+        # audits keys by scanning source text for one `cache_key="..."` per
+        # call site, and a ternary would hide the second key from that scan
+        # the same way this pooling bug hid from it the first time.
+        if composition:
+            return SafeReActAgent(
+                name=name,
+                sys_prompt=GLUE_SYSTEM_PROMPT,
+                model=make_openai_model(self._cfg, cache_key="rtl-generate-glue"),
+                formatter=make_formatter(self._cfg.model),
+                memory=InMemoryMemory(),
+                max_iters=10,
+            )
         return SafeReActAgent(
             name=name,
-            sys_prompt=GLUE_SYSTEM_PROMPT if composition else SYSTEM_PROMPT,
+            sys_prompt=SYSTEM_PROMPT,
             model=make_openai_model(self._cfg, cache_key="rtl-generate"),
             formatter=make_formatter(self._cfg.model),
             memory=InMemoryMemory(),
