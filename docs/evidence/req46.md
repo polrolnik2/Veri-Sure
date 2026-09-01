@@ -40,12 +40,67 @@ every change in its observation window.
 ## The two confounds, measured
 
 Golden's single conviction is `TP-0024`: a 1-edge glitch on `sda_i` at edge 3,
-and `dout` moves at edge 4. That is golden's power-on capture --
-`always @(posedge clk) if (sSCL & ~dSCL) dout <= sSDA;` has no reset branch, so
-the first clock after reset captures unconditionally. Across golden's 311
-testpoints with >=8 rows, `dout`'s first change is at row 4 in **180 testpoints
-where `sda_i` is clean at row 3** and 17 where it is not. The glitch is not the
-cause.
+and `dout` moves at edge 4.
+
+**Correction to an earlier account.** I first wrote that this was a power-on
+capture because `dSCL` starts at 0 and the first clock after reset therefore
+satisfies `sSCL & ~dSCL`. That is wrong: golden resets `dSCL <= 1'b1` and
+`sSCL <= 1'b1`. The real mechanism is reset RECOVERY. `rst` forces
+`cSCL <= 2'b00` -- the sampled bus is held low -- while `fSCL <= 3'b111` and
+`sSCL <= 1'b1`. When `rst` releases, `fSCL` shifts in the low `cSCL[1]`
+(111 -> 110 -> 100 -> 000) and `sSCL` falls; then `cSCL` refills from
+`scl_i = 1` and `sSCL` rises again. **That is a genuine rising edge of the
+filtered SCL**, and `dout` captures on it, exactly once per testpoint.
+
+The evidence for the attribution does not depend on that mechanism being right.
+Across golden's 311 testpoints with >=8 rows, `dout`'s first change is at row 4
+in **180 testpoints where `sda_i` is clean at row 3** and 17 where it is not. A
+response to a glitch cannot occur in traces with no glitch. The glitch is not
+the cause.
+
+### Is convicting golden here defensible? No -- and the specification is explicit
+
+`dout` is unreset in golden (`always @(posedge clk) if (sSCL & ~dSCL) dout <=
+sSDA;`, not even in the `nReset` sensitivity list), so it is worth asking
+whether the SPEC demands otherwise and golden is simply wrong.
+
+It does not, and it is not silent by accident. The spec's item 15 enumerates
+what reset does:
+
+> *"On asynchronous reset `nReset = 0`, the FSM returns to idle, output enables
+> are released high, command acknowledge is cleared, arbitration lost is
+> cleared, busy is cleared, counters and filters are reset, and filtered
+> SCL/SDA are initialized high."*
+
+Every other output is named -- `cmd_ack`, `al`, `busy`, the output enables.
+`dout` is absent. The prose at line 101 repeats the same enumeration and omits
+it again, and the port table hedges: *"most sequential state elements are
+immediately initialized"* -- most, not all.
+
+`dout`'s only stated behaviour anywhere in the spec is *"captures the filtered
+SDA value on the rising edge of the filtered SCL signal"* (lines 53, 84, 115),
+with no reset qualifier. REQ-0100 sharpens it to **"on EVERY rising edge of the
+filtered SCL signal."**
+
+So the reset-recovery rise is a rising edge of filtered SCL, and **REQ-0100
+requires the capture that REQ-0046's check convicts.** A check that convicts it
+does not catch a golden defect; it puts REQ-0046 in direct contradiction with
+the more specific REQ-0100.
+
+**Nothing was dropped that covered this.** All seven reset requirements
+(REQ-0018, 0019, 0075, 0076, 0077, 0082, 0083) and all the `dout` capture
+requirements (REQ-0004, 0031, 0051, 0068, 0100) are frozen and TRUSTED. The one
+`dout` requirement that is ABANDONED, REQ-0113, was abandoned for
+*"never reached in 3 attempt(s)"* and concerns the FSM returning to idle with
+`cmd_ack`, not reset. No requirement about `dout`'s reset value was dropped,
+because none was ever written -- the specification does not state one.
+
+### What the attribution gate costs
+
+It discards an observation rather than re-attributing it, so a design that DID
+respond to a glitch in a window another input also moved would be discarded
+too. That is a loss of sensitivity bought for soundness, and on this stimulus it
+is expensive: it is part of why 329 of 334 testpoints abstain.
 
 Gating `dout` on the when-clause `observed_via` already carried -- *"around a
 filtered-SCL rising sample"* -- moves the conviction to `TP-0234` rather than
