@@ -32,15 +32,19 @@ def main(check_path: str) -> int:
 
     source = Path(check_path).read_text()
     contract = json.loads((S / "asrt/run10/contract.json").read_text())
-    # tp_uids empty: decide against EVERY testpoint, which is what the frozen
-    # set does and what makes the two columns comparable.
-    orc = [RequirementOracle(req_uid="REQ-0046", clause="majority filter",
-                             source=source, tp_uids=[])]
-
+    # EVERY testpoint, named explicitly. `decide_rtl` iterates `oracle.tp_uids`,
+    # so an EMPTY list decides against nothing and `_worst([])` returns a
+    # constant `ok=False, broken="the oracle names no testpoint"` -- which is a
+    # verdict-shaped object that never looked at a trace. Leaving it empty made
+    # this script print FAIL/FAIL for every input, including inputs that convict
+    # nothing at all.
     out = {}
     for tag, d in (("GOLDEN  (filter present)", "asrt/gold10"),
                    ("RUN 10  (filter bypassed)", "asrt/run10")):
-        res = decide_rtl(orc, load_traces(S / d / "suite/results"), contract)
+        traces = load_traces(S / d / "suite/results")
+        orc = [RequirementOracle(req_uid="REQ-0046", clause="majority filter",
+                                 source=source, tp_uids=sorted(traces))]
+        res = decide_rtl(orc, traces, contract)
         r = res[0] if res else None
         out[tag] = (getattr(r, "ok", None), getattr(r, "detail", "") or "")
         v = {True: "PASS", False: "FAIL", None: "abstain"}[out[tag][0]]
