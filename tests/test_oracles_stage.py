@@ -1298,3 +1298,32 @@ def test_every_operator_the_author_is_told_about_is_importable_and_shown():
     # so they must also be reachable.
     for name in ("runs", "nth"):
         assert name in shown, f"{name} is described but not in the import line"
+
+
+def test_a_threshold_in_the_requirement_TEXT_is_reachable_without_sustains():
+    """The author has `runs`; it was also told not to use it.
+
+    Two things gated the one requirement class the operator was built for.
+    The prompt's own `sustains` paragraph opened with "When it is present",
+    and the older rule says "You are not inventing a window, you are copying
+    one" -- so with `sustains: []` the author holds the tool and an
+    instruction against reaching for it.
+
+    Measured: after teaching normalization the field, 1 of 127 requirements
+    populated it, and REQ-0010, REQ-0045 and REQ-0046 -- the filter cluster it
+    exists for -- all came back empty. Normalization is RIGHT to decline: the
+    spec states a sample DEPTH ("a majority of the three-sample histories"),
+    not a duration on a port, and `stated_by` cannot quote a phrase that does
+    not exist. The author reads the same sentence and can do the arithmetic.
+
+    The exception must stay narrow, so this pins both halves: the door is open
+    for a threshold in the requirement's own words, and the rule it sits under
+    is still stated.
+    """
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    assert "ONE EXCEPTION, AND ONLY THIS ONE" in SYSTEM
+    assert "not inventing a window, you are copying one" in SYSTEM
+    # The evidence trail the exception is licensed by.
+    assert "QUOTE THE PHRASE" in SYSTEM
+    assert "at_most=1" in SYSTEM

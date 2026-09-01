@@ -349,6 +349,25 @@ THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
 `activation.until` is what CLOSES it; `activation.aborts_on` is what DISCARDS
 it. You are not inventing a window, you are copying one.
 
+ONE EXCEPTION, AND ONLY THIS ONE: A THRESHOLD THE REQUIREMENT'S OWN TEXT
+STATES. If `activation.sustains` is EMPTY but the requirement says a duration
+in words -- "a majority of the three consecutive samples", "shorter than the
+filter window", "for one clock cycle" -- you may open on it with `runs`, and
+you should. Normalization declines these when the number is about a SAMPLE
+DEPTH rather than a port's duration, because it cannot quote a phrase saying
+how long the port was held; you are reading the same sentence and can do the
+arithmetic it declined to do. A run that cannot win a majority of three
+consecutive samples is a run of at most one.
+
+    # requirement text: "a majority function over the three-sample histories"
+    short = runs(trace, "sda_i", value=0, at_most=1)     # cannot win 3-sample majority
+    long_ = runs(trace, "sda_i", value=0, at_least=2)    # can
+
+QUOTE THE PHRASE IN YOUR DETAIL STRING when you do this, exactly as
+`stated_by` would have. A number you can point at in the specification is a
+transcription; one you cannot is the invented pacing the rule above forbids,
+and the detail string is where a reader checks which of the two you did.
+
     windows = after(trace, applies, until=closes, aborts=voided)
 
 `aborts` IS SVA's `disable iff`. A window it ends returns UNKNOWN from every
