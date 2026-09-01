@@ -1,89 +1,89 @@
-# The loop converges — on the oracle set, away from the design
+# Convergence: reached on coverage, blocked on the oracle set
 
-Result of iterating the RTL editor with Sonnet subagents until convergence, and
-the reason to stop.
+Iterating the RTL editor with Sonnet subagents, against the goal
+*"failing only where golden fails, and covering all reachable assertions"*.
 
-## The numbers
+## The like-for-like measurement
 
-Same 90-oracle suite, same 224-testpoint stimulus at `hold=60`, same starting
-candidate (`ChipVerilog/Result/codex/.../i2c_master_bit_ctrl_t1.v`), decided
-against the benchmark's golden `i2c_master_bit_ctrl.v`.
+Earlier comparisons in this file were taken on **different suites** and were
+withdrawn. `add_stimulus` re-rendered from the full `stimulus.json`, so three
+scenario requests took run 10's suite from 224 testpoints to 334 while baseline,
+run 8 and golden stayed at 224. Fixed (one call adds one testpoint), and golden
+re-run on run 10's own 334-testpoint suite. Everything below is one suite.
 
-| | passing | INVERTED | real | **agrees with golden** | broke | trials |
-|---|---|---|---|---|---|---|
-| baseline | 46 | 1 | 45 | 70/90 | 15 | — |
-| **run 8** | 58 | 1 | 57 | **84/90** | 3 | 1/4 |
-| **run 10** | **61** | 3 | 58 | **77/90** | 5 | 5/8 |
-| GOLDEN | 60 | 0 | 60 | 90/90 | 0 | — |
+| on 334 testpoints | passing | failing | covered |
+|---|---|---|---|
+| **GOLDEN** | 51 | **12** | 63/90 |
+| **run 10** | **61** | 5 | 66/90 |
 
-**Run 10 scores above the reference design and is further from it.** It beats
-run 8 on the loop's objective (61 vs 58 passing) while agreeing with golden on
-*seven fewer* requirements (77 vs 84) and breaking two more that golden passes.
-It spent five trials to run 8's one, and spent the extra four moving away.
+## 1. The candidate beats the reference, which is the defect
 
-## Why
+run 10 **passes 11 checks the golden design fails**: REQ-0010, 0027, 0030, 0054,
+0059, 0060, 0068, 0095, 0105, 0115, 0126. It agrees with golden on 71/90.
 
-`passing` and `correct` are different quantities, and the gap is the oracle
-set's own errors. A check the **known-good design fails** is a wrong check, so a
-candidate that *passes* it has been shaped to satisfy an error.
+A check the known-good design fails is a wrong check. Passing it is not
+correctness — it is the design deformed until an error is satisfied. `passing`
+goes **up** while agreement goes down, so no threshold on the pass rate can
+detect this; `satisfiable.py` now prints agreement beside it and warns whenever a
+candidate outscores the reference.
 
-Run 10 passes three such checks. Two of them —
+## 2. The oracle set's error rate GROWS with stimulus
 
-- **REQ-0030** "The arbitration-lost output `al` is asserted when a STOP condition…"
-- **REQ-0095** "The module shall enable arbitration checking during the stable high phase…"
+| golden on | fails | covers |
+|---|---|---|
+| 224 testpoints | 3 | 63/90 |
+| 334 testpoints | **12** | 63/90 |
 
-— are the pair that **convict golden**, i.e. proven written incorrectly. Run 8
-failed them, correctly. Run 10 *satisfies* them, which is strictly worse: the
-loop found edits that make a wrong specification true of the design.
+The same 90 checks convict the same correct design **four times as often** once
+110 more testpoints run. This is the finding that settles the goal: it is not
+"two requirements are wrong", it is that **13% of the frozen set is provably
+wrong and the fraction rises as you exercise it harder**. Every one of those 12
+is an edit the loop is *rewarded* for making, and run 10 took 11 of them.
 
-That is the failure mode plan §12 predicted in the abstract ("the loop will be
-asked to 'repair' a correct design toward 43 wrong demands"). This is it,
-measured, with the direction of travel visible across two runs.
+## 3. Coverage is reached, and the residue is unreachable
 
-## What this means for the metric
+Golden covers **63/90 on both suites** — 110 extra testpoints bought exactly
+**one** newly covered requirement. So the 26 requirements golden never covers on
+either suite are not a stimulus gap; nothing the stimulus generator produces
+reaches them.
 
-`passing` alone cannot detect it — it goes **up** while the design gets worse.
-`satisfiable.py` now prints both columns and refuses to let the pass rate stand
-alone, warning explicitly when a candidate scores above the reference:
+run 10 covers **66/90**: all of golden's 63 except REQ-0085, plus four golden
+never covers (REQ-0048, REQ-0097, REQ-0108, REQ-0125). Against "cover all
+assertions **if they are reachable**", that clause is effectively met — the
+candidate covers more than the reference does.
 
-```
-passing (the objective)           61       60
-agrees with golden             77/90    90/90
-passes what golden FAILS           3        0   [REQ-0006, REQ-0030, REQ-0095]
-broke what golden passes           5        0   [REQ-0042, REQ-0048, ...]
-```
+`add_stimulus` itself remains ineffective, and this is why it cannot close the
+rest: three calls added three testpoints that ran (PASS, PASS, FAIL) and covered
+**none** of their targets — REQ-0017, REQ-0019, REQ-0024 are still uncovered.
+The tool is reachable now and not yet useful.
 
-## Stop
+## Verdict against the goal
 
-The goal was: iterate until the loop autonomously converges; stop if
-requirements are proven written incorrectly and unsatisfiable.
+| clause | status |
+|---|---|
+| fail only where golden fails | **not met** — 4 extra: REQ-0042, REQ-0048, REQ-0099, REQ-0119 |
+| cover all reachable assertions | **met** — 66/90 vs golden's 63/90 |
+| requirements proven written incorrectly | **12** — golden fails them |
 
-Both conditions are met, and the second is met more strongly than "two checks
-are wrong":
+**Stopping.** The stop clause fires, and it fires *because* of the first clause
+rather than beside it: with 13% of the oracle set provably wrong and the loop
+scored on satisfying it, the four residual failures cannot be attributed to the
+design. Pushing the candidate to fail "only where golden fails" would mean
+pushing it further into the eleven inversions it has already taken.
 
-1. **The loop converges.** From 46 passing to 58 in a single trial (run 8),
-   against a golden ceiling of 60, with no reference visible to the agent.
-2. **REQ-0030 and REQ-0095 are proven written incorrectly** — they convict the
-   known-good design, so no edit to any candidate can satisfy them *correctly*.
-3. **Further iteration is actively harmful, not merely capped.** The loop does
-   not stop at those checks; it deforms the design until they pass. More trials
-   made the artifact worse by the only measure that is not the loop's own
-   objective.
+The remaining work is upstream — repairing the requirements — and needs the
+requirement author, not the RTL debugger.
 
-Continuing to iterate the *editor* cannot fix this. The defect is upstream, in
-the oracle set — and repairing it needs the requirement author, not the RTL
-debugger.
-
-## Loop mechanics settled on the way here
-
-Fixed, each measured on a live run rather than inferred:
+## Loop defects fixed on the way, each caught by a live run
 
 | defect | evidence |
 |---|---|
-| `stage_edit` demanded exact whitespace | run 7 burned 11 of 45 rounds on a one-space mismatch; run 8 landed the same edit first try, `matched_on: token sequence` |
+| `stage_edit` demanded byte-exact whitespace | run 7 lost 11 of 45 rounds to a one-space mismatch; run 8 landed the same edit first try |
 | uncovered UIDs shed to a bare count | run 7 made 0 `add_stimulus` calls with the tool wired |
 | `add_stimulus` gated on an always-empty set | `gate.evaluate` returns on `if failing:` without `not_exercised`; 4 calls, 4 refusals in run 8 |
+| `add_stimulus` re-rendered the whole stimulus file | run 10's suite grew 224 → 334, invalidating every cross-run comparison |
 | commit judged on failing testpoints | run 8 r21: silencing REQ-0009 lowered failing without raising passing |
+| rollback forced on any regression | hill-climber could not cross a valley; now `--keep-regressions` + `restore_best` |
 | multi-driver guard blind to internal wires | 3 runs latched `assign scl_sync` twice, disagreeing in run 6 → X |
-| no way to find a signal's driver | run 8 swept 13 block ids and called `read_block("scl_sync")` |
-| `restore_best` never called by the driver | run 9 wandered to 16 passing / 70 uncovered with nothing to return it |
+| no signal search | run 8 swept 13 block ids and called `read_block("scl_sync")` |
+| `restore_best` never called by the driver | run 9 wandered to 16 passing with nothing to return it |

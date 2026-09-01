@@ -523,6 +523,32 @@ class SpecflowStimulusStager:
             return {"error": "the generator produced no steps"}
 
         by_tp = {t["tp_uid"]: t["stimulus_steps"] for t in stim.get("testpoints", [])}
+
+        # RENDER THE SUITE THAT EXISTS, PLUS ONE -- not every testpoint the
+        # stimulus file happens to hold.
+        #
+        # `stimulus.json` and `testplan.json` are the FULL artifacts; a run may
+        # deliberately be built over a subset of them. This re-rendered from the
+        # full set, so adding one testpoint silently restored every testpoint
+        # the run had excluded.
+        #
+        # MEASURED on run 10: three `add_stimulus` calls took the suite from 224
+        # testpoints to 334 -- the 331 in the stimulus file plus the 3 added. The
+        # run's pass and coverage counts were therefore taken on a LARGER suite
+        # than its own baseline, than run 8, and than the golden reference, and
+        # no comparison across that boundary means anything. A tool that adds
+        # one scenario must add one scenario.
+        try:
+            live = json.loads((Path(self.suite_dir) / "manifest.json").read_text(
+                encoding="utf-8")).get("testpoints") or []
+        except (OSError, ValueError):
+            live = []
+        live_uids = {str(t.get("tp_uid") or t.get("uid") or "") if isinstance(t, dict)
+                     else str(t) for t in live}
+        if live_uids:
+            by_tp = {k: v for k, v in by_tp.items() if k in live_uids}
+            testplan = [t for t in testplan
+                        if str(t.get("tp_uid") or t.get("uid") or "") in live_uids]
         # Byte-identical to something already present buys nothing and costs a
         # simulator process on every future run, not just this one.
         key = json.dumps(steps, sort_keys=True)

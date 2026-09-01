@@ -2120,3 +2120,67 @@ def test_restore_best_is_what_makes_keeping_regressions_safe(tmp_path):
     assert s.restore_best() is True
     assert s.read_rtl() == good, "the session must end at its best point"
     assert s.restore_best() is False, "already there: nothing to do"
+
+
+def test_add_stimulus_adds_ONE_testpoint_not_the_whole_stimulus_file(tmp_path):
+    """`stimulus.json` and `testplan.json` are the FULL artifacts; a run may be
+    built over a SUBSET of them. Re-rendering from the full set means adding one
+    testpoint silently restores every testpoint the run excluded.
+
+    MEASURED on run 10: three add_stimulus calls took the suite from 224
+    testpoints to 334 -- the 331 in the stimulus file plus the 3 added. Its pass
+    and coverage counts were therefore taken on a LARGER suite than its own
+    baseline, than run 8, and than the golden reference, so no comparison across
+    that boundary means anything. That invalidated a published comparison before
+    it was caught.
+    """
+    import json as _json
+
+    from eda_agent.specflow_node import SpecflowStimulusStager
+
+    run = tmp_path / "run"
+    (run / "specflow").mkdir(parents=True)
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    # The suite holds TWO testpoints; the artifacts on disk describe FIVE.
+    (suite / "manifest.json").write_text(_json.dumps(
+        {"testpoints": ["TP-0001", "TP-0002"], "modules": []}))
+    full = [f"TP-{i:04d}" for i in range(1, 6)]
+    (run / "specflow/testplan.json").write_text(_json.dumps(
+        {"elements": [{"uid": u, "tp_uid": u, "covers": []} for u in full]}))
+    (run / "specflow/stimulus.json").write_text(_json.dumps(
+        {"testpoints": [{"tp_uid": u, "stimulus_steps": [{"drive": {"ena": 1}}]}
+                        for u in full]}))
+    (run / "specflow/requirements.json").write_text(_json.dumps(
+        {"requirements": [{"uid": "REQ-0001", "text": "t"}]}))
+    (run / "specflow/coverage_model.json").write_text(_json.dumps({"checks": []}))
+
+    rendered = {}
+
+    def _fake_render(**kw):
+        rendered["n"] = len(kw["stimulus_by_tp"])
+        rendered["uids"] = sorted(kw["stimulus_by_tp"])
+
+    stager = SpecflowStimulusStager(
+        run_dir=run, contract={"io": []}, bins=[], suite_dir=suite,
+        model_port=object())
+    stager.uncovered = {"REQ-0001"}
+    stager._checks = []
+
+    import eda_agent.specflow_node as sn
+    import specflow.tb.render as render_mod
+    import specflow.testcase_agent as tca
+    orig_render, orig_stim = render_mod.render_suite, tca.stimulus_for_scenario
+    render_mod.render_suite = _fake_render
+    tca.stimulus_for_scenario = lambda **kw: [{"drive": {"ena": 1, "cmd": 4}}]
+    try:
+        out = stager.add_stimulus("REQ-0001", "drive a WRITE")
+    finally:
+        render_mod.render_suite, tca.stimulus_for_scenario = orig_render, orig_stim
+    assert sn is not None
+
+    assert "added" in out, out
+    assert rendered["n"] == 3, (
+        f"the suite had 2 testpoints and one was added, so the render must see "
+        f"3 -- not {rendered['n']}, which would restore the excluded ones")
+    assert rendered["uids"][:2] == ["TP-0001", "TP-0002"]
