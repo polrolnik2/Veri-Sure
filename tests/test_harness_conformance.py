@@ -463,3 +463,38 @@ def test_the_internal_trace_localises_a_one_generation_early_read(tmp_path, monk
         "no edge shows an internal disagreement while the outputs agree, so the "
         "trace adds nothing a plain output comparison did not already give"
     )
+
+
+def test_a_vacuous_testpoint_is_RECORDED_not_raised():
+    """`Env.finish` must not assert, and the second assert is why this exists.
+
+    `assert self.sb.invoked` raised on a testpoint no check fired on. That is
+    the definition of UNCOVERED -- the record two lines above already calls it
+    `NOT_EXERCISED` -- so raising turned the coverage measurement into a suite
+    crash. It also made cover bins load-bearing for the RUNTIME long after they
+    stopped being load-bearing for the METRIC, since coverage is now the
+    oracles' own tri-state and nothing downstream of the suite reads a bin.
+
+    With it gone a suite renders and runs with no checks and no bins, which is
+    what lets the S3 stage be skipped -- 335 model calls on c1-i2c for an
+    artifact the oracle stage never reads.
+
+    A source pin rather than a behavioural one: `Env` needs a live cocotb
+    simulation to instantiate, and the property being fixed is precisely that
+    two lines of source are absent.
+    """
+    import inspect
+
+    from specflow.tb.runtime import Env
+
+    # COMMENTS STRIPPED FIRST. The removal is explained in a comment that
+    # quotes the very line it removed, so a naive substring search finds the
+    # explanation and reports the bug as unfixed.
+    src = inspect.getsource(Env.finish)
+    code = "\n".join(ln for ln in src.splitlines()
+                     if not ln.lstrip().startswith("#"))
+    assert "assert self.sb.invoked" not in code
+    assert "assert not self.sb.failed" not in code
+    # The tri-state the assert used to pre-empt is still computed and recorded.
+    assert "NOT_EXERCISED" in code
+    assert '"checks_invoked"' in code

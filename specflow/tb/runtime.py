@@ -947,8 +947,25 @@ class Env:
             encoding="utf-8",
         )
 
-        assert not self.sb.failed, (
-            f"{self.tp_uid}: {len(self.sb.failed)} of {len(self.sb.invoked)} checks "
-            f"failed: {sorted(set(self.sb.failed))}"
-        )
-        assert self.sb.invoked, f"{self.tp_uid}: no check ran; this testpoint is vacuous"
+        # NEITHER OF THESE ASSERTS ANY MORE, and the second is the load-bearing
+        # removal.
+        #
+        # A check failure is a RECORD, not a broken harness: `_read_results`
+        # reads the JSON written just above, never the XML an assert would
+        # colour, so raising here only turned a verdict into a suite error.
+        #
+        # `assert self.sb.invoked` was actively wrong. A testpoint no check
+        # fires on is UNCOVERED, which is exactly what the coverage metric
+        # exists to measure -- the record already says so, `status` above is
+        # NOT_EXERCISED for it -- and raising turned that measurement into a
+        # crash. It also made the cover bins load-bearing for the RUNTIME long
+        # after they stopped being load-bearing for the METRIC: coverage is now
+        # the oracles' own tri-state, `decide` returning None where an
+        # activation never occurred, and nothing downstream of the suite reads
+        # a bin. With this assert gone, a suite renders and runs with no checks
+        # and no bins at all, and the S3 stage that mints them -- 335 model
+        # calls on c1-i2c -- is not needed to produce a scoreable run.
+        #
+        # The record is written BEFORE this point, so nothing is lost either
+        # way; what changes is that a vacuous testpoint is reported rather
+        # than raised.

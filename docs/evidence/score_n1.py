@@ -52,7 +52,10 @@ def main() -> int:
 
     contract = json.loads((run_dir.parent / "c1-i2c/contract.json").read_text())
     tps = json.loads((sf / "testplan.json").read_text())["elements"]
-    cov = json.loads((sf / "coverage_model.json").read_text())
+    # Absent by design on a run that skipped S3. Empty bins and checks render
+    # a suite that drives stimulus and records, which is all the oracles need.
+    _cov = sf / "coverage_model.json"
+    cov = json.loads(_cov.read_text()) if _cov.is_file() else {"bins": [], "checks": []}
     stim = json.loads((sf / "stimulus.json").read_text())
     by_tp = {t["tp_uid"]: t.get("steps") or [] for t in stim.get("testpoints") or []}
     art = json.loads((sf / "oracles.json").read_text())

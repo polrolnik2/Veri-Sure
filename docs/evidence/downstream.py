@@ -93,7 +93,16 @@ def main() -> int:
                     help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
                          "and the measured stream deaths were at 9000")
     ap.add_argument("--effort", default="medium")
-    ap.add_argument("--skip", default="", help="comma list: s2,s3,stimulus,oracles")
+    #: S3 IS SKIPPED BY DEFAULT, and it is the biggest saving here: 335 model
+    #: calls on c1-i2c for cover bins that NOTHING downstream reads. The oracle
+    #: stage never sees them, and coverage is the oracles' own tri-state --
+    #: `decide` returning None where the activation never occurred -- not a bin
+    #: denominator. Their last consumer was `Env.finish`'s
+    #: `assert self.sb.invoked`, which crashed on the very testpoints the
+    #: coverage metric exists to count; that assert is gone, so a suite renders
+    #: and runs with no checks and no bins.
+    ap.add_argument("--skip", default="s3",
+                    help="comma list: s2,s3,stimulus,oracles")
     a = ap.parse_args()
     skip = {s.strip() for s in a.skip.split(",") if s.strip()}
 
