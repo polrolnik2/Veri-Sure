@@ -422,6 +422,16 @@ def run_unit(
     The stage name carries the unit's offset rather than its index so a rerun
     over a re-divided spec cannot silently collide with a recorded fixture from a
     different partition.
+
+    **That safeguard is one-sided, and the gate is what closes it.** The name is
+    the unit's START, so a divider change that only moves a unit's END -- which
+    is what widening `_SENTENCE_CUT` did: 168 units to 172, every existing start
+    unchanged -- reuses the recorded response of a LONGER unit. It is not
+    silent: those obligations tile the old body, so at least one runs past the
+    new `unit.length` and `gate_unit` rejects it as "span is not inside the
+    unit", forcing a fresh call. Relying on that is still worse than not
+    colliding, so **re-divide into a fresh run directory** rather than resuming
+    one recorded under a different partition.
     """
     try:
         contract = json.loads(contract_json) if contract_json.strip() else {}

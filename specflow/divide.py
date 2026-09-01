@@ -118,11 +118,29 @@ def _line_kind(line: str) -> str:
 #: them at `.` produces fragments no reader would recognise as units.
 _PROSE_KINDS = ("paragraph", "list_item")
 
-#: A sentence terminator followed by whitespace and a capital or a digit. The
-#: lookahead is what keeps "clk_cnt >> 2. Whenever" apart from "i.e. when" and
-#: from a decimal point: an abbreviation is followed by a lower-case word, and
-#: `2.5` has no space.
-_SENTENCE_CUT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9`])")
+#: A sentence terminator followed by whitespace and a capital or a digit, OR by
+#: a line break. The first lookahead is what keeps "clk_cnt >> 2. Whenever"
+#: apart from "i.e. when" and from a decimal point: an abbreviation is followed
+#: by a lower-case word, and `2.5` has no space.
+#:
+#: The line-break alternative is there because a specification's own names are
+#: lower case. On i2c the port glossary reads
+#:
+#:     scl_i:External I2C SCL line input ... and read sampling.
+#:     sda_i:External I2C SDA line input ...
+#:
+#: and the capital-letter lookahead refuses the boundary before `sda_i`, so one
+#: unit ran from the middle of the SCL entry into the SDA entry -- and the seven
+#: requirements built on it were attributed to a quote mixing SCL behaviour with
+#: an SDA declaration, which is the provenance defect this module exists to
+#: prevent. A sentence end followed by a NEWLINE is unambiguous in a way a
+#: mid-line one is not: no abbreviation is broken across a line here, and a
+#: stray short fragment is joined backwards by `min_words` regardless.
+#:
+#: Measured before landing: purely additive on i2c (168 -> 172 units, every
+#: existing unit start unchanged) and zero splits, overlaps or word-carrying
+#: gaps across all 273 specs in both corpora.
+_SENTENCE_CUT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9`])|(?<=[.!?])\n(?=[ \t]*\S)")
 
 
 def _by_sentence(text: str, units: list[Unit], min_words: int) -> list[Unit]:

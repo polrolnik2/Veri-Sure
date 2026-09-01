@@ -129,6 +129,28 @@ def test_a_short_fragment_joins_its_predecessor():
     assert len(units) == 1
 
 
+def test_a_lowercase_named_entry_still_starts_a_unit():
+    """A specification's own names are lower case, and the cut must see them.
+
+    The capital-letter lookahead refused the boundary before `sda_i`, so one
+    unit ran from the middle of the SCL entry into the SDA entry, and every
+    requirement built on it was attributed to a quote mixing SCL behaviour with
+    an SDA declaration.
+    """
+    spec = (
+        "    scl_i:External I2C SCL line input from the pad. This input is "
+        "filtered and used for read sampling.\n"
+        "    sda_i:External I2C SDA line input from the pad. This input is "
+        "filtered and used for arbitration.\n"
+    )
+    units = divide(spec)
+    assert not splits_a_sentence(spec, units)
+    # The `sda_i` entry begins its own unit. It keeps its line indent, because
+    # a unit that starts mid-line is what `splits_a_sentence` rejects.
+    starts = [u.text(spec).lstrip()[:6] for u in units]
+    assert "scl_i:" in starts and "sda_i:" in starts, starts
+
+
 def test_a_sentence_cut_keeps_the_line_indent_it_starts_on():
     """The pin on the sentence pass's own boundary arithmetic.
 
