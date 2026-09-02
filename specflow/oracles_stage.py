@@ -1273,6 +1273,37 @@ def run_oracle_stage(
         # only two objections and no discard at all. A path that drops an
         # author's work must say so where the artifact can be read.
         for o in again:
+            # AN UNCHANGED REPLY IS NOT AN ATTEMPT.
+            #
+            # The author is sent the gate's objection and sometimes returns the
+            # previous function verbatim. Measured on h2-i2c: 14 of 89 repair
+            # rounds (16%) came back byte-identical to the oracle they were
+            # asked to fix, every one of them the FIRST repair round, and three
+            # of the run's five false convictions of golden are among them --
+            # REQ-0050 was handed a specific, actionable defect report ("your
+            # check judged at edge 62, before any of busy had moved off its
+            # reset value") and returned the same source unchanged.
+            #
+            # These are not cache hits: `resumable` keys on the stage name and
+            # `oracle_X_r0` and `oracle_X_fix1_r0` are different stages.
+            #
+            # Letting it through spends a repair attempt and buys nothing, and
+            # because attempts are finite the requirement can exhaust its budget
+            # on replies that never changed a character. Recording it and
+            # leaving the previous oracle standing costs nothing, keeps the
+            # objection live for the next round, and puts the fact in `repairs`
+            # where the artifact can be read -- the same reason every other
+            # discard on this path is recorded rather than logged.
+            standing = held.get(o.req_uid)
+            if standing is not None and o.source.strip() == standing.source.strip():
+                logger.info("oracles: %s: the reply is byte-identical to the "
+                            "oracle it was asked to repair; not an attempt",
+                            o.req_uid)
+                repairs.setdefault(o.req_uid, []).append(
+                    "repair rejected -- the reply was byte-identical to the "
+                    "oracle it was asked to fix, so nothing was attempted and "
+                    "the objection stands")
+                continue
             # RE-VERIFY EVERY REPLACEMENT, not only the advisory ones.
             #
             # This branch used to run for `advisory_only` alone, so a reply to
