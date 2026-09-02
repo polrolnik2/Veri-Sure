@@ -396,6 +396,25 @@ class Route(BaseModel):
     #: What the port does when this requirement holds, AND when it does not.
     #: Two cases, or there is nothing for a check to discriminate between.
     shows: str = ""
+    #: WHAT THE PORT DOES WHEN THE REQUIREMENT DOES NOT HOLD. A SECOND SLOT,
+    #: not a second sentence, and that is the whole point of the change.
+    #:
+    #: The demand for two cases is right: a check written over "the port shows
+    #: X" with nothing to contrast against passes any design that ever shows X,
+    #: including one with none of the behaviour. What was wrong was INFERRING
+    #: two-ness from prose. The old gate searched `shows` for " not ",
+    #: "otherwise", "does not" or " and " -- a substring test standing in for a
+    #: semantic property -- and it gave opposite verdicts to identical claims:
+    #: REQ-0004's "no discrimination: scl_o is structurally tied to 0" was
+    #: recorded as undecidable, while REQ-0034's "there is no case where this
+    #: requirement does not hold" -- the same claim -- passed as a real check,
+    #: because the string happens to contain " not ".
+    #:
+    #: With two slots the check is a FACT rather than a guess: is the second one
+    #: filled. No wording is privileged, an author writing plainly is not
+    #: punished for its vocabulary, and the escape hatch stays an explicit
+    #: opt-in rather than something inferred.
+    otherwise: str = ""
 
 
 class Reach(BaseModel):
@@ -1045,7 +1064,8 @@ Reply with ONE JSON object and nothing else:
           "port": "busy",
           "through_req": "REQ-0007",
           "when": "after a START-shaped edge on sda_i while scl_i is high",
-          "shows": "busy stays low for a glitch narrower than the filter depth, and rises for one at or above it"
+          "shows": "busy rises for a glitch at or above the filter depth",
+          "otherwise": "busy stays low for one narrower than it"
         }
       ],
       "activated_via": [
@@ -1053,7 +1073,8 @@ Reply with ONE JSON object and nothing else:
           "through_req": "REQ-0012",
           "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}},
           "when": "the command is accepted from idle, i.e. presented while clk_en allows the FSM to advance",
-          "shows": "sda_oen falls to 0 while scl_oen is still 1 -- the START-condition signature at the boundary -- and cmd_ack has not yet pulsed for it"
+          "shows": "sda_oen falls to 0 while scl_oen is still 1 -- the START-condition signature at the boundary",
+          "otherwise": "sda_oen holds at 1, or falls only after scl_oen has already gone low"
         }
       ]
     }
@@ -1181,22 +1202,6 @@ def build_indirect_prompt(
 NO_DISCRIMINATION = "no discrimination"
 
 
-def discriminates(shows: str) -> bool:
-    """Does this `shows` name two cases rather than one?
-
-    A heuristic on wording, deliberately: what it is screening for is an author
-    who wrote "busy is observable" where the check needs "busy stays low for a
-    narrow glitch and rises for a wide one". Over-approximating costs a repair
-    round; under-approximating lets a check that cannot fail through.
-    """
-    text = (shows or "").strip()
-    if len(text) < 2:
-        return False
-    low = text.lower()
-    return (" not " in f" {low} " or "otherwise" in low
-            or "does not" in low or " and " in low)
-
-
 def declines_discrimination(shows: str) -> bool:
     """Is this an explicit "there is no second case"?
 
@@ -1268,19 +1273,60 @@ def concedes_a_route(reason: str) -> str:
     return ""
 
 
-def shows_issue(path: str, shows: str) -> Issue | None:
-    """The rule both passes apply to a route's `shows`."""
-    if declines_discrimination(shows) or discriminates(shows):
+#: THE DISCRIMINATION GATE IS GONE, DELIBERATELY.
+#:
+#: `shows_issue` demanded that a route's `shows` name two cases -- what the port
+#: does when the requirement holds and when it does not -- or say the explicit
+#: no-second-case phrase. It was a SUBSTRING TEST (" not ", "otherwise", "does
+#: not", " and ") standing in for a semantic property, applied at normalisation,
+#: four stages before anything can check whether the promise was kept.
+#:
+#: WHAT IT COST, all measured:
+#:   - repair rounds, a meaningful share of the 0.45-0.66 mean
+#:   - the port-deletion defect: the cheapest way to satisfy an objection about
+#:     a port's `shows` is to drop that port from `observable`, which silently
+#:     shrinks what the requirement is ever checked against, and the gate cannot
+#:     tell the two repairs apart because it only sees the routes that remain
+#:   - inconsistent verdicts on identical claims. REQ-0004 said "no
+#:     discrimination" and was recorded as undecidable; REQ-0034 said "there is
+#:     no case where this requirement does not hold" -- the same claim -- and
+#:     passed as a real check, because the string contains " not ".
+#:
+#: WHAT IT BOUGHT: nothing that survives measurement. Discrimination is a
+#: property of the CHECK against real traces, and it is measurable there
+#: directly, with no prose in the loop. Asking an author to promise it in a
+#: sentence at normalisation buys a promise.
+#:
+#: `declines_discrimination` and `NO_DISCRIMINATION` SURVIVE, because
+#: `oracles_stage._declines` (:1435) reads them to assign a disposition -- a
+#: requirement whose routes all decline is classified, not gated. That is
+#: reporting, which is the right use of a lexical screen.
+def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
+    """Two cases, decided by whether the second SLOT is filled.
+
+    No inference from wording. `declines_discrimination` survives as the
+    author's explicit opt-out -- a sentinel it writes deliberately, which is a
+    different act from a gate guessing at its prose.
+    """
+    if not (shows or "").strip():
+        return Issue(
+            "error", path,
+            "`shows` is empty: say what the port does when the requirement "
+            "HOLDS. Without it the check author has a port and no reason to "
+            "watch it.")
+    if declines_discrimination(shows) or declines_discrimination(otherwise):
         return None
-    return Issue(
-        "error", path,
-        "`shows` must name what the port does when the requirement HOLDS and "
-        "what it does when it does NOT. One case is not a discrimination, and "
-        "a check written over it would pass a design with none of this "
-        f"behaviour. If there genuinely is no second case -- the requirement "
-        f"restates its own antecedent, so nothing could contradict it -- say "
-        f"so with {NO_DISCRIMINATION!r} and it is recorded as a finding rather "
-        f"than turned into a check.")
+    if not (otherwise or "").strip():
+        return Issue(
+            "error", path,
+            "`otherwise` is empty: say what the port does when the requirement "
+            "does NOT hold. One case is not a discrimination -- a check written "
+            "over it passes a design with none of this behaviour. If there "
+            f"genuinely is no second case, because the requirement restates its "
+            f"own antecedent and nothing could contradict it, put "
+            f"{NO_DISCRIMINATION!r} in `otherwise` and it is recorded as a "
+            f"finding rather than turned into a check.")
+    return None
 
 
 def when_issue(path: str, when: str) -> Issue | None:
@@ -1403,7 +1449,7 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                                 "a requirement cannot be observed through "
                                 "itself -- that is the direct case, and the "
                                 "first pass already said there is none"))
-        bad = shows_issue(path, route.shows)
+        bad = route_shows_issue(path, route.shows, route.otherwise)
         if bad is not None:
             issues.append(bad)
         bad = when_issue(path, route.when)
@@ -1476,16 +1522,21 @@ _OBSERVED_VIA_SHAPE = (
     "port name. Each entry:\n"
     '  {"port": <output port>, "through_req": "", '
     '"when": <when this port carries this requirement\'s effect>, '
-    '"shows": <what the port does when this requirement holds, AND when it '
-    "does not>}\n"
+    '"shows": <what the port does when this requirement HOLDS>, '
+    '"otherwise": <what it does when it does NOT>}\n'
+    "`otherwise` is a SEPARATE FIELD, not a second clause inside `shows`. One "
+    "case is not a discrimination: a check written over \"the port shows X\" "
+    "passes any design that ever shows X, including one with none of this "
+    "behaviour. If nothing could contradict the requirement -- it restates its "
+    "own antecedent, so no design could fail it -- put \"no discrimination\" "
+    "in `otherwise` and it is recorded as a finding rather than made a check.\n"
     "Example:\n"
-    '  "observed_via": [\n'
-    '    {"port": "busy", "through_req": "", '
+    '  [{"port": "busy", "through_req": "", '
     '"when": "after a START-shaped edge on sda_i while scl_i is high", '
-    '"shows": "busy stays low for a glitch narrower than the filter depth, '
-    'and rises for one at or above it"}\n'
-    "  ]"
+    '"shows": "busy rises for a glitch at or above the filter depth", '
+    '"otherwise": "busy stays low for one narrower than it"}]'
 )
+
 
 
 #: THE ACTIVATION HALF, asked of every requirement in the same breath as
@@ -1686,7 +1737,7 @@ def gate_one(
                     "error", path,
                     f"{route.port!r} is not among the ports this requirement "
                     f"is observable at ({sorted(norm.observable)})"))
-            bad = shows_issue(path, route.shows)
+            bad = route_shows_issue(path, route.shows, route.otherwise)
             if bad is not None:
                 issues.append(bad)
             bad = when_issue(path, route.when)

@@ -48,7 +48,7 @@ def _errors(contract, **activation):
     out = NormalizeOutput(normalized=[NormalizedRequirement(
         observable=["cmd_ack"], expectation="e",
         observed_via=[{"port": "cmd_ack", "through_req": "", "when": "w",
-                       "shows": SHOWS}],
+                       "shows": SHOWS, "otherwise": "the port holds its idle value"}],
         activation=Activation(text="t", **activation))])
     return [i.message for i in gate_one(REQ, out, contract) if i.severity == "error"]
 

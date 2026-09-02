@@ -64,22 +64,20 @@ def _out(**kw):
 # ------------------------------------------------------------- the gate
 
 
-def test_a_route_naming_one_case_is_rejected():
-    """THE VACUITY FAILURE, ONE STAGE EARLY, and harder to see because the route
-    looks like progress. A check over "the port shows X" passes any design that
-    ever shows X -- including one with none of this behaviour."""
+def test_the_indirect_pass_also_wants_the_OTHERWISE_slot():
+    """Same demand, same structural test, both passes."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
         shows="busy is low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})
-    assert issues and "HOLDS" in issues[0].message
+    assert any("`otherwise` is empty" in i.message for i in issues)
 
 
 def test_a_route_naming_both_cases_passes():
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
-        shows=DISCRIMINATING)])
+        shows=DISCRIMINATING, otherwise="busy stays low")])
     assert gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                          known={"REQ-0007", "REQ-0031"}) == []
 
@@ -87,7 +85,7 @@ def test_a_route_naming_both_cases_passes():
 def test_a_route_through_an_undeclared_port_is_rejected():
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="filter_cnt", through_req="REQ-0007", when="x",
-        shows=DISCRIMINATING)])
+        shows=DISCRIMINATING, otherwise="busy stays low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})
     assert any("not a declared output port" in i.message for i in issues)
@@ -96,7 +94,7 @@ def test_a_route_through_an_undeclared_port_is_rejected():
 def test_a_requirement_cannot_be_observed_through_itself():
     """That is the direct case, and the first pass already said there is none."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
-        port="busy", through_req="REQ-0031", when="x", shows=DISCRIMINATING)])
+        port="busy", through_req="REQ-0031", when="x", shows=DISCRIMINATING, otherwise="busy stays low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0031"})
     assert any("through itself" in i.message for i in issues)
@@ -176,7 +174,8 @@ def _resolve(reply, shapes):
 
 ROUTED = ('{"normalized": [{"req_uid": "REQ-0031", "observed_via": [{"port": '
           '"busy", "through_req": "REQ-0007", "when": "after a glitch", '
-          f'"shows": "{DISCRIMINATING}"}}]}}]}}')
+          f'"shows": "{DISCRIMINATING}", '
+          '"otherwise": "busy stays low"}]}]}')
 
 
 def test_a_resolved_requirement_becomes_observable_at_the_route_s_port():
@@ -772,7 +771,7 @@ def test_a_route_GIVEN_silences_the_concession_check():
     not a contradiction worth a second error."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
-        shows=DISCRIMINATING)])
+        shows=DISCRIMINATING, otherwise="busy stays low")])
     out.normalized[0].unobservable_reason = CONCEDING
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})

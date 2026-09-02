@@ -29,8 +29,8 @@ def _route(port: str) -> dict:
     """A direct self-route. Every requirement carries one now, and the field
     that matters is `shows`: two cases, so nothing vacuous gets through."""
     return {"port": port, "through_req": "", "when": "when a START is issued",
-            "shows": f"{port} takes the stated value when the requirement "
-                     f"holds and does not when it does not"}
+            "shows": f"{port} takes the stated value",
+            "otherwise": f"{port} holds its idle value"}
 
 
 def _out(**kw) -> NormalizeOutput:
@@ -284,11 +284,42 @@ def test_a_shape_mistake_on_observed_via_does_not_lose_the_shape():
     assert "LIST of objects" not in out2.reasoning
 
 
-def test_a_one_sided_shows_is_rejected():
+def test_a_route_with_no_OTHERWISE_is_refused():
+    """The two-case demand SURVIVES; only the way it is detected changed.
+
+    It used to be inferred from prose -- `shows` searched for " not ",
+    "otherwise", "does not", " and " -- which gave opposite verdicts to
+    identical claims: REQ-0004's "no discrimination: scl_o is structurally tied
+    to 0" was recorded as undecidable, while REQ-0034's "there is no case where
+    this requirement does not hold" passed as a real check, purely because the
+    string contains " not ".
+
+    Now there are two slots and the check is whether the second is filled. A
+    fact, not a guess about wording.
+    """
     out = _out(observable=["cmd_ack"])
-    out.normalized[0].observed_via[0].shows = "cmd_ack is observable"
+    out.normalized[0].observed_via[0].shows = "cmd_ack pulses"
+    out.normalized[0].observed_via[0].otherwise = ""
     issues = gate_one(REQ, out, CONTRACT)
-    assert any("when it does NOT" in i.message for i in issues)
+    assert any("`otherwise` is empty" in i.message for i in issues)
+
+
+def test_a_route_WITH_otherwise_passes_whatever_words_it_uses():
+    """The pin that proves the lexical inference is gone: this `otherwise` has
+    no " not ", no "otherwise", no " and " -- the old gate would have rejected
+    it, and it is a perfectly good second case."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = "cmd_ack pulses high for one clock"
+    out.normalized[0].observed_via[0].otherwise = "cmd_ack stays low"
+    assert [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"] == []
+
+
+def test_an_EMPTY_shows_is_refused():
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = ""
+    out.normalized[0].observed_via[0].otherwise = "cmd_ack stays low"
+    issues = gate_one(REQ, out, CONTRACT)
+    assert any("`shows` is empty" in i.message for i in issues)
 
 
 def test_a_TAUTOLOGY_may_decline_and_is_not_forced_to_invent_one():
@@ -308,16 +339,6 @@ def test_a_TAUTOLOGY_may_decline_and_is_not_forced_to_invent_one():
     out.normalized[0].observed_via[0].shows = (
         f"{NO_DISCRIMINATION}: the port is the requirement's own antecedent")
     assert gate_one(REQ, out, CONTRACT) == []
-
-
-def test_SILENCE_is_still_rejected():
-    """An absent answer cannot be told from "there is nothing to distinguish",
-    and the difference decides whether this is a finding about the
-    specification or a defect in the pass. Same shape as `observable` + an
-    `unobservable_reason`: empty WITH a reason passes, empty without does not."""
-    out = _out(observable=["cmd_ack"])
-    out.normalized[0].observed_via[0].shows = ""
-    assert gate_one(REQ, out, CONTRACT) != []
 
 
 def test_the_first_pass_may_not_name_ANOTHER_requirement():
