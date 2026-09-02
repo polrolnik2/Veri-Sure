@@ -23,7 +23,7 @@ import logging
 from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
-from .model_io import PortSettings, make_port
+from .model_io import PortSettings, make_port, resumable
 from .normalize import resolve_indirect, run_normalize_fanout
 from .normalize import write_artifacts as write_normalized
 from .refmodel.compose import choose_base, run_refmodel
@@ -362,6 +362,15 @@ def build_artifacts(
     #: `verdict.DOWNGRADABLE` is honoured.
     advisory_verdicts: frozenset[str] = frozenset(),
     reuse: bool = False,
+    #: Replay a call whose response is already recorded in `agent_io`, instead
+    #: of paying for it again. For RESUMING AN INTERRUPTED RUN OVER UNCHANGED
+    #: INPUTS, and nothing else: the recording is keyed by (stage, round_) and
+    #: is NOT checked against the prompt, so a changed prompt would be answered
+    #: by the old response. Separate from `reuse` on purpose -- `reuse` skips a
+    #: stage whose artifact still passes its gate, which does not imply the
+    #: inputs are unchanged, and a stage the gate REJECTS must regenerate with
+    #: a real call rather than replay the answer that produced the rejection.
+    resume_calls: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
     judge: bool = True,
@@ -392,6 +401,31 @@ def build_artifacts(
     ensure_prompt_file(run_dir, spec)
     stats = CacheStats()
     port = make_port(model_port, run_dir / "agent_io", stats, port_settings)
+
+    # RESUME THE CALLS, NOT JUST THE STAGES. `reuse` skips a stage whose
+    # ARTIFACT is on disk, which covers S1..stimulus but does nothing for a
+    # fan-out that dies part way through: variants and oracle generation write
+    # no artifact until the whole stage completes, so a reclaim discarded every
+    # call they had already paid for. `ResumePort` was written for exactly this
+    # -- its docstring cites the oracle stage losing ~600 variant calls after
+    # 1h40m -- and was never wired to anything. Measured here: two container
+    # restarts inside forty minutes, each throwing away every oracle generated
+    # since the last, against a stage that needs about seventy.
+    #
+    # IT IS ITS OWN SWITCH, AND MUST NOT RIDE ON `reuse`. Hanging it there was
+    # tried and is wrong: `reuse` means "skip a stage whose artifact still
+    # passes its gate", which is NOT the same claim as "the inputs have not
+    # changed". A run can carry `reuse=True` over an artifact the gate then
+    # REJECTS, and that stage must regenerate with a real call -- but a replayed
+    # recording hands back the very answer that produced the rejected artifact,
+    # so the regeneration returns the same bad content and re-gating stops
+    # meaning anything. `test_a_stale_artifact_is_regenerated_not_trusted`
+    # catches exactly that.
+    #
+    # So the caller states the precondition ResumePort actually needs -- same
+    # run, unchanged inputs -- and nothing infers it.
+    if resume_calls:
+        port = resumable(port, run_dir / "agent_io")
     contract = json.loads(contract_json) if contract_json.strip() else {}
 
     # Set once a stage regenerates: everything downstream must regenerate too,
