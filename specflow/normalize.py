@@ -1016,14 +1016,18 @@ OBSERVATION -- `observed_via`, a list of ALTERNATIVES, any one sufficient.
                told apart from: an unscoped route makes a check that watches
                the port everywhere and blames this requirement for whatever it
                sees. Restating the activation is a fine answer; empty is not
-  shows        what the port does when this requirement HOLDS, **and what it
-               does when it does not**
+  shows        what the port does when this requirement HOLDS
+  otherwise    what it does when it does NOT -- a SEPARATE FIELD, never a
+               second clause inside `shows`
 
-  `shows` MUST NAME TWO CASES. "busy is observable" is useless. "busy stays low
-  for a glitch narrower than the filter depth, and rises for one at or above it"
-  is something a check can be written on. A route with one case will be
-  rejected: a check over it would pass any design, including one with no such
-  behaviour at all.
+  BOTH CASES ARE REQUIRED, and a route carrying only one will be rejected.
+  "busy is observable" is useless. `shows` "busy rises for a glitch at or above
+  the filter depth" with `otherwise` "busy stays low for one narrower than it"
+  is something a check can be written on; the first half alone passes any
+  design that ever raises busy, including one with none of this behaviour.
+  If nothing could contradict the requirement -- it restates its own antecedent,
+  so no design could fail it -- put "no discrimination" in `otherwise` and it is
+  recorded as a finding rather than made a check.
 
 ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
   Give this only when the activation cannot be stated as input values. "cmd is
@@ -1046,11 +1050,25 @@ ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
   gives; a whole chain guessed here would invalidate everything after its first
   wrong link.
 
-IF THERE IS NO ROUTE, SAY SO. Return empty lists and leave
-`unobservable_reason` as it stands. An honest "nothing observes this" is worth
-more than a route that does not discriminate -- that route would produce a check
-that passes everything, which is the failure this whole pipeline exists to
-prevent.
+THIS IS THE LAST PASS. There is no third question and no later stage that asks
+again: a requirement returning empty lists here ends with no check written for
+it at all. So an empty answer is a FINDING ABOUT THE SPECIFICATION, not a way to
+hand the question on, and it is only true of text that makes no behavioural
+claim -- a port declaration, a list marker, a section heading, architectural
+prose. If the requirement says the design DOES something, that something reaches
+a port, and finding which is what this pass is for.
+
+AN ABSENCE IS AN OBSERVATION. "the FSM stalls" is not unobservable: it shows as
+cmd_ack NOT pulsing where it otherwise would, or scl_oen held where it otherwise
+releases. That is what the two cases are for -- a delay, a non-event or a held
+level fills `shows` or `otherwise` as well as a transition does. An internal
+signal whose only effect is to POSTPONE a boundary event is routed by naming the
+event it postpones and the requirement that would otherwise produce it.
+
+What is still not acceptable is a port you cannot justify. A route reached for
+because it was nearest produces a check that fails correct designs, and that is
+the failure this whole pipeline exists to prevent. Name the port the effect
+actually reaches, scope it with `when`, and fill both cases.
 
 Reply with ONE JSON object and nothing else:
 
