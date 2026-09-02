@@ -93,6 +93,45 @@ def unknown_ports(rows: list[dict]) -> dict[str, int]:
     return bad
 
 
+def check_stimulus(traces_by_tp: dict[str, dict],
+                   stimulus_by_tp: dict[str, list]) -> dict[str, str]:
+    """Which testpoints' traces were NOT driven by the stimulus given.
+
+    Returns `tp_uid -> what disagrees`, empty when everything matches. A
+    testpoint present in only one of the two is reported, because a trace set
+    that is missing half the scenarios is the other way this goes wrong.
+
+    THE FAILURE THIS EXISTS FOR IS SILENT. Both `traces_by_tp` and
+    `stimulus_by_tp` are keyed by `tp_uid`, and uids are minted per requirement
+    rather than per run -- so scoring one run's oracles against a trace set
+    rendered from a different run's stimulus succeeds, folds cleanly, and
+    produces a conviction rate about a scenario the oracles were never written
+    for. It cost a full analysis to find, and it left no evidence at all in the
+    verdicts it produced.
+
+    A trace with no `stimulus_digest` predates the fingerprint and cannot be
+    checked; that is reported as its own reason rather than passed silently,
+    because "unverifiable" and "verified" are different facts.
+    """
+    from ..tb.runtime import stimulus_digest
+
+    out: dict[str, str] = {}
+    for uid in sorted(set(traces_by_tp) | set(stimulus_by_tp)):
+        trace, steps = traces_by_tp.get(uid), stimulus_by_tp.get(uid)
+        if trace is None:
+            out[uid] = "the stimulus names this testpoint; no trace was recorded"
+        elif steps is None:
+            out[uid] = "a trace exists for a testpoint this stimulus does not name"
+        elif not trace.get("stimulus_digest"):
+            out[uid] = ("the trace carries no stimulus_digest, so it predates "
+                        "the fingerprint and cannot be matched")
+        elif trace["stimulus_digest"] != stimulus_digest(steps):
+            out[uid] = (f"driven by different stimulus: the trace records "
+                        f"{trace['stimulus_digest']}, this stimulus is "
+                        f"{stimulus_digest(steps)}")
+    return out
+
+
 def decide_rtl(
     oracles: list[RequirementOracle],
     traces_by_tp: dict[str, dict],
@@ -100,6 +139,7 @@ def decide_rtl(
     *,
     side: str = "dut",
     transactional: bool = True,
+    stimulus_by_tp: dict[str, list] | None = None,
 ) -> list[OracleResult]:
     """Decide every oracle over recorded traces instead of a replayed model.
 
@@ -116,6 +156,21 @@ def decide_rtl(
     silences a whole testpoint because one signal the check never mentions was
     missing.
     """
+    if stimulus_by_tp is not None:
+        # RAISES, and deliberately. A verdict computed against the wrong
+        # recording is not a weaker measurement, it is a measurement of
+        # something else, and every way of reporting it short of refusing to
+        # produce it has already been tried and read as a real result.
+        wrong = check_stimulus(traces_by_tp, stimulus_by_tp)
+        named = {tp for o in oracles for tp in o.tp_uids}
+        wrong = {k: v for k, v in wrong.items() if k in named}
+        if wrong:
+            sample = "; ".join(f"{k}: {v}" for k, v in list(wrong.items())[:3])
+            raise ValueError(
+                f"{len(wrong)} of the {len(named)} testpoint(s) these oracles "
+                f"name were not recorded from this stimulus -- {sample}"
+                + (" ..." if len(wrong) > 3 else ""))
+
     out: list[OracleResult] = []
     for oracle in oracles:
         reads = ports_read(oracle, contract)

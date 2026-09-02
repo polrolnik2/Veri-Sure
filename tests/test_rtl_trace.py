@@ -185,3 +185,75 @@ def test_a_missing_trace_also_names_the_testpoint_it_was_looking_for():
                           tp_uids=["TP-0404"])
     [res] = decide_rtl([o], {}, CONTRACT)
     assert res.ok is None and res.tp_uid == "TP-0404"
+
+
+# -- stimulus provenance -----------------------------------------------------
+#
+# The failure these pin is the one that cost a whole analysis: `decide_rtl`
+# looks a trace up by `tp_uid`, every run of the pipeline mints the SAME uids,
+# and the stimulus behind them is regenerated. So scoring one run's oracles
+# against another run's traces SUCCEEDS -- it just answers a different
+# question, and leaves no trace of having done so in the verdicts.
+
+
+def _digested(steps, **over):
+    from specflow.tb.runtime import stimulus_digest
+    t = _trace((0, 1, 0, 0, 0))
+    t["stimulus_digest"] = stimulus_digest(steps)
+    t.update(over)
+    return t
+
+
+def test_matching_stimulus_and_traces_report_nothing():
+    from specflow.refmodel.rtl_trace import check_stimulus
+    steps = [{"inputs": {"cmd": 1}, "hold": 2}]
+    assert check_stimulus({"TP-0000": _digested(steps)}, {"TP-0000": steps}) == {}
+
+
+def test_a_trace_driven_by_DIFFERENT_stimulus_is_named():
+    """The whole point: same uid, different content, and it must be loud."""
+    from specflow.refmodel.rtl_trace import check_stimulus
+    mine = [{"inputs": {"cmd": 1}, "hold": 2}]
+    theirs = [{"inputs": {"cmd": 1}, "hold": 2}, {"reset": True}]
+    bad = check_stimulus({"TP-0000": _digested(theirs)}, {"TP-0000": mine})
+    assert "TP-0000" in bad and "different stimulus" in bad["TP-0000"]
+
+
+def test_key_ORDER_is_not_a_difference():
+    """Two spellings of one step are one scenario; only content may disagree."""
+    from specflow.refmodel.rtl_trace import check_stimulus
+    a = [{"inputs": {"cmd": 1}, "hold": 2}]
+    b = [{"hold": 2, "inputs": {"cmd": 1}}]
+    assert check_stimulus({"TP-0000": _digested(a)}, {"TP-0000": b}) == {}
+
+
+def test_a_trace_with_no_digest_is_UNVERIFIABLE_not_verified():
+    """A recording predating the fingerprint gets its own reason, not silence."""
+    from specflow.refmodel.rtl_trace import check_stimulus
+    steps = [{"inputs": {"cmd": 1}}]
+    bad = check_stimulus({"TP-0000": _trace((0, 1, 0, 0, 0))}, {"TP-0000": steps})
+    assert "no stimulus_digest" in bad["TP-0000"]
+
+
+def test_decide_rtl_REFUSES_rather_than_returning_a_wrong_verdict():
+    """Raises. A verdict against the wrong recording is not a weaker
+    measurement, it is a measurement of something else -- and every softer way
+    of reporting it has already been read as a real result."""
+    o = _oracle("def decide(trace):\n    return True\n")
+    theirs = [{"reset": True}]
+    with pytest.raises(ValueError, match="not recorded from this stimulus"):
+        decide_rtl([o], {"TP-0000": _digested(theirs)}, CONTRACT,
+                   stimulus_by_tp={"TP-0000": [{"inputs": {"cmd": 1}}]})
+
+
+def test_a_testpoint_no_oracle_NAMES_does_not_trip_the_refusal():
+    """A suite may record more than these oracles look at; that is not a
+    provenance failure, and treating it as one would refuse every partial
+    scoring."""
+    o = _oracle("def decide(trace):\n    return True\n")
+    steps = [{"inputs": {"cmd": 1}}]
+    traces = {"TP-0000": _digested(steps),
+              "TP-0999": {**_digested([{"reset": True}]), "tp_uid": "TP-0999"}}
+    [res] = decide_rtl([o], traces, CONTRACT,
+                       stimulus_by_tp={"TP-0000": steps, "TP-0999": steps})
+    assert res.ok is True
