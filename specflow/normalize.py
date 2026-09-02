@@ -815,6 +815,36 @@ EXPECTATION. What must hold of those outputs when the activation occurs, in one
 clause. If `observable` is empty, still state the expectation in terms of the
 internal thing -- it records what could not be checked.
 
+AND SAY HOW THE ACTIVATION IS REACHED, in `activated_via`.
+
+Some requirements apply whenever their inputs are driven a certain way. Others
+apply only once something has ALREADY HAPPENED -- a command was accepted, a
+sequence is running, a condition was detected. Those are different answers and
+only you can tell them apart.
+
+  DRIVEN: one entry, `through_req` empty, carrying the inputs that drive it.
+    {"through_req": "", "activation": {"text": "...", "inputs": {"cmd": 4}}}
+
+  REACHED: one entry per prerequisite, each naming the requirement whose
+  behaviour puts the design there, plus `when` and `shows`.
+    {"through_req": "REQ-0096",
+     "activation": {"text": "the FSM has entered the READ sequence"},
+     "when": "the command is accepted from idle",
+     "shows": "scl_oen or sda_oen departs the released idle pair and sda_oen
+               stays 1 until cmd_ack"}
+  `shows` is how a trace of DECLARED PORTS reveals the hop has fired. Without
+  it the check author knows which requirement to thank and still cannot open a
+  window on it, so it opens on whatever is easy to see instead.
+
+  NEITHER: if it needs a prior event you cannot name, leave `activated_via`
+  empty and say so in `unreachable_reason`. That is a real answer and it is
+  worth more than a hop you invented.
+
+PINNING AN INPUT TO THE VALUE IT RESTS AT IS NOT DRIVING ANYTHING. If the only
+inputs you would name are the ones saying nothing unusual is happening -- reset
+inactive, core enabled -- then this requirement is NOT driven by its inputs, and
+saying it is hides the fact that something must have happened first.
+
 Reply with ONE JSON object and nothing else:
 
 {
@@ -830,7 +860,11 @@ Reply with ONE JSON object and nothing else:
       },
       "observable": ["cmd_ack", "busy"],
       "unobservable_reason": "",
-      "expectation": "cmd_ack pulses high for exactly one clock and busy rises"
+      "expectation": "cmd_ack pulses high for exactly one clock and busy rises",
+      "activated_via": [
+        {"through_req": "", "activation": {"text": "a START command is issued", "inputs": {"cmd": 1, "ena": 1}}}
+      ],
+      "unreachable_reason": ""
     }
   ]
 }
