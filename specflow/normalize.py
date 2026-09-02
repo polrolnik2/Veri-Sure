@@ -1447,9 +1447,12 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                 f"this pass exists to find the route, and your own reason says "
                 f"where the effect is seen: {conceded!r} -- yet `observed_via` "
                 f"is empty. Write it: the declared output port it reaches, the "
-                f"`through_req` it travels through, `when` it shows there, and "
-                f"`shows` giving BOTH cases -- how that port looks when the "
-                f"requirement holds and when it does not. If you now judge no "
+                f"`through_req` it travels through, `when` it shows there, "
+                f"`shows` for how that port looks when the requirement holds "
+                f"and `otherwise` for how it looks when it does not -- two "
+                f"SEPARATE fields. An absence counts: a port that does not "
+                f"move where it otherwise would is an observation. If you now "
+                f"judge no "
                 f"boundary effect exists at all, say that plainly instead; do "
                 f"not describe an effect you are declining to name"))
 
