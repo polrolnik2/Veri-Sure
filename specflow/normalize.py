@@ -1264,17 +1264,43 @@ def declines_discrimination(shows: str) -> bool:
 #: loose version of this predicate matched "is NOT directly observable at
 #: declared output ports", which is the honest answer, so a negation anywhere in
 #: the preceding clause disqualifies the match.
-_CONCEDES_ROUTE = re.compile(
+#: THE COPULA FORMS ARE NEGATION-PROOF BY CONSTRUCTION, so they carry no
+#: lookback. "is not visible" cannot match, because `not` is not one of the
+#: adverbs the optional slot admits; "should not be visible" cannot match,
+#: because the alternation requires `should be` adjacent. Anything these
+#: patterns match is therefore an ASSERTION that the effect is seen.
+_CONCEDES_COPULA = re.compile(
     r"\b(?:should\s+be|would\s+be|will\s+be|is|are|becomes?|remains?)\s+"
     r"(?:(?:indirectly|directly|only|still|clearly|ultimately|readily)\s+){0,2}"
     r"(?:visible|observable|observed|detectable|apparent)\s+"
-    r"(?:through|via|wherever|by\s+observing|as\s+)"
-    r"|\bmanifests?\s+(?:through|via|as|in)\b"
+    r"(?:through|via|wherever|by\s+observing|as\s+)",
+    re.I)
+
+#: THE VERB FORMS CAN BE NEGATED IN PLACE -- "never manifests through", "does
+#: not show up in" -- so these do need a guard. It must be IMMEDIATE: the
+#: negation has to be modifying this verb, not sitting somewhere earlier in the
+#: sentence.
+_CONCEDES_VERB = re.compile(
+    r"\bmanifests?\s+(?:through|via|as|in)\b"
     r"|\bshows?\s+up\s+(?:in|through|as)\b"
     r"|\bsurfaces?\s+(?:through|via|in)\b"
     r"|\breflected\s+(?:in|through|by)\b",
     re.I)
-_NEGATION = re.compile(r"\b(?:not|never|cannot|can't|no|nothing|neither)\b", re.I)
+
+#: Immediate negation only -- the word right before the verb, optionally with
+#: one auxiliary between ("does not show up", "never manifests"). A wider
+#: window is what this guard used to have and it was WRONG in the direction
+#: that matters: a reason saying "commands do not advance, which should be
+#: visible wherever command completion is" is a CONCESSION, and the `not`
+#: belongs to `advance`. Measured on the live indirect pass: REQ-0015 escaped
+#: the gate on exactly that sentence while REQ-0019, saying the same thing
+#: without a nearby `not`, was caught. And the cost is now structural rather
+#: than incidental, because the pass deliberately teaches that AN ABSENCE IS AN
+#: OBSERVATION -- so correct reasons increasingly say "cmd_ack not pulsing",
+#: and a wide window would disarm the gate on precisely the answers it exists
+#: to catch.
+_IMMEDIATE_NEGATION = re.compile(
+    r"\b(?:not|never|cannot|can't|neither|nor)\s+(?:\w+\s+){0,1}$", re.I)
 
 
 def concedes_a_route(reason: str) -> str:
@@ -1284,11 +1310,13 @@ def concedes_a_route(reason: str) -> str:
     author reads its own words faster than it reads a rule.
     """
     text = reason or ""
-    for m in _CONCEDES_ROUTE.finditer(text):
-        if _NEGATION.search(text[max(0, m.start() - 40):m.start()]):
-            continue
-        return text[m.start():m.end() + 90].strip()
-    return ""
+    hits = [m for m in _CONCEDES_COPULA.finditer(text)]
+    hits += [m for m in _CONCEDES_VERB.finditer(text)
+             if not _IMMEDIATE_NEGATION.search(text[max(0, m.start() - 24):m.start()])]
+    if not hits:
+        return ""
+    m = min(hits, key=lambda h: h.start())
+    return text[m.start():m.end() + 90].strip()
 
 
 #: THE DISCRIMINATION GATE IS GONE, DELIBERATELY.
@@ -1417,7 +1445,8 @@ def reach_shows_issue(path: str, shows: str) -> Issue | None:
 
 
 def gate_indirect(out: NormalizeOutput, *, uid: str,
-                  contract: dict, known: set[str]) -> list[Issue]:
+                  contract: dict, known: set[str],
+                  prior_reason: str = "") -> list[Issue]:
     """A route has to be usable, or it is worse than no route at all.
 
     The one rejection that matters is `shows` naming a single case. A check
@@ -1440,7 +1469,15 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
     # naming where the effect shows and still returning no route is declining to
     # answer the only question it was asked.
     if not norm.observable and not norm.observed_via:
-        conceded = concedes_a_route(norm.unobservable_reason)
+        # THE REASON IS INHERITED WHEN THE ANSWER LEAVES IT BLANK, and it
+        # usually does: the prompt says to "leave `unobservable_reason` as it
+        # stands", so a model that declines correctly writes nothing here.
+        # Reading only the answer's own field made this gate blind on exactly
+        # the requirements that followed that instruction -- measured live, 4
+        # of 10 empty indirect answers carried an empty reason while the direct
+        # pass had recorded a real one.
+        conceded = concedes_a_route(
+            norm.unobservable_reason.strip() or prior_reason)
         if conceded:
             issues.append(Issue(
                 "error", f"normalize.{uid}.unobservable_reason",
@@ -2076,7 +2113,8 @@ def resolve_indirect(
                 ask=asks[shape.req_uid]),
             parse=parse_response,
             gate=lambda out: gate_indirect(
-                out, uid=shape.req_uid, contract=contract, known=known),
+                out, uid=shape.req_uid, contract=contract, known=known,
+                prior_reason=shape.unobservable_reason),
             max_repairs=max_repairs,
         )
 
