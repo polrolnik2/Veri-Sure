@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass
 
 from .ids import IdError, parse_ref
-from .schema import Issue
+from .schema import Issue, all_spans
 
 # A gap in spec attribution shorter than this is noise (list punctuation, stray
 # words). Tuned to be forgiving: G1 blocks the pipeline, so a false positive
@@ -178,16 +178,21 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
 
     for req in requirements:
         uid = req.get("uid", "<no-uid>")
-        req_spans = req.get("spec_spans") or []
+        # Core FIRST, then context. `all_spans` is the provenance view: what
+        # text this requirement rests on. It is never the deciding view -- what
+        # a check must satisfy is `core_span` alone.
+        req_spans = all_spans(req)
         if not req_spans:
             issues.append(
-                Issue("error", f"requirement.{uid}.spec_spans", "no spec span quoted")
+                Issue("error", f"requirement.{uid}.obligation",
+                      "no obligation span quoted")
             )
             continue
 
         quoted: list[str] = []
         for i, sp in enumerate(req_spans):
-            path = f"requirement.{uid}.spec_spans[{i}]"
+            path = (f"requirement.{uid}.obligation" if i == 0
+                    else f"requirement.{uid}.spec_spans[{i - 1}]")
             try:
                 # `end` is deliberately unread: the quote's own length
                 # defines the span once it is located, so a model that
@@ -216,6 +221,14 @@ def check_spec_attribution(spec_text: str, requirements: list[dict]) -> list[Iss
             spans.append(located)
             quoted.append(quote)
 
+        # EVIDENCE INCLUDES SUPPORTING SPANS, deliberately. A linked unit can
+        # legitimately supply the number a requirement restates -- the filter's
+        # interval is stated one sentence away from the filter -- and this
+        # module's stated bias is that "the conservative direction is one that
+        # enlarges what counts as support", because a false positive here
+        # BLOCKS the pipeline. The narrowing is on the other side: a supporting
+        # span can only be a whole unit S1 already froze, so this cannot be
+        # widened by quoting arbitrary text.
         issues.extend(_unsupported_quantities(
             uid, str(req.get("text") or ""), " \n".join(quoted), spec_text))
 

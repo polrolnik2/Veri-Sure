@@ -189,7 +189,9 @@ def test_non_verbatim_quote_is_rejected():
 
 def test_requirement_with_no_span_is_rejected():
     issues = check_spec_attribution(SPEC, [{"uid": "REQ-0000", "spec_spans": []}])
-    assert any("no spec span" in i.message for i in issues)
+    # The core is `obligation` now, so the message names that rather than a
+    # span index -- a requirement with nothing to be checked against.
+    assert any("no obligation span" in i.message for i in issues)
 
 
 def test_a_wrong_offset_no_longer_rejects_a_verbatim_quote():

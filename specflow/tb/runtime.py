@@ -23,6 +23,7 @@ testcase report all of its mismatches instead of dying on the first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -182,6 +183,30 @@ def is_reset_step(step: object) -> bool:
     silently run the scenario without the reset it was written for.
     """
     return isinstance(step, dict) and bool(step.get("reset"))
+
+
+def stimulus_digest(steps: object) -> str:
+    """A fingerprint of the stimulus a testpoint was driven with.
+
+    WHY A TRACE HAS TO CARRY ONE. `decide_rtl` looks a recorded trace up by
+    `tp_uid`, and every run of the pipeline mints the SAME uids -- TP-0069
+    exists in every i2c run there has ever been -- while regenerating the
+    stimulus behind them. So pointing one run's frozen oracles at another run's
+    traces does not fail: the dict lookup succeeds and answers a different
+    question, silently. Measured on two runs of the same design: 322 shared
+    uids, ZERO with identical step lists; one drives a reset in 158 testpoints
+    and the other in none. Every conviction and every abstention that came out
+    of that comparison was about the wrong stimulus.
+
+    The digest is over the steps AS WRITTEN, canonicalised only by key order,
+    because two step lists that differ anywhere are two different scenarios and
+    it is not this function's business to decide which differences are benign.
+    """
+    h = hashlib.sha256()
+    for step in (steps or []):
+        h.update(json.dumps(step, sort_keys=True, default=str).encode())
+        h.update(b"\n")
+    return h.hexdigest()[:16]
 
 
 def reset_ports(step: object) -> list[str] | None:
@@ -346,6 +371,9 @@ class Env:
         self._expected: dict | None = None
         #: The inputs of the step being driven, for `expect`/`check` context.
         self._inputs: dict = {}
+        #: The steps this Env was actually asked to drive, in order, so
+        #: `finish` can fingerprint them -- see `stimulus_digest`.
+        self._driven: list[dict] = []
         #: Declared ports the DUT does not expose. A verdict, not a crash.
         self.missing_ports: list[str] = []
         #: Stimulus values a port could not hold. Also a verdict, not a crash.
@@ -494,13 +522,39 @@ class Env:
         # a model that took none arrives at the first stimulus vector that many
         # edges behind -- which for a design whose outputs move on specific
         # edges misaligns every comparison that follows.
+        # RECORDED, like every other edge. It used to tick without recording,
+        # and that had two consequences neither of which was visible in a
+        # verdict.
+        #
+        # A reset-behaviour check could never fire: the stimulus asserts reset,
+        # the DUT sees it, and the trace contains NO ROW in which the reset port
+        # is active -- so `after(trace, lambda r: r['inputs']['rst'])` abstains
+        # on a scenario written precisely to exercise it. Measured on one run:
+        # the stimulus resets in 158 of 322 testpoints and every recorded trace
+        # showed reset in zero.
+        #
+        # Worse, the trace went DISCONTINUOUS. A mid-sequence reset step left
+        # the row for step N-1 adjacent to the row for step N+1, with a whole
+        # reset sequence unrecorded between them -- so a check comparing row i
+        # against row i+1 saw a transition that never happened at that adjacency
+        # and could convict the design for it. 76 of that run's 322 testpoints
+        # reset mid-sequence.
+        # `_expected` is assigned, not discarded: `_record` reads the model
+        # side off it, so ticking the model without keeping its outputs would
+        # record a row whose DUT half is real and whose model half is all
+        # `None` -- which every transactional comparison then reads as a
+        # mismatch on a correct design.
         for _ in range(cycles):
             await self.tick(1)
-            self._advance_model({})
+            self._expected = self._advance_model({})
+            await self._settled()
+            self._record()
         for name, _ in handles:
             self._drive(name, inactive_value(name))
         await self.tick(1)
-        self._advance_model({})
+        self._expected = self._advance_model({})
+        await self._settled()
+        self._record()
 
     # -- driving -----------------------------------------------------------
 
@@ -518,6 +572,10 @@ class Env:
 
     async def drive(self, stim: dict) -> None:
         self.step_index += 1
+        # Recorded BEFORE anything can go wrong with it. A step that times out
+        # or names a port the DUT lacks is still a step this trace was driven
+        # with, and the fingerprint has to say so.
+        self._driven.append(stim)
         self._expected = None
         inputs, hold, until, timeout = normalise_step(stim)
         if is_reset_step(stim):
@@ -940,6 +998,10 @@ class Env:
         (self.results_dir / f"{self.tp_uid}.trace.json").write_text(
             json.dumps({
                 "tp_uid": self.tp_uid,
+                # WHAT THIS TRACE IS A RECORDING OF. Without it a consumer can
+                # only match on `tp_uid`, which every run reuses -- see
+                # `stimulus_digest`.
+                "stimulus_digest": stimulus_digest(self._driven),
                 "signals": self.trace_internals,
                 "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
                 "edges": edges,
@@ -947,8 +1009,25 @@ class Env:
             encoding="utf-8",
         )
 
-        assert not self.sb.failed, (
-            f"{self.tp_uid}: {len(self.sb.failed)} of {len(self.sb.invoked)} checks "
-            f"failed: {sorted(set(self.sb.failed))}"
-        )
-        assert self.sb.invoked, f"{self.tp_uid}: no check ran; this testpoint is vacuous"
+        # NEITHER OF THESE ASSERTS ANY MORE, and the second is the load-bearing
+        # removal.
+        #
+        # A check failure is a RECORD, not a broken harness: `_read_results`
+        # reads the JSON written just above, never the XML an assert would
+        # colour, so raising here only turned a verdict into a suite error.
+        #
+        # `assert self.sb.invoked` was actively wrong. A testpoint no check
+        # fires on is UNCOVERED, which is exactly what the coverage metric
+        # exists to measure -- the record already says so, `status` above is
+        # NOT_EXERCISED for it -- and raising turned that measurement into a
+        # crash. It also made the cover bins load-bearing for the RUNTIME long
+        # after they stopped being load-bearing for the METRIC: coverage is now
+        # the oracles' own tri-state, `decide` returning None where an
+        # activation never occurred, and nothing downstream of the suite reads
+        # a bin. With this assert gone, a suite renders and runs with no checks
+        # and no bins at all, and the S3 stage that mints them -- 335 model
+        # calls on c1-i2c -- is not needed to produce a scoreable run.
+        #
+        # The record is written BEFORE this point, so nothing is lost either
+        # way; what changes is that a vacuous testpoint is reported rather
+        # than raised.

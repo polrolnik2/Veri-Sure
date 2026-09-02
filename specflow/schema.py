@@ -209,3 +209,68 @@ def render_issues(issues: list[Issue]) -> str:
 
 def has_errors(issues: list[Issue]) -> bool:
     return any(it.severity == "error" for it in issues)
+
+
+# ------------------------------------------------------------ the obligation
+
+
+def core_span(req: dict) -> dict:
+    """The ONE span a requirement is checked against.
+
+    It lives in `obligation`, a single object, not an entry in a list. That is
+    the point: a list with one member marked `role: "core"` reads as though
+    there could be two, and a schema that can express a state the design forbids
+    will eventually be handed one. `spec_spans` beside it holds CONTEXT only --
+    spans the obligation cannot be read without, never a second thing to check.
+
+    **Falls back to a marked or first `spec_spans` entry** when `obligation` is
+    absent, which is what every artifact written before this shape looks like,
+    including the generative arm's. Recorded runs stay readable rather than
+    silently losing their provenance.
+    """
+    ob = req.get("obligation")
+    if isinstance(ob, dict) and ob:
+        return ob
+    spans = req.get("spec_spans") or []
+    for sp in spans:
+        if sp.get("role") == "core":
+            return sp
+    return spans[0] if spans else {}
+
+
+def supporting_spans(req: dict) -> list[dict]:
+    """The spans a requirement is READ WITH.
+
+    They are evidence, not decoration: normalisation legitimately draws an
+    activation, an observability route, or a definition from them -- those are
+    the fields an obligation most often leaves open. What they may never supply
+    is the EXPECTATION. What must be true is what the obligation says; a
+    behaviour stated in a context span is a different requirement with its own
+    uid, and taking it here checks that one twice while leaving this one
+    unchecked.
+    """
+    spans = list(req.get("spec_spans") or [])
+    ob = req.get("obligation")
+    if isinstance(ob, dict) and ob:
+        return spans          # the core is not in here at all
+    return [sp for sp in spans if sp.get("role") == "supporting"]
+
+
+def all_spans(req: dict) -> list[dict]:
+    """Every span this requirement rests on. For PROVENANCE, never for deciding
+    what it must satisfy -- that is `core_span`, and there is one.
+
+    In the new shape the core lives in `obligation` and `spec_spans` is context,
+    so both halves are concatenated. In the OLD shape -- the generative arm,
+    which emits "one or more VERBATIM quotations" with no roles at all --
+    `spec_spans` already holds everything, and this must return ALL of it.
+    Composing this from `core_span` plus `supporting_spans` looked equivalent
+    and was not: with no roles marked, the second returns nothing, so every span
+    after the first vanished and G1 failed on requirements it had passed for
+    months.
+    """
+    spans = list(req.get("spec_spans") or [])
+    ob = req.get("obligation")
+    if isinstance(ob, dict) and ob:
+        return [ob] + spans
+    return spans

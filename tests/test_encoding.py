@@ -48,7 +48,7 @@ def _errors(contract, **activation):
     out = NormalizeOutput(normalized=[NormalizedRequirement(
         observable=["cmd_ack"], expectation="e",
         observed_via=[{"port": "cmd_ack", "through_req": "", "when": "w",
-                       "shows": SHOWS}],
+                       "shows": SHOWS, "otherwise": "the port holds its idle value"}],
         activation=Activation(text="t", **activation))])
     return [i.message for i in gate_one(REQ, out, contract) if i.severity == "error"]
 
@@ -332,3 +332,85 @@ def test_the_REVIEWER_is_told_what_the_operators_RETURN():
     from specflow.refmodel.oracle_gen import SYSTEM as AUTHOR
     for w in ("strong=True", "stable", "eventually"):
         assert AUTHOR.count(w) and SYSTEM.count(w), w
+
+
+def test_the_EVIDENCE_DRIVER_enriches_before_anything_reads_the_contract():
+    """The second call site, and the one that was missing.
+
+    `top_agent` has always enriched; `docs/evidence/downstream.py` never did, so
+    every run in the evidence series shipped a contract with no `cmd` table and
+    the oracle author guessed. Measured on n4-i2c: of 18 numeric `cmd` values
+    normalization wrote, 8 were right, 5 wrong and 3 illegal -- `cmd=3` matches
+    no arm of the design's `case`, so those windows can never open, which at
+    decide time is indistinguishable from "the design never did it". READ was
+    never once correct.
+
+    Source-level, like the `top_agent` guard above, because the alternative is
+    running the whole driver. What it pins is ORDER: enrichment has to happen
+    before `port` is built, or the stages read the un-enriched object.
+    """
+    src = (Path(__file__).resolve().parents[1]
+           / "docs" / "evidence" / "downstream.py").read_text()
+    assert "encoding.enrich_contract" in src
+    assert "encoding.find_defines" in src
+    # A runtime switch, not an environment variable.
+    assert "--defines-root" in src
+    assert src.index("enrich_contract") < src.index("port = resumable(")
+
+
+# ---------------------------------------------- a value-set of SYMBOLS
+
+
+def _contract_with_encoding() -> dict:
+    """A contract carrying `cmd`'s real table, harvested from the design's own
+    defines rather than typed in, so the values cannot drift from the design."""
+    from specflow.encoding import parse_defines
+    table = parse_defines(DEFINES.read_text())
+    return {"io": [
+        {"name": "cmd", "dir": "input", "width": 4,
+         "encoding": {n: v for n, v in table.items() if n.startswith("I2C_CMD_")},
+         "encoding_complete": True},
+        {"name": "ena", "dir": "input", "width": 1},
+    ]}
+
+
+
+def test_resolve_any_turns_a_SYMBOL_SET_into_the_values_it_admits():
+    """The shape the eight untriggered h2 requirements needed: "a START, STOP,
+    READ or WRITE command is accepted" is one activation over four values, and
+    `inputs` could only say AND."""
+    from specflow.encoding import resolve_any
+    c = _contract_with_encoding()
+    vals, why = resolve_any(
+        "cmd", ["I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_READ",
+                "I2C_CMD_WRITE"], c)
+    assert why == ""
+    assert vals == (1, 2, 4, 8)
+
+
+def test_resolve_any_gives_a_SCALAR_back_as_a_one_tuple():
+    """One shape downstream. A consumer that had to branch on scalar-vs-list
+    would get the membership test right in one branch and wrong in the other."""
+    from specflow.encoding import resolve_any
+    c = _contract_with_encoding()
+    assert resolve_any("cmd", "I2C_CMD_WRITE", c) == ((4,), "")
+    assert resolve_any("cmd", 4, c) == ((4,), "")
+
+
+def test_a_symbol_set_with_ONE_bad_member_resolves_to_NOTHING():
+    """Dropping the bad member silently narrows the window. Rejecting the set
+    whole is what puts the sentence in front of the author instead."""
+    from specflow.encoding import resolve_any
+    c = _contract_with_encoding()
+    vals, why = resolve_any("cmd", ["I2C_CMD_START", "I2C_CMD_NOPE"], c)
+    assert vals is None
+    assert "I2C_CMD_NOPE" in why
+
+
+def test_a_value_set_survives_annotate_as_a_list():
+    """`annotate` builds the numeric form the oracle author writes comparisons
+    against, so a set has to arrive there as a set."""
+    from specflow.encoding import annotate
+    c = _contract_with_encoding()
+    got = annotate({"cmd": ["I2C_CMD_START", "I2C_CMD_STOP"], "ena": 1}, c)
+    assert got == {"cmd": [1, 2], "ena": 1}

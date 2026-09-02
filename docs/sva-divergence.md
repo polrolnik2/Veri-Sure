@@ -109,7 +109,7 @@ every gate, and `NOT_EXERCISED` exists to refuse exactly this. A vacuous pass is
 a false green, and false greens are the failure class the project is built
 against.
 
-### D2 · No `##[n:m]`, no `[*n]` — cycle counts are absent on purpose
+### D2 · No `##[n:m]`; `[*n:m]` exists ONLY where the spec states the number
 
 Phases 3–6 severed pacing from latency and stopped `latency_cycles` gating,
 because the specification does not state edge counts. A check asserting one
@@ -118,6 +118,49 @@ either fails correct designs or asserts nothing.
 `##1` (`nexttime`) survives because a row is a state, so "the next row" means
 "the next time anything changed" — which is what "then" means in a
 specification.
+
+**AMENDED: consecutive repetition is now present, as `runs`.** The ban above is
+on *inventing* pacing, and it was over-read as a ban on transcribing a duration
+the specification gives. A requirement whose entire content is a threshold —
+"a majority of the three consecutive samples" — cannot be checked at all
+without one, because the property *is* the count. `normalize.Sustain` carries
+`stated_by` for exactly this: if you cannot quote the phrase the number comes
+from, D2's original rule still applies and you are guessing.
+
+    runs(t, port, value=v, at_least=N)    (port == v)[*N:$]
+    runs(t, port, value=v, at_most=M)     (port == v)[*1:M] ##1 (port != v)
+    runs(t, port, value=v, at_least=N,
+                          at_most=M)      (port == v)[*N:M] ##1 (port != v)
+
+Three differences from the SVA it corresponds to, and none is incidental:
+
+**The anchor is the START of the run, not the end.** SVA's `|->` fires where
+the antecedent match *completes*, so `sig[*3] |-> p` evaluates `p` after the
+third tick. `runs` returns the `edge` where the run BEGAN, and `after` opens
+the window there. That is the useful anchor for a `sustains` activation — the
+question is what the design did *in response to* the glitch, and the response
+starts when the glitch does — but it is not `|->`'s anchor and a check
+transcribed as if it were will read the outputs several edges early.
+
+**The upper bound needs the terminator; the lower bound does not.** `[*1:1]`
+alone matches the first tick of a run of any length, so bounding a run ABOVE
+requires witnessing it end: `##1 !sig`. That is why a run still open at the end
+of the trace is excluded under `at_most` and admitted under `at_least` — its
+length is a lower bound, not a measurement. In SVA's vocabulary an upper bound
+is a *strong* obligation and a lower bound is a weak one, and the asymmetry is
+forced there for the same reason it is forced here. Admitting the trailing run
+under `at_most` would let the trace running out masquerade as a short glitch,
+which is a false activation, which is how a check convicts a correct design.
+
+**It counts EDGES, and D3 bites hardest here.** `[*n]` counts clock ticks;
+`runs` sums `held` over a state-compressed trace. A five-edge level is one row,
+so a row count would call it a one-edge glitch — inverting precisely the
+short-against-long distinction a majority filter is about.
+
+One non-difference worth stating: SVA's `[*n:$]` is nondeterministic and is
+usually wrapped in `first_match`. `runs` returns EVERY qualifying start, so
+each opens its own window — which is `after`'s existing behaviour under D4, not
+a new choice.
 
 ### D3 · A row is a STATE, not a clock tick
 
@@ -173,8 +216,22 @@ where `release` fires, because the release is tested first. `until_with` is a
 one-line variant to add when a requirement needs it.
 
 **`[->n]` goto repetition — "the nth occurrence" — is NOT a cycle count**, so
-D2's rationale does not cover it. It is simply not built. Recorded here rather
-than left to look like a principled absence.
+D2's rationale does not cover it.
+
+**CORRECTED: it was built all along, and only unnamed.** `sequence` steps are
+`##[1:$]` and each strictly advances, so `sequence(w, p, p, p, p)` *is* `p[->4]`
+— verified on a trace pulsing four times: four steps pass, five stall. The
+claim that it was "simply not built" was made from the operator table, where it
+does not appear, rather than from the semantics, where it does. It is now
+`nth(w, holds, n)`, sugar over exactly that.
+
+**It counts OCCURRENCES where `runs` measures DURATION**, and they are the two
+distinct cycle-accurate axes — neither substitutes for the other. The worked
+case for this one is not in `i2c_master_bit_ctrl` at all: its FSM's observable
+effects are output pulses, covered by `pulse(width=1)`, and its internal state
+sequence has no port. It is the BYTE controller, where `dcnt` loads 7 and
+decrements per shift, so "all eight data bits have been transmitted" and "the
+ninth ACK/NACK bit" are `core_ack[->8]` and `[->9]`.
 
 ### D9 · `disable iff` exists, as `aborts_on`, and an aborted attempt is UNKNOWN
 
@@ -225,6 +282,47 @@ share a convention, which is what lets the same frozen check decide against
 either one. An assertion ported to real SVA would see different values.
 
 ---
+
+### D11 · `$past(p, n)` for n > 1 is absent, and on a compressed trace that is a FEATURE
+
+`Window.past(port)` is depth 1 — the row before the activation — and there is
+no `$past(p, 2)`. That looks like the obvious gap for a sample-history
+requirement, because the canonical SVA transcription of the i2c glitch filter
+is not a repetition at all:
+
+    $countones({s, $past(s), $past(s,2)}) >= 2
+
+**Measured against the requirement set, this is the only cycle-accurate axis
+that pays.** Scanning all 127 c1-i2c requirements for what each absent SVA
+feature would serve:
+
+| absent feature | requirements that would use it |
+|---|---|
+| `[->n]` goto repetition, "the nth occurrence" (D8) | **0** |
+| `##[n:m]` bounded delay (D2) | **0** |
+| sample-history depth — `$past(p, n)` | **5** — REQ-0010, 0045, 0046, 0047, 0048 |
+
+So D2's and D8's absences are vindicated rather than gaps: this specification
+states no latencies and counts no occurrences. Every cycle-accurate requirement
+it has is the same cluster, and they are all the majority filter.
+
+**And a depth-n past is the wrong primitive HERE, for D3's reason.** `$past(p, 2)`
+means two TICKS ago. The trace is state-compressed, so two rows back can be
+forty edges back, and two edges back can be inside the row you are standing on.
+An edge-accurate lookback would have to walk backwards summing `held` and split
+a row to land mid-run — reintroducing exactly the index arithmetic the operator
+set exists to keep out of checks, in the one place it is hardest to get right.
+
+`runs` expresses the same property without that. "A majority of three
+consecutive samples" and "a run shorter than the filter window" are the same
+statement seen from two sides: SVA counts the samples because its trace is
+ticks, and `runs` measures the duration because ours is states. The count is
+recoverable from the duration; the duration is not cleanly recoverable from a
+row-indexed past.
+
+Left absent deliberately, then, and recorded here so it does not look like an
+oversight — with the note that a design whose spec DID state "the nth
+occurrence" would need `[->n]`, and nothing in the operator set approximates it.
 
 ## What to do when a requirement needs something absent
 

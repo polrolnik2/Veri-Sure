@@ -600,7 +600,7 @@ async def run_specflow_node(
     debug_max_trials: int = 30,
     model_port: str = "replay",
     port_settings: object | None = None,
-    max_repairs: int = 3,
+    max_repairs: int = 5,
     refmodel_max_repairs: int | None = None,
     #: Edit attempts per debug turn. Zero disables the agentic path entirely and
     #: the stage falls back to prose-driven regeneration, which is what every

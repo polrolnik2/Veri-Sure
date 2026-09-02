@@ -74,3 +74,36 @@ def test_there_is_always_a_cap():
     than something to remember to pass."""
     assert _responses_body(_Cfg(), "p")["max_output_tokens"] == 48000
     assert _responses_body(_Cfg(), "p", 9000)["max_output_tokens"] == 9000
+
+
+# ------------------------------------------ developer_role_prefix (the fix)
+def test_developer_role_prefix_off_by_default_sends_a_flat_string():
+    """Unchanged behaviour when the switch is off, regardless of the prompt."""
+    from specflow.fanout import PREFIX_SENTINEL
+
+    prompt = f"shared stuff{PREFIX_SENTINEL}\n\nitem text"
+    assert _responses_body(_Cfg(), prompt)["input"] == prompt
+
+
+def test_developer_role_prefix_splits_at_the_sentinel_when_on():
+    """THE FIX. See `PortSettings.developer_role_prefix` for the measurement:
+    this exact split reads 99.6% cached on gpt-5.6-luna where one flat `user`
+    string reads 0%, isolated against streaming, `include`, and structure
+    alone (a single-item list also read 0%)."""
+    from specflow.fanout import PREFIX_SENTINEL
+
+    prompt = f"shared stuff{PREFIX_SENTINEL}\n\nitem text"
+    body = _responses_body(_Cfg(), prompt, developer_role_prefix=True)
+    assert body["input"] == [
+        {"role": "developer", "content": f"shared stuff{PREFIX_SENTINEL}"},
+        {"role": "user", "content": "item text"},
+    ]
+
+
+def test_developer_role_prefix_is_a_noop_with_no_shared_block():
+    """A whole-artifact stage (refmodel, witness) has no `shared_block`
+    sentinel at all -- turning the switch on for it must not invent a split
+    that was never there, or misparse ordinary prompt text as a boundary."""
+    body = _responses_body(_Cfg(), "just a plain prompt, no sentinel",
+                           developer_role_prefix=True)
+    assert body["input"] == "just a plain prompt, no sentinel"

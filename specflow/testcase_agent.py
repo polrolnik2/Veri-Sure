@@ -32,7 +32,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from .ids import PREFIX_TESTCASE, mint, next_index
 from .model_io import ModelPort
 from .ports import classify
-from .schema import Issue
+from .schema import Issue, all_spans
 from .tb.runtime import is_reset_step, normalise_step, reset_ports
 from .fanout import compose, json_block, shared_block
 from .stage import (
@@ -51,6 +51,39 @@ SUITE_STAGE = "stimulus"
 #: bound applied when it was generated -- a reuse path gated more loosely than
 #: the generator is a way to accept what a fresh run would reject.
 STIMULUS_MAX_STEPS = 24
+
+
+def drivable_ports(contract: dict) -> list[dict]:
+    """The drivable ports AS THE AUTHOR SEES THEM -- with their encodings.
+
+    THE ENCODING USED TO BE DROPPED HERE, and it cost the suite its coverage.
+    All three prompt paths described a port as `{"name", "width"}` and nothing
+    else, so an author told to "issue a READ command" on a 4-bit `cmd` had to
+    guess which of sixteen values that is -- while the contract sat on disk
+    saying `I2C_CMD_READ: 8`, harvested by `encoding.enrich_contract` from the
+    design's own defines file and carrying the sha256 of the file it came from.
+
+    Measured on the suite that produced: across 322 testpoints and ~1539 steps,
+    `cmd` was driven READ FIVE TIMES, and 129 steps drove 3, 5, 10 or 15 --
+    values that are not commands at all. Eight of that run's 28 genuine
+    abstentions are checks about READ and WRITE whose activation the stimulus
+    therefore never reached. The checks were fine; the scenario never happened.
+
+    Only `encoding` travels, not the whole port record. `encoding_source` is
+    provenance for a human, and `notes` is prose the testplan already carries.
+    """
+    encodings = {
+        str(p.get("name")): p.get("encoding")
+        for p in (contract.get("io") or [])
+        if isinstance(p.get("encoding"), dict) and p.get("encoding")
+    }
+    out = []
+    for name, width in _drivable(contract).items():
+        port: dict = {"name": name, "width": width}
+        if name in encodings:
+            port["encoding"] = encodings[name]
+        out.append(port)
+    return out
 
 
 def _drivable(contract: dict) -> dict[str, int]:
@@ -121,9 +154,7 @@ def build_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     parts = [
         SYSTEM,
         f"<bin uid=\"{bin_uid}\" category=\"{gap_category}\">\n{condition}\n</bin>",
@@ -358,9 +389,7 @@ def build_suite_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     elements = [
         {
             "uid": tp.get("uid"),
@@ -724,9 +753,7 @@ def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "
     defines file; whatever calls this with domain knowledge of the design
     under test is where that belongs.
     """
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     outputs = [
         {"name": p.get("name"), "width": p.get("width", 1)}
         for p in (contract.get("io") or [])
@@ -771,7 +798,10 @@ def spec_quotes_for(element: dict, requirements: list[dict] | None) -> list[str]
     quotes: list[str] = []
     for ref in element.get("covers") or []:
         req = by_uid.get(str(ref).split("@", 1)[0])
-        for span in (req or {}).get("spec_spans") or []:
+        # Provenance: the obligation first, then the context it is read with.
+        # Stimulus is aimed at what the requirement rests on, so both belong --
+        # unlike a CHECK, which may only ever answer to the obligation.
+        for span in all_spans(req or {}):
             quote = (span or {}).get("quote")
             if quote and quote not in quotes:
                 quotes.append(quote)

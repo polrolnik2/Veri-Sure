@@ -1116,7 +1116,22 @@ class _TBAlignSession:
             self.continuous_drivers = continuous_drivers
             self.driver_map = drivers
         except Exception:  # noqa: BLE001
-            pass
+            # Best-effort, like every other side-channel refresh in this
+            # file -- a parse failure here must not kill the edit loop. But
+            # unlike those, silently keeping the OLD sections_by_id/driver_map
+            # is not harmless: the TB file on disk has already been
+            # overwritten (write_tb ran and lint passed before this is
+            # called), so a swallowed failure here leaves the agent's next
+            # `list_suspect_sections()`/`replace_section()` call reasoning
+            # about section boundaries that no longer match the file it
+            # would edit. Log it so a stale map has a diagnostic trail
+            # instead of surfacing only as a confusing downstream edit.
+            logger.warning(
+                "tb_editor: _refresh_sections failed; sections_by_id/"
+                "driver_map are STALE (still reflect the text before this "
+                "edit, not the file just written)",
+                exc_info=True,
+            )
 
 
 # ---------------------------------------------------------------------------

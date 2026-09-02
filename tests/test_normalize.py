@@ -29,8 +29,8 @@ def _route(port: str) -> dict:
     """A direct self-route. Every requirement carries one now, and the field
     that matters is `shows`: two cases, so nothing vacuous gets through."""
     return {"port": port, "through_req": "", "when": "when a START is issued",
-            "shows": f"{port} takes the stated value when the requirement "
-                     f"holds and does not when it does not"}
+            "shows": f"{port} takes the stated value",
+            "otherwise": f"{port} holds its idle value"}
 
 
 def _out(**kw) -> NormalizeOutput:
@@ -284,11 +284,42 @@ def test_a_shape_mistake_on_observed_via_does_not_lose_the_shape():
     assert "LIST of objects" not in out2.reasoning
 
 
-def test_a_one_sided_shows_is_rejected():
+def test_a_route_with_no_OTHERWISE_is_refused():
+    """The two-case demand SURVIVES; only the way it is detected changed.
+
+    It used to be inferred from prose -- `shows` searched for " not ",
+    "otherwise", "does not", " and " -- which gave opposite verdicts to
+    identical claims: REQ-0004's "no discrimination: scl_o is structurally tied
+    to 0" was recorded as undecidable, while REQ-0034's "there is no case where
+    this requirement does not hold" passed as a real check, purely because the
+    string contains " not ".
+
+    Now there are two slots and the check is whether the second is filled. A
+    fact, not a guess about wording.
+    """
     out = _out(observable=["cmd_ack"])
-    out.normalized[0].observed_via[0].shows = "cmd_ack is observable"
+    out.normalized[0].observed_via[0].shows = "cmd_ack pulses"
+    out.normalized[0].observed_via[0].otherwise = ""
     issues = gate_one(REQ, out, CONTRACT)
-    assert any("when it does NOT" in i.message for i in issues)
+    assert any("`otherwise` is empty" in i.message for i in issues)
+
+
+def test_a_route_WITH_otherwise_passes_whatever_words_it_uses():
+    """The pin that proves the lexical inference is gone: this `otherwise` has
+    no " not ", no "otherwise", no " and " -- the old gate would have rejected
+    it, and it is a perfectly good second case."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = "cmd_ack pulses high for one clock"
+    out.normalized[0].observed_via[0].otherwise = "cmd_ack stays low"
+    assert [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"] == []
+
+
+def test_an_EMPTY_shows_is_refused():
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].observed_via[0].shows = ""
+    out.normalized[0].observed_via[0].otherwise = "cmd_ack stays low"
+    issues = gate_one(REQ, out, CONTRACT)
+    assert any("`shows` is empty" in i.message for i in issues)
 
 
 def test_a_TAUTOLOGY_may_decline_and_is_not_forced_to_invent_one():
@@ -308,16 +339,6 @@ def test_a_TAUTOLOGY_may_decline_and_is_not_forced_to_invent_one():
     out.normalized[0].observed_via[0].shows = (
         f"{NO_DISCRIMINATION}: the port is the requirement's own antecedent")
     assert gate_one(REQ, out, CONTRACT) == []
-
-
-def test_SILENCE_is_still_rejected():
-    """An absent answer cannot be told from "there is nothing to distinguish",
-    and the difference decides whether this is a finding about the
-    specification or a defect in the pass. Same shape as `observable` + an
-    `unobservable_reason`: empty WITH a reason passes, empty without does not."""
-    out = _out(observable=["cmd_ack"])
-    out.normalized[0].observed_via[0].shows = ""
-    assert gate_one(REQ, out, CONTRACT) != []
 
 
 def test_the_first_pass_may_not_name_ANOTHER_requirement():
@@ -683,3 +704,155 @@ def test_the_prompt_tells_the_author_that_reset_is_an_abort():
         assert fragment in SYSTEM, fragment
     # And the example that taught the defect is gone.
     assert '[{"cmd_ack": 1}, {"al": 1}]' not in SYSTEM
+
+
+def test_a_scraped_fragment_is_a_parse_error_not_an_empty_answer():
+    """Both `NormalizeOutput` fields carry defaults, so ANY object validates.
+
+    That makes a fragment scraped out of a broken response indistinguishable
+    from a model that answered nothing, and the next round is then handed a
+    complaint about CONTENT -- "observable at [...] but no route given" -- for
+    a response whose only defect was one unescaped quote. The model is asked to
+    fix a field it did supply, which is the same short-circuit the
+    `observed_via` shape gate exists to prevent, one layer up.
+
+    Measured live: c1-i2c REQ-0048 round 1 wrote `until [{"busy":0}]` inside
+    its `reasoning` STRING with the inner quotes unescaped. Recovery found the
+    balanced `{"busy":0}`, validated it to an empty output, and all four
+    rounds went on the wrong complaint. 3 of that run's 348 recorded responses
+    took this path.
+    """
+    from specflow.normalize import PARSE_ERROR
+
+    out = parse_response('{"reasoning": "I set until [{"busy":0}] here"}')
+    assert not out.normalized
+    assert out.reasoning.startswith(PARSE_ERROR), out.reasoning
+    # It must name what was actually recovered, so the round can see that its
+    # JSON broke rather than guessing at its content.
+    assert "['busy']" in out.reasoning, out.reasoning
+    assert "ESCAPE" in out.reasoning, out.reasoning
+
+
+def test_an_empty_normalization_WITH_reasoning_is_still_a_real_answer():
+    """The counter-case, and the reason the guard tests both fields.
+
+    A model may legitimately return no normalized requirement and say why --
+    that is an answer, and turning it into a parse error would destroy the one
+    honest way to report that a requirement cannot be normalized.
+    """
+    from specflow.normalize import PARSE_ERROR
+
+    out = parse_response('{"reasoning": "this span is a port-table gloss"}')
+    assert not out.normalized
+    assert not out.reasoning.startswith(PARSE_ERROR)
+    assert out.reasoning == "this span is a port-table gloss"
+
+
+def test_a_route_with_no_when_is_rejected():
+    """`shows` says WHAT the port does; `when` says WHERE it may say it.
+
+    The gate checked `port`, `through_req` and `shows` and never `when`, so
+    76% of the frozen c1-i2c set's routes (180 of 238, across 76 of 122
+    requirements) carry an empty one. An unscoped route cannot tell a response
+    to this requirement apart from anything else happening in the same window:
+    REQ-0046's re-authored check watched all three of its observables at every
+    edge, because all three routes arrived with `when` empty, and it convicted
+    the golden design on an unreset `dout`'s power-on capture.
+    """
+    bad = _out(observable=["busy"],
+               observed_via=[{**_route("busy"), "when": "   "}])
+    issues = [i for i in gate_one(REQ, bad, CONTRACT) if i.severity == "error"]
+    assert any("`when` is empty" in i.message for i in issues), issues
+    assert any("observed_via[0]" in i.path for i in issues), issues
+
+
+def test_restating_the_activation_is_an_acceptable_when():
+    """The bar is deliberately low, and this is the pin that keeps it low.
+
+    A requirement whose effect is visible for exactly as long as its activation
+    holds has nothing sharper to say, and rejecting that answer would push the
+    author to invent a narrower window the specification never states -- which
+    is the over-strictness this pipeline spends its budget preventing.
+    """
+    ok = _out(observable=["busy"],
+              observed_via=[{**_route("busy"),
+                             "when": "whenever the activation holds"}])
+    assert not [i for i in gate_one(REQ, ok, CONTRACT) if i.severity == "error"]
+
+
+def test_both_prompts_ask_for_when_now_that_the_gate_demands_it():
+    """The gate must never demand a field the instruction does not ask for.
+
+    That is the defect the `observed_via` SHAPE fix closed one layer up, and
+    the empty-`when` check reintroduced it: the direct pass's task text named
+    `shows` and never `when`, and `INDIRECT_SYSTEM` glossed `when` purely as
+    telling THIS requirement's effect apart from the OTHER requirement's --
+    vacuous on a direct route, where `through_req` is empty and there is no
+    other requirement. 76% of the frozen set's routes came back empty.
+    """
+    from specflow.normalize import (
+        INDIRECT_SYSTEM,
+        _OBSERVED_VIA_SHAPE,
+        _OBSERVED_VIA_TASK,
+    )
+
+    assert "`when`" in _OBSERVED_VIA_TASK
+    assert "when" in _OBSERVED_VIA_SHAPE
+    # And the low bar is stated where the author reads it, not only in the gate.
+    assert "the activation" in _OBSERVED_VIA_TASK
+    # The indirect gloss has to cover the direct route it also governs.
+    assert "DIRECT route" in INDIRECT_SYSTEM
+
+
+def test_the_prompt_teaches_sustains_now_that_the_schema_has_it():
+    """A field the schema accepts and the prompt never names is a dark field.
+
+    `sustains` was added so an activation could state a repetition the
+    specification gives -- the majority-filter threshold that REQ-0046's check
+    could not express, and without which it convicted every design. Measured on
+    the first run after it landed: **0 of 127** normalized requirements
+    populated it, and `SYSTEM` did not contain the word. That is the same
+    defect as `observed_via`'s missing shape one layer over: the gate and the
+    model disagree because only one of them was told.
+
+    The rule it sits beside must survive: `until` is still a condition and
+    never a count, and `sustains` is the narrow exception for a count the spec
+    STATES rather than one the model invents -- which is what `stated_by` is
+    for.
+    """
+    from specflow.normalize import SYSTEM
+
+    assert "sustains" in SYSTEM
+    for fragment in ("at_least", "at_most", "stated_by",
+                     "A CONDITION, NEVER A COUNT",
+                     "LEAVE IT EMPTY unless the specification supplies"):
+        assert fragment in SYSTEM, fragment
+
+
+# ------------------------ a conceded route is a DEFERRAL in the direct pass
+
+
+CONCEDING = ("not visible on any output port directly; the effect is that the "
+             "FSM timing counter is paused, which should be visible through "
+             "the absence of state transitions (cmd_ack not pulsing)")
+
+
+def test_the_direct_pass_ACCEPTS_a_reason_that_concedes_a_route():
+    """It is a DEFERRAL, not a dodge, and refusing it here destroys value.
+
+    `unobservable` is literally the ticket into `blind`, so an answer of
+    "unobservable, though it should show through the command timing" hands the
+    question to the pass built to answer it -- which sees the sibling pool this
+    one does not. Measured on h2-i2c: of 18 direct-pass answers that conceded a
+    route, the indirect pass recovered 15 (83%) with a real port AND route.
+
+    Gating it here forced a worse route out of the pass with less information
+    and, because `unobservable` is `not observable`, dropped the requirement
+    from `blind` so it never got the better-informed look at all.
+    """
+    issues = gate_one(REQ, _out(observable=[], unobservable_reason=CONCEDING),
+                      CONTRACT)
+    assert [i for i in issues if i.severity == "error"] == []
+
+
+

@@ -64,22 +64,20 @@ def _out(**kw):
 # ------------------------------------------------------------- the gate
 
 
-def test_a_route_naming_one_case_is_rejected():
-    """THE VACUITY FAILURE, ONE STAGE EARLY, and harder to see because the route
-    looks like progress. A check over "the port shows X" passes any design that
-    ever shows X -- including one with none of this behaviour."""
+def test_the_indirect_pass_also_wants_the_OTHERWISE_slot():
+    """Same demand, same structural test, both passes."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
         shows="busy is low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})
-    assert issues and "HOLDS" in issues[0].message
+    assert any("`otherwise` is empty" in i.message for i in issues)
 
 
 def test_a_route_naming_both_cases_passes():
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
-        shows=DISCRIMINATING)])
+        shows=DISCRIMINATING, otherwise="busy stays low")])
     assert gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                          known={"REQ-0007", "REQ-0031"}) == []
 
@@ -87,7 +85,7 @@ def test_a_route_naming_both_cases_passes():
 def test_a_route_through_an_undeclared_port_is_rejected():
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="filter_cnt", through_req="REQ-0007", when="x",
-        shows=DISCRIMINATING)])
+        shows=DISCRIMINATING, otherwise="busy stays low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})
     assert any("not a declared output port" in i.message for i in issues)
@@ -96,7 +94,7 @@ def test_a_route_through_an_undeclared_port_is_rejected():
 def test_a_requirement_cannot_be_observed_through_itself():
     """That is the direct case, and the first pass already said there is none."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
-        port="busy", through_req="REQ-0031", when="x", shows=DISCRIMINATING)])
+        port="busy", through_req="REQ-0031", when="x", shows=DISCRIMINATING, otherwise="busy stays low")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0031"})
     assert any("through itself" in i.message for i in issues)
@@ -116,7 +114,9 @@ def _reachable(uid, via=()):
     return NormalizedRequirement(
         req_uid=uid, observable=["busy"],
         activated_via=[Reach(through_req=t,
-                             activation=Activation(text=f"via {t}"))
+                             activation=Activation(text=f"via {t}"),
+                             when=f"whenever {t} fires",
+                             shows="busy rises and stays high")
                        for t in via])
 
 
@@ -174,7 +174,8 @@ def _resolve(reply, shapes):
 
 ROUTED = ('{"normalized": [{"req_uid": "REQ-0031", "observed_via": [{"port": '
           '"busy", "through_req": "REQ-0007", "when": "after a glitch", '
-          f'"shows": "{DISCRIMINATING}"}}]}}]}}')
+          f'"shows": "{DISCRIMINATING}", '
+          '"otherwise": "busy stays low"}]}]}')
 
 
 def test_a_resolved_requirement_becomes_observable_at_the_route_s_port():
@@ -226,12 +227,21 @@ def test_an_OBSERVABLE_but_UNREACHABLE_requirement_is_asked_the_other_question()
 
     Live proof it was structural rather than a property of the design -- on
     a2-i2c, `activated_via` WITHOUT `observed_via` came back zero of 105.
+
+    NOMINATION IS NOW THE MODEL'S CLAIM, not an inference. This used to rely on
+    `activation.state_dependent`, which read `bool(inputs)` and so called 76 of
+    110 requirements drivable on n4-i2c because they carry `{nReset: 1, rst: 0,
+    ena: 1}` -- a precondition, not a trigger. `unreachable_reason` is the
+    mirror of `unobservable_reason`: the model says it needs a prior event it
+    cannot name, and that is what selects it.
     """
     stateful = _seer().model_copy(update={
-        "activation": Activation(text="the FSM is in START_B")})
+        "activation": Activation(text="the FSM is in START_B"),
+        "unreachable_reason": "something must have put the FSM in START_B"})
     reply = ('{"normalized": [{"req_uid": "REQ-0007", "activated_via": '
              '[{"through_req": "REQ-0012", "activation": {"text": "issue START",'
-             ' "inputs": {"cmd": 1}}}]}]}')
+             ' "inputs": {"cmd": 1}}, "when": "the command is accepted from idle",'
+             ' "shows": "sda_oen falls to 0 while scl_oen is still 1"}]}]}')
     merged, results, port = _resolve(reply, [stateful, _settled()])
     assert len(port.prompts) == 1
     assert "ACTIVATION ONLY" in port.prompts[0]
@@ -267,7 +277,8 @@ def test_a_reaching_chain_survives_an_answer_with_no_observation_route():
     """
     reply = ('{"normalized": [{"req_uid": "REQ-0031", "observed_via": [], '
              '"activated_via": [{"through_req": "REQ-0012", "activation": '
-             '{"text": "issue START"}}]}]}')
+             '{"text": "issue START"}, "when": "the command is accepted from idle",'
+             ' "shows": "sda_oen falls to 0 while scl_oen is still 1"}]}]}')
     merged, _, _ = _resolve(reply, [_blind(), _settled()])
     got = next(n for n in merged if n.req_uid == "REQ-0031")
     assert [h.through_req for h in got.activated_via] == ["REQ-0012"]
@@ -388,7 +399,9 @@ def test_the_stimulus_hint_carries_the_reaching_sequence_not_the_state_name():
     stateful = dict(SHAPE, activation={"text": "while in START_B"},
                     activated_via=[{"through_req": "REQ-0012",
                                     "activation": {"text": "a START is issued",
-                                                   "inputs": {"cmd": 1}}}])
+                                                   "inputs": {"cmd": 1}},
+                                    "when": "the command is accepted from idle",
+                                    "shows": "sda_oen falls while scl_oen is 1"}])
     hint = _hint({"uid": "REQ-0031", "text": "t"}, stateful, None, 0)
     assert "STATE, not a set of values" in hint
     assert "REQ-0012" in hint and "cmd=1" in hint
@@ -639,3 +652,109 @@ def test_no_gate_reads_the_review():
                if "def _reach_edges(" in src else src.index("REACH_DEPTH")]
     for name in ("indirect_review", "discriminates_on", "antecedent_port"):
         assert name not in gate
+
+
+def test_housekeeping_inputs_no_longer_nominate_anything_by_themselves():
+    """The heuristic is gone, and this is the case that killed it.
+
+    `{nReset: 1, rst: 0, ena: 1}` is what almost every requirement in this
+    module carries: measured over 156,833 rows of golden trace, nReset sits at
+    1 for 100% of them, rst at 0 for 100%, ena at 1 for 95.9%. Pinning them
+    selects nothing. The old predicate could not tell that from a trigger, in
+    either direction -- and `ena = 0`, which selects 4.1%, IS the trigger of a
+    real requirement, so a name-based fix would have thrown that one away.
+
+    So neither shape nominates on its own any more. Only the model's own claim
+    does.
+    """
+    housekeeping = _seer().model_copy(update={
+        "activation": Activation(text="while enabled and out of reset",
+                                 inputs={"nReset": 1, "rst": 0, "ena": 1})})
+    _, results, port = _resolve(ROUTED, [housekeeping])
+    assert port.prompts == [] and results == []
+
+    # ...and the same shape WITH the claim is asked, so the difference is the
+    # claim and nothing else.
+    claimed = housekeeping.model_copy(update={
+        "unreachable_reason": "a command must already have been accepted"})
+    _, _, port2 = _resolve(ROUTED, [claimed])
+    # `ROUTED` answers a different uid, so the gate rejects and the loop
+    # retries -- irrelevant here. What this asserts is that the claim NOMINATED
+    # it at all, and that it was asked the activation question rather than the
+    # observation one.
+    assert port2.prompts, "the claim did not nominate the requirement"
+    assert "ACTIVATION ONLY" in port2.prompts[0]
+
+
+def test_a_driven_activation_hop_needs_inputs_not_a_route():
+    """An empty `through_req` is the DIRECT case, exactly as it is for a Route.
+
+    It is what makes the selector unnecessary: "drivable" becomes an answer the
+    model gives rather than a property inferred from the shape of `inputs`. So
+    the gate must not demand `when`/`shows` of it -- there is no hop to
+    recognise -- but must demand what drives it.
+    """
+    from specflow.normalize import NormalizedRequirement, gate_indirect, NormalizeOutput
+
+    def issues_for(hop):
+        out = NormalizeOutput(normalized=[NormalizedRequirement(
+            req_uid="REQ-0007", observable=["busy"], activated_via=[hop])])
+        return gate_indirect(out, uid="REQ-0007", contract={},
+                             known={"REQ-0007", "REQ-0012"})
+
+    ok = issues_for(Reach(through_req="",
+                          activation=Activation(text="a WRITE is presented",
+                                                inputs={"cmd": 4})))
+    assert ok == [], [i.message for i in ok]
+
+    empty = issues_for(Reach(through_req=""))
+    assert any("DIRECT case" in i.message for i in empty), [i.message for i in empty]
+
+
+
+# ------------ NO LEXICAL TEST DECIDES ANYTHING IN THIS GATE
+
+
+CONCEDING = ("not visible on any output port directly; the effect is that the "
+             "FSM timing counter is paused, which should be visible through "
+             "the absence of state transitions (cmd_ack not pulsing)")
+HONEST = ("slave_wait is an internal signal whose assertion cannot be directly "
+          "observed at declared output ports")
+
+
+def test_the_indirect_gate_READS_NO_PROSE_when_the_answer_is_empty():
+    """A conceding reason and an honest one are treated IDENTICALLY.
+
+    `concedes_a_route` used to refuse the first and accept the second by
+    matching the wording of `unobservable_reason`. It is gone, and this test is
+    what replaces it: the gate asks whether the SCHEMA SLOTS are filled and
+    reads nothing else.
+
+    Why it was removed rather than repaired. It produced two measured false
+    negatives in a single session -- a 40-character negation window that any
+    nearby "not" disarmed, which is structurally wrong here because the pass
+    deliberately teaches that an ABSENCE is an observation, so correct reasons
+    increasingly contain "not"; and reading the answer's own
+    `unobservable_reason` when the prompt tells the model to leave that field
+    alone, which blinded it on every answer that complied. Each repair made the
+    predicate more intricate and neither made it correct.
+    """
+    for reason in (CONCEDING, HONEST, ""):
+        out = _out(req_uid="REQ-0031", observed_via=[])
+        out.normalized[0].observable = []
+        out.normalized[0].unobservable_reason = reason
+        issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
+                               known={"REQ-0007", "REQ-0031"})
+        assert [i for i in issues if "unobservable_reason" in i.path] == [], (
+            f"the gate inspected the reason text: {reason[:60]!r}")
+
+
+def test_a_route_is_still_gated_STRUCTURALLY_in_the_indirect_pass():
+    """Removing the prose checks does not remove the schema checks."""
+    out = _out(req_uid="REQ-0031", observed_via=[Route(
+        port="busy", through_req="REQ-0007", when="after a glitch",
+        shows=DISCRIMINATING, otherwise="")])
+    issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
+                           known={"REQ-0007", "REQ-0031"})
+    assert [i for i in issues if "observed_via[0]" in i.path], (
+        "an empty `otherwise` slot must still be refused")

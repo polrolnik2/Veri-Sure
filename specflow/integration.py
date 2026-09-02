@@ -190,6 +190,7 @@ def _run_divided_s1(
     of a cache hit.
     """
     from .divide import coverage as unit_coverage
+    from .schema import core_span
     from .s1_classify import divide_and_classify
 
     out_dir = Path(run_dir) / "specflow"
@@ -227,9 +228,13 @@ def _run_divided_s1(
                 "spec_chars": total,
                 "unit_chars": covered,
                 "word_carrying_gaps": len(gaps),
+                # The CORE span only. A supporting span belongs to the
+                # requirement it was linked from, and counting it here would
+                # report "the largest thing any requirement cites" under a name
+                # that says "the largest requirement".
                 "largest_requirement_chars": max(
-                    (s["end"] - s["start"] for r in reqs for s in r["spec_spans"]),
-                    default=0,
+                    ((core_span(r).get("end", 0) - core_span(r).get("start", 0))
+                     for r in reqs), default=0,
                 ),
                 "issues": [
                     {"severity": i.severity, "path": i.path, "message": i.message,
@@ -299,7 +304,16 @@ def build_artifacts(
     spec: str,
     contract_json: str,
     model_port: str = "replay",
-    max_repairs: int = 3,
+    #: Rounds of gate-fed repair per item, so 5 gives r0..r5.
+    #:
+    #: Was 3. Measured on n4-i2c: of 111 requirements exactly one exhausted the
+    #: budget, and it was CONVERGING when it ran out -- REQ-0014 went from no
+    #: routes, to eight routes without discriminating `shows`, to six of eight
+    #: discriminating. Two more of a shape it had already got right six times.
+    #: A budget that stops a converging item one round short buys nothing: the
+    #: cost is paid per FAILING item, which is now ~1%, while the failure it
+    #: prevents is a whole requirement dropped from the set.
+    max_repairs: int = 5,
     #: The reference model gets its own budget, and a larger default. Its repair
     #: round is the only one whose feedback comes from RUNNING the artifact
     #: rather than from a script checking its shape, and that feedback converges

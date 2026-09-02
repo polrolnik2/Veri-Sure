@@ -30,11 +30,32 @@ CHIPVERILOG = sorted((REPO / "benchmarks" / "chipverilog" / "Des").rglob("descri
 # ------------------------------------------------------------------ fixtures
 
 
-def test_a_paragraph_is_one_unit():
+def test_a_paragraph_splits_at_its_sentence_ends():
+    """The floor is the SENTENCE, not the paragraph.
+
+    The paragraph was the floor until an S1 span of `" and glitch filtering."`
+    -- 22 characters of a feature list, naming a mechanism and stating no
+    behaviour -- became a requirement about a three-sample filter window. With
+    the sentence as the unit and a requirement's span the whole unit, that
+    fragment cannot be a span, because it is not a unit.
+    """
     spec = "The counter counts up. On overflow it saturates rather than wrapping."
     units = divide(spec)
-    assert len(units) == 1
-    assert units[0].text(spec) == spec
+    assert [u.text(spec) for u in units] == [
+        "The counter counts up.",
+        "On overflow it saturates rather than wrapping.",
+    ]
+    assert not splits_a_sentence(spec, units)
+
+
+def test_a_sentence_end_that_is_not_one_does_not_cut():
+    """Abbreviations and decimals are why the cut needs a lookahead.
+
+    `i.e.` is followed by a lower-case word and `2.5` by a digit with no space,
+    so neither can be mistaken for the end of a sentence.
+    """
+    spec = "The divider samples at clk_cnt >> 2, i.e. every 2.5 us, and holds."
+    assert len(divide(spec)) == 1
 
 
 def test_a_blank_line_separates_units():
@@ -80,12 +101,18 @@ def test_an_indented_definition_list_splits_per_line():
 
 
 def test_an_ordinary_paragraph_with_one_indented_line_is_not_a_list():
-    """The guard on the rule above: a paragraph with an afterthought stays whole."""
+    """The guard on the rule above: a paragraph with an afterthought is prose.
+
+    The sentence pass cuts it in two, which is the floor doing its job; what
+    this pins is that neither piece is a `list_item`, because the indented line
+    is an afterthought and not the author's list markup.
+    """
     spec = (
         "The controller synchronises both bus inputs through two capture stages.\n"
         "    This is required for metastability.\n"
     )
-    assert len(divide(spec)) == 1
+    units = divide(spec)
+    assert [u.kind for u in units] == ["paragraph", "paragraph"]
 
 
 def test_a_fenced_code_block_is_one_unit():
@@ -100,6 +127,67 @@ def test_a_short_fragment_joins_its_predecessor():
     spec = "The output saturates on overflow.\n\nNote:\n"
     units = divide(spec)
     assert len(units) == 1
+
+
+def test_a_lowercase_named_entry_still_starts_a_unit():
+    """A specification's own names are lower case, and the cut must see them.
+
+    The capital-letter lookahead refused the boundary before `sda_i`, so one
+    unit ran from the middle of the SCL entry into the SDA entry, and every
+    requirement built on it was attributed to a quote mixing SCL behaviour with
+    an SDA declaration.
+    """
+    spec = (
+        "    scl_i:External I2C SCL line input from the pad. This input is "
+        "filtered and used for read sampling.\n"
+        "    sda_i:External I2C SDA line input from the pad. This input is "
+        "filtered and used for arbitration.\n"
+    )
+    units = divide(spec)
+    assert not splits_a_sentence(spec, units)
+    # The `sda_i` entry begins its own unit. It keeps its line indent, because
+    # a unit that starts mid-line is what `splits_a_sentence` rejects.
+    starts = [u.text(spec).lstrip()[:6] for u in units]
+    assert "scl_i:" in starts and "sda_i:" in starts, starts
+
+
+def test_a_sentence_cut_keeps_the_line_indent_it_starts_on():
+    """The pin on the sentence pass's own boundary arithmetic.
+
+    A piece that begins on a fresh line must start immediately after the
+    newline, indent included, exactly as `_split_indented_list` sets its units.
+    Stripping the indent moves the boundary into the middle of a line, which is
+    precisely what `splits_a_sentence` exists to reject -- and it did, twice, on
+    the i2c spec before this was fixed.
+    """
+    spec = (
+        "    scl_oen: Active-low SCL output enable.\n"
+        "        - `0`: drive SCL low\n"
+        "        - `1`: release SCL so the pull-up drives it high\n"
+        "    output sda_o: Constant-low SDA drive value.\n"
+    )
+    units = divide(spec)
+    assert not splits_a_sentence(spec, units), [u.text(spec) for u in units]
+
+
+def test_the_split_i2c_filter_sentence_is_now_one_unit():
+    """The measured defect this change exists to close.
+
+    On c1-i2c, `divide` put boundaries at 6812 and 7192, and S1 cut inside them
+    at 7072 -- mid-clause. REQ-0045 got "...are generated using a majority
+    function" and REQ-0046 got "over the three-sample histories.", so neither
+    span states the requirement and the pipeline authored checks from both. The
+    sentence is one unit now, and no unit boundary falls at 7072.
+    """
+    path = REPO / "benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/description.txt"
+    spec = path.read_text(encoding="utf-8")
+    units = divide(spec)
+    holding = [u for u in units if u.start <= 7072 < u.end]
+    assert len(holding) == 1
+    assert holding[0].text(spec) == (
+        "The filtered outputs `sSCL` and `sSDA` are generated using a majority "
+        "function over the three-sample histories."
+    )
 
 
 def test_offsets_index_the_normalised_spec():

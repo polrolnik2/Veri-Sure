@@ -249,6 +249,32 @@ check is therefore not evidence that the requirement asked for one.** You are
 the only reader positioned to notice, because you hold the sentence and the
 code side by side.
 
+WHAT "BORROWED FROM A NEARBY REQUIREMENT" MEANS, EXACTLY, AND WHAT IT DOES NOT.
+The requirement you are given has two parts and they license different things:
+
+  obligation    ONE span. This is the requirement. The check's ASSERTION must
+                be licensed by these words.
+  spec_spans    Context, `role: "supporting"`, and `supports` names sibling
+                requirements. Linked deliberately by an earlier stage because
+                the obligation sentence does not, alone, say what situation it
+                is about.
+
+A TRIGGER BUILT FROM THE SURROUND IS LICENSED. That is what the surround is
+for, and objecting to it is the most common way to reject a correct check here.
+If the obligation is "The FSM then returns to `idle` and pulses `cmd_ack`" and
+a support span establishes that the sentence is about the STOP sequence, then
+opening the window on a STOP sequence is licensed -- even though the words
+"STOP sequence" appear only in the support span. Do not answer NO because the
+trigger's words are in `spec_spans` rather than in `obligation`.
+
+AN ASSERTION BUILT FROM THE SURROUND IS NOT. If the effect the check convicts
+on is stated in a support span or a sibling and not in `obligation`, that is
+the borrowing this section is about, and the answer is NO -- name which span
+the effect came from.
+
+So: read the whole requirement to decide WHEN the check may fire, and
+`obligation` alone to decide WHAT it may demand.
+
 THE BOUNDARY, AND IT IS THE WHOLE RISK IN THIS SECTION. This is NOT the
 internal-signal rejection, which section 7 forbids outright and for good reason.
 A sentence may name an invisible mechanism and still state a real obligation:
@@ -565,11 +591,17 @@ def build_prompt(
     `spec` is the source document the requirement was extracted FROM, and it is
     admitted here on purpose. It is strictly upstream of every artifact in this
     pipeline -- it is what S1 read -- so it cannot carry back anything the
-    pipeline produced. What it adds is the surround: `requirement.spec_spans`
-    already quotes the sentence, and a reviewer holding only that sentence
-    cannot tell a clause whose testable content is stated two paragraphs later
-    from one that has none. Ahead of the requirement rather than after it, so
-    the shared prefix stays cacheable across the fan-out.
+    pipeline produced. What it adds is the surround: `requirement.obligation`
+    quotes the one sentence the check must satisfy, and a reviewer holding only
+    that sentence cannot tell a clause whose testable content is stated two
+    paragraphs later from one that has none. Ahead of the requirement rather
+    than after it, so the shared prefix stays cacheable across the fan-out.
+
+    (This said `requirement.spec_spans already quotes the sentence` until the
+    obligation core was split out into its own field. `spec_spans` now holds
+    the SUPPORTING context and the sentence itself lives in `obligation`, so
+    the old wording named the wrong field -- and the SYSTEM text it described
+    had the matching gap, which cost 51 of 111 requirements on n4-i2c.)
 
     It does NOT let this gate see behaviour. Whether a check can fail is decided
     by `liveness`, mechanically, from traces -- a fact about execution that no

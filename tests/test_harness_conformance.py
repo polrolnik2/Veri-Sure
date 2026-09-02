@@ -463,3 +463,113 @@ def test_the_internal_trace_localises_a_one_generation_early_read(tmp_path, monk
         "no edge shows an internal disagreement while the outputs agree, so the "
         "trace adds nothing a plain output comparison did not already give"
     )
+
+
+def test_a_vacuous_testpoint_is_RECORDED_not_raised():
+    """`Env.finish` must not assert, and the second assert is why this exists.
+
+    `assert self.sb.invoked` raised on a testpoint no check fired on. That is
+    the definition of UNCOVERED -- the record two lines above already calls it
+    `NOT_EXERCISED` -- so raising turned the coverage measurement into a suite
+    crash. It also made cover bins load-bearing for the RUNTIME long after they
+    stopped being load-bearing for the METRIC, since coverage is now the
+    oracles' own tri-state and nothing downstream of the suite reads a bin.
+
+    With it gone a suite renders and runs with no checks and no bins, which is
+    what lets the S3 stage be skipped -- 335 model calls on c1-i2c for an
+    artifact the oracle stage never reads.
+
+    A source pin rather than a behavioural one: `Env` needs a live cocotb
+    simulation to instantiate, and the property being fixed is precisely that
+    two lines of source are absent.
+    """
+    import inspect
+
+    from specflow.tb.runtime import Env
+
+    # COMMENTS STRIPPED FIRST. The removal is explained in a comment that
+    # quotes the very line it removed, so a naive substring search finds the
+    # explanation and reports the bug as unfixed.
+    src = inspect.getsource(Env.finish)
+    code = "\n".join(ln for ln in src.splitlines()
+                     if not ln.lstrip().startswith("#"))
+    assert "assert self.sb.invoked" not in code
+    assert "assert not self.sb.failed" not in code
+    # The tri-state the assert used to pre-empt is still computed and recorded.
+    assert "NOT_EXERCISED" in code
+    assert '"checks_invoked"' in code
+
+
+@needs_verilator
+def test_a_MID_SEQUENCE_reset_is_recorded_and_leaves_no_hole(tmp_path):
+    """A reset step must appear in the trace, and must not break its continuity.
+
+    `reset()` used to tick the clock without recording, with two consequences
+    that no verdict could show.
+
+    A reset-behaviour check could never fire. The stimulus asserts reset, the
+    DUT sees it, and the recording contains NO ROW in which the reset port is
+    active -- so an oracle whose activation is "reset is asserted" abstains on
+    the scenario written to exercise it. Measured on one i2c run: the stimulus
+    reset in 158 of 322 testpoints and every recorded trace showed reset in
+    zero, which is 4 of that run's 53 abstentions attributable to the harness
+    rather than the stimulus or the check.
+
+    And the trace went DISCONTINUOUS: with a reset at step N, the row for step
+    N-1 sat directly beside the row for step N+1. A check comparing row i with
+    row i+1 -- which is what every skew and `nexttime` check does -- then saw a
+    transition that never happened at that adjacency, and could convict a
+    correct design for it.
+    """
+    src = FIXTURES / "reg1"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    steps = [{"inputs": {"d": 1}, "hold": 2},
+             {"reset": True},
+             {"inputs": {"d": 1}, "hold": 2}]
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite, stimulus_by_tp={"TP-0000": steps})
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    trace = json.loads((suite / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))
+    edges = trace["edges"]
+
+    steps_seen = sorted({e["step"] for e in edges})
+    assert 1 in steps_seen, (
+        f"the reset step left no row at all; steps recorded: {steps_seen}")
+    assert steps_seen == list(range(steps_seen[0], steps_seen[-1] + 1)), (
+        f"the recorded steps have a hole in them: {steps_seen}")
+
+    reset_rows = [e for e in edges if e["step"] == 1]
+    assert any(e["inputs"].get("rst_n") == 0 for e in reset_rows), (
+        "no recorded row shows the reset asserted, so a reset-behaviour check "
+        f"still cannot fire: {[e['inputs'] for e in reset_rows]}")
+
+
+@needs_verilator
+def test_a_trace_says_what_stimulus_it_is_a_recording_OF(tmp_path):
+    """Without this a consumer can only match on `tp_uid`, which every run
+    reuses -- see `stimulus_digest`."""
+    from specflow.tb.runtime import stimulus_digest
+
+    src = FIXTURES / "reg1"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    steps = [{"inputs": {"d": 1}, "hold": 2}, {"inputs": {"d": 0}, "hold": 2}]
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite, stimulus_by_tp={"TP-0000": steps})
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    trace = json.loads((suite / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))
+    assert trace["stimulus_digest"] == stimulus_digest(steps)
+    assert trace["stimulus_digest"] != stimulus_digest(steps[:1])

@@ -205,15 +205,18 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
     units = divide(spec)
 
     def reply(stage, round_):
+        if stage.startswith("boundary_"):
+            # Every unit stands alone here, so the partition the classifier
+            # sees is the scaffold `divide` produced.
+            return json.dumps({"reasoning": "-", "continues_previous": False})
         if stage.startswith("classify_"):
             start = int(stage.split("_")[1])
             unit = next(u for u in units if u.start == start)
             port = "sum" if "sum" in unit.text(spec) else "cout"
             return json.dumps({
                 "kind": "behavioural",
-                "obligations": [{"start": 0, "end": unit.length,
-                                 "text": f"The {port} output is driven as specified.",
-                                 "ports": [port]}],
+                "text": f"The {port} output is driven as specified.",
+                "ports": [port],
             })
         if stage.startswith("s2_"):
             uid = stage.split("_", 1)[1]
@@ -306,7 +309,9 @@ def test_build_artifacts_can_run_the_divided_arm(tmp_path):
     # Same artifact shape as the generative arm.
     reqs = json.loads((run_dir / "specflow" / "requirements.json").read_text())
     assert [r["uid"] for r in reqs["requirements"]] == ["REQ-0000", "REQ-0001"]
-    assert all(r["spec_spans"][0]["quote"] for r in reqs["requirements"])
+    # The core is `obligation`, a field. `spec_spans` beside it is context and
+    # is legitimately empty when a requirement needs none.
+    assert all(r["obligation"]["quote"] for r in reqs["requirements"])
 
     # The number that says the catch-all is gone: no requirement claims the spec.
     gate = json.loads((run_dir / "specflow" / "s1_gate.json").read_text())

@@ -54,8 +54,8 @@ SEER = json.dumps({"normalized": [{
     "observed_via": [{
         "port": "busy", "through_req": "",
         "when": "after a START-shaped edge on sda_i while scl_i is high",
-        "shows": "busy is high once a START has been detected and low when "
-                 "none has"}],
+        "shows": "busy is high once a START has been detected",
+        "otherwise": "busy stays low when none has"}],
     "expectation": "busy rises"}]})
 
 ROUTED = json.dumps({"normalized": [{
@@ -63,7 +63,8 @@ ROUTED = json.dumps({"normalized": [{
     "observed_via": [{
         "port": "busy", "through_req": "REQ-0001",
         "when": "after a glitch narrower than the filter depth",
-        "shows": "busy stays low for a narrow glitch and rises for a wide one"}],
+        "shows": "busy rises for a wide one",
+        "otherwise": "busy stays low for a narrow one"}],
     "activated_via": []}]})
 
 
@@ -259,9 +260,9 @@ def test_a_direct_route_does_not_make_a_requirement_indirect():
     from specflow.s2_testplan import borrowed
 
     direct = {"observed_via": [{"port": "busy", "through_req": "",
-                                "when": "w", "shows": "s"}]}
+                                "when": "w", "shows": "s", "otherwise": "o"}]}
     indirect = {"observed_via": [{"port": "busy", "through_req": "REQ-0001",
-                                  "when": "w", "shows": "s"}]}
+                                  "when": "w", "shows": "s", "otherwise": "o"}]}
     assert borrowed(direct) == []
     assert len(borrowed(indirect)) == 1
     assert borrowed({}) == [] and borrowed(None) == []
@@ -274,7 +275,7 @@ def test_the_indirect_note_reaches_only_the_borrowed_requirement():
 
     direct = {"observable": ["busy"],
               "observed_via": [{"port": "busy", "through_req": "",
-                                "when": "w", "shows": "s"}]}
+                                "when": "w", "shows": "s", "otherwise": "o"}]}
     req = {"uid": "REQ-0001", "text": "t"}
     s2 = s2_testplan.build_prompt_one(req, CONTRACT_JSON, normalized=direct)
     assert "PLAN BOTH CASES" not in s2

@@ -753,6 +753,13 @@ def run_oracle_stage(
     testplan: list[dict],
     stimulus_by_tp: dict[str, list[dict]],
     port: ModelPort,
+    #: The variant author, when it should not be the oracle author. Variants are
+    #: WRONG implementations of a requirement -- the must-fail leg of the vacuity
+    #: check -- so the job is breadth, not the care an oracle needs, and paying
+    #: oracle-grade inference for ~700 of them is the largest avoidable cost in
+    #: this stage. Defaults to `port`, which is what every caller did implicitly
+    #: before this existed.
+    variant_port: ModelPort | None = None,
     workdir: Path,
     base: str = "step",
     normalized: dict[str, dict] | None = None,
@@ -939,7 +946,7 @@ def run_oracle_stage(
             requirements=requirements, contract_json=contract_json,
             contract=contract, conforming_source=witness,
             stimulus_by_tp=stimulus_by_tp,
-            tp_by_req=by_requirement(testplan), port=port,
+            tp_by_req=by_requirement(testplan), port=variant_port or port,
             normalized=normalized, base=base, fanout=fanout,
         )
         logger.info("oracles: %d variant(s) for %d requirement(s)",
@@ -1266,6 +1273,37 @@ def run_oracle_stage(
         # only two objections and no discard at all. A path that drops an
         # author's work must say so where the artifact can be read.
         for o in again:
+            # AN UNCHANGED REPLY IS NOT AN ATTEMPT.
+            #
+            # The author is sent the gate's objection and sometimes returns the
+            # previous function verbatim. Measured on h2-i2c: 14 of 89 repair
+            # rounds (16%) came back byte-identical to the oracle they were
+            # asked to fix, every one of them the FIRST repair round, and three
+            # of the run's five false convictions of golden are among them --
+            # REQ-0050 was handed a specific, actionable defect report ("your
+            # check judged at edge 62, before any of busy had moved off its
+            # reset value") and returned the same source unchanged.
+            #
+            # These are not cache hits: `resumable` keys on the stage name and
+            # `oracle_X_r0` and `oracle_X_fix1_r0` are different stages.
+            #
+            # Letting it through spends a repair attempt and buys nothing, and
+            # because attempts are finite the requirement can exhaust its budget
+            # on replies that never changed a character. Recording it and
+            # leaving the previous oracle standing costs nothing, keeps the
+            # objection live for the next round, and puts the fact in `repairs`
+            # where the artifact can be read -- the same reason every other
+            # discard on this path is recorded rather than logged.
+            standing = held.get(o.req_uid)
+            if standing is not None and o.source.strip() == standing.source.strip():
+                logger.info("oracles: %s: the reply is byte-identical to the "
+                            "oracle it was asked to repair; not an attempt",
+                            o.req_uid)
+                repairs.setdefault(o.req_uid, []).append(
+                    "repair rejected -- the reply was byte-identical to the "
+                    "oracle it was asked to fix, so nothing was attempted and "
+                    "the objection stands")
+                continue
             # RE-VERIFY EVERY REPLACEMENT, not only the advisory ones.
             #
             # This branch used to run for `advisory_only` alone, so a reply to
@@ -2114,9 +2152,11 @@ def stage_unexercised(
         # be abandoned at all.
         shape = normalized.get(uid) or {}
         act = shape.get("activation") or {}
-        ob = Obligation(uid, str(act.get("text") or ""),
-                        dict(act.get("inputs") or {}),
-                        tuple(shape.get("observable") or ()))
+        # `.of`, never the bare constructor -- it resolves symbols through the
+        # port's encoding and normalises a value-set to a tuple.
+        ob = Obligation.of(uid, str(act.get("text") or ""),
+                           act.get("inputs") or {},
+                           shape.get("observable") or (), contract)
         route_ports = set(shape.get("observable") or ())
         tries: list[dict] = []
         evidence: dict | None = None

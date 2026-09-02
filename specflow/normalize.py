@@ -188,7 +188,29 @@ class Activation(BaseModel):
     #: across the corpus, and seven requirements used a value the design decodes
     #: as nothing. `specflow.encoding` resolves the symbol against the ONE table
     #: on the contract, so the number stops being anybody's opinion.
-    inputs: dict[str, int | str] = Field(default_factory=dict)
+    #: A VALUE MAY ALSO BE A LIST, MEANING ANY OF THESE:
+    #: `{"cmd": ["I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_READ",
+    #:           "I2C_CMD_WRITE"], "ena": 1}` -- the window opens on any of the
+    #: four commands, and `ena` must be 1 in every case.
+    #:
+    #: WITHOUT IT THIS FIELD COULD ONLY SAY "AND". It is a mapping port ->
+    #: value, so every named port had to hold together, and a requirement
+    #: triggered by ANY OF several values had nowhere to say so. `opens_on`,
+    #: `until` and `aborts_on` all took the list-of-alternatives shape long ago
+    #: for exactly this reason; `inputs` was the last field that could not.
+    #:
+    #: Measured on h2-i2c: of 22 observable requirements whose activation
+    #: carried no trigger at all, 8 had a disjunctive one -- "a START, STOP,
+    #: READ, or WRITE command is accepted while the FSM is idle", "reset is
+    #: asserted via nReset low or rst high" -- which the model wrote into
+    #: `text`, where no gate and no oracle can reach it. It knew the trigger and
+    #: had nowhere to put it, so the activation read as unconditional.
+    #:
+    #: A DISJUNCTION ACROSS DIFFERENT PORTS is not this: "nReset low OR rst
+    #: high" names two ports, and a per-port value-set cannot express it. That
+    #: one belongs in `opens_on`, which is disjunctive normal form and already
+    #: general enough -- `[{"nReset": 0}, {"rst": 1}]`.
+    inputs: dict[str, int | str | list[int | str]] = Field(default_factory=dict)
     #: The rest of the opening condition, and this one MAY name outputs.
     #:
     #: A LIST OF ALTERNATIVES: any entry opening the window is enough, and every
@@ -374,6 +396,25 @@ class Route(BaseModel):
     #: What the port does when this requirement holds, AND when it does not.
     #: Two cases, or there is nothing for a check to discriminate between.
     shows: str = ""
+    #: WHAT THE PORT DOES WHEN THE REQUIREMENT DOES NOT HOLD. A SECOND SLOT,
+    #: not a second sentence, and that is the whole point of the change.
+    #:
+    #: The demand for two cases is right: a check written over "the port shows
+    #: X" with nothing to contrast against passes any design that ever shows X,
+    #: including one with none of the behaviour. What was wrong was INFERRING
+    #: two-ness from prose. The old gate searched `shows` for " not ",
+    #: "otherwise", "does not" or " and " -- a substring test standing in for a
+    #: semantic property -- and it gave opposite verdicts to identical claims:
+    #: REQ-0004's "no discrimination: scl_o is structurally tied to 0" was
+    #: recorded as undecidable, while REQ-0034's "there is no case where this
+    #: requirement does not hold" -- the same claim -- passed as a real check,
+    #: because the string happens to contain " not ".
+    #:
+    #: With two slots the check is a FACT rather than a guess: is the second one
+    #: filled. No wording is privileged, an author writing plainly is not
+    #: punished for its vocabulary, and the escape hatch stays an explicit
+    #: opt-in rather than something inferred.
+    otherwise: str = ""
 
 
 class Reach(BaseModel):
@@ -387,10 +428,35 @@ class Reach(BaseModel):
 
     `activation` reuses `Activation` verbatim rather than inventing a second
     vocabulary for "what must be driven".
+
+    AND A POINTER IS NOT A ROUTE HERE EITHER. `Route` says this in its own
+    docstring and then carries `when` and `shows` to fix it; this class carried
+    `{through_req, activation}` and nothing else, which is the pointer shape
+    `Route` rejects. "REQ-0096 puts the FSM into the READ sequence" tells an
+    author which requirement to thank and gives it no way to RECOGNISE, in a
+    trace of declared ports, that the sequence is now running -- so the check it
+    writes opens on whatever is easy to see instead.
+
+    Measured on n4-i2c: 8 requirements were rejected with the same objection --
+    "the trigger must identify an actual command sequence", "it must open only
+    on a filtered-SCL rising edge during an active READ" -- and every one had an
+    empty `activated_via`. Filling it with the pointer alone would not have
+    answered any of them.
+
+    So `when` and `shows` mirror `Route`'s, and mean the activation-side thing:
+    `when` is the condition under which the hop actually delivers the state,
+    `shows` is how the boundary betrays that it has.
     """
 
     through_req: str = ""
     activation: Activation = Field(default_factory=Activation)
+    #: The condition under which this hop actually puts the design in the state
+    #: -- not every firing of `through_req` need do so.
+    when: str = ""
+    #: How a trace of DECLARED PORTS tells you the hop has fired and the state
+    #: now holds. Without this the author cannot open a window on it, which is
+    #: the whole point of naming the hop.
+    shows: str = ""
 
 
 class NormalizedRequirement(BaseModel):
@@ -420,9 +486,35 @@ class NormalizedRequirement(BaseModel):
     #: `observable` still holds the ports it is decidable at by ANY route, so
     #: every downstream stage keeps reading one field.
     observed_via: list[Route] = Field(default_factory=list)
-    #: Prerequisites, ALL required, one hop each. Empty when the activation is
-    #: `input_only` -- there is nothing to reach, the values are simply driven.
+    #: Prerequisites, ALL required, one hop each. A hop with an EMPTY
+    #: `through_req` is the direct case -- the activation is driven, and the
+    #: hop's `activation.inputs` are the values that drive it.
+    #:
+    #: ASKED OF EVERY REQUIREMENT, exactly as `observed_via` is, and for the
+    #: same reason. Observation never had a selector: the direct pass asks the
+    #: question of everyone and an empty `through_req` means "my own port", so
+    #: there is no predicate to get wrong. Activation had one -- entry was gated
+    #: on `state_dependent`, which rested on `input_only == bool(self.inputs)`
+    #: -- and it got it wrong for 76 of 110 requirements on n4-i2c, because
+    #: `{nReset: 1, rst: 0, ena: 1}` is a precondition carried by almost every
+    #: requirement in the module and satisfies `bool(...)` exactly as a real
+    #: trigger does. 49 of those carried nothing else.
+    #:
+    #: The heuristic could not be repaired by a better port list either: on this
+    #: module `ena = 1` selects 95.9% of recorded rows and discriminates
+    #: nothing, while `ena = 0` selects 4.1% and IS the trigger of REQ-0015. A
+    #: name-based rule would have discarded that requirement's actual trigger,
+    #: and would not transfer to a module whose enable is called something else.
+    #:
+    #: So the question is asked rather than inferred. The model already knows
+    #: which of its inputs constitute the trigger; nothing else does.
     activated_via: list[Reach] = Field(default_factory=list)
+    #: Why the activation cannot be reached, set if and only if the model can
+    #: say the requirement needs a prior event it cannot name. The mirror of
+    #: `unobservable_reason`, and it replaces the inferred `state_dependent` as
+    #: what nominates a requirement for the indirect pass -- a claim the model
+    #: makes, not one the harness guesses on its behalf.
+    unreachable_reason: str = ""
 
     @field_validator("observed_via", "activated_via", mode="before")
     @classmethod
@@ -476,6 +568,11 @@ class NormalizedRequirement(BaseModel):
         return not self.observable
 
     @property
+    def unreachable(self) -> bool:
+        """The model said the activation needs a prior event it cannot name."""
+        return bool(self.unreachable_reason.strip())
+
+    @property
     def indirect(self) -> bool:
         """Observed at a port its own text does not name.
 
@@ -502,6 +599,30 @@ inferring their own version of it.
 
 You are not judging the requirement, rewriting it, or deciding whether a design
 meets it. You are saying what it is about, in a form a script can check.
+
+THE REQUIREMENT BLOCK. `obligation` is the requirement: one span, the text this
+requirement IS, and the only text anything will ever be checked against.
+Normalise THAT.
+
+`spec_spans` beside it is CONTEXT -- spans the obligation cannot be read
+without. USE THEM. That is what they are for, and the fields they legitimately
+supply are exactly the ones the obligation tends to leave open:
+
+  * the ACTIVATION, when the obligation says what must hold but the condition
+    it holds under is stated in the sentence that introduces it;
+  * the OBSERVABILITY route, when the obligation names an internal signal and
+    a context span says which port it reaches;
+  * a DEFINITION -- the value of a term, the encoding of a command, the width
+    of a field -- that the obligation uses without restating.
+
+The ONE field a context span may never supply is the EXPECTATION. What must be
+true is what `obligation` says, and only that. If a context span states a
+behaviour of its own, that behaviour is a DIFFERENT requirement with its own
+uid, listed in `supports`, and it is being normalised separately -- taking it
+here would check the same thing twice under one name and leave the obligation
+you were given unchecked.
+
+`unit_kind` and `supportive` are bookkeeping from an earlier stage. Ignore them.
 
 ACTIVATION. Give `text` always: the precondition in one clause. Additionally
 give `inputs` -- a map of input port name to the value that must hold.
@@ -661,6 +782,30 @@ A CONDITION, NEVER A COUNT. "until cmd_ack" is expressible; "for 12 edges" is a
 guess at pacing this specification does not state, and a check that asserts one
 either fails correct designs or asserts nothing.
 
+`sustains` IS WHERE A COUNT GOES WHEN THE SPECIFICATION ITSELF STATES ONE, and
+it is the one exception to the line above. The rule there forbids INVENTING
+pacing; it does not forbid transcribing a duration the spec gives you. A
+requirement whose whole content is a threshold -- "a majority of the three
+consecutive samples", "at least two clocks", "shorter than the filter window" --
+cannot be checked at all without it, because the property IS the count.
+
+    "sustains": [
+      {"port": "sda_i", "value": 0, "at_most":  1,
+       "stated_by": "a majority of the three-sample history"},
+      {"port": "sda_i", "value": 0, "at_least": 2,
+       "stated_by": "a majority of the three-sample history"}
+    ]
+
+`port` and `value` say what is held; `at_least` / `at_most` bound how long, in
+EDGES; `stated_by` quotes the words of the specification that give the number.
+Give at least one bound -- an entry with neither constrains nothing and is
+rejected. Two entries, one short and one long, are how a threshold requirement
+states both sides of its own boundary.
+
+LEAVE IT EMPTY unless the specification supplies the number. `stated_by` is the
+test: if you cannot quote the phrase the count comes from, you are guessing
+pacing, and the rule above applies instead.
+
 Leave `until` EMPTY when the activation condition is itself co-extensive with
 the span -- "while ena is low", "during reset". Those hold at every row they
 govern, so the condition already delimits the window and a close condition would
@@ -711,6 +856,54 @@ EXPECTATION. What must hold of those outputs when the activation occurs, in one
 clause. If `observable` is empty, still state the expectation in terms of the
 internal thing -- it records what could not be checked.
 
+AND SAY HOW THE ACTIVATION IS REACHED, in `activated_via`.
+
+Some requirements apply whenever their inputs are driven a certain way. Others
+apply only once something has ALREADY HAPPENED -- a command was accepted, a
+sequence is running, a condition was detected. Those are different answers and
+only you can tell them apart.
+
+  DRIVEN: one entry, `through_req` empty, carrying the inputs that drive it.
+    {"through_req": "", "activation": {"text": "...", "inputs": {"cmd": 4}}}
+
+  REACHED: one entry per prerequisite, each naming the requirement whose
+  behaviour puts the design there, plus `when` and `shows`.
+    {"through_req": "REQ-0096",
+     "activation": {"text": "the FSM has entered the READ sequence"},
+     "when": "the command is accepted from idle",
+     "shows": "scl_oen or sda_oen departs the released idle pair and sda_oen
+               stays 1 until cmd_ack"}
+  `shows` is how a trace of DECLARED PORTS reveals the hop has fired. Without
+  it the check author knows which requirement to thank and still cannot open a
+  window on it, so it opens on whatever is easy to see instead.
+
+  NEITHER: if it needs a prior event you cannot name, leave `activated_via`
+  empty and say so in `unreachable_reason`. That is a real answer and it is
+  worth more than a hop you invented.
+
+PINNING AN INPUT TO THE VALUE IT RESTS AT IS NOT DRIVING ANYTHING. If the only
+inputs you would name are the ones saying nothing unusual is happening -- reset
+inactive, core enabled -- then this requirement is NOT driven by its inputs, and
+saying it is hides the fact that something must have happened first.
+
+WHEN ANY OF SEVERAL VALUES OPENS THE WINDOW, WRITE THEM ALL AS A LIST.
+`inputs` maps a port to the value that must hold, so naming two ports means
+BOTH -- but a port may take a LIST, and that means ANY OF THESE:
+
+  {"cmd": ["I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_READ", "I2C_CMD_WRITE"],
+   "ena": 1}
+
+opens on any of the four commands, with `ena` 1 in every case. Requirements
+about "a supported command", "any command sequence", "a START or STOP
+condition" are exactly this shape. Do NOT leave `inputs` empty and put the
+alternatives in `text`: prose is not something a check can open a window on,
+and a requirement whose trigger lives only in `text` reads as unconditional.
+
+A DISJUNCTION ACROSS DIFFERENT PORTS is a different thing and does not go here.
+"nReset is low OR rst is high" names two ports, and no per-port list can say
+it. Put that in `opens_on`, which is a list of alternatives and may name any
+declared port: [{"nReset": 0}, {"rst": 1}].
+
 Reply with ONE JSON object and nothing else:
 
 {
@@ -719,14 +912,18 @@ Reply with ONE JSON object and nothing else:
     {
       "activation": {
         "text": "a START command is issued while the core is enabled",
-        "inputs": {"cmd": 1, "ena": 1},
+        "inputs": {"cmd": "I2C_CMD_START", "ena": 1},
         "opens_on": [],
         "until": [{"cmd_ack": 1}],
         "aborts_on": [{"al": 1}, {"nReset": 0}]
       },
       "observable": ["cmd_ack", "busy"],
       "unobservable_reason": "",
-      "expectation": "cmd_ack pulses high for exactly one clock and busy rises"
+      "expectation": "cmd_ack pulses high for exactly one clock and busy rises",
+      "activated_via": [
+        {"through_req": "", "activation": {"text": "a START command is issued", "inputs": {"cmd": "I2C_CMD_START", "ena": 1}}}
+      ],
+      "unreachable_reason": ""
     }
   ]
 }
@@ -811,16 +1008,26 @@ Answer the one the item block asks for, or say plainly that you cannot.
 OBSERVATION -- `observed_via`, a list of ALTERNATIVES, any one sufficient.
   port         a declared OUTPUT port, named by the OTHER requirement
   through_req  that requirement's uid
-  when         the condition under which that port carries THIS requirement's
-               effect rather than the other requirement's own
-  shows        what the port does when this requirement HOLDS, **and what it
-               does when it does not**
+  when         the phase, edge or window in which a reading of that port is
+               evidence about THIS requirement -- rather than about the other
+               requirement's own behaviour, or about anything else the design
+               happens to be doing at the same time. REQUIRED, and required on
+               a DIRECT route too, where there is no other requirement to be
+               told apart from: an unscoped route makes a check that watches
+               the port everywhere and blames this requirement for whatever it
+               sees. Restating the activation is a fine answer; empty is not
+  shows        what the port does when this requirement HOLDS
+  otherwise    what it does when it does NOT -- a SEPARATE FIELD, never a
+               second clause inside `shows`
 
-  `shows` MUST NAME TWO CASES. "busy is observable" is useless. "busy stays low
-  for a glitch narrower than the filter depth, and rises for one at or above it"
-  is something a check can be written on. A route with one case will be
-  rejected: a check over it would pass any design, including one with no such
-  behaviour at all.
+  BOTH CASES ARE REQUIRED, and a route carrying only one will be rejected.
+  "busy is observable" is useless. `shows` "busy rises for a glitch at or above
+  the filter depth" with `otherwise` "busy stays low for one narrower than it"
+  is something a check can be written on; the first half alone passes any
+  design that ever raises busy, including one with none of this behaviour.
+  If nothing could contradict the requirement -- it restates its own antecedent,
+  so no design could fail it -- put "no discrimination" in `otherwise` and it is
+  recorded as a finding rather than made a check.
 
 ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
   Give this only when the activation cannot be stated as input values. "cmd is
@@ -830,17 +1037,38 @@ ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
   through_req  the requirement whose behaviour puts the design in this state
   activation   what that requirement's own activation prescribes -- text, and
                inputs where they can be stated
+  when         the condition under which that hop actually delivers the state.
+               Not every firing of `through_req` need put you there.
+  shows        HOW A TRACE OF DECLARED PORTS REVEALS that the hop has fired and
+               the state now holds. Required. Without it the author is told
+               which requirement to thank and still cannot open a window on it,
+               so it opens on whatever is easy to see instead -- which is the
+               single most common reason a check is later rejected.
 
   ONE HOP ONLY. Say what must have just happened, not the whole sequence back
   to reset. The chain is followed mechanically from the hops every requirement
   gives; a whole chain guessed here would invalidate everything after its first
   wrong link.
 
-IF THERE IS NO ROUTE, SAY SO. Return empty lists and leave
-`unobservable_reason` as it stands. An honest "nothing observes this" is worth
-more than a route that does not discriminate -- that route would produce a check
-that passes everything, which is the failure this whole pipeline exists to
-prevent.
+THIS IS THE LAST PASS. There is no third question and no later stage that asks
+again: a requirement returning empty lists here ends with no check written for
+it at all. So an empty answer is a FINDING ABOUT THE SPECIFICATION, not a way to
+hand the question on, and it is only true of text that makes no behavioural
+claim -- a port declaration, a list marker, a section heading, architectural
+prose. If the requirement says the design DOES something, that something reaches
+a port, and finding which is what this pass is for.
+
+AN ABSENCE IS AN OBSERVATION. "the FSM stalls" is not unobservable: it shows as
+cmd_ack NOT pulsing where it otherwise would, or scl_oen held where it otherwise
+releases. That is what the two cases are for -- a delay, a non-event or a held
+level fills `shows` or `otherwise` as well as a transition does. An internal
+signal whose only effect is to POSTPONE a boundary event is routed by naming the
+event it postpones and the requirement that would otherwise produce it.
+
+What is still not acceptable is a port you cannot justify. A route reached for
+because it was nearest produces a check that fails correct designs, and that is
+the failure this whole pipeline exists to prevent. Name the port the effect
+actually reaches, scope it with `when`, and fill both cases.
 
 Reply with ONE JSON object and nothing else:
 
@@ -854,13 +1082,17 @@ Reply with ONE JSON object and nothing else:
           "port": "busy",
           "through_req": "REQ-0007",
           "when": "after a START-shaped edge on sda_i while scl_i is high",
-          "shows": "busy stays low for a glitch narrower than the filter depth, and rises for one at or above it"
+          "shows": "busy rises for a glitch at or above the filter depth",
+          "otherwise": "busy stays low for one narrower than it"
         }
       ],
       "activated_via": [
         {
           "through_req": "REQ-0012",
-          "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}}
+          "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}},
+          "when": "the command is accepted from idle, i.e. presented while clk_en allows the FSM to advance",
+          "shows": "sda_oen falls to 0 while scl_oen is still 1 -- the START-condition signature at the boundary",
+          "otherwise": "sda_oen holds at 1, or falls only after scl_oen has already gone low"
         }
       ]
     }
@@ -988,22 +1220,6 @@ def build_indirect_prompt(
 NO_DISCRIMINATION = "no discrimination"
 
 
-def discriminates(shows: str) -> bool:
-    """Does this `shows` name two cases rather than one?
-
-    A heuristic on wording, deliberately: what it is screening for is an author
-    who wrote "busy is observable" where the check needs "busy stays low for a
-    narrow glitch and rises for a wide one". Over-approximating costs a repair
-    round; under-approximating lets a check that cannot fail through.
-    """
-    text = (shows or "").strip()
-    if len(text) < 2:
-        return False
-    low = text.lower()
-    return (" not " in f" {low} " or "otherwise" in low
-            or "does not" in low or " and " in low)
-
-
 def declines_discrimination(shows: str) -> bool:
     """Is this an explicit "there is no second case"?
 
@@ -1022,19 +1238,176 @@ def declines_discrimination(shows: str) -> bool:
     return NO_DISCRIMINATION in (shows or "").strip().lower()
 
 
-def shows_issue(path: str, shows: str) -> Issue | None:
-    """The rule both passes apply to a route's `shows`."""
-    if declines_discrimination(shows) or discriminates(shows):
+#: THE CONCESSION. An author that writes `unobservable_reason` while SAYING in
+#: the same sentence where the effect can be seen has not judged the requirement
+#: unobservable -- it has declined to write the route. Measured on h2-i2c's
+#: Haiku normalization: 18 of 41 unobservable requirements (44%) concede a route
+#: in their own reason. "...which should be visible through the timing of
+#: command completion (cmd_ack)"; "...manifests through delayed FSM advancement
+#: visible only through extended command timing".
+#:
+#: WHY THIS IS NOT A MODEL-STRENGTH PROBLEM, which is what it looks like. A
+#: model that did not KNOW the route would not name the port and the mechanism.
+#: These name both. What makes `unobservable_reason` attractive is that it is
+#: CHEAP: `observed_via`'s `shows` demands a two-case discrimination -- how the
+#: port looks when the requirement holds and when it does not -- and one free
+#: sentence buys an exit from that. The prompt has warned against this since it
+#: was written; the warning was not enough, and a gate is.
+#:
+#: THE FIX IS NOT A WEAKER `shows`. A route that cannot tell holds from
+#: does-not-hold is not a route, and dropping the demand would launder exactly
+#: the checks vacuity catches three stages later. The fix is to close the cheap
+#: exit and hand the author back its own sentence.
+#:
+#: TIGHT ON PURPOSE. A concession has two parts -- an assertion that the effect
+#: IS seen, and a preposition saying WHERE -- and neither alone is one. The
+#: loose version of this predicate matched "is NOT directly observable at
+#: declared output ports", which is the honest answer, so a negation anywhere in
+#: the preceding clause disqualifies the match.
+
+
+#: THE DISCRIMINATION GATE IS GONE, DELIBERATELY.
+#:
+#: `shows_issue` demanded that a route's `shows` name two cases -- what the port
+#: does when the requirement holds and when it does not -- or say the explicit
+#: no-second-case phrase. It was a SUBSTRING TEST (" not ", "otherwise", "does
+#: not", " and ") standing in for a semantic property, applied at normalisation,
+#: four stages before anything can check whether the promise was kept.
+#:
+#: WHAT IT COST, all measured:
+#:   - repair rounds, a meaningful share of the 0.45-0.66 mean
+#:   - the port-deletion defect: the cheapest way to satisfy an objection about
+#:     a port's `shows` is to drop that port from `observable`, which silently
+#:     shrinks what the requirement is ever checked against, and the gate cannot
+#:     tell the two repairs apart because it only sees the routes that remain
+#:   - inconsistent verdicts on identical claims. REQ-0004 said "no
+#:     discrimination" and was recorded as undecidable; REQ-0034 said "there is
+#:     no case where this requirement does not hold" -- the same claim -- and
+#:     passed as a real check, because the string contains " not ".
+#:
+#: WHAT IT BOUGHT: nothing that survives measurement. Discrimination is a
+#: property of the CHECK against real traces, and it is measurable there
+#: directly, with no prose in the loop. Asking an author to promise it in a
+#: sentence at normalisation buys a promise.
+#:
+#: `declines_discrimination` and `NO_DISCRIMINATION` SURVIVE, because
+#: `oracles_stage._declines` (:1435) reads them to assign a disposition -- a
+#: requirement whose routes all decline is classified, not gated. That is
+#: reporting, which is the right use of a lexical screen.
+def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
+    """Two cases, decided by whether the second SLOT is filled. Nothing else.
+
+    NO LEXICAL TEST DECIDES ANYTHING HERE, and that is the whole design. This
+    file used to carry three of them and every one cost something measurable:
+
+      `concedes_a_route`   refused an indirect answer whose prose asserted the
+                           effect was visible somewhere. Two false negatives in
+                           one session -- a 40-character negation window that
+                           any nearby "not" disarmed, and reading the answer's
+                           own `unobservable_reason` when the prompt tells the
+                           model to leave that field alone.
+      `declines_discrimination` short-circuited THIS check whenever the phrase
+                           "no discrimination" appeared in EITHER field, so
+                           writing the opt-out into `shows` skipped the check
+                           while writing the real second case into `shows` was
+                           refused. The lenient path and the strict path were
+                           the wrong way round.
+      a second-case sniffer that tried to recognise a contrast misplaced in
+                           `shows`, so the message could quote it back.
+
+    All three are gone. The schema says where each thing belongs and the gate
+    asks only whether the boxes are filled. `NO_DISCRIMINATION` survives as a
+    VALUE an author may write into `otherwise` -- it passes because the slot is
+    non-empty, not because anything matched it -- and `oracles_stage` still
+    reads it to assign a disposition, which is reporting rather than gating.
+    """
+    if not (shows or "").strip():
+        return Issue(
+            "error", path,
+            "`shows` is empty: say what the port does when the requirement "
+            "HOLDS. Without it the check author has a port and no reason to "
+            "watch it.")
+    if not (otherwise or "").strip():
+        return Issue(
+            "error", path,
+            "`otherwise` is empty: say what the port does when the requirement "
+            "does NOT hold. One case is not a discrimination -- a check written "
+            "over it passes a design with none of this behaviour. If there "
+            f"genuinely is no second case, because the requirement restates its "
+            f"own antecedent and nothing could contradict it, put "
+            f"{NO_DISCRIMINATION!r} in `otherwise` and it is recorded as a "
+            f"finding rather than turned into a check.")
+    return None
+
+
+
+def when_issue(path: str, when: str) -> Issue | None:
+    """`shows` says WHAT the port does; `when` says WHERE it is allowed to say it.
+
+    A route with an empty `when` tells the check author to watch a port with no
+    scope, and an unscoped observation cannot tell a response to this
+    requirement apart from anything else the design does in the same window.
+    That is not a hypothetical: REQ-0046's re-authored check watched
+    `(busy, dout, al)` at every edge of its window, because all three of its
+    routes arrived with `when` empty. It convicted the golden design twice over
+    -- once on an unreset `dout` making its power-on capture (180 of 311 golden
+    testpoints, with no glitch present at all), and once on a legitimate
+    filtered response that merely shared the window. Restoring the two
+    when-clauses the routes SHOULD have carried stopped both.
+
+    The bar is deliberately low. Restating the activation is a fine answer --
+    "whenever the activation holds" scopes the observation exactly as much as
+    this requirement does. What is rejected is saying nothing, because an empty
+    string is not that claim; it is the absence of one.
+    """
+    if when.strip():
         return None
     return Issue(
         "error", path,
-        "`shows` must name what the port does when the requirement HOLDS and "
-        "what it does when it does NOT. One case is not a discrimination, and "
-        "a check written over it would pass a design with none of this "
-        f"behaviour. If there genuinely is no second case -- the requirement "
-        f"restates its own antecedent, so nothing could contradict it -- say "
-        f"so with {NO_DISCRIMINATION!r} and it is recorded as a finding rather "
-        f"than turned into a check.")
+        "`when` is empty. Say when this port carries THIS requirement's "
+        "effect -- the phase, the edge, or the window in which a reading of it "
+        "is evidence about this requirement and not about something else the "
+        "design is doing at the same time. If the answer is simply the "
+        "activation, say that; what cannot stand is no answer, because a check "
+        "written over an unscoped route watches the port everywhere and blames "
+        "this requirement for whatever it sees.")
+
+
+def reach_shows_issue(path: str, shows: str) -> Issue | None:
+    """A hop's `shows` must be RECOGNISABLE, not DISCRIMINATING.
+
+    NOT `shows_issue`, and the difference is a category one rather than a
+    stylistic one. An `observed_via` route's `shows` has to name two cases --
+    what the port does when the requirement holds and what it does when it does
+    not -- because that route exists to separate THIS requirement's effect from
+    the effect of the requirement whose port it borrows. One case there is a
+    check that passes a design with none of the behaviour.
+
+    A hop's `shows` answers a different question: how does a trace of declared
+    ports reveal that the prerequisite STATE has been reached, so a window can
+    open on it. That is a recognition condition. There is no second case to
+    state, because the hop is not asserting anything -- it is locating the rows
+    the assertion applies to, and the assertion supplies its own discrimination.
+    Demanding "and what it does when it does not" of a window-opener asks for a
+    sentence that has no referent, and the measured cost of asking is a repair
+    loop that spends its whole budget failing to produce one.
+
+    So the bar is the same as `when_issue`'s and for the same reason: what is
+    rejected is saying nothing, because an empty string is not a claim about
+    the boundary; it is the absence of one, and an author holding it falls back
+    to whatever it can see.
+    """
+    if shows.strip():
+        return None
+    return Issue(
+        "error", path,
+        "`shows` is empty. Say how a trace of DECLARED PORTS reveals that this "
+        "hop has fired and the prerequisite state now holds -- the edge, the "
+        "level, or the ordered pair of transitions a check can open its window "
+        "on. Naming the requirement that gets you there is not enough on its "
+        "own: an author that cannot recognise the state opens its window on "
+        "whatever it can see instead, which is the single most common reason a "
+        "check is later rejected as testing the wrong situation.")
 
 
 def gate_indirect(out: NormalizeOutput, *, uid: str,
@@ -1053,6 +1426,8 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
         return [Issue("error", f"normalize.{uid}.indirect",
                       "no answer returned; give empty lists if there is no route")]
     norm = out.normalized[0]
+
+
     for i, route in enumerate(norm.observed_via):
         path = f"normalize.{uid}.observed_via[{i}]"
         if route.port not in outputs:
@@ -1067,17 +1442,42 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                                 "a requirement cannot be observed through "
                                 "itself -- that is the direct case, and the "
                                 "first pass already said there is none"))
-        bad = shows_issue(path, route.shows)
+        bad = route_shows_issue(path, route.shows, route.otherwise)
+        if bad is not None:
+            issues.append(bad)
+        bad = when_issue(path, route.when)
         if bad is not None:
             issues.append(bad)
     for i, hop in enumerate(norm.activated_via):
         path = f"normalize.{uid}.activated_via[{i}]"
-        if hop.through_req not in known:
+        if hop.through_req and hop.through_req not in known:
             issues.append(Issue("error", path,
                                 f"{hop.through_req!r} is not a requirement uid"))
         if hop.through_req == uid:
             issues.append(Issue("error", path,
                                 "a requirement cannot be its own prerequisite"))
+        #: AN EMPTY `through_req` IS THE DIRECT CASE, exactly as it is for a
+        #: `Route`: the activation is driven, and `activation.inputs` are the
+        #: values that drive it. There is no hop to recognise, so `when` and
+        #: `shows` do not apply -- what must be there instead is the inputs.
+        if not hop.through_req:
+            if not (hop.activation.inputs or hop.activation.text.strip()):
+                issues.append(Issue(
+                    "error", path,
+                    "a hop with no `through_req` is the DIRECT case and must "
+                    "say what drives the activation: give "
+                    "`activation.inputs`, or `activation.text` if the "
+                    "requirement holds at all times."))
+            continue
+        #: The pointer-is-not-a-route checks, for a hop that names one. `when`
+        #: is shared with `observed_via` verbatim -- an unscoped hop is
+        #: unscoped the same way. `shows` is NOT: see `reach_shows_issue`.
+        bad = reach_shows_issue(path, hop.shows)
+        if bad is not None:
+            issues.append(bad)
+        bad = when_issue(path, hop.when)
+        if bad is not None:
+            issues.append(bad)
     return issues
 
 
@@ -1101,31 +1501,104 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
 #: round away. Both pieces are carried at both trigger points now, so a round
 #: reached through either path sees the same complete explanation.
 _OBSERVED_VIA_TASK = (
-    "Give one route naming that port, leaving `through_req` empty, and say "
-    "in `shows` what the port does when this requirement holds and what it "
-    "does when it does not."
+    "Give one route naming that port, leaving `through_req` empty. Say in "
+    "`shows` what the port does when this requirement holds and what it does "
+    "when it does not, and say in `when` the phase, edge or window in which a "
+    "reading of that port is evidence about THIS requirement rather than about "
+    "something else the design is doing at the same time. If the answer is "
+    "simply the activation, say that -- what cannot stand is leaving `when` "
+    "empty, because a check written over an unscoped route watches the port "
+    "everywhere and blames this requirement for whatever it sees."
 )
 _OBSERVED_VIA_SHAPE = (
     "`observed_via` is a LIST of objects, one per route -- not a dict keyed by "
     "port name. Each entry:\n"
     '  {"port": <output port>, "through_req": "", '
     '"when": <when this port carries this requirement\'s effect>, '
-    '"shows": <what the port does when this requirement holds, AND when it '
-    "does not>}\n"
+    '"shows": <what the port does when this requirement HOLDS>, '
+    '"otherwise": <what it does when it does NOT>}\n'
+    "`otherwise` is a SEPARATE FIELD, not a second clause inside `shows`. One "
+    "case is not a discrimination: a check written over \"the port shows X\" "
+    "passes any design that ever shows X, including one with none of this "
+    "behaviour. If nothing could contradict the requirement -- it restates its "
+    "own antecedent, so no design could fail it -- put \"no discrimination\" "
+    "in `otherwise` and it is recorded as a finding rather than made a check.\n"
     "Example:\n"
-    '  "observed_via": [\n'
-    '    {"port": "busy", "through_req": "", '
+    '  [{"port": "busy", "through_req": "", '
     '"when": "after a START-shaped edge on sda_i while scl_i is high", '
-    '"shows": "busy stays low for a glitch narrower than the filter depth, '
-    'and rises for one at or above it"}\n'
-    "  ]"
+    '"shows": "busy rises for a glitch at or above the filter depth", '
+    '"otherwise": "busy stays low for one narrower than it"}]'
+)
+
+
+
+#: THE ACTIVATION HALF, asked of every requirement in the same breath as
+#: `observed_via` and for the same reason -- see `NormalizedRequirement.
+#: activated_via`. An empty `through_req` is the direct case, which is what
+#: makes a selector unnecessary: "drivable" is an answer the model gives rather
+#: than a property the harness infers from the shape of `inputs`.
+_ACTIVATED_VIA_TASK = (
+    "AND SAY HOW THE ACTIVATION IS REACHED.\n"
+    "Some requirements apply whenever their inputs are driven a certain "
+    "way. Others apply only once something has ALREADY HAPPENED -- a "
+    "command was accepted, a sequence is running, a condition was "
+    "detected. Those two need different answers and only you can tell "
+    "them apart.\n"
+    "  DRIVEN: give ONE entry with `through_req` empty and the inputs "
+    "that drive it. Pinning an input to the value it rests at almost "
+    "always is not driving anything -- if the only inputs you would name "
+    "are the ones saying nothing unusual is happening, it is NOT driven.\n"
+    "  REACHED: one entry per prerequisite, each naming the requirement "
+    "whose behaviour puts the design there, plus `when` and `shows`.\n"
+    "  NEITHER: if it needs a prior event you cannot name, leave "
+    "`activated_via` empty and say so in `unreachable_reason`. That is a "
+    "real answer and it is better than a hop you invented."
+)
+_ACTIVATED_VIA_SHAPE = (
+    "`activated_via` is a LIST of objects. Each entry:\n"
+    '  {"through_req": <uid, or "" for the driven case>, '
+    '"activation": {"text": <what must hold>, "inputs": {<port>: <value>; '
+    'a LIST of values means ANY of them}}, '
+    '"when": <when that hop delivers the state>, '
+    '"shows": <how declared ports reveal the hop has fired>}\n'
+    "Examples:\n"
+    '  driven:  {"through_req": "", "activation": {"text": "a WRITE '
+    'command is presented", "inputs": {"cmd": 4}}}\n'
+    '  reached: {"through_req": "REQ-0096", "activation": {"text": '
+    '"the FSM has entered the READ sequence"}, "when": "the command '
+    'is accepted from idle", "shows": "scl_oen or sda_oen departs '
+    'the released idle pair and sda_oen stays 1 until cmd_ack"}'
 )
 
 
 def parse_response(text: str) -> NormalizeOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
-        return NormalizeOutput.model_validate(obj)
+        out = NormalizeOutput.model_validate(obj)
+        # BOTH fields carry defaults, so ANY object validates -- including a
+        # fragment `extract_json_object` scraped out of the middle of a broken
+        # response. The result is an empty `NormalizeOutput` that is
+        # indistinguishable from a model which answered nothing, and `gate_one`
+        # then complains about CONTENT ("observable at [...] but no route
+        # given") when the response was never read at all. The model is asked
+        # to fix a field it did supply.
+        #
+        # Measured live, c1-i2c REQ-0048 r1: the model wrote `until
+        # [{"busy":0}]` inside its `reasoning` STRING with the inner quotes
+        # unescaped, which ends the JSON string early and breaks the document.
+        # Recovery found the balanced `{"busy":0}` fragment, validated it to an
+        # empty output, and all four rounds were spent on a content complaint
+        # about a response whose only defect was one unescaped quote.
+        if not out.normalized and not out.reasoning.strip():
+            keys = sorted(obj)[:8] if isinstance(obj, dict) else []
+            raise ValueError(
+                "the response is not valid JSON, and the object recovered from "
+                f"it carries neither `normalized` nor `reasoning` (its keys "
+                f"were {keys}). Return ONE JSON object with those two "
+                "top-level fields, and ESCAPE every quote that appears inside "
+                'a string value -- write \\" for a quote you want in the text, '
+                "or describe the shape in prose without quoting JSON at all.")
+        return out
     except Exception as exc:  # noqa: BLE001
         detail = f"{PARSE_ERROR}{exc}"
         # Otherwise a shape mistake on THIS field loses its only explanation
@@ -1133,7 +1606,8 @@ def parse_response(text: str) -> NormalizeOutput:
         # above. Both pieces, matching what the base "no route given" case
         # in `gate_one` says, not a narrower message this path invents.
         if "observed_via" in str(exc):
-            detail += f"\n\n{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"
+            detail += (f"\n\n{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"
+                       f"\n\n{_ACTIVATED_VIA_TASK}\n\n{_ACTIVATED_VIA_SHAPE}")
         return NormalizeOutput(reasoning=detail)
 
 
@@ -1211,6 +1685,22 @@ def gate_one(
             f"names {sorted(norm.observable)} as observable AND gives an "
             f"unobservable_reason; these contradict"))
 
+    # NOT GATED HERE, AND THAT IS THE POINT. A first-pass answer reading
+    # "unobservable, though the effect should show through the command timing"
+    # is DEFERRING to the indirect pass, which is the stage built to answer it:
+    # `unobservable` is literally the ticket into `blind`, and the second pass
+    # re-asks with the sibling pool in hand that this one does not have.
+    #
+    # Measured on h2-i2c: of the 18 direct-pass answers that conceded a route,
+    # the indirect pass recovered 15 (83%) with a real port AND route --
+    # REQ-0042 through `scl_oen`, REQ-0084 through `cmd_ack` and `scl_oen` over
+    # three routes. Refusing the concession here forced a worse route out of the
+    # pass with LESS information and, because `unobservable` is `not
+    # observable`, dropped the requirement from `blind` so it never got the
+    # better-informed look at all. The check lives in `gate_indirect`, where the
+    # author was asked the question directly and a concession is a refusal to
+    # answer it.
+
     # THE ROUTE IS THE BASE CASE, so the first pass gates it too. Until now the
     # discrimination rule lived only in `gate_indirect`, which runs over the
     # blind subset -- so a DIRECTLY observable requirement was asked for `shows`
@@ -1225,7 +1715,8 @@ def gate_one(
             issues.append(Issue(
                 "error", f"normalize.{uid}.observed_via",
                 f"observable at {sorted(norm.observable)} but no route given. "
-                f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"))
+                f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}\n\n"
+                f"{_ACTIVATED_VIA_TASK}\n\n{_ACTIVATED_VIA_SHAPE}"))
         for i, route in enumerate(norm.observed_via):
             path = f"normalize.{uid}.observed_via[{i}]"
             if route.through_req:
@@ -1239,7 +1730,10 @@ def gate_one(
                     "error", path,
                     f"{route.port!r} is not among the ports this requirement "
                     f"is observable at ({sorted(norm.observable)})"))
-            bad = shows_issue(path, route.shows)
+            bad = route_shows_issue(path, route.shows, route.otherwise)
+            if bad is not None:
+                issues.append(bad)
+            bad = when_issue(path, route.when)
             if bad is not None:
                 issues.append(bad)
 
@@ -1257,13 +1751,20 @@ def gate_one(
         # RESOLVE THROUGH THE PORT'S ENCODING, when it declares one. Absent a
         # table this is `int(value)` and the same width check as before, so
         # every design without a shared constants header behaves as it did.
-        as_int, why = encoding.resolve(name, value, contract)
-        if as_int is None:
+        #
+        # `resolve_any` takes a scalar OR a value-set and always hands back a
+        # tuple, so the width check below runs over every alternative and a set
+        # with one bad member is rejected whole -- dropping the bad one would
+        # narrow the window without saying so.
+        vals, why = encoding.resolve_any(name, value, contract)
+        if vals is None:
             issues.append(Issue("error", path, why))
             continue
-        if not (0 <= as_int < (1 << inputs[name])):
+        too_wide = [v for v in vals if not (0 <= v < (1 << inputs[name]))]
+        if too_wide:
             issues.append(Issue("error", path,
-                                f"{name}={as_int} does not fit {inputs[name]} bit(s)"))
+                                f"{name}={', '.join(str(v) for v in too_wide)} "
+                                f"does not fit {inputs[name]} bit(s)"))
             continue
         # NO NUDGE HERE FOR A NUMBER THAT HAPPENS TO BE RIGHT. `Severity` is
         # error|warning, and a warning on every correct numeric value would be
@@ -1375,7 +1876,7 @@ def run_normalize_fanout(
     contract_json: str,
     contract: dict,
     port: ModelPort,
-    max_repairs: int = 2,
+    max_repairs: int = 5,
     fanout: bool = True,
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """One small call per requirement. Requirements do not constrain each other.
@@ -1489,7 +1990,7 @@ def resolve_indirect(
     contract_json: str,
     contract: dict,
     port: ModelPort,
-    max_repairs: int = 2,
+    max_repairs: int = 5,
     fanout: bool = True,
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """Ask the blind requirements the second question. Returns the merged set.
@@ -1522,11 +2023,15 @@ def resolve_indirect(
     # not a property of the design, an artefact of who was let in.
     def _ask(n: NormalizedRequirement) -> str:
         if n.unobservable:
-            return "both" if n.activation.state_dependent else "observation"
+            return "both" if n.unreachable else "observation"
         return "activation"
 
-    blind = [n for n in normalized
-             if n.unobservable or n.activation.state_dependent]
+    #: BOTH LEGS ARE NOW MODEL-DECLARED. `unobservable` was always a claim the
+    #: model makes -- an empty `observable` plus a reason. `unreachable` is its
+    #: mirror, and replaces `activation.state_dependent`, which inferred the
+    #: same thing from the shape of `inputs` and was wrong for 76 of 110
+    #: requirements. See `activated_via`.
+    blind = [n for n in normalized if n.unobservable or n.unreachable]
     if not blind:
         return list(normalized), []
     asks = {n.req_uid: _ask(n) for n in blind}

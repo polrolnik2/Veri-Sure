@@ -103,7 +103,7 @@ def test_an_unobservable_requirement_gets_no_obligation():
                               unobservable_reason="div_cnt is internal",
                               activation=Activation(text="x"), expectation="y"),
     ]
-    assert [o.req_uid for o in obligations(norm)] == ["REQ-0000"]
+    assert [o.req_uid for o in obligations(norm, contract=_ENC)] == ["REQ-0000"]
 
 
 def test_attachment_comes_from_the_testplan_not_from_an_oracle():
@@ -188,3 +188,60 @@ def test_the_plain_set_form_keeps_its_old_behaviour():
                     inputs={"nReset": 1}, observable=["q"])
     got = check_static(ob, [{"cmd": 8}], reset_ports=frozenset({"nReset"}))
     assert got.status == NOT_FIRED
+
+
+# ------------------------------- a value-set fires on ANY of its alternatives
+
+
+_ENC = {"io": [
+    {"name": "cmd", "dir": "input", "width": 4,
+     "encoding": {"I2C_CMD_NOP": 0, "I2C_CMD_START": 1, "I2C_CMD_STOP": 2,
+                  "I2C_CMD_WRITE": 4, "I2C_CMD_READ": 8},
+     "encoding_complete": True},
+    {"name": "ena", "dir": "input", "width": 1},
+]}
+
+
+def _steps(*cmds):
+    return [{"inputs": {"cmd": c, "ena": 1}, "hold": 1} for c in cmds]
+
+
+def test_a_value_set_FIRES_on_any_one_of_its_alternatives():
+    """"a START, STOP, READ or WRITE command is accepted" is staged by a
+    stimulus that drives ANY one of them. Demanding all four would report
+    NOT_FIRED on a step list that stages the requirement perfectly."""
+    from specflow.obligation import FIRED, Obligation, check_static
+    ob = Obligation.of("REQ-0057", "a supported command is accepted",
+                       {"cmd": ["I2C_CMD_START", "I2C_CMD_STOP",
+                                "I2C_CMD_READ", "I2C_CMD_WRITE"], "ena": 1},
+                       ("cmd_ack",), _ENC)
+    assert check_static(ob, _steps(1)).status == FIRED
+
+
+def test_a_value_set_does_NOT_fire_when_none_of_its_alternatives_is_driven():
+    """The set widens what counts, it does not make the check unfalsifiable."""
+    from specflow.obligation import NOT_FIRED, Obligation, check_static
+    ob = Obligation.of("REQ-0057", "a supported command is accepted",
+                       {"cmd": ["I2C_CMD_START", "I2C_CMD_STOP"], "ena": 1},
+                       ("cmd_ack",), _ENC)
+    got = check_static(ob, _steps(0, 8))
+    assert got.status == NOT_FIRED
+    assert "cmd=1|2" in got.detail
+
+
+def test_a_SYMBOL_is_resolved_before_it_reaches_the_static_check():
+    """THE BUG THIS FOUND. `Obligation.inputs` used to hold whatever the
+    normalization wrote -- `dict(n.activation.inputs)`, symbols included -- and
+    `check_static` compared those against the integers the stimulus drives. A
+    string never equals an int, so every symbolic activation reported NOT_FIRED
+    with a message naming a value the stimulus does drive.
+
+    Latent while normalizations wrote numbers. h2-i2c writes symbols for 28 of
+    28 `cmd` activations, which would have made the entire static leg answer
+    "the stimulus never drives cmd=I2C_CMD_START".
+    """
+    from specflow.obligation import FIRED, Obligation, check_static
+    ob = Obligation.of("REQ-0001", "a START is issued",
+                       {"cmd": "I2C_CMD_START"}, ("cmd_ack",), _ENC)
+    assert ob.inputs == {"cmd": (1,)}
+    assert check_static(ob, _steps(1)).status == FIRED

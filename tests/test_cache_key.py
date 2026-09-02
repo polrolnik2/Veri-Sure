@@ -236,8 +236,43 @@ def test_every_shipped_agent_still_names_its_own_key():
                              path.read_text(encoding="utf-8")):
             seen.setdefault(m.group(1), []).append(path.name)
     assert set(seen) == {"rtl-debug", "tb-debug", "refmodel-debug", "architect",
-                         "asserter", "rtl-generate", "boolean-proofer"}, seen
+                         "asserter", "rtl-generate", "rtl-generate-glue",
+                         "boolean-proofer"}, seen
     assert all(len(v) == 1 for v in seen.values()), seen
+
+
+def test_composition_and_leaf_rtl_generation_do_not_share_a_key():
+    """The bug this pins: `RTLGenerator._new_agent` picks between two
+    genuinely different system prompts (`SYSTEM_PROMPT` for a leaf,
+    `GLUE_SYSTEM_PROMPT` for a composition/glue node -- they diverge from
+    the first sentence) but used to pass the SAME `cache_key="rtl-generate"`
+    for both. That pools two different prefixes under one routing hint,
+    which `make_openai_model`'s own docstring names as worse than no key at
+    all: an interleaved leaf call and glue call would take turns sending
+    each other's traffic to a backend holding the wrong head.
+
+    The two source-scanning tests above (`test_EVERY_agent_is_keyed_...`,
+    `test_every_shipped_agent_still_names_its_own_key`) could not catch
+    this: they check that literal `cache_key="..."` strings are not reused
+    ACROSS files, which was already true (there was only ever one such
+    literal in this file). The defect was one call site serving two
+    different runtime prefixes under that one literal, which only a test
+    of the actual constructed agents -- not the source text -- can see.
+    """
+    from eda_agent.config import OpenAIConfig
+    from eda_agent.rtl_generator import RTLGenerator
+
+    cfg = OpenAIConfig(model="gpt-5-mini", api_key="dummy",
+                       base_url="https://example.invalid/v1")
+    gen = RTLGenerator(cfg)
+    leaf_key = gen._new_agent(name="Coder").model.generate_kwargs["prompt_cache_key"]
+    glue_key = gen._new_agent(
+        name="Coder", composition=True
+    ).model.generate_kwargs["prompt_cache_key"]
+    assert leaf_key != glue_key, (
+        f"leaf and composition RTL generation share a cache key ({leaf_key!r}); "
+        "they run different system prompts and must not share a prefix"
+    )
 
 
 # --------------------------------------- reading usage off a dict-subclass

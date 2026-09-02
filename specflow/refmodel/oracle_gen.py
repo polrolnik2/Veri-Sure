@@ -85,6 +85,64 @@ normalized form:
 Your oracle decides the `expectation` over the `observable`, at the moments the
 `activation` holds.
 
+THE REQUIREMENT HAS A CORE AND A SURROUND, AND THEY LICENSE DIFFERENT THINGS.
+
+  obligation    ONE span. This is the requirement. Everything your check
+                ASSERTS must be licensed by these words and no others.
+  spec_spans    Context, each with `role: "supporting"`. Linked deliberately,
+                because the obligation sentence alone does not say what
+                situation it is about.
+  supports      uids of sibling requirements linked for the same reason.
+
+You MAY read the surround to build the TRIGGER. That is what it is for. If the
+obligation says "The FSM then returns to `idle` and pulses `cmd_ack`" and a
+support span says "For a STOP command, the FSM first ensures SDA is low, then
+releases SCL high", then "during a STOP sequence" is a licensed trigger -- the
+surround is how you know which sequence "the command" means.
+
+You MAY NOT move the EXPECTATION into the surround. The effect you assert has
+to be stated in `obligation`. A support span's effect is some other
+requirement's effect, and asserting it here writes that requirement's check
+under this uid -- which is then rejected, and rightly, because two checks now
+convict for the same defect and neither is about its own sentence.
+
+THE TEST, and apply it before you write the assertion. Cover the support spans
+and read `obligation` alone. If what you assert is still stated there, it is
+licensed. If the thing you assert vanished with the surround, you have written
+the neighbour's check: keep the trigger you learned, and assert what the
+obligation actually says instead.
+
+WHEN THE OBLIGATION STATES NO EFFECT AT ALL -- it names a role, a part, a
+definition, or is a fragment of a table or list -- do not manufacture one from
+the surround. Say so in `reasoning` and write the check you can defend; a later
+gate is allowed to conclude the sentence asserts nothing, and that is a better
+outcome than a confident check nothing licensed.
+
+SYMBOLIC PORT VALUES: USE THE TABLE, NEVER A GUESS.
+
+A port in `contract_json` may carry an `encoding` -- a symbol-to-integer table
+(`{"I2C_CMD_START": 1, "I2C_CMD_STOP": 2, ...}`). Where one exists it is
+AUTHORITATIVE and it is the only licensed source of a number for that port. Read
+the symbol the requirement names and take its value from the table.
+
+WHERE THERE IS NO TABLE FOR A PORT, YOU DO NOT KNOW ITS ENCODING AND MUST NOT
+INVENT ONE. A specification that names commands by symbol and never states the
+numbers has not told you that `cmd == 1` means START. A check keyed on a bare
+number is then asserting an encoding nobody stated, and it is wrong in two
+directions at once: it convicts a correct design that uses the real encoding,
+and it silently passes on a value no design ever presents.
+
+Measured across one corpus: every symbol contradicted itself. START was written
+as 1 and as 4; STOP as 1 and as 2; WRITE as 4, 1, 2 and 3; READ as 3, 1, 8 and
+4. Seven checks used a value matching NO arm of the design's decoder -- their
+windows can never open, which at decide time is indistinguishable from "the
+design never did it".
+
+So when the table is absent, build the trigger from the port-level SIGNATURE of
+the situation instead -- what the declared outputs do while that command runs --
+and say in `reasoning` that you did so and why. An activation hop's `shows`
+field, when present, is exactly that signature.
+
 WHEN A ROUTE NAMES A `through_req`, THE PORT BELONGS TO ANOTHER REQUIREMENT.
 
 `observed_via` IS NOT THAT SIGNAL, and reading it as one is the error this
@@ -281,8 +339,9 @@ Six of the last run's fourteen vacuous checks were exactly this. And a check
 that instead waits a FIXED number of edges is the opposite failure, pinning a
 count the specification never gave.
 
-    from specflow.refmodel.temporal import (after, edges, eventually,
-                                            throughout, stable, pulse, worst)
+    from specflow.refmodel.temporal import (after, edges, eventually, nth,
+                                            runs, throughout, stable, pulse,
+                                            worst)
 
     def decide(trace):
         windows = after(trace,
@@ -295,6 +354,14 @@ count the specification never gave.
   eventually(w, holds)                  -> Verdict; holds at SOME row of w
   throughout(w, holds)                  -> Verdict; holds at EVERY row of w
   stable(w, port)                       -> Verdict; port never changes in w
+  runs(trace, port, value=0, at_least=N, at_most=M)
+                                        -> set of `edge` numbers where a run of
+                                           `port == value` BEGINS, bounded in
+                                           EDGES. The opener for
+                                           `activation.sustains`.
+  nth(w, holds, n)                      -> Verdict; the nth time `holds`
+                                           becomes true -- OCCURRENCES,
+                                           where `runs` is duration
   pulse(w, port, width=1, active=1)     -> Verdict; active for exactly `width`
                                            EDGES, exactly once
   worst(verdicts)                       -> Verdict; folds many, failure first
@@ -314,10 +381,73 @@ blames the design for a testpoint that does not exist.
 `after` returns at most 64 windows. If you hit that on a long trace you are
 matching something far broader than the requirement.
 
+COUNTS AND DURATIONS -- the one place a number may enter a check.
+
+TWO OPERATORS, TWO DIFFERENT QUESTIONS, and neither substitutes for the other:
+
+  runs(trace, port, value=v, at_least=N, at_most=M)
+      HOW LONG a level is held. Returns the edges where a qualifying run
+      begins, so it opens a window.
+  nth(w, holds, n)
+      HOW MANY TIMES something happens. Returns a verdict on the nth
+      occurrence.
+
+THE TEST FOR WHETHER A NUMBER MAY BE USED IS WHETHER YOU CAN QUOTE IT. A
+requirement that states a number -- a duration, a sample count, an occurrence
+index, a width -- licenses that number. A requirement that states none does
+not, and asserting one there is the invented pacing this prompt forbids
+everywhere else: it fails correct designs whose timing the specification left
+open.
+
+ARITHMETIC ON A STATED NUMBER IS STILL TRANSCRIPTION. A count is often given
+in units the ports do not directly carry -- a number of samples, a number of
+stages, a threshold over a history -- and converting it into a bound you can
+check is reading, not inventing. If the specification fixes a quantity and
+simple arithmetic turns it into an edge count or an occurrence index, that
+bound is licensed. What is NOT licensed is a number that appears nowhere and
+is chosen because it happens to fit.
+
+    # requirement text: "<the phrase stating the number>"
+    short = runs(trace, PORT, value=V, at_most=K)     # below the stated threshold
+    long_ = runs(trace, PORT, value=V, at_least=K+1)  # at or above it
+
+A REQUIREMENT STATING BOTH SIDES OF A THRESHOLD GIVES TWO ACTIVATIONS OF ONE
+CHECK -- below it the design must not react, at or above it it must. Convict on
+the first arm only when the second shows the outputs can move at all; otherwise
+a design that ignores the port entirely passes the quiet arm for the wrong
+reason.
+
+QUOTE THE PHRASE IN YOUR DETAIL STRING. `activation.sustains` records the same
+thing in `stated_by` when normalization was able to fill it, and it is often
+empty even where the requirement does state a number -- normalization can only
+quote a phrase that names the port's own duration. Your detail string is where
+a reader checks whether a number was read off the specification or chosen to
+fit, so name the words it came from either way.
+
+`activation.sustains` IS A WINDOW OPENER, NOT AN OBLIGATION. When normalization
+filled it, the duration is already transcribed for you and `runs` turns it into
+edges to open on -- the entry's `port`, `value` and bounds map across directly:
+
+    # normalized: sustains [{"port": P, "value": V, "at_most": K}]
+    short   = runs(trace, P, value=V, at_most=K)
+    windows = after(trace, lambda r: r["edge"] in short)
+
+An empty `sustains` is not evidence the requirement states no duration; see
+COUNTS AND DURATIONS above for when you may read one out of the text yourself.
+
+COUNT IN EDGES AND LET `runs` DO IT. The trace is state-compressed, so a
+five-edge level is one row carrying `held: 5`; a hand-written scan that counts
+ROWS calls it a one-edge glitch, which inverts exactly the distinction the
+requirement is about.
+
 THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
 `activation.inputs` and `activation.opens_on` are what OPENS it;
 `activation.until` is what CLOSES it; `activation.aborts_on` is what DISCARDS
 it. You are not inventing a window, you are copying one.
+
+A DURATION OR AN OCCURRENCE COUNT IS NOT A WINDOW YOU INVENT -- see
+COUNTS AND DURATIONS below, which is the one place a number may enter
+a check, and states the test for whether it was transcribed.
 
     windows = after(trace, applies, until=closes, aborts=voided)
 
@@ -326,12 +456,20 @@ operator -- not a pass, not a failure -- because the attempt was cut short by
 something that makes the requirement's promise moot: reset, or an arbitration
 loss that returns the FSM to idle. `strong=True` over such a window would read
 "the response never came" when the response was never owed, and that is how a
-check convicts a correct design. Pass `aborts_on` whenever it is non-empty and
-`after` handles the rest -- no operator needs a guard of its own. Every
-construct below is built the same way:
+check convicts a correct design.
 
-    from specflow.refmodel.temporal import (after, eventually, throughout,
-                                            stable, pulse, worst)
+THE FIELD IS `aborts_on`. THE KEYWORD IS `aborts`. They are different names for
+the two ends of the same wire: you READ `activation.aborts_on` from the
+normalized JSON and you PASS it as `after(..., aborts=...)`. Writing
+`aborts_on=` raises TypeError, and because a check that raises is scored as a
+FAILING DESIGN, it sends a debug agent to repair correct RTL. Measured on
+h2-i2c: 22 of 96 frozen oracles died exactly this way.
+
+Pass it whenever the field is non-empty and `after` handles the rest -- no
+operator needs a guard of its own. Every construct below is built the same way:
+
+    from specflow.refmodel.temporal import (after, eventually, nth, runs,
+                                            throughout, stable, pulse, worst)
 
     # `{port: value}` straight out of the normalized block -> a row predicate.
     def _holds(cond):
@@ -447,7 +585,14 @@ down are the ones that will bite you:
   never(w, p)                   `not p` anywhere in it
   until(w, p, q)                `p until q`   (strong=True -> `s_until`)
   sequence(w, p, q, r)          `p ##[1:$] q ##[1:$] r` -- ORDER, no counts
+  nth(w, p, n)                  `p[->n]` -- the nth OCCURRENCE. Counting
+                                events, where `runs` measures duration
   nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
+  runs(t, port, value=v,        `(port==v)[*N:$]` -- and with `at_most`,
+       at_least=N, at_most=M)   `(port==v)[*1:M] ##1 (port!=v)`, since
+                                bounding a run ABOVE needs its end seen.
+                                ANCHORED AT THE RUN'S START, not where
+                                the match completes as `|->` would be
   stable(w, port)               `$stable(port)` across it
   pulse(w, port)                `$rose` then `$fell` one state later
 
@@ -577,14 +722,32 @@ Reply with ONE JSON object and nothing else:
 """
 
 
-def shared_prefix(contract_json: str, contract: dict) -> str:
+def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
     """Byte-identical across every requirement of one node.
 
-    It contains the SYSTEM prompt, the contract and the port lists -- and
-    deliberately nothing else. Everything that changes per round in the judge's
-    prefix (the model source, its observed behaviour) is absent here, so unlike
-    the judge's this prefix is warm for the whole node rather than cold at the
-    start of every round.
+    It contains the SYSTEM prompt, the contract, the port lists and the SPEC --
+    and deliberately nothing else. Everything that changes per round in the
+    judge's prefix (the model source, its observed behaviour) is absent here, so
+    unlike the judge's this prefix is warm for the whole node rather than cold at
+    the start of every round.
+
+    THE SPEC WAS MISSING AND THE REVIEWER HAD IT. `correspondence.build_prompt`
+    takes `spec` and `siblings`; this took neither. So the AUTHOR was asked to
+    write a check for "the START command behavior" while holding one sentence
+    and a port list, and the REVIEWER that rejected it for "asserting cmd == 1
+    when no such encoding is declared" was holding the paragraph that names the
+    commands. Measured on n4-i2c: the string `I2C_CMD` does not occur anywhere
+    in an author prompt and does occur in every reviewer prompt.
+
+    That is the same asymmetry, in the other direction, as the one fixed by
+    giving correspondence the contract -- and it is admitted on the same
+    argument. The spec is strictly UPSTREAM of every artifact here: it is what
+    S1 read, so it cannot carry back anything the pipeline produced, and it
+    cannot carry anything from a design because no design has been written. I1
+    is untouched.
+
+    Ahead of the requirement rather than after it, so the shared prefix stays
+    cacheable across the fan-out.
     """
     ports = {
         "outputs": [
@@ -598,7 +761,7 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
             if p.get("dir") == "input" and p.get("name")
         ],
     }
-    return shared_block(
+    blocks = [
         ("system", SYSTEM),
         ("contract_json", contract_json),
         ("declared_ports",
@@ -606,7 +769,10 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
          + "\n\nThese are the only names that appear in a trace row. Anything "
            "else the requirement mentions is internal to the design and cannot "
            "be read."),
-    )
+    ]
+    if spec.strip():
+        blocks.append(("specification", spec))
+    return shared_block(*blocks)
 
 
 #: THE REPAIR-ROUND OVERRIDE, and it exists because the shared briefing is wrong
@@ -683,12 +849,84 @@ suspicion loses that for nothing.
 </window_authority>"""
 
 
+#: THE THREE OBJECTIONS THE REVIEWER ACTUALLY RAISES, emitted on repair rounds
+#: beside the gate's own text. Measured by triaging all 51 ORACLE_INVALID
+#: dispositions on n4-i2c, where they account for 20 of the 51 -- the share a
+#: better-briefed author can actually move. (The other 31 are upstream defects
+#: this block cannot help with: 16 requirements whose trigger is an internal
+#: signal that reaches no declared port, 9 whose trigger needs a `cmd` encoding
+#: the specification never states, and 6 whose obligation is a fragment of a
+#: table or list rather than a sentence.)
+#:
+#: Phrased as the fix rather than the fault, because the author is answering an
+#: objection it has already been shown: repeating the objection back adds
+#: nothing, and what it lacks is the move that answers it.
+REJECTION_CLASSES = """\
+<objection_classes>
+THREE OBJECTIONS ACCOUNT FOR MOST REJECTIONS HERE. If the gate text above is
+one of them, this is the move that answers it.
+
+1. "UNLICENSED FALSE PATH: THE TRACE ENDED BEFORE THE RESPONSE."
+   You used a strong obligation where the requirement licenses only a weak one.
+   A requirement that says what happens AT a moment does not oblige the design
+   to reach that moment before the stimulus stops. Missing future evidence is
+   None, never False -- return None when the window is still open at the last
+   row. Use a strong form ONLY where the requirement's own words oblige the
+   response to arrive ("is asserted for exactly one cycle at the end of every
+   sequence" does; "the FSM then returns to idle" does not).
+
+2. "THE ASSERTION BELONGS TO A NEIGHBOURING REQUIREMENT."
+   You asserted an effect stated in a support span or a linked sibling rather
+   than in `obligation`. Keep the trigger you built from that context -- it is
+   licensed -- and assert what the obligation itself states. If the obligation
+   states no effect, say so in `reasoning` rather than borrowing one.
+
+3. "THE TRIGGER IS TOO BROAD / IS NOT THE REQUIREMENT'S SITUATION."
+   Your window opens on something easy to see rather than on the situation the
+   sentence is about -- any `cmd` change instead of a named command sequence,
+   any output-enable release instead of an arbitration check, `ena` rising
+   instead of a sequence completing. Narrow it to the stated situation even
+   when that situation is harder to recognise from the ports. A window that
+   opens too often convicts correct designs, and every such conviction is
+   unlicensed.
+</objection_classes>"""
+
+
+def _named_siblings(requirement: dict, normalized: dict | None,
+                    pool: dict[str, dict]) -> dict[str, dict]:
+    """Only the requirements THIS one names, never the whole set.
+
+    A route's `through_req`, a hop's `through_req` and the requirement's own
+    `supports` list are uids. Handing the author all 111 requirements would
+    bury the two it needs and cost the prefix its cacheability; handing it none
+    -- which is what happened until now -- leaves those uids as opaque tokens.
+    """
+    want: set[str] = set(requirement.get("supports") or [])
+    for r in (normalized or {}).get("observed_via") or []:
+        if r.get("through_req"):
+            want.add(str(r["through_req"]))
+    for h in (normalized or {}).get("activated_via") or []:
+        if h.get("through_req"):
+            want.add(str(h["through_req"]))
+    want.discard(str(requirement.get("uid") or ""))
+    out: dict[str, dict] = {}
+    for uid in sorted(want):
+        sib = pool.get(uid)
+        if not sib:
+            continue
+        ob = (sib.get("obligation") or {}).get("quote") or sib.get("text") or ""
+        out[uid] = {"obligation": ob, "ports": sib.get("ports") or []}
+    return out
+
+
 def build_prompt(
     *,
     requirement: dict,
     contract_json: str,
     contract: dict,
     normalized: dict | None = None,
+    spec: str = "",
+    siblings: dict[str, dict] | None = None,
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
@@ -701,12 +939,26 @@ def build_prompt(
     in a dict.
     """
     parts = [json_block("requirement", requirement)]
+    #: THE REQUIREMENTS THIS ONE POINTS AT, and only those. A route's
+    #: `through_req` and a hop's `through_req` name a sibling by uid, and
+    #: without its text that uid is an opaque token -- the author is told the
+    #: port belongs to REQ-0086 and cannot read what REQ-0086 claims, so it
+    #: cannot tell this requirement's effect from that one's. `correspondence`
+    #: has been given siblings since it was written; this had not.
+    named = _named_siblings(requirement, normalized, siblings or {})
+    if named:
+        parts.append(json_block("linked_requirements", named))
     if normalized:
         parts.append(json_block("normalized", normalized))
         if issues:
             parts.append(WINDOW_NOT_AUTHORITATIVE)
+    #: Outside the `normalized` guard: the three objection classes are about the
+    #: check's own logic, not about the window it was handed, so a requirement
+    #: with no normalized form still gets them on a repair round.
+    if issues:
+        parts.append(REJECTION_CLASSES)
     return compose(
-        shared_prefix(contract_json, contract),
+        shared_prefix(contract_json, contract, spec),
         "\n\n".join(parts),
         issues=issues,
         previous=previous,
@@ -785,6 +1037,10 @@ def run_oracle_gen(
     testplan: list[dict],
     port: ModelPort,
     normalized: dict[str, dict] | None = None,
+    #: The source document S1 read. Strictly upstream of every artifact here and
+    #: of any design, so admitting it cannot carry anything back -- see
+    #: `shared_prefix`. Empty keeps the old behaviour exactly.
+    spec: str = "",
     #: An implementation built from these same requirements, for the must-pass
     #: leg. NEVER the golden control: feeding a known-good design's behaviour
     #: back into oracle generation is the contamination I1 exists to prevent,
@@ -832,6 +1088,7 @@ def run_oracle_gen(
     from ..obligation import by_requirement
 
     attached = by_requirement(testplan)
+    pool = {str(r.get("uid") or ""): r for r in requirements}
     wanted = [r for r in requirements if attached.get(str(r.get("uid") or ""))]
     if only is not None:
         wanted = [r for r in wanted if str(r.get("uid") or "") in only]
@@ -856,6 +1113,7 @@ def run_oracle_gen(
             build_prompt=lambda issues, previous: build_prompt(
                 requirement=req, contract_json=contract_json, contract=contract,
                 normalized=(normalized or {}).get(uid),
+                spec=spec, siblings=pool,
                 issues=issues or seeds.get(uid),
                 previous=previous or (standing or {}).get(uid),
             ),

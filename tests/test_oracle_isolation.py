@@ -15,6 +15,7 @@ failed by that control outright.
 from __future__ import annotations
 
 import inspect
+import json
 
 from specflow.refmodel import oracle_gen
 from specflow.refmodel.oracle_gen import build_prompt, gate_one, parse_response, OracleOutput
@@ -51,9 +52,62 @@ def test_the_prompt_cannot_carry_an_implementation():
     """
     params = set(inspect.signature(build_prompt).parameters)
     assert params == {"requirement", "contract_json", "contract",
-                      "normalized", "issues", "previous"}
+                      "normalized", "spec", "siblings", "issues", "previous"}
     assert not (params & {"source", "model", "trace", "behaviour",
                           "stimulus_by_tp", "testpoints", "verdict"})
+
+
+def test_spec_and_siblings_are_upstream_and_cannot_carry_a_design():
+    """The two parameters added after this guard was written, and why they pass.
+
+    I1 forbids a channel a DESIGN could arrive through, not every channel. The
+    spec is the document S1 read: it exists before any requirement, let alone
+    any implementation, so nothing it contains was produced by the pipeline.
+    Siblings are other requirements from the same set, and `_named_siblings`
+    projects each to its obligation quote and port list -- so even a sibling
+    whose dict had picked up a check, a verdict or a model source cannot pass
+    that through.
+
+    That projection is the load-bearing half: handing the raw sibling dict
+    would make this parameter exactly the dict-shaped context the test above
+    exists to forbid.
+    """
+    from specflow.refmodel.oracle_gen import _named_siblings
+
+    poisoned = {"REQ-0002": {
+        "uid": "REQ-0002",
+        "obligation": {"quote": "busy is set on START"},
+        "ports": ["busy"],
+        # everything below is what a leak would look like
+        "source": "class Model:\n    def step(self): ...",
+        "oracle": "def decide(trace): ...",
+        "verdict": "CONFORMS",
+        "observed_behaviour": [{"edge": 0}],
+    }}
+    req = {"uid": "REQ-0001", "supports": ["REQ-0002"]}
+    got = _named_siblings(req, None, poisoned)
+    assert set(got) == {"REQ-0002"}
+    assert set(got["REQ-0002"]) == {"obligation", "ports"}
+    blob = json.dumps(got)
+    for forbidden in ("class Model", "def step", "def decide", "CONFORMS",
+                      "observed_behaviour"):
+        assert forbidden not in blob, f"{forbidden!r} survived the projection"
+
+
+def test_an_unnamed_sibling_never_reaches_the_prompt():
+    """Only the requirements this one POINTS AT. Handing over the whole set
+    would bury the two that matter and cost the shared prefix its cacheability.
+    """
+    from specflow.refmodel.oracle_gen import _named_siblings
+
+    pool = {f"REQ-{i:04d}": {"uid": f"REQ-{i:04d}",
+                             "obligation": {"quote": f"claim {i}"}}
+            for i in range(5)}
+    req = {"uid": "REQ-0000", "supports": ["REQ-0003"]}
+    got = _named_siblings(req, {"observed_via": [{"through_req": "REQ-0001"}]}, pool)
+    assert set(got) == {"REQ-0001", "REQ-0003"}
+    # ...and never itself, which would be a cycle the author cannot resolve.
+    assert "REQ-0000" not in got
 
 
 def test_the_built_prompt_contains_no_implementation_and_no_trace():
@@ -470,7 +524,15 @@ def test_the_author_is_told_that_an_abort_is_not_a_close():
     assert "disable iff" in body, "the SVA name is what an author reaches for"
     assert "aborts=voided" in body, "the call shape, not just the concept"
     assert "returns UNKNOWN from every" in body
-    assert "Pass `aborts_on` whenever it is non-empty" in body, "when to pass it"
+    assert "Pass it whenever the field is non-empty" in body, "when to pass it"
+    # FOURTH THING, added after it cost 22 of 96 oracles on h2-i2c. The field is
+    # `aborts_on` and the keyword is `aborts`, and the prompt used to name both
+    # without ever saying they differ -- so "Pass `aborts_on`" read as the kwarg.
+    # `after()` raises TypeError on it, and a raising check is scored as a
+    # FAILING DESIGN, so the typo arrived as a conviction of correct RTL.
+    assert "THE FIELD IS `aborts_on`. THE KEYWORD IS `aborts`." in body, (
+        "naming both without distinguishing them is what produced the typo"
+    )
 
 
 def test_the_repair_override_says_MOVE_a_reset_close_not_DROP_it():

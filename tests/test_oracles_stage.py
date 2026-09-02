@@ -1266,3 +1266,80 @@ def test_every_path_that_discards_a_replacement_records_it():
     # axis it could see, and the repair had moved a different one.
     assert "_is_live(" not in src, (
         "the liveness discard is dropped; a helper left behind gets re-wired")
+
+
+def test_every_operator_the_author_is_told_about_is_importable_and_shown():
+    """The prompt must not name an operator its own import line omits.
+
+    This is the third instance of one pattern in this stage: `observed_via`
+    had a gate with no shape, `sustains` had a schema field with no prompt,
+    and `runs`/`nth` were described in prose while the import statement the
+    author copies listed neither. A check calling one would have raised
+    NameError at decide time and been recorded as a broken oracle -- blaming
+    the author for a line the prompt told it to write.
+
+    Pins the direction that matters: everything IMPORTED must exist, and
+    everything DESCRIBED must be imported.
+    """
+    import re
+
+    from specflow.refmodel import temporal
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    shown = set()
+    for m in re.finditer(r"from \S*temporal import \(([^)]*)\)", SYSTEM, re.S):
+        shown |= {n.strip(" ,") for n in m.group(1).split()}
+    assert shown, "the prompt shows no temporal import at all"
+
+    for name in sorted(shown):
+        assert hasattr(temporal, name), f"prompt imports {name}, which does not exist"
+
+    # And the two cycle-accurate operators specifically: described in prose,
+    # so they must also be reachable.
+    for name in ("runs", "nth"):
+        assert name in shown, f"{name} is described but not in the import line"
+
+
+def test_counting_guidance_is_general_and_names_no_design():
+    """The author has `runs`/`nth`; it was also told not to invent a window.
+
+    Two things gated the requirement class the operators were built for. The
+    `sustains` paragraph opened with "When it is present", and the older rule
+    says "You are not inventing a window, you are copying one" -- so with
+    `sustains: []` the author holds the tool and an instruction against
+    reaching for it.
+
+    Normalization is RIGHT to leave it empty in that case: it can only quote a
+    phrase naming the port's own duration, and a spec often states the number
+    in other units. The author reads the same sentence and can do the
+    arithmetic, so the permission belongs here.
+
+    THE FIRST VERSION OF THIS WAS OVERFITTED. It was written as an exception
+    under the window rule with i2c's own filter as the worked example -- the
+    port name, the sample count and the resulting bound all inlined -- which
+    teaches pattern-matching on one design instead of the rule. This pins the
+    general form: one section, both operators, the transcribe-or-invent test
+    stated once, and no design in it.
+    """
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    start = SYSTEM.find("COUNTS AND DURATIONS")
+    assert start > 0, "the counting guidance must be its own section"
+    block = SYSTEM[start:SYSTEM.find("COUNT IN EDGES AND LET")]
+
+    # Both axes, named together, since confusing them inverts the property.
+    assert "runs(trace, port" in block and "nth(w, holds, n)" in block
+    # The test that licenses a number, and the record that proves it was applied.
+    assert "whether you can quote it" in block.lower()
+    assert "QUOTE THE PHRASE IN YOUR DETAIL STRING" in block
+    # The arithmetic clause -- the whole reason an empty `sustains` is not a
+    # statement that the requirement is countless.
+    assert "ARITHMETIC ON A STATED NUMBER IS STILL TRANSCRIPTION" in block
+
+    # NO DESIGN IN IT. This is the regression the first version was.
+    for token in ("sda_i", "scl_i", "three-sample", "filter window", "cmd_ack"):
+        assert token not in block, f"{token!r} overfits the prompt to one design"
+
+    # And the rule it is an opening in must still stand, elsewhere.
+    assert "not inventing a window, you are copying one" in SYSTEM
+

@@ -14,7 +14,7 @@ the shape index arithmetic makes easiest.
 from __future__ import annotations
 
 from specflow.refmodel.temporal import (after, edges, eventually, never,
-                                        nexttime, pulse, sequence, stable,
+                                        nexttime, nth, pulse, sequence, stable,
                                         throughout, until, worst)
 from specflow.refmodel.verdict import truncated
 
@@ -558,6 +558,13 @@ def test_an_aborted_window_decides_nothing():
                     pulse(w, "x"),
                     nexttime(w, lambda r: r["outputs"]["x"] == 1),
                     sequence(w, lambda r: r["outputs"]["x"] == 1, strong=True),
+                    # `nth` guards by DELEGATION -- it is sugar over `sequence`
+                    # and owns no scan of its own. Exercised here anyway: the
+                    # roster below is a promise about behaviour, not about
+                    # which function happens to hold the `if w.aborted` line,
+                    # and a later rewrite that gave `nth` its own scan would
+                    # otherwise lose the guard silently.
+                    nth(w, lambda r: r["outputs"]["x"] == 1, 2, strong=True),
                     until(w, lambda r: r["outputs"]["x"] == 1,
                           lambda r: False, strong=True)):
         assert verdict[0] is None, verdict
@@ -571,7 +578,8 @@ def test_an_aborted_window_decides_nothing():
         if not n.startswith("_") and inspect.isfunction(f)
         and list(inspect.signature(f).parameters)[:1] == ["w"]}
     assert takes_a_window == {"eventually", "throughout", "stable", "pulse",
-                              "never", "nexttime", "sequence", "until"}, (
+                              "never", "nexttime", "sequence", "until",
+                              "nth"}, (
         "a new Window operator needs an `if w.aborted` guard and a line "
         f"above: {takes_a_window}")
 
@@ -608,3 +616,106 @@ def test_without_aborts_nothing_changes():
     assert not w.aborted
     ok, _e, _d = eventually(w, lambda r: r["outputs"]["x"] == 1, strong=True)
     assert ok is False, "a real close with no evidence is still a conviction"
+
+
+def _row(edge, p, held=None):
+    r = {"edge": edge, "inputs": {"p": p}, "outputs": {}}
+    if held is not None:
+        r["held"] = held
+    return r
+
+
+def test_runs_selects_by_length_in_EDGES_not_rows():
+    """`runs` is `sustains`'s window opener, and `held` is the whole subtlety.
+
+    The trace is state-compressed, so a 5-edge low is ONE row carrying
+    `held: 5`. Counting rows would call it a one-edge glitch -- which is
+    exactly backwards for a majority filter, where the short run is the one
+    that must be suppressed and the long one the one that must get through.
+    """
+    from specflow.refmodel.temporal import runs
+
+    trace = [_row(0, 1), _row(1, 1), _row(2, 0), _row(3, 1),
+             _row(4, 1), _row(5, 0), _row(6, 0), _row(7, 0), _row(8, 1)]
+    assert runs(trace, "p", value=0, at_most=1) == {2}
+    assert runs(trace, "p", value=0, at_least=2) == {5}
+
+    # One row, five edges: long, and emphatically not short.
+    packed = [_row(0, 0, held=5), _row(1, 1)]
+    assert runs(packed, "p", value=0, at_least=2) == {0}
+    assert runs(packed, "p", value=0, at_most=1) == set()
+
+
+def test_a_run_still_open_at_the_end_of_trace_cannot_be_called_SHORT():
+    """Its length is a lower bound, not a measurement.
+
+    Admitting it under `at_most` would let the trace running out masquerade as
+    a glitch the design was supposed to suppress -- a false activation, which
+    is the failure mode that produces a check convicting a correct design.
+    Under `at_least` it is fine: what was already seen clears the floor.
+    """
+    from specflow.refmodel.temporal import runs
+
+    trailing = [_row(0, 1), _row(1, 0)]
+    assert runs(trailing, "p", value=0, at_most=1) == set()
+    assert runs(trailing, "p", value=0, at_least=1) == {1}
+
+
+def test_runs_refuses_to_select_everything():
+    """No bound is not a wide net, it is a missing statement.
+
+    Same rule `normalize.Sustain` enforces on the schema side: an entry with
+    neither bound constrains nothing, and silently matching every run would
+    hand the author an activation that fires constantly.
+    """
+    import pytest
+
+    from specflow.refmodel.temporal import runs
+
+    with pytest.raises(ValueError, match="neither at_least nor at_most"):
+        runs([_row(0, 0)], "p", value=0)
+
+
+def test_nth_is_goto_repetition_and_was_reachable_all_along():
+    """`nth(w, p, n)` is `p[->n]`, and `sequence` already implemented it.
+
+    `sva-divergence.md` D8 recorded `[->n]` as "simply not built" -- a claim
+    made from the operator TABLE, where it does not appear, rather than from
+    the semantics, where it does: sequence steps are `##[1:$]` and each
+    strictly advances, so repeating one predicate n times counts occurrences.
+    The gap was discoverability, not expressiveness.
+    """
+    from specflow.refmodel.temporal import after, nth
+
+    trace = [{"edge": i,
+              "inputs": {"go": 1 if i == 1 else 0,
+                         "p": 1 if i in (2, 5, 9, 12) else 0},
+              "outputs": {}} for i in range(16)]
+    w = after(trace, lambda r: r["inputs"]["go"] == 1,
+              until=lambda r: r["inputs"].get("done") == 1)[0]
+    p = lambda r: r["inputs"]["p"] == 1  # noqa: E731
+
+    # Four occurrences: the fourth is found, the fifth is not.
+    assert nth(w, p, 4, strong=True)[0] is True
+    assert nth(w, p, 5, strong=True)[0] is False
+
+
+def test_nth_counts_occurrences_where_runs_measures_duration():
+    """The two cycle-accurate axes, and neither substitutes for the other.
+
+    A port that pulses four times has four OCCURRENCES and no long RUN; one
+    held low for four edges has one run and one occurrence. Reading either
+    through the other inverts the property -- which is the failure `runs`'
+    own `held` warning is about, arriving from the other direction.
+    """
+    from specflow.refmodel.temporal import after, nth, runs
+
+    pulsing = [{"edge": i, "inputs": {"go": 1 if i == 1 else 0,
+                                      "p": 1 if i in (2, 4, 6, 8) else 0},
+                "outputs": {}} for i in range(12)]
+    w = after(pulsing, lambda r: r["inputs"]["go"] == 1,
+              until=lambda r: r["inputs"].get("done") == 1)[0]
+    p = lambda r: r["inputs"]["p"] == 1  # noqa: E731
+
+    assert nth(w, p, 4, strong=True)[0] is True          # four occurrences
+    assert runs(pulsing, "p", value=1, at_least=2) == set()   # no run of two
