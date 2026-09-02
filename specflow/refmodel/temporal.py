@@ -263,8 +263,27 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
     A window opens on a RISING activation -- the first row where `activation`
     holds and the row before it did not -- so a condition true for forty
     consecutive edges is one window, not forty. It closes on the first row
-    satisfying `until`, or on the last row where `activation` still holds when
-    no `until` is given.
+    satisfying `until`, or on `aborts`, and OTHERWISE RUNS TO THE END OF THE
+    TRACE.
+
+    A BARE WINDOW USED TO CLOSE WHERE THE ACTIVATION STOPPED HOLDING, and that
+    was wrong for the thing `after` is usually asked. "After a START, busy
+    rises" is a statement about what follows an INSTANT; scoping the window to
+    the instant's own duration makes it one or two rows, and a consequence with
+    any latency at all falls outside. That is a cycle-accurate window imposed
+    silently on a construction whose whole point is not to be cycle-accurate --
+    and it can only convict, never acquit.
+
+    MEASURED on golden i2c_master_bit_ctrl. REQ-0047 opens on a START and asks
+    `eventually(busy == 1)`. The old window was rows [6, 7]; `busy` rises at row
+    12. It CONVICTED THE CORRECT DESIGN, and passed its own screening because
+    the Python witness distinguishes fewer states than the RTL, so on the
+    witness the rise landed in the very next row and inside the window. 4 of
+    that run's 15 convictions of golden were this idiom.
+
+    A NARROW WINDOW IS STILL AVAILABLE AND IS NOW ASKED FOR: `until=` closes on
+    a condition, and `pulse`/`runs` measure a level's own duration directly.
+    Bounding a window is a deliberate act, not what happens by default.
 
     THE ACTIVATION ROW IS NEVER TESTED FOR `until`. The scan for the close
     starts at the row AFTER the trigger, so a release condition that is already
@@ -313,9 +332,6 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
                 if until(trace[j]):
                     w.closed = True
                     break
-            elif not activation(trace[j]):
-                w.closed = True
-                break
             j += 1
         out.append(w)
         i = i + 1 if overlap else j + 1

@@ -34,6 +34,19 @@ def _windows(trace=None):
                  until=lambda r: r["outputs"]["ack"] == 1)
 
 
+
+def _while(trace, act):
+    """The window the old bare `after` gave: the activation's own extent.
+
+    These tests are about where the TRIGGER sits relative to the window, not
+    about how far the window runs. Under the new default a bare `after` runs to
+    the end of the trace and every operator over an unclosed window reports
+    UNKNOWN -- correct, and not what these fixtures are measuring. Saying
+    `until=` here is the discipline the default change exists to force.
+    """
+    return after(trace, act, until=lambda r: not act(r))
+
+
 def test_a_window_spans_the_activation_to_its_consequence():
     """The point of the whole module: the effect is not at the activation."""
     w = _windows()
@@ -108,23 +121,39 @@ def test_pulse_refuses_two_pulses_in_one_window():
     assert ok is False and "pulsed 2 times" in why
 
 
-def test_a_window_with_no_until_ends_WITH_THE_ACTIVATION():
-    """And that narrowness is deliberate, because of which way it fails.
+def test_a_window_with_no_until_RUNS_TO_THE_END_OF_THE_TRACE():
+    """The default flipped, and the reason the old one gave is why.
 
-    Without `until` the window is the activation's own extent plus the row that
-    ended it, so a check looking for a later effect returns False or UNKNOWN --
-    loudly, against the witness, where gate 1 makes the author add the `until`.
-    An open-ended default would fail the other way: `eventually` would find the
-    event somewhere in the remaining trace and pass, which is the vacuity this
-    module exists to remove.
+    It used to end with the activation, deliberately: a check looking for a
+    later effect would return False "loudly, against the witness, where gate 1
+    makes the author add the `until`". MEASURED, that mechanism does not work.
+    The witness distinguishes FEWER STATES than the RTL, so on i2c a narrow
+    window covered the witness's latency -- the effect landed in the very next
+    row -- and did not cover the RTL's, where one extra transactional state
+    (`dout` moving) sat in between. REQ-0047 passed its screening and CONVICTED
+    THE GOLDEN DESIGN. Four of that run's fifteen convictions were this idiom.
+
+    Scoping "after an INSTANT, eventually X" to the instant's own extent is a
+    cycle-accurate window imposed on a construction that does not mean to be
+    cycle-accurate, and it can only convict. A narrow window is still available
+    and is now REQUESTED: `until=` closes on a condition, `pulse`/`runs` measure
+    a level's duration directly.
+
+    WHAT THIS COSTS, stated because the old docstring was right that it costs
+    something: an open-ended `eventually` can now pass on an event that happens
+    far later, which is weaker evidence than one bounded by a deadline. The
+    module still has no `within=N`, and that -- not a narrow default -- is what
+    should guard this side.
     """
     trace = [_state(0, cmd=8), _state(1), _state(2), _state(3, ack=1)]
-    narrow = after(trace, lambda r: r["inputs"]["cmd"] == 8)[0]
+    wide = after(trace, lambda r: r["inputs"]["cmd"] == 8)[0]
+    assert [r["edge"] for r in wide.rows] == [0, 1, 2, 3]
+    assert eventually(wide, lambda r: r["outputs"]["ack"] == 1)[0] is True
+    # The narrow window is one keyword away, and now says so at the call site.
+    narrow = after(trace, lambda r: r["inputs"]["cmd"] == 8,
+                   until=lambda r: r["inputs"]["cmd"] != 8)[0]
     assert [r["edge"] for r in narrow.rows] == [0, 1]
     assert eventually(narrow, lambda r: r["outputs"]["ack"] == 1)[0] is False
-    wide = after(trace, lambda r: r["inputs"]["cmd"] == 8,
-                 until=lambda r: r["outputs"]["ack"] == 1)[0]
-    assert eventually(wide, lambda r: r["outputs"]["ack"] == 1)[0] is True
 
 
 def test_worst_puts_failure_first_and_unknown_above_a_pass():
@@ -212,10 +241,10 @@ def test_the_activation_row_is_excluded_by_after_activation():
     expectation on the SAME row as the activation, and the operators as first
     built still permitted it.
     """
-    from specflow.refmodel.temporal import after, eventually, throughout
+    from specflow.refmodel.temporal import eventually, throughout
 
     # b is true AT the activation and false afterwards.
-    w = after(_t((0, 1, 1), (2, 1, 0), (4, 0, 0)), _a)[0]
+    w = _while(_t((0, 1, 1), (2, 1, 0), (4, 0, 0)), _a)[0]
     assert eventually(w, _b)[0] is True, "|-> is satisfied at the activation"
     assert eventually(w, _b, after_activation=True)[0] is False, (
         "|=> must not be satisfied by the activation instant itself")
@@ -228,9 +257,9 @@ def test_strong_eventually_convicts_where_weak_abstains():
     claim, and under weak semantics it can never be violated -- only left
     undecided. 11 of 105 requirements are phrased that way, and 5 of 14
     abstaining checks abstained for exactly this reason."""
-    from specflow.refmodel.temporal import after, eventually
+    from specflow.refmodel.temporal import eventually
 
-    w = after(_t((0, 1, 0), (2, 1, 0)), _a)[0]  # never closes
+    w = _while(_t((0, 1, 0), (2, 1, 0)), _a)[0]  # never closes
     assert not w.closed
     assert eventually(w, _b)[0] is None, "weak: we stopped looking"
     assert eventually(w, _b, strong=True)[0] is False, (
@@ -244,7 +273,7 @@ def test_sequence_is_ordering_and_three_eventuallys_are_not():
     from specflow.refmodel.temporal import after, eventually, sequence
 
     rows = _t((0, 1, 0), (2, 1, 1), (4, 1, 0), (6, 0, 0))
-    w = after(rows, _a)[0]
+    w = after(rows, _a, until=lambda r: r["edge"] >= 4)[0]
     b_on, b_off = _b, (lambda r: not _b(r))
     assert sequence(w, b_off, b_on, b_off)[0] is True
     # Backwards: b is never off-then-on-then-off in THAT order twice over.
@@ -254,9 +283,9 @@ def test_sequence_is_ordering_and_three_eventuallys_are_not():
 
 
 def test_never_and_until_and_nexttime():
-    from specflow.refmodel.temporal import after, never, nexttime, until
+    from specflow.refmodel.temporal import never, nexttime, until
 
-    w = after(_t((0, 1, 0), (2, 1, 0), (4, 1, 1), (6, 0, 1)), _a)[0]
+    w = _while(_t((0, 1, 0), (2, 1, 0), (4, 1, 1), (6, 0, 1)), _a)[0]
     assert never(w, _b)[0] is False, "b does occur inside the window"
     assert never(w, lambda r: r["outputs"]["b"] == 9)[0] is True
 
@@ -267,7 +296,7 @@ def test_never_and_until_and_nexttime():
 
     # p until q, weak and strong.
     assert until(w, lambda r: not _b(r), _b)[0] is True
-    closed = after(_t((0, 1, 0), (2, 1, 0), (4, 0, 0)), _a)[0]
+    closed = _while(_t((0, 1, 0), (2, 1, 0), (4, 0, 0)), _a)[0]
     assert closed.closed
     assert until(closed, lambda r: not _b(r), _b)[0] is True, "weak: no release needed"
     assert until(closed, lambda r: not _b(r), _b, strong=True)[0] is False
@@ -292,13 +321,12 @@ def test_first_match_and_overlapping_attempts():
 def test_past_is_one_row_not_a_cycle_count():
     """`$past(sig)` -- what it was before this happened -- is not a count.
     `$past(sig, 3)` is, and Phases 3-6 severed those."""
-    from specflow.refmodel.temporal import after
 
-    w = after(_t((0, 0, 1), (2, 1, 0)), _a)[0]
+    w = _while(_t((0, 0, 1), (2, 1, 0)), _a)[0]
     assert w.edge == 2
     assert w.past("b") == 1, "the value on the row before the activation"
     assert w.value("b") == 0, "the value AT the activation"
-    first = after(_t((0, 1, 1),), _a)[0]
+    first = _while(_t((0, 1, 1),), _a)[0]
     assert first.past("b") is None, "no previous sample to name"
 
 
@@ -329,7 +357,7 @@ def test_every_window_operator_accepts_after_activation():
     and no amount of prompt wording fixes it -- so this asserts the surface,
     operator by operator, rather than any one behaviour.
     """
-    w = after(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     for name, call in (
             ("eventually", lambda: eventually(w, _b, after_activation=True)),
             ("throughout", lambda: throughout(w, _b, after_activation=True)),
@@ -346,7 +374,7 @@ def test_every_window_operator_accepts_after_activation():
 
 def test_never_after_activation_ignores_a_prohibition_met_at_the_trigger():
     """"Once X, never Y" says nothing about the row X arrived on."""
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     assert never(w, _b)[0] is False, "b occurs at the activation row"
     assert never(w, _b, after_activation=True)[0] is True
 
@@ -358,13 +386,13 @@ def test_stable_after_activation_takes_its_baseline_after_the_trigger():
     is reported as unstable -- which is the over-strictness half of the same
     defect `eventually` had.
     """
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
     assert stable(w, "b")[0] is False, "b moves 1 -> 0 across the trigger"
     assert stable(w, "b", after_activation=True)[0] is True
 
 
 def test_pulse_after_activation_does_not_count_a_pulse_at_the_trigger():
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     assert pulse(w, "b")[0] is True, "one one-edge pulse, at the activation"
     ok, _, detail = pulse(w, "b", after_activation=True)
     assert ok is False and "never went to 1" in detail
@@ -374,7 +402,7 @@ def test_sequence_after_activation_cannot_match_step_one_at_the_trigger():
     """Three `eventually`s pass a design that does the three things backwards;
     a `sequence` whose first step is satisfied by the activation row itself
     passes one that never starts."""
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     assert sequence(w, _b, lambda r: not _b(r))[0] is True
     ok, _, detail = sequence(w, _b, lambda r: not _b(r), after_activation=True)
     assert ok is False and "step 1 of 2" in detail
@@ -384,7 +412,7 @@ def test_until_after_activation_is_not_discharged_by_a_release_at_the_trigger():
     """The sharpest of the six: a release already true at the activation
     discharges the obligation instantly, so a real violation one row later is
     never looked at. `until` is weak, so this reads as a PASS."""
-    w = after(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 1, 0, 1), (6, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 1, 0, 1), (6, 0, 0, 0)), _a)[0]
     assert until(w, _c, _b)[0] is True, "released at the activation instant"
     ok, edge, detail = until(w, _c, _b, after_activation=True)
     assert ok is False and edge == 2 and "before any release" in detail
@@ -397,7 +425,7 @@ def test_nexttime_is_already_after_the_activation_and_says_so_when_overridden():
     rather than silently turning `nexttime` into a predicate at the trigger --
     an operator that quietly becomes a different operator on a keyword is worse
     than one that ignores it."""
-    w = after(_t3((0, 1, 0, 0), (2, 1, 1, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 0, 0), (2, 1, 1, 0), (4, 0, 0, 0)), _a)[0]
     assert nexttime(w, _b)[0] is True
     assert nexttime(w, _b, after_activation=True) == nexttime(w, _b)
     ok, _, detail = nexttime(w, _b, after_activation=False)
@@ -423,7 +451,7 @@ def test_an_empty_row_set_is_unknown_in_every_window_operator():
     """
     # The activation on the LAST row of the trace: `after` seeds `rows` with
     # the trigger and never appends, so `body` is empty.
-    w = after(_t3((0, 0, 0, 0), (2, 1, 1, 0)), _a)[0]
+    w = _while(_t3((0, 0, 0, 0), (2, 1, 1, 0)), _a)[0]
     assert w.body == [], "the fixture must actually produce an empty body"
     for name, verdict in (
         ("throughout", throughout(w, lambda r: False, after_activation=True)),
@@ -437,7 +465,7 @@ def test_an_empty_row_set_is_unknown_in_every_window_operator():
 
 def test_throughout_and_never_still_decide_when_there_are_rows():
     """The counter-case: the empty guard must not swallow a real verdict."""
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     assert throughout(w, _b)[0] is False, "b is 0 at edge 2"
     assert throughout(w, lambda r: True)[0] is True
     assert never(w, _b)[0] is False, "b IS 1 at the activation"
@@ -452,7 +480,7 @@ def test_pulse_needs_evidence_of_a_rise_not_just_an_active_value():
     exact design it exists to catch. `w.prev` is the evidence: it is `$past` at
     the activation, and it says the port was already active.
     """
-    w = after(_t3((0, 0, 1, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 0, 1, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
     assert w.prev is not None and w.prev["outputs"]["b"] == 1
     ok, _, detail = pulse(w, "b")
     assert ok is None, "no rise was witnessed, so the width is not measurable"
@@ -463,7 +491,7 @@ def test_pulse_accepts_a_rise_at_the_first_row_it_looks_at():
     """The counter-case, and the reason the guard reads `prev` rather than just
     `rows[0]`: a port that rises exactly as the window opens HAS pulsed, and
     convicting it would trade the vacuity for over-strictness."""
-    w = after(_t3((0, 0, 0, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 0, 0, 0), (2, 1, 1, 0), (4, 1, 0, 0), (6, 0, 0, 0)), _a)[0]
     assert w.prev["outputs"]["b"] == 0, "it was at rest before the window"
     ok, edge, _ = pulse(w, "b")
     assert ok is True and edge == 2, "and the edge names where it BEGAN"
@@ -474,7 +502,7 @@ def test_pulse_at_the_very_start_of_a_trace_is_not_convicted():
     on the trace's first row has `prev is None` -- the design has just come out
     of reset, and a port at its active value there has genuinely just
     asserted."""
-    w = after(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
+    w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     assert w.prev is None
     assert pulse(w, "b")[0] is True
 
