@@ -228,9 +228,17 @@ def test_an_OBSERVABLE_but_UNREACHABLE_requirement_is_asked_the_other_question()
 
     Live proof it was structural rather than a property of the design -- on
     a2-i2c, `activated_via` WITHOUT `observed_via` came back zero of 105.
+
+    NOMINATION IS NOW THE MODEL'S CLAIM, not an inference. This used to rely on
+    `activation.state_dependent`, which read `bool(inputs)` and so called 76 of
+    110 requirements drivable on n4-i2c because they carry `{nReset: 1, rst: 0,
+    ena: 1}` -- a precondition, not a trigger. `unreachable_reason` is the
+    mirror of `unobservable_reason`: the model says it needs a prior event it
+    cannot name, and that is what selects it.
     """
     stateful = _seer().model_copy(update={
-        "activation": Activation(text="the FSM is in START_B")})
+        "activation": Activation(text="the FSM is in START_B"),
+        "unreachable_reason": "something must have put the FSM in START_B"})
     reply = ('{"normalized": [{"req_uid": "REQ-0007", "activated_via": '
              '[{"through_req": "REQ-0012", "activation": {"text": "issue START",'
              ' "inputs": {"cmd": 1}}, "when": "the command is accepted from idle",'
@@ -645,3 +653,60 @@ def test_no_gate_reads_the_review():
                if "def _reach_edges(" in src else src.index("REACH_DEPTH")]
     for name in ("indirect_review", "discriminates_on", "antecedent_port"):
         assert name not in gate
+
+
+def test_housekeeping_inputs_no_longer_nominate_anything_by_themselves():
+    """The heuristic is gone, and this is the case that killed it.
+
+    `{nReset: 1, rst: 0, ena: 1}` is what almost every requirement in this
+    module carries: measured over 156,833 rows of golden trace, nReset sits at
+    1 for 100% of them, rst at 0 for 100%, ena at 1 for 95.9%. Pinning them
+    selects nothing. The old predicate could not tell that from a trigger, in
+    either direction -- and `ena = 0`, which selects 4.1%, IS the trigger of a
+    real requirement, so a name-based fix would have thrown that one away.
+
+    So neither shape nominates on its own any more. Only the model's own claim
+    does.
+    """
+    housekeeping = _seer().model_copy(update={
+        "activation": Activation(text="while enabled and out of reset",
+                                 inputs={"nReset": 1, "rst": 0, "ena": 1})})
+    _, results, port = _resolve(ROUTED, [housekeeping])
+    assert port.prompts == [] and results == []
+
+    # ...and the same shape WITH the claim is asked, so the difference is the
+    # claim and nothing else.
+    claimed = housekeeping.model_copy(update={
+        "unreachable_reason": "a command must already have been accepted"})
+    _, _, port2 = _resolve(ROUTED, [claimed])
+    # `ROUTED` answers a different uid, so the gate rejects and the loop
+    # retries -- irrelevant here. What this asserts is that the claim NOMINATED
+    # it at all, and that it was asked the activation question rather than the
+    # observation one.
+    assert port2.prompts, "the claim did not nominate the requirement"
+    assert "ACTIVATION ONLY" in port2.prompts[0]
+
+
+def test_a_driven_activation_hop_needs_inputs_not_a_route():
+    """An empty `through_req` is the DIRECT case, exactly as it is for a Route.
+
+    It is what makes the selector unnecessary: "drivable" becomes an answer the
+    model gives rather than a property inferred from the shape of `inputs`. So
+    the gate must not demand `when`/`shows` of it -- there is no hop to
+    recognise -- but must demand what drives it.
+    """
+    from specflow.normalize import NormalizedRequirement, gate_indirect, NormalizeOutput
+
+    def issues_for(hop):
+        out = NormalizeOutput(normalized=[NormalizedRequirement(
+            req_uid="REQ-0007", observable=["busy"], activated_via=[hop])])
+        return gate_indirect(out, uid="REQ-0007", contract={},
+                             known={"REQ-0007", "REQ-0012"})
+
+    ok = issues_for(Reach(through_req="",
+                          activation=Activation(text="a WRITE is presented",
+                                                inputs={"cmd": 4})))
+    assert ok == [], [i.message for i in ok]
+
+    empty = issues_for(Reach(through_req=""))
+    assert any("DIRECT case" in i.message for i in empty), [i.message for i in empty]

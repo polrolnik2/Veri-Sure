@@ -445,9 +445,35 @@ class NormalizedRequirement(BaseModel):
     #: `observable` still holds the ports it is decidable at by ANY route, so
     #: every downstream stage keeps reading one field.
     observed_via: list[Route] = Field(default_factory=list)
-    #: Prerequisites, ALL required, one hop each. Empty when the activation is
-    #: `input_only` -- there is nothing to reach, the values are simply driven.
+    #: Prerequisites, ALL required, one hop each. A hop with an EMPTY
+    #: `through_req` is the direct case -- the activation is driven, and the
+    #: hop's `activation.inputs` are the values that drive it.
+    #:
+    #: ASKED OF EVERY REQUIREMENT, exactly as `observed_via` is, and for the
+    #: same reason. Observation never had a selector: the direct pass asks the
+    #: question of everyone and an empty `through_req` means "my own port", so
+    #: there is no predicate to get wrong. Activation had one -- entry was gated
+    #: on `state_dependent`, which rested on `input_only == bool(self.inputs)`
+    #: -- and it got it wrong for 76 of 110 requirements on n4-i2c, because
+    #: `{nReset: 1, rst: 0, ena: 1}` is a precondition carried by almost every
+    #: requirement in the module and satisfies `bool(...)` exactly as a real
+    #: trigger does. 49 of those carried nothing else.
+    #:
+    #: The heuristic could not be repaired by a better port list either: on this
+    #: module `ena = 1` selects 95.9% of recorded rows and discriminates
+    #: nothing, while `ena = 0` selects 4.1% and IS the trigger of REQ-0015. A
+    #: name-based rule would have discarded that requirement's actual trigger,
+    #: and would not transfer to a module whose enable is called something else.
+    #:
+    #: So the question is asked rather than inferred. The model already knows
+    #: which of its inputs constitute the trigger; nothing else does.
     activated_via: list[Reach] = Field(default_factory=list)
+    #: Why the activation cannot be reached, set if and only if the model can
+    #: say the requirement needs a prior event it cannot name. The mirror of
+    #: `unobservable_reason`, and it replaces the inferred `state_dependent` as
+    #: what nominates a requirement for the indirect pass -- a claim the model
+    #: makes, not one the harness guesses on its behalf.
+    unreachable_reason: str = ""
 
     @field_validator("observed_via", "activated_via", mode="before")
     @classmethod
@@ -499,6 +525,11 @@ class NormalizedRequirement(BaseModel):
     @property
     def unobservable(self) -> bool:
         return not self.observable
+
+    @property
+    def unreachable(self) -> bool:
+        """The model said the activation needs a prior event it cannot name."""
+        return bool(self.unreachable_reason.strip())
 
     @property
     def indirect(self) -> bool:
@@ -1232,15 +1263,28 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
             issues.append(bad)
     for i, hop in enumerate(norm.activated_via):
         path = f"normalize.{uid}.activated_via[{i}]"
-        if hop.through_req not in known:
+        if hop.through_req and hop.through_req not in known:
             issues.append(Issue("error", path,
                                 f"{hop.through_req!r} is not a requirement uid"))
         if hop.through_req == uid:
             issues.append(Issue("error", path,
                                 "a requirement cannot be its own prerequisite"))
-        #: The pointer-is-not-a-route checks. `when` is shared with
-        #: `observed_via` verbatim -- an unscoped hop is unscoped the same way.
-        #: `shows` is NOT: see `reach_shows_issue`.
+        #: AN EMPTY `through_req` IS THE DIRECT CASE, exactly as it is for a
+        #: `Route`: the activation is driven, and `activation.inputs` are the
+        #: values that drive it. There is no hop to recognise, so `when` and
+        #: `shows` do not apply -- what must be there instead is the inputs.
+        if not hop.through_req:
+            if not (hop.activation.inputs or hop.activation.text.strip()):
+                issues.append(Issue(
+                    "error", path,
+                    "a hop with no `through_req` is the DIRECT case and must "
+                    "say what drives the activation: give "
+                    "`activation.inputs`, or `activation.text` if the "
+                    "requirement holds at all times."))
+            continue
+        #: The pointer-is-not-a-route checks, for a hop that names one. `when`
+        #: is shared with `observed_via` verbatim -- an unscoped hop is
+        #: unscoped the same way. `shows` is NOT: see `reach_shows_issue`.
         bad = reach_shows_issue(path, hop.shows)
         if bad is not None:
             issues.append(bad)
@@ -1296,6 +1340,44 @@ _OBSERVED_VIA_SHAPE = (
 )
 
 
+#: THE ACTIVATION HALF, asked of every requirement in the same breath as
+#: `observed_via` and for the same reason -- see `NormalizedRequirement.
+#: activated_via`. An empty `through_req` is the direct case, which is what
+#: makes a selector unnecessary: "drivable" is an answer the model gives rather
+#: than a property the harness infers from the shape of `inputs`.
+_ACTIVATED_VIA_TASK = (
+    "AND SAY HOW THE ACTIVATION IS REACHED.\n"
+    "Some requirements apply whenever their inputs are driven a certain "
+    "way. Others apply only once something has ALREADY HAPPENED -- a "
+    "command was accepted, a sequence is running, a condition was "
+    "detected. Those two need different answers and only you can tell "
+    "them apart.\n"
+    "  DRIVEN: give ONE entry with `through_req` empty and the inputs "
+    "that drive it. Pinning an input to the value it rests at almost "
+    "always is not driving anything -- if the only inputs you would name "
+    "are the ones saying nothing unusual is happening, it is NOT driven.\n"
+    "  REACHED: one entry per prerequisite, each naming the requirement "
+    "whose behaviour puts the design there, plus `when` and `shows`.\n"
+    "  NEITHER: if it needs a prior event you cannot name, leave "
+    "`activated_via` empty and say so in `unreachable_reason`. That is a "
+    "real answer and it is better than a hop you invented."
+)
+_ACTIVATED_VIA_SHAPE = (
+    "`activated_via` is a LIST of objects. Each entry:\n"
+    '  {"through_req": <uid, or "" for the driven case>, '
+    '"activation": {"text": <what must hold>, "inputs": {<port>: <value>}}, '
+    '"when": <when that hop delivers the state>, '
+    '"shows": <how declared ports reveal the hop has fired>}\n'
+    "Examples:\n"
+    '  driven:  {"through_req": "", "activation": {"text": "a WRITE '
+    'command is presented", "inputs": {"cmd": 4}}}\n'
+    '  reached: {"through_req": "REQ-0096", "activation": {"text": '
+    '"the FSM has entered the READ sequence"}, "when": "the command '
+    'is accepted from idle", "shows": "scl_oen or sda_oen departs '
+    'the released idle pair and sda_oen stays 1 until cmd_ack"}'
+)
+
+
 def parse_response(text: str) -> NormalizeOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
@@ -1331,7 +1413,8 @@ def parse_response(text: str) -> NormalizeOutput:
         # above. Both pieces, matching what the base "no route given" case
         # in `gate_one` says, not a narrower message this path invents.
         if "observed_via" in str(exc):
-            detail += f"\n\n{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"
+            detail += (f"\n\n{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"
+                       f"\n\n{_ACTIVATED_VIA_TASK}\n\n{_ACTIVATED_VIA_SHAPE}")
         return NormalizeOutput(reasoning=detail)
 
 
@@ -1423,7 +1506,8 @@ def gate_one(
             issues.append(Issue(
                 "error", f"normalize.{uid}.observed_via",
                 f"observable at {sorted(norm.observable)} but no route given. "
-                f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}"))
+                f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}\n\n"
+                f"{_ACTIVATED_VIA_TASK}\n\n{_ACTIVATED_VIA_SHAPE}"))
         for i, route in enumerate(norm.observed_via):
             path = f"normalize.{uid}.observed_via[{i}]"
             if route.through_req:
@@ -1723,11 +1807,15 @@ def resolve_indirect(
     # not a property of the design, an artefact of who was let in.
     def _ask(n: NormalizedRequirement) -> str:
         if n.unobservable:
-            return "both" if n.activation.state_dependent else "observation"
+            return "both" if n.unreachable else "observation"
         return "activation"
 
-    blind = [n for n in normalized
-             if n.unobservable or n.activation.state_dependent]
+    #: BOTH LEGS ARE NOW MODEL-DECLARED. `unobservable` was always a claim the
+    #: model makes -- an empty `observable` plus a reason. `unreachable` is its
+    #: mirror, and replaces `activation.state_dependent`, which inferred the
+    #: same thing from the shape of `inputs` and was wrong for 76 of 110
+    #: requirements. See `activated_via`.
+    blind = [n for n in normalized if n.unobservable or n.unreachable]
     if not blind:
         return list(normalized), []
     asks = {n.req_uid: _ask(n) for n in blind}
