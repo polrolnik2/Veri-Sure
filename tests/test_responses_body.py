@@ -77,12 +77,32 @@ def test_there_is_always_a_cap():
 
 
 # ------------------------------------------ developer_role_prefix (the fix)
-def test_developer_role_prefix_off_by_default_sends_a_flat_string():
-    """Unchanged behaviour when the switch is off, regardless of the prompt."""
+def test_developer_role_prefix_is_ON_BY_DEFAULT():
+    """Flipped on the run-scale measurement the old default was waiting for.
+
+    h3-i2c's oracle stage ran 149 real calls at fan-out concurrency with the
+    switch off and cached 1.3% of 2,058,353 input tokens -- while carrying a
+    ~13k-token identical prefix, 93% of each prompt. Five stages on gpt-5-mini
+    in the same run cached 61-83% with a SMALLER shared head. Off is the
+    expensive setting; see `PortSettings.developer_role_prefix`.
+    """
     from specflow.fanout import PREFIX_SENTINEL
 
     prompt = f"shared stuff{PREFIX_SENTINEL}\n\nitem text"
-    assert _responses_body(_Cfg(), prompt)["input"] == prompt
+    assert _responses_body(_Cfg(), prompt)["input"] == [
+        {"role": "developer", "content": f"shared stuff{PREFIX_SENTINEL}"},
+        {"role": "user", "content": "item text"},
+    ]
+
+
+def test_developer_role_prefix_can_still_be_turned_OFF():
+    """The flat shape stays reachable, so the 1.3%-vs-99.6% comparison can be
+    re-run rather than taken on faith."""
+    from specflow.fanout import PREFIX_SENTINEL
+
+    prompt = f"shared stuff{PREFIX_SENTINEL}\n\nitem text"
+    assert _responses_body(_Cfg(), prompt,
+                           developer_role_prefix=False)["input"] == prompt
 
 
 def test_developer_role_prefix_splits_at_the_sentinel_when_on():
@@ -107,3 +127,26 @@ def test_developer_role_prefix_is_a_noop_with_no_shared_block():
     body = _responses_body(_Cfg(), "just a plain prompt, no sentinel",
                            developer_role_prefix=True)
     assert body["input"] == "just a plain prompt, no sentinel"
+
+
+def test_the_body_default_and_PortSettings_CANNOT_DRIFT():
+    """One decision, one place.
+
+    `_responses_body` carried its own bare `False` while `PortSettings` also
+    said `False`, so the duplication was invisible -- until the dataclass
+    flipped to True and the function default did not, and a direct call
+    silently kept sending the flat shape that measured 1.3%. Production was
+    never wrong (ApiPort passes `self.settings.developer_role_prefix`), which
+    is exactly what makes this the kind of drift a test has to hold.
+    """
+    import inspect
+
+    from specflow.model_io import PortSettings, _responses_body
+
+    got = inspect.signature(_responses_body).parameters[
+        "developer_role_prefix"].default
+    assert got is PortSettings.developer_role_prefix, (
+        "the body default must come FROM PortSettings, not from a second "
+        f"literal (signature says {got!r}, PortSettings says "
+        f"{PortSettings.developer_role_prefix!r})"
+    )

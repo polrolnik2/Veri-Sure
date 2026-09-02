@@ -531,13 +531,35 @@ class PortSettings:
     #: role to `developer` on every turn -- which is why they were never
     #: seen to have this problem and `specflow`'s flat-string stages were.
     #:
-    #: OFF BY DEFAULT because it has not yet been measured at run scale
-    #: (fan-out concurrency, real oracle prompts rather than filler, gpt-5-mini
-    #: unaffected) the way the 0% finding it corrects was. `_split_shared_prefix`
-    #: only fires on a prompt built with `fanout.shared_block`'s sentinel, so
-    #: turning this on for a stage with no such prefix is a no-op, not a
-    #: regression.
-    developer_role_prefix: bool = False
+    #: ON BY DEFAULT. It was off pending a measurement "at run scale (fan-out
+    #: concurrency, real oracle prompts rather than filler)", and h3-i2c is
+    #: that measurement -- taken by accident, because the switch was left at
+    #: its default and the bill arrived anyway:
+    #:
+    #:     h3 oracle stage, gpt-5.6-luna, flat `user` string, 149 real calls
+    #:     at fan-out concurrency:   2,058,353 input tokens, 27,364 cached
+    #:                               = 1.3%   (repair rounds: 0.0%)
+    #:
+    #: The prompts were not the problem, which is what makes this decisive
+    #: rather than suggestive: those same prompts carry a 52,146-char
+    #: (~13k token) IDENTICAL prefix, 93% of each prompt, ending at the
+    #: `shared_block` sentinel -- a LONGER and higher-fraction shared head than
+    #: the variant stage's ~5.7k tokens at 88%, which cached at 82.6% on
+    #: gpt-5-mini in the same run. Same run, same prompt discipline, five
+    #: stages on mini at 61-83%, the one stage on luna at 1.3%.
+    #:
+    #: So the residual doubt the default was protecting -- "does the flat shape
+    #: really cost anything once the prompts are real and the fan-out is
+    #: concurrent" -- is answered: it costs about 2M input tokens per oracle
+    #: stage. Being off is the expensive setting, and the burden of proof has
+    #: changed sides.
+    #:
+    #: `_split_shared_prefix` only fires on a prompt built with
+    #: `fanout.shared_block`'s sentinel, so this is a no-op for a whole-artifact
+    #: stage (refmodel, witness) rather than a regression, and gpt-5-mini is
+    #: unaffected either way -- which is what makes ON a safe default rather
+    #: than a bet.
+    developer_role_prefix: bool = True
 
     #: Retries for a DROPPED stream. Distinct from `max_retries`, which the SDK
     #: applies before a response starts.
@@ -654,12 +676,19 @@ def _cache_key(cfg, stage: str) -> str:
 
 def _responses_body(cfg, prompt: str, default_cap: int = 48000,
                     stage: str | None = None,
-                    developer_role_prefix: bool = False) -> dict:
+                    developer_role_prefix: bool =
+                    PortSettings.developer_role_prefix) -> dict:
     """The request body for `/v1/responses`, built where it can be tested.
 
     Pure on purpose: the two bugs this had were both invisible from the outside
     -- the request looked fine in the code and wrong on the wire -- so the thing
     that needs a test is the body itself, not the call around it.
+
+    `developer_role_prefix` DEFAULTS OFF `PortSettings`, not off a second
+    literal. It was written as a bare `False` here while the dataclass said
+    `False` too, so the duplication was invisible -- and then the dataclass
+    flipped to True and this did not, which is the drift `ApiPort` is already
+    pinned against one level up. One decision, one place.
 
     `prompt_cache_key` IS THE STAGE FAMILY, and the reason it is the family and
     not the stage is the reason `family()` exists. A cache lives on the backend
