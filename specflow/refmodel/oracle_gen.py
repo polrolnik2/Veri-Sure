@@ -339,7 +339,8 @@ Six of the last run's fourteen vacuous checks were exactly this. And a check
 that instead waits a FIXED number of edges is the opposite failure, pinning a
 count the specification never gave.
 
-    from specflow.refmodel.temporal import (after, edges, eventually, nth,
+    from specflow.refmodel.temporal import (TO_END, WHILE_ACTIVE, after,
+                                            edges, eventually, nth,
                                             runs, throughout, stable, pulse,
                                             worst)
 
@@ -351,6 +352,27 @@ count the specification never gave.
                       for w in windows])
 
   after(trace, applies, until=closes)   -> list[Window], one per activation
+
+`until` IS REQUIRED. There is no default, because every default is silently
+wrong for one of the two shapes and the mistake does not show up until the
+check is scored against real RTL. Say which you mean:
+
+  until=<predicate>   the window closes when that becomes true -- the usual
+                      case, and the one to reach for: "after the command, until
+                      it is acknowledged".
+  until=TO_END        the window runs to the end of the trace. "After a START,
+                      EVENTUALLY busy" -- the consequence may arrive at any
+                      later point.
+  until=WHILE_ACTIVE  the window is the activation's own extent. "WHILE reset is
+                      held, the outputs stay at their reset values." ONLY for a
+                      LEVEL activation. On an INSTANT -- an edge, a pulse -- it
+                      is one or two rows, and any consequence with latency falls
+                      outside it, so the check can only convict.
+
+MEASURED: 96 frozen checks scored against KNOWN-GOOD RTL. Scoping every bare
+window to its activation convicted the correct design 15 times; running every
+bare window to the end convicted it 14 times, and swapped which ones. Choosing
+for you is not available -- choose.
   eventually(w, holds)                  -> Verdict; holds at SOME row of w
   throughout(w, holds)                  -> Verdict; holds at EVERY row of w
   stable(w, port)                       -> Verdict; port never changes in w
@@ -430,7 +452,7 @@ edges to open on -- the entry's `port`, `value` and bounds map across directly:
 
     # normalized: sustains [{"port": P, "value": V, "at_most": K}]
     short   = runs(trace, P, value=V, at_most=K)
-    windows = after(trace, lambda r: r["edge"] in short)
+    windows = after(trace, lambda r: r["edge"] in short, until=TO_END)
 
 An empty `sustains` is not evidence the requirement states no duration; see
 COUNTS AND DURATIONS above for when you may read one out of the text yourself.
@@ -468,7 +490,8 @@ h2-i2c: 22 of 96 frozen oracles died exactly this way.
 Pass it whenever the field is non-empty and `after` handles the rest -- no
 operator needs a guard of its own. Every construct below is built the same way:
 
-    from specflow.refmodel.temporal import (after, eventually, nth, runs,
+    from specflow.refmodel.temporal import (TO_END, WHILE_ACTIVE, after,
+                                            eventually, nth, runs,
                                             throughout, stable, pulse, worst)
 
     # `{port: value}` straight out of the normalized block -> a row predicate.
@@ -497,16 +520,16 @@ operator needs a guard of its own. Every construct below is built the same way:
   the activation stops holding, which is what "while ena is low" means:
 
     # normalized: inputs {"ena": 0}, until []
-    windows = after(trace, _holds({"ena": 0}))
+    windows = after(trace, _holds({"ena": 0}), until=TO_END)
 
   AN INSTANT -- the same call. A one-row activation gives a one-row window and
   `throughout` over it IS the point check. There is no separate form:
 
-    windows = after(trace, _holds({"rst": 1}))
+    windows = after(trace, _holds({"rst": 1}), until=TO_END)
 
   AN INVARIANT -- "at all times", "never":
 
-    windows = after(trace, lambda r: True)
+    windows = after(trace, lambda r: True, until=TO_END)
 
   AN ACTIVATION THAT DEPENDS ON AN OUTPUT -- merge `opens_on` into the opening
   predicate. It qualifies the trigger; it is not the thing being checked:
@@ -514,7 +537,7 @@ operator needs a guard of its own. Every construct below is built the same way:
     # normalized: inputs {"nReset": 1}, opens_on [{"scl_oen": 0}, {"sda_oen": 0}]
     # -- "AN output-enable is driven low", either of them
     opens = _any([{"scl_oen": 0}, {"sda_oen": 0}])
-    windows = after(trace, lambda r: _holds({"nReset": 1})(r) and opens(r))
+    windows = after(trace, lambda r: _holds({"nReset": 1})(r) and opens(r), until=TO_END)
 
   AN EDGE IN THE CONDITION -- a value of `"rise"`, `"fall"` or `"change"`
   instead of a number. `edges()` gives you the rows where the port moved, and
@@ -523,7 +546,7 @@ operator needs a guard of its own. Every construct below is built the same way:
     # normalized: opens_on [{"scl_i": "fall", "scl_oen": 1}]
     fell = edges(trace, "scl_i", "fall")
     windows = after(trace, lambda r: r["edge"] in fell
-                    and r["outputs"].get("scl_oen") == 1)
+                    and r["outputs"].get("scl_oen") == 1, until=TO_END)
 
   `after` alone will NOT do this for you, and the reason is worth knowing. It
   opens on a rising activation, so a lone `{"scl_i": 0}` does give
@@ -604,7 +627,7 @@ down are the ones that will bite you:
   w.value(port)                 the sampled value AT the activation
   w.past(port)                  `$past(port)` -- its value the row before
   first_match(windows)          `first_match` -- the first attempt only
-  after(t, a, overlap=True)     windows may OVERLAP in extent -- the scan for
+  after(t, a, overlap=True, until=TO_END)     windows may OVERLAP in extent -- the scan for
                                 the next one resumes at the row after this
                                 window OPENED rather than after it closed.
                                 NOT SVA's attempt model: a window still starts

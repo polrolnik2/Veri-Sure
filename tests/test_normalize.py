@@ -499,7 +499,7 @@ def test_edges_computes_the_transition_not_the_level():
     """The reason this lives in `temporal` rather than in the prompt: an author
     re-deriving it per check is the hand-rolled index arithmetic the operators
     exist to replace."""
-    from specflow.refmodel.temporal import after, edges
+    from specflow.refmodel.temporal import TO_END, after, edges
 
     trace = [{"edge": 0, "inputs": {"scl_i": 1, "scl_oen": 0}, "outputs": {}},
              {"edge": 4, "inputs": {"scl_i": 1, "scl_oen": 1}, "outputs": {}},
@@ -515,13 +515,14 @@ def test_edges_computes_the_transition_not_the_level():
     # but it ALSO opens one where scl_oen rose over an already-low scl_i --
     # which the edge form does not.
     edge_windows = after(trace, lambda r: r["edge"] in fell
-                         and r["inputs"]["scl_oen"] == 1)
+                         and r["inputs"]["scl_oen"] == 1, until=TO_END)
     assert [w.edge for w in edge_windows] == [9]
 
     already_low = [{"edge": 0, "inputs": {"scl_i": 0, "scl_oen": 0}, "outputs": {}},
                    {"edge": 5, "inputs": {"scl_i": 0, "scl_oen": 1}, "outputs": {}}]
     levels = after(already_low,
-                   lambda r: r["inputs"]["scl_i"] == 0 and r["inputs"]["scl_oen"] == 1)
+                   lambda r: r["inputs"]["scl_i"] == 0 and r["inputs"]["scl_oen"] == 1,
+                   until=TO_END)
     assert [w.edge for w in levels] == [5], "the level form fires here"
     assert not edges(already_low, "scl_i", "fall"), "the edge form does not"
 

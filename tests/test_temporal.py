@@ -13,7 +13,10 @@ the shape index arithmetic makes easiest.
 
 from __future__ import annotations
 
-from specflow.refmodel.temporal import (after, edges, eventually, never,
+import pytest
+
+from specflow.refmodel.temporal import (TO_END, WHILE_ACTIVE, after, edges,
+                                        eventually, never,
                                         nexttime, nth, pulse, sequence, stable,
                                         throughout, until, worst)
 from specflow.refmodel.verdict import truncated
@@ -101,7 +104,7 @@ def test_pulse_counts_EDGES_not_rows():
     and outputs are ONE row carrying `held`. Counting rows would call a 40-edge
     assertion a single-cycle pulse."""
     one = [_state(0, cmd=8), _state(1, ack=1, held=1), _state(2, ack=1)]
-    w = after(one, lambda r: r["inputs"]["cmd"] == 8)
+    w = after(one, lambda r: r["inputs"]["cmd"] == 8, until=TO_END)
     assert pulse(_windows()[0], "ack")[0] is True
     wide = [_state(0, cmd=8), _state(1, cmd=8), _state(2, ack=1, held=4),
             _state(3, ack=1)]
@@ -121,40 +124,40 @@ def test_pulse_refuses_two_pulses_in_one_window():
     assert ok is False and "pulsed 2 times" in why
 
 
-def test_a_window_with_no_until_RUNS_TO_THE_END_OF_THE_TRACE():
-    """The default flipped, and the reason the old one gave is why.
+def test_there_is_NO_DEFAULT_WINDOW_and_both_ends_are_named():
+    """`until` is required, and that is the point.
 
-    It used to end with the activation, deliberately: a check looking for a
-    later effect would return False "loudly, against the witness, where gate 1
-    makes the author add the `until`". MEASURED, that mechanism does not work.
-    The witness distinguishes FEWER STATES than the RTL, so on i2c a narrow
-    window covered the witness's latency -- the effect landed in the very next
-    row -- and did not cover the RTL's, where one extra transactional state
-    (`dout` moving) sat in between. REQ-0047 passed its screening and CONVICTED
-    THE GOLDEN DESIGN. Four of that run's fifteen convictions were this idiom.
+    Every default is silently wrong for one of the two idioms, and the mistake
+    is invisible where checks are screened. Scoping a bare window to its
+    activation is right for "WHILE A, B holds" and wrong for "after A,
+    eventually B" -- an instant's extent is one or two rows, so the consequence
+    falls outside and the check CAN ONLY CONVICT. Running it to the end is right
+    for the second and wrong for the first.
 
-    Scoping "after an INSTANT, eventually X" to the instant's own extent is a
-    cycle-accurate window imposed on a construction that does not mean to be
-    cycle-accurate, and it can only convict. A narrow window is still available
-    and is now REQUESTED: `until=` closes on a condition, `pulse`/`runs` measure
-    a level's duration directly.
+    MEASURED on 96 frozen checks against KNOWN-GOOD RTL, same traces: the
+    activation-scoped rule convicted the correct design 15 times, the
+    open-ended rule 14 -- and swapped WHICH ones, 3 fixed and 3 newly broken.
+    Neither is detectable at screening, because the Python witness distinguishes
+    fewer states than the RTL, so a window too narrow for the design can still
+    cover the witness's latency.
 
-    WHAT THIS COSTS, stated because the old docstring was right that it costs
-    something: an open-ended `eventually` can now pass on an event that happens
-    far later, which is weaker evidence than one bounded by a deadline. The
-    module still has no `within=N`, and that -- not a narrow default -- is what
-    should guard this side.
+    So the choice is the author's, and a missing `until` is a TypeError --
+    which `well_formed`'s smoke run turns into a rejected oracle at authoring
+    time, instead of a quiet wrong verdict months later.
     """
     trace = [_state(0, cmd=8), _state(1), _state(2), _state(3, ack=1)]
-    wide = after(trace, lambda r: r["inputs"]["cmd"] == 8)[0]
-    assert [r["edge"] for r in wide.rows] == [0, 1, 2, 3]
-    assert eventually(wide, lambda r: r["outputs"]["ack"] == 1)[0] is True
-    # The narrow window is one keyword away, and now says so at the call site.
-    narrow = after(trace, lambda r: r["inputs"]["cmd"] == 8,
-                   until=lambda r: r["inputs"]["cmd"] != 8)[0]
-    assert [r["edge"] for r in narrow.rows] == [0, 1]
-    assert eventually(narrow, lambda r: r["outputs"]["ack"] == 1)[0] is False
+    act = lambda r: r["inputs"]["cmd"] == 8            # noqa: E731
 
+    with pytest.raises(TypeError):
+        after(trace, act)
+
+    to_end = after(trace, act, until=TO_END)[0]
+    assert [r["edge"] for r in to_end.rows] == [0, 1, 2, 3]
+    assert eventually(to_end, lambda r: r["outputs"]["ack"] == 1)[0] is True
+
+    while_active = after(trace, act, until=WHILE_ACTIVE)[0]
+    assert [r["edge"] for r in while_active.rows] == [0, 1]
+    assert eventually(while_active, lambda r: r["outputs"]["ack"] == 1)[0] is False
 
 def test_worst_puts_failure_first_and_unknown_above_a_pass():
     """A requirement holding on nine windows and breaking on the tenth is

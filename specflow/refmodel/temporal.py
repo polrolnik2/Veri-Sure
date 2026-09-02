@@ -154,7 +154,7 @@ def edges(trace: list[dict], port: str, direction: str = "change") -> set[int]:
     level conditions afterwards:
 
         fell = edges(trace, "scl_i", "fall")
-        after(trace, lambda r: r["edge"] in fell and _val(r, "scl_oen") == 1)
+        after(trace, lambda r: r["edge"] in fell and _val(r, "scl_oen") == 1, until=TO_END)
 
     Returns `edge` numbers rather than rows because `edge` is the one field a
     row can be identified by; identity comparison on dicts is not stable across
@@ -209,7 +209,7 @@ def runs(trace: list[dict], port: str, *, value: int = 0,
     into an activation predicate.
 
         short = runs(trace, "sda_i", value=0, at_most=1)
-        after(trace, lambda r: r["edge"] in short)
+        after(trace, lambda r: r["edge"] in short, until=TO_END)
 
     WHY THIS IS A WINDOW OPENER AND NOT A VERDICT. `sustains` lives in the
     ACTIVATION, so a duration it states is part of WHEN the requirement
@@ -255,35 +255,63 @@ def runs(trace: list[dict], port: str, *, value: int = 0,
     return out
 
 
-def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
+class _Window_end:
+    """A named window close, so both intents are written down at the call site."""
+
+    __slots__ = ("_name", "why")
+
+    def __init__(self, name: str, why: str) -> None:
+        self._name, self.why = name, why
+
+    def __repr__(self) -> str:
+        return self._name
+
+
+#: The window runs to the end of the trace. "After A, eventually B" -- the
+#: consequence may arrive at any later point and the trace is all the evidence
+#: there is. An operator over a window that never closed reports UNKNOWN rather
+#: than a failure, because we stopped looking rather than saw it not happen.
+TO_END = _Window_end("TO_END", "the window runs to the end of the trace")
+
+#: The window is the activation's own extent -- "WHILE A, B holds". Right for a
+#: LEVEL activation (a reset held, a command asserted), and wrong for an INSTANT
+#: (a START, an edge), where it is one or two rows and the consequence of the
+#: instant falls outside it.
+WHILE_ACTIVE = _Window_end(
+    "WHILE_ACTIVE", "the window is the activation's own extent")
+
+
+def after(trace: list[dict], activation: Pred, *, until,
           aborts: Pred | None = None,
           max_windows: int = 64, overlap: bool = False) -> list[Window]:
     """Every window the requirement applies over.
 
     A window opens on a RISING activation -- the first row where `activation`
     holds and the row before it did not -- so a condition true for forty
-    consecutive edges is one window, not forty. It closes on the first row
-    satisfying `until`, or on `aborts`, and OTHERWISE RUNS TO THE END OF THE
-    TRACE.
+    consecutive edges is one window, not forty.
 
-    A BARE WINDOW USED TO CLOSE WHERE THE ACTIVATION STOPPED HOLDING, and that
-    was wrong for the thing `after` is usually asked. "After a START, busy
-    rises" is a statement about what follows an INSTANT; scoping the window to
-    the instant's own duration makes it one or two rows, and a consequence with
-    any latency at all falls outside. That is a cycle-accurate window imposed
-    silently on a construction whose whole point is not to be cycle-accurate --
-    and it can only convict, never acquit.
+    `until` IS REQUIRED AND HAS NO DEFAULT, because every default is silently
+    wrong for one of the two idioms and neither wrongness is detectable where
+    the check is screened.
 
-    MEASURED on golden i2c_master_bit_ctrl. REQ-0047 opens on a START and asks
-    `eventually(busy == 1)`. The old window was rows [6, 7]; `busy` rises at row
-    12. It CONVICTED THE CORRECT DESIGN, and passed its own screening because
-    the Python witness distinguishes fewer states than the RTL, so on the
-    witness the rise landed in the very next row and inside the window. 4 of
-    that run's 15 convictions of golden were this idiom.
+      * A window scoped to the activation is right for "WHILE A, B holds" and
+        wrong for "after A, eventually B": an instant's own extent is one or two
+        rows, so the consequence falls outside and the check CAN ONLY CONVICT.
+      * A window running to the end of the trace is right for the second and
+        wrong for the first: "after reset, throughout, outputs are at their
+        reset values" becomes a claim about the whole run.
 
-    A NARROW WINDOW IS STILL AVAILABLE AND IS NOW ASKED FOR: `until=` closes on
-    a condition, and `pulse`/`runs` measure a level's own duration directly.
-    Bounding a window is a deliberate act, not what happens by default.
+    Both were tried against golden i2c RTL on the same 96 frozen oracles. The
+    activation-scoped default produced 15 convictions of a correct design; the
+    open-ended default produced 14, and swapped WHICH ones -- 3 fixed, 3 newly
+    broken. The count is not the point: neither default is detectable at
+    screening, because the Python witness distinguishes fewer states than the
+    RTL, so a window that is too narrow can cover the witness's latency and not
+    the design's. A missing `until` is now a TypeError, which `well_formed`'s
+    smoke run turns into a rejected oracle at authoring time -- a loud failure
+    where there used to be a quiet wrong answer.
+
+    Say which one you mean: `TO_END`, `WHILE_ACTIVE`, or a predicate.
 
     THE ACTIVATION ROW IS NEVER TESTED FOR `until`. The scan for the close
     starts at the row AFTER the trigger, so a release condition that is already
@@ -309,6 +337,18 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
     abort is reportable rather than silently absent; what changes is that every
     operator over it returns UNKNOWN.
     """
+    if until is TO_END:
+        close: Pred | None = None
+    elif until is WHILE_ACTIVE:
+        def close(row, _a=activation):  # type: ignore[misc]
+            return not _a(row)
+    elif callable(until):
+        close = until
+    else:
+        raise TypeError(
+            "after(..., until=...) is required: pass TO_END, WHILE_ACTIVE, or "
+            f"a predicate; got {until!r}")
+
     out: list[Window] = []
     i, n = 0, len(trace)
     while i < n and len(out) < max_windows:
@@ -328,10 +368,9 @@ def after(trace: list[dict], activation: Pred, *, until: Pred | None = None,
             if aborts is not None and aborts(trace[j]):
                 w.closed = w.aborted = True
                 break
-            if until is not None:
-                if until(trace[j]):
-                    w.closed = True
-                    break
+            if close is not None and close(trace[j]):
+                w.closed = True
+                break
             j += 1
         out.append(w)
         i = i + 1 if overlap else j + 1
