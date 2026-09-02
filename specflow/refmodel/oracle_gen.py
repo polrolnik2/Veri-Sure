@@ -118,6 +118,31 @@ the surround. Say so in `reasoning` and write the check you can defend; a later
 gate is allowed to conclude the sentence asserts nothing, and that is a better
 outcome than a confident check nothing licensed.
 
+SYMBOLIC PORT VALUES: USE THE TABLE, NEVER A GUESS.
+
+A port in `contract_json` may carry an `encoding` -- a symbol-to-integer table
+(`{"I2C_CMD_START": 1, "I2C_CMD_STOP": 2, ...}`). Where one exists it is
+AUTHORITATIVE and it is the only licensed source of a number for that port. Read
+the symbol the requirement names and take its value from the table.
+
+WHERE THERE IS NO TABLE FOR A PORT, YOU DO NOT KNOW ITS ENCODING AND MUST NOT
+INVENT ONE. A specification that names commands by symbol and never states the
+numbers has not told you that `cmd == 1` means START. A check keyed on a bare
+number is then asserting an encoding nobody stated, and it is wrong in two
+directions at once: it convicts a correct design that uses the real encoding,
+and it silently passes on a value no design ever presents.
+
+Measured across one corpus: every symbol contradicted itself. START was written
+as 1 and as 4; STOP as 1 and as 2; WRITE as 4, 1, 2 and 3; READ as 3, 1, 8 and
+4. Seven checks used a value matching NO arm of the design's decoder -- their
+windows can never open, which at decide time is indistinguishable from "the
+design never did it".
+
+So when the table is absent, build the trigger from the port-level SIGNATURE of
+the situation instead -- what the declared outputs do while that command runs --
+and say in `reasoning` that you did so and why. An activation hop's `shows`
+field, when present, is exactly that signature.
+
 WHEN A ROUTE NAMES A `through_req`, THE PORT BELONGS TO ANOTHER REQUIREMENT.
 
 `observed_via` IS NOT THAT SIGNAL, and reading it as one is the error this
@@ -689,14 +714,32 @@ Reply with ONE JSON object and nothing else:
 """
 
 
-def shared_prefix(contract_json: str, contract: dict) -> str:
+def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
     """Byte-identical across every requirement of one node.
 
-    It contains the SYSTEM prompt, the contract and the port lists -- and
-    deliberately nothing else. Everything that changes per round in the judge's
-    prefix (the model source, its observed behaviour) is absent here, so unlike
-    the judge's this prefix is warm for the whole node rather than cold at the
-    start of every round.
+    It contains the SYSTEM prompt, the contract, the port lists and the SPEC --
+    and deliberately nothing else. Everything that changes per round in the
+    judge's prefix (the model source, its observed behaviour) is absent here, so
+    unlike the judge's this prefix is warm for the whole node rather than cold at
+    the start of every round.
+
+    THE SPEC WAS MISSING AND THE REVIEWER HAD IT. `correspondence.build_prompt`
+    takes `spec` and `siblings`; this took neither. So the AUTHOR was asked to
+    write a check for "the START command behavior" while holding one sentence
+    and a port list, and the REVIEWER that rejected it for "asserting cmd == 1
+    when no such encoding is declared" was holding the paragraph that names the
+    commands. Measured on n4-i2c: the string `I2C_CMD` does not occur anywhere
+    in an author prompt and does occur in every reviewer prompt.
+
+    That is the same asymmetry, in the other direction, as the one fixed by
+    giving correspondence the contract -- and it is admitted on the same
+    argument. The spec is strictly UPSTREAM of every artifact here: it is what
+    S1 read, so it cannot carry back anything the pipeline produced, and it
+    cannot carry anything from a design because no design has been written. I1
+    is untouched.
+
+    Ahead of the requirement rather than after it, so the shared prefix stays
+    cacheable across the fan-out.
     """
     ports = {
         "outputs": [
@@ -710,7 +753,7 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
             if p.get("dir") == "input" and p.get("name")
         ],
     }
-    return shared_block(
+    blocks = [
         ("system", SYSTEM),
         ("contract_json", contract_json),
         ("declared_ports",
@@ -718,7 +761,10 @@ def shared_prefix(contract_json: str, contract: dict) -> str:
          + "\n\nThese are the only names that appear in a trace row. Anything "
            "else the requirement mentions is internal to the design and cannot "
            "be read."),
-    )
+    ]
+    if spec.strip():
+        blocks.append(("specification", spec))
+    return shared_block(*blocks)
 
 
 #: THE REPAIR-ROUND OVERRIDE, and it exists because the shared briefing is wrong
@@ -838,12 +884,41 @@ one of them, this is the move that answers it.
 </objection_classes>"""
 
 
+def _named_siblings(requirement: dict, normalized: dict | None,
+                    pool: dict[str, dict]) -> dict[str, dict]:
+    """Only the requirements THIS one names, never the whole set.
+
+    A route's `through_req`, a hop's `through_req` and the requirement's own
+    `supports` list are uids. Handing the author all 111 requirements would
+    bury the two it needs and cost the prefix its cacheability; handing it none
+    -- which is what happened until now -- leaves those uids as opaque tokens.
+    """
+    want: set[str] = set(requirement.get("supports") or [])
+    for r in (normalized or {}).get("observed_via") or []:
+        if r.get("through_req"):
+            want.add(str(r["through_req"]))
+    for h in (normalized or {}).get("activated_via") or []:
+        if h.get("through_req"):
+            want.add(str(h["through_req"]))
+    want.discard(str(requirement.get("uid") or ""))
+    out: dict[str, dict] = {}
+    for uid in sorted(want):
+        sib = pool.get(uid)
+        if not sib:
+            continue
+        ob = (sib.get("obligation") or {}).get("quote") or sib.get("text") or ""
+        out[uid] = {"obligation": ob, "ports": sib.get("ports") or []}
+    return out
+
+
 def build_prompt(
     *,
     requirement: dict,
     contract_json: str,
     contract: dict,
     normalized: dict | None = None,
+    spec: str = "",
+    siblings: dict[str, dict] | None = None,
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
@@ -856,6 +931,15 @@ def build_prompt(
     in a dict.
     """
     parts = [json_block("requirement", requirement)]
+    #: THE REQUIREMENTS THIS ONE POINTS AT, and only those. A route's
+    #: `through_req` and a hop's `through_req` name a sibling by uid, and
+    #: without its text that uid is an opaque token -- the author is told the
+    #: port belongs to REQ-0086 and cannot read what REQ-0086 claims, so it
+    #: cannot tell this requirement's effect from that one's. `correspondence`
+    #: has been given siblings since it was written; this had not.
+    named = _named_siblings(requirement, normalized, siblings or {})
+    if named:
+        parts.append(json_block("linked_requirements", named))
     if normalized:
         parts.append(json_block("normalized", normalized))
         if issues:
@@ -866,7 +950,7 @@ def build_prompt(
     if issues:
         parts.append(REJECTION_CLASSES)
     return compose(
-        shared_prefix(contract_json, contract),
+        shared_prefix(contract_json, contract, spec),
         "\n\n".join(parts),
         issues=issues,
         previous=previous,
@@ -945,6 +1029,10 @@ def run_oracle_gen(
     testplan: list[dict],
     port: ModelPort,
     normalized: dict[str, dict] | None = None,
+    #: The source document S1 read. Strictly upstream of every artifact here and
+    #: of any design, so admitting it cannot carry anything back -- see
+    #: `shared_prefix`. Empty keeps the old behaviour exactly.
+    spec: str = "",
     #: An implementation built from these same requirements, for the must-pass
     #: leg. NEVER the golden control: feeding a known-good design's behaviour
     #: back into oracle generation is the contamination I1 exists to prevent,
@@ -992,6 +1080,7 @@ def run_oracle_gen(
     from ..obligation import by_requirement
 
     attached = by_requirement(testplan)
+    pool = {str(r.get("uid") or ""): r for r in requirements}
     wanted = [r for r in requirements if attached.get(str(r.get("uid") or ""))]
     if only is not None:
         wanted = [r for r in wanted if str(r.get("uid") or "") in only]
@@ -1016,6 +1105,7 @@ def run_oracle_gen(
             build_prompt=lambda issues, previous: build_prompt(
                 requirement=req, contract_json=contract_json, contract=contract,
                 normalized=(normalized or {}).get(uid),
+                spec=spec, siblings=pool,
                 issues=issues or seeds.get(uid),
                 previous=previous or (standing or {}).get(uid),
             ),
