@@ -85,6 +85,39 @@ normalized form:
 Your oracle decides the `expectation` over the `observable`, at the moments the
 `activation` holds.
 
+THE REQUIREMENT HAS A CORE AND A SURROUND, AND THEY LICENSE DIFFERENT THINGS.
+
+  obligation    ONE span. This is the requirement. Everything your check
+                ASSERTS must be licensed by these words and no others.
+  spec_spans    Context, each with `role: "supporting"`. Linked deliberately,
+                because the obligation sentence alone does not say what
+                situation it is about.
+  supports      uids of sibling requirements linked for the same reason.
+
+You MAY read the surround to build the TRIGGER. That is what it is for. If the
+obligation says "The FSM then returns to `idle` and pulses `cmd_ack`" and a
+support span says "For a STOP command, the FSM first ensures SDA is low, then
+releases SCL high", then "during a STOP sequence" is a licensed trigger -- the
+surround is how you know which sequence "the command" means.
+
+You MAY NOT move the EXPECTATION into the surround. The effect you assert has
+to be stated in `obligation`. A support span's effect is some other
+requirement's effect, and asserting it here writes that requirement's check
+under this uid -- which is then rejected, and rightly, because two checks now
+convict for the same defect and neither is about its own sentence.
+
+THE TEST, and apply it before you write the assertion. Cover the support spans
+and read `obligation` alone. If what you assert is still stated there, it is
+licensed. If the thing you assert vanished with the surround, you have written
+the neighbour's check: keep the trigger you learned, and assert what the
+obligation actually says instead.
+
+WHEN THE OBLIGATION STATES NO EFFECT AT ALL -- it names a role, a part, a
+definition, or is a fragment of a table or list -- do not manufacture one from
+the surround. Say so in `reasoning` and write the check you can defend; a later
+gate is allowed to conclude the sentence asserts nothing, and that is a better
+outcome than a confident check nothing licensed.
+
 WHEN A ROUTE NAMES A `through_req`, THE PORT BELONGS TO ANOTHER REQUIREMENT.
 
 `observed_via` IS NOT THAT SIGNAL, and reading it as one is the error this
@@ -762,6 +795,49 @@ suspicion loses that for nothing.
 </window_authority>"""
 
 
+#: THE THREE OBJECTIONS THE REVIEWER ACTUALLY RAISES, emitted on repair rounds
+#: beside the gate's own text. Measured by triaging all 51 ORACLE_INVALID
+#: dispositions on n4-i2c, where they account for 20 of the 51 -- the share a
+#: better-briefed author can actually move. (The other 31 are upstream defects
+#: this block cannot help with: 16 requirements whose trigger is an internal
+#: signal that reaches no declared port, 9 whose trigger needs a `cmd` encoding
+#: the specification never states, and 6 whose obligation is a fragment of a
+#: table or list rather than a sentence.)
+#:
+#: Phrased as the fix rather than the fault, because the author is answering an
+#: objection it has already been shown: repeating the objection back adds
+#: nothing, and what it lacks is the move that answers it.
+REJECTION_CLASSES = """\
+<objection_classes>
+THREE OBJECTIONS ACCOUNT FOR MOST REJECTIONS HERE. If the gate text above is
+one of them, this is the move that answers it.
+
+1. "UNLICENSED FALSE PATH: THE TRACE ENDED BEFORE THE RESPONSE."
+   You used a strong obligation where the requirement licenses only a weak one.
+   A requirement that says what happens AT a moment does not oblige the design
+   to reach that moment before the stimulus stops. Missing future evidence is
+   None, never False -- return None when the window is still open at the last
+   row. Use a strong form ONLY where the requirement's own words oblige the
+   response to arrive ("is asserted for exactly one cycle at the end of every
+   sequence" does; "the FSM then returns to idle" does not).
+
+2. "THE ASSERTION BELONGS TO A NEIGHBOURING REQUIREMENT."
+   You asserted an effect stated in a support span or a linked sibling rather
+   than in `obligation`. Keep the trigger you built from that context -- it is
+   licensed -- and assert what the obligation itself states. If the obligation
+   states no effect, say so in `reasoning` rather than borrowing one.
+
+3. "THE TRIGGER IS TOO BROAD / IS NOT THE REQUIREMENT'S SITUATION."
+   Your window opens on something easy to see rather than on the situation the
+   sentence is about -- any `cmd` change instead of a named command sequence,
+   any output-enable release instead of an arbitration check, `ena` rising
+   instead of a sequence completing. Narrow it to the stated situation even
+   when that situation is harder to recognise from the ports. A window that
+   opens too often convicts correct designs, and every such conviction is
+   unlicensed.
+</objection_classes>"""
+
+
 def build_prompt(
     *,
     requirement: dict,
@@ -784,6 +860,11 @@ def build_prompt(
         parts.append(json_block("normalized", normalized))
         if issues:
             parts.append(WINDOW_NOT_AUTHORITATIVE)
+    #: Outside the `normalized` guard: the three objection classes are about the
+    #: check's own logic, not about the window it was handed, so a requirement
+    #: with no normalized form still gets them on a repair round.
+    if issues:
+        parts.append(REJECTION_CLASSES)
     return compose(
         shared_prefix(contract_json, contract),
         "\n\n".join(parts),
