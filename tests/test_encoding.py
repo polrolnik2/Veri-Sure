@@ -332,3 +332,27 @@ def test_the_REVIEWER_is_told_what_the_operators_RETURN():
     from specflow.refmodel.oracle_gen import SYSTEM as AUTHOR
     for w in ("strong=True", "stable", "eventually"):
         assert AUTHOR.count(w) and SYSTEM.count(w), w
+
+
+def test_the_EVIDENCE_DRIVER_enriches_before_anything_reads_the_contract():
+    """The second call site, and the one that was missing.
+
+    `top_agent` has always enriched; `docs/evidence/downstream.py` never did, so
+    every run in the evidence series shipped a contract with no `cmd` table and
+    the oracle author guessed. Measured on n4-i2c: of 18 numeric `cmd` values
+    normalization wrote, 8 were right, 5 wrong and 3 illegal -- `cmd=3` matches
+    no arm of the design's `case`, so those windows can never open, which at
+    decide time is indistinguishable from "the design never did it". READ was
+    never once correct.
+
+    Source-level, like the `top_agent` guard above, because the alternative is
+    running the whole driver. What it pins is ORDER: enrichment has to happen
+    before `port` is built, or the stages read the un-enriched object.
+    """
+    src = (Path(__file__).resolve().parents[1]
+           / "docs" / "evidence" / "downstream.py").read_text()
+    assert "encoding.enrich_contract" in src
+    assert "encoding.find_defines" in src
+    # A runtime switch, not an environment variable.
+    assert "--defines-root" in src
+    assert src.index("enrich_contract") < src.index("port = resumable(")

@@ -43,6 +43,7 @@ SRC = Path("/home/user/runs/c1-i2c")
 
 
 def main() -> int:
+    from specflow import encoding
     from specflow.model_io import PortSettings, make_port, resumable
     from specflow.oracles_stage import run_oracle_stage
     from specflow.refmodel.compose import choose_base
@@ -128,6 +129,31 @@ def main() -> int:
     #: `assert self.sb.invoked`, which crashed on the very testpoints the
     #: coverage metric exists to count; that assert is gone, so a suite renders
     #: and runs with no checks and no bins.
+    #: WHERE `cmd`'s ENCODING COMES FROM. `enrich_contract` harvests the
+    #: symbol table out of a design's shared defines header and attaches it to
+    #: the port, so the author writes I2C_CMD_READ and the harness resolves the
+    #: number. `top_agent` has always called it; this driver never did, so every
+    #: run in the evidence series shipped a contract with no table and the
+    #: author guessed -- measured on n4-i2c: of 18 numeric `cmd` values, 8 right,
+    #: 5 wrong, 3 illegal (`cmd=3` matches no arm of the design's case), and READ
+    #: never once correct.
+    #:
+    #: DEFAULTED, not merely switchable. This gap existed for the whole evidence
+    #: series precisely because nothing happened unless somebody remembered to
+    #: make it happen; a flag defaulting to None would reproduce that exactly.
+    #: `SRC` already pins this driver to the c1-i2c run, so the repo's own i2c
+    #: benchmark is the design it is talking about, and pointing at it is a
+    #: statement of fact rather than a guess. A runtime switch (never an
+    #: environment variable) overrides it for any other design, and `--defines-
+    #: root ""` opts out -- enrichment is inert without a header, and an absent
+    #: table is now SAID rather than silently assumed.
+    ap.add_argument("--defines-root",
+                    default=str(Path(__file__).resolve().parents[2]
+                                / "benchmarks/chipverilog/Des/i2c"),
+                    help="directory searched for the design's shared defines "
+                         "header; pass an empty string to opt out, and the "
+                         "contract then carries no encoding table so the "
+                         "oracle author must guess every symbol")
     ap.add_argument("--skip", default="s3",
                     help="comma list: s2,s3,stimulus,oracles")
     a = ap.parse_args()
@@ -147,6 +173,24 @@ def main() -> int:
     contract_json = (SRC / "contract.json").read_text()
     contract = json.loads(contract_json)
     spec = (SRC / "prompt.txt").read_text()
+
+    # Attach the symbol table BEFORE anything reads the contract, so the
+    # normalizer, the oracle author and the reviewer all see one encoding.
+    # Enrichment is inert without a header, and never fails a run.
+    defines = (encoding.find_defines(Path(a.defines_root))
+               if a.defines_root else [])
+    try:
+        notes = encoding.enrich_contract(contract, spec=spec, defines=defines)
+    except Exception as exc:  # noqa: BLE001
+        notes = []
+        print(f"contract encoding enrichment skipped: {exc}", flush=True)
+    if notes:
+        contract_json = json.dumps(contract, indent=2) + "\n"
+        print(f"contract encodings: {'; '.join(notes)}", flush=True)
+    else:
+        print("contract carries NO encoding table -- every symbolic value the "
+              "spec names will be a guess. Pass --defines-root to fix.",
+              flush=True)
 
     norm_path = sf / "normalized.json"
     if not norm_path.is_file():
