@@ -333,3 +333,40 @@ def test_the_edge_budget_still_stops_a_replay():
                  edge_budget=30)
     assert len(rep.rows) == 30
     assert any("stopped after 30 edges" in n for n in rep.notes)
+
+
+def test_well_formed_SMOKE_RUNS_the_body_so_a_bad_call_cannot_be_frozen():
+    """A wrong keyword compiles perfectly and raises only when the check RUNS.
+
+    Every other screen in `well_formed` is static -- the source parses, `decide`
+    exists with arity 1, a declared port is named -- and a call like
+    `after(..., aborts_on=...)` passes all of them. Measured on h2-i2c: 25 of 96
+    frozen oracles raised on every trace, 22 with exactly that keyword, and all
+    25 passed this function. Because `decide` returns ok=False for a broken
+    oracle, they were indistinguishable from convictions of the design.
+    """
+    bad = RequirementOracle(
+        req_uid="REQ-0001", tp_uids=["TP-0000"], clause="q settles",
+        source="def decide(trace):\n"
+               "    return sorted(trace, nosuchkeyword=True) and (True, 0, 'q')\n")
+    why = well_formed(bad, CONTRACT, PLAN)
+    assert why, "an oracle that raises on any trace must not be well-formed"
+    assert "nosuchkeyword" in why, why
+
+
+def test_the_smoke_run_does_NOT_reject_an_oracle_that_merely_abstains():
+    """Abstaining on a blank trace is CORRECT, and must not read as broken.
+
+    The smoke rows are every declared port at zero, so a real activation almost
+    never occurs in them. An oracle returning ok=None there has behaved exactly
+    as `decide`'s contract asks, and rejecting it would discard the honest ones
+    while keeping the vacuous checks that answer True regardless.
+    """
+    shy = RequirementOracle(
+        req_uid="REQ-0002", tp_uids=["TP-0000"], clause="ack pulses",
+        source="def decide(trace):\n"
+               "    for row in trace:\n"
+               "        if row['outputs']['ack'] == 1:\n"
+               "            return (True, row['edge'], 'ack pulsed')\n"
+               "    return (None, None, 'ack never pulsed in this trace')\n")
+    assert well_formed(shy, CONTRACT, PLAN) is None

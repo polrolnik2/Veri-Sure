@@ -526,6 +526,25 @@ def ports_read(oracle: RequirementOracle, contract: dict) -> set[str]:
     return {name for name in declared if name in seen}
 
 
+def _smoke_rows(contract: dict, rows: int = 2) -> list[dict]:
+    """A minimal trace shaped like the real one, for `well_formed`'s smoke run.
+
+    Every declared port at zero. It is not meant to exercise anything -- an
+    oracle that abstains on it is behaving correctly -- only to execute the
+    body once so a call that cannot possibly work is caught before freezing.
+    """
+    ins, outs = {}, {}
+    for port in contract.get("io") or []:
+        name = str(port.get("name") or "")
+        if not name:
+            continue
+        (ins if str(port.get("dir")) == "input" else outs)[name] = 0
+    if not ins and not outs:
+        return []
+    return [{"edge": i, "index": i, "held": 1,
+             "inputs": dict(ins), "outputs": dict(outs)} for i in range(rows)]
+
+
 def well_formed(
     oracle: RequirementOracle, contract: dict, testplan: list[dict]
 ) -> str | None:
@@ -561,6 +580,35 @@ def well_formed(
         # An oracle naming no declared port cannot be about observable
         # behaviour, and the mutation gate could never scope a mutant to it.
         return "names no declared port, so it decides nothing observable"
+
+    # SMOKE-RUN IT. Everything above is STATIC -- the source parses, `decide`
+    # exists with the right arity, a declared port is named -- and none of that
+    # runs a single line of the body. A call in the body with a wrong keyword
+    # compiles perfectly and raises only when the check is used.
+    #
+    # That is not hypothetical. Measured on h2-i2c: 25 of 96 frozen oracles
+    # raised on every trace, 22 of them with the same
+    # `after() got an unexpected keyword argument 'aborts_on'` (the parameter is
+    # `aborts`; `aborts_on` is the JSON field's name). All 25 passed this
+    # function. And because `decide` returns ok=False for a broken oracle, they
+    # were indistinguishable from convictions -- 26 of a reported 31% "convicts
+    # golden" rate was checks that never executed, and a debug agent would have
+    # been sent to repair correct RTL for every one.
+    #
+    # Two rows of declared ports at zero is enough to catch that class, costs
+    # microseconds, and needs NO stimulus -- which matters, because the leg that
+    # would otherwise catch it (`gate_one`'s decide against the witness) is
+    # skipped whenever `replayable` is False, and a run whose stimulus map is
+    # empty therefore freezes broken oracles silently.
+    #
+    # A raise is reported ONLY as a defect of the oracle. `decide` already
+    # separates that from a verdict: a smoke trace that legitimately activates
+    # nothing returns ok=None, which is not a finding here.
+    smoke = _smoke_rows(contract)
+    if smoke:
+        probe = decide(oracle, smoke)
+        if probe.broken:
+            return str(probe.broken)
     return None
 
 
