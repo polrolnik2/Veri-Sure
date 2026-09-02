@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from specflow.run import run_suite
+from specflow.tb import runtime
 from specflow.tb.render import render_suite
 
 REPO = Path(__file__).resolve().parents[1]
@@ -573,3 +574,135 @@ def test_a_trace_says_what_stimulus_it_is_a_recording_OF(tmp_path):
                        .read_text(encoding="utf-8"))
     assert trace["stimulus_digest"] == stimulus_digest(steps)
     assert trace["stimulus_digest"] != stimulus_digest(steps[:1])
+
+
+@needs_verilator
+def test_an_open_drain_line_the_TESTBENCH_WIRES_reads_back_what_the_DUT_DRIVES(
+        tmp_path):
+    """The DUT must be able to observe the bus it is driving.
+
+    WITHOUT THE WIRE the stimulus drives `bus_i` and the design drives
+    `bus_oen` and nothing connects them. Measured on golden i2c across 322
+    testpoints: the DUT pulled SCL low at 30,595 edges and `scl_i` read 0 at
+    2,637 of them -- 8.6%, every one a coincidence of the stimulus. It drove a
+    START itself 1,378 times and a START reached the pins it samples 121 times.
+
+    One of that run's fifteen convictions of the GOLDEN RTL asserted the
+    missing wire outright -- "scl_oen=0 but scl_i=1, expected 0" -- and no
+    repair round could have fixed it, because the check is right and the
+    testbench was incomplete. Wiring the bus flips exactly that one, and makes
+    a multi-master requirement decidable that had abstained; it does NOT lower
+    the conviction count, which went 15 -> 16 as two more checks became
+    decidable and turned out to be over-strict. See `bus_lines_from`.
+
+    Two halves, and the second is the one that bites. Driving the pin is not
+    enough: `_bundle` builds a recorded row from the STIMULUS dict, so a wired
+    line was driven correctly into the design -- its behaviour changed -- while
+    the trace still reported the value the stimulus asked for. That is worse
+    than the missing wire: an unwired testbench fails to exercise the bus, a
+    miswired recording ASSERTS something false about it.
+    """
+    src = FIXTURES / "activelow_io"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    # NAMED EXPLICITLY, not derived. This fixture calls its enable `oen`
+    # rather than `bus_oen`, so the `_i`/`_oen` convention finds nothing here
+    # -- correctly, and `bus_lines_from` is unit-tested on its own. Deriving it
+    # here would have wired NOTHING and let both of these tests pass vacuously.
+    lines = [{"input": "bus_i", "oen": "oen"}]
+
+    testplan, bins, checks = _plan(contract)
+    steps = [{"inputs": {"req_n": 1, "bus_i": 1}, "hold": 4},
+             {"inputs": {"req_n": 0, "bus_i": 1}, "hold": 8},
+             {"inputs": {"req_n": 1, "bus_i": 1}, "hold": 4}]
+
+    def rows(bus):
+        out = tmp_path / ("wired" if bus else "open")
+        render_suite(testplan=testplan, bins=bins, checks=checks,
+                     contract=contract, out_dir=out / "suite",
+                     stimulus_by_tp={"TP-0000": steps},
+                     bus_lines=lines if bus else None)
+        outcome = run_suite(rtl_path=src / "dut.sv",
+                            hdl_toplevel=contract["module_name"],
+                            suite_dir=out / "suite",
+                            refmodel_path=src / "ref_model.py",
+                            coverage=False, trace=False)
+        assert outcome.build_ok, outcome.build_log
+        return json.loads((out / "suite" / "results" / "TP-0000.trace.json")
+                          .read_text(encoding="utf-8"))["edges"]
+
+    def pulled_low_and_seen(edges):
+        low = [e for e in edges if e["dut"].get("oen") == 0]
+        return len(low), sum(1 for e in low if e["inputs"].get("bus_i") == 0)
+
+    n_open, seen_open = pulled_low_and_seen(rows(False))
+    n_wired, seen_wired = pulled_low_and_seen(rows(True))
+
+    assert n_open and n_wired, "the design never pulled the line low at all"
+    # The stimulus holds bus_i high throughout, so unwired it can NEVER read 0.
+    assert seen_open == 0, (
+        f"unwired, the line read low at {seen_open} of {n_open} edges -- this "
+        f"test cannot tell the two apart")
+    assert seen_wired == n_wired, (
+        f"wired, the line read low at only {seen_wired} of {n_wired} edges the "
+        f"DUT was pulling it low")
+
+
+@needs_verilator
+def test_the_wire_does_NOT_stop_an_external_device_holding_the_line(tmp_path):
+    """Open-drain is a wired-AND, not a takeover.
+
+    The stimulus half of the AND is how clock stretching and arbitration are
+    expressed -- an external device holding the line low while the DUT has
+    released it -- and if the wire overwrote the stimulus instead of ANDing
+    with it, those would become untestable. A driver that clobbered
+    `self._inputs` would pass the previous test and fail this one.
+    """
+    src = FIXTURES / "activelow_io"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite,
+                 stimulus_by_tp={"TP-0000": [
+                     {"inputs": {"req_n": 1, "bus_i": 0}, "hold": 6}]},
+                 bus_lines=[{"input": "bus_i", "oen": "oen"}])
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    edges = json.loads((suite / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))["edges"]
+    held = [e for e in edges if e["step"] == 0 and e["dut"].get("oen") == 1]
+    assert held, "the DUT never released the line, so this proves nothing"
+    assert all(e["inputs"].get("bus_i") == 0 for e in held), (
+        "the wire overwrote an external device holding the line low; clock "
+        "stretching and arbitration would be untestable")
+
+
+def test_the_bus_pairing_is_a_CONVENTION_that_is_returned_and_never_applied():
+    """`bus_lines_from` pairs `<base>_i` with `<base>_oen` and hands the result
+    back for a caller to pass explicitly.
+
+    The contract states the relationship in PROSE -- "external open-drain SCL
+    line input", "active-low SCL open-drain output enable: 0 pulls low, 1
+    releases" -- with no structured field joining them. Rather than parse that,
+    this pairs on the suffix. A design where the convention does not hold then
+    gets a testbench that is merely UNWIRED, which is the existing behaviour,
+    instead of one silently miswired.
+    """
+    c = {"io": [
+        {"name": "scl_i", "dir": "input"}, {"name": "scl_oen", "dir": "output"},
+        {"name": "sda_i", "dir": "input"}, {"name": "sda_oen", "dir": "output"},
+        {"name": "ena", "dir": "input"}, {"name": "busy", "dir": "output"},
+    ]}
+    assert runtime.bus_lines_from(c) == [
+        {"input": "scl_i", "oen": "scl_oen"},
+        {"input": "sda_i", "oen": "sda_oen"}]
+    # An `_i` with no matching enable is not a bus line.
+    assert runtime.bus_lines_from(
+        {"io": [{"name": "data_i", "dir": "input"}]}) == []
+    # Nor is one whose "enable" is really an input.
+    assert runtime.bus_lines_from(
+        {"io": [{"name": "x_i", "dir": "input"},
+                {"name": "x_oen", "dir": "input"}]}) == []

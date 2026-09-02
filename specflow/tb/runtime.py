@@ -185,6 +185,60 @@ def is_reset_step(step: object) -> bool:
     return isinstance(step, dict) and bool(step.get("reset"))
 
 
+def bus_lines_from(contract: dict) -> list[dict]:
+    """Open-drain lines a testbench should WIRE, paired `<base>_i` <-> `<base>_oen`.
+
+    WHY THE WIRE HAS TO EXIST. Without it the stimulus drives `scl_i` and the
+    DUT drives `scl_oen` and NOTHING CONNECTS THEM, so the design cannot observe
+    the bus it is driving. Measured on golden i2c across 322 testpoints: the DUT
+    pulled SCL low at 30,595 edges and `scl_i` read 0 at 2,637 of them (8.6%,
+    every one a coincidence of the stimulus); it drove a START itself 1,378
+    times and a START reached the pins it samples 121 times.
+
+    MEASURED AFTERWARDS, AND SMALLER THAN IT LOOKED. Wiring the bus and
+    re-scoring the same 96 oracles against the same stimulus moved FOUR
+    verdicts, and the conviction count went 15 -> 16, not down:
+
+      REQ-0035  CONVICT -> pass     asserted the missing wire outright,
+                                    "scl_oen=0 but scl_i=1, expected 0"
+      REQ-0043  abstain -> pass     multi-master SCL fall, undecidable before
+      REQ-0015  pass    -> CONVICT  newly decidable, and over-strict
+      REQ-0052  abstain -> CONVICT  newly decidable, and over-strict
+
+    So exactly ONE conviction was the missing wire. Five others reading
+    `scl_i`/`sda_i` -- the START and `busy` detection group -- still convict,
+    and their cause is elsewhere. An earlier attribution of six to this is
+    withdrawn; it generalised from the ports a check reads to the reason it
+    fails, which the experiment refuted.
+
+    THE WIRE IS STILL RIGHT, on the evidence rather than the count. It removes
+    a check that could only ever have passed by accident, and it makes
+    requirements about multi-master behaviour decidable at all. What it does
+    not do is lower the conviction rate: it converts abstentions into verdicts,
+    and some of those verdicts are convictions.
+
+    THE PAIRING IS A NAMING CONVENTION AND IS RETURNED, NEVER APPLIED. The
+    contract says `scl_i` is an "external open-drain SCL line input" and
+    `scl_oen` is an "active-low SCL open-drain output enable: 0 pulls low, 1
+    releases" -- in PROSE, with no structured field joining them. Rather than
+    parse that prose, this pairs on the `_i`/`_oen` suffix and hands the result
+    back for a caller to pass explicitly. A design where that convention is
+    wrong then gets a testbench that is merely unwired, which is today's
+    behaviour, instead of one silently miswired.
+    """
+    io = contract.get("io") or []
+    ins = {str(p.get("name")) for p in io if p.get("dir") == "input"}
+    outs = {str(p.get("name")) for p in io if p.get("dir") == "output"}
+    pairs = []
+    for name in sorted(ins):
+        if not name.endswith("_i"):
+            continue
+        oen = name[:-2] + "_oen"
+        if oen in outs:
+            pairs.append({"input": name, "oen": oen})
+    return pairs
+
+
 def stimulus_digest(steps: object) -> str:
     """A fingerprint of the stimulus a testpoint was driven with.
 
@@ -374,6 +428,21 @@ class Env:
         #: The steps this Env was actually asked to drive, in order, so
         #: `finish` can fingerprint them -- see `stimulus_digest`.
         self._driven: list[dict] = []
+        #: Open-drain lines to wire, `[{"input", "oen"}]`. EMPTY BY DEFAULT:
+        #: an unwired testbench is what every existing suite was recorded
+        #: against, and turning the wire on silently would change what every
+        #: one of those recordings means. See `bus_lines_from`.
+        self.bus_lines: list[dict] = []
+        #: What the STIMULUS last asked a wired input to be. The line is the
+        #: wired-AND of that and the DUT's enable, so the stimulus value has to
+        #: survive being overridden by the design pulling low.
+        self._bus_stim: dict[str, int] = {}
+        #: What `_apply_bus` last DROVE onto each wired line. Recorded from
+        #: here rather than re-read off the handle, because a cocotb assignment
+        #: needs a delta to become visible and `_record` runs in the same one:
+        #: re-reading reported the line one edge stale, which showed the design
+        #: pulling low while the trace still said the line was released.
+        self._bus_now: dict[str, int] = {}
         #: Declared ports the DUT does not expose. A verdict, not a crash.
         self.missing_ports: list[str] = []
         #: Stimulus values a port could not hold. Also a verdict, not a crash.
@@ -450,6 +519,7 @@ class Env:
         results_dir: Path | str | None = None,
         trace_internals: list[str] | None = None,
         compare: str = "",
+        bus_lines: list[dict] | None = None,
     ) -> "Env":
         results = Path(results_dir) if results_dir is not None else Path(
             os.environ.get("SPECFLOW_RESULTS", "results"))
@@ -458,6 +528,7 @@ class Env:
             env.trace_internals = [n for n in trace_internals if n]
         if compare:
             env.compare_mode = compare
+        env.bus_lines = [dict(b) for b in (bus_lines or [])]
 
         clk = env._clk()
         if clk is not None:
@@ -548,12 +619,14 @@ class Env:
             await self.tick(1)
             self._expected = self._advance_model({})
             await self._settled()
+            self._apply_bus()
             self._record()
         for name, _ in handles:
             self._drive(name, inactive_value(name))
         await self.tick(1)
         self._expected = self._advance_model({})
         await self._settled()
+        self._apply_bus()
         self._record()
 
     # -- driving -----------------------------------------------------------
@@ -587,6 +660,13 @@ class Env:
             await self.reset(cycles=hold, only=reset_ports(stim))
             return
         self._inputs = inputs
+        # THE STIMULUS HALF of the wired-AND, kept so `_apply_bus` can restore
+        # the line when the design releases it. Without this the first edge on
+        # which the DUT pulls low would overwrite the stimulus value for good,
+        # and an external device holding the line -- clock stretching,
+        # arbitration -- would become unexpressible.
+        for name in ({b["input"] for b in self.bus_lines} & set(inputs)):
+            self._bus_stim[name] = inputs[name]
         for name, value in inputs.items():
             port = getattr(self.dut, name, None)
             if port is None:
@@ -667,6 +747,7 @@ class Env:
             if stim is not None:
                 self._expected = self._advance_model(stim)
             await self._settled()
+            self._apply_bus()
             self._record()
 
         if until:
@@ -773,6 +854,26 @@ class Env:
         and fall back to the pinned inactive value when the handle is absent.
         """
         bundle = dict(stim)
+        # A WIRED LINE IS NOT STIMULUS-DETERMINED, so it is read from the pin
+        # even though the stimulus named it. The stimulus says what the external
+        # world drives; the line is the wired-AND of that and the DUT's enable,
+        # and only the pin knows the result. Recording the stimulus value here
+        # would hand every oracle -- and the reference model, which is bundled
+        # the same way -- a trace saying the line was high at edges where the
+        # design was holding it low. That is a worse failure than the missing
+        # wire it would be papering over: an unwired testbench merely fails to
+        # exercise the bus, a miswired recording ASSERTS something false about
+        # it.
+        for line in self.bus_lines:
+            name = str(line.get("input"))
+            if name in self._bus_now:
+                bundle[name] = self._bus_now[name]
+                continue
+            handle = getattr(self.dut, name, None)
+            if handle is not None:
+                sampled = _plain(handle.value)
+                if isinstance(sampled, int):
+                    bundle[name] = sampled
         for name in self.input_ports:
             if name in bundle:
                 continue
@@ -788,6 +889,37 @@ class Env:
         return bundle
 
     # -- verdict -----------------------------------------------------------
+
+    def _apply_bus(self) -> None:
+        """Wire each open-drain line: the DUT pulling low overrides the stimulus.
+
+        RE-EVALUATED EVERY EDGE, not once per step, because the enable moves
+        within a step -- a START is `sda_oen` going 1 -> 0 while SCL is
+        released, and a per-step wire would miss it entirely.
+
+        Open-drain is a wired-AND: the line is high only if nobody pulls it
+        low. `*_oen` is active-low here (0 pulls, 1 releases), so the line is
+        `stimulus AND oen`. An external master or slave holding the line low is
+        still expressible -- the stimulus half of the AND is what says so, and
+        it still wins -- which is what keeps arbitration and clock stretching
+        testable rather than being overwritten by the DUT.
+
+        Applied after `_settled` and before `_record`, so the recorded row shows
+        the line as it will be at the NEXT rising edge -- the value the design
+        actually samples.
+        """
+        for line in self.bus_lines:
+            name, oen = str(line.get("input")), str(line.get("oen"))
+            handle = getattr(self.dut, name, None)
+            if handle is None:
+                continue
+            driven = self.sample(oen)
+            if not isinstance(driven, int):
+                continue
+            want = self._bus_stim.get(name, self.idle.get(name, 1))
+            value = want if driven else 0
+            self._bus_now[name] = value
+            self._drive(name, value)
 
     def _record(self) -> None:
         """Append this edge to the trace: both sides' outputs, and its stimulus.
