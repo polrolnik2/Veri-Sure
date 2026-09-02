@@ -1264,59 +1264,6 @@ def declines_discrimination(shows: str) -> bool:
 #: loose version of this predicate matched "is NOT directly observable at
 #: declared output ports", which is the honest answer, so a negation anywhere in
 #: the preceding clause disqualifies the match.
-#: THE COPULA FORMS ARE NEGATION-PROOF BY CONSTRUCTION, so they carry no
-#: lookback. "is not visible" cannot match, because `not` is not one of the
-#: adverbs the optional slot admits; "should not be visible" cannot match,
-#: because the alternation requires `should be` adjacent. Anything these
-#: patterns match is therefore an ASSERTION that the effect is seen.
-_CONCEDES_COPULA = re.compile(
-    r"\b(?:should\s+be|would\s+be|will\s+be|is|are|becomes?|remains?)\s+"
-    r"(?:(?:indirectly|directly|only|still|clearly|ultimately|readily)\s+){0,2}"
-    r"(?:visible|observable|observed|detectable|apparent)\s+"
-    r"(?:through|via|wherever|by\s+observing|as\s+)",
-    re.I)
-
-#: THE VERB FORMS CAN BE NEGATED IN PLACE -- "never manifests through", "does
-#: not show up in" -- so these do need a guard. It must be IMMEDIATE: the
-#: negation has to be modifying this verb, not sitting somewhere earlier in the
-#: sentence.
-_CONCEDES_VERB = re.compile(
-    r"\bmanifests?\s+(?:through|via|as|in)\b"
-    r"|\bshows?\s+up\s+(?:in|through|as)\b"
-    r"|\bsurfaces?\s+(?:through|via|in)\b"
-    r"|\breflected\s+(?:in|through|by)\b",
-    re.I)
-
-#: Immediate negation only -- the word right before the verb, optionally with
-#: one auxiliary between ("does not show up", "never manifests"). A wider
-#: window is what this guard used to have and it was WRONG in the direction
-#: that matters: a reason saying "commands do not advance, which should be
-#: visible wherever command completion is" is a CONCESSION, and the `not`
-#: belongs to `advance`. Measured on the live indirect pass: REQ-0015 escaped
-#: the gate on exactly that sentence while REQ-0019, saying the same thing
-#: without a nearby `not`, was caught. And the cost is now structural rather
-#: than incidental, because the pass deliberately teaches that AN ABSENCE IS AN
-#: OBSERVATION -- so correct reasons increasingly say "cmd_ack not pulsing",
-#: and a wide window would disarm the gate on precisely the answers it exists
-#: to catch.
-_IMMEDIATE_NEGATION = re.compile(
-    r"\b(?:not|never|cannot|can't|neither|nor)\s+(?:\w+\s+){0,1}$", re.I)
-
-
-def concedes_a_route(reason: str) -> str:
-    """The span of `reason` that says where the effect IS seen, or "".
-
-    Returns the conceding phrase itself so the gate can quote it back: an
-    author reads its own words faster than it reads a rule.
-    """
-    text = reason or ""
-    hits = [m for m in _CONCEDES_COPULA.finditer(text)]
-    hits += [m for m in _CONCEDES_VERB.finditer(text)
-             if not _IMMEDIATE_NEGATION.search(text[max(0, m.start() - 24):m.start()])]
-    if not hits:
-        return ""
-    m = min(hits, key=lambda h: h.start())
-    return text[m.start():m.end() + 90].strip()
 
 
 #: THE DISCRIMINATION GATE IS GONE, DELIBERATELY.
@@ -1348,11 +1295,31 @@ def concedes_a_route(reason: str) -> str:
 #: requirement whose routes all decline is classified, not gated. That is
 #: reporting, which is the right use of a lexical screen.
 def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
-    """Two cases, decided by whether the second SLOT is filled.
+    """Two cases, decided by whether the second SLOT is filled. Nothing else.
 
-    No inference from wording. `declines_discrimination` survives as the
-    author's explicit opt-out -- a sentinel it writes deliberately, which is a
-    different act from a gate guessing at its prose.
+    NO LEXICAL TEST DECIDES ANYTHING HERE, and that is the whole design. This
+    file used to carry three of them and every one cost something measurable:
+
+      `concedes_a_route`   refused an indirect answer whose prose asserted the
+                           effect was visible somewhere. Two false negatives in
+                           one session -- a 40-character negation window that
+                           any nearby "not" disarmed, and reading the answer's
+                           own `unobservable_reason` when the prompt tells the
+                           model to leave that field alone.
+      `declines_discrimination` short-circuited THIS check whenever the phrase
+                           "no discrimination" appeared in EITHER field, so
+                           writing the opt-out into `shows` skipped the check
+                           while writing the real second case into `shows` was
+                           refused. The lenient path and the strict path were
+                           the wrong way round.
+      a second-case sniffer that tried to recognise a contrast misplaced in
+                           `shows`, so the message could quote it back.
+
+    All three are gone. The schema says where each thing belongs and the gate
+    asks only whether the boxes are filled. `NO_DISCRIMINATION` survives as a
+    VALUE an author may write into `otherwise` -- it passes because the slot is
+    non-empty, not because anything matched it -- and `oracles_stage` still
+    reads it to assign a disposition, which is reporting rather than gating.
     """
     if not (shows or "").strip():
         return Issue(
@@ -1360,29 +1327,7 @@ def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
             "`shows` is empty: say what the port does when the requirement "
             "HOLDS. Without it the check author has a port and no reason to "
             "watch it.")
-    if declines_discrimination(shows) or declines_discrimination(otherwise):
-        return None
     if not (otherwise or "").strip():
-        # QUOTE THE SECOND CASE BACK WHEN IT IS ALREADY THERE, in `shows`.
-        #
-        # Measured on h2-i2c: three requirements were DISCARDED after spending
-        # r0..r3 on this objection, and all three had written the contrast --
-        # into `shows`. REQ-0026: "busy=1 when a START condition has just been
-        # detected; busy=0 when no START condition was detected". REQ-0101:
-        # "...; otherwise scl_oen remains 0 or does not release" -- the word
-        # `otherwise` inside the wrong field. They were not failing to
-        # understand the rule; they were failing to find the box. Restating the
-        # rule at them four times could not fix that, and cost the run `busy`
-        # semantics, the START sequence and the READ SCL window.
-        carried = _second_case_in_shows(shows)
-        if carried:
-            return Issue(
-                "error", path,
-                f"`otherwise` is empty, but `shows` already contains the second "
-                f"case: {carried!r}. THIS IS A FIELD PLACEMENT PROBLEM, not a "
-                f"missing answer -- move that clause out of `shows` and into "
-                f"`otherwise`, leaving `shows` describing only what the port "
-                f"does when the requirement HOLDS. Change nothing else.")
         return Issue(
             "error", path,
             "`otherwise` is empty: say what the port does when the requirement "
@@ -1394,23 +1339,6 @@ def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
             f"finding rather than turned into a check.")
     return None
 
-
-#: The shapes the three discarded requirements actually used, in their own
-#: words. Deliberately narrow: this exists to RECOGNISE a contrast the author
-#: has already written, not to guess at one. A miss costs the old message; a
-#: false positive would tell an author to move a clause that is not there.
-_SECOND_CASE = re.compile(
-    r"(?:;|,|\.)\s*(otherwise\b.*"
-    r"|a\s+(?:failing|non-compliant|violating)\s+design\s+would\b.*"
-    r"|(?:and\s+)?\w+\s*=\s*\S+\s+when\s+no\b.*"
-    r"|(?:and\s+)?\w+\s+remains?\b[^;]*\bwhen\s+no\b.*)",
-    re.I | re.S)
-
-
-def _second_case_in_shows(shows: str) -> str:
-    """The clause in `shows` that is really the `otherwise` case, or ""."""
-    m = _SECOND_CASE.search(shows or "")
-    return m.group(1).strip()[:200] if m else ""
 
 
 def when_issue(path: str, when: str) -> Issue | None:
@@ -1483,8 +1411,7 @@ def reach_shows_issue(path: str, shows: str) -> Issue | None:
 
 
 def gate_indirect(out: NormalizeOutput, *, uid: str,
-                  contract: dict, known: set[str],
-                  prior_reason: str = "") -> list[Issue]:
+                  contract: dict, known: set[str]) -> list[Issue]:
     """A route has to be usable, or it is worse than no route at all.
 
     The one rejection that matters is `shows` naming a single case. A check
@@ -1500,36 +1427,6 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
                       "no answer returned; give empty lists if there is no route")]
     norm = out.normalized[0]
 
-    # THE CONCESSION, and THIS is the pass where it is a failure rather than a
-    # deferral. The first pass may honestly answer "unobservable, though it
-    # should show through the command timing" -- that hands the question here.
-    # This pass was asked directly, with the sibling requirements in hand, so
-    # naming where the effect shows and still returning no route is declining to
-    # answer the only question it was asked.
-    if not norm.observable and not norm.observed_via:
-        # THE REASON IS INHERITED WHEN THE ANSWER LEAVES IT BLANK, and it
-        # usually does: the prompt says to "leave `unobservable_reason` as it
-        # stands", so a model that declines correctly writes nothing here.
-        # Reading only the answer's own field made this gate blind on exactly
-        # the requirements that followed that instruction -- measured live, 4
-        # of 10 empty indirect answers carried an empty reason while the direct
-        # pass had recorded a real one.
-        conceded = concedes_a_route(
-            norm.unobservable_reason.strip() or prior_reason)
-        if conceded:
-            issues.append(Issue(
-                "error", f"normalize.{uid}.unobservable_reason",
-                f"this pass exists to find the route, and your own reason says "
-                f"where the effect is seen: {conceded!r} -- yet `observed_via` "
-                f"is empty. Write it: the declared output port it reaches, the "
-                f"`through_req` it travels through, `when` it shows there, "
-                f"`shows` for how that port looks when the requirement holds "
-                f"and `otherwise` for how it looks when it does not -- two "
-                f"SEPARATE fields. An absence counts: a port that does not "
-                f"move where it otherwise would is an observation. If you now "
-                f"judge no "
-                f"boundary effect exists at all, say that plainly instead; do "
-                f"not describe an effect you are declining to name"))
 
     for i, route in enumerate(norm.observed_via):
         path = f"normalize.{uid}.observed_via[{i}]"
@@ -2151,8 +2048,7 @@ def resolve_indirect(
                 ask=asks[shape.req_uid]),
             parse=parse_response,
             gate=lambda out: gate_indirect(
-                out, uid=shape.req_uid, contract=contract, known=known,
-                prior_reason=shape.unobservable_reason),
+                out, uid=shape.req_uid, contract=contract, known=known),
             max_repairs=max_repairs,
         )
 

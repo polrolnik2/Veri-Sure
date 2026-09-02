@@ -712,67 +712,49 @@ def test_a_driven_activation_hop_needs_inputs_not_a_route():
 
 
 
-# ------------ the concession is a deferral in pass one, a failure in pass two
+# ------------ NO LEXICAL TEST DECIDES ANYTHING IN THIS GATE
 
 
 CONCEDING = ("not visible on any output port directly; the effect is that the "
              "FSM timing counter is paused, which should be visible through "
              "the absence of state transitions (cmd_ack not pulsing)")
+HONEST = ("slave_wait is an internal signal whose assertion cannot be directly "
+          "observed at declared output ports")
 
 
-def test_conceding_a_route_and_giving_none_is_REFUSED_by_the_indirect_pass():
-    """This pass exists to find the route, so naming where the effect shows and
-    returning none is declining to answer the only question it was asked.
+def test_the_indirect_gate_READS_NO_PROSE_when_the_answer_is_empty():
+    """A conceding reason and an honest one are treated IDENTICALLY.
 
-    The direct pass accepts the same sentence, and must: `unobservable` is the
-    ticket into `blind`, and the first pass sees one requirement in isolation
-    while this one has the sibling pool. Measured on h2-i2c: of 18 direct-pass
-    answers that conceded a route, this pass recovered 15 (83%) with a real
-    port AND route. Gating it in pass one produced a worse route from the pass
-    with less information and dropped the requirement from `blind` entirely.
+    `concedes_a_route` used to refuse the first and accept the second by
+    matching the wording of `unobservable_reason`. It is gone, and this test is
+    what replaces it: the gate asks whether the SCHEMA SLOTS are filled and
+    reads nothing else.
+
+    Why it was removed rather than repaired. It produced two measured false
+    negatives in a single session -- a 40-character negation window that any
+    nearby "not" disarmed, which is structurally wrong here because the pass
+    deliberately teaches that an ABSENCE is an observation, so correct reasons
+    increasingly contain "not"; and reading the answer's own
+    `unobservable_reason` when the prompt tells the model to leave that field
+    alone, which blinded it on every answer that complied. Each repair made the
+    predicate more intricate and neither made it correct.
     """
-    out = _out(req_uid="REQ-0031", observed_via=[])
-    out.normalized[0].observable = []
-    out.normalized[0].unobservable_reason = CONCEDING
-    issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
-                           known={"REQ-0007", "REQ-0031"})
-    bad = [i for i in issues if "unobservable_reason" in i.path]
-    assert bad, f"a conceded route must be refused HERE; got {issues}"
-    assert "should be visible through" in bad[0].message
-    assert "observed_via" in bad[0].message
-
-
-def test_an_HONEST_no_boundary_effect_still_passes_the_indirect_pass():
-    """The pin that stops the gate eating the answer it exists to protect.
-
-    "cannot be directly observed at declared output ports" is the right reply
-    for a port declaration, and it contains the word `observed` -- a predicate
-    keying on vocabulary alone would reject every honest answer and force a
-    port the author knows is wrong, which is the failure the stage exists to
-    prevent.
-    """
-    for reason in (
-        "slave_wait is an internal signal whose assertion cannot be directly "
-        "observed at declared output ports",
-        "this is scaffolding text containing only a list marker with no "
-        "functional content to observe at any interface port",
-    ):
+    for reason in (CONCEDING, HONEST, ""):
         out = _out(req_uid="REQ-0031", observed_via=[])
         out.normalized[0].observable = []
         out.normalized[0].unobservable_reason = reason
         issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
-                               known={"REQ-0031"})
-        bad = [i for i in issues if "unobservable_reason" in i.path]
-        assert not bad, f"honest answer refused: {reason[:50]!r} -> {bad}"
+                               known={"REQ-0007", "REQ-0031"})
+        assert [i for i in issues if "unobservable_reason" in i.path] == [], (
+            f"the gate inspected the reason text: {reason[:60]!r}")
 
 
-def test_a_route_GIVEN_silences_the_concession_check():
-    """The check asks for a route. Once there is one, the reason beside it is
-    not a contradiction worth a second error."""
+def test_a_route_is_still_gated_STRUCTURALLY_in_the_indirect_pass():
+    """Removing the prose checks does not remove the schema checks."""
     out = _out(req_uid="REQ-0031", observed_via=[Route(
         port="busy", through_req="REQ-0007", when="after a glitch",
-        shows=DISCRIMINATING, otherwise="busy stays low")])
-    out.normalized[0].unobservable_reason = CONCEDING
+        shows=DISCRIMINATING, otherwise="")])
     issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
                            known={"REQ-0007", "REQ-0031"})
-    assert [i for i in issues if "unobservable_reason" in i.path] == []
+    assert [i for i in issues if "observed_via[0]" in i.path], (
+        "an empty `otherwise` slot must still be refused")
