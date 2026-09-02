@@ -866,9 +866,9 @@ and transcribing them again will fail the same way.
     window from the sentence.
 
 Name the condition you changed in `reasoning` and quote the words that license
-it. Change nothing that was not objected to: the default is there so that
-neighbouring requirements get comparable windows, and a window rewritten on
-suspicion loses that for nothing.
+it. Change nothing that was not objected to: neighbouring requirements get
+comparable windows only when each one's end is derived from its own sentence,
+and a window rewritten on suspicion loses that for nothing.
 </window_authority>"""
 
 
