@@ -587,11 +587,13 @@ def test_an_open_drain_line_the_TESTBENCH_WIRES_reads_back_what_the_DUT_DRIVES(
     2,637 of them -- 8.6%, every one a coincidence of the stimulus. It drove a
     START itself 1,378 times and a START reached the pins it samples 121 times.
 
-    An I2C specification is mostly about that bus, so a correct design fails
-    every requirement written about it: six of one run's fifteen convictions of
-    the GOLDEN RTL were this, one of them asserting the missing wire outright
-    ("scl_oen=0 but scl_i=1, expected 0"). No repair round can fix those checks
-    -- the check is right and the testbench is incomplete.
+    One of that run's fifteen convictions of the GOLDEN RTL asserted the
+    missing wire outright -- "scl_oen=0 but scl_i=1, expected 0" -- and no
+    repair round could have fixed it, because the check is right and the
+    testbench was incomplete. Wiring the bus flips exactly that one, and makes
+    a multi-master requirement decidable that had abstained; it does NOT lower
+    the conviction count, which went 15 -> 16 as two more checks became
+    decidable and turned out to be over-strict. See `bus_lines_from`.
 
     Two halves, and the second is the one that bites. Driving the pin is not
     enough: `_bundle` builds a recorded row from the STIMULUS dict, so a wired

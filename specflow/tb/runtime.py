@@ -195,11 +195,27 @@ def bus_lines_from(contract: dict) -> list[dict]:
     every one a coincidence of the stimulus); it drove a START itself 1,378
     times and a START reached the pins it samples 121 times.
 
-    An I2C specification is mostly about that bus, so a correct design fails
-    every requirement written about it. Six of one run's fifteen convictions of
-    the GOLDEN RTL are this, including one that asserts the missing wire
-    outright -- "scl_oen=0 but scl_i=1". No repair round can fix those checks,
-    because the check is right and the testbench is incomplete.
+    MEASURED AFTERWARDS, AND SMALLER THAN IT LOOKED. Wiring the bus and
+    re-scoring the same 96 oracles against the same stimulus moved FOUR
+    verdicts, and the conviction count went 15 -> 16, not down:
+
+      REQ-0035  CONVICT -> pass     asserted the missing wire outright,
+                                    "scl_oen=0 but scl_i=1, expected 0"
+      REQ-0043  abstain -> pass     multi-master SCL fall, undecidable before
+      REQ-0015  pass    -> CONVICT  newly decidable, and over-strict
+      REQ-0052  abstain -> CONVICT  newly decidable, and over-strict
+
+    So exactly ONE conviction was the missing wire. Five others reading
+    `scl_i`/`sda_i` -- the START and `busy` detection group -- still convict,
+    and their cause is elsewhere. An earlier attribution of six to this is
+    withdrawn; it generalised from the ports a check reads to the reason it
+    fails, which the experiment refuted.
+
+    THE WIRE IS STILL RIGHT, on the evidence rather than the count. It removes
+    a check that could only ever have passed by accident, and it makes
+    requirements about multi-master behaviour decidable at all. What it does
+    not do is lower the conviction rate: it converts abstentions into verdicts,
+    and some of those verdicts are convictions.
 
     THE PAIRING IS A NAMING CONVENTION AND IS RETURNED, NEVER APPLIED. The
     contract says `scl_i` is an "external open-drain SCL line input" and
