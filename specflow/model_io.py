@@ -232,9 +232,38 @@ def load_env_file(path: Path | None = None) -> dict[str, str]:
     Deliberately not a dotenv dependency: two rules (`#` comments, one
     `KEY=value` per line) are the whole format, and a credential loader is not
     somewhere to add a package.
+
+    THE DEFAULT IS SEARCHED IN TWO PLACES, AND A MISS IS SAID OUT LOUD.
+    `.env.local` was resolved against the CURRENT WORKING DIRECTORY alone, and
+    the file lives at the repo root -- so a driver launched from anywhere else
+    silently got `{}` and ran on whatever the container environment happened to
+    carry. Measured cost: an h3 relaunch from the run directory fell back to a
+    base URL missing its `/v1`, and every call 404'd about forty seconds later
+    with an error naming the model rather than the missing file. The repo root
+    is where the file is by design (it is gitignored there), so it is the
+    fallback; cwd is still tried first, so a deliberate per-directory file
+    keeps winning. An explicit `path` is never second-guessed.
     """
+    searched: list[Path] = []
     if path is None:
-        path = Path(os.environ.get("SPECFLOW_ENV_FILE") or ".env.local")
+        named = os.environ.get("SPECFLOW_ENV_FILE")
+        if named:
+            searched = [Path(named)]
+        else:
+            searched = [Path(".env.local"),
+                        Path(__file__).resolve().parent.parent / ".env.local"]
+        for candidate in searched:
+            if candidate.exists():
+                path = candidate
+                break
+        else:
+            logger.warning(
+                "no credentials file found; looked in %s. Model calls will use "
+                "the process environment, which is a container snapshot -- a "
+                "wrong or missing OPENAI_BASE_URL surfaces later as a 404 that "
+                "names the MODEL, not this file.",
+                ", ".join(str(c) for c in searched))
+            return {}
     path = Path(path)
     if not path.exists():
         return {}
