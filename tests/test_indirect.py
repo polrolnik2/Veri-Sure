@@ -710,3 +710,4 @@ def test_a_driven_activation_hop_needs_inputs_not_a_route():
 
     empty = issues_for(Reach(through_req=""))
     assert any("DIRECT case" in i.message for i in empty), [i.message for i in empty]
+

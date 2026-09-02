@@ -1175,6 +1175,59 @@ def declines_discrimination(shows: str) -> bool:
     return NO_DISCRIMINATION in (shows or "").strip().lower()
 
 
+#: THE CONCESSION. An author that writes `unobservable_reason` while SAYING in
+#: the same sentence where the effect can be seen has not judged the requirement
+#: unobservable -- it has declined to write the route. Measured on h2-i2c's
+#: Haiku normalization: 18 of 41 unobservable requirements (44%) concede a route
+#: in their own reason. "...which should be visible through the timing of
+#: command completion (cmd_ack)"; "...manifests through delayed FSM advancement
+#: visible only through extended command timing".
+#:
+#: WHY THIS IS NOT A MODEL-STRENGTH PROBLEM, which is what it looks like. A
+#: model that did not KNOW the route would not name the port and the mechanism.
+#: These name both. What makes `unobservable_reason` attractive is that it is
+#: CHEAP: `observed_via`'s `shows` demands a two-case discrimination -- how the
+#: port looks when the requirement holds and when it does not -- and one free
+#: sentence buys an exit from that. The prompt has warned against this since it
+#: was written; the warning was not enough, and a gate is.
+#:
+#: THE FIX IS NOT A WEAKER `shows`. A route that cannot tell holds from
+#: does-not-hold is not a route, and dropping the demand would launder exactly
+#: the checks vacuity catches three stages later. The fix is to close the cheap
+#: exit and hand the author back its own sentence.
+#:
+#: TIGHT ON PURPOSE. A concession has two parts -- an assertion that the effect
+#: IS seen, and a preposition saying WHERE -- and neither alone is one. The
+#: loose version of this predicate matched "is NOT directly observable at
+#: declared output ports", which is the honest answer, so a negation anywhere in
+#: the preceding clause disqualifies the match.
+_CONCEDES_ROUTE = re.compile(
+    r"\b(?:should\s+be|would\s+be|will\s+be|is|are|becomes?|remains?)\s+"
+    r"(?:(?:indirectly|directly|only|still|clearly|ultimately|readily)\s+){0,2}"
+    r"(?:visible|observable|observed|detectable|apparent)\s+"
+    r"(?:through|via|wherever|by\s+observing|as\s+)"
+    r"|\bmanifests?\s+(?:through|via|as|in)\b"
+    r"|\bshows?\s+up\s+(?:in|through|as)\b"
+    r"|\bsurfaces?\s+(?:through|via|in)\b"
+    r"|\breflected\s+(?:in|through|by)\b",
+    re.I)
+_NEGATION = re.compile(r"\b(?:not|never|cannot|can't|no|nothing|neither)\b", re.I)
+
+
+def concedes_a_route(reason: str) -> str:
+    """The span of `reason` that says where the effect IS seen, or "".
+
+    Returns the conceding phrase itself so the gate can quote it back: an
+    author reads its own words faster than it reads a rule.
+    """
+    text = reason or ""
+    for m in _CONCEDES_ROUTE.finditer(text):
+        if _NEGATION.search(text[max(0, m.start() - 40):m.start()]):
+            continue
+        return text[m.start():m.end() + 90].strip()
+    return ""
+
+
 def shows_issue(path: str, shows: str) -> Issue | None:
     """The rule both passes apply to a route's `shows`."""
     if declines_discrimination(shows) or discriminates(shows):
@@ -1525,6 +1578,24 @@ def gate_one(
             "error", f"normalize.{uid}.unobservable_reason",
             f"names {sorted(norm.observable)} as observable AND gives an "
             f"unobservable_reason; these contradict"))
+
+    # The SAME contradiction, one sentence in rather than one field apart: an
+    # empty `observable` whose reason says where the effect can be seen. See
+    # `concedes_a_route` for the measurement and why the cheap exit, not the
+    # model, is what needs closing.
+    conceded = ("" if norm.observable
+                else concedes_a_route(norm.unobservable_reason))
+    if conceded:
+        issues.append(Issue(
+            "error", f"normalize.{uid}.unobservable_reason",
+            f"gives no observable port, but the reason itself says where the "
+            f"effect is seen: {conceded!r}. That is a ROUTE, and it belongs in "
+            f"`observed_via` -- name the declared output port it reaches, the "
+            f"`through_req` it travels through if any, `when` it shows there, "
+            f"and `shows` how that port looks when the requirement holds AND "
+            f"when it does not. `unobservable_reason` is for a requirement with "
+            f"no boundary effect at all -- a port declaration, a list marker, "
+            f"architectural prose -- not for one whose effect is indirect"))
 
     # THE ROUTE IS THE BASE CASE, so the first pass gates it too. Until now the
     # discrimination rule lived only in `gate_indirect`, which runs over the

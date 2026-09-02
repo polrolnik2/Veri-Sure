@@ -806,3 +806,76 @@ def test_the_prompt_teaches_sustains_now_that_the_schema_has_it():
                      "A CONDITION, NEVER A COUNT",
                      "LEAVE IT EMPTY unless the specification supplies"):
         assert fragment in SYSTEM, fragment
+
+
+# ------------------------------------- the cheap exit out of writing a route
+
+
+CONCEDING = ("not visible on any output port directly; the effect is that the "
+             "FSM timing counter is paused, which should be visible through "
+             "the absence of state transitions (cmd_ack not pulsing)")
+
+
+def test_an_UNOBSERVABLE_reason_that_says_WHERE_the_effect_shows_is_refused():
+    """The concession, measured on h2-i2c: 18 of 41 unobservable requirements
+    (44%) name the port and the mechanism inside the very sentence that
+    declines to give a route.
+
+    This is not the model failing to know the answer -- it writes the answer
+    down. `observed_via`'s `shows` demands a two-case discrimination, and one
+    free sentence in `unobservable_reason` buys an exit from that. The prompt
+    has warned against exactly this since it was written, and the warning was
+    not enough.
+    """
+    issues = gate_one(REQ, _out(observable=[], unobservable_reason=CONCEDING),
+                      CONTRACT)
+    bad = [i for i in issues
+           if i.severity == "error" and "unobservable_reason" in i.path]
+    assert bad, f"a conceded route must be refused; got {issues}"
+    # It quotes the author's own sentence back -- an author reads its own words
+    # faster than it reads a rule -- and names the field the route belongs in.
+    assert "should be visible through" in bad[0].message
+    assert "observed_via" in bad[0].message
+
+
+def test_an_HONEST_unobservable_reason_is_NOT_refused():
+    """The pin that keeps the gate from eating the answer it exists to protect.
+
+    "cannot be directly observed at declared output ports" is the correct reply
+    for a port declaration or a list marker, and it contains the word
+    `observed` -- so a predicate keying on vocabulary alone would reject every
+    honest answer, forcing the model to name a port it knows is wrong. That is
+    the failure this whole stage exists to prevent, so a negation anywhere in
+    the preceding clause disqualifies the match.
+    """
+    for reason in (
+        "slave_wait is an internal signal whose assertion cannot be directly "
+        "observed at declared output ports",
+        "the synchronization pipeline itself is not directly observable at "
+        "declared output ports",
+        "this is scaffolding text containing only a list marker with no "
+        "functional content to observe at any interface port",
+        "the requirement specifies input port declarations which are "
+        "compile-time structural properties of the interface",
+        "This requirement lists module capabilities at an architectural level "
+        "without specifying particular observable behaviors",
+    ):
+        issues = gate_one(REQ, _out(observable=[], unobservable_reason=reason),
+                          CONTRACT)
+        bad = [i for i in issues
+               if i.severity == "error" and "unobservable_reason" in i.path]
+        assert not bad, f"honest answer refused: {reason[:60]!r} -> {bad}"
+
+
+def test_a_NAMED_port_gets_ONE_error_for_the_contradiction_not_two():
+    """`observable` non-empty already contradicts any reason at all, and the
+    older check owns that case. Firing both would hand the author two errors
+    for one mistake and invite it to fix the wrong half -- delete the route it
+    correctly gave, rather than delete the reason."""
+    issues = gate_one(
+        REQ, _out(observable=["cmd_ack"], unobservable_reason=CONCEDING),
+        CONTRACT)
+    bad = [i for i in issues
+           if i.severity == "error" and "unobservable_reason" in i.path]
+    assert len(bad) == 1, f"expected one contradiction error, got {bad}"
+    assert "these contradict" in bad[0].message
