@@ -15,6 +15,7 @@ from specflow.testcase_agent import (
     build_suite_prompt,
     build_suite_prompt_one,
     run_suite_stimulus_fanout,
+    suite_shared_prefix,
 )
 
 CONTRACT = {
@@ -143,3 +144,53 @@ def test_only_the_covered_requirements_spec_is_carried():
     prompt = build_suite_prompt_one(element, CONTRACT, 24, requirements=reqs)
     assert "MINE" in prompt
     assert "THEIRS" not in prompt
+
+
+# -- the port's ENCODING reaches the author ----------------------------------
+
+
+def _with_encoding() -> dict:
+    c = json.loads(json.dumps(CONTRACT))
+    for p in c["io"]:
+        if p["name"] == "cmd":
+            p["encoding"] = {"I2C_CMD_NOP": 0, "I2C_CMD_START": 1,
+                             "I2C_CMD_STOP": 2, "I2C_CMD_WRITE": 4,
+                             "I2C_CMD_READ": 8}
+            p["encoding_source"] = {"file": "i2c_master_defines.v",
+                                    "sha256": "0" * 64}
+    return c
+
+
+def test_the_stimulus_author_is_shown_the_ENCODING_not_just_the_width():
+    """Told "issue a READ command" on a 4-bit port, an author shown only a width
+    has to guess which of sixteen values that is.
+
+    Measured on the suite that produced: across 322 testpoints and ~1539 steps,
+    `cmd` was driven READ FIVE TIMES, and 129 steps drove 3, 5, 10 or 15 --
+    values that are not commands. Eight of that run's 28 genuine abstentions
+    are checks about READ and WRITE whose activation the stimulus never
+    reached, while the contract on disk said `I2C_CMD_READ: 8` all along.
+    """
+    for prompt in (build_suite_prompt(testplan=PLAN, contract=_with_encoding(),
+                                      max_steps=8),
+                   build_suite_prompt_one(element=PLAN[0],
+                                          contract=_with_encoding(),
+                                          max_steps=8),
+                   suite_shared_prefix(_with_encoding(), 8)):
+        assert "I2C_CMD_READ" in prompt, "the encoding never reached the author"
+        assert '"width": 4' in prompt, "the width must still be there"
+
+
+def test_only_the_ENCODING_travels_not_the_provenance():
+    """`encoding_source` is a sha256 for a human auditing where a value came
+    from. Spending prompt on it buys the author nothing and costs every
+    testpoint that shares the prefix."""
+    prompt = suite_shared_prefix(_with_encoding(), 8)
+    assert "encoding_source" not in prompt and "sha256" not in prompt
+
+
+def test_a_port_with_no_encoding_is_UNCHANGED():
+    """The overwhelming majority of ports have no symbolic values, and an empty
+    `encoding` key on each of them is noise in a cached prefix."""
+    prompt = suite_shared_prefix(CONTRACT, 8)
+    assert "encoding" not in prompt

@@ -53,6 +53,39 @@ SUITE_STAGE = "stimulus"
 STIMULUS_MAX_STEPS = 24
 
 
+def drivable_ports(contract: dict) -> list[dict]:
+    """The drivable ports AS THE AUTHOR SEES THEM -- with their encodings.
+
+    THE ENCODING USED TO BE DROPPED HERE, and it cost the suite its coverage.
+    All three prompt paths described a port as `{"name", "width"}` and nothing
+    else, so an author told to "issue a READ command" on a 4-bit `cmd` had to
+    guess which of sixteen values that is -- while the contract sat on disk
+    saying `I2C_CMD_READ: 8`, harvested by `encoding.enrich_contract` from the
+    design's own defines file and carrying the sha256 of the file it came from.
+
+    Measured on the suite that produced: across 322 testpoints and ~1539 steps,
+    `cmd` was driven READ FIVE TIMES, and 129 steps drove 3, 5, 10 or 15 --
+    values that are not commands at all. Eight of that run's 28 genuine
+    abstentions are checks about READ and WRITE whose activation the stimulus
+    therefore never reached. The checks were fine; the scenario never happened.
+
+    Only `encoding` travels, not the whole port record. `encoding_source` is
+    provenance for a human, and `notes` is prose the testplan already carries.
+    """
+    encodings = {
+        str(p.get("name")): p.get("encoding")
+        for p in (contract.get("io") or [])
+        if isinstance(p.get("encoding"), dict) and p.get("encoding")
+    }
+    out = []
+    for name, width in _drivable(contract).items():
+        port: dict = {"name": name, "width": width}
+        if name in encodings:
+            port["encoding"] = encodings[name]
+        out.append(port)
+    return out
+
+
 def _drivable(contract: dict) -> dict[str, int]:
     """Input ports a testcase may drive: the functional ones.
 
@@ -121,9 +154,7 @@ def build_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     parts = [
         SYSTEM,
         f"<bin uid=\"{bin_uid}\" category=\"{gap_category}\">\n{condition}\n</bin>",
@@ -358,9 +389,7 @@ def build_suite_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
 ) -> str:
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     elements = [
         {
             "uid": tp.get("uid"),
@@ -707,9 +736,7 @@ def suite_shared_prefix(contract: dict, max_steps: int) -> str:
     Both lists sit in the shared prefix, so they cost one cache write rather
     than one copy per testpoint.
     """
-    inputs = [
-        {"name": name, "width": width} for name, width in _drivable(contract).items()
-    ]
+    inputs = drivable_ports(contract)
     outputs = [
         {"name": p.get("name"), "width": p.get("width", 1)}
         for p in (contract.get("io") or [])
