@@ -2121,9 +2121,11 @@ def stage_unexercised(
         # be abandoned at all.
         shape = normalized.get(uid) or {}
         act = shape.get("activation") or {}
-        ob = Obligation(uid, str(act.get("text") or ""),
-                        dict(act.get("inputs") or {}),
-                        tuple(shape.get("observable") or ()))
+        # `.of`, never the bare constructor -- it resolves symbols through the
+        # port's encoding and normalises a value-set to a tuple.
+        ob = Obligation.of(uid, str(act.get("text") or ""),
+                           act.get("inputs") or {},
+                           shape.get("observable") or (), contract)
         route_ports = set(shape.get("observable") or ())
         tries: list[dict] = []
         evidence: dict | None = None

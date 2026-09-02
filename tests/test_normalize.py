@@ -879,3 +879,49 @@ def test_a_NAMED_port_gets_ONE_error_for_the_contradiction_not_two():
            if i.severity == "error" and "unobservable_reason" in i.path]
     assert len(bad) == 1, f"expected one contradiction error, got {bad}"
     assert "these contradict" in bad[0].message
+
+
+# ------------------------------------------ a value-set: ANY of these opens it
+
+
+def test_a_VALUE_SET_in_inputs_passes_the_gate():
+    """`inputs` maps port -> value, which makes it a CONJUNCTION, and until now
+    that was the only shape it had. A requirement triggered by ANY OF several
+    values -- "a START, STOP, READ or WRITE command is accepted" -- had nowhere
+    to say so.
+
+    Measured on h2-i2c: of 22 observable requirements whose activation carried
+    no trigger at all, 8 had a disjunctive one, written into `text` where no
+    gate and no oracle can reach it.
+    """
+    out = _out(observable=["cmd_ack"])
+    # Numeric here because this fixture's contract declares no encoding
+    # table; the symbolic form is exercised in test_encoding.py against a real
+    # one. What is under test is the SHAPE, which is orthogonal to resolution.
+    out.normalized[0].activation.inputs = {"cmd": [1, 2, 4, 8], "ena": 1}
+    assert [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"] == []
+
+
+def test_a_value_set_is_rejected_WHOLE_when_one_alternative_is_bad():
+    """Dropping the bad member would narrow the window without saying so, and a
+    narrowed window is the silent failure this whole module exists to stop."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].activation.inputs = {"cmd": [1, "NOT_A_SYMBOL"]}
+    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
+    assert errs and "NOT_A_SYMBOL" in errs[0].message
+
+
+def test_an_EMPTY_value_set_is_refused():
+    """No value satisfies it, so the window can never open -- which at decide
+    time reads exactly like a design that never did it."""
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].activation.inputs = {"cmd": []}
+    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
+    assert errs and "empty value-set" in errs[0].message
+
+
+def test_every_alternative_gets_the_WIDTH_check_not_just_the_first():
+    out = _out(observable=["cmd_ack"])
+    out.normalized[0].activation.inputs = {"cmd": [0, 1, 999]}
+    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
+    assert errs and "999" in errs[0].message

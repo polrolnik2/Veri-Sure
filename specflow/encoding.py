@@ -229,6 +229,46 @@ def resolve(port: str, value, contract: dict) -> tuple[int | None, str]:
     return as_int, ""
 
 
+def resolve_any(port: str, value, contract: dict) -> tuple[tuple[int, ...] | None, str]:
+    """One value OR a value-set to the integers it admits.
+
+    A list means ANY OF THESE, so `{"cmd": ["I2C_CMD_START", "I2C_CMD_STOP"]}`
+    resolves to `(1, 2)` and the activation opens on either. A scalar resolves
+    to a 1-tuple, so every caller downstream handles one shape.
+
+    WHY THE SET EXISTS. `Activation.inputs` is a mapping port -> value, which
+    makes it a CONJUNCTION: every named port must hold together. `opens_on`,
+    `until` and `aborts_on` all took the list-of-alternatives shape long ago
+    for exactly this reason, and `inputs` was the last field that could not say
+    "any of". Measured on h2-i2c: of 22 observable requirements whose
+    activation carried no trigger at all, 8 had a DISJUNCTIVE one -- "a START,
+    STOP, READ, or WRITE command is accepted while the FSM is idle" -- which
+    the model wrote into `text`, where no gate and no oracle can reach it. A
+    trigger stated only in prose is a trigger the pipeline does not have.
+
+    Returns `(None, why)` if ANY alternative fails to resolve, because a set
+    with one bad member is a set whose membership test is wrong, and silently
+    dropping the bad one would widen or narrow the window without saying so.
+    """
+    if isinstance(value, (list, tuple, set)):
+        alts = list(value)
+        if not alts:
+            return None, (f"{port}=[] is an empty value-set, which no value can "
+                          f"satisfy. Give the values that open the window, or "
+                          f"drop the port")
+        out: list[int] = []
+        for v in alts:
+            as_int, why = resolve(port, v, contract)
+            if as_int is None:
+                return None, why
+            out.append(as_int)
+        # Order is not meaningful in a set, and a duplicate is not an error --
+        # it is the same alternative said twice.
+        return tuple(sorted(set(out))), ""
+    as_int, why = resolve(port, value, contract)
+    return (None, why) if as_int is None else ((as_int,), "")
+
+
 def symbol_for(port: str, value: int, contract: dict) -> str:
     """The symbol a value stands for, or "" -- for reporting, never for gating."""
     table, _ = encoding_for(contract, port)
@@ -238,7 +278,7 @@ def symbol_for(port: str, value: int, contract: dict) -> str:
     return ""
 
 
-def annotate(inputs: dict, contract: dict) -> dict[str, int]:
+def annotate(inputs: dict, contract: dict) -> dict[str, int | list[int]]:
     """`{port: value}` with every symbol resolved; unresolvable entries dropped.
 
     The DROP is deliberate and the gate is what reports it. This function is
@@ -246,11 +286,16 @@ def annotate(inputs: dict, contract: dict) -> dict[str, int]:
     could not resolve has no number to offer -- inventing one is the whole
     defect this module exists to remove.
     """
-    out: dict[str, int] = {}
+    out: dict[str, int | list[int]] = {}
     for port, value in (inputs or {}).items():
-        as_int, _ = resolve(port, value, contract)
-        if as_int is not None:
-            out[port] = as_int
+        vals, _ = resolve_any(port, value, contract)
+        if not vals:
+            continue
+        # A 1-tuple renders as the bare number it was written as. Wrapping every
+        # scalar in a list would change what every existing author sees for no
+        # gain, and the numeric form is what the author writes comparisons
+        # against.
+        out[port] = vals[0] if len(vals) == 1 else list(vals)
     return out
 
 

@@ -912,8 +912,13 @@ class DebugSession:
             act = (norm.get("activation") or {})
             if not act.get("inputs"):
                 continue
-            ob = Obligation(oracle.req_uid, act.get("text", ""),
-                            dict(act["inputs"]), tuple(norm.get("observable") or ()))
+            # `.of` and never the bare constructor: it resolves symbols and
+            # normalises a value-set to a tuple. Built raw, a symbolic `cmd`
+            # would be compared against the integers the stimulus drives and
+            # never match.
+            ob = Obligation.of(oracle.req_uid, act.get("text", ""),
+                               act["inputs"], norm.get("observable") or (),
+                               self.contract)
             check = check_static(ob, steps, reset_ports=self.reset_ports)
             if check is not None and check.status == FIRED:
                 if tp_uid not in oracle.tp_uids:

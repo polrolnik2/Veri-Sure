@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import encoding
 from .normalize import NormalizedRequirement
 from .tb.runtime import is_reset_step, normalise_step
 
@@ -49,15 +50,63 @@ class Obligation:
 
     req_uid: str
     text: str
-    #: input port -> required value. Empty means state-dependent.
-    inputs: dict[str, int] = field(default_factory=dict)
+    #: input port -> the values that OPEN the window, as a tuple. Empty means
+    #: state-dependent.
+    #:
+    #: ALWAYS A TUPLE, EVEN FOR ONE VALUE, so every consumer runs one code path.
+    #: `Activation.inputs` may write a scalar or a value-set (`{"cmd": ["START",
+    #: "STOP"]}` meaning either), and a check that special-cased the two shapes
+    #: would get the membership test right in one branch and wrong in the other.
+    #:
+    #: ALWAYS INTEGERS, resolved through the port's encoding. This used to hold
+    #: whatever the normalization wrote -- `dict(n.activation.inputs)`, symbols
+    #: included -- and `check_static` compared those against the integers the
+    #: stimulus drives. A symbol never equals an int, so every symbolic
+    #: activation reported NOT_FIRED with a message naming a value the stimulus
+    #: does drive. Latent while normalizations wrote numbers; h2-i2c writes
+    #: symbols for 28 of 28 `cmd` activations, which would have made the whole
+    #: static leg answer "the stimulus never drives cmd=I2C_CMD_START".
+    #: `Obligation.of` is the only correct way to build one.
+    inputs: dict[str, tuple[int, ...]] = field(default_factory=dict)
     #: The ports the requirement is about, used for the refutation leg.
     observable: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """One shape, guaranteed by the type rather than by discipline.
+
+        A scalar becomes a 1-tuple here, so `check_static` never has to branch
+        on scalar-vs-set -- a branch that would get the membership test right in
+        one arm and wrong in the other. `Obligation.of` still owns SYMBOL
+        resolution, which needs a contract this has no access to.
+        """
+        fixed = {
+            port: tuple(v) if isinstance(v, (list, tuple, set)) else (v,)
+            for port, v in (self.inputs or {}).items()
+        }
+        object.__setattr__(self, "inputs", fixed)
 
     @property
     def decidable(self) -> bool:
         """Whether this can be CONFIRMED, as opposed to only refuted."""
         return bool(self.inputs)
+
+    @classmethod
+    def of(cls, req_uid: str, text: str, raw_inputs: dict, observable,
+           contract: dict) -> "Obligation":
+        """Build one from a raw `activation.inputs`, resolving as it goes.
+
+        Symbols become numbers and a scalar becomes a 1-tuple, so `inputs`
+        arrives in the one shape every consumer expects. An entry that cannot
+        resolve is DROPPED rather than guessed at -- `gate_one` already refused
+        it with a sentence, and inventing a number here would let a rejected
+        normalization quietly acquire a working static check.
+        """
+        got: dict[str, tuple[int, ...]] = {}
+        for port, value in (raw_inputs or {}).items():
+            vals, _why = encoding.resolve_any(port, value, contract)
+            if vals:
+                got[port] = vals
+        return cls(req_uid, text, got, tuple(observable or ()))
 
 
 @dataclass(frozen=True)
@@ -68,7 +117,8 @@ class Check:
     detail: str = ""
 
 
-def obligations(normalized: list[NormalizedRequirement]) -> list[Obligation]:
+def obligations(normalized: list[NormalizedRequirement], *,
+                contract: dict) -> list[Obligation]:
     """One per requirement that has a boundary observable.
 
     An UNOBSERVABLE requirement gets none. There is nothing to stage: no
@@ -76,12 +126,8 @@ def obligations(normalized: list[NormalizedRequirement]) -> list[Obligation]:
     stimulus staged it would report a stimulus defect for a specification one.
     """
     return [
-        Obligation(
-            req_uid=n.req_uid,
-            text=n.activation.text,
-            inputs=dict(n.activation.inputs or {}),
-            observable=tuple(n.observable),
-        )
+        Obligation.of(n.req_uid, n.activation.text,
+                      n.activation.inputs or {}, n.observable, contract)
         for n in normalized
         if n.req_uid and not n.unobservable
     ]
@@ -164,14 +210,20 @@ def check_static(
     active = reset_ports if isinstance(reset_ports, dict) else {}
     missing: list[str] = []
     for name, want in ob.inputs.items():
+        # ANY of `want` opens the window, so the test is membership, not
+        # equality: "a START, STOP, READ or WRITE command" is staged by a
+        # stimulus that drives any one of them, and demanding all four would
+        # report NOT_FIRED on a step list that stages the requirement perfectly.
+        shown = "|".join(str(v) for v in want)
         if name in reset_ports:
-            wants_asserted = want == active.get(name, want)
+            asserted = active.get(name)
+            wants_asserted = asserted is None or asserted in want
             if wants_asserted and not _reset_asserted(steps):
-                missing.append(f"{name}={want} (no reset step)")
+                missing.append(f"{name}={shown} (no reset step)")
             continue
-        if want not in driven.get(name, set()):
+        if not (set(want) & driven.get(name, set())):
             seen = sorted(driven.get(name, set()))
-            missing.append(f"{name}={want} (driven: {seen or 'never'})")
+            missing.append(f"{name}={shown} (driven: {seen or 'never'})")
     if missing:
         return Check(ob.req_uid, "", NOT_FIRED,
                      f"the stimulus never drives {'; '.join(missing)}")

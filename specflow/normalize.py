@@ -188,7 +188,29 @@ class Activation(BaseModel):
     #: across the corpus, and seven requirements used a value the design decodes
     #: as nothing. `specflow.encoding` resolves the symbol against the ONE table
     #: on the contract, so the number stops being anybody's opinion.
-    inputs: dict[str, int | str] = Field(default_factory=dict)
+    #: A VALUE MAY ALSO BE A LIST, MEANING ANY OF THESE:
+    #: `{"cmd": ["I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_READ",
+    #:           "I2C_CMD_WRITE"], "ena": 1}` -- the window opens on any of the
+    #: four commands, and `ena` must be 1 in every case.
+    #:
+    #: WITHOUT IT THIS FIELD COULD ONLY SAY "AND". It is a mapping port ->
+    #: value, so every named port had to hold together, and a requirement
+    #: triggered by ANY OF several values had nowhere to say so. `opens_on`,
+    #: `until` and `aborts_on` all took the list-of-alternatives shape long ago
+    #: for exactly this reason; `inputs` was the last field that could not.
+    #:
+    #: Measured on h2-i2c: of 22 observable requirements whose activation
+    #: carried no trigger at all, 8 had a disjunctive one -- "a START, STOP,
+    #: READ, or WRITE command is accepted while the FSM is idle", "reset is
+    #: asserted via nReset low or rst high" -- which the model wrote into
+    #: `text`, where no gate and no oracle can reach it. It knew the trigger and
+    #: had nowhere to put it, so the activation read as unconditional.
+    #:
+    #: A DISJUNCTION ACROSS DIFFERENT PORTS is not this: "nReset low OR rst
+    #: high" names two ports, and a per-port value-set cannot express it. That
+    #: one belongs in `opens_on`, which is disjunctive normal form and already
+    #: general enough -- `[{"nReset": 0}, {"rst": 1}]`.
+    inputs: dict[str, int | str | list[int | str]] = Field(default_factory=dict)
     #: The rest of the opening condition, and this one MAY name outputs.
     #:
     #: A LIST OF ALTERNATIVES: any entry opening the window is enough, and every
@@ -845,6 +867,24 @@ inputs you would name are the ones saying nothing unusual is happening -- reset
 inactive, core enabled -- then this requirement is NOT driven by its inputs, and
 saying it is hides the fact that something must have happened first.
 
+WHEN ANY OF SEVERAL VALUES OPENS THE WINDOW, WRITE THEM ALL AS A LIST.
+`inputs` maps a port to the value that must hold, so naming two ports means
+BOTH -- but a port may take a LIST, and that means ANY OF THESE:
+
+  {"cmd": ["I2C_CMD_START", "I2C_CMD_STOP", "I2C_CMD_READ", "I2C_CMD_WRITE"],
+   "ena": 1}
+
+opens on any of the four commands, with `ena` 1 in every case. Requirements
+about "a supported command", "any command sequence", "a START or STOP
+condition" are exactly this shape. Do NOT leave `inputs` empty and put the
+alternatives in `text`: prose is not something a check can open a window on,
+and a requirement whose trigger lives only in `text` reads as unconditional.
+
+A DISJUNCTION ACROSS DIFFERENT PORTS is a different thing and does not go here.
+"nReset is low OR rst is high" names two ports, and no per-port list can say
+it. Put that in `opens_on`, which is a list of alternatives and may name any
+declared port: [{"nReset": 0}, {"rst": 1}].
+
 Reply with ONE JSON object and nothing else:
 
 {
@@ -853,7 +893,7 @@ Reply with ONE JSON object and nothing else:
     {
       "activation": {
         "text": "a START command is issued while the core is enabled",
-        "inputs": {"cmd": 1, "ena": 1},
+        "inputs": {"cmd": "I2C_CMD_START", "ena": 1},
         "opens_on": [],
         "until": [{"cmd_ack": 1}],
         "aborts_on": [{"al": 1}, {"nReset": 0}]
@@ -862,7 +902,7 @@ Reply with ONE JSON object and nothing else:
       "unobservable_reason": "",
       "expectation": "cmd_ack pulses high for exactly one clock and busy rises",
       "activated_via": [
-        {"through_req": "", "activation": {"text": "a START command is issued", "inputs": {"cmd": 1, "ena": 1}}}
+        {"through_req": "", "activation": {"text": "a START command is issued", "inputs": {"cmd": "I2C_CMD_START", "ena": 1}}}
       ],
       "unreachable_reason": ""
     }
@@ -1452,7 +1492,8 @@ _ACTIVATED_VIA_TASK = (
 _ACTIVATED_VIA_SHAPE = (
     "`activated_via` is a LIST of objects. Each entry:\n"
     '  {"through_req": <uid, or "" for the driven case>, '
-    '"activation": {"text": <what must hold>, "inputs": {<port>: <value>}}, '
+    '"activation": {"text": <what must hold>, "inputs": {<port>: <value>; '
+    'a LIST of values means ANY of them}}, '
     '"when": <when that hop delivers the state>, '
     '"shows": <how declared ports reveal the hop has fired>}\n'
     "Examples:\n"
@@ -1647,13 +1688,20 @@ def gate_one(
         # RESOLVE THROUGH THE PORT'S ENCODING, when it declares one. Absent a
         # table this is `int(value)` and the same width check as before, so
         # every design without a shared constants header behaves as it did.
-        as_int, why = encoding.resolve(name, value, contract)
-        if as_int is None:
+        #
+        # `resolve_any` takes a scalar OR a value-set and always hands back a
+        # tuple, so the width check below runs over every alternative and a set
+        # with one bad member is rejected whole -- dropping the bad one would
+        # narrow the window without saying so.
+        vals, why = encoding.resolve_any(name, value, contract)
+        if vals is None:
             issues.append(Issue("error", path, why))
             continue
-        if not (0 <= as_int < (1 << inputs[name])):
+        too_wide = [v for v in vals if not (0 <= v < (1 << inputs[name]))]
+        if too_wide:
             issues.append(Issue("error", path,
-                                f"{name}={as_int} does not fit {inputs[name]} bit(s)"))
+                                f"{name}={', '.join(str(v) for v in too_wide)} "
+                                f"does not fit {inputs[name]} bit(s)"))
             continue
         # NO NUDGE HERE FOR A NUMBER THAT HAPPENS TO BE RIGHT. `Severity` is
         # error|warning, and a warning on every correct numeric value would be
