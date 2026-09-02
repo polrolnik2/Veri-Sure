@@ -456,9 +456,17 @@ operator -- not a pass, not a failure -- because the attempt was cut short by
 something that makes the requirement's promise moot: reset, or an arbitration
 loss that returns the FSM to idle. `strong=True` over such a window would read
 "the response never came" when the response was never owed, and that is how a
-check convicts a correct design. Pass `aborts_on` whenever it is non-empty and
-`after` handles the rest -- no operator needs a guard of its own. Every
-construct below is built the same way:
+check convicts a correct design.
+
+THE FIELD IS `aborts_on`. THE KEYWORD IS `aborts`. They are different names for
+the two ends of the same wire: you READ `activation.aborts_on` from the
+normalized JSON and you PASS it as `after(..., aborts=...)`. Writing
+`aborts_on=` raises TypeError, and because a check that raises is scored as a
+FAILING DESIGN, it sends a debug agent to repair correct RTL. Measured on
+h2-i2c: 22 of 96 frozen oracles died exactly this way.
+
+Pass it whenever the field is non-empty and `after` handles the rest -- no
+operator needs a guard of its own. Every construct below is built the same way:
 
     from specflow.refmodel.temporal import (after, eventually, nth, runs,
                                             throughout, stable, pulse, worst)

@@ -345,20 +345,38 @@ def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
     a short timeout a defect: a check that cannot see must never report a
     verdict it has not earned.
     """
+    # A BROKEN ORACLE DECIDED NOTHING, so `ok` is None and not False.
+    #
+    # `broken` has always carried the reason and `failed()` has always excluded
+    # it, but `ok` itself said False -- and every consumer that reads `ok`
+    # directly, which is what a conviction rate does, therefore counted a check
+    # that could not run as a check that convicted the design. Measured on
+    # h2-i2c: 25 of 96 oracles raised on every trace and a conviction rate of
+    # 31% was 26 points of them. A debug agent reading that list is sent to
+    # repair correct RTL for a keyword typo.
+    #
+    # None is the honest answer and it is the one this module already gives for
+    # "the scenario never occurred": no evidence about the design either way.
+    # `unexercised()` still excludes these -- it requires `not broken` -- so a
+    # broken oracle is not laundered into a stimulus finding either. It ranks
+    # first in `_worst` exactly as before.
+    #
+    # The MODEL crashing keeps ok=False: that IS a defect of the artifact under
+    # test, and `model_broke` marks it.
     fn, err = _oracle_fn(oracle)
     if err:
-        return OracleResult(oracle.req_uid, ok=False, broken=err, rows=trace)
+        return OracleResult(oracle.req_uid, ok=None, broken=err, rows=trace)
     try:
         verdict = fn(trace)
     except Exception as exc:  # noqa: BLE001
         return OracleResult(
-            oracle.req_uid, ok=False, rows=trace,
+            oracle.req_uid, ok=None, rows=trace,
             broken=f"decide() raised: {exc!r}",
         )
     ok, edge, detail = _unpack(verdict)
     if ok is MALFORMED:
         return OracleResult(
-            oracle.req_uid, ok=False, rows=trace,
+            oracle.req_uid, ok=None, rows=trace,
             broken=f"decide() returned {verdict!r}, expected (ok, edge, detail)",
         )
     return OracleResult(oracle.req_uid, ok=ok, edge=edge, detail=detail, rows=trace)

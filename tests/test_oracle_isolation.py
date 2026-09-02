@@ -524,7 +524,15 @@ def test_the_author_is_told_that_an_abort_is_not_a_close():
     assert "disable iff" in body, "the SVA name is what an author reaches for"
     assert "aborts=voided" in body, "the call shape, not just the concept"
     assert "returns UNKNOWN from every" in body
-    assert "Pass `aborts_on` whenever it is non-empty" in body, "when to pass it"
+    assert "Pass it whenever the field is non-empty" in body, "when to pass it"
+    # FOURTH THING, added after it cost 22 of 96 oracles on h2-i2c. The field is
+    # `aborts_on` and the keyword is `aborts`, and the prompt used to name both
+    # without ever saying they differ -- so "Pass `aborts_on`" read as the kwarg.
+    # `after()` raises TypeError on it, and a raising check is scored as a
+    # FAILING DESIGN, so the typo arrived as a conviction of correct RTL.
+    assert "THE FIELD IS `aborts_on`. THE KEYWORD IS `aborts`." in body, (
+        "naming both without distinguishing them is what produced the typo"
+    )
 
 
 def test_the_repair_override_says_MOVE_a_reset_close_not_DROP_it():
