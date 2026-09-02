@@ -162,6 +162,7 @@ def render_testcase(
     #: instead of depending on what happens to be exported when it runs.
     trace_internals: list[str] | None = None,
     compare: str = "",
+    bus_lines: list[dict] | None = None,
 ) -> str:
     tp_uid = tp["uid"]
     lines = [
@@ -211,6 +212,11 @@ def render_testcase(
         lines.append(f"                          trace_internals={list(trace_internals)!r},")
     if compare:
         lines.append(f"                          compare={compare!r},")
+    # SAME RULE AS THE OTHERS: emitted only when supplied, so a caller that
+    # says nothing gets today's unwired testbench rather than a silent rewiring
+    # of what every recorded trace means.
+    if bus_lines:
+        lines.append(f"                          bus_lines={list(bus_lines)!r},")
     lines += [
         "                          idle=IDLE_INPUTS)",
         "    for stim in STIMULUS:",
@@ -297,6 +303,11 @@ def render_suite(
     #: runs. See `render_testcase`.
     trace_internals: list[str] | None = None,
     compare: str = "",
+    #: Open-drain lines to wire in the testbench, `[{"input", "oen"}]`.
+    #: `runtime.bus_lines_from(contract)` derives the conventional pairing;
+    #: passing it is DELIBERATELY the caller's decision, because an unwired
+    #: testbench is what every existing recording was made against.
+    bus_lines: list[dict] | None = None,
 ) -> Manifest:
     out_dir = Path(out_dir)
     tests_dir = out_dir / "tests"
@@ -327,6 +338,7 @@ def render_suite(
             idle=idle,
             trace_internals=trace_internals,
             compare=compare,
+            bus_lines=bus_lines,
         )
         name = module_name(uid)
         (tests_dir / f"{name}.py").write_text(source, encoding="utf-8")
