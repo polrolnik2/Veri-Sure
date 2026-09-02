@@ -47,6 +47,11 @@ def conforming_implementation(
     port: ModelPort,
     workdir: Path,
     max_repairs: int = 2,
+    #: See `compose.generate_model`. Threaded through so a caller with domain
+    #: knowledge of the design under test (a structured-encoding port
+    #: `contract` cannot state) can ground the witness the same way the
+    #: reference model can.
+    domain_notes: str = "",
 ) -> tuple[str, list[Issue]]:
     """Generate one implementation of the design. Returns `(source, issues)`.
 
@@ -85,5 +90,6 @@ def conforming_implementation(
         # artifact, and `model_io` keys records by stage name -- sharing one
         # would make each overwrite the other's prompt and response.
         stage=WITNESS_STAGE,
+        domain_notes=domain_notes,
     )
     return (source if result.ok else ""), list(result.issues)

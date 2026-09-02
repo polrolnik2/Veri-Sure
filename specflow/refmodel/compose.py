@@ -183,6 +183,15 @@ def generate_model(
     #: checks, receiving `(output, source, round_)`. The per-requirement judge
     #: is the only caller that supplies one; a witness supplies none.
     extra_gate: Callable[[RefModelOutput, str, int], list[Issue]] | None = None,
+    #: See `testcase_agent.suite_shared_prefix` for the twin of this. A wide
+    #: input port can pack a structured encoding `contract` cannot state, and
+    #: nothing here can derive one from `contract` alone. Measured on
+    #: or1200_ctrl's witness: with no opcode table, `_branch_decode` matched
+    #: RFE against opcodes 0x13/0x14 -- neither is RFE's real one (0x09) -- so
+    #: `rfe` stayed 0 for a correctly-encoded RFE instruction held 24 edges,
+    #: confirmed by replaying it. Empty and inert for every design that does
+    #: not supply one.
+    domain_notes: str = "",
 ) -> tuple[StageResult[RefModelOutput], str]:
     """Produce ONE implementation of these requirements. Returns it and its source.
 
@@ -212,6 +221,8 @@ def generate_model(
             f"(chosen from the contract, not negotiable). "
             f"Output ports that must all be written: {output_ports(contract)}.",
         ]
+        if domain_notes.strip():
+            parts.append("<domain_notes>\n" + domain_notes.rstrip() + "\n</domain_notes>")
         if issues:
             # The artifact first: the defect list refers to it, so a reader
             # (or a model) meets what is being repaired before what is wrong
