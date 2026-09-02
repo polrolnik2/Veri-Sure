@@ -411,3 +411,38 @@ def test_a_combinational_model_carrying_state_still_blocks(tmp_path):
                  tmp_path)
     assert not res.ok
     assert any("carries state" in i.message for i in res.issues)
+
+
+def test_domain_notes_reach_the_generator_and_the_witness(tmp_path):
+    """`generate_model` is shared by the reference model and the witness
+    (`conform.conforming_implementation`), so grounding it here grounds both.
+
+    Measured on or1200_ctrl's witness: with no opcode table, `_branch_decode`
+    matched RFE against opcodes 0x13/0x14 -- neither is RFE's real one (0x09)
+    -- so `rfe` stayed 0 for a correctly-encoded RFE instruction held 24
+    edges, confirmed by replaying it against the witness. Empty and invisible
+    in the prompt for every design that does not supply one.
+    """
+    from specflow.refmodel.compose import generate_model
+
+    class RecordingPort:
+        def __init__(self):
+            self.prompts: list[str] = []
+
+        def complete(self, *, stage, round_, prompt):
+            self.prompts.append(prompt)
+            return "not valid json, deliberately -- only the prompt is checked"
+
+    plain_port = RecordingPort()
+    generate_model(requirements=REQS, contract_json=CONTRACT,
+                   contract=CONTRACT_OBJ, base="evaluate", port=plain_port,
+                   workdir=tmp_path, max_repairs=0)
+    assert "domain_notes" not in plain_port.prompts[0]
+
+    noted_port = RecordingPort()
+    generate_model(requirements=REQS, contract_json=CONTRACT,
+                   contract=CONTRACT_OBJ, base="evaluate", port=noted_port,
+                   workdir=tmp_path, max_repairs=0,
+                   domain_notes="OR32_RFE opcode is 6'b001001 in if_insn[31:26].")
+    assert "domain_notes" in noted_port.prompts[0]
+    assert "OR32_RFE opcode is 6'b001001" in noted_port.prompts[0]

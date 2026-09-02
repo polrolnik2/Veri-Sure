@@ -721,7 +721,7 @@ def run_suite_stimulus(
     )
 
 
-def suite_shared_prefix(contract: dict, max_steps: int) -> str:
+def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "") -> str:
     """Everything identical across testpoints: the task, the limits, the ports.
 
     OUTPUTS are listed as well as inputs, because `until` waits on a declared
@@ -735,6 +735,23 @@ def suite_shared_prefix(contract: dict, max_steps: int) -> str:
 
     Both lists sit in the shared prefix, so they cost one cache write rather
     than one copy per testpoint.
+
+    `domain_notes`, optional and empty for every design that does not supply
+    one: a WIDE input port sometimes packs a structured encoding -- an
+    instruction word with its opcode in a fixed bit range, a command field
+    with named values -- that no `contract` port list captures, because the
+    contract states widths and directions, not bit-level semantics. Nothing
+    here can derive that from `contract` alone, and nothing gates it, so a
+    testpoint asking for a NAMED value with no way to construct it produces a
+    step that parses, passes `gate_suite`, and drives nothing resembling what
+    it claims. Measured on or1200_ctrl: 185 of 246 driven `if_insn` values
+    across the whole 31-testpoint suite left the opcode field (bits [31:26])
+    at zero -- `sig_syscall`/`sig_trap`/`rfe`/`no_more_dslot` never fired in a
+    replay against the witness for the testpoints asking for them by name,
+    confirmed by direct execution, not inferred from the JSON. Caller-supplied
+    because this module has no business reading a benchmark's vendored
+    defines file; whatever calls this with domain knowledge of the design
+    under test is where that belongs.
     """
     inputs = drivable_ports(contract)
     outputs = [
@@ -742,7 +759,7 @@ def suite_shared_prefix(contract: dict, max_steps: int) -> str:
         for p in (contract.get("io") or [])
         if p.get("dir") == "output" and p.get("name")
     ]
-    return shared_block(
+    sections = [
         ("system", SUITE_SYSTEM),
         ("limits", f"At most {max_steps} steps for this testpoint."),
         ("input_ports", json.dumps(inputs, indent=2)),
@@ -751,7 +768,10 @@ def suite_shared_prefix(contract: dict, max_steps: int) -> str:
          + "\n\nThese are the ONLY signals `until` may wait on. Anything else "
            "named in the testpoint prose is internal to the design and is not "
            "observable at the boundary."),
-    )
+    ]
+    if domain_notes.strip():
+        sections.append(("domain_notes", domain_notes))
+    return shared_block(*sections)
 
 
 def spec_quotes_for(element: dict, requirements: list[dict] | None) -> list[str]:
@@ -795,6 +815,7 @@ def build_suite_prompt_one(
     issues: list[Issue] | None = None,
     previous: str | None = None,
     requirements: list[dict] | None = None,
+    domain_notes: str = "",
 ) -> str:
     item = {
         "uid": element.get("uid"),
@@ -806,7 +827,7 @@ def build_suite_prompt_one(
     if quotes:
         item["specification_this_testpoint_covers"] = quotes
     return compose(
-        suite_shared_prefix(contract, max_steps),
+        suite_shared_prefix(contract, max_steps, domain_notes=domain_notes),
         json_block("testplan_element", item),
         issues=issues,
         previous=previous,
@@ -822,6 +843,9 @@ def run_suite_stimulus_fanout(
     max_repairs: int = 2,
     fanout: bool = True,
     requirements: list[dict] | None = None,
+    #: See `suite_shared_prefix`. Empty and inert for a design with no wide
+    #: structured-encoding input port.
+    domain_notes: str = "",
 ) -> tuple[SuiteStimulus, list[StageResult[SuiteStimulus]]]:
     """One call per testpoint, because testpoints do not constrain each other.
 
@@ -851,7 +875,7 @@ def run_suite_stimulus_fanout(
             port=port,
             build_prompt=lambda issues, previous: build_suite_prompt_one(
                 element, contract, max_steps, issues, previous,
-                requirements=requirements),
+                requirements=requirements, domain_notes=domain_notes),
             parse=parse_suite_response,
             gate=lambda spec: gate_suite(
                 spec, testplan=[element], contract=contract, max_steps=max_steps),

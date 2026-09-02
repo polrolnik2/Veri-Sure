@@ -94,10 +94,28 @@ def _score(label: str, rtl: Path, suite_src: Path, out: Path, *,
         return {"label": label, "passed": 0, "total": 0, "by_signal": {},
                 "build_failed": True}
 
+    return {"label": label, **_tally(run / "suite" / "results")}
+
+
+def _tally(results_dir: Path) -> dict:
+    """`{passed, total, by_signal, sole}` from a rendered suite's results.
+
+    `{tp}.trace.json` shares this directory and is a different artifact --
+    the recording the oracles decide over, with no `status` in it (see
+    `specflow/run.py:_read_results`, which guards the identical glob for the
+    identical reason). Once tracing became unconditional a bare `*.json` glob
+    gives every testpoint a second, statusless record that can never read
+    PASS, which silently doubles `total` and halves every reported rate.
+    Measured live on or1200_ctrl: 8/62 reported before this guard existed,
+    8/31 the real count -- confirmed by counting the `results/*.json` files
+    that are not `*.trace.json` by hand.
+    """
     passed = total = 0
     by_signal: Counter = Counter()
     sole: Counter = Counter()
-    for path in sorted((run / "suite" / "results").glob("*.json")):
+    for path in sorted(Path(results_dir).glob("*.json")):
+        if path.name.endswith(".trace.json"):
+            continue
         record = json.loads(path.read_text(encoding="utf-8"))
         total += 1
         if record.get("status") == "PASS":
@@ -113,7 +131,7 @@ def _score(label: str, rtl: Path, suite_src: Path, out: Path, *,
             # dominant name, and it is what made the harness score a wrong
             # design ABOVE golden before the idle values were declared.
             sole[next(iter(failed))] += 1
-    return {"label": label, "passed": passed, "total": total,
+    return {"passed": passed, "total": total,
             "by_signal": dict(by_signal.most_common()), "sole": dict(sole.most_common())}
 
 

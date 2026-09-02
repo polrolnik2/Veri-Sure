@@ -146,6 +146,27 @@ def test_only_the_covered_requirements_spec_is_carried():
     assert "THEIRS" not in prompt
 
 
+def test_domain_notes_absent_by_default_and_present_when_supplied():
+    """Measured live on or1200_ctrl: with no way to construct a NAMED value for
+    a wide structured-encoding input port (an instruction word's opcode bit
+    range, not stated by `contract`), 185 of 246 driven `if_insn` values across
+    the suite left the opcode field at zero -- confirmed by replaying the
+    stimulus against the witness, where `sig_syscall`/`sig_trap`/`rfe`/
+    `no_more_dslot` never fired for the testpoints asking for them by name.
+    `domain_notes` is the caller's escape hatch for exactly this; empty and
+    invisible in the prompt for every design that does not supply one, since
+    this module has no business reading a benchmark's vendored defines file.
+    """
+    plain = build_suite_prompt_one(PLAN[0], CONTRACT, 24)
+    assert "domain_notes" not in plain
+
+    noted = build_suite_prompt_one(
+        PLAN[0], CONTRACT, 24,
+        domain_notes="OR32_J opcode is 6'b000000 in if_insn[31:26].")
+    assert "domain_notes" in noted
+    assert "OR32_J opcode is 6'b000000" in noted
+
+
 # -- the port's ENCODING reaches the author ----------------------------------
 
 
