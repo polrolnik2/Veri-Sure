@@ -252,7 +252,9 @@ def test_explain_on_an_unknown_requirement_says_what_exists():
 def test_run_oracle_windows_the_trace_and_reports_the_whole_length():
     out = _session().run_oracle("REQ-0000", from_edge=2, rows=3)
     tp = out["testpoints"]["TP-0000"]
-    assert tp["edges_total"] == 8
+    # 8 edges of stimulus plus the settle tail every trace now carries.
+    from specflow.tb.runtime import SETTLE_EDGES
+    assert tp["edges_total"] == 8 + SETTLE_EDGES
     assert [r["edge"] for r in tp["trace"]] == [2, 3, 4]
     assert out["verdict"]["status"] == "NOT MET"
 
@@ -565,7 +567,10 @@ def test_the_whole_trace_is_still_available_when_asked_for():
 
 def test_a_short_trace_comes_back_whole_with_no_omission_note():
     s = _session(model=WORKING)
-    tp = s.run_oracle("REQ-0000")["testpoints"]["TP-0000"]
+    # The window has to cover the trace for "comes back whole" to mean
+    # anything, and since the settle tail no trace is short enough for the
+    # default. The property under test is the omission note, not the default.
+    tp = s.run_oracle("REQ-0000", from_edge=0, rows=200)["testpoints"]["TP-0000"]
     assert len(tp["trace"]) == tp["edges_total"] and "omitted" not in tp
 
 

@@ -257,3 +257,47 @@ def test_a_testpoint_no_oracle_NAMES_does_not_trip_the_refusal():
     [res] = decide_rtl([o], traces, CONTRACT,
                        stimulus_by_tp={"TP-0000": steps, "TP-0999": steps})
     assert res.ok is True
+
+
+def test_the_witness_driver_runs_THE_SAME_TAIL_as_the_simulator():
+    """Both drivers or neither.
+
+    These two screen and score the same frozen oracles -- `replay` confers the
+    TRUSTED stamp, `Env` produces the verdict -- so every difference between
+    their environments is a place where a check passes its gate meaning one
+    thing and is judged meaning another. A settle tail in the simulator alone
+    would be exactly that, in the worst direction: the cheap environment would
+    keep cutting effects off and abandoning checks that the expensive one can
+    see perfectly well.
+    """
+    from specflow.refmodel.oracles import replay
+    from specflow.tb.runtime import SETTLE_EDGES
+
+    src = ("from specflow.refmodel.base import RefModel\n"
+           "class Model(RefModel):\n"
+           "    OUTPUT_PORTS = ['q']\n"
+           "    def __init__(self):\n"
+           "        self.q = 0\n"
+           "        self._d = 0\n"
+           "    def reset(self):\n"
+           "        self.q = 0\n"
+           "        self._d = 0\n"
+           "    def step(self, i):\n"
+           "        self.q = self._d\n"
+           "        self._d = i.get('d', 0)\n"
+           "        return {'q': self.q}\n")
+    contract = {"module_name": "Dut", "io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "d", "dir": "input", "width": 1},
+        {"name": "q", "dir": "output", "width": 1}]}
+    steps = [{"inputs": {"d": 0}, "hold": 2}, {"inputs": {"d": 1}, "hold": 1}]
+
+    rep = replay(src, contract, steps, base="step")
+    assert not rep.error, rep.error
+    assert len(rep.rows) >= 3 + SETTLE_EDGES, (
+        f"no settle tail in the witness driver: {len(rep.rows)} rows")
+    # One edge of latency, so `q` can only follow the last step inside the tail.
+    assert any(r["outputs"]["q"] == 1 for r in rep.rows), (
+        "the effect of the final step is still being cut off")
+    assert all(r["inputs"]["d"] == 1 for r in rep.rows[-SETTLE_EDGES:]), (
+        "the tail must HOLD the last stimulus, not return to idle")

@@ -33,7 +33,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..ports import asserted_resets, idle_values, pinned_inputs
-from ..tb.runtime import is_reset_step, normalise_step, reset_ports
+from ..tb.runtime import (SETTLE_EDGES, is_reset_step, normalise_step,
+                          reset_ports)
 from .validate import _static_checks
 
 #: Hard bound on edges any one replay will simulate. A stimulus step may declare
@@ -144,6 +145,10 @@ def replay(
     *,
     base: str,
     edge_budget: int = EDGE_BUDGET,
+    #: Edges to run past the last step, holding it -- see `SETTLE_EDGES`. A
+    #: caller asserting on the step->edge decoding passes 0; nothing in the
+    #: pipeline does, because screening must see what scoring sees.
+    settle_edges: int = SETTLE_EDGES,
 ) -> Replay:
     """Drive `source` over one testpoint's concrete stimulus, structurally.
 
@@ -262,6 +267,38 @@ def replay(
                 f"{until.get('port')} did not reach {until.get('value')!r} "
                 f"within the {edges} edges this testpoint allows"
             )
+    # THE SAME TAIL THE SIMULATOR RUNS, from the same constant. An effect is
+    # not simultaneous with its cause, so a recording that stops at the last
+    # driven value ends mid-window and the check reports that its expected
+    # response never occurred -- about a design that was about to produce it.
+    #
+    # It is imported rather than chosen here for the reason `normalise_step`
+    # is: these two drivers screen and score the SAME frozen oracles, and every
+    # difference between them is a place where a check can pass its gate
+    # meaning one thing and be judged meaning another. A tail in one and not
+    # the other would be exactly that, in the direction that matters most --
+    # the cheap environment confers the trust, the expensive one spends it.
+    if not exhausted:
+        for _ in range(settle_edges):
+            if len(rows) >= edge_budget:
+                notes.append(f"stopped after {edge_budget} edges")
+                break
+            if resetting:
+                try:
+                    fn.__self__.reset()
+                except Exception as exc:  # noqa: BLE001
+                    return Replay(rows, notes,
+                                  f"reset() raised at edge {len(rows)}: {exc!r}")
+            try:
+                out = fn(dict(state))
+            except Exception as exc:  # noqa: BLE001
+                return Replay(rows, notes, f"raised at edge {len(rows)}: {exc!r}")
+            if not isinstance(out, dict):
+                return Replay(rows, notes,
+                              f"returned {type(out).__name__} at edge "
+                              f"{len(rows)}, expected a dict of outputs")
+            rows.append({"edge": len(rows), "inputs": dict(state),
+                         "outputs": dict(out)})
     return Replay(rows, notes, "")
 
 

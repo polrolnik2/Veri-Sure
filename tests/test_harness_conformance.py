@@ -62,14 +62,19 @@ CASES = {
 #: takes many clocks per phase has to say so. That is the point of Phase 3 --
 #: duration is a property of the test, not of a port's latency figure.
 STIMULUS = {
+    # prescale 6, NOT 2. At prescale 2 the five phases take 15 edges, which the
+    # 16-edge settle tail now covers -- so one-edge-per-step reached the end
+    # anyway and the parametrised case below stopped testing anything. The
+    # sequence has to OUTLAST the tail for "reach is the point of hold/until"
+    # to remain a real claim; at prescale 6 it takes 35.
     "prescaled_fsm": [
-        {"inputs": {"ena": 1, "prescale": 2, "go": 0}, "hold": 4},
+        {"inputs": {"ena": 1, "prescale": 6, "go": 0}, "hold": 4},
         # Drive the command and wait for the design to acknowledge it, rather
         # than guessing an edge count. At prescale=2 one phase takes 3 clocks
         # and the sequence is 5 phases, but the test does not need to know that.
-        {"inputs": {"ena": 1, "prescale": 2, "go": 1},
+        {"inputs": {"ena": 1, "prescale": 6, "go": 1},
          "until": {"port": "done", "value": 1}, "timeout": 200},
-        {"inputs": {"ena": 1, "prescale": 2, "go": 0}, "hold": 4},
+        {"inputs": {"ena": 1, "prescale": 6, "go": 0}, "hold": 4},
     ],
 }
 
@@ -706,3 +711,51 @@ def test_the_bus_pairing_is_a_CONVENTION_that_is_returned_and_never_applied():
     assert runtime.bus_lines_from(
         {"io": [{"name": "x_i", "dir": "input"},
                 {"name": "x_oen", "dir": "input"}]}) == []
+
+
+@needs_verilator
+def test_a_testpoint_RUNS_ON_past_its_last_stimulus_step(tmp_path):
+    """An effect is not simultaneous with its cause, so the recording must not
+    stop at the last driven value.
+
+    MEASURED on golden i2c_master_bit_ctrl before this existed. TP-0152 drives a
+    valid START -- core enabled, SDA low for the full 4 edges the design's input
+    filter needs -- and the trace ends 3 edges later, one short of `busy`
+    rising. The frozen check then reported "the expected response never
+    occurred" and CONVICTED a design that was about to produce it. TP-0153
+    (2 edges left, needs 4), TP-0214 (5, needs 6) and TP-0142 (8, needs 12)
+    ended the same way.
+
+    `reg1` has one edge of latency, so the last driven value can only appear in
+    the recording if the run continues past the step that drove it.
+    """
+    from specflow.tb.runtime import SETTLE_EDGES
+
+    src = FIXTURES / "reg1"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    steps = [{"inputs": {"d": 0}, "hold": 2}, {"inputs": {"d": 1}, "hold": 1}]
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite, stimulus_by_tp={"TP-0000": steps})
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    edges = json.loads((suite / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))["edges"]
+
+    # The stimulus is 3 edges (hold 2 + hold 1). Tail rows keep the LAST step
+    # index -- they are a continuation of it, not a new step -- so the tail is
+    # counted by total length rather than by `step`.
+    stimulus_edges = 3
+    assert len(edges) >= stimulus_edges + SETTLE_EDGES, (
+        f"no settle tail: {len(edges)} recorded edges for {stimulus_edges} "
+        f"edges of stimulus plus a {SETTLE_EDGES}-edge tail")
+    assert all(e["inputs"]["d"] == 1 for e in edges[-SETTLE_EDGES:]), (
+        "the tail must HOLD the last stimulus, not return to idle -- driving "
+        "back to idle is itself a stimulus event")
+    assert any(e["dut"]["q"] == 1 for e in edges), (
+        "d=1 was driven on the last step and q never followed; the effect is "
+        "still being cut off")

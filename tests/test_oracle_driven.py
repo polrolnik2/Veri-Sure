@@ -44,7 +44,7 @@ STIM = {"TP-0000": [{"a": 0}, {"a": 1}, {"a": 1}, {"a": 1}]}
 
 def _raw():
     from specflow.refmodel.oracles import replay
-    return replay(LATE, CONTRACT, STIM["TP-0000"], base="step").rows
+    return replay(LATE, CONTRACT, STIM["TP-0000"], base="step", settle_edges=0).rows
 
 
 # ------------------------------------------------------------- transactional
@@ -99,7 +99,12 @@ def test_decide_all_can_run_over_the_transactional_view():
     raw = decide_all([counts_the_edges], LATE, CONTRACT, STIM, base="step")
     txn = decide_all([counts_the_edges], LATE, CONTRACT, STIM, base="step",
                      transactional=True)
-    assert raw[0].detail == "4 rows"
+    # The settle tail adds DURATION, not new states: the raw view grows by
+    # `SETTLE_EDGES` while the transactional view is unchanged, because every
+    # tail row repeats the last state. That is the whole claim of the
+    # transactional view, and the tail is a free demonstration of it.
+    from specflow.tb.runtime import SETTLE_EDGES
+    assert raw[0].detail == f"{4 + SETTLE_EDGES} rows"
     assert txn[0].detail == "3 rows"
 
 

@@ -15,8 +15,18 @@ see the event it is about.
 from __future__ import annotations
 
 from specflow.ports import asserted_resets, pinned_inputs
-from specflow.refmodel.oracles import replay
+from specflow.refmodel.oracles import replay as _replay_with_tail
 from specflow.tb.runtime import is_reset_step, normalise_step
+
+# These tests assert the exact step -> edge decoding, which the settle tail is
+# orthogonal to: it appends rows AFTER the last step, so every expected row
+# list here would grow by `SETTLE_EDGES` while testing nothing new. Opting the
+# whole module out keeps each assertion about the thing it names. Nothing in
+# the pipeline passes 0 -- screening must see what scoring sees.
+def replay(*args, **kwargs):  # noqa: F811
+    kwargs.setdefault("settle_edges", 0)
+    return _replay_with_tail(*args, **kwargs)
+
 
 CONTRACT = {
     "io": [

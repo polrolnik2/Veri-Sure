@@ -72,7 +72,7 @@ def test_a_check_that_LOOKED_ELSEWHERE_is_window_missed_and_repairable():
     label, why = why_passed(_oracle(READS_ROW_ZERO), _variant(LATE), GOOD,
                             CONTRACT, STIM, {"q"})
     assert label == "window-missed"
-    assert "differ at edge(s) 2-2" in why
+    assert "differ at edge(s) 2-" in why
     assert "only read edge(s) 0-0" in why
     # And it must point at a CONDITION, never a cycle count: Phases 3-6 stopped
     # `latency_cycles` gating because the spec does not pin cycle counts.

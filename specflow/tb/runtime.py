@@ -239,6 +239,28 @@ def bus_lines_from(contract: dict) -> list[dict]:
     return pairs
 
 
+#: Edges to keep running after the last stimulus step, holding the final input
+#: values, before a testpoint's record is written.
+#:
+#: WHY A TESTPOINT MUST NOT END ON ITS LAST STIMULUS EVENT. An effect is not
+#: simultaneous with its cause: a design that synchronises and filters its
+#: inputs answers several edges later, and a recording that stops at the last
+#: driven value ends mid-window. The check then reports "the expected response
+#: never occurred" about a design that was about to produce it.
+#:
+#: MEASURED on golden i2c_master_bit_ctrl. TP-0152 drives a valid START -- core
+#: enabled, SDA low the full 4 edges the input filter needs -- and the trace
+#: ends 3 edges later, one short of `busy` rising. TP-0153 (2 left, needs 4),
+#: TP-0214 (5, needs 6) and TP-0142 (8, needs 12) fail the same way. Those are
+#: convictions of a CORRECT design caused by the recording, not by the RTL.
+#:
+#: The value is a plain edge count rather than anything derived from the design.
+#: A filter depth is a fact about one design; "give the effect room to appear"
+#: is a fact about sampling, and a settle tail computed from this design's
+#: prescaler would be this design's constant wearing a general name.
+SETTLE_EDGES = 16
+
+
 def stimulus_digest(steps: object) -> str:
     """A fingerprint of the stimulus a testpoint was driven with.
 
@@ -443,6 +465,10 @@ class Env:
         #: re-reading reported the line one edge stale, which showed the design
         #: pulling low while the trace still said the line was released.
         self._bus_now: dict[str, int] = {}
+        #: Edges to run after the last stimulus step -- see `SETTLE_EDGES`.
+        self.settle_edges: int = SETTLE_EDGES
+        #: The tail runs once, even if `finish` is called twice.
+        self._finished_tail: bool = False
         #: Declared ports the DUT does not expose. A verdict, not a crash.
         self.missing_ports: list[str] = []
         #: Stimulus values a port could not hold. Also a verdict, not a crash.
@@ -520,6 +546,7 @@ class Env:
         trace_internals: list[str] | None = None,
         compare: str = "",
         bus_lines: list[dict] | None = None,
+        settle_edges: int | None = None,
     ) -> "Env":
         results = Path(results_dir) if results_dir is not None else Path(
             os.environ.get("SPECFLOW_RESULTS", "results"))
@@ -529,6 +556,8 @@ class Env:
         if compare:
             env.compare_mode = compare
         env.bus_lines = [dict(b) for b in (bus_lines or [])]
+        if settle_edges is not None:
+            env.settle_edges = max(0, int(settle_edges))
 
         clk = env._clk()
         if clk is not None:
@@ -1076,6 +1105,27 @@ class Env:
         step, inputs = row[2], row[3]
         return {"vector": step, **{k: _plain(v) for k, v in inputs.items()}}
 
+    async def _settle_tail(self) -> None:
+        """Run on past the last stimulus step so a late effect is recorded.
+
+        The final inputs are HELD, not returned to idle: driving them back would
+        be another stimulus event, and the point is to observe the design
+        answering the last one. Nothing else changes -- the model advances in
+        lockstep and every edge is recorded exactly as a driven edge is, so a
+        check reasons over these rows without knowing they are a tail.
+        """
+        if self._finished_tail or self.settle_edges <= 0:
+            return
+        self._finished_tail = True
+        if self._clk() is None:
+            return
+        for _ in range(self.settle_edges):
+            await self.tick(1)
+            self._expected = self._advance_model(self._inputs)
+            await self._settled()
+            self._apply_bus()
+            self._record()
+
     async def finish(self) -> None:
         """Write this testpoint's record, then assert once.
 
@@ -1089,6 +1139,7 @@ class Env:
         if self._finished:
             return
         self._finished = True
+        await self._settle_tail()
         self._resolve()
 
         status = "FAIL" if self.sb.failed else ("PASS" if self.sb.invoked else "NOT_EXERCISED")
