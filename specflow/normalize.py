@@ -1363,6 +1363,26 @@ def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
     if declines_discrimination(shows) or declines_discrimination(otherwise):
         return None
     if not (otherwise or "").strip():
+        # QUOTE THE SECOND CASE BACK WHEN IT IS ALREADY THERE, in `shows`.
+        #
+        # Measured on h2-i2c: three requirements were DISCARDED after spending
+        # r0..r3 on this objection, and all three had written the contrast --
+        # into `shows`. REQ-0026: "busy=1 when a START condition has just been
+        # detected; busy=0 when no START condition was detected". REQ-0101:
+        # "...; otherwise scl_oen remains 0 or does not release" -- the word
+        # `otherwise` inside the wrong field. They were not failing to
+        # understand the rule; they were failing to find the box. Restating the
+        # rule at them four times could not fix that, and cost the run `busy`
+        # semantics, the START sequence and the READ SCL window.
+        carried = _second_case_in_shows(shows)
+        if carried:
+            return Issue(
+                "error", path,
+                f"`otherwise` is empty, but `shows` already contains the second "
+                f"case: {carried!r}. THIS IS A FIELD PLACEMENT PROBLEM, not a "
+                f"missing answer -- move that clause out of `shows` and into "
+                f"`otherwise`, leaving `shows` describing only what the port "
+                f"does when the requirement HOLDS. Change nothing else.")
         return Issue(
             "error", path,
             "`otherwise` is empty: say what the port does when the requirement "
@@ -1373,6 +1393,24 @@ def route_shows_issue(path: str, shows: str, otherwise: str) -> Issue | None:
             f"{NO_DISCRIMINATION!r} in `otherwise` and it is recorded as a "
             f"finding rather than turned into a check.")
     return None
+
+
+#: The shapes the three discarded requirements actually used, in their own
+#: words. Deliberately narrow: this exists to RECOGNISE a contrast the author
+#: has already written, not to guess at one. A miss costs the old message; a
+#: false positive would tell an author to move a clause that is not there.
+_SECOND_CASE = re.compile(
+    r"(?:;|,|\.)\s*(otherwise\b.*"
+    r"|a\s+(?:failing|non-compliant|violating)\s+design\s+would\b.*"
+    r"|(?:and\s+)?\w+\s*=\s*\S+\s+when\s+no\b.*"
+    r"|(?:and\s+)?\w+\s+remains?\b[^;]*\bwhen\s+no\b.*)",
+    re.I | re.S)
+
+
+def _second_case_in_shows(shows: str) -> str:
+    """The clause in `shows` that is really the `otherwise` case, or ""."""
+    m = _SECOND_CASE.search(shows or "")
+    return m.group(1).strip()[:200] if m else ""
 
 
 def when_issue(path: str, when: str) -> Issue | None:
