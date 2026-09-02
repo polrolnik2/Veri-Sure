@@ -711,3 +711,69 @@ def test_a_driven_activation_hop_needs_inputs_not_a_route():
     empty = issues_for(Reach(through_req=""))
     assert any("DIRECT case" in i.message for i in empty), [i.message for i in empty]
 
+
+
+# ------------ the concession is a deferral in pass one, a failure in pass two
+
+
+CONCEDING = ("not visible on any output port directly; the effect is that the "
+             "FSM timing counter is paused, which should be visible through "
+             "the absence of state transitions (cmd_ack not pulsing)")
+
+
+def test_conceding_a_route_and_giving_none_is_REFUSED_by_the_indirect_pass():
+    """This pass exists to find the route, so naming where the effect shows and
+    returning none is declining to answer the only question it was asked.
+
+    The direct pass accepts the same sentence, and must: `unobservable` is the
+    ticket into `blind`, and the first pass sees one requirement in isolation
+    while this one has the sibling pool. Measured on h2-i2c: of 18 direct-pass
+    answers that conceded a route, this pass recovered 15 (83%) with a real
+    port AND route. Gating it in pass one produced a worse route from the pass
+    with less information and dropped the requirement from `blind` entirely.
+    """
+    out = _out(req_uid="REQ-0031", observed_via=[])
+    out.normalized[0].observable = []
+    out.normalized[0].unobservable_reason = CONCEDING
+    issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
+                           known={"REQ-0007", "REQ-0031"})
+    bad = [i for i in issues if "unobservable_reason" in i.path]
+    assert bad, f"a conceded route must be refused HERE; got {issues}"
+    assert "should be visible through" in bad[0].message
+    assert "observed_via" in bad[0].message
+
+
+def test_an_HONEST_no_boundary_effect_still_passes_the_indirect_pass():
+    """The pin that stops the gate eating the answer it exists to protect.
+
+    "cannot be directly observed at declared output ports" is the right reply
+    for a port declaration, and it contains the word `observed` -- a predicate
+    keying on vocabulary alone would reject every honest answer and force a
+    port the author knows is wrong, which is the failure the stage exists to
+    prevent.
+    """
+    for reason in (
+        "slave_wait is an internal signal whose assertion cannot be directly "
+        "observed at declared output ports",
+        "this is scaffolding text containing only a list marker with no "
+        "functional content to observe at any interface port",
+    ):
+        out = _out(req_uid="REQ-0031", observed_via=[])
+        out.normalized[0].observable = []
+        out.normalized[0].unobservable_reason = reason
+        issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
+                               known={"REQ-0031"})
+        bad = [i for i in issues if "unobservable_reason" in i.path]
+        assert not bad, f"honest answer refused: {reason[:50]!r} -> {bad}"
+
+
+def test_a_route_GIVEN_silences_the_concession_check():
+    """The check asks for a route. Once there is one, the reason beside it is
+    not a contradiction worth a second error."""
+    out = _out(req_uid="REQ-0031", observed_via=[Route(
+        port="busy", through_req="REQ-0007", when="after a glitch",
+        shows=DISCRIMINATING)])
+    out.normalized[0].unobservable_reason = CONCEDING
+    issues = gate_indirect(out, uid="REQ-0031", contract=CONTRACT,
+                           known={"REQ-0007", "REQ-0031"})
+    assert [i for i in issues if "unobservable_reason" in i.path] == []

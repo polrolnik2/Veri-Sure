@@ -1368,6 +1368,27 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
         return [Issue("error", f"normalize.{uid}.indirect",
                       "no answer returned; give empty lists if there is no route")]
     norm = out.normalized[0]
+
+    # THE CONCESSION, and THIS is the pass where it is a failure rather than a
+    # deferral. The first pass may honestly answer "unobservable, though it
+    # should show through the command timing" -- that hands the question here.
+    # This pass was asked directly, with the sibling requirements in hand, so
+    # naming where the effect shows and still returning no route is declining to
+    # answer the only question it was asked.
+    if not norm.observable and not norm.observed_via:
+        conceded = concedes_a_route(norm.unobservable_reason)
+        if conceded:
+            issues.append(Issue(
+                "error", f"normalize.{uid}.unobservable_reason",
+                f"this pass exists to find the route, and your own reason says "
+                f"where the effect is seen: {conceded!r} -- yet `observed_via` "
+                f"is empty. Write it: the declared output port it reaches, the "
+                f"`through_req` it travels through, `when` it shows there, and "
+                f"`shows` giving BOTH cases -- how that port looks when the "
+                f"requirement holds and when it does not. If you now judge no "
+                f"boundary effect exists at all, say that plainly instead; do "
+                f"not describe an effect you are declining to name"))
+
     for i, route in enumerate(norm.observed_via):
         path = f"normalize.{uid}.observed_via[{i}]"
         if route.port not in outputs:
@@ -1620,23 +1641,21 @@ def gate_one(
             f"names {sorted(norm.observable)} as observable AND gives an "
             f"unobservable_reason; these contradict"))
 
-    # The SAME contradiction, one sentence in rather than one field apart: an
-    # empty `observable` whose reason says where the effect can be seen. See
-    # `concedes_a_route` for the measurement and why the cheap exit, not the
-    # model, is what needs closing.
-    conceded = ("" if norm.observable
-                else concedes_a_route(norm.unobservable_reason))
-    if conceded:
-        issues.append(Issue(
-            "error", f"normalize.{uid}.unobservable_reason",
-            f"gives no observable port, but the reason itself says where the "
-            f"effect is seen: {conceded!r}. That is a ROUTE, and it belongs in "
-            f"`observed_via` -- name the declared output port it reaches, the "
-            f"`through_req` it travels through if any, `when` it shows there, "
-            f"and `shows` how that port looks when the requirement holds AND "
-            f"when it does not. `unobservable_reason` is for a requirement with "
-            f"no boundary effect at all -- a port declaration, a list marker, "
-            f"architectural prose -- not for one whose effect is indirect"))
+    # NOT GATED HERE, AND THAT IS THE POINT. A first-pass answer reading
+    # "unobservable, though the effect should show through the command timing"
+    # is DEFERRING to the indirect pass, which is the stage built to answer it:
+    # `unobservable` is literally the ticket into `blind`, and the second pass
+    # re-asks with the sibling pool in hand that this one does not have.
+    #
+    # Measured on h2-i2c: of the 18 direct-pass answers that conceded a route,
+    # the indirect pass recovered 15 (83%) with a real port AND route --
+    # REQ-0042 through `scl_oen`, REQ-0084 through `cmd_ack` and `scl_oen` over
+    # three routes. Refusing the concession here forced a worse route out of the
+    # pass with LESS information and, because `unobservable` is `not
+    # observable`, dropped the requirement from `blind` so it never got the
+    # better-informed look at all. The check lives in `gate_indirect`, where the
+    # author was asked the question directly and a concession is a refusal to
+    # answer it.
 
     # THE ROUTE IS THE BASE CASE, so the first pass gates it too. Until now the
     # discrimination rule lived only in `gate_indirect`, which runs over the

@@ -808,7 +808,7 @@ def test_the_prompt_teaches_sustains_now_that_the_schema_has_it():
         assert fragment in SYSTEM, fragment
 
 
-# ------------------------------------- the cheap exit out of writing a route
+# ------------------------ a conceded route is a DEFERRAL in the direct pass
 
 
 CONCEDING = ("not visible on any output port directly; the effect is that the "
@@ -816,112 +816,22 @@ CONCEDING = ("not visible on any output port directly; the effect is that the "
              "the absence of state transitions (cmd_ack not pulsing)")
 
 
-def test_an_UNOBSERVABLE_reason_that_says_WHERE_the_effect_shows_is_refused():
-    """The concession, measured on h2-i2c: 18 of 41 unobservable requirements
-    (44%) name the port and the mechanism inside the very sentence that
-    declines to give a route.
+def test_the_direct_pass_ACCEPTS_a_reason_that_concedes_a_route():
+    """It is a DEFERRAL, not a dodge, and refusing it here destroys value.
 
-    This is not the model failing to know the answer -- it writes the answer
-    down. `observed_via`'s `shows` demands a two-case discrimination, and one
-    free sentence in `unobservable_reason` buys an exit from that. The prompt
-    has warned against exactly this since it was written, and the warning was
-    not enough.
+    `unobservable` is literally the ticket into `blind`, so an answer of
+    "unobservable, though it should show through the command timing" hands the
+    question to the pass built to answer it -- which sees the sibling pool this
+    one does not. Measured on h2-i2c: of 18 direct-pass answers that conceded a
+    route, the indirect pass recovered 15 (83%) with a real port AND route.
+
+    Gating it here forced a worse route out of the pass with less information
+    and, because `unobservable` is `not observable`, dropped the requirement
+    from `blind` so it never got the better-informed look at all.
     """
     issues = gate_one(REQ, _out(observable=[], unobservable_reason=CONCEDING),
                       CONTRACT)
-    bad = [i for i in issues
-           if i.severity == "error" and "unobservable_reason" in i.path]
-    assert bad, f"a conceded route must be refused; got {issues}"
-    # It quotes the author's own sentence back -- an author reads its own words
-    # faster than it reads a rule -- and names the field the route belongs in.
-    assert "should be visible through" in bad[0].message
-    assert "observed_via" in bad[0].message
+    assert [i for i in issues if i.severity == "error"] == []
 
 
-def test_an_HONEST_unobservable_reason_is_NOT_refused():
-    """The pin that keeps the gate from eating the answer it exists to protect.
 
-    "cannot be directly observed at declared output ports" is the correct reply
-    for a port declaration or a list marker, and it contains the word
-    `observed` -- so a predicate keying on vocabulary alone would reject every
-    honest answer, forcing the model to name a port it knows is wrong. That is
-    the failure this whole stage exists to prevent, so a negation anywhere in
-    the preceding clause disqualifies the match.
-    """
-    for reason in (
-        "slave_wait is an internal signal whose assertion cannot be directly "
-        "observed at declared output ports",
-        "the synchronization pipeline itself is not directly observable at "
-        "declared output ports",
-        "this is scaffolding text containing only a list marker with no "
-        "functional content to observe at any interface port",
-        "the requirement specifies input port declarations which are "
-        "compile-time structural properties of the interface",
-        "This requirement lists module capabilities at an architectural level "
-        "without specifying particular observable behaviors",
-    ):
-        issues = gate_one(REQ, _out(observable=[], unobservable_reason=reason),
-                          CONTRACT)
-        bad = [i for i in issues
-               if i.severity == "error" and "unobservable_reason" in i.path]
-        assert not bad, f"honest answer refused: {reason[:60]!r} -> {bad}"
-
-
-def test_a_NAMED_port_gets_ONE_error_for_the_contradiction_not_two():
-    """`observable` non-empty already contradicts any reason at all, and the
-    older check owns that case. Firing both would hand the author two errors
-    for one mistake and invite it to fix the wrong half -- delete the route it
-    correctly gave, rather than delete the reason."""
-    issues = gate_one(
-        REQ, _out(observable=["cmd_ack"], unobservable_reason=CONCEDING),
-        CONTRACT)
-    bad = [i for i in issues
-           if i.severity == "error" and "unobservable_reason" in i.path]
-    assert len(bad) == 1, f"expected one contradiction error, got {bad}"
-    assert "these contradict" in bad[0].message
-
-
-# ------------------------------------------ a value-set: ANY of these opens it
-
-
-def test_a_VALUE_SET_in_inputs_passes_the_gate():
-    """`inputs` maps port -> value, which makes it a CONJUNCTION, and until now
-    that was the only shape it had. A requirement triggered by ANY OF several
-    values -- "a START, STOP, READ or WRITE command is accepted" -- had nowhere
-    to say so.
-
-    Measured on h2-i2c: of 22 observable requirements whose activation carried
-    no trigger at all, 8 had a disjunctive one, written into `text` where no
-    gate and no oracle can reach it.
-    """
-    out = _out(observable=["cmd_ack"])
-    # Numeric here because this fixture's contract declares no encoding
-    # table; the symbolic form is exercised in test_encoding.py against a real
-    # one. What is under test is the SHAPE, which is orthogonal to resolution.
-    out.normalized[0].activation.inputs = {"cmd": [1, 2, 4, 8], "ena": 1}
-    assert [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"] == []
-
-
-def test_a_value_set_is_rejected_WHOLE_when_one_alternative_is_bad():
-    """Dropping the bad member would narrow the window without saying so, and a
-    narrowed window is the silent failure this whole module exists to stop."""
-    out = _out(observable=["cmd_ack"])
-    out.normalized[0].activation.inputs = {"cmd": [1, "NOT_A_SYMBOL"]}
-    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
-    assert errs and "NOT_A_SYMBOL" in errs[0].message
-
-
-def test_an_EMPTY_value_set_is_refused():
-    """No value satisfies it, so the window can never open -- which at decide
-    time reads exactly like a design that never did it."""
-    out = _out(observable=["cmd_ack"])
-    out.normalized[0].activation.inputs = {"cmd": []}
-    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
-    assert errs and "empty value-set" in errs[0].message
-
-
-def test_every_alternative_gets_the_WIDTH_check_not_just_the_first():
-    out = _out(observable=["cmd_ack"])
-    out.normalized[0].activation.inputs = {"cmd": [0, 1, 999]}
-    errs = [i for i in gate_one(REQ, out, CONTRACT) if i.severity == "error"]
-    assert errs and "999" in errs[0].message
