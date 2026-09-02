@@ -116,7 +116,9 @@ def _reachable(uid, via=()):
     return NormalizedRequirement(
         req_uid=uid, observable=["busy"],
         activated_via=[Reach(through_req=t,
-                             activation=Activation(text=f"via {t}"))
+                             activation=Activation(text=f"via {t}"),
+                             when=f"whenever {t} fires",
+                             shows="busy rises and stays high")
                        for t in via])
 
 
@@ -231,7 +233,8 @@ def test_an_OBSERVABLE_but_UNREACHABLE_requirement_is_asked_the_other_question()
         "activation": Activation(text="the FSM is in START_B")})
     reply = ('{"normalized": [{"req_uid": "REQ-0007", "activated_via": '
              '[{"through_req": "REQ-0012", "activation": {"text": "issue START",'
-             ' "inputs": {"cmd": 1}}}]}]}')
+             ' "inputs": {"cmd": 1}}, "when": "the command is accepted from idle",'
+             ' "shows": "sda_oen falls to 0 while scl_oen is still 1"}]}]}')
     merged, results, port = _resolve(reply, [stateful, _settled()])
     assert len(port.prompts) == 1
     assert "ACTIVATION ONLY" in port.prompts[0]
@@ -267,7 +270,8 @@ def test_a_reaching_chain_survives_an_answer_with_no_observation_route():
     """
     reply = ('{"normalized": [{"req_uid": "REQ-0031", "observed_via": [], '
              '"activated_via": [{"through_req": "REQ-0012", "activation": '
-             '{"text": "issue START"}}]}]}')
+             '{"text": "issue START"}, "when": "the command is accepted from idle",'
+             ' "shows": "sda_oen falls to 0 while scl_oen is still 1"}]}]}')
     merged, _, _ = _resolve(reply, [_blind(), _settled()])
     got = next(n for n in merged if n.req_uid == "REQ-0031")
     assert [h.through_req for h in got.activated_via] == ["REQ-0012"]
@@ -388,7 +392,9 @@ def test_the_stimulus_hint_carries_the_reaching_sequence_not_the_state_name():
     stateful = dict(SHAPE, activation={"text": "while in START_B"},
                     activated_via=[{"through_req": "REQ-0012",
                                     "activation": {"text": "a START is issued",
-                                                   "inputs": {"cmd": 1}}}])
+                                                   "inputs": {"cmd": 1}},
+                                    "when": "the command is accepted from idle",
+                                    "shows": "sda_oen falls while scl_oen is 1"}])
     hint = _hint({"uid": "REQ-0031", "text": "t"}, stateful, None, 0)
     assert "STATE, not a set of values" in hint
     assert "REQ-0012" in hint and "cmd=1" in hint

@@ -387,10 +387,35 @@ class Reach(BaseModel):
 
     `activation` reuses `Activation` verbatim rather than inventing a second
     vocabulary for "what must be driven".
+
+    AND A POINTER IS NOT A ROUTE HERE EITHER. `Route` says this in its own
+    docstring and then carries `when` and `shows` to fix it; this class carried
+    `{through_req, activation}` and nothing else, which is the pointer shape
+    `Route` rejects. "REQ-0096 puts the FSM into the READ sequence" tells an
+    author which requirement to thank and gives it no way to RECOGNISE, in a
+    trace of declared ports, that the sequence is now running -- so the check it
+    writes opens on whatever is easy to see instead.
+
+    Measured on n4-i2c: 8 requirements were rejected with the same objection --
+    "the trigger must identify an actual command sequence", "it must open only
+    on a filtered-SCL rising edge during an active READ" -- and every one had an
+    empty `activated_via`. Filling it with the pointer alone would not have
+    answered any of them.
+
+    So `when` and `shows` mirror `Route`'s, and mean the activation-side thing:
+    `when` is the condition under which the hop actually delivers the state,
+    `shows` is how the boundary betrays that it has.
     """
 
     through_req: str = ""
     activation: Activation = Field(default_factory=Activation)
+    #: The condition under which this hop actually puts the design in the state
+    #: -- not every firing of `through_req` need do so.
+    when: str = ""
+    #: How a trace of DECLARED PORTS tells you the hop has fired and the state
+    #: now holds. Without this the author cannot open a window on it, which is
+    #: the whole point of naming the hop.
+    shows: str = ""
 
 
 class NormalizedRequirement(BaseModel):
@@ -884,6 +909,13 @@ ACTIVATION -- `activated_via`, a list of PREREQUISITES, every one required.
   through_req  the requirement whose behaviour puts the design in this state
   activation   what that requirement's own activation prescribes -- text, and
                inputs where they can be stated
+  when         the condition under which that hop actually delivers the state.
+               Not every firing of `through_req` need put you there.
+  shows        HOW A TRACE OF DECLARED PORTS REVEALS that the hop has fired and
+               the state now holds. Required. Without it the author is told
+               which requirement to thank and still cannot open a window on it,
+               so it opens on whatever is easy to see instead -- which is the
+               single most common reason a check is later rejected.
 
   ONE HOP ONLY. Say what must have just happened, not the whole sequence back
   to reset. The chain is followed mechanically from the hops every requirement
@@ -914,7 +946,9 @@ Reply with ONE JSON object and nothing else:
       "activated_via": [
         {
           "through_req": "REQ-0012",
-          "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}}
+          "activation": {"text": "a START command is issued", "inputs": {"cmd": 1}},
+          "when": "the command is accepted from idle, i.e. presented while clk_en allows the FSM to advance",
+          "shows": "sda_oen falls to 0 while scl_oen is still 1 -- the START-condition signature at the boundary -- and cmd_ack has not yet pulsed for it"
         }
       ]
     }
@@ -1123,6 +1157,43 @@ def when_issue(path: str, when: str) -> Issue | None:
         "this requirement for whatever it sees.")
 
 
+def reach_shows_issue(path: str, shows: str) -> Issue | None:
+    """A hop's `shows` must be RECOGNISABLE, not DISCRIMINATING.
+
+    NOT `shows_issue`, and the difference is a category one rather than a
+    stylistic one. An `observed_via` route's `shows` has to name two cases --
+    what the port does when the requirement holds and what it does when it does
+    not -- because that route exists to separate THIS requirement's effect from
+    the effect of the requirement whose port it borrows. One case there is a
+    check that passes a design with none of the behaviour.
+
+    A hop's `shows` answers a different question: how does a trace of declared
+    ports reveal that the prerequisite STATE has been reached, so a window can
+    open on it. That is a recognition condition. There is no second case to
+    state, because the hop is not asserting anything -- it is locating the rows
+    the assertion applies to, and the assertion supplies its own discrimination.
+    Demanding "and what it does when it does not" of a window-opener asks for a
+    sentence that has no referent, and the measured cost of asking is a repair
+    loop that spends its whole budget failing to produce one.
+
+    So the bar is the same as `when_issue`'s and for the same reason: what is
+    rejected is saying nothing, because an empty string is not a claim about
+    the boundary; it is the absence of one, and an author holding it falls back
+    to whatever it can see.
+    """
+    if shows.strip():
+        return None
+    return Issue(
+        "error", path,
+        "`shows` is empty. Say how a trace of DECLARED PORTS reveals that this "
+        "hop has fired and the prerequisite state now holds -- the edge, the "
+        "level, or the ordered pair of transitions a check can open its window "
+        "on. Naming the requirement that gets you there is not enough on its "
+        "own: an author that cannot recognise the state opens its window on "
+        "whatever it can see instead, which is the single most common reason a "
+        "check is later rejected as testing the wrong situation.")
+
+
 def gate_indirect(out: NormalizeOutput, *, uid: str,
                   contract: dict, known: set[str]) -> list[Issue]:
     """A route has to be usable, or it is worse than no route at all.
@@ -1167,6 +1238,15 @@ def gate_indirect(out: NormalizeOutput, *, uid: str,
         if hop.through_req == uid:
             issues.append(Issue("error", path,
                                 "a requirement cannot be its own prerequisite"))
+        #: The pointer-is-not-a-route checks. `when` is shared with
+        #: `observed_via` verbatim -- an unscoped hop is unscoped the same way.
+        #: `shows` is NOT: see `reach_shows_issue`.
+        bad = reach_shows_issue(path, hop.shows)
+        if bad is not None:
+            issues.append(bad)
+        bad = when_issue(path, hop.when)
+        if bad is not None:
+            issues.append(bad)
     return issues
 
 
