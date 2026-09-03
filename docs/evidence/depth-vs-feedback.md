@@ -50,12 +50,40 @@ A third of byte_ctrl's remaining internal vocabulary is the `ST_*` state names �
 constants, depth `-`. No boundary observation ever answers "the FSM is in
 ST_ACK".
 
-## What follows
+## CORRECTION: "unreachable" was wrong
 
-The obvious reading of i2c — that the bit controller is the hard one because
-its dependencies run deep — is backwards for the purpose of fixing it. Depth is
-the tractable failure. The byte controller has no depth to climb and no
-derived-signal layer can help it, so complete-testbench failure attribution
-really is the only non-confounded signal available there.
+I first read the 72% figure as meaning byte_ctrl's vocabulary cannot be handed
+to an oracle author at all. That does not survive contact with the design, on
+three counts:
+
+* **A cycle through an OBSERVABLE signal is not a barrier.** `go` is
+  `(read | write | stop) & ~cmd_ack` -- ports only. It lands in the recursive
+  core solely because the cycle runs through `cmd_ack`, which the trace records.
+  You read the observation instead of solving the loop. Computing an SCC over a
+  graph that treats outputs as opaque nodes overstates what is trapped.
+* **`assign dout = sr;`** The most-mentioned internal in the spec (15 times) IS
+  a port, by identity, with no delay or gating.
+* **What a trace exposes is a CHOICE.** `Env` already writes a `dut_internal`
+  block; for the bit controller it carries `c_state, sda_chk, clk_en,
+  dscl_oen`. Nothing but the recording list stops it carrying `sr` or `dcnt`.
+
+Recomputed with inputs AND outputs as recorded roots, every one of bit_ctrl's
+19 internals is computable from the boundary. So feedback is not the wall the
+first version of this note claimed.
+
+## What the measurement does support
+
+Only the narrower claim, which is about the AUTHOR rather than the harness:
+**depth destroys per-requirement independence.** bit_ctrl's 28 bus-touching
+requirements each had to re-derive the same 4-deep filter chain before saying
+anything, so they could not be authored separately -- getting 28 right requires
+getting one sub-derivation right 28 times, and the measured result was that it
+happened zero times. byte_ctrl has max depth 1: nothing to rebuild, so nothing
+couples the requirements to each other, and correspondingly no case for
+decomposing anything.
+
+That reverses the obvious reading of i2c. The bit controller is not hard
+because it is deep in the sense of large; it is hard because depth is what
+forces every requirement to solve the same problem again.
 
 Run with `python docs/evidence/rtl_depth.py` from the repository root.
