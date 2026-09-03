@@ -50,10 +50,40 @@ only when dc_en=1 and dcqmem_cycstb_i=1" is directly writable, and k1's oracle
 author wrote it. At depth 2 and beyond the author must IMPLEMENT the chain, and
 that burden is what three measurements say does not get paid.
 
-The version that works passes the discharged **implementation**, not the prose:
-REQ-0051's frozen `decide` becomes callable, so REQ-0057 calls rather than
-rebuilds. That is the stratified fixpoint, and transitive citation is how its
-edges get found.
+### CORRECTION: "callable" was the wrong word, and it names the degeneracy
+
+An earlier version of this section said REQ-0051's frozen `decide` should become
+**callable** so REQ-0057 calls rather than rebuilds. That is citation-as-CALL,
+and it is exactly the confounding this project is trying to avoid.
+
+The confound depends entirely on what crosses the boundary:
+
+| what a dependent receives | attribution |
+|---|---|
+| a computed **value** (`sSCL` as a column, or another oracle's arithmetic) | **confounded.** The dependent compares the design against harness code. If the upstream code is wrong the dependent is wrong AND the upstream still passes, because its code is self-consistently wrong — no discharge ever fires. This is the reference model, rebuilt one oracle at a time. |
+| a tri-state **verdict**, used as a guard | **not confounded.** The dependent reads the DESIGN's own signal; the upstream independently checks that signal against its definition. A failed guarantee discharges the dependents rather than failing them. |
+
+Two things already enforce the safe form. `decide` returns
+`(ok: bool | None, edge: int | None, detail: str)` — a verdict, never a signal —
+so a citation can only be consumed as "does this hold here". And every oracle is
+executed in a fresh empty namespace (`oracles.py:423`), so one oracle cannot
+reach another at all today. The rule to write down is therefore "do not add a
+call", not "remove one".
+
+What the fixpoint actually needs is the **citation**, not the call: the edge
+"REQ-0057 depends on the term REQ-0051 defines" is what orders the strata and
+what discharges dependents. Nothing requires one oracle's code to invoke
+another's.
+
+**Residual confounding, stated plainly.** If the upstream check is WEAK — it
+passes a filter that is actually broken — its guard reports "assumption holds"
+when it does not, and every dependent produces a wrong verdict attributed to
+itself. Assume-guarantee does not eliminate that; it concentrates it into one
+named requirement. The detector for that residue is co-failure clustering
+(`repetition-without-a-graph.md`): a weak upstream makes its dependents fail
+together, measured at 0.813 conditional co-failure within a shared-cause group
+against 0.245 for unrelated pairs. So the attribution survives statistically
+even when the guard itself is wrong.
 
 ## The value your proposal buys anyway
 
