@@ -392,15 +392,56 @@ def _witness_note(req_uid: str, notes: dict[str, str]) -> list[Issue]:
     where a transition was meant, it is computable from the trace, and the fix
     is specific. Sending the generic "try to accept it" alongside would invite
     relaxation for a defect that has an exact repair, so the specific note
-    REPLACES the generic one rather than joining it.
+    leads and `_advisory` is still NOT sent.
+
+    BUT THE WITNESS FAILURE IS NO LONGER DROPPED WITH IT. This used to `return`
+    on `idle_match` alone, so when both fired the author was told it had judged
+    at idle and never told that a second implementation had failed its check at
+    all. Measured on h3-i2c: five `dout` checks (REQ-0028/0057/0099/0100/0101)
+    carried BOTH keys, went out with the idle note only, froze as TRUSTED, and
+    every one of them convicted golden RTL. The witness had failed all five and
+    said so in `instrument_notes`; nothing downstream ever saw it.
+
+    So the idle diagnosis still leads -- it is the precise one -- and
+    `_witness_stands` follows it with the bare fact. That fact is deliberately
+    NOT `_advisory`: it reports the disagreement without asking the author to
+    accept the second implementation, which is the move that measured
+    over-strictness 27 -> 15 but convictions 2 -> 16.
     """
     if "idle_match" in notes:
-        return [_idle_advisory(req_uid, notes["idle_match"])]
+        issues = [_idle_advisory(req_uid, notes["idle_match"])]
+        if "witness" in notes:
+            issues.append(_witness_stands(req_uid, notes["witness"]))
+        return issues
     if "self_split" in notes:
         return [_split_advisory(req_uid, notes["self_split"])]
     if "witness" in notes:
         return [_advisory(req_uid, notes["witness"])]
     return []
+
+
+def _witness_stands(req_uid: str, note: str) -> Issue:
+    """The witness disagreed, stated as evidence and nothing more.
+
+    Deliberately not `_advisory`. That one asks the author to TRY to accept a
+    second implementation, and the asking is what measured over-strictness
+    27 -> 15 while convictions went 2 -> 16 -- checks relaxed until they stopped
+    disagreeing. This says only what happened, so a specific diagnosis can lead
+    without the witness verdict vanishing behind it.
+    """
+    return Issue(
+        # A DISTINCT path from `_advisory`'s `witness_disagrees`. They carry
+        # the same fact and mean different things -- that one ASKS the author to
+        # accept the second implementation, this one only records it -- and a
+        # shared id would make them indistinguishable in the artifact exactly
+        # where the difference is the point.
+        "warning", f"oracle.{req_uid}.witness_disagrees_reported",
+        f"Separately, a second implementation of this same requirement {note}.\n\n"
+        f"This is REPORTED, not a request to weaken anything -- fix the defect "
+        f"named above and this may resolve with it. It is here because a check "
+        f"that fails an implementation believed correct is the single best "
+        f"predictor available that it will fail a correct DESIGN, and that "
+        f"evidence must not be lost just because a more specific note applies.")
 
 
 def _split_advisory(req_uid: str, note: str) -> Issue:

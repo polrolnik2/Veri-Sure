@@ -380,8 +380,11 @@ def test_the_idle_match_note_reaches_verify_one(monkeypatch):
              "idle_match": _fake(None, [], {}, at_edge=0)}
     issues = S._witness_note("REQ-0070", notes)
 
-    assert len(issues) == 1
-    assert issues[0].path.endswith("judged_at_idle")
+    assert issues[0].path.endswith("judged_at_idle"), "the precise note leads"
+    assert [i.path.rsplit(".", 1)[-1] for i in issues] == [
+        "judged_at_idle", "witness_disagrees_reported"], (
+        "the witness failure travels with it -- dropping it froze five checks "
+        "on h3-i2c that then convicted golden")
 
 
 def test_the_specific_note_replaces_the_relaxation_request():
@@ -391,15 +394,25 @@ def test_the_specific_note_replaces_the_relaxation_request():
     measured as pressure toward relaxation -- over-strictness 27 -> 15 and
     convictions 2 -> 16 when declining meant the oracle was discarded. The idle
     note names an exact defect whose repair makes the check MORE precise.
-    Sending both would invite weakening for a defect that has a specific fix.
+    Sending the RELAXATION REQUEST alongside would invite weakening for a
+    defect that has a specific fix -- so `_advisory` is still not sent.
+
+    What changed: the witness FAILURE is no longer dropped along with it. On
+    h3-i2c five checks carried both keys, went out with the idle note only,
+    froze TRUSTED, and all five convicted golden. The idle note still leads;
+    a non-relaxing record of the disagreement follows it.
     """
     from specflow import oracles_stage as S
 
     both = S._witness_note("REQ-0070", {
         "witness": "fails it at edge 0 -- scl_oen never released",
         "idle_match": "judged at edge 0, before any of scl_oen had moved"})
-    assert len(both) == 1, "the specific note replaces the generic one"
-    assert "judged_at_idle" in both[0].path
+    assert [i.path.rsplit(".", 1)[-1] for i in both] == [
+        "judged_at_idle", "witness_disagrees_reported"], (
+        "the specific note leads; the witness verdict is recorded, not dropped")
+    assert not any("witness_disagrees" == i.path.rsplit(".", 1)[-1]
+                   for i in both), (
+        "the RELAXATION REQUEST must still not be sent alongside")
 
     generic = S._witness_note("REQ-0070", {
         "witness": "fails it at edge 4 -- scl_oen released too early"})
@@ -526,17 +539,22 @@ def test_it_needs_no_control_and_convicts_nothing():
     assert "real defect visible only there" in body.lower()
 
 
-def test_the_sharper_note_wins_when_both_could_speak():
-    """Two competing diagnoses for one disagreement is worse than the sharper
-    one alone, and the idle read is the sharper -- it names an exact repair."""
+def test_the_sharper_DIAGNOSIS_wins_but_the_witness_fact_still_travels():
+    """Two competing diagnoses is worse than the sharper one alone, and the
+    idle read is the sharper -- it names an exact repair. `self_split` is still
+    dropped for that reason.
+
+    The witness FAILURE is not a competing diagnosis, though, it is evidence,
+    and it is now reported alongside rather than discarded with the loser."""
     from specflow import oracles_stage as S
 
     issues = S._witness_note("REQ-0070", {
         "witness": "fails it at edge 0",
         "idle_match": "judged at edge 0, before any of scl_oen had moved",
         "self_split": "holds on 3 of the testpoints it names"})
-    assert len(issues) == 1
-    assert issues[0].path.endswith("judged_at_idle")
+    kinds = [i.path.rsplit(".", 1)[-1] for i in issues]
+    assert kinds == ["judged_at_idle", "witness_disagrees_reported"]
+    assert "disagrees_with_itself" not in kinds, "the weaker diagnosis loses"
 
 
 def test_a_check_that_never_triggered_is_not_blamed_on_its_author():

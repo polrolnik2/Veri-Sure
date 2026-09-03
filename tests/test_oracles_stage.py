@@ -1343,3 +1343,47 @@ def test_counting_guidance_is_general_and_names_no_design():
     # And the rule it is an opening in must still stand, elsewhere.
     assert "not inventing a window, you are copying one" in SYSTEM
 
+
+
+def test_an_idle_note_does_NOT_bury_the_witness_failure():
+    """h3-i2c froze five checks that the witness had already failed.
+
+    REQ-0028/0057/0099/0100/0101 each carried BOTH an `idle_match` note and a
+    `witness` note. `_witness_note` returned on `idle_match` alone, so the
+    author heard "you judged at idle" and never heard that a second
+    implementation had failed the check. All five froze TRUSTED and all five
+    convicted golden RTL -- a quarter of that run's false convictions, with the
+    evidence sitting unread in `instrument_notes`.
+
+    The specific diagnosis still leads; the witness fact now follows it.
+    """
+    from specflow.oracles_stage import _witness_note
+
+    both = _witness_note("REQ-0100", {
+        "idle_match": "judged at edge 8, before any of dout had moved",
+        "witness": "fails it at edge 8",
+    })
+    kinds = [i.path.rsplit(".", 1)[-1] for i in both]
+    assert kinds == ["judged_at_idle", "witness_disagrees_reported"], (
+        "the precise note leads, and the witness verdict is not dropped"
+    )
+
+
+def test_the_witness_fact_does_not_ask_for_relaxation():
+    """`_advisory` asks the author to TRY to accept the other implementation,
+    and that ask measured over-strictness 27 -> 15 with convictions 2 -> 16.
+    The reported fact must not carry it."""
+    from specflow.oracles_stage import _witness_note
+
+    note = _witness_note("REQ-0100", {
+        "idle_match": "judged at edge 8", "witness": "fails it at edge 8",
+    })[1]
+    assert "not a request to weaken" in note.message
+    assert "TRY" not in note.message
+
+
+def test_an_idle_note_ALONE_is_unchanged():
+    from specflow.oracles_stage import _witness_note
+
+    only = _witness_note("REQ-0070", {"idle_match": "judged at edge 0"})
+    assert [i.path.rsplit(".", 1)[-1] for i in only] == ["judged_at_idle"]
