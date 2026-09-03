@@ -21,10 +21,32 @@ KW = {"begin", "end", "if", "else", "case", "casex", "casez", "endcase", "posedg
       "generate", "endgenerate", "initial", "forever", "repeat", "while", "for"}
 
 
+#: Compiler directives, whose whole line is noise.
+_DIRECTIVE = re.compile(
+    r"^[ \t]*`(?:include|define|undef|ifdef|ifndef|elsif|else|endif|timescale"
+    r"|default_nettype|line|celldefine|endcelldefine|resetall|unconnected_drive"
+    r"|nounconnected_drive)\b[^\n]*", re.M)
+
+
 def strip(text):
+    """Comments and directives out; macro USAGES kept as plain identifiers.
+
+    Deleting from a backtick to end of line -- the obvious reading of "drop the
+    preprocessor" -- silently eats the body of any statement that mentions a
+    macro. or1200_dc_fsm compares `state` against `OR1200_DCFSM_* constants in
+    almost every branch, so that reading removed the entire FSM and scored three
+    driven outputs as having no source at all. i2c's bit_ctrl uses `parameter`
+    for its states and never exposed it.
+    """
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     text = re.sub(r"//[^\n]*", " ", text)
-    return re.sub(r"`\w+[^\n]*", " ", text)
+    text = _DIRECTIVE.sub(" ", text)
+    return re.sub(r"`(\w+)", r"\1", text)
+
+
+def macros(text):
+    """Names used as `MACRO -- constants, not signals, so not dependencies."""
+    return set(re.findall(r"`(\w+)", text))
 
 
 def ports(text):
