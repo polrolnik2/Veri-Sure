@@ -76,7 +76,7 @@ def _run(gen, **kw):
     try:
         return O.stage_unexercised(
             held={"REQ-0000": kw.pop("oracle", _oracle())},
-            unexercised={"REQ-0000": "never triggered"},
+            unexercised=kw.pop("unexercised", {"REQ-0000": "never triggered"}),
             requirements=[REQ], normalized=NORM, contract=CONTRACT,
             testplan=kw.pop("testplan", []),
             stimulus_by_tp=kw.pop("stimulus_by_tp", {}),
@@ -655,3 +655,73 @@ def test_an_exhausted_staging_attempt_convicts_and_says_what_was_tried():
     assert "nothing in the design moved" in why, "the diagnosis must travel"
     from specflow.refmodel.verdict import of_discard
     assert of_discard(why) == "ORACLE_INVALID"
+
+
+# ---------------------------------- the loop aims at the CHECK, not the schema
+
+
+def test_unexercised_against_reports_the_checks_own_account():
+    """`decide` already wrote the sentence, and it was being thrown away.
+
+    An abstaining branch returns `(None, None, detail)`, and that `detail` is
+    the author's description of the thing the check waited for and did not see.
+    `unexercised_against` computed the real result and then discarded `detail`
+    for one fixed string, so every abstainer reached the staging loop described
+    identically -- and the loop had nothing left to aim at but the NORMALIZED
+    activation, which is a different stage's reading of the same requirement.
+    """
+    oracle = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="q moves",
+        source="def decide(trace):\n"
+               "    return (None, None, 'no burst refill ever began')\n")
+    out = O.unexercised_against(
+        {"REQ-0000": oracle}, WITNESS, CONTRACT,
+        {"TP-0000": [{"inputs": {"a": 1}, "hold": 2}]},
+        base="step", transactional=True)
+    assert out.get("REQ-0000") == "no burst refill ever began"
+
+
+def test_a_check_that_says_nothing_falls_back_rather_than_quoting_empty():
+    """An empty detail is not an account. There is nothing to aim at, so the
+    loop keeps the generic sentence and `_hint` says nothing extra."""
+    oracle = RequirementOracle(
+        req_uid="REQ-0000", tp_uids=["TP-0000"], clause="q moves",
+        source="def decide(trace):\n    return (None, None, '')\n")
+    out = O.unexercised_against(
+        {"REQ-0000": oracle}, WITNESS, CONTRACT,
+        {"TP-0000": [{"inputs": {"a": 1}, "hold": 2}]},
+        base="step", transactional=True)
+    assert out.get("REQ-0000") == O.NO_ACCOUNT
+    assert O.NO_ACCOUNT not in O._hint(REQ, NORM["REQ-0000"], None, 0, saw=O.NO_ACCOUNT)
+
+
+def test_the_hint_names_the_checks_account_as_the_target():
+    h = O._hint(REQ, NORM["REQ-0000"], None, 0,
+                 saw="no burst refill ever began")
+    assert "no burst refill ever began" in h
+    # Not merely quoted -- named as the thing to stage, because the activation
+    # line is still in the same hint and the two can disagree.
+    assert "That " in h and "target" in h
+
+
+def test_the_loop_THREADS_the_account_into_the_generators_hint():
+    """THE LOAD-BEARING ONE. `unexercised_against` reporting the account buys
+    nothing unless `stage_unexercised` hands it to the generator; the value was
+    previously read only for its key. This asserts the whole path."""
+    gen = _Gen(MISS)
+    _run(gen, unexercised={"REQ-0000": "the CI strobe never rose while dc_en=1"})
+    assert gen.hints, "the generator was never called"
+    assert "the CI strobe never rose while dc_en=1" in gen.hints[0]
+
+
+def test_the_staged_testplan_element_records_what_the_check_said(tmp_path):
+    """The minted element's `stimulus` is the run's own record of why it exists.
+    Aiming the generator at the check's account while the artifact still says
+    only 'the activation' would leave the testplan describing a scenario nobody
+    staged."""
+    plan: list[dict] = []
+    gen = _Gen(MISS)
+    _run(gen, testplan=plan,
+         unexercised={"REQ-0000": "the CI strobe never rose while dc_en=1"})
+    assert plan, "no testpoint was minted"
+    assert "the CI strobe never rose while dc_en=1" in plan[0]["stimulus"]

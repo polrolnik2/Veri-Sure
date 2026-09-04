@@ -1978,7 +1978,7 @@ def _diagnose(ev: dict) -> str:
 
 
 def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
-          reset_ports: dict[str, int] | None = None) -> str:
+          reset_ports: dict[str, int] | None = None, saw: str = "") -> str:
     """What to stage, in the vocabulary S2 uses. Never a repeat.
 
     `what_the_scenario_needs` goes where S2's `stimulus` field goes, so this is
@@ -1990,6 +1990,23 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
     parts = [
         f"Stage the situation this requirement is about: {act.get('text') or req.get('text', '')}",
     ]
+    # THE CHECK IS WHAT HAS TO FIRE, AND IT ALREADY SAID WHY IT DID NOT.
+    # `saw` is the abstaining check's own `detail`. The activation line above is
+    # a DIFFERENT sentence about the same requirement -- normalization's reading,
+    # not the author's -- and where the two diverge, stimulus aimed at the
+    # activation stages a scenario the check does not recognise. The attempt is
+    # then spent, the check still abstains, and the record says "never reached"
+    # about a scenario nobody ever tried to reach.
+    #
+    # Measured on k1-dcfsm: re-aiming the loop at the check's own account
+    # reached 3 abstainers that aiming at the normalized activation had not
+    # reached in any attempt.
+    if saw and saw != NO_ACCOUNT:
+        parts.append(
+            "The check for this requirement decided NOTHING on every testpoint "
+            f"it already names, and this is the account it gave: {saw}. That "
+            "sentence is the target. Stage what the CHECK says it did not see, "
+            "which is not always what the activation above describes.")
     # RESET IS NOT A DRIVABLE INPUT, and a hint that does not say so sends the
     # generator to drive a port the schema forbids. The runtime owns reset and
     # offers a first-class step for it; the generator's own prompt documents
@@ -2101,6 +2118,12 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
 
 
 
+#: What `unexercised_against` reports when the check itself said nothing --
+#: a `decide` whose abstaining branch returns an empty detail. Nothing can be
+#: aimed at it, so `_hint` skips it rather than quoting it back at the author.
+NO_ACCOUNT = "the check never saw its scenario in this stimulus"
+
+
 def unexercised_against(held: dict, witness: str, contract: dict,
                         stimulus_by_tp: dict, *, base: str,
                         transactional: bool) -> dict[str, str]:
@@ -2128,7 +2151,14 @@ def unexercised_against(held: dict, witness: str, contract: dict,
     except Exception as exc:  # noqa: BLE001 -- a measurement, never the stage
         logger.warning("oracles: could not decide the set for staging: %r", exc)
         return {}
-    return {r.req_uid: "the check never saw its scenario in this stimulus"
+    # THE CHECK'S OWN SENTENCE, not a fixed string. `detail` is what the
+    # author wrote for the abstaining branch -- the account of the thing the
+    # check was waiting for and did not see -- and it is the only description
+    # of the missing scenario written in the check's own terms. Collapsing it
+    # to one constant threw away the whole payload and left the staging loop
+    # aiming at the NORMALIZED activation instead, which is a different
+    # sentence about the same requirement written by a different stage.
+    return {r.req_uid: (str(r.detail).strip() or NO_ACCOUNT)
             for r in results if r.unexercised()}
 
 
@@ -2269,6 +2299,7 @@ def stage_unexercised(
         # be abandoned at all.
         shape = normalized.get(uid) or {}
         act = shape.get("activation") or {}
+        saw = str(unexercised.get(uid) or "").strip()
         # `.of`, never the bare constructor -- it resolves symbols through the
         # port's encoding and normalises a value-set to a tuple.
         ob = Obligation.of(uid, str(act.get("text") or ""),
@@ -2286,7 +2317,7 @@ def stage_unexercised(
             steps = stimulus_for_scenario(
                 requirement=req, contract=contract, port=port,
                 what_the_scenario_needs=_hint(req, shape, evidence, attempt - 1,
-                                              reset_ports=reset_ports),
+                                              reset_ports=reset_ports, saw=saw),
             )
             if not steps:
                 tries.append({"attempt": attempt,
@@ -2298,7 +2329,8 @@ def stage_unexercised(
             stimulus_by_tp[tp_uid] = steps
             testplan.append(_staged_element(
                 tp_uid, uid, req, shape,
-                stimulus=_hint(req, shape, None, 0, reset_ports=reset_ports)))
+                stimulus=_hint(req, shape, None, 0, reset_ports=reset_ports,
+                               saw=saw)))
             added.append(tp_uid)
             if tp_uid not in oracle.tp_uids:
                 oracle.tp_uids.append(tp_uid)

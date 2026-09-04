@@ -235,9 +235,53 @@ right instrument is "no measurable difference".
 subagent correlated with unfalsifiable checks. Harness observation, not a
 pipeline measurement.
 
+### F6 -- stage what the CHECK said it did not see, not the normalized activation
+
+**IMPLEMENTED.** `specflow/oracles_stage.py`, with tests in
+`tests/test_stimulus_loop.py`.
+
+`unexercised_against` runs the real `decide_all` and then throws away the one
+thing the run produced. An abstaining `decide` returns `(None, None, detail)`,
+and `detail` is the author's own sentence about the thing the check waited for
+and did not see -- the only description of the missing scenario written in the
+check's terms. The function replaced it with one fixed string for every
+requirement:
+
+```python
+return {r.req_uid: "the check never saw its scenario in this stimulus"
+        for r in results if r.unexercised()}
+```
+
+So every abstainer arrived at the staging loop described identically, and the
+loop had nothing left to aim at but the NORMALIZED activation -- a different
+stage's reading of the same requirement. Where the two diverge, stimulus aimed
+at the activation stages a scenario the check does not recognise; the attempt is
+spent, the check still abstains, and the record says "never reached" about a
+scenario nobody tried to reach.
+
+*Measured on k1-dcfsm.* Re-aiming the loop at the check's own account reached
+**3** abstainers that aiming at the normalized activation had not reached in any
+attempt: 0 -> 3.
+
+The change is three lines of plumbing and one paragraph of prompt:
+`unexercised_against` returns `r.detail`; `stage_unexercised` binds it (the dict
+value was previously read only for its key); `_hint` names it as the target
+alongside the activation rather than instead of it, because the two are both
+true and the check's is the one that has to fire. An empty detail is not an
+account, so it falls back to `NO_ACCOUNT` and `_hint` stays silent rather than
+quoting a constant back at the generator.
+
+**This is the correction to the negative result below**, which was measured with
+the loop still aimed at the activation and is a finding about that target, not
+about stimulus.
+
 ## Negative results
 
-**Adding stimulus does not recover the abstaining checks.** For the 15
+**Adding stimulus aimed at the NORMALIZED ACTIVATION does not recover the
+abstaining checks.** The qualifier is load-bearing and was added after the fact:
+re-running this with the stimulus aimed at the check's own abstention detail
+recovered 3 (F6). Read what follows as a result about the TARGET, not about
+whether stimulus can help. For the 15
 behavioural discards liveness called `unknown`/`dead-stimulus`, new stimulus was
 generated through the pipeline's own path (`_hint` -> `build_suite_prompt_one` ->
 author -> the real `gate_suite`) and added as a new testpoint, with the check
@@ -255,5 +299,6 @@ corrected run.
 ## Order to implement
 
 F2 first (largest, no model calls, replicated on five designs), then F3 (makes
-the rest safe), then F1 (largest per-requirement effect). F4 needs a
-higher-powered trial before it earns a place. F5 needs a trial at all.
+the rest safe), then F1 (largest per-requirement effect), then F6 (small, no
+model calls, and it corrects the target the staging budget is spent on). F4
+needs a higher-powered trial before it earns a place. F5 needs a trial at all.
