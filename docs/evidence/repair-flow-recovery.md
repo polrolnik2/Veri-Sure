@@ -275,6 +275,76 @@ quoting a constant back at the generator.
 the loop still aimed at the activation and is a finding about that target, not
 about stimulus.
 
+### F7 -- a requirement gated on a COMPILED-OUT option is unreachable by construction
+
+**NOT IMPLEMENTED. Measured, and the largest single unexplained block on k1.**
+
+`or1200_defines.v` carries `// \`define OR1200_DC_STORE_REFILL` -- commented
+out. So `OR1200_DCFSM_SREFILL4`, and every transition into it, is behind an
+`ifdef` that is FALSE in the design under test. The state does not exist in the
+build.
+
+**The fact is NOT missing. It is carried and never consulted.** The contract
+holds it explicitly:
+
+```json
+"build_config": {"OR1200_DC_STORE_REFILL": false, "OR1200_DCLS": 4}
+```
+
+That block appears in **13 of 13** oracle-author prompts, and **no file under
+`specflow/` or `eda_agent/` reads `build_config` at all** -- it is threaded into
+every prompt and consumed by nothing. No gate asks whether a requirement's own
+precondition holds in this build; `normalize` has no disposition for it; the
+staging loop spends attempts reaching a state that is not compiled.
+
+That the fact is USABLE from where it sits is not a conjecture: one of the three
+repair arms read `build_config` unprompted while fixing an unrelated defect and
+flagged it in its own report -- *"this build's contract_json sets
+OR1200_DC_STORE_REFILL: false, meaning the feature this requirement describes is
+compiled out in the design actually being verified"* -- then correctly declined
+to act on it because the gate had not raised it. The information reached the
+author. Nothing gave the author authority to use it, and no gate used it either.
+
+**7 of 89 k1 requirements name that option, and they are three different
+problems, which is why a blanket exclusion would be wrong:**
+
+| group | uids | what it is |
+|---|---|---|
+| wholly unreachable | REQ-0025, REQ-0080, REQ-0085 | the whole obligation is "when the option is enabled, ... SREFILL4 ..." |
+| reachable core, dead clause | REQ-0002, REQ-0036, REQ-0088 | asserts CLOAD/LREFILL3 behaviour AND "... and throughout SREFILL4 when enabled" |
+| about the option being OFF | REQ-0079 | "when OR1200_DC_STORE_REFILL is **not** enabled, ... returns to IDLE without a refill" -- this build exactly |
+
+*Dispositions, as shipped.* The three wholly-unreachable ones are all
+ORACLE_INVALID: the repair budget was spent, three times each, on behaviour that
+cannot occur. Of the middle group, REQ-0036 is **TRUSTED and decides `None` on
+both testpoints it names** -- a vacuous trust counted as a recovered
+requirement; the other two are ORACLE_INVALID. REQ-0079 is **TRUSTED and
+convicts golden**, which is an ordinary over-strict check and not an
+unreachability artefact at all -- it describes the live configuration.
+
+**None of the seven is a sound trusted check**, and no single fix addresses all
+three groups:
+
+* **wholly unreachable** -> a fourth disposition, UNREACHABLE, out of the
+  denominator and never sent to the author. Behavioural denominator 67 -> 64.
+* **reachable core** -> the check must assert the reachable conjuncts and drop
+  the dead one. This is an authoring instruction, not an exclusion; excluding
+  them would discard real obligations about `burst` in CLOAD and LREFILL3.
+* **REQ-0079** -> nothing to do with configuration. Ordinary repair.
+
+*Detection is mechanical and needs no model call, and needs no new plumbing
+either* -- `contract["build_config"]` already says which options are off, and a
+requirement quoting an option that is false there is answerable before the
+author is ever called. The distinction between the first two groups is NOT mechanical -- it is
+whether the option gates the whole obligation or one conjunct -- so the safe
+automatic action is to ROUTE the requirement with the configuration fact
+attached, and let the author drop the dead clause, rather than to exclude on a
+keyword match.
+
+**This is a k1 finding and its generality is unmeasured.** The i2c designs were
+not checked for the same pattern, and 41 of 541 OR1200 defines are commented out,
+so the k1 count is a lower bound for this design family only.
+
 ## Negative results
 
 **Adding stimulus aimed at the NORMALIZED ACTIVATION does not recover the
