@@ -613,6 +613,83 @@ Every one of the five was an ACCEPTANCE, so the bug biased the result against th
 repaired bodies by exactly enough to make the experiment look negative. Dropping
 nulls is serialization, not a verdict.
 
+### F11 -- probes REFUTED: the state was not what the authors were missing
+
+**The probe idea is refuted by its own pre-registered test. Do not open the
+branch.**
+
+Hypothesis: 11 of 13 `off-target` objections demand a window keyed to an FSM
+state the contract does not declare, so making that state readable should let the
+author scope the window and stop taking unlicensed paths.
+
+The runtime already records internals per edge (`runtime.py:990-993`,
+`trace_internals`), so k1's traces already carry `state, cnt, hitmiss_eval, load,
+store, cache_inhibit`. Ten one-bit predicates were derived from them and injected
+into every row. Haiku re-authored the same 13 checks against the augmented
+contract; **the control is rx7's Haiku arm** -- same model, same builder, same
+objections, unaugmented contract -- so the arms differ in exactly one variable.
+
+| WORKS = fires on golden AND never convicts it | baseline | control | **probe** |
+|---|---|---|---|
+| spec-names-state (4) | 1 | 1 | **1** |
+| gate-overspecifies (4) | 1 | 3 | 2 |
+| other (5) | 3 | 3 | 3 |
+| **ALL (13)** | **5** | **7** | **6** |
+
+**Probe arm 6/13 against control 7/13: -1, where the pre-registered threshold was
++4.** `spec-names-state` moved by ZERO. 11 of 13 answers actually read a probe,
+so the instrument was used; it simply did not help.
+
+And this was the idea's BEST CASE. The predicates were computed from the golden
+RTL's own encoding, so the authors were handed perfectly correct probes for free
+-- a luxury no real pipeline can offer, since there the RTL author drives them
+and can get them wrong. The ceiling measured -1.
+
+**Probes actively hurt twice.** REQ-0006 regressed from `fires + sound` to
+`CONVICTS golden`; REQ-0025 and REQ-0067 went from convicting to `never fires`.
+A sharper instrument let the author draw a tighter window around the wrong thing.
+
+#### The real cause, and it is a GATE fault
+
+REQ-0017 is decisive. Its objection names exactly two defects:
+
+> *"The check's trigger is too broad: it must be restricted to rows representing
+> the FSM being in LREFILL3 with cnt nonzero. It also must not return False
+> merely because saved_addr is unavailable."*
+
+The probe answer fixed **both, exactly**: `in_lrefill3 and cnt_nonzero` for the
+first, missing-evidence-to-None for the second. It still convicts golden, because
+of a **third defect the objection never mentions** -- it computes
+`expected = (old_addr + 4)`, while the design does
+`saved_addr_r[3:2] <= saved_addr_r[3:2] + 1`, a modulo-4 advance of two bits that
+WRAPS. A flat `+4` convicts a correct design at the line-wrap position.
+
+So the objection was accurate and **incomplete**, and the author fixed precisely
+what was named. rx7's Sonnet answer passed this requirement not because it scoped
+better but because it also reworked the increment -- Opus's rx7 report names the
+same defect unprompted: *"I corrected the increment from +4 to the spec's
+saved_addr[3:2]-only modulo-4 advance, since +4 convicts a correct design at the
+line-wrap position."*
+
+**This is the finding the probe experiment bought.** `off-target` objections
+enumerate SOME unlicensed paths, the author fixes those, and the check still
+convicts on the ones nobody named. That is the same conclusion the witness
+measurement reached from the other direction (F10, and the 80%-blind
+over-strictness instrument): **conviction control cannot work while the only
+instrument that could enumerate the remaining false paths is absent.**
+
+#### What survives
+
+Two mechanical results are independent of the refutation and worth keeping:
+
+* **The reachability screen works.** Over 318 traces / 25,305 edges,
+  `in_srefill4` is true **zero** times, reproducing the compiled-out
+  `OR1200_DC_STORE_REFILL` finding from traces alone, with no spec reading.
+  Dependents can be dispositioned `UNREACHABLE` before a staging attempt is spent.
+* **The failure is not coverage.** `in_lrefill3` and `cnt_nonzero` are each true
+  on 62 of 318 testpoints. The states these checks need ARE reached. Whatever is
+  wrong with them, it is not that the stimulus never gets there.
+
 ## Is 90% of behavioural reachable on k1? No, and here is the arithmetic
 
 k1-dcfsm has **67 behavioural** requirements; 90% is **60**. As shipped, **33**
