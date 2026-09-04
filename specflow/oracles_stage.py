@@ -545,6 +545,46 @@ def _advisory(req_uid: str, note: str) -> Issue:
         f"a disagreement.")
 
 
+#: A `live` LIVENESS VERDICT REFUTES A REACHABILITY CLAIM, AND NOTHING ELSE.
+#:
+#: `liveness` decided the check on a real replay and then moved its verdict by
+#: perturbing a port it reads. That is a direct counter-example to "never
+#: reached": the check DID decide, so the claim that nothing reaches it was
+#: measured false. Keeping it is not a softening -- it is declining to believe a
+#: refuted claim.
+#:
+#: EVERY OTHER GROUND IS OUT OF SCOPE, and the exclusions are the whole of this
+#: predicate:
+#:
+#:   `off-target`      -- correspondence asks whether the oracle tests the
+#:       requirement it CLAIMS to. Liveness cannot see that; a check can be
+#:       perfectly live and test the wrong thing. Of k1-dcfsm's 24 live discards,
+#:       16 are this. Admitting them would launder what this stage has twice been
+#:       burned by: turning a number into a verdict it does not support.
+#:
+#:   `not-assertable` -- the REQUIREMENT states no obligation ("the sentence
+#:       lacks an actionable effect"). That is a claim about the spec, not about
+#:       the check, and a live check attached to a hollow requirement is testing
+#:       something nothing asked for -- off-target wearing another hat. Both of
+#:       k1's NOT_ASSERTABLE checks are this, and an earlier draft of this
+#:       predicate wrongly matched the string; `test_correspondence` caught it.
+#:
+#: MEASURED. Of k1-dcfsm's 53 discarded checks 24 are `live`, and 6 of those were
+#: held on the reachability ground alone -- so this takes TRUSTED 36 -> 42, not
+#: the 36 -> 60 that reprieving every live check would have claimed.
+_REACHABILITY_CLAIMS = ("never reached", "unreached")
+
+
+def _reprieved(reason: str, verdict: str | None) -> bool:
+    """True when `verdict` is evidence against the stated `reason`."""
+    if verdict != _L.LIVE:
+        return False
+    text = str(reason or "").lower()
+    if "off-target" in text or "not-assertable" in text:
+        return False
+    return any(claim in text for claim in _REACHABILITY_CLAIMS)
+
+
 def _liveness(held: dict, witness: str, contract: dict,
               stimulus_by_tp: dict, *, base: str) -> dict:
     """`req_uid -> record` over the checks still standing. `{}` if it cannot run.
@@ -1517,6 +1557,22 @@ def run_oracle_stage(
     # `abandoned` is populated by the stages that ran the attempt (the stimulus
     # loop, the resolution pass, the repair loop) and is empty otherwise, so the
     # exclusion cannot fire on a requirement nobody tried.
+    # THE REPRIEVE. A discard whose stated ground is a reachability claim is
+    # overturned by a `live` verdict, because that verdict IS the counter-
+    # example. `off-target` is untouched -- see `_reprieved`.
+    _verdict = {u: (r or {}).get("verdict") for u, r in (alive or {}).items()}
+    reprieved = {
+        uid: why
+        for uid, why in list(rejected.items()) + list(abandoned.items())
+        if uid in held and _reprieved(why, _verdict.get(uid))
+    }
+    if reprieved:
+        rejected = {u: w for u, w in rejected.items() if u not in reprieved}
+        abandoned = {u: w for u, w in abandoned.items() if u not in reprieved}
+        logger.info(
+            "oracles: %d discard(s) overturned -- liveness decided and moved "
+            "them, which refutes the reachability ground they were held on: %s",
+            len(reprieved), ", ".join(sorted(reprieved)[:8]))
     trusted = [o for uid, o in held.items()
                if uid not in rejected and uid not in abandoned]
     dispositions, reasons = _dispositions(
@@ -1524,6 +1580,10 @@ def run_oracle_stage(
         had_source=set(held), normalized=normalized,
         abandoned=abandoned,
         never_decides=_L.never_decides(alive))
+    for uid, why in reprieved.items():
+        reasons[uid] = (f"discard overturned -- liveness decided this check and "
+                        f"a perturbation moved its verdict, which refutes "
+                        f"{why!r}")
 
     if only and previous is not None:
         # A SCOPED ROUND DECIDES ONLY WHAT IT WAS ASKED ABOUT. Everything else

@@ -125,24 +125,55 @@ Paired: N-only 0, A-only 8, both 0 (sign test p ~ 0.008). The bare reason is
 *Change.* Write `_diagnose(evidence)` into `repairs[uid]` phrased as
 **"the activation was driven and the check saw nothing"**, never "never reached".
 
-### F2 -- do not discard a check liveness calls `live`
+### F2 -- overturn a REACHABILITY discard when liveness says `live`
 
-**CONFIRMED on five designs.** The largest absolute gain.
+**IMPLEMENTED** (`oracles_stage._reprieved` + the reprieve at the `trusted`
+construction). Smaller than first claimed -- see the correction below.
 
-*Defect.* A correspondence rejection is terminal. Liveness runs every round
-(`oracles_stage.py:1204`) but only over `held` -- a check already rejected never
-gets a liveness verdict, so "this check works" is never weighed against "a
-reviewer who saw no trace disliked it".
+*Defect.* A discard is terminal. Liveness runs every round but its verdict is
+never weighed against the ground the check was discarded on, so a claim the
+stage has already measured false still ends the requirement.
 
-*Measured.* 24/53 on k1, and 41-65% of the residue on four i2c runs (table
-above). Only 2 of k1's 53 are `dead-oracle`.
+*What a `live` verdict does and does not refute.* Liveness decided the check on a
+real replay and then moved its verdict. That is a counter-example to
+**"never reached"** and nothing else:
 
-*Available where it must run.* Liveness is witness-based, so it is computable at
-oracle time. This is the criterion the withdrawn golden-based version lacked.
+| ground | refuted by `live`? | why |
+|---|---|---|
+| `never reached` / `unreached` | **yes** | the check DID decide |
+| `off-target` | no | whether it tests ITS requirement is invisible to liveness |
+| `not-assertable` | no | a claim the REQUIREMENT states no obligation, not about the check |
 
-*Change.* Extend the liveness pass to rejected checks, and make `live` block a
-discard -- or at minimum route it back for a second look rather than freezing
-the rejection.
+*THE CORRECTION THIS FIX WENT THROUGH, recorded because the first number was
+wrong by 3x.* The original proposal was "keep any discarded check liveness calls
+live", sized at 24/53 on k1 and 41-65% across five runs, projecting TRUSTED
+36 -> 60. Classifying the 24 by the ground they were actually held on:
+**16 were `off-target`** and 2 were `not-assertable`. Liveness speaks to neither.
+The first draft of the predicate still matched the `not-assertable` string, and
+`test_correspondence.py` caught it -- a hollow requirement was being promoted to
+TRUSTED. The sound reprieve is **6 of 53**, not 24.
+
+*Measured on the implemented predicate*, k1-dcfsm:
+
+| | n | CONVICTS golden | passes | silent |
+|---|---|---|---|---|
+| frozen set as shipped | 36 | 8 (22%) | 20 | 8 |
+| the 6 the reprieve admits | 6 | 1 | 1 | 4 |
+| extended set | **42** | 9 (**21%**) | 21 | 12 |
+
+TRUSTED **36 -> 42** (40% -> 47% of 89). Golden is known-good, so a conviction is
+a FALSE conviction: the rate is flat, 22% -> 21% of the set and 29% -> 30% of
+deciders. The reprieve does not buy coverage at the cost of false alarms.
+
+*Caveat.* 4 of the 6 admitted are SILENT on golden -- live against the witness,
+but they do not fire against the real design. They are legitimate members of the
+set and they add no decisions to it.
+
+*Sound reprieve across runs* (live-and-discarded whose ground is a reachability
+claim, so the `off-target` majority is excluded): k1 6, and on the wider
+"reachability or not-assertable" reading 8/53, 7/64, 5/49, 8/30, 8/17 -- the
+per-run figures should be recomputed under the narrowed predicate before being
+quoted as projections.
 
 ### F3 -- keep the better body across a repair round
 
