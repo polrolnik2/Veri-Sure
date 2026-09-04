@@ -507,6 +507,51 @@ had. Gate-clean went 8 -> 11 after the fix. The 0-moved result is from the
 corrected run.
 
 
+### F11 -- the trusted rate across the corpus, and a concurrence rule priced
+
+**The 90% target has never been approached on ANY design in this corpus.**
+Recollected from each run's own `dispositions`, over requirements S1 marked
+`behavioural`:
+
+| run | behavioural | TRUSTED | % | blockers |
+|---|---|---|---|---|
+| k1-dcfsm | 67 | 33 | **49%** | 23 ORACLE_INVALID, 10 ABANDONED, 1 VACUOUS |
+| h3-i2c | 95 | 44 | **46%** | 32 ORACLE_INVALID, 8 ABANDONED, 7 NOT_ASSERTABLE, 4 VACUOUS |
+| n4-i2c | 91 | 24 | **26%** | 44 ORACLE_INVALID, 12 ABANDONED, 10 NOT_ASSERTABLE, 1 VACUOUS |
+| a2-i2c, c1-i2c, d1-i2c | -- | -- | -- | predate `unit_kind`; not comparable |
+
+Aggregate over the three measurable runs: **101 of 253 = 40%**. k1 at 49% is the
+BEST case, not a bad one, and `ORACLE_INVALID` is the largest blocker on every
+single run. The shortfall is systemic, not a property of k1 or of the dcfsm.
+
+**A concurrence rule, priced honestly.** F10 measured `off-target` at 54%
+disagreement between reviewers, which suggests requiring TWO concurring reviews
+before discarding. On the 13:
+
+* retains **7** the shipped gate discarded;
+* of those 7 with their ORIGINAL body, **2 pass golden**, **1 decides nothing**,
+  and **4 CONVICT A KNOWN-GOOD DESIGN** (REQ-0002, REQ-0025, REQ-0074,
+  REQ-0084);
+* concurrence THEN repair on what concurrence still discards ends with **5 of
+  13** carrying a body that is both gate-accepted and clean on golden.
+
+Scaled to the 23: **+9**, taking k1 to **42 of 67 = 63%**.
+
+**That cost is the point and it is not a footnote.** The goal asks for full
+trusted coverage AND reasonable golden convictions, and this rule trades the
+second for the first: it readmits four checks that fail a correct design. A gate
+loosened until coverage looks good is the vacuous-accept failure one artifact up.
+The rule is therefore RECORDED AND NOT RECOMMENDED on this evidence -- what the
+54% disagreement licenses is measuring the SHIPPED gate's own reproducibility
+(run it twice over identical bodies), not loosening it on the strength of one
+proxy reviewer.
+
+**Every lever, stacked, on k1:** F2 +3, F6 +3, F9 upper bound +3, concurrence and
+repair on the off-target block +9. That is 33 + 18 = **51 of 67 = 76%** at the
+optimistic ceiling, with the golden-conviction cost above included. **The target
+is 60. It is not reachable**, and the corpus-wide table says the same thing three
+times over.
+
 ### F10 -- the acceptance test, with a control: +3, and `off-target` is not reproducible
 
 **The measurement nothing else in this document had run.** Every other number
