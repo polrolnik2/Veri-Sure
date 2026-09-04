@@ -83,10 +83,16 @@ def test_only_a_definite_failure_is_reported():
     """A pass, an unexercised scenario and a broken replay are all silence. Only
     a definite failure carries information; re-asking on the others would spend
     a repair round on something the author cannot act on."""
+    # Reads the declared OUTPUT as well as the input: an abstention is the
+    # point of this test, deciding nothing observable is not, and `well_formed`
+    # now separates the two.
     unexercised = (
         "def decide(trace):\n"
-        "    if not any(r['inputs']['a'] == 7 for r in trace):\n"
+        "    hits = [r for r in trace if r['inputs']['a'] == 7]\n"
+        "    if not hits:\n"
         "        return (None, None, 'the a==7 case never occurs')\n"
+        "    if any(r['outputs']['y'] != r['inputs']['a'] for r in hits):\n"
+        "        return (False, None, 'y did not follow a while a was 7')\n"
         "    return (True, None, 'ok')\n"
     )
     assert _gate(unexercised, conforming_source=CONFORMING,

@@ -600,6 +600,12 @@ def _smoke_rows(contract: dict, rows: int = 2) -> list[dict]:
              "inputs": dict(ins), "outputs": dict(outs)} for i in range(rows)]
 
 
+def _declared_outputs(contract: dict) -> set[str]:
+    """The declared OUTPUT port names. What a check has to read to check."""
+    return {str(p.get("name")) for p in (contract.get("io") or [])
+            if str(p.get("dir")) == "output" and p.get("name")}
+
+
 def well_formed(
     oracle: RequirementOracle, contract: dict, testplan: list[dict]
 ) -> str | None:
@@ -631,10 +637,34 @@ def well_formed(
         return "`decide` is not an ordinary function"
     if arity != 1:
         return f"`decide` takes {arity} arguments, expected exactly 1 (the trace)"
-    if not ports_read(oracle, contract):
+    named = ports_read(oracle, contract)
+    if not named:
         # An oracle naming no declared port cannot be about observable
         # behaviour, and the mutation gate could never scope a mutant to it.
         return "names no declared port, so it decides nothing observable"
+    # AND AN OUTPUT AMONG THEM, which is what the sentence above always meant
+    # and did not say. `ports_read` returns any DECLARED port, inputs included,
+    # so a check reading only `dc_en` and `dcqmem_cycstb_i` passed this gate --
+    # a check over the stimulus alone, which no design can fail because no
+    # design drives its own inputs. Three of k1-dcfsm's abandonments are exactly
+    # that (REQ-0001 is six lines and never touches `row["outputs"]`), and each
+    # spent three staging attempts first, then was ABANDONED -- a verdict that
+    # blames the TESTPLAN for a defect wholly in the check.
+    #
+    # Measured over every run's bodies, discarded ones recovered from agent_io:
+    # k1-dcfsm 6 of 89, d1-i2c 5 of 97, a2-i2c 0, c1-i2c 0. Of the 11, eight
+    # were ABANDONED, two ORACLE_INVALID, and ONE WAS TRUSTED AND FROZEN -- a
+    # shipped check that decides nothing observable.
+    #
+    # `liveness` already computes the right set (`ports_read(...) & widths`,
+    # "outputs only") and already words the finding -- "the oracle names no
+    # declared output port" -- but it runs AFTER the staging budget is spent,
+    # and its `unknown` is not a rejection. Asking here costs nothing and puts
+    # the objection where the author can act on it.
+    if not (named & _declared_outputs(contract)):
+        return ("names no declared OUTPUT port, so it decides nothing about the "
+                "design -- it reads only inputs, which the stimulus drives and "
+                "no design can get wrong")
 
     # SMOKE-RUN IT. Everything above is STATIC -- the source parses, `decide`
     # exists with the right arity, a declared port is named -- and none of that

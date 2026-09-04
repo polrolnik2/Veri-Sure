@@ -224,6 +224,41 @@ def test_an_oracle_naming_no_declared_port_decides_nothing_observable():
     assert "names no declared port" in (well_formed(bad, CONTRACT, PLAN) or "")
 
 
+def test_an_oracle_reading_ONLY_INPUTS_is_refused():
+    """THE GAP THE PORT GATE LEFT. `ports_read` returns any DECLARED port, so a
+    check reading only inputs satisfied "names a declared port" while deciding
+    nothing about the design -- no design drives its own inputs, so no design
+    can fail such a check. The gate's own comment always said "decides nothing
+    observable"; the predicate did not implement it.
+
+    Measured over every run's oracle bodies, discarded ones recovered from
+    `agent_io`: k1-dcfsm 6 of 89, d1-i2c 5 of 97, a2-i2c 0, c1-i2c 0. Of those
+    11, eight were ABANDONED -- "never reached in N attempt(s)", a verdict that
+    blames the TESTPLAN and spends the staging budget first -- two were
+    ORACLE_INVALID, and one was TRUSTED AND FROZEN.
+    """
+    bad = _oracle("def decide(trace):\n"
+                  "    if any(r['inputs']['a'] == 7 for r in trace):\n"
+                  "        return (True, None, 'a reached 7')\n"
+                  "    return (None, None, 'a never reached 7')\n")
+    why = well_formed(bad, CONTRACT, PLAN) or ""
+    assert "names no declared OUTPUT port" in why
+    # It must NOT be reported as the older, different defect: that one is about
+    # naming no port at all, and routes the author somewhere else.
+    assert why != "names no declared port, so it decides nothing observable"
+
+
+def test_reading_one_declared_output_is_enough_to_pass_the_port_gate():
+    """The gate asks for an output, not for a good check. Strength is `must_fail`'s
+    question and over-strictness is correspondence's; neither belongs here."""
+    ok = _oracle("def decide(trace):\n"
+                 "    for row in trace:\n"
+                 "        if row['inputs']['a'] == 7 and row['outputs']['q'] != 7:\n"
+                 "            return (False, row['edge'], 'q did not follow a')\n"
+                 "    return (True, None, 'q followed a')\n")
+    assert well_formed(ok, CONTRACT, PLAN) is None
+
+
 def test_ports_read_finds_only_declared_ports():
     o = _oracle('def decide(trace):\n    x = "not_a_port"\n'
                 '    return (trace[0]["outputs"]["ack"] == 1, 0, x)\n')

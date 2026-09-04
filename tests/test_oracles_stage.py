@@ -62,11 +62,20 @@ def decide(trace):
     return True, 0, 'y stayed a bit'
 """
 #: Its scenario never occurs in this stimulus. NOT a defect.
+# An abstainer that is otherwise a REAL check: it reads the declared output.
+# The earlier body read only `a`, so it decided nothing about the design at all,
+# and `well_formed` now refuses that -- which would have made these tests about
+# the wrong thing. Abstention is what they are for; naming no output was never
+# the point.
 UNEXERCISED = """\
 def decide(trace):
-    if not any(r['inputs']['a'] == 7 for r in trace):
+    hits = [r for r in trace if r['inputs']['a'] == 7]
+    if not hits:
         return None, None, 'a never reached 7'
-    return True, 0, 'ok'
+    for row in hits:
+        if row['outputs']['y'] != row['inputs']['a']:
+            return False, row['edge'], 'y did not follow a while a was 7'
+    return True, 0, 'y followed a whenever a was 7'
 """
 
 

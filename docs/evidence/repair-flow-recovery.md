@@ -432,6 +432,59 @@ single-shot re-authoring per arm with no repair rounds, where the pipeline gives
 the author two; and subagents rather than the pipeline's own gateway, so the
 prompt is identical but the serving path is not.
 
+### F9 -- the port gate asks for a declared port, and meant a declared OUTPUT
+
+**IMPLEMENTED.** `specflow/refmodel/oracles.py`, tests in
+`tests/test_refmodel_oracles.py`.
+
+```python
+if not ports_read(oracle, contract):
+    # An oracle naming no declared port cannot be about observable
+    # behaviour, and the mutation gate could never scope a mutant to it.
+    return "names no declared port, so it decides nothing observable"
+```
+
+`ports_read` returns any DECLARED port, inputs included. So a check reading only
+`dc_en` and `dcqmem_cycstb_i` satisfied a gate whose own comment says "decides
+nothing observable" -- and it does decide nothing, because no design drives its
+own inputs, so no design can fail such a check. The comment stated the intent
+exactly; the predicate did not implement it. `liveness.py:240` has had the right
+set all along -- `ports_read(oracle, contract) & set(widths)`, commented
+"outputs only".
+
+*Measured over every run's oracle bodies, discarded ones recovered from
+`agent_io`:*
+
+| run | bodies | read no declared OUTPUT | dispositions |
+|---|---|---|---|
+| k1-dcfsm | 89 | **6** (7%) | 6 ABANDONED |
+| d1-i2c | 97 | **5** (5%) | 2 ABANDONED, 2 ORACLE_INVALID, **1 TRUSTED** |
+| a2-i2c | 105 | 0 | -- |
+| c1-i2c | 110 | 0 | -- |
+
+Eight of the eleven were **ABANDONED** -- "never reached in 3 attempt(s)", a
+verdict that blames the TESTPLAN and spends three staging attempts first. One
+was **TRUSTED AND FROZEN**: a shipped check that decides nothing observable.
+k1's REQ-0001 is six lines and never touches `row["outputs"]` at all.
+
+The two i2c runs with the later normalization score zero, so this is not
+universal -- but where it bites it is misattributed in the most expensive
+direction, and it is answerable statically, before any staging attempt or model
+call.
+
+**What it does NOT do is recover those requirements.** It moves the objection
+from the testplan to the author and makes it mechanical and quotable; whether
+the author then writes a check that reads an output is unmeasured. The three
+k1 behavioural cases (REQ-0001, REQ-0009, REQ-0010) are an upper bound of +3,
+not a measured gain.
+
+*Three test fixtures had to change, and the reason is the finding.*
+`UNEXERCISED` in `test_oracles_stage.py`, the inline body in
+`test_oracle_promotion.py`, and the staging fixture all used an input-only check
+as a convenient ABSTAINER. Abstention is what those tests are about; naming no
+output never was. Each now reads the declared output and abstains on the same
+condition, so the tests assert what they always meant.
+
 ## Negative results
 
 **Adding stimulus aimed at the NORMALIZED ACTIVATION does not recover the
@@ -452,6 +505,43 @@ One harness bug was found and fixed mid-run: the first scorer REPLACED a
 testpoint's stimulus instead of adding one, deleting evidence the check already
 had. Gate-clean went 8 -> 11 after the fix. The 0-moved result is from the
 corrected run.
+
+
+## Is 90% of behavioural reachable on k1? No, and here is the arithmetic
+
+k1-dcfsm has **67 behavioural** requirements; 90% is **60**. As shipped, **33**
+are TRUSTED (49%). The whole available pool is the 34 that are not, and it has
+exactly three shapes:
+
+| blocker | n | reason |
+|---|---|---|
+| ORACLE_INVALID | 23 | every one `off-target` -- the correspondence gate |
+| ABANDONED | 10 | every one "never reached in 3 attempt(s)" -- the staging loop |
+| VACUOUS | 1 | passed every variant of its own requirement |
+
+Best case per bucket, using only what was measured this session:
+
+* **the 10 ABANDONED.** Running liveness over their recovered bodies: **3 live**
+  (F2 reprieves these -- and this is where the ledger's +3 behavioural comes
+  from, not a larger number), **3 that read only inputs** (F9; recovery
+  unmeasured), **1 `dead-oracle`** which cannot fail and is correctly rejected,
+  and **3 genuinely unexercised** (F6's target). Ceiling **+9 of 10**.
+* **the 23 ORACLE_INVALID.** rx7 covered 13 and the union of four independently
+  authored bodies was 7 -- 54%. Scaled to 23 that is **+12**, and the scaling is
+  an assumption, not a measurement.
+* **the 1 VACUOUS.** +0.
+
+**Optimistic ceiling 33 + 21 = 54 of 67 = 81%. The target is 60. It is short by
+6, and the ceiling is not achievable anyway**, because it assumes all three of:
+per-requirement selection on golden (which this project forbids -- golden scores,
+it never selects); every routed author fix landing; and the 54% rate measured on
+13 holding across all 23.
+
+The binding constraint is the 23 `off-target` rejections, and the honest state of
+that lever is that **its acceptance test has not been run**. Everything measured
+here scores bodies on golden. Whether a repaired body PASSES CORRESPONDENCE --
+the gate that actually rejected it, and the only thing that would make it TRUSTED
+-- is unmeasured, and is the next experiment worth running.
 
 ## Order to implement
 
