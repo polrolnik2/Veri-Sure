@@ -345,6 +345,93 @@ keyword match.
 not checked for the same pattern, and 41 of 541 OR1200 defines are commented out,
 so the k1 count is a lower bound for this design family only.
 
+### F8 -- the three-arm capability experiment REFUTES my structural claim
+
+**RETRACTION. Not a capability problem, and not the structural problem I said it
+was.** Haiku, Sonnet and Opus each answered the same 13 real repair prompts,
+built through the pipeline's own `build_prompt` and carrying each requirement's
+real objection. Scored CLEAN = live AND passes golden AND decides AND not
+CONVICTED of vacuity. Golden scores; it never selects, and no arm saw it.
+
+| class (n) | baseline | haiku | sonnet | opus |
+|---|---|---|---|---|
+| spec-names-state (4) | 1 | 1 | **2** | 0 |
+| gate-overspecifies (4) | 0 | **2** | 0 | **2** |
+| other (5) | 3 | 3 | 3 | 2 |
+| **ALL (13)** | **4** | **6** | **5** | **4** |
+
+**There is no capability gradient.** Opus scores exactly the baseline, BELOW
+Haiku. Opus is also the only arm that regressed -- it lost REQ-0063 and REQ-0087,
+both of which the baseline body already got right -- and its REQ-0002 answer is
+the one the vacuity axis caught: `passes/live/CONVICTED`, a check that stopped
+convicting golden by ceasing to assert. Without `must_fail` in the criterion it
+would have scored as a recovery.
+
+**And the structural claim is refuted on its own pre-registered terms.** Before
+seeing results I wrote: *if the structural reading is right, all three arms score
+about 0 on the four `spec-names-state` requirements regardless of capability*,
+and *if an arm beats the baseline on that class, that is enough to stop me
+asserting it*. Sonnet scored 2 of 4, taking REQ-0017 from CONVICTS to passes --
+the requirement whose objection demands "the FSM being in LREFILL3 with cnt
+nonzero".
+
+*How it did it, because the mechanism is the useful part.* I had proved from the
+golden RTL that the state is not pointwise identifiable:
+
+```verilog
+assign burst = (state == CLOAD) & tagcomp_miss & !cache_inhibit | (state == LREFILL3);
+assign first_miss_ack = ((state == CLOAD) | (state == CSTORE)) & biudata_valid;
+```
+
+so CLOAD-with-miss-pending-before-data presents `burst=1, biu_read=1,
+first_miss_ack=0` -- identical to LREFILL3 on exactly those ports. That much is
+correct. What is wrong is the conclusion I drew from it. Sonnet did not try to
+identify the state pointwise: it took the whole `burst==1` SPAN (which spans the
+CLOAD entry and LREFILL3 together, collision included) and excluded the first
+and last `biudata_valid` pulse positionally, so only the pulses that provably had
+`cnt` nonzero are asserted. **The claim "you cannot key a window to LREFILL3 from
+declared ports" is true pointwise and false at span level.** A span-relative
+construction sidesteps state identification entirely, and no arm was told about
+it -- one found it.
+
+**What the data actually shows is VARIANCE.** Each arm fixed a different subset
+and no arm dominates:
+
+| | gained over baseline | lost |
+|---|---|---|
+| haiku | REQ-0006, REQ-0084 | none |
+| sonnet | REQ-0017 | none |
+| opus | REQ-0006, REQ-0084 | REQ-0063, REQ-0087 |
+
+Union of all four bodies: **7 of 13**, against 4 for the baseline and 6 for the
+best single arm.
+
+**That union is an UPPER BOUND, not an achievable number, and the distinction is
+the whole point.** Picking per requirement the body that passes golden is using
+golden to SELECT, which this project does not permit. The selector actually
+available to the pipeline is correspondence + liveness + `must_fail`, and whether
+it picks the same bodies is unmeasured. What the spread does establish is that
+re-authoring is nearly independent between attempts, which is the first evidence
+for the freeze-time variant recorded under F3 -- *ship the best body seen across
+rounds* -- and that variant remains unmeasured.
+
+**The 6 no arm fixed decompose, and only 2 are unexplained:**
+
+* REQ-0025 -- the compiled-out feature (F7). Correctly unfixable; Opus and Sonnet
+  both said so unprompted.
+* REQ-0002 -- reachable core with a dead SREFILL4 clause (F7).
+* REQ-0028, REQ-0031 -- `silent` in EVERY arm including baseline: they decide
+  nothing on golden. Not repair failures at all; an observability and stimulus
+  finding.
+* REQ-0067, REQ-0074 -- convict golden in every arm. These two are the genuine
+  unexplained residue, and they are 2 of 13, not 4 of 4.
+
+**Caveats that bound all of this.** n=4 per class, so Sonnet's 2/4 against
+baseline's 1/4 is a one-requirement difference; one design (k1-dcfsm); one
+single-shot re-authoring per arm with no repair rounds, where the pipeline gives
+the author two; and subagents rather than the pipeline's own gateway, so the
+prompt is identical but the serving path is not.
+
 ## Negative results
 
 **Adding stimulus aimed at the NORMALIZED ACTIVATION does not recover the
