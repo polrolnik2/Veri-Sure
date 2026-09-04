@@ -507,6 +507,67 @@ had. Gate-clean went 8 -> 11 after the fix. The 0-moved result is from the
 corrected run.
 
 
+### F10 -- the acceptance test, with a control: +3, and `off-target` is not reproducible
+
+**The measurement nothing else in this document had run.** Every other number
+here scores a repaired body against GOLDEN. Golden is not the acceptance
+criterion: these 13 were rejected by CORRESPONDENCE, and only correspondence can
+make them TRUSTED. So the pipeline's own `build_prompt` was used to ask
+correspondence about each repaired body, and the pipeline's own `rejects()` to
+read the answer. No golden in that path.
+
+**And a control, without which the result is uninterpretable.** The same
+reviewer, the same builder, the ORIGINAL body -- the one the pipeline rejected.
+"9 of 13 accepted" is equally consistent with a good repair and a permissive
+reviewer, and only the paired movement separates them.
+
+| | original | repaired |
+|---|---|---|
+| accepted by correspondence | **7 / 13** | **9 / 13** |
+
+| movement | n | which |
+|---|---|---|
+| repair fixed it | 4 | REQ-0006, REQ-0017, REQ-0067, REQ-0087 |
+| repair made it WORSE | 2 | REQ-0002, REQ-0031 |
+| both accepted | 5 | REQ-0025, REQ-0032, REQ-0069, REQ-0074, REQ-0084 |
+| both rejected | 2 | REQ-0028, REQ-0063 |
+
+**Net paired movement +2. Attributable recovery +3**: control rejected, repair
+accepted, AND clean on golden -- REQ-0006, REQ-0017, REQ-0087. REQ-0067 moved on
+the gate but still convicts golden, so it recovers nothing.
+
+**The headline is the control arm, not the repaired one.** The pipeline rejected
+all 13 as `off-target`. An independent reviewer, given the same body and the same
+prompt, **accepts 7 of them** -- a 54% disagreement with the shipped gate. Three
+of the six requirements that pass both gates (REQ-0032, REQ-0069, REQ-0084) were
+already accepted in the CONTROL arm, so the repair changed nothing for them by
+this instrument; only the shipped gate had ever objected.
+
+Two things follow, and they cut in opposite directions:
+
+* **Against the repair story.** The naive read of the repaired arm -- "9 of 13
+  accepted, +6 recovered" -- is wrong, and was corrected by the control from +6
+  to +3. Half of the apparent recovery is reviewer disagreement with the
+  original rejection, not any improvement in the check.
+* **Against the gate.** A rejection a peer reviewer reproduces less than half the
+  time is not a stable verdict. `off-target` is the disposition behind **23 of
+  k1's 34 non-trusted behavioural requirements** -- the single largest block --
+  and this is the first measurement of whether it replicates. It does not.
+
+**What this does NOT license.** It is one reviewer, one model, one design, n=13,
+single-shot with no repair rounds, and the reviewer is a subagent rather than the
+pipeline's own gateway -- so it is a proxy for correspondence, not correspondence.
+The 54% figure is a reason to measure the real gate's reproducibility directly,
+by running the shipped correspondence twice on the same bodies. It is NOT a
+licence to overturn any individual rejection, and nothing here was overturned.
+
+*One harness bug, recorded because it changed the sign.* Five replies wrote
+`"what_is_missing": null` against a bare `str` field, so `Review.model_validate`
+threw and the scorer counted them unusable -- reading 4 accepted, 5 unusable.
+Every one of the five was an ACCEPTANCE, so the bug biased the result against the
+repaired bodies by exactly enough to make the experiment look negative. Dropping
+nulls is serialization, not a verdict.
+
 ## Is 90% of behavioural reachable on k1? No, and here is the arithmetic
 
 k1-dcfsm has **67 behavioural** requirements; 90% is **60**. As shipped, **33**
@@ -526,13 +587,15 @@ Best case per bucket, using only what was measured this session:
   from, not a larger number), **3 that read only inputs** (F9; recovery
   unmeasured), **1 `dead-oracle`** which cannot fail and is correctly rejected,
   and **3 genuinely unexercised** (F6's target). Ceiling **+9 of 10**.
-* **the 23 ORACLE_INVALID.** rx7 covered 13 and the union of four independently
-  authored bodies was 7 -- 54%. Scaled to 23 that is **+12**, and the scaling is
-  an assumption, not a measurement.
+* **the 23 ORACLE_INVALID.** rx7's union of four bodies was 7 of 13 on GOLDEN,
+  which scaled to **+12** -- but F10 then ran the actual acceptance test with a
+  control and the attributable recovery was **+3 of 13**, not 7. Scaled to 23
+  that is **+5**, and the scaling is still an assumption.
 * **the 1 VACUOUS.** +0.
 
-**Optimistic ceiling 33 + 21 = 54 of 67 = 81%. The target is 60. It is short by
-6, and the ceiling is not achievable anyway**, because it assumes all three of:
+**Optimistic ceiling, with F10's controlled figure in place of the golden-only
+one: 33 + 9 + 5 = 47 of 67 = 70%. The target is 60. It is short by 13**, and even
+that is not achievable, because it assumes all three of:
 per-requirement selection on golden (which this project forbids -- golden scores,
 it never selects); every routed author fix landing; and the 54% rate measured on
 13 holding across all 23.
