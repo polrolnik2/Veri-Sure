@@ -669,16 +669,31 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
     exhausted repair budget turns it into `ABANDONED`, with the record to prove
     it.
     """
-    if not record:
-        return ""                                   # nothing was attempted
-    attempted = int(record.get("attempted") or 0)
-    if not attempted or record.get("reached_at_attempt"):
+    # EACH GUARD SAYS WHICH ONE FIRED, because returning "" five different ways
+    # is indistinguishable in the artifact and the difference is the whole
+    # diagnosis. Measured on k1-dcfsm: 19 of 25 ABANDONED requirements never
+    # reached a repair round and only 7 carried an `unreached:` objection, so 18
+    # were silenced HERE -- and which guard did it could not be recovered from
+    # `oracles.json`, because the record keeps the staging attempts but not the
+    # verdict this function reached on them. Naming the guard is what makes the
+    # next measurement possible; it changes no behaviour.
+    def _silent(guard: str) -> str:
+        logger.debug("oracles: %s not routed as unreached (%s)",
+                     oracle.req_uid, guard)
         return ""
+
+    if not record:
+        return _silent("nothing was attempted")
+    attempted = int(record.get("attempted") or 0)
+    if not attempted:
+        return _silent("attempted == 0")
+    if record.get("reached_at_attempt"):
+        return _silent("the scenario WAS reached")
     if not any(stimulus_by_tp.get(tp) for tp in oracle.tp_uids):
-        return ""                                   # no evidence to run at all
+        return _silent("no stimulus on any testpoint it names")
     if _decides(oracle, witness, contract, stimulus_by_tp,
                 base=base, transactional=transactional):
-        return ""                                   # partial is not silence
+        return _silent("it decides on some testpoint; partial is not silence")
     evidence = [t.get("evidence") or {} for t in (record.get("attempts") or [])
                 if t.get("evidence")]
     last = evidence[-1] if evidence else {}
@@ -686,7 +701,8 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
         # The ports this requirement is observed on never moved at all. That is
         # a defect in the observation route, and re-asking the check author for
         # it sends the finding to the one party who cannot act on it.
-        return ""
+        return _silent("route_never_moved -- a normalisation defect, not the "
+                       "author's")
     said = _diagnose(last) if last else "the scenario was never made to occur"
     return (
         f"unreached: an independent stimulus author was given this check's "

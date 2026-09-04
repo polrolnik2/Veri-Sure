@@ -90,40 +90,47 @@ single largest and most reproducible finding.
 
 ## The fixes
 
-### F1 -- route `_diagnose` to the repair author, with the right wording
+### F1 -- the diagnosis IS routed; the defect is that most requirements never get it
 
-**CONFIRMED. Largest per-requirement effect measured.**
+**CORRECTED TWICE. The mechanism I proposed already exists.**
 
-*Defect.* `stage_unexercised` (`oracles_stage.py:~2243`) computes
-`_diagnose(evidence)` per attempt and returns `(abandoned, record)`. `abandoned`
-merges into a terminal disposition; `record` goes to the artifact. **Neither
-writes `repairs`**, and `repairs` is the sole source of `issues` for
-`oracle_gen.build_prompt`. On k1 the diagnosis was computed 107 times and shown
-to nobody. 19 of the 25 ABANDONED ended on their ORIGINAL body, never repaired.
+`_unreached` (`oracles_stage.py`) already embeds `_diagnose(last)` in an
+`unreached:` objection and returns it as a REJECTION, which flows through
+`rejected`/`quotable` into `repairs` and so into `build_prompt`. The claim in an
+earlier draft -- "the diagnosis is computed 107 times and shown to nobody" --
+was **wrong**, and so was the follow-on claim that this is a routing fix.
 
-*The wording is load-bearing, not cosmetic.* What production records is
-`"never reached in N attempt(s)"`. Its own evidence says the opposite: 78 of 107
-attempts were diagnosed "the activation was driven and the check still saw
-nothing". Independently confirmed here -- new gate-clean stimulus was generated
-for 15 abstaining checks and **13 of 13 had their activation staged** (the
-activation inputs hold for 18-24 rows) while every check still returned `None`.
+*What IS true, measured on k1-dcfsm's 25 ABANDONED requirements:*
 
-*Measured*, 21 k1 requirements that never reached an author, liveness only:
-
-| arm | live / 21 |
+| | |
 |---|---|
-| baseline (no repair round) | 5 |
-| **N** -- bare `"never reached in 3 attempt(s)"` | **0** |
-| **A** -- + the diagnosis | **8** |
+| carry an `unreached:` objection in `repairs` | **7** |
+| never reached a repair round at all (highest is `fix0`) | **19** |
+| staging attempts each | 3 of 3, and **no** budget exhaustion |
 
-Paired: N-only 0, A-only 8, both 0 (sign test p ~ 0.008). The bare reason is
-**worse than not asking**: 5 -> 0, because the author reads "never reached" as
-"unassertable" and writes a check that abstains by construction (median source
-320 chars vs 886 with the diagnosis; the agents' own summaries say
-*"correctly return (None, None, ...) to indicate no testable requirement"*).
+So the channel works and 18 of 25 were silenced inside `_unreached` -- which
+returns `""` through five separate guards. **Which guard fired could not be
+recovered from `oracles.json`**, because the staging record keeps the attempts
+but not the verdict this function reached on them. Replaying the guards against
+the FINAL bodies attributes 7 to `route_never_moved` and 1 to "decides on some
+testpoint", but that replay uses end-of-run state and the guards were evaluated
+per round, so it does not establish the cause.
 
-*Change.* Write `_diagnose(evidence)` into `repairs[uid]` phrased as
-**"the activation was driven and the check saw nothing"**, never "never reached".
+*The offline experiment stands and is not affected by any of this*: on the 21
+requirements that never reached an author, a prompt carrying the diagnosis
+yielded 8 live and the bare `"never reached in 3 attempt(s)"` yielded 0 --
+paired 0 vs 8, and the bare reason also destroyed the 5 the baseline had. That
+measures the VALUE of the diagnosis reaching an author. It does not measure a
+missing channel, because the channel is there.
+
+*Shipped instead: the guards now name themselves.* Each of the five `return ""`
+paths logs which one fired. It changes no behaviour and it is the thing that
+makes the next measurement possible -- without it the cause of the 18 cannot be
+established on a fresh run either.
+
+*NOT shipped: any change to when or whether `_unreached` fires.* The residual
+defect is real, but its cause is unestablished, and this fix has already been
+wrong twice. A guard should not be loosened against a hypothesis.
 
 ### F2 -- overturn a REACHABILITY discard when liveness says `live`
 
@@ -177,21 +184,32 @@ quoted as projections.
 
 ### F3 -- keep the better body across a repair round
 
-**CONFIRMED as a defect; the rule itself is arithmetic on it.**
+**ALREADY IMPLEMENTED on the defensible axes. NOT shipping the third.**
 
-*Defect.* Repair replaces the body unconditionally, and every re-authoring arm
-measured here both gains and destroys:
+The repair loop already refuses a replacement that is worse:
 
-| arm | gains | destroys |
-|---|---|---|
-| diagnosis (53) | +10 | -9 |
-| evidence (53) | +8 | -4 |
-| bare reason (21) | +0 | **-5** |
+* `verify_one` on the replacement -- rejects `malformed:` / `vacuous:`, and the
+  previous check stands;
+* a `_decides` comparison -- "a replacement that stopped deciding is not a
+  repair", blocking only a STRICT loss.
 
-`oracles_stage.py:1218` already records this shape for REQ-0055.
+The axis my proposal added -- reject a replacement that is less LIVE -- was
+present and **removed deliberately**. The reasoning is recorded in the source
+against REQ-0055: the guard treated liveness as the only axis of improvement,
+discarded a replacement that was better on trigger coverage (a dimension neither
+`_is_live` nor `_decides` can see), and the requirement was lost two rounds
+later to the defect that replacement had already fixed. *"A predicate that
+cannot see the dimension a repair moved must not be the thing that decides
+whether the repair survives."*
 
-*Change.* After a repair round keep whichever of {pre, post} is `live`. Costs
-nothing and is what makes F1 and F4 safe to apply.
+My +10/-9, +8/-4, +0/-5 gain/loss measurements are real, but they score
+single-shot re-authorings on liveness -- exactly the axis that decision bars
+from gating. They are evidence that repair rounds destroy work; they are not
+evidence that this guard should come back.
+
+If the destruction is to be addressed it should be at FREEZE time (ship the best
+body seen across rounds) rather than by refusing replacements mid-loop, which is
+what was already tried and reverted. That variant is unmeasured.
 
 ### F4 -- the `<failure_evidence>` block
 
