@@ -180,3 +180,83 @@ def test_the_prompt_carries_the_spec_the_requirements_and_the_contract() -> None
     assert "ONE SITUATION GETS ONE PROBE" in prompt
     assert "VERBATIM" in prompt
     assert "ONE BIT" in prompt
+
+
+# --------------------------------------------------------------- on by default
+
+def test_probes_are_ON_by_default_and_can_be_turned_off() -> None:
+    """The switch has to exist at both levels or an A/B arm is impossible.
+
+    `[P]` is one model call, and it is the one that decides whether a check can
+    NAME the situation its requirement is about or has to guess at it from
+    output combinations -- 0 of 11 to 5 of 11 on the requirements whose bodies
+    use one. It is on. But a comparison arm needs to turn it off from the
+    caller, not one level down.
+    """
+    import inspect
+
+    from eda_agent.specflow_node import run_specflow_node
+    from specflow.integration import build_artifacts
+
+    for fn in (build_artifacts, run_specflow_node):
+        param = inspect.signature(fn).parameters["enable_probes"]
+        assert param.default is True, fn.__name__
+
+
+def test_a_port_failure_propagates_and_is_CAUGHT_AT_THE_CALL_SITE() -> None:
+    """`[P]` must be NON-FATAL, and its comment claimed that while the code did
+    not implement it.
+
+    `run_stage` calls `port.complete` bare. A `ReplayPort` raises
+    `FileNotFoundError` for a stage it has no recording of, and a `FilePort`
+    raises `PendingResponse`. Invisible while the stage defaulted off; on by
+    default and unwrapped, that takes down every run directory recorded before
+    probes existed.
+
+    The guard is deliberately at the CALL SITE rather than in `run_probes`,
+    because that is where the contract to fall back to is in scope -- returning
+    a sentinel from here would make every caller re-derive it. So this pins two
+    things: the failure really does propagate out of the stage, and the caller
+    really does wrap it.
+
+    The end-to-end evidence is `tests/test_specflow_reuse.py`, whose ports have
+    no `probes` recording at all: those nine tests pass only because the guard
+    holds.
+    """
+    import inspect
+
+    import pytest
+
+    from specflow import integration
+
+    class _Exploding:
+        def complete(self, *, stage, round_, prompt):
+            raise FileNotFoundError("no recorded response for 'probes'")
+
+    with pytest.raises(FileNotFoundError):
+        probes.run_probes(requirements=REQS, contract=CONTRACT,
+                          contract_json='{"io": []}', spec=SPEC,
+                          port=_Exploding())
+
+    src = inspect.getsource(integration.build_artifacts)
+    guarded = src[src.index("run_probes("):]
+    assert "except Exception" in guarded[:1200], (
+        "the call to run_probes is not wrapped -- a missing recording or a "
+        "gateway error would take down the whole build")
+
+
+def test_the_stage_records_that_it_RAN_even_when_it_produced_nothing(tmp_path) -> None:
+    """What makes `reuse` mean what it says.
+
+    An empty table is a real answer -- a specification may name no state at all
+    -- and a run directory whose stage produced nothing must not re-attempt it
+    on every resume. The `error` field is what tells a reader it was a failure
+    rather than a spec with no states in it.
+    """
+    import json
+
+    path = probes.write_artifacts(tmp_path, CONTRACT, None, error="port exploded")
+    held = json.loads(path.read_text())
+    assert held["probes"] == []
+    assert held["error"] == "port exploded"
+    assert held["rounds"] == 0

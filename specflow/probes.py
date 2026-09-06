@@ -441,7 +441,9 @@ def run_probes(*, requirements: list[dict], contract: dict, contract_json: str,
     return doc, extra, result
 
 
-def write_artifacts(run_dir, contract: dict, result: StageResult[ProbeOutput]):
+def write_artifacts(run_dir, contract: dict,
+                    result: StageResult[ProbeOutput] | None,
+                    error: str = ""):
     """`probes.json` beside the other stage artifacts.
 
     The probe table is also written into `contract["io"]`, which is where every
@@ -453,7 +455,12 @@ def write_artifacts(run_dir, contract: dict, result: StageResult[ProbeOutput]):
     """
     from pathlib import Path as _Path
 
-    out = result.output or ProbeOutput()
+    # `result is None` is the stage having failed outright -- a port with no
+    # recording, a transport error. Recorded anyway, and as an EMPTY table
+    # rather than an absent file, because a resumed run needs to know the stage
+    # was attempted; the `error` field is what tells a reader it was not simply
+    # a specification with no state terms in it.
+    out = (result.output if result is not None else None) or ProbeOutput()
     out_dir = _Path(run_dir) / "specflow"
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "probes.json"
@@ -463,8 +470,9 @@ def write_artifacts(run_dir, contract: dict, result: StageResult[ProbeOutput]):
         "cross_constraints": [c.model_dump() for c in out.cross_constraints],
         "reasoning": out.reasoning,
         "issues": [{"severity": i.severity, "path": i.path, "message": i.message}
-                   for i in result.issues],
-        "rounds": result.rounds,
+                   for i in (result.issues if result is not None else [])],
+        "rounds": result.rounds if result is not None else 0,
+        "error": error,
         "note": ("[P] runs before normalize and before any design exists, so it "
                  "may not say a state is unreachable; a config_gated entry is a "
                  "HYPOTHESIS licensed by a quoted span, and only a prover on "

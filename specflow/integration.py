@@ -26,6 +26,7 @@ from .gate import evaluate
 from .model_io import PortSettings, make_port, resumable
 from .normalize import resolve_indirect, run_normalize_fanout
 from .normalize import write_artifacts as write_normalized
+from eda_agent.contract_linter import probe_issues
 from .probes import orphans as probe_orphans
 from .probes import run_probes
 from .probes import write_artifacts as write_probes
@@ -321,10 +322,17 @@ def build_artifacts(
     #: before normalize, so a check can name the state a requirement names
     #: instead of proxying it through output combinations. Costs ONE model call.
     #:
-    #: Defaulted OFF while the requirement-to-state mapping is unvalidated: it
-    #: is one model call the whole architecture rests on, and a wrong probe
-    #: makes every check that reads it wrong at once. Turn it on deliberately.
-    enable_probes: bool = False,
+    #: ON by default. It is one model call, and it is the one that decides
+    #: whether a check can NAME the situation its requirement is about or has to
+    #: guess at it from output combinations -- measured 0 of 11 to 5 of 11 on the
+    #: requirements whose bodies use one, with all five survivors sensitive on
+    #: the vacuity screen.
+    #:
+    #: The risk it carries is real and is bounded elsewhere rather than by
+    #: leaving it off: a wrong probe makes every check that reads it wrong at
+    #: once, which is what the linter's span rules and the cross-constraint
+    #: requirements exist for. Pass False for a comparison arm.
+    enable_probes: bool = True,
     #: The reference model gets its own budget, and a larger default. Its repair
     #: round is the only one whose feedback comes from RUNNING the artifact
     #: rather than from a script checking its shape, and that feedback converges
@@ -486,16 +494,77 @@ def build_artifacts(
     # after would leave every downstream stage planned against the proxy, which
     # is the translation this exists to remove.
     #
-    # Never fatal, for the same reason normalize is not: a run with no probe
-    # table is exactly today's run, and failing the node over one would make the
-    # pipeline strictly worse than before this stage existed. `run_probes`
-    # returns the ORIGINAL contract when its gate cannot be satisfied -- a
-    # half-accepted probe table is worse than none, because every stage below
-    # would then build on names that failed their licensing.
-    if enable_probes:
-        contract, cross, probe_result = run_probes(
-            requirements=reqs, contract=contract, contract_json=contract_json,
-            spec=spec, port=port, max_repairs=max_repairs)
+    # NEVER FATAL, on two levels. `run_probes` returns the ORIGINAL contract
+    # when its gate cannot be satisfied -- a half-accepted probe table is worse
+    # than none, because every stage below would build on names that failed
+    # their licensing. And the call itself is wrapped, which it was not while
+    # the stage defaulted off: `run_stage` calls `port.complete` bare, a
+    # `ReplayPort` raises `FileNotFoundError` for a stage it has no recording
+    # of, and a `FilePort` raises `PendingResponse`. On by default, unwrapped,
+    # that takes down every run directory recorded before probes existed.
+    #
+    # A run with no probe table is exactly the run we had yesterday, so failing
+    # the node over one would make the pipeline strictly worse than before this
+    # stage existed.
+    #
+    # AND IT REUSES ITS ARTIFACT like every other stage. `[P]` ran
+    # unconditionally at first, which was invisible while it defaulted off and
+    # became a resumed run's ONE model call the moment it defaulted on --
+    # `test_reuse_makes_no_model_calls_when_every_gate_still_passes` caught it.
+    # The probe table is a pure function of the requirements and the spec, so a
+    # recorded one is as good as a fresh one; re-asking for it spends a call to
+    # be told the same thing.
+    # AND ITS OUTCOME IS DURABLE, which is what makes `reuse` mean what it says.
+    # `[P]` ran unconditionally at first -- invisible while it defaulted off,
+    # and a resumed run's ONE model call the moment it defaulted on, which
+    # `test_reuse_makes_no_model_calls_when_every_gate_still_passes` caught.
+    #
+    # So the stage records that it ran, INCLUDING when it produced nothing. An
+    # empty table is a real answer (a specification may name no state at all),
+    # and a run directory certified before probes existed would otherwise
+    # re-attempt the stage on every resume, forever, for a result it cannot get.
+    #
+    # THE COST, stated because it is a real one: a transport failure is latched
+    # too, so a gateway outage leaves that run directory probe-free until
+    # someone re-runs it. `reuse=False` is the retry, the artifact records the
+    # reason, and the warning below names it. The alternative -- retrying
+    # forever -- spends a call per resume on every pre-probe run there is.
+    probes_path = run_dir / "specflow" / "probes.json"
+    _probes_enabled = enable_probes
+    if _probes_enabled and reuse and probes_path.is_file():
+        _probes_enabled = False
+        try:
+            entries = (json.loads(probes_path.read_text(encoding="utf-8"))
+                       .get("probes") or [])
+        except (OSError, ValueError):
+            entries = []
+        # RE-GATED, never trusted on the recorded verdict -- the rule every
+        # other reuse path here follows, and why `[P]` writes its issues into
+        # the artifact at all. A table whose spans no longer match the spec is
+        # not reused; it is dropped, and the run continues without probes.
+        if entries and not has_errors([Issue(i.severity, i.path, i.message)
+                                       for i in probe_issues(entries, spec)]):
+            contract = json.loads(json.dumps(contract))
+            contract["io"] = list(contract.get("io") or []) + entries
+            contract["probes"] = [str(e["name"]) for e in entries]
+            contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
+            logger.info("probes: reusing %d probe(s) from %s",
+                        len(entries), probes_path)
+        elif entries:
+            logger.warning("probes: the held table no longer passes its own "
+                           "gate -- dropping it and continuing without probes")
+    elif _probes_enabled:
+        try:
+            contract, cross, probe_result = run_probes(
+                requirements=reqs, contract=contract, contract_json=contract_json,
+                spec=spec, port=port, max_repairs=max_repairs)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("probes: not produced (%r) -- continuing without "
+                           "them, so every state term stays unnameable; "
+                           "re-run with reuse=False to try again", exc)
+            _probes_enabled = False
+            write_probes(run_dir, contract, None, error=repr(exc))
+    if _probes_enabled:
         if cross:
             # CROSS-CONSTRAINTS ARE ORDINARY REQUIREMENTS. They tie a probe to
             # real ports where the spec states the relation, and they go through
@@ -508,6 +577,15 @@ def build_artifacts(
         if contract.get("probes"):
             contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
             write_probes(run_dir, contract, probe_result)
+            # THE CONTRACT CHANGED, SO WHAT WAS COMPUTED AGAINST THE OLD ONE
+            # MUST NOT BE REUSED. `_reuse` hands back a cached artifact that
+            # still passes its gate, and no gate below here looks at probes --
+            # so a resumed run would pair a probe-bearing contract with a
+            # normalization that cannot name a single probe, which is the one
+            # state in which probes cost a call and buy nothing. Same rule the
+            # S1 path already states: passing a gate is not the same claim as
+            # the inputs not having changed.
+            stale = True
 
     # Normalization runs on the requirements and nothing else, so it sits here
     # rather than later: its output is about S1's artifact, and a stage that

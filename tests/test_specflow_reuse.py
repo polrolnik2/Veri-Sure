@@ -20,6 +20,7 @@ from pathlib import Path
 from specflow.integration import build_artifacts
 from specflow.model_io import ReplayPort
 from specflow.normalize import run_normalize_fanout
+from specflow.probes import write_artifacts as write_probes
 from specflow.normalize import write_artifacts as write_normalized
 from specflow.oracles_stage import run_oracle_stage
 from specflow.refmodel.compose import choose_base, run_refmodel
@@ -82,6 +83,15 @@ def _certified(tmp_path: Path) -> Path:
         workdir=run_dir / "specflow" / "_refmodel_check",
     )
     write_refmodel(run_dir, rm, source)
+    # [P] TOO, because "certified" means every stage's outcome is on disk and
+    # this fixture's recordings do not include a probe table. Written empty and
+    # explicit: the stage was attempted and produced nothing for this spec,
+    # which is a real outcome and is what stops a resumed run re-attempting it
+    # forever. Without this line the reuse run below makes exactly one model
+    # call -- for `probes` -- and the assertion that reuse costs nothing is
+    # false for every run directory recorded before probes existed.
+    write_probes(run_dir, json.loads(contract_json), None,
+                 error="no probes recording in this fixture")
     return run_dir
 
 

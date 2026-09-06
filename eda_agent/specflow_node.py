@@ -642,6 +642,12 @@ async def run_specflow_node(
     reuse: bool = False,
     divide_s1: bool = True,
     fanout: bool = True,
+    #: `[P]` -- declare the specification's state terms as contract probes, so a
+    #: check can name the situation its requirement is about instead of guessing
+    #: at it from output combinations. On by default; pass False for a
+    #: comparison arm, which is the only reason the parameter exists here at all
+    #: -- an A/B measurement is impossible if the switch lives one level down.
+    enable_probes: bool = True,
 ) -> Tuple[bool, str, dict[str, Any]]:
     """Build the oracle, generate RTL, repair until the gate accepts.
 
@@ -667,6 +673,7 @@ async def run_specflow_node(
         reuse=reuse,
         divide_s1=divide_s1,
         fanout=fanout,
+        enable_probes=enable_probes,
         # The reference model is repaired by EDITING it against the judge's
         # oracles rather than by regenerating it from the judge's prose. This is
         # the only place holding both a specflow model port and an OpenAIConfig,
