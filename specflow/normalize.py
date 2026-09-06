@@ -1650,6 +1650,19 @@ def gate_one(
     issues: list[Issue] = []
     outputs = _ports(contract, "output")
     inputs = _ports(contract, "input")
+    # PROBES ARE THE SPECIFICATION'S OWN NOUNS, declared as signals by [P]
+    # before this pass runs. A transition obligation -- "on tagcomp_miss with
+    # biudata_valid, the FSM advances to LREFILL3" -- names a state in both its
+    # trigger and its effect, and without this the only way to express it is to
+    # proxy the state through a combination of outputs. That proxy is lossy:
+    # `or1200_dc_fsm` puts six state variables onto ten output bits, and
+    # CLOAD-with-miss-pending is indistinguishable from LREFILL3 on the three
+    # outputs a check can watch, so the window opens in a state the requirement
+    # never mentioned and the check is rejected as off-target.
+    #
+    # `_ports` is already direction-parameterised, so this is the whole edit;
+    # the undeclared-name rejection below then does the rest with no new gate.
+    probes = _ports(contract, "probe")
     # THE CLOCK IS PINNED AND EVERY ROW IS ALREADY AN EDGE. Conditioning on it
     # cannot mean anything: `clk` is constant across the trace the oracle sees,
     # so `{"clk": "rise"}` matches NO row and `{"clk": 1}` matches every one.
@@ -1662,14 +1675,22 @@ def gate_one(
     clock = str(((contract.get("clocking") or {}).get("clock") or {}).get("name") or "")
     # Both directions: a window closes on what the DESIGN does, and a
     # requirement can be activated by an output. Only `inputs` is one-sided.
-    ports = {**inputs, **outputs}
+    ports = {**inputs, **outputs, **probes}
 
+    # `observable` admits a probe as well as an output. The scope rule is a
+    # DEFAULT rather than a prohibition -- see `oracle_gen`'s block -- because
+    # the requirements most in need of probes state their obligation ABOUT the
+    # state, and under an absolute rule they could only be checked through the
+    # proxy this exists to remove. Arm C measured the unrestricted form and it
+    # doubled vacuity, so the author is told to prefer a declared output and to
+    # quote the requirement's words when it overrides.
+    observable_here = {**outputs, **probes}
     for name in norm.observable:
-        if name not in outputs:
+        if name not in observable_here:
             issues.append(Issue(
                 "error", f"normalize.{uid}.observable",
-                f"{name!r} is not a declared output port (declared: "
-                f"{sorted(outputs)}). Either the name is wrong, or the "
+                f"{name!r} is not a declared output port or probe (declared: "
+                f"{sorted(observable_here)}). Either the name is wrong, or the "
                 f"requirement is not observable at the boundary -- in which "
                 f"case give an empty list and an unobservable_reason"))
 
@@ -1710,11 +1731,24 @@ def gate_one(
     # `through_req` is empty here by construction: the first pass sees one
     # requirement and cannot know another's uid, so a borrowed port is the
     # second pass's answer and naming one here is a claim it cannot support.
+    # A ROUTE EXPLAINS AN INDIRECTION, AND A PROBE HAS NONE TO EXPLAIN. The rule
+    # asks how a port the requirement does not name shows the effect it does --
+    # "the counter is visible as a delay before `busy` falls". A probe IS the
+    # requirement's own noun, declared as a signal: demanding a route for
+    # `observable: ["in_lrefill3"]` on "the FSM advances to LREFILL3" asks the
+    # author to explain how LREFILL3 shows LREFILL3, and an author asked for an
+    # explanation that does not exist will invent one.
+    #
+    # So the route is required for the OUTPUTS in `observable`, and a
+    # requirement observable only at probes needs none. This is the "probes
+    # retire `observed_via` for state terms" case, and it is the one place that
+    # needed an edit rather than falling out of the declaration.
+    needs_route = sorted(set(norm.observable) - set(probes))
     if norm.observable:
-        if not norm.observed_via:
+        if needs_route and not norm.observed_via:
             issues.append(Issue(
                 "error", f"normalize.{uid}.observed_via",
-                f"observable at {sorted(norm.observable)} but no route given. "
+                f"observable at {needs_route} but no route given. "
                 f"{_OBSERVED_VIA_TASK}\n\n{_OBSERVED_VIA_SHAPE}\n\n"
                 f"{_ACTIVATED_VIA_TASK}\n\n{_ACTIVATED_VIA_SHAPE}"))
         for i, route in enumerate(norm.observed_via):

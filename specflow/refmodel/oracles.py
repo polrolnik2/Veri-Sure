@@ -617,9 +617,20 @@ def _smoke_rows(contract: dict, rows: int = 2) -> list[dict]:
 
 
 def _declared_outputs(contract: dict) -> set[str]:
-    """The declared OUTPUT port names. What a check has to read to check."""
+    """What a check may name as its EFFECT: declared outputs, and probes.
+
+    Probes are admitted because `well_formed` refuses a check whose named effect
+    is not in this set, and a transition obligation states its effect ON a state
+    -- "the FSM advances to LREFILL3". Excluding probes would refuse exactly the
+    requirements probes exist for, and would make the scope rule absolute by the
+    back door rather than the default it is meant to be.
+
+    This is the ONE place the default is not enough and the set has to widen; a
+    probe is excluded from roughly fifteen other direction tests for free, which
+    is the whole argument for it being a third class rather than an output.
+    """
     return {str(p.get("name")) for p in (contract.get("io") or [])
-            if str(p.get("dir")) == "output" and p.get("name")}
+            if str(p.get("dir")) in {"output", "probe"} and p.get("name")}
 
 
 def well_formed(

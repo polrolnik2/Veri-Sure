@@ -1,0 +1,166 @@
+"""Step 6: the check author can say what the specification says.
+
+Three edits, ten lines between them, and they carry the whole measured effect:
+on the 11 k1 requirements whose bodies use a probe, checks went 0 of 11 to 5 of
+11 on "fires and never convicts a correct design" (p = 0.0074). Everything else
+in the probe architecture is plumbing that makes these three true.
+"""
+from __future__ import annotations
+
+from specflow.normalize import NormalizeOutput, gate_one
+from specflow.refmodel.oracle_gen import shared_prefix
+from specflow.refmodel.oracles import RequirementOracle, well_formed
+
+CONTRACT = {"module_name": "dcfsm", "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "tagcomp_miss", "dir": "input", "width": 1},
+    {"name": "burst", "dir": "output", "width": 1},
+    {"name": "in_lrefill3", "dir": "probe", "width": 1,
+     "notes": "the FSM is in the state the specification calls LREFILL3",
+     "licensed_by": ["REQ-0017"],
+     "spans": ["the FSM advances to LREFILL3"]},
+], "clocking": {"is_sequential": True,
+                "clock": {"name": "clk", "edge": "posedge"}}}
+
+PLAIN = {**CONTRACT,
+         "io": [p for p in CONTRACT["io"] if p.get("dir") != "probe"]}
+
+
+def test_the_author_is_told_the_probe_exists_and_what_it_means() -> None:
+    """The measured intervention. Without this block nothing else pays."""
+    prompt = shared_prefix("{}", CONTRACT, spec="")
+    assert "in_lrefill3" in prompt
+    # Its meaning IN THE SPECIFICATION'S OWN WORDS -- the author is not asked to
+    # infer what the name refers to.
+    assert "the FSM advances to LREFILL3" in prompt
+    # And that it is read like any other signal.
+    assert 'row["outputs"]' in prompt
+
+
+def test_a_contract_with_no_probes_says_nothing_about_them() -> None:
+    """No probe block, no probe paragraph, no changed digest for a plain run."""
+    assert "probe" not in shared_prefix("{}", PLAIN, spec="").lower()
+
+
+def test_the_prompt_states_the_default_AND_the_override() -> None:
+    """Measured both ways, and neither extreme is what ships.
+
+    Made absolute, the scope rule refuses the transition obligations that are
+    most of what this kind of specification says. Dropped entirely, authors
+    asserted on probes freely and the count of checks passing because they
+    cannot fail DOUBLED. The default with an override did neither.
+    """
+    prompt = shared_prefix("{}", CONTRACT, spec="")
+    assert "SCOPE A WINDOW WITH A PROBE FREELY" in prompt
+    assert "PREFER A DECLARED OUTPUT FOR WHAT YOU ASSERT" in prompt
+    assert "quote those words" in prompt
+    # And that a probe is not drivable, which `ports.py` enforces structurally.
+    assert "never an input" in prompt
+
+
+def _norm(**fields) -> NormalizeOutput:
+    base = {"req_uid": "REQ-0017", "activation": {
+                "text": "on tagcomp_miss the FSM advances to LREFILL3",
+                "inputs": {}, "opens_on": [], "until": [], "aborts_on": [],
+                "sustains": [], "effect_follows": "same_edge"},
+            "observable": ["burst"],
+            # A route is demanded for an OUTPUT, which is unrelated to probes
+            # and predates them. Supplied so these tests measure the probe
+            # edits rather than this rule.
+            "observed_via": [{"port": "burst", "through_req": "",
+                              "shows": "burst rises on the refill and stays "
+                                       "high until the last word",
+                              "otherwise": "burst stays low for a hit, which "
+                                           "is what distinguishes the two",
+                              "when": "from the edge tagcomp_miss is sampled "
+                                      "until the final refill word"}],
+            "expectation": "burst is asserted"}
+    base.update(fields)
+    return NormalizeOutput.model_validate({"reasoning": "r", "normalized": [base]})
+
+
+REQ = {"uid": "REQ-0017", "text": "on tagcomp_miss the FSM advances to LREFILL3"}
+
+
+def test_a_window_may_open_on_a_DECLARED_probe() -> None:
+    out = _norm(activation={**_norm().normalized[0].activation.model_dump(),
+                            "opens_on": [{"in_lrefill3": 1}]})
+    assert gate_one(REQ, out, CONTRACT) == []
+
+
+def test_a_window_may_NOT_open_on_an_undeclared_name() -> None:
+    """The existing rejection still does the work; no new gate was added.
+
+    `_ports(contract, "probe")` puts declared probes into the lookup, and
+    everything else falls through to the refusal that was always there.
+    """
+    out = _norm(activation={**_norm().normalized[0].activation.model_dump(),
+                            "opens_on": [{"in_lrefill3": 1}]})
+    issues = gate_one(REQ, out, PLAIN)
+    assert issues, "an undeclared name must still be refused"
+    assert any("in_lrefill3" in i.message for i in issues)
+
+
+def test_a_probe_may_be_the_observable_when_declared() -> None:
+    """A transition obligation states its effect ON the state.
+
+    Refusing this would make the scope rule absolute by the back door, and would
+    refuse exactly the requirements probes exist for.
+    """
+    # No `observed_via`: a probe is the requirement's own noun, so there is no
+    # indirection to explain and none is demanded.
+    only_probe = _norm(observable=["in_lrefill3"], observed_via=[])
+    assert gate_one(REQ, only_probe, CONTRACT) == []
+    assert gate_one(REQ, only_probe, PLAIN) != []
+
+
+def test_an_OUTPUT_observable_still_needs_its_route() -> None:
+    """The route rule is scoped, not removed.
+
+    It explains how a port the requirement does not name shows the effect it
+    does. That question is still real for an output, and probes do not answer it.
+    """
+    assert gate_one(REQ, _norm(observed_via=[]), CONTRACT) != []
+    assert gate_one(REQ, _norm(observable=["burst", "in_lrefill3"],
+                               observed_via=[]), CONTRACT) != []
+
+
+BODY = ("def decide(trace):\n"
+        "    for r in trace:\n"
+        "        if r['outputs'].get('in_lrefill3'):\n"
+        "            return (True, r['edge'], 'in LREFILL3')\n"
+        "    return (None, None, 'never entered')\n")
+
+
+def test_well_formed_accepts_a_check_whose_effect_is_a_probe() -> None:
+    """`_declared_outputs` is the one place the default had to widen."""
+    oracle = RequirementOracle(req_uid="REQ-0017", clause="", source=BODY,
+                               tp_uids=["TP-0000"])
+    plan = [{"uid": "TP-0000", "covers": ["REQ-0017@1"]}]
+    assert well_formed(oracle, CONTRACT, plan) is None
+    # Without the declaration it is refused, which is what makes the acceptance
+    # above mean something.
+    assert well_formed(oracle, PLAIN, plan) is not None
+
+
+def test_normalize_is_untouched_where_the_plan_says_it_is() -> None:
+    """`reaching`, `Reach`, `gate_indirect`, `indirect_prefix`,
+    `resolve_indirect` are not read by any of this and are not edited.
+
+    The claim matters because the staging change deliberately does NOT use the
+    prerequisite chain those build. Adjacency for a state nothing has reached is
+    the stimulus author's call, decided from the specification with every
+    reachable prefix in view -- there is no mechanical source for it, and a
+    depth heuristic picks the wrong branch on a fork. If this list starts being
+    read, that claim needs re-examining rather than quietly widening.
+    """
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "diff", "origin/agent-hardening-probes", "--", "specflow/normalize.py"],
+        capture_output=True, text=True, cwd="/home/user/Veri-Sure").stdout
+    touched = [ln for ln in out.splitlines()
+               if ln.startswith(("+", "-")) and not ln.startswith(("+++", "---"))]
+    for name in ("def reaching", "class Reach", "def gate_indirect",
+                 "def indirect_prefix", "def resolve_indirect"):
+        assert not any(name in ln for ln in touched), (name, touched[:5])

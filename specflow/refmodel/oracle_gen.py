@@ -784,14 +784,57 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
             if p.get("dir") == "input" and p.get("name")
         ],
     }
+    # THE PROBES. This block is the intervention that was measured: on the 11 k1
+    # requirements whose bodies use one, checks went 0 of 11 to 5 of 11 on
+    # "fires and never convicts a correct design" (p = 0.0074). Everything else
+    # in the probe architecture is plumbing that makes this block true.
+    probes = [
+        {"name": p.get("name"),
+         "means": p.get("notes") or "",
+         "the specification's words": list(p.get("spans") or [])}
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "probe" and p.get("name")
+    ]
+    declared = (
+        json.dumps(ports, indent=2)
+        + "\n\nThese are the only names that appear in a trace row. Anything "
+          "else the requirement mentions is internal to the design and cannot "
+          "be read.")
+    if probes:
+        declared = (
+            json.dumps(ports, indent=2)
+            + "\n\nAND THESE PROBES, which also appear in every trace row:\n"
+            + json.dumps(probes, indent=2)
+            + "\n\nA probe is a situation the specification names but the "
+              "interface does not -- a state of the machine, an internal flag. "
+              "It is one bit, true exactly when that situation holds, and you "
+              "read it exactly as you read an output: `row[\"outputs\"][\"in_"
+              "lrefill3\"]`. It exists so that a requirement about a state can "
+              "be checked by NAMING that state, instead of guessing at it from "
+              "a combination of outputs -- a guess that is lossy, and every "
+              "behaviour it wrongly admits is a check that convicts a correct "
+              "design.\n\n"
+              "SCOPE A WINDOW WITH A PROBE FREELY. That is what they are for.\n"
+              "\n"
+              "PREFER A DECLARED OUTPUT FOR WHAT YOU ASSERT. Correctness is "
+              "defined at the boundary, and an assertion on a probe can convict "
+              "a design that is right at its ports. You MAY assert on a probe "
+              "when the requirement's own words state an obligation about the "
+              "state itself -- \"the FSM shall advance to LREFILL3\" is such an "
+              "obligation -- and when you do, quote those words in your "
+              "reasoning.\n\n"
+              "This is a default rather than a prohibition because it was "
+              "measured both ways. Made absolute, it refuses the transition "
+              "obligations that are most of what this kind of specification "
+              "says. Dropped entirely, authors asserted on probes freely and "
+              "the number of checks that pass because they CANNOT FAIL doubled. "
+              "The default with an override is the form that did neither.\n\n"
+              "A probe is never an input. You cannot drive one; the design has "
+              "to be driven into the situation through its real inputs.")
     blocks = [
         ("system", SYSTEM),
         ("contract_json", contract_json),
-        ("declared_ports",
-         json.dumps(ports, indent=2)
-         + "\n\nThese are the only names that appear in a trace row. Anything "
-           "else the requirement mentions is internal to the design and cannot "
-           "be read."),
+        ("declared_ports", declared),
     ]
     if spec.strip():
         blocks.append(("specification", spec))
