@@ -1194,6 +1194,29 @@ def run_oracle_stage(
                 logger.info("oracles: %s abstains under an unconditional "
                             "activation -- re-asking the author, not the "
                             "stimulus", uid)
+
+            # THE SECOND PREDICATE, into the same sink. This block already
+            # sends one class of abstainer to the check author rather than to
+            # the stimulus -- "re-asking the author, not the stimulus" -- and
+            # this is that pattern with a second, measured reason: the state
+            # the check waits for was reached ON ITS OWN TESTPOINTS and it
+            # stayed silent. On k1 that is 11 of the 15 state-naming
+            # abstainers, and it is the largest single class.
+            #
+            # The message is a reproducible defect -- your check does not fire
+            # when its own state is present, here is where it was present --
+            # which is a different message from "already sound, fix it anyway",
+            # the one measured to break 2 of 4 working checks.
+            #
+            # No staging attempt is spent: the stimulus already did its job.
+            for uid, why in sorted(
+                    _probe_triage(unexer, held, normalized or {}, contract,
+                                  witness, stimulus_by_tp, base).author.items()):
+                rejected[uid] = quotable[uid] = why
+                unexer.pop(uid, None)
+                logger.info("oracles: %s waits on a state its own stimulus "
+                            "reached -- routing to the check author, no "
+                            "staging attempt spent", uid)
             # ONE BUDGET FOR THE WHOLE STAGE, not one per round. Sizing it
             # inside the block was correct while the block ran once; running it
             # every round would re-size it every round and spend three times
@@ -1801,29 +1824,84 @@ def run_oracle_stage(
                                     if "witness" in n})
 
 
-def _blocked_states(unexercised: dict, normalized: dict, contract: dict,
-                    witness: str, stimulus_by_tp: dict, base: str) -> dict[str, str]:
-    """`{req_uid: the unobserved state it waits on}`, empty where there is none.
+@dataclass(frozen=True)
+class _Triage:
+    """What one replay pass over the testpoints tells us about the abstainers.
 
-    A check whose state the pool ALREADY has is not in here: the state was
-    reached and it stayed silent anyway, which staging cannot fix. Nor is one
-    whose window names no probe -- that bucket is not empty (10 of k1's 25
-    abstainers) and nothing about probes reaches it.
+    Built once and read by three callers, because the replay is the expensive
+    part and doing it per question would triple it for no new information.
+    """
+
+    #: `{probe: [Observation]}` -- every state any testpoint reached.
+    pool: dict
+    #: `{req_uid: the unobserved state it waits on}`. These schedule.
+    blocked: dict
+    #: `{req_uid: why}` for checks whose state was reached ON THEIR OWN
+    #: TESTPOINTS and which stayed silent regardless. These do not schedule.
+    author: dict
+
+
+def _probe_triage(unexercised: dict, held: dict, normalized: dict, contract: dict,
+                  witness: str, stimulus_by_tp: dict, base: str) -> _Triage:
+    """Split the abstainers by what the rows say, mechanically. No model call.
+
+    The staging loop's model of an abstention is "the stimulus never got the
+    design into the state the check is waiting for", and it has one response:
+    mint another testpoint. Triaging k1's 25 never-firing checks against
+    recorded state says that is the wrong response most of the time -- of the 15
+    whose requirement names a state, ELEVEN had the state reached on the check's
+    own testpoints and stayed silent anyway.
+
+    That is a defect in the check, and staging harder cannot fix it: the
+    stimulus already did its job. The loop could not tell those apart because it
+    could not see whether the state was entered; once the state is a probe it is
+    in the row, and one scan answers it.
     """
     probes = reachability.probes_of(contract)
     if not probes or not witness or not stimulus_by_tp:
-        return {}
+        return _Triage({}, {}, {})
     rows_by_tp = reachability.rows_for(witness, stimulus_by_tp, contract, base=base)
     if not rows_by_tp:
-        return {}
+        return _Triage({}, {}, {})
     pool = reachability.observed(rows_by_tp, probes)
-    out: dict[str, str] = {}
+
+    blocked: dict[str, str] = {}
+    author: dict[str, str] = {}
     for uid in unexercised:
-        want = reachability.waiting_on(normalized.get(uid) or {}, probes)
-        blocked = sorted(p for p in want if not pool.get(p))
-        if blocked:
-            out[uid] = blocked[0]
-    return out
+        shape = normalized.get(uid) or {}
+        want = reachability.waiting_on(shape, probes)
+        if not want:
+            continue  # LEGACY: names no state; today's path, untouched
+        unobserved = sorted(p for p in want if not pool.get(p))
+        if unobserved:
+            blocked[uid] = unobserved[0]
+            continue
+        oracle = held.get(uid)
+        own = set(getattr(oracle, "tp_uids", None) or [])
+        for probe in want:
+            hit = next((o for o in pool.get(probe) or [] if o.tp_uid in own), None)
+            if hit is None:
+                continue
+            act = (shape.get("activation") or {}).get("text") or ""
+            author[uid] = (
+                f"the state this check waits for WAS REACHED on its own "
+                f"stimulus and the check did not decide. {probe!r} was true on "
+                f"{hit.tp_uid} from edge {hit.first_edge} for {hit.held} "
+                f"edge(s), and this check returned no verdict on that "
+                f"testpoint. So this is a defect in the check -- its window "
+                f"does not recognise the state it names -- and not a gap in "
+                f"the stimulus, which already produced the state. Its "
+                f"activation reads: {act!r}. Re-read the requirement and make "
+                f"the window open on {probe!r}.")
+            break
+    return _Triage(pool, blocked, author)
+
+
+def _blocked_states(unexercised: dict, normalized: dict, contract: dict,
+                    witness: str, stimulus_by_tp: dict, base: str) -> dict[str, str]:
+    """`{req_uid: the unobserved state it waits on}`. See `_probe_triage`."""
+    return _probe_triage(unexercised, {}, normalized, contract, witness,
+                         stimulus_by_tp, base).blocked
 
 
 def _size_budget(unexercised: dict, normalized: dict, contract: dict,
@@ -2070,8 +2148,97 @@ def _diagnose(ev: dict) -> str:
     return "the activation was driven and the check still saw nothing"
 
 
+def _pool_block(*, target: str, pool: dict, contract: dict,
+                stimulus_by_tp: dict, own: list[str], relation,
+                tried: list[str]) -> str:
+    """What the suite has already reached, handed to the stimulus author.
+
+    THE DISCIPLINE THIS EXISTS FOR: the author is never asked to invent a path
+    to a state. It is handed a stimulus that already ran, already reached the
+    nearest state we have, and asked to extend it by one hop. Three properties
+    follow, and each is why a design choice is what it is:
+
+    * GROUNDED -- every prefix here is a recorded stimulus that actually
+      produced the state it claims to, with its digest. The mined edge is
+      ANNOTATION on that stimulus, never a substitute for it: a synthesised
+      recipe can be wrong, has no reproducer behind it, and asks the author to
+      build a whole stimulus around it.
+    * COMPOSABLE -- the task shrinks from "reach LREFILL3 from reset" to "here
+      are the steps that reach CLOAD; the spec says LREFILL3 follows CLOAD when
+      tagcomp_miss and biudata_valid; add that". One hop is a task a stimulus
+      author does well; a whole path is the one that fails today.
+    * MONOTONE -- the pool never shrinks, so a testpoint minted while staging
+      one check feeds every later one. Staging rounds compound instead of
+      restarting.
+
+    WHO PICKS THE PREDECESSOR, AND WHY IT IS THE AUTHOR. For a state that has
+    been observed, adjacency is measured. For one nothing has reached, NO
+    mechanical source knows it: the relation has no edge into a state that never
+    rose, and "hand over the deepest state" assumes a chain and picks the wrong
+    branch on a fork -- k1 forks at CLOAD and CSTORE at the same depth. So the
+    pipeline hands over every reachable prefix and the specification's own words,
+    and the author picks. The pick is CHECKED, not trusted: the attempt succeeds
+    only if the target rose. A wrong pick costs one call and is named in the
+    next attempt's `attempts so far`.
+    """
+    spans = reachability.states_from(contract)
+    obs = pool.get(target) or []
+    status = (f'observed on {obs[0].tp_uid} at edge {obs[0].first_edge}'
+              if obs else "never observed")
+    lines = [f'<pool target="{target}" status="{status}">']
+
+    want = spans.get(target) or {}
+    if want.get("spans"):
+        lines.append(f'  what the spec says about {target}: '
+                     f'{want["spans"][0]!r}')
+    if own:
+        lines.append("  states this check's own testpoints reached: "
+                     + ", ".join(own))
+
+    lines.append("  the pool -- every state any testpoint has reached:")
+    for probe, entries in sorted(pool.items()):
+        span = ((spans.get(probe) or {}).get("spans") or [""])[0]
+        if not entries:
+            lines.append(f"    {probe:<14} never")
+            continue
+        first = entries[0]
+        rises = sum(o.rises for o in entries)
+        lines.append(
+            f"    {probe:<14} rises {rises:<5} shortest {first.tp_uid} "
+            f"@ edge {first.first_edge}   {span[:70]!r}")
+
+    for probe in own:
+        entries = pool.get(probe) or []
+        if not entries:
+            continue
+        first = entries[0]
+        steps = stimulus_by_tp.get(first.tp_uid) or []
+        prefix = reachability.stimulus_prefix(steps, first.first_edge)
+        lines.append(f"  prefix reaching {probe} ({first.tp_uid}, "
+                     f"steps 1-{len(prefix)} of {len(steps)}) -- "
+                     f"held {first.held} edge(s):")
+        lines.append("    " + json.dumps(prefix))
+        for edge in (relation.into(probe) if relation is not None else []):
+            if reachability.gate_reachability(edge):
+                req = ", ".join(f"{k}={v}" for k, v in sorted(edge.requires.items()))
+                lines.append(f"    how {probe} was entered (mined, "
+                             f"{edge.precision:.0%} holdout): from "
+                             f"{edge.frm or 'reset'} when {req}")
+                break
+
+    lines.append("  attempts so far: "
+                 + (", ".join(tried) if tried else "none"))
+    lines.append("</pool>")
+    lines.append(
+        f"Pick the pool state the specification says precedes {target}, and "
+        f"extend that prefix by the hop the specification describes. Do not "
+        f"restart from reset.")
+    return "\n".join(lines)
+
+
 def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
-          reset_ports: dict[str, int] | None = None, saw: str = "") -> str:
+          reset_ports: dict[str, int] | None = None, saw: str = "",
+          pool_block: str = "") -> str:
     """What to stage, in the vocabulary S2 uses. Never a repeat.
 
     `what_the_scenario_needs` goes where S2's `stimulus` field goes, so this is
@@ -2083,6 +2250,13 @@ def _hint(req: dict, shape: dict, ev: dict | None, attempt: int,
     parts = [
         f"Stage the situation this requirement is about: {act.get('text') or req.get('text', '')}",
     ]
+    # THE POOL GOES FIRST, because it is the concrete thing: a stimulus that
+    # ran and reached a state, to be extended by one hop. Everything below is
+    # prose about what to aim for; this is what to start from. Absent when no
+    # probe is declared or nothing has been reached, and then the hint is
+    # exactly today's -- the change is never worse than the present.
+    if pool_block:
+        parts.append(pool_block)
     # THE CHECK IS WHAT HAS TO FIRE, AND IT ALREADY SAID WHY IT DID NOT.
     # `saw` is the abstaining check's own `detail`. The activation line above is
     # a DIFFERENT sentence about the same requirement -- normalization's reading,
@@ -2394,9 +2568,16 @@ def stage_unexercised(
     # replay is free -- Python against the witness, no model call -- and it is
     # the thing that lets a testpoint minted for one check decide another
     # waiting on the same state.
-    _blocked = _blocked_states(unexercised, normalized, contract, witness,
-                               stimulus_by_tp, base)
+    _tri = _probe_triage(unexercised, held, normalized or {}, contract, witness,
+                         stimulus_by_tp, base)
+    _blocked = _tri.blocked
+    _relation = (reachability.mine(
+        reachability.rows_for(witness, stimulus_by_tp, contract, base=base),
+        reachability.probes_of(contract)) if _blocked else None)
     _by_state: dict[str, dict] = {}
+    #: What has already been tried for each state, so a retry does not repeat a
+    #: pick. A wrong pick costs one call; repeating it costs the rest.
+    _tried: dict[str, list[str]] = {}
 
     def _state_order(u: str) -> tuple:
         """Dependents of one state adjacent, so the first spends and the rest
@@ -2427,6 +2608,11 @@ def stage_unexercised(
         tries: list[dict] = []
         evidence: dict | None = None
         reached: int | None = None
+        #: Which states this requirement's attempts actually entered. An
+        #: `ABANDONED` that can say "never observed; prefixes tried X, Y;
+        #: reached Q instead" is a finding; one that says only "never reached"
+        #: blames the testplan for something it may have had no part in.
+        reached_states: set[str] = set()
 
         target = _blocked.get(uid) or ""
         shared = _by_state.get(target) if target else None
@@ -2460,10 +2646,18 @@ def stage_unexercised(
                     break
                 tries.append({"attempt": attempt, "outcome": BUDGET_SPENT})
                 break
+            block = ""
+            if target:
+                block = _pool_block(
+                    target=target, pool=_tri.pool, contract=contract,
+                    stimulus_by_tp=stimulus_by_tp,
+                    own=reachability.own_reached(oracle.tp_uids, _tri.pool),
+                    relation=_relation, tried=_tried.get(target) or [])
             steps = stimulus_for_scenario(
                 requirement=req, contract=contract, port=port,
                 what_the_scenario_needs=_hint(req, shape, evidence, attempt - 1,
-                                              reset_ports=reset_ports, saw=saw),
+                                              reset_ports=reset_ports, saw=saw,
+                                              pool_block=block),
             )
             if not steps:
                 tries.append({"attempt": attempt,
@@ -2483,6 +2677,29 @@ def stage_unexercised(
 
             rep = replay(witness, contract, steps, base=base)
             result = None if rep.error else decide(oracle, rep.rows)
+
+            # DID THE STATE RISE? Read from the row, mechanically, and recorded
+            # separately from whether the check decided.
+            #
+            # Those are two different questions and the loop has always
+            # conflated them -- its success test is `decide` returning a verdict
+            # at all, so "we could not reach it" and "we reached it and the
+            # check did not notice" come out identical. The k1 triage found the
+            # second is the common case. Keeping them apart is what lets an
+            # attempt that REACHED the state hand the check to its author with
+            # the new testpoint as evidence, instead of spending another
+            # attempt on stimulus that already worked.
+            rose = sorted(
+                p for p in (reachability.waiting_on(
+                    shape, reachability.probes_of(contract)) or [])
+                if not rep.error and any(
+                    (r.get("outputs") or {}).get(p) for r in rep.rows))
+            if rose:
+                reached_states.update(rose)
+            if target:
+                _tried.setdefault(target, []).append(
+                    f"attempt {attempt}: reached {rose or 'nothing new'}")
+
             # THE TEST. Both True and False end the loop -- see the docstring.
             if result is not None and result.ok is not None:
                 reached = attempt
@@ -2514,7 +2731,13 @@ def stage_unexercised(
         staged_count = sum(1 for t in tries if t.get("staged"))
         reached = reached or earlier.get("reached_at_attempt")
         record[uid] = {"attempts": tries, "reached_at_attempt": reached,
-                       "staged": staged_count, "attempted": attempted}
+                       "staged": staged_count, "attempted": attempted,
+                       # What the staging actually achieved, as opposed to
+                       # whether the check then fired.
+                       "prefix_from": sorted(
+                           reachability.own_reached(oracle.tp_uids, _tri.pool)),
+                       "reached": sorted(reached_states),
+                       "waiting_on": target or ""}
         if not final:
             # Round is not the last, so the check may still be rewritten and the
             # scenario with it. Record the attempts; take no disposition.
