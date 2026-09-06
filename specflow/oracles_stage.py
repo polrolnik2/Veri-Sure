@@ -1800,7 +1800,16 @@ def run_oracle_stage(
 
 
 def _ports_agree(source: str, contract_json: str) -> bool:
-    """Does this model's `OUTPUT_PORTS` match the contract's outputs?
+    """Does this model's declared port lists match the contract's?
+
+    BOTH lists, and the probe half is not a nicety. Probes are sampled into
+    `row["outputs"]`, and `transactional_view` compresses on inputs and outputs
+    together, so declaring a probe changes the ROW LIST every check sees --
+    including checks that read no probe (measured at 1.04x more rows over 60
+    testpoints). A witness reused across a contract change in its probe set
+    would therefore decide against a different row list than the one its checks
+    were authored against, silently. No new digest is needed for that: this
+    function already owns witness/contract agreement.
 
     Read from the source with `ast` rather than by importing it: this runs on a
     witness that may be stale in ways beyond its port list, and executing a
@@ -1814,24 +1823,39 @@ def _ports_agree(source: str, contract_json: str) -> bool:
 
     try:
         contract = json.loads(contract_json)
+        from .refmodel.base import probe_names
         from .refmodel.compose import output_ports
         wanted = set(output_ports(contract))
+        want_probes = set(probe_names(contract))
         tree = _ast.parse(source)
     except (ValueError, SyntaxError, TypeError):
         return True
-    if not wanted:
+    if not wanted and not want_probes:
         return True
+
+    # A witness written before probes existed has no PROBE_PORTS line at all, so
+    # an absent list reads as empty rather than as unreadable -- which is the
+    # right answer: it agrees with a contract that declares no probe, and
+    # disagrees with one that does.
+    declared: dict[str, set | None] = {"OUTPUT_PORTS": None, "PROBE_PORTS": set()}
     for node in _ast.walk(tree):
         if not isinstance(node, _ast.Assign):
             continue
         names = [t.id for t in node.targets if isinstance(t, _ast.Name)]
-        if "OUTPUT_PORTS" not in names:
-            continue
-        try:
-            return set(_ast.literal_eval(node.value)) == wanted
-        except (ValueError, SyntaxError):
-            return True
-    return True
+        for key in declared:
+            if key not in names:
+                continue
+            try:
+                declared[key] = set(_ast.literal_eval(node.value))
+            except (ValueError, SyntaxError):
+                return True
+    if declared["OUTPUT_PORTS"] is None:
+        # No OUTPUT_PORTS line to read. Unreadable either way -> True, because
+        # refusing to reuse whenever this helper cannot answer would silently
+        # re-pay for a witness for an unrelated reason.
+        return True
+    return (declared["OUTPUT_PORTS"] == wanted
+            and declared["PROBE_PORTS"] == want_probes)
 
 
 def _witness(

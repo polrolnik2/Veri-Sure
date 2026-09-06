@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from ..ports import idle_value, inactive_value, is_clock, is_reset
+from specflow.refmodel.base import probe_values
 
 #: Internal signals to record per edge, from `SPECFLOW_TRACE_INTERNALS`.
 #:
@@ -964,9 +965,19 @@ class Env:
         if not ports:
             return
         expected = self._expected or {}
+        # Probes, on BOTH sides and by DIFFERENT routes, because they are
+        # different things on each. On the DUT a probe is a real port the
+        # generated RTL drives, so it is sampled like any other. On the witness
+        # it is an attribute -- deliberately not an entry in the returned output
+        # dict, which is what keeps it out of every OUTPUT_PORTS-keyed gate --
+        # so it is read with `probe_values`, the same helper `oracles.replay`
+        # uses, since these two runtimes drive the same frozen checks.
+        probes = list(getattr(self.ref, "PROBE_PORTS", []) or [])
+        dut_probes = {n: self.sample(n) for n in probes}
+        ref_probes = probe_values(self.ref, probes)
         self._trace.append((
-            {p: self.sample(p) for p in ports},
-            {p: _plain(expected.get(p)) for p in ports},
+            {**{p: self.sample(p) for p in ports}, **dut_probes},
+            {**{p: _plain(expected.get(p)) for p in ports}, **ref_probes},
             self.step_index,
             # THE COMPLETE DECLARED INPUT SET, not just the ports this step
             # sweeps -- the same correction `_bundle` already makes for the

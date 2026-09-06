@@ -36,6 +36,7 @@ from ..ports import asserted_resets, idle_values, pinned_inputs
 from ..tb.runtime import (SETTLE_EDGES, is_reset_step, normalise_step,
                           reset_ports)
 from .validate import _static_checks
+from .base import probe_names, probe_values
 
 #: Hard bound on edges any one replay will simulate. A stimulus step may declare
 #: `until ... timeout=4000`, and an oracle that never fires must not spin.
@@ -168,6 +169,15 @@ def replay(
     if err:
         return Replay([], [], err)
 
+    # The probes this contract declares, read off the model after each call.
+    # Without this a probe-reading check finds a MISSING KEY in the row, its
+    # window never opens, and it lands in "never fires" -- which is a defect
+    # that reads as under-coverage rather than as a broken harness. It is what
+    # made the first probe-generation scoring report a gain in which not one
+    # passing check used a probe.
+    probes = probe_names(contract)
+    ref = getattr(fn, "__self__", None)
+
     idle_resets = dict(pinned_inputs(contract))
     active_resets = asserted_resets(contract)
     all_idle = dict(idle_values(contract))
@@ -250,10 +260,13 @@ def replay(
                     f"returned {type(out).__name__} at edge {len(rows)}, "
                     f"expected a dict of outputs",
                 )
+            merged = dict(out)
+            if probes:
+                merged.update(probe_values(ref, probes))
             rows.append({
                 "edge": len(rows),
                 "inputs": dict(state),
-                "outputs": dict(out),
+                "outputs": merged,
             })
             if until and out.get(str(until.get("port"))) == until.get("value"):
                 reached = True
@@ -297,8 +310,11 @@ def replay(
                 return Replay(rows, notes,
                               f"returned {type(out).__name__} at edge "
                               f"{len(rows)}, expected a dict of outputs")
+            merged = dict(out)
+            if probes:
+                merged.update(probe_values(ref, probes))
             rows.append({"edge": len(rows), "inputs": dict(state),
-                         "outputs": dict(out)})
+                         "outputs": merged})
     return Replay(rows, notes, "")
 
 

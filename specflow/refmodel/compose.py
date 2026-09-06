@@ -104,11 +104,8 @@ def probe_ports(contract: dict) -> list[str]:
     and a probe is not under that obligation -- a state predicate is False most
     of the time and that is correct behaviour.
     """
-    return [
-        str(p.get("name"))
-        for p in (contract.get("io") or [])
-        if p.get("name") and p.get("dir") == "probe"
-    ]
+    from .base import probe_names
+    return probe_names(contract)
 
 
 def probe_block(contract: dict, base: str) -> str:

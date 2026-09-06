@@ -98,3 +98,36 @@ class RefModel:
         value = int(value) & ((1 << int(width)) - 1)
         sign = 1 << (int(width) - 1)
         return (value ^ sign) - sign
+
+
+def probe_names(contract: dict) -> list[str]:
+    """The contract's `dir: "probe"` names, in declaration order."""
+    return [
+        str(p.get("name"))
+        for p in ((contract or {}).get("io") or [])
+        if p.get("name") and p.get("dir") == "probe"
+    ]
+
+
+def probe_values(ref: object, names: list[str] | tuple[str, ...]) -> dict:
+    """Sample probes off a model instance, as 0/1.
+
+    ONE helper for both runtimes. Probes are sampled in two places -- the cocotb
+    suite (`tb/runtime.Env._record`) and the oracle stage's own replay
+    (`refmodel/oracles.replay`) -- and those two drive the SAME frozen checks.
+    Any difference between them is a place where a check can pass its gate
+    meaning one thing and be judged meaning another, which is the reason
+    `replay` already imports the testbench's own step decoder rather than
+    reimplementing it.
+
+    A missing attribute samples as 0, not None. `None` in a row is what a check
+    reads when it silently never fires, and a probe that is absent is far more
+    likely to mean "this model is not in that state" than to mean anything a
+    check should reason about. `validate`'s check 3c is what catches an absent
+    probe LOUDLY, at generation, so nothing has to be inferred from it here.
+    """
+    out: dict = {}
+    for name in names or ():
+        value = getattr(ref, name, None)
+        out[str(name)] = 1 if value else 0
+    return out
