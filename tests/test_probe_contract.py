@@ -66,16 +66,30 @@ def test_d_a_span_must_be_in_the_specification() -> None:
     assert "not in the specification" in issues[0].message
 
 
-def test_e_two_probes_may_not_rest_on_one_sentence() -> None:
-    """One situation gets one probe.
+def test_e_two_probes_quoting_one_sentence_WARNS_and_does_not_refuse() -> None:
+    """Demoted from an error, on measurement rather than on caution.
 
-    The stage that proposes them is ONE merged call over all the requirements
-    precisely so that three phrasings of one state collapse to a single entry.
-    Two probes resting on one sentence is that collapse having failed, and it
-    hands the check author two names for one thing.
+    It was written to catch the collapse failing -- three phrasings of one state
+    shipped as three probes. It CANNOT: three phrasings carry three different
+    spans, so a same-span test never sees them. What it does catch is one
+    sentence naming two distinct signals, which is ordinary English and ordinary
+    hardware.
+
+    Run against k1 it fired twice, and both tables were right: "either the store
+    or load flag is set" licenses `store_flag` and `load_flag`, and a sentence
+    about decrementing `cnt` inside the refill state licenses both `in_lrefill3`
+    and `cnt_nonzero`. Two of two honest cases blocked, none of its target case
+    caught.
+
+    Kept as a warning: a reviewer reading the stage's report can still use it as
+    weak evidence of a duplicate. What actually prevents two names for one thing
+    is the merged single call, with the orphan report as its backstop.
     """
     issues = probe_issues([_probe(), _probe(name="in_refilling")], SPEC)
     assert [i.path for i in issues] == ["io[1].spans"]
+    assert [i.severity for i in issues] == ["warning"]
+    assert not any(i.severity == "error" for i in issues), (
+        "a shared sentence must not block an otherwise valid table")
 
 
 def test_f_a_config_hypothesis_needs_its_own_span() -> None:

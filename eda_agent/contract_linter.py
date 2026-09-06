@@ -348,16 +348,30 @@ def probe_issues(entries: list[dict], spec: str = "") -> list[ContractIssue]:
                     f"probe {name!r} quotes {span[:60]!r}, which is not in the "
                     f"specification; a span must be quoted, not paraphrased"))
                 continue
-            # THE SAME SENTENCE MUST NOT LICENSE TWO PROBES. The stage that
-            # proposes them is one merged call over all requirements precisely so
-            # that three phrasings of one state collapse to one entry; two probes
-            # resting on one sentence is that collapse having failed, and it ships
-            # the reader two names for one thing.
+            # TWO PROBES SHARING A SENTENCE IS A WARNING, NOT A REFUSAL, and
+            # the demotion is measured rather than cautious.
+            #
+            # It was written to catch the collapse failing -- three phrasings of
+            # one state shipped as three probes, two names for one thing. It
+            # cannot: three phrasings carry three DIFFERENT spans, so a
+            # same-span test never sees them. What it does catch is one sentence
+            # that names two distinct signals, which is ordinary English and
+            # ordinary hardware. On k1 it fired twice and both were correct
+            # tables: "either the store or load flag is set" licenses `store_flag`
+            # and `load_flag`, and a sentence about decrementing `cnt` inside the
+            # refill state licenses both `in_lrefill3` and `cnt_nonzero`.
+            #
+            # So it blocked 2 of 2 honest cases and 0 of its target case. Left as
+            # a warning because a reviewer reading the stage's report can still
+            # use it as weak evidence of a duplicate; what catches the real thing
+            # is the merged single call that makes the collapse happen at all,
+            # and the orphan report as its backstop.
             if flat in span_owner and span_owner[flat] != name:
                 issues.append(ContractIssue(
-                    "error", f"{path}.spans",
-                    f"probes {span_owner[flat]!r} and {name!r} both rest on the "
-                    f"same specification text; one situation gets one probe"))
+                    "warning", f"{path}.spans",
+                    f"probes {span_owner[flat]!r} and {name!r} both quote the "
+                    f"same sentence; check they are two situations and not one "
+                    f"named twice"))
             span_owner.setdefault(flat, name)
 
         # A config-gated hypothesis is the ONLY thing a probe may say about a

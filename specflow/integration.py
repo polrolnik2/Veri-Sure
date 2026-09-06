@@ -26,6 +26,9 @@ from .gate import evaluate
 from .model_io import PortSettings, make_port, resumable
 from .normalize import resolve_indirect, run_normalize_fanout
 from .normalize import write_artifacts as write_normalized
+from .probes import orphans as probe_orphans
+from .probes import run_probes
+from .probes import write_artifacts as write_probes
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
@@ -314,6 +317,14 @@ def build_artifacts(
     #: cost is paid per FAILING item, which is now ~1%, while the failure it
     #: prevents is a whole requirement dropped from the set.
     max_repairs: int = 5,
+    #: [P] -- declare the specification's state terms as `dir: "probe"` entries
+    #: before normalize, so a check can name the state a requirement names
+    #: instead of proxying it through output combinations. Costs ONE model call.
+    #:
+    #: Defaulted OFF while the requirement-to-state mapping is unvalidated: it
+    #: is one model call the whole architecture rests on, and a wrong probe
+    #: makes every check that reads it wrong at once. Turn it on deliberately.
+    enable_probes: bool = False,
     #: The reference model gets its own budget, and a larger default. Its repair
     #: round is the only one whose feedback comes from RUNNING the artifact
     #: rather than from a script checking its shape, and that feedback converges
@@ -468,6 +479,36 @@ def build_artifacts(
 
         reqs = [r.model_dump() for r in s1.output.requirements]
 
+    # [P] -- the specification's nouns, made into declared signals. BEFORE
+    # normalize, so the first normalization pass already sees probes as declared
+    # ports and a requirement's `observable` can name the state directly instead
+    # of being routed to a proxy built out of output combinations. Running it
+    # after would leave every downstream stage planned against the proxy, which
+    # is the translation this exists to remove.
+    #
+    # Never fatal, for the same reason normalize is not: a run with no probe
+    # table is exactly today's run, and failing the node over one would make the
+    # pipeline strictly worse than before this stage existed. `run_probes`
+    # returns the ORIGINAL contract when its gate cannot be satisfied -- a
+    # half-accepted probe table is worse than none, because every stage below
+    # would then build on names that failed their licensing.
+    if enable_probes:
+        contract, cross, probe_result = run_probes(
+            requirements=reqs, contract=contract, contract_json=contract_json,
+            spec=spec, port=port, max_repairs=max_repairs)
+        if cross:
+            # CROSS-CONSTRAINTS ARE ORDINARY REQUIREMENTS. They tie a probe to
+            # real ports where the spec states the relation, and they go through
+            # normalize, the check author and every existing gate exactly as any
+            # requirement does -- no new machinery. With the scope rule reduced
+            # to a default, they are what stops a check verifying the design
+            # against its own private vocabulary: a design that lies about a
+            # probe fails them, on signals golden and the miter can both see.
+            reqs = list(reqs) + cross
+        if contract.get("probes"):
+            contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
+            write_probes(run_dir, contract, probe_result)
+
     # Normalization runs on the requirements and nothing else, so it sits here
     # rather than later: its output is about S1's artifact, and a stage that
     # reads a requirement should be able to read the normalized form beside it.
@@ -514,6 +555,19 @@ def build_artifacts(
         write_normalized(run_dir, normalized, norm_results, requirements=reqs)
         normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
                              if n.req_uid}
+        # ORPHANS -- probes no activation or effect ended up naming. Reported,
+        # never enforced, and the report has to be read as one of two opposite
+        # things: if a licensing requirement's text plainly names the state but
+        # its activation does not, normalize failed to USE a declared probe and
+        # the defect is in the port lookup; if no requirement's activation
+        # actually depends on the state, [P] over-nominated.
+        orphaned = probe_orphans(contract, list(normalized_by_uid.values()))
+        if orphaned:
+            logger.warning(
+                "probes: %d probe(s) named by no activation or effect: %s -- "
+                "either normalize did not use a declared probe, or [P] "
+                "over-nominated; check the licensing requirements' text",
+                len(orphaned), orphaned)
 
     cached = None if stale else _reuse(
         run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
