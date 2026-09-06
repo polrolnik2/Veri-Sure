@@ -809,7 +809,12 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
         # port" was a true statement about the prompt they were given, and six
         # of twelve said so in those words while deleting it. Appending a
         # paragraph that contradicts the layout does not work -- one was added
-        # and the drop rate moved 12 -> 11. A third key does.
+        # and the drop rate moved 12 -> 11. A third key does: MEASURED on a
+        # third round of the same 12 repairs, probes kept 1 -> 11 of 12. The
+        # one remaining drop is not this defect -- it dropped `in_cstore`
+        # because "in_cstore==1 AND first_hit_ack==1 may never occur together
+        # in the same row", which is a row-alignment argument, not a claim that
+        # the probe is undeclared.
         declared = (
             json.dumps({**ports, "probes": probes}, indent=2)
             + "\n\nThe `probes` above ARE declared ports -- the rule naming "
