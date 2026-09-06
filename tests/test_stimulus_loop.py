@@ -345,14 +345,27 @@ def test_a_generator_that_RAN_and_produced_nothing_still_counts_as_an_attempt():
 
 def test_the_budget_is_sized_from_the_number_of_unexercised_oracles():
     """A flat constant borrowed from [D]'s per-turn budget is what broke: 41
-    oracles wanting 3 attempts each against a budget of 12."""
+    oracles wanting 3 attempts each against a budget of 12.
+
+    Asserted as BEHAVIOUR rather than as a source string. The sizing now lives
+    in `_size_budget`, because it also has to answer a second question -- how
+    many distinct STATES the abstainers are blocked on, which is what lets N
+    checks waiting on one unreachable state share one allocation instead of
+    discovering the same fact N times. Where no probe is declared there is no
+    such question and the answer is the original one, which is what this pins.
+    """
     from specflow import oracles_stage as O
 
     assert O.STAGING_BUDGET_PER_ORACLE >= 1
     assert not hasattr(O, "STAGING_BUDGET"), "the flat constant must be gone"
-    import inspect
-    src = inspect.getsource(O.stage_unexercised)
-    assert "len(unexercised)) * STAGING_BUDGET_PER_ORACLE" in src
+
+    plain = {"module_name": "m", "io": [
+        {"name": "clk", "dir": "input", "width": 1},
+        {"name": "busy", "dir": "output", "width": 1}]}
+    for n in (1, 7, 41):
+        unexer = {f"REQ-{i:04d}": "never fired" for i in range(n)}
+        assert O._size_budget(unexer, {}, plain, "", {}, "step") == min(
+            O.STAGING_BUDGET_CAP, n * O.STAGING_BUDGET_PER_ORACLE)
 
 
 def test_a_route_is_refuted_only_when_NONE_of_its_ports_moved():

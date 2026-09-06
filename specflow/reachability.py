@@ -330,6 +330,68 @@ def schedule(waiting: dict[str, list[str]],
                   key=lambda u: (-dependents[target[u]], target[u], u))
 
 
+def waiting_on(normalized_entry: dict, probes: list[str]) -> list[str]:
+    """The probes a check needs REACHED before it can decide anything.
+
+    Read from the normalized activation, which is the one thing that says what
+    a check watches without executing it. Three window fields and the effect:
+
+    * `opens_on` / `until` / `aborts_on` -- what scopes the window. A window
+      keyed on a state cannot open until the state is entered.
+    * `observable` -- what the check asserts. Included because the scope rule
+      was withdrawn to a default: a transition obligation states its effect ON
+      the state ("the FSM advances to LREFILL3"), so a check whose asserted
+      effect is a probe needs that state reached just as surely as one whose
+      window is.
+
+    `activation.inputs` is deliberately NOT read: those are drivable input ports
+    by construction, and a probe can never be among them.
+    """
+    want = set(probes or ())
+    if not want:
+        return []
+    act = (normalized_entry or {}).get("activation") or {}
+    found: set[str] = set()
+    for field_ in ("opens_on", "until", "aborts_on", "sustains"):
+        for clause in (act.get(field_) or []):
+            if isinstance(clause, dict):
+                found |= (set(clause) & want)
+    found |= (set((normalized_entry or {}).get("observable") or []) & want)
+    return sorted(found)
+
+
+def budget_for(waiting: dict[str, list[str]], pool: dict[str, list[Observation]],
+               *, per_state: int, cap: int) -> int:
+    """Size the staging budget PER STATE, not per check.
+
+    One testpoint that reaches P serves every check waiting on P, so N checks
+    blocked on one unobserved state need one allocation between them, not N. On
+    k1 the eight SREFILL4 dependents burned three attempts each and went
+    `ABANDONED` eight times over; here they share three.
+
+    A check whose window names NO probe keeps its own allocation. That bucket is
+    not empty -- on k1, 10 of the 25 abstainers name no state at all -- and
+    nothing about this change reaches them, so nothing about their budget should
+    change either.
+
+    Checks waiting on a state the pool ALREADY has do not schedule and are not
+    counted: they route to the check author, whose own testpoints reached the
+    state, or take the existing reproducer. Neither spends a discovery attempt.
+    """
+    unobserved = {p for p, obs in (pool or {}).items() if not obs}
+    states: set[str] = set()
+    legacy = 0
+    for probes in (waiting or {}).values():
+        named = set(probes or [])
+        if not named:
+            legacy += 1
+            continue
+        blocked = named & unobserved
+        if blocked:
+            states |= blocked
+    return min(cap, max(1, len(states) + legacy) * per_state)
+
+
 def to_json(*, states: dict, pool: dict[str, list[Observation]],
             relation: Relation, hypotheses: dict | None = None,
             proofs: dict | None = None, path: Path | None = None) -> dict:

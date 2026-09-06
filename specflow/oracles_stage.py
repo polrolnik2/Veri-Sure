@@ -44,6 +44,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import reachability
 from .model_io import ModelPort
 from .refmodel import correspondence, freeze
 from .refmodel import liveness as _L
@@ -1198,9 +1199,10 @@ def run_oracle_stage(
             # every round would re-size it every round and spend three times
             # over. What each round gets is what the previous rounds left.
             if staging_left is None:
-                staging_left = staging_budget if staging_budget is not None else min(
-                    STAGING_BUDGET_CAP,
-                    max(1, len(unexer)) * STAGING_BUDGET_PER_ORACLE)
+                staging_left = (
+                    staging_budget if staging_budget is not None
+                    else _size_budget(unexer, normalized or {}, contract,
+                                      witness, stimulus_by_tp, base))
                 logger.info("oracles: staging budget %d testpoint(s) for the "
                             "whole stage", staging_left)
             before = len(stimulus_by_tp)
@@ -1799,6 +1801,73 @@ def run_oracle_stage(
                                     if "witness" in n})
 
 
+def _blocked_states(unexercised: dict, normalized: dict, contract: dict,
+                    witness: str, stimulus_by_tp: dict, base: str) -> dict[str, str]:
+    """`{req_uid: the unobserved state it waits on}`, empty where there is none.
+
+    A check whose state the pool ALREADY has is not in here: the state was
+    reached and it stayed silent anyway, which staging cannot fix. Nor is one
+    whose window names no probe -- that bucket is not empty (10 of k1's 25
+    abstainers) and nothing about probes reaches it.
+    """
+    probes = reachability.probes_of(contract)
+    if not probes or not witness or not stimulus_by_tp:
+        return {}
+    rows_by_tp = reachability.rows_for(witness, stimulus_by_tp, contract, base=base)
+    if not rows_by_tp:
+        return {}
+    pool = reachability.observed(rows_by_tp, probes)
+    out: dict[str, str] = {}
+    for uid in unexercised:
+        want = reachability.waiting_on(normalized.get(uid) or {}, probes)
+        blocked = sorted(p for p in want if not pool.get(p))
+        if blocked:
+            out[uid] = blocked[0]
+    return out
+
+
+def _size_budget(unexercised: dict, normalized: dict, contract: dict,
+                 witness: str, stimulus_by_tp: dict, base: str) -> int:
+    """The staging budget, sized PER STATE where the pool can say so.
+
+    The old sizing was `len(unexercised) * PER_ORACLE` -- one allocation per
+    silent check. That is the right shape only if every abstention is a separate
+    stimulus problem, and the k1 triage says it is not: eight of them were
+    dependents of ONE state the design compiles out, and they spent 24 attempts
+    between them discovering that eight times over.
+
+    One testpoint that reaches P serves every check waiting on P, so the
+    allocation belongs to the STATE. Checks naming no probe keep their own, and
+    checks whose state the pool already has do not schedule at all.
+
+    Falls back to the old sizing whenever the pool cannot be built -- no probes
+    declared, no witness, no stimulus. The per-state budget is an improvement
+    where the evidence exists and must not become a way to under-fund staging
+    where it does not.
+    """
+    probes = reachability.probes_of(contract)
+    if not probes or not witness or not stimulus_by_tp:
+        return min(STAGING_BUDGET_CAP,
+                   max(1, len(unexercised)) * STAGING_BUDGET_PER_ORACLE)
+    rows_by_tp = reachability.rows_for(witness, stimulus_by_tp, contract, base=base)
+    if not rows_by_tp:
+        return min(STAGING_BUDGET_CAP,
+                   max(1, len(unexercised)) * STAGING_BUDGET_PER_ORACLE)
+    pool = reachability.observed(rows_by_tp, probes)
+    waiting = {uid: reachability.waiting_on(normalized.get(uid) or {}, probes)
+               for uid in unexercised}
+    sized = reachability.budget_for(
+        waiting, pool, per_state=STAGING_BUDGET_PER_ORACLE, cap=STAGING_BUDGET_CAP)
+    states = sorted({p for ps in waiting.values() for p in ps
+                     if not pool.get(p)})
+    logger.info("oracles: %d abstainer(s) wait on %d unobserved state(s) %s; "
+                "budget %d instead of %d",
+                len(unexercised), len(states), states, sized,
+                min(STAGING_BUDGET_CAP,
+                    max(1, len(unexercised)) * STAGING_BUDGET_PER_ORACLE))
+    return sized
+
+
 def _ports_agree(source: str, contract_json: str) -> bool:
     """Does this model's declared port lists match the contract's?
 
@@ -2297,8 +2366,12 @@ def stage_unexercised(
     if not unexercised or not witness:
         return abandoned, record
     if budget is None:
-        budget = min(STAGING_BUDGET_CAP,
-                     max(1, len(unexercised)) * STAGING_BUDGET_PER_ORACLE)
+        # Same per-state sizing as the caller's, for the paths that reach here
+        # without one -- a direct call, or a resumed run. Keeping the two in one
+        # function is what stops them from drifting into two different budgets
+        # for the same question.
+        budget = _size_budget(unexercised, normalized or {}, contract,
+                              witness, stimulus_by_tp, base)
         logger.info("oracles: staging budget %d testpoint(s) for %d unexercised "
                     "oracle(s)", budget, len(unexercised))
 
@@ -2309,7 +2382,28 @@ def stage_unexercised(
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
     added: list[str] = []
 
-    for uid in sorted(unexercised):
+    # WHICH UNOBSERVED STATE EACH ABSTAINER IS BLOCKED ON, so the shared budget
+    # can be shared honestly. A budget that is per state but a record that is
+    # per check would starve every dependent after the first: the allocation
+    # runs out, the later checks record "nothing was attempted", and they block
+    # as NOT_EXERCISED -- strictly worse than the per-check budget they replaced,
+    # which at least dispositioned all of them.
+    #
+    # So a check whose allocation a SIBLING spent inherits that sibling's
+    # attempts, and is replayed on the testpoints those attempts produced. The
+    # replay is free -- Python against the witness, no model call -- and it is
+    # the thing that lets a testpoint minted for one check decide another
+    # waiting on the same state.
+    _blocked = _blocked_states(unexercised, normalized, contract, witness,
+                               stimulus_by_tp, base)
+    _by_state: dict[str, dict] = {}
+
+    def _state_order(u: str) -> tuple:
+        """Dependents of one state adjacent, so the first spends and the rest
+        inherit. Deterministic: same inputs, same order, same record."""
+        return (_blocked.get(u) or "", u)
+
+    for uid in sorted(unexercised, key=_state_order):
         oracle = held.get(uid)
         req = by_uid.get(uid)
         if oracle is None or req is None:
@@ -2334,8 +2428,36 @@ def stage_unexercised(
         evidence: dict | None = None
         reached: int | None = None
 
+        target = _blocked.get(uid) or ""
+        shared = _by_state.get(target) if target else None
+
         for attempt in range(spent + 1, max(1, attempts) + 1):
             if len(added) >= budget:
+                if shared and shared.get("staged_uids"):
+                    # A SIBLING SPENT THIS CHECK'S ALLOCATION, on its behalf and
+                    # on the same state. Replay this check on what that bought:
+                    # the state is what both are waiting for, so a testpoint that
+                    # reached it decides both, and one that did not is evidence
+                    # for both.
+                    for shared_tp in shared["staged_uids"]:
+                        if shared_tp not in oracle.tp_uids:
+                            oracle.tp_uids.append(shared_tp)
+                        rep_s = replay(witness, contract,
+                                       stimulus_by_tp.get(shared_tp) or [],
+                                       base=base)
+                        res_s = None if rep_s.error else decide(oracle, rep_s.rows)
+                        if res_s is not None and res_s.ok is not None:
+                            reached = attempt
+                            tries.append({
+                                "attempt": attempt, "staged": shared_tp,
+                                "shared_with": shared["first"],
+                                "outcome": f"the check decided ({res_s.ok})"})
+                            break
+                    else:
+                        tries.extend(
+                            {**t, "shared_with": shared["first"]}
+                            for t in shared["attempts"])
+                    break
                 tries.append({"attempt": attempt, "outcome": BUDGET_SPENT})
                 break
             steps = stimulus_for_scenario(
@@ -2380,6 +2502,14 @@ def stage_unexercised(
         # that is a finding about the scenario. The only outcome that is not an
         # attempt is the budget running out before the generator was invoked.
         tries = list(earlier.get("attempts") or []) + tries
+        if target and target not in _by_state:
+            staged_here = [t["staged"] for t in tries if t.get("staged")]
+            if staged_here:
+                _by_state[target] = {
+                    "first": uid, "staged_uids": staged_here,
+                    "attempts": [t for t in tries
+                                 if t.get("outcome") != BUDGET_SPENT],
+                }
         attempted = sum(1 for t in tries if t.get("outcome") != BUDGET_SPENT)
         staged_count = sum(1 for t in tries if t.get("staged"))
         reached = reached or earlier.get("reached_at_attempt")
