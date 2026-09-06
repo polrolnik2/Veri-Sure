@@ -197,3 +197,43 @@ def test_the_override_is_absent_when_no_probe_is_declared() -> None:
     general form; this names the specific sentence.
     """
     assert "DOES NOT APPLY to these" not in shared_prefix("{}", PLAIN, spec="")
+
+
+def test_a_probe_is_INSIDE_the_declared_ports_object() -> None:
+    """Placement, not prose. The triage that forced this is worth stating.
+
+    `SYSTEM` says "Read only DECLARED PORTS out of `outputs` and `inputs`".
+    Probes used to be appended AFTER that object closed, so an author checking
+    whether `in_cload` was a declared port looked in those two keys, did not
+    find it, and was right. Six of twelve k1 repair rounds deleted a probe
+    saying exactly that -- "not a declared port", "undefined port in_cload",
+    "since FSM state is internal". A paragraph contradicting the layout was
+    tried first and moved the drop rate 12 -> 11; a third key is the fix.
+
+    A failure means the rule's own two-key test excludes probes again, and no
+    amount of surrounding prose will stop an author acting on it.
+    """
+    import json as _json
+    import re as _re
+    prompt = shared_prefix("{}", CONTRACT, spec="")
+    block = _re.search(r"<declared_ports>\n(\{.*?\n\})", prompt, _re.S)
+    assert block, "the declared-ports JSON object is not where it was"
+    ports = _json.loads(block.group(1))
+    assert "probes" in ports, sorted(ports)
+    assert [p["name"] for p in ports["probes"]] == ["in_lrefill3"]
+    # And it is NOT smuggled into the two keys the output-only gates read.
+    assert all(p["name"] != "in_lrefill3"
+               for p in ports.get("outputs", []) + ports.get("inputs", []))
+
+
+def test_a_probe_free_contract_still_has_exactly_two_keys() -> None:
+    """The third key appears only when there is something to put in it.
+
+    A failure means every existing probe-free design's cached prefix changed to
+    carry an empty list, for nothing.
+    """
+    import json as _json
+    import re as _re
+    block = _re.search(r"<declared_ports>\n(\{.*?\n\})",
+                       shared_prefix("{}", PLAIN, spec=""), _re.S)
+    assert block and "probes" not in _json.loads(block.group(1))

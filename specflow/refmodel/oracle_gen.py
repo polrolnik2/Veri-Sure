@@ -801,12 +801,23 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
           "else the requirement mentions is internal to the design and cannot "
           "be read.")
     if probes:
+        # PROBES GO INSIDE THE PORT OBJECT, and that placement is the whole
+        # point. TRIAGED on 12 k1 repair rounds: the authors did not disbelieve
+        # the prose, they CHECKED THE STRUCTURE. `SYSTEM` says "Read only
+        # DECLARED PORTS out of `outputs` and `inputs`"; a probe listed after
+        # the object closed is in neither key, so "in_cload is not a declared
+        # port" was a true statement about the prompt they were given, and six
+        # of twelve said so in those words while deleting it. Appending a
+        # paragraph that contradicts the layout does not work -- one was added
+        # and the drop rate moved 12 -> 11. A third key does.
         declared = (
-            json.dumps(ports, indent=2)
-            + "\n\nAND THESE PROBES, which also appear in every trace row:\n"
-            + json.dumps(probes, indent=2)
+            json.dumps({**ports, "probes": probes}, indent=2)
+            + "\n\nThe `probes` above ARE declared ports -- the rule naming "
+              "`outputs` and `inputs` predates them, and they appear in every "
+              "trace row exactly as an output does.\n"
             + "\n\nA probe is a situation the specification names but the "
-              "interface does not -- a state of the machine, an internal flag. "
+              "interface does not -- a state of the machine, an internal flag "
+              "the contract declares so a check can name it. "
               "The rule above that internal signals are not in the "
               "trace DOES NOT APPLY to these: a probe is declared, "
               "and it is sampled into every row. "
