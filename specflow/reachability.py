@@ -392,6 +392,58 @@ def budget_for(waiting: dict[str, list[str]], pool: dict[str, list[Observation]]
     return min(cap, max(1, len(states) + legacy) * per_state)
 
 
+#: The two dispositions a PROOF may assign, and the only place either is
+#: written. Both mean the state is unreachable in the generated design; they
+#: differ on whether the specification said it would be, and that difference is
+#: the whole reason `[P]` records a `config_gated` hypothesis at all.
+UNREACHABLE = "UNREACHABLE"
+DESIGN_MISSING_STATE = "DESIGN_MISSING_STATE"
+
+
+def dispose(discharge, *, hypothesis: dict | None) -> tuple[str, str]:
+    """Read one proof. Returns `(disposition, reason)`; `("", why)` disposes of
+    nothing.
+
+    THE AUTHORITY RULE, in one function. A state absent from every replay is a
+    staging target and nothing more -- absence from a sample is not proof of
+    absence from a design. The only thing that may say otherwise is a
+    k-induction proof on the GENERATED RTL, and even then only when it PASSES:
+    `reachable`, `unknown`, `timeout` and `error` all leave the checks blocking,
+    because treating a solver timeout as a proof would shrink the denominator on
+    the strength of not having finished.
+
+    AND A PROOF MEANS TWO DIFFERENT THINGS. With a `config_gated` hypothesis
+    whose span the specification actually states, the state is LEGITIMATELY
+    ABSENT and its checks leave the denominator. Without one, the design is
+    missing a state the specification requires -- which is a design finding, and
+    the opposite of a discard. Silently treating the second as the first is how
+    a missing feature becomes a smaller denominator.
+
+    `reachable` is not nothing, either: sby produces a counterexample, which is
+    a stimulus that reaches the state. It is recorded rather than converted here.
+    """
+    status = getattr(discharge, "status", "")
+    if status != "unreachable":
+        if status == "reachable":
+            return "", ("a counterexample exists, so the state IS reachable -- "
+                        "the trace sby produced is a stimulus that gets there")
+        return "", (f"proof status {status!r} establishes nothing; the checks "
+                    f"stay blocking, because a solver that did not finish is "
+                    f"not evidence about the design")
+    span = str((hypothesis or {}).get("span") or "").strip()
+    if span:
+        key = (hypothesis or {}).get("config_gated") or (hypothesis or {}).get("key")
+        return UNREACHABLE, (
+            f"proved unreachable on the generated RTL, and the specification "
+            f"states the dependency on {key!r}: {span[:120]!r}. Legitimately "
+            f"absent, so its checks leave the denominator")
+    return DESIGN_MISSING_STATE, (
+        "proved unreachable on the generated RTL, and NOTHING in the "
+        "specification says it should be absent -- so the design is missing a "
+        "state the specification requires. This is a design finding, not a "
+        "discard, and the checks stay blocking")
+
+
 def to_json(*, states: dict, pool: dict[str, list[Observation]],
             relation: Relation, hypotheses: dict | None = None,
             proofs: dict | None = None, path: Path | None = None) -> dict:

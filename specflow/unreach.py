@@ -122,14 +122,51 @@ def render_cover_probe(
         decls.append(f"  {'input' if p.get('dir') == 'input' else 'output'} wire {rng}{name}")
         conns.append(f".{name}({name})")
 
-    clk = ((contract.get("clocking") or {}).get("clock") or {}).get("name") or "clk"
+    clocking = contract.get("clocking") or {}
+    clk = ((clocking.get("clock") or {}).get("name")) or "clk"
     has_clk = any(str(p["name"]) == clk for p in ports)
     guard = f"always @(posedge {clk}) " if has_clk else "always @* "
+
+    # THE DESIGN MUST START FROM RESET, or this proves nothing about it.
+    #
+    # `mode prove` is k-induction, which checks a base case and an inductive
+    # step. The inductive step is what makes a PASS unbounded, and it is fine
+    # without help. The BASE CASE is not: with nothing constraining the initial
+    # state, the solver may start the design in any bit pattern its registers
+    # can hold -- including the very state we are asking whether it can reach.
+    #
+    # Measured on a two-bit FSM whose state 3 is never assigned anywhere:
+    # "Temporal induction successful" -- the design genuinely cannot ENTER the
+    # state -- while the base case failed at step 0 because the solver started
+    # there. The verdict came back `reachable`. Left unfixed, this instrument
+    # could never prove ANY state of ANY design with registers unreachable, and
+    # the one authority the plan gives for `UNREACHABLE` would be vacuous while
+    # looking like it ran.
+    #
+    # So reset is assumed in the initial state and the property is asserted only
+    # from the first clock edge after it, which is exactly "reachable from
+    # reset". With no reset declared there is nothing to assume and the old
+    # behaviour stands -- a design with no reset has no defined start state, so
+    # "reachable from reset" is not a question it can be asked.
+    reset = clocking.get("reset") or {}
+    rname = str(reset.get("name") or "")
+    has_reset = has_clk and any(str(p["name"]) == rname for p in ports)
+    preamble, gate = "", ""
+    if has_reset:
+        active = "" if str(reset.get("active", "high")).lower() == "high" else "!"
+        preamble = (
+            f"  // Start from reset: without this the base case may begin in\n"
+            f"  // the state under test, and no state is ever provably absent.\n"
+            f"  initial assume ({active}{rname});\n"
+            f"  reg _past_reset = 1'b0;\n"
+            f"  always @(posedge {clk}) _past_reset <= 1'b1;\n\n")
+        gate = "if (_past_reset) "
 
     return (
         f"module {probe_top} (\n" + ",\n".join(decls) + "\n);\n\n"
         f"  {dut_module} dut (\n    " + ",\n    ".join(conns) + "\n  );\n\n"
-        f"  {guard}assert (!({condition_sv}));\n\n"
+        f"{preamble}"
+        f"  {guard}{gate}assert (!({condition_sv}));\n\n"
         "endmodule\n"
     )
 

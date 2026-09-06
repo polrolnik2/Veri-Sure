@@ -204,6 +204,14 @@ Hard rules:
   literals) for the widths/values they govern.
 - Produce synthesizable RTL (no delays, no testbench constructs).
 - Keep the code small and readable.
+- A port whose contract direction is "probe" is declared as an ordinary Verilog
+  `output` -- Verilog has no probe direction. It is an OBSERVATION POINT: a
+  one-bit signal that is high exactly when the situation its `notes` and `spans`
+  describe holds, and nothing else in the design may read it or depend on it.
+  Drive it from the state you already have (`assign in_lrefill3 = (state ==
+  LREFILL3);`). It must not change the module's functional behaviour in any way;
+  it exists so a check can name the situation the specification names, and it is
+  stripped before the design is compared against a reference.
 
 In `reasoning`, write a short summary of key decisions and assumptions (no step-by-step chain-of-thought).
 
