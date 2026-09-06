@@ -807,6 +807,9 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
             + json.dumps(probes, indent=2)
             + "\n\nA probe is a situation the specification names but the "
               "interface does not -- a state of the machine, an internal flag. "
+              "The rule above that internal signals are not in the "
+              "trace DOES NOT APPLY to these: a probe is declared, "
+              "and it is sampled into every row. "
               "It is one bit, true exactly when that situation holds, and you "
               "read it exactly as you read an output: `row[\"outputs\"][\"in_"
               "lrefill3\"]`. It exists so that a requirement about a state can "

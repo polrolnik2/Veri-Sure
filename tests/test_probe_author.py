@@ -164,3 +164,36 @@ def test_normalize_is_untouched_where_the_plan_says_it_is() -> None:
     for name in ("def reaching", "class Reach", "def gate_indirect",
                  "def indirect_prefix", "def resolve_indirect"):
         assert not any(name in ln for ln in touched), (name, touched[:5])
+
+
+def test_the_probe_block_neutralises_the_SYSTEM_rule_it_contradicts() -> None:
+    """The measured cause of 12-of-12 de-probing on a repair round.
+
+    `SYSTEM` carries a standing rule -- "Internal signals are not in the trace"
+    -- and this block described a probe as "an internal flag". Both are in
+    every probe-bearing prompt. On a first shot the block won: 29 of 34 k1
+    bodies named a probe. On a repair round, where the author is told its check
+    is defective and re-reads the rules for a reason, the rule won: 12 of 12
+    repaired bodies deleted every probe, four of them while answering a pure
+    syntax error, reporting it as "removed references to non-existent internal
+    probes".
+
+    A failure means the two statements are back to contradicting each other,
+    and a probe survives generation but not repair -- which puts the check back
+    on the output proxy the whole architecture exists to remove.
+    """
+    prompt = shared_prefix("{}", CONTRACT, spec="")
+    assert "Internal signals are" in prompt and "not in the trace" in prompt
+    assert "DOES NOT APPLY to these" in prompt
+    assert "sampled into every row" in prompt
+
+
+def test_the_override_is_absent_when_no_probe_is_declared() -> None:
+    """It corrects a collision that a probe-free prompt does not have.
+
+    The rule alone is true when nothing is declared, so saying otherwise would
+    change the cached prefix of every existing design to answer a question it
+    never asks. `test_a_contract_with_no_probes_says_nothing_about_them` is the
+    general form; this names the specific sentence.
+    """
+    assert "DOES NOT APPLY to these" not in shared_prefix("{}", PLAIN, spec="")

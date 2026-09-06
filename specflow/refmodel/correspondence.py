@@ -460,11 +460,17 @@ over a longer span, and convicts on rows after the claim has closed.
   mechanical slip, not a claim about the requirement. One real case turned on
   exactly this and it is NOT a correspondence defect.
 
-  THAT IT DOES NOT WATCH AN INTERNAL SIGNAL.  The trace carries the declared
-  ports and nothing else -- no counter, no state variable, no internal flag,
-  whatever the requirement's sentence names. "It would need to observe
-  <internal signal>" is NEVER a valid rejection: it asks for something no check
-  can do. This project has made that mistake once already, calling 27 of 77
+  THAT IT DOES NOT WATCH AN INTERNAL SIGNAL.  The trace carries exactly what
+  `interface` declares, and that INCLUDES any port whose direction is `probe`.
+  A probe is one bit, declared in the contract and implemented by the design,
+  true exactly when a situation the specification names holds, and a check
+  reads it as it reads an output. IT IS IN THE TRACE: "the check reads an
+  internal signal", "it uses an undeclared probe", "in_lrefill3 is not in the
+  interface" are NOT valid rejections of a name `interface` lists. What is not
+  in the trace is what `interface` does NOT list -- a counter, a state
+  variable, an internal flag the contract never declared -- and "it would need
+  to observe <that>" is NEVER a valid rejection either: it asks for something
+  no check can do. This project has made that mistake once already, calling 27 of 77
   requirements unobservable by reading each one's MECHANISM instead of its
   EFFECT, when 10 of them already had working checks.
 
@@ -486,8 +492,9 @@ requirement holds, it is testing the neighbour under a different uid. `when` is
 what was supposed to separate them. That is a NO, and it is a rejection only
 you can make.
 
-`interface` lists every declared port with its direction. A port not in that
-list is internal -- see section 7.
+`interface` lists every declared port with its direction -- `input`, `output`,
+`inout` or `probe`. Every one of them is in the trace and any of them may be
+read. A port NOT in that list is internal -- see section 7.
 
 PROCEDURE. In `reasoning`, in this order:
   0. section 3b: name a design this sentence's own words call wrong. If you

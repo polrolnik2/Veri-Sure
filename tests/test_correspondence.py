@@ -741,3 +741,77 @@ def test_zero_hollow_requirements_is_not_reported_when_nobody_asked():
     found = O.OracleSet(dispositions={"REQ-0001": "NOT_ASSERTABLE"},
                         tools={"correspondence": True})
     assert found.rates()["NOT_ASSERTABLE"] == 1
+
+
+# ---------------------------------------------------------------------------
+# THE JUDGE MUST KNOW WHAT A PROBE IS.
+#
+# The probes plan listed `correspondence` as deliberately unchanged, on the
+# grounds that `_ports` already emits `"direction": p.get("dir")` so a probe
+# "appears in its interface block labelled `probe` with no prompt change".
+# That was true about the DATA and false about the BRIEFING, and running it
+# refuted it: section 7 told the judge "the trace carries the declared ports
+# and nothing else -- no counter, no state variable, no internal flag", the
+# word `probe` appeared nowhere in the file, and judges rejected probe-using
+# checks with "uses undeclared internal probes ... not in declared interface",
+# citing section 7 by number.
+#
+# That rejection is `off-target` -- the exact class this whole plan exists to
+# reduce -- so the untouched gate was manufacturing the defect being measured.
+
+PROBE_CONTRACT = {"module_name": "dcfsm", "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "burst", "dir": "output", "width": 1},
+    {"name": "in_lrefill3", "dir": "probe", "width": 1,
+     "notes": "the FSM is in the state the specification calls LREFILL3"},
+]}
+PLAIN_CONTRACT = {**PROBE_CONTRACT,
+                  "io": [p for p in PROBE_CONTRACT["io"]
+                         if p.get("dir") != "probe"]}
+
+
+def _judge_prompt(contract: dict) -> str:
+    return C.build_prompt(requirement=REQ, oracle=ORACLE, contract=contract)
+
+
+def test_the_judge_is_told_a_probe_is_in_the_trace() -> None:
+    """Without this the judge reads `probe` as a synonym for `internal`.
+
+    A failure means the briefing again asserts the trace holds only the
+    declared ports, and every probe-using check is off-target by construction.
+    """
+    prompt = _judge_prompt(PROBE_CONTRACT)
+    assert "in_lrefill3" in prompt and '"direction": "probe"' in prompt
+    assert "IT IS IN THE TRACE" in prompt
+
+
+def test_reading_a_declared_probe_is_not_a_valid_rejection() -> None:
+    """The measured false rejection, named in the briefing so it cannot recur.
+
+    A failure means nothing forbids the judge rejecting a check for reading a
+    name the interface it was handed actually lists.
+    """
+    prompt = _judge_prompt(PROBE_CONTRACT)
+    assert "are NOT valid rejections" in prompt
+    assert "undeclared probe" in prompt
+
+
+def test_the_briefing_no_longer_claims_the_trace_holds_only_ports() -> None:
+    """The sentence that caused it, gone -- in the probe-free prompt too.
+
+    It was false whenever probes are declared, and leaving it for probe-free
+    runs would keep two briefings to maintain.
+    """
+    for contract in (PROBE_CONTRACT, PLAIN_CONTRACT):
+        assert "the declared\n  ports and nothing else" not in _judge_prompt(contract)
+
+
+def test_an_internal_signal_the_contract_never_declared_is_still_absent() -> None:
+    """The original rule survives; only its scope was corrected.
+
+    A failure means the fix over-reached and the judge now believes a counter
+    the contract never declared is readable, which would license demanding it.
+    """
+    prompt = _judge_prompt(PLAIN_CONTRACT)
+    assert "is NEVER a valid rejection" in prompt
+    assert "a counter, a state\n  variable, an internal flag" in prompt
