@@ -554,3 +554,59 @@ def test_the_repair_override_says_MOVE_a_reset_close_not_DROP_it():
     assert "Reset is\n    always one" in w
     # And the counter-case survives: `al` is sometimes the response itself.
     assert "unless\n    the requirement is ABOUT that loss" in w
+
+
+# ---------------------------------------------------------------------------
+# THE TWO TIMING-ALIGNMENT OBJECTIONS.
+#
+# Traced all 15 k1 requirements whose checks convict the KNOWN-GOOD design to
+# their counterexample rows. Eight are timing, in two shapes, and neither had
+# any text anywhere in the prompt:
+#
+#   held input  -- the testbench holds dc_en/cycstb/tagcomp_miss asserted for
+#                  many states after the design has answered. A window opened on
+#                  those alone reopens on a design that is back in IDLE and
+#                  correctly idle, and convicts it. REQ-0028 convicts at edge 16
+#                  where in_idle=1 and biu_read is correctly gone.
+#   one early   -- the state lands on the row AFTER its cause. REQ-0074:
+#                  cnt_nonzero drops at edge 10, in_idle arrives at edge 11, and
+#                  the check demands both on row 10.
+#
+# Both are repair-round text, so neither touches the cached shared prefix.
+
+def test_the_repair_prompt_says_a_held_input_is_not_a_live_trigger() -> None:
+    """Class A, which had no text at all before this.
+
+    A failure means a window built from `activation.inputs` alone goes
+    unchallenged, and the check convicts a design that already answered.
+    """
+    from specflow.refmodel.oracle_gen import WINDOW_NOT_AUTHORITATIVE as W
+    assert "NOT A LIVE TRIGGER" in W
+    # and it must name the MOVE, not just the fault
+    assert "QUALIFY the window rather than open it" in W
+
+
+def test_the_repair_prompt_names_the_one_state_early_error() -> None:
+    """Class B. The rule exists in SYSTEM three times; what was missing is it
+    stated as an OBJECTION the author is answering.
+
+    A failure means an off-by-one against a register gets no named repair.
+    """
+    from specflow.refmodel.oracle_gen import REJECTION_CLASSES as R
+    assert "ONE STATE TOO EARLY" in R
+    assert "effect_follows" in R
+
+
+def test_the_objection_docstring_does_not_miscount_its_own_evidence() -> None:
+    """The block measured 20 of 51 on n4-i2c for THREE classes. A fourth added
+    on different evidence must not be absorbed into that figure.
+
+    A failure means the comment claims a measurement for an entry the
+    measurement never covered.
+    """
+    import inspect
+
+    import specflow.refmodel.oracle_gen as G
+    src = inspect.getsource(G)
+    assert "THE THREE OBJECTIONS" not in src
+    assert "NOT part of the 20-of-51" in src

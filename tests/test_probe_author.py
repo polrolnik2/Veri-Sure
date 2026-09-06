@@ -237,3 +237,21 @@ def test_a_probe_free_contract_still_has_exactly_two_keys() -> None:
     block = _re.search(r"<declared_ports>\n(\{.*?\n\})",
                        shared_prefix("{}", PLAIN, spec=""), _re.S)
     assert block and "probes" not in _json.loads(block.group(1))
+
+
+def test_the_probe_block_answers_the_held_input_problem() -> None:
+    """The one place Class A can be stated as a POSITIVE rather than a warning.
+
+    An input is held by the stimulus; a probe is true exactly while the
+    situation is. That makes the probe the FIX for the held-input false alarm,
+    which is worth saying where the probes are introduced.
+    """
+    prompt = shared_prefix("{}", CONTRACT, spec="")
+    assert "ANSWER TO A HELD INPUT" in prompt
+    assert "not held by anybody" in prompt
+
+
+def test_the_held_input_answer_is_absent_without_probes() -> None:
+    """It names probes as the remedy, so it cannot appear where there are none
+    -- and the probe-free prefix must stay byte-identical for the cache."""
+    assert "ANSWER TO A HELD INPUT" not in shared_prefix("{}", PLAIN, spec="")

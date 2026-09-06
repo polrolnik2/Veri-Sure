@@ -835,6 +835,16 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
               "design.\n\n"
               "SCOPE A WINDOW WITH A PROBE FREELY. That is what they are for.\n"
               "\n"
+              "AND THAT IS THE ANSWER TO A HELD INPUT. The stimulus holds "
+              "its inputs: an enable, a strobe, a miss flag stay asserted "
+              "for many states after the design has finished the "
+              "transaction they started. A window opened on those alone is "
+              "still open when the machine is back in IDLE and correctly "
+              "doing nothing, and the check then convicts a design that was "
+              "right. A probe is not held by anybody -- it is true exactly "
+              "while the situation is. Open on the probe; let the input "
+              "qualify.\n"
+              "\n"
               "PREFER A DECLARED OUTPUT FOR WHAT YOU ASSERT. Correctness is "
               "defined at the boundary, and an assertion on a probe can convict "
               "a design that is right at its ports. You MAY assert on a probe "
@@ -927,6 +937,16 @@ and transcribing them again will fail the same way.
     signal, no design can fail the check whatever you write. Re-derive the
     window from the sentence.
 
+  - AN ACTIVATION MADE ONLY OF INPUTS IS NOT A LIVE TRIGGER. `activation.inputs`
+    is what the stimulus DRIVES, and a testbench HOLDS its inputs: an enable, a
+    strobe, a miss flag stay asserted for many states after the design has
+    finished responding and gone back to idle. A window opened on those alone
+    re-opens, or never closes, across every one of those rows -- and the check
+    then demands the response again from a design that correctly gave it once.
+    Add to the opening predicate something the DESIGN drives -- a declared
+    output, or a probe -- that says it is actually in the situation, and let the
+    held input QUALIFY the window rather than open it.
+
 Name the condition you changed in `reasoning` and quote the words that license
 it. Change nothing that was not objected to: neighbouring requirements get
 comparable windows only when each one's end is derived from its own sentence,
@@ -934,10 +954,16 @@ and a window rewritten on suspicion loses that for nothing.
 </window_authority>"""
 
 
-#: THE THREE OBJECTIONS THE REVIEWER ACTUALLY RAISES, emitted on repair rounds
-#: beside the gate's own text. Measured by triaging all 51 ORACLE_INVALID
-#: dispositions on n4-i2c, where they account for 20 of the 51 -- the share a
-#: better-briefed author can actually move. (The other 31 are upstream defects
+#: THE OBJECTIONS THE REVIEWER ACTUALLY RAISES, emitted on repair rounds beside
+#: the gate's own text. The first three were measured by triaging all 51
+#: ORACLE_INVALID dispositions on n4-i2c, where they account for 20 of the 51 --
+#: the share a better-briefed author can actually move.
+#:
+#: The FOURTH was added later on separate evidence: tracing all 15 k1
+#: requirements whose checks convict the known-good design to their
+#: counterexample rows, 4 of them assert the effect one state before it lands
+#: (`cnt_nonzero` drops at edge 10, `in_idle` arrives at edge 11, the check
+#: demands both on row 10). It is NOT part of the 20-of-51 figure above. (The other 31 are upstream defects
 #: this block cannot help with: 16 requirements whose trigger is an internal
 #: signal that reaches no declared port, 9 whose trigger needs a `cmd` encoding
 #: the specification never states, and 6 whose obligation is a fragment of a
@@ -974,6 +1000,14 @@ one of them, this is the move that answers it.
    when that situation is harder to recognise from the ports. A window that
    opens too often convicts correct designs, and every such conviction is
    unlicensed.
+
+4. "YOUR CHECK CONVICTED ONE STATE TOO EARLY."
+   The state or flag lands on the row AFTER the input that caused it -- that is
+   what a register does. And rows here are DISTINCT STATES, not clock edges, so
+   "on the row where the counter reaches zero, the FSM is back in idle" is a
+   claim about two different rows. Assert the effect over the window that
+   FOLLOWS the trigger row: pass `activation.effect_follows` through, or open on
+   the trigger and use `eventually`. Do not assert it AT the trigger row.
 </objection_classes>"""
 
 
