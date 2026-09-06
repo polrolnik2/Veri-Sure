@@ -96,6 +96,57 @@ def output_ports(contract: dict) -> list[str]:
     ]
 
 
+def probe_ports(contract: dict) -> list[str]:
+    """The contract's `dir: "probe"` names.
+
+    Separate from `output_ports` rather than folded into it: `output_ports`
+    feeds the every-output-written obligation in the prompt and in `validate`,
+    and a probe is not under that obligation -- a state predicate is False most
+    of the time and that is correct behaviour.
+    """
+    return [
+        str(p.get("name"))
+        for p in (contract.get("io") or [])
+        if p.get("name") and p.get("dir") == "probe"
+    ]
+
+
+def probe_block(contract: dict, base: str) -> str:
+    """What the witness author is told about probes. Empty when there are none.
+
+    Said as an obligation about ATTRIBUTES, never about the returned dict, and
+    that distinction is the whole of the design. A probe is read off the instance
+    (`getattr(model, name)`), so a model that RETURNED its probes would put them
+    in the output dict, and every gate keyed on `OUTPUT_PORTS` would then see
+    them -- the every-output-written rule first, which a state predicate that is
+    False most of the time cannot satisfy.
+
+    Named rather than inlined in `build_prompt` so the text has one owner and can
+    be read back in a test: an author cannot maintain a probe it was never told
+    about, and that failure is silent at scoring.
+    """
+    named = [p for p in (contract.get("io") or [])
+             if p.get("dir") == "probe" and p.get("name")]
+    if not named:
+        return ""
+    listed = ", ".join(
+        f"`{p['name']}` ({p.get('notes') or 'see the specification'})"
+        for p in named
+    )
+    return (
+        f"The interface also declares PROBES: {listed}.\n"
+        "A probe is a specification term made observable, and it is how a check "
+        "names a moment this interface has no port for. Maintain each one as a "
+        "BOOLEAN ATTRIBUTE on the model -- "
+        "`self.in_lrefill3 = (self.state == 'LREFILL3')` -- readable at any time "
+        f"after a dispatch call. Do NOT return them from `{base}`: they are "
+        "observation points, not outputs, and the output dict must contain "
+        "exactly the output ports above. A probe being False most of the time is "
+        "correct; the obligation is that it is readable and that it means what "
+        "its description says."
+    )
+
+
 def latency_cycles(contract: dict) -> int:
     timing = contract.get("timing") or {}
     best = 0
@@ -133,6 +184,7 @@ def render(out: RefModelOutput, contract: dict) -> str:
         "from specflow.refmodel.base import RefModel\n\n\n"
         "class Model(RefModel):\n"
         f"    OUTPUT_PORTS = {output_ports(contract)!r}\n"
+        f"    PROBE_PORTS = {probe_ports(contract)!r}\n"
         f"    LATENCY_CYCLES = {latency_cycles(contract)}\n\n"
         + body
         + "\n"
@@ -221,6 +273,9 @@ def generate_model(
             f"(chosen from the contract, not negotiable). "
             f"Output ports that must all be written: {output_ports(contract)}.",
         ]
+        block = probe_block(contract, base)
+        if block:
+            parts.append(block)
         if domain_notes.strip():
             parts.append("<domain_notes>\n" + domain_notes.rstrip() + "\n</domain_notes>")
         if issues:

@@ -16,3 +16,7 @@ golden_check/
 
 .venv/
 .env.local
+
+# Verification reports written by the per-step Haiku subagents. Evidence for a
+# step that has landed, not part of the artifact.
+scratchpad/

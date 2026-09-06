@@ -187,9 +187,12 @@ def _behavioural_checks(
     rng = random.Random(1337)  # noqa: S311 -- fixed seed: G4 must be reproducible
     vectors = [_random_inputs(contract, rng) for _ in range(8)]
 
+    driven: dict = {}
+
     def run_sequence() -> tuple[list[dict] | None, Issue | None]:
         """Drive a *fresh* model through the whole vector sequence."""
         m = model_cls()
+        driven["m"] = m          # kept so the probe check reads a DRIVEN model
         fn = getattr(m, expected_base)
         out: list[dict] = []
         for inputs in vectors:
@@ -221,6 +224,30 @@ def _behavioural_checks(
                       f"every declared output must be determined")
             )
             break
+
+    # -- check 3c: probes are READABLE. Presence, not determination.
+    #
+    # Deliberately NOT check 3a's rule. A probe is a state predicate -- "the FSM
+    # is in LREFILL3" -- and it is False on most edges, which is correct
+    # behaviour rather than a port the model failed to determine. Holding a probe
+    # to the every-call rule would fail generation outright on every design whose
+    # states are not all simultaneously true, which is every design.
+    #
+    # It is checked at all because the failure it catches is SILENT: the replay
+    # path reads a probe with `getattr(model, name, None)`, so a probe the model
+    # never defines is sampled as `None`, lands in the row as `None`, and every
+    # check reading it quietly never fires. That is the exact defect that made
+    # E0's first scoring read +5 with zero probe-using passes, and it is worth a
+    # loud failure at generation instead of a mystery at scoring.
+    for name in (getattr(model_cls, "PROBE_PORTS", None) or []):
+        if not hasattr(driven.get("m", model), name):
+            issues.append(
+                Issue("error", f"ref_model.py.{name}",
+                      f"declares probe {name!r} and never defines it as an "
+                      f"attribute; a probe is read off the model, so an absent "
+                      f"one is sampled as None and every check reading it "
+                      f"silently never fires")
+            )
 
     # -- check 3b: determinism, stated as a property of the *sequence*.
     #

@@ -35,6 +35,22 @@ class RefModel:
     #: which G4 rejects.
     OUTPUT_PORTS: list[str] = []
 
+    #: Probe names, from the contract's `dir: "probe"` entries. A probe is a
+    #: SPECIFICATION TERM made observable -- `in_lrefill3` is true exactly when
+    #: the model is in the state the spec calls LREFILL3 -- so that a check can
+    #: name the moment its requirement is about instead of proxying it through a
+    #: combination of outputs.
+    #:
+    #: DELIBERATELY A SEPARATE LIST, and that is the whole design. Putting probes
+    #: in `OUTPUT_PORTS` would be free plumbing and would drag in every gate
+    #: keyed on it at once: `validate`'s every-output-written-every-call rule
+    #: (wrong for a state that is False most of the time), the bidirectional
+    #: OUTPUT_PORTS check, `_ports_agree`, `compose.output_ports`,
+    #: `variants._widths` and `liveness._widths`. Kept separate, all of those are
+    #: untouched, and the obligation on a probe is only that it is READABLE --
+    #: presence, not determination.
+    PROBE_PORTS: list[str] = []
+
     #: Cycles between a stimulus and the output that answers it. 0 is
     #: combinational. Used by the testbench to align sampling, not by the model.
     LATENCY_CYCLES: int = 0
