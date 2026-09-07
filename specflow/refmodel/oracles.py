@@ -26,6 +26,8 @@ cocotb, so a generated model runs in a plain interpreter.
 
 from __future__ import annotations
 
+from .temporal import strong_not_stated
+
 import ast
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -649,6 +651,21 @@ def well_formed(
     issues = [i for i in _static_checks(oracle.source, [], {}) if i.severity == "error"]
     if issues:
         return issues[0].message
+    #: `strong` IS REQUIRED and omitting it is a TypeError, so it MUST be
+    #: caught here rather than at replay: a check that raises during replay is
+    #: a broken check, and h2-i2c is on record with 22 of 96 frozen oracles
+    #: dying that way. Refused at authoring, the author gets a targeted
+    #: objection naming the operator instead.
+    unstated = strong_not_stated(oracle.source)
+    if unstated:
+        ops = "`, `".join(unstated)
+        return (f"`{ops}` is called without stating `strong`, which has no "
+                "default. It is a claim about the requirement, not a "
+                "formatting choice: pass strong=True when the requirement "
+                "obliges a response, so that the response failing to arrive is "
+                "a violation of it, and strong=False when it describes a "
+                "condition, where running out of trace means only that you "
+                "stopped looking.")
     if not oracle.tp_uids:
         return "the oracle names no testpoint to replay"
     known = {str(tp.get("uid")) for tp in testplan}

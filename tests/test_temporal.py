@@ -64,7 +64,7 @@ def test_a_condition_true_for_many_rows_is_ONE_window():
 
 
 def test_eventually_finds_an_effect_the_activation_row_cannot_show():
-    ok, edge, _ = eventually(_windows()[0], lambda r: r["outputs"]["ack"] == 1)
+    ok, edge, _ = eventually(_windows()[0], lambda r: r["outputs"]["ack"] == 1, strong=False)
     assert (ok, edge) == (True, 4)
 
 
@@ -79,7 +79,7 @@ def test_a_window_that_RUNS_OFF_THE_END_is_unknown_not_false():
     trace = [_state(0, cmd=8), _state(1, cmd=8), _state(2)]
     w = after(trace, lambda r: r["inputs"]["cmd"] == 8,
               until=lambda r: r["outputs"]["ack"] == 1)
-    ok, _edge, why = eventually(w[0], lambda r: r["outputs"]["ack"] == 1)
+    ok, _edge, why = eventually(w[0], lambda r: r["outputs"]["ack"] == 1, strong=False)
     assert ok is None
     assert truncated(why), why
 
@@ -153,11 +153,11 @@ def test_there_is_NO_DEFAULT_WINDOW_and_both_ends_are_named():
 
     to_end = after(trace, act, until=TO_END)[0]
     assert [r["edge"] for r in to_end.rows] == [0, 1, 2, 3]
-    assert eventually(to_end, lambda r: r["outputs"]["ack"] == 1)[0] is True
+    assert eventually(to_end, lambda r: r["outputs"]["ack"] == 1, strong=False)[0] is True
 
     while_active = after(trace, act, until=WHILE_ACTIVE)[0]
     assert [r["edge"] for r in while_active.rows] == [0, 1]
-    assert eventually(while_active, lambda r: r["outputs"]["ack"] == 1)[0] is False
+    assert eventually(while_active, lambda r: r["outputs"]["ack"] == 1, strong=False)[0] is False
 
 def test_worst_puts_failure_first_and_unknown_above_a_pass():
     """A requirement holding on nine windows and breaking on the tenth is
@@ -248,8 +248,8 @@ def test_the_activation_row_is_excluded_by_after_activation():
 
     # b is true AT the activation and false afterwards.
     w = _while(_t((0, 1, 1), (2, 1, 0), (4, 0, 0)), _a)[0]
-    assert eventually(w, _b)[0] is True, "|-> is satisfied at the activation"
-    assert eventually(w, _b, after_activation=True)[0] is False, (
+    assert eventually(w, _b, strong=False)[0] is True, "|-> is satisfied at the activation"
+    assert eventually(w, _b, after_activation=True, strong=False)[0] is False, (
         "|=> must not be satisfied by the activation instant itself")
     assert throughout(w, _b)[0] is False
     assert throughout(w, lambda r: not _b(r), after_activation=True)[0] is True
@@ -264,7 +264,7 @@ def test_strong_eventually_convicts_where_weak_abstains():
 
     w = _while(_t((0, 1, 0), (2, 1, 0)), _a)[0]  # never closes
     assert not w.closed
-    assert eventually(w, _b)[0] is None, "weak: we stopped looking"
+    assert eventually(w, _b, strong=False)[0] is None, "weak: we stopped looking"
     assert eventually(w, _b, strong=True)[0] is False, (
         "strong: the obligation was never discharged")
 
@@ -278,11 +278,11 @@ def test_sequence_is_ordering_and_three_eventuallys_are_not():
     rows = _t((0, 1, 0), (2, 1, 1), (4, 1, 0), (6, 0, 0))
     w = after(rows, _a, until=lambda r: r["edge"] >= 4)[0]
     b_on, b_off = _b, (lambda r: not _b(r))
-    assert sequence(w, b_off, b_on, b_off)[0] is True
+    assert sequence(w, b_off, b_on, b_off, strong=False)[0] is True
     # Backwards: b is never off-then-on-then-off in THAT order twice over.
-    assert sequence(w, b_on, b_off, b_on)[0] is False
+    assert sequence(w, b_on, b_off, b_on, strong=False)[0] is False
     # Both orders satisfy a bare conjunction of eventuallys, which is the point.
-    assert eventually(w, b_on)[0] and eventually(w, b_off)[0]
+    assert eventually(w, b_on, strong=False)[0] and eventually(w, b_off, strong=False)[0]
 
 
 def test_never_and_until_and_nexttime():
@@ -298,10 +298,10 @@ def test_never_and_until_and_nexttime():
     assert nexttime(w, _b)[0] is False
 
     # p until q, weak and strong.
-    assert until(w, lambda r: not _b(r), _b)[0] is True
+    assert until(w, lambda r: not _b(r), _b, strong=False)[0] is True
     closed = _while(_t((0, 1, 0), (2, 1, 0), (4, 0, 0)), _a)[0]
     assert closed.closed
-    assert until(closed, lambda r: not _b(r), _b)[0] is True, "weak: no release needed"
+    assert until(closed, lambda r: not _b(r), _b, strong=False)[0] is True, "weak: no release needed"
     assert until(closed, lambda r: not _b(r), _b, strong=True)[0] is False
 
 
@@ -362,14 +362,14 @@ def test_every_window_operator_accepts_after_activation():
     """
     w = _while(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
     for name, call in (
-            ("eventually", lambda: eventually(w, _b, after_activation=True)),
+            ("eventually", lambda: eventually(w, _b, after_activation=True, strong=False)),
             ("throughout", lambda: throughout(w, _b, after_activation=True)),
             ("stable", lambda: stable(w, "b", after_activation=True)),
             ("pulse", lambda: pulse(w, "b", after_activation=True)),
             ("never", lambda: never(w, _b, after_activation=True)),
             ("nexttime", lambda: nexttime(w, _b, after_activation=True)),
-            ("sequence", lambda: sequence(w, _b, after_activation=True)),
-            ("until", lambda: until(w, _b, _c, after_activation=True)),
+            ("sequence", lambda: sequence(w, _b, after_activation=True, strong=False)),
+            ("until", lambda: until(w, _b, _c, after_activation=True, strong=False)),
     ):
         ok, _, _ = call()                       # must not raise
         assert ok in (True, False, None), name
@@ -406,8 +406,8 @@ def test_sequence_after_activation_cannot_match_step_one_at_the_trigger():
     a `sequence` whose first step is satisfied by the activation row itself
     passes one that never starts."""
     w = _while(_t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 0, 0, 0)), _a)[0]
-    assert sequence(w, _b, lambda r: not _b(r))[0] is True
-    ok, _, detail = sequence(w, _b, lambda r: not _b(r), after_activation=True)
+    assert sequence(w, _b, lambda r: not _b(r), strong=False)[0] is True
+    ok, _, detail = sequence(w, _b, lambda r: not _b(r), after_activation=True, strong=False)
     assert ok is False and "step 1 of 2" in detail
 
 
@@ -416,8 +416,8 @@ def test_until_after_activation_is_not_discharged_by_a_release_at_the_trigger():
     discharges the obligation instantly, so a real violation one row later is
     never looked at. `until` is weak, so this reads as a PASS."""
     w = _while(_t3((0, 1, 1, 1), (2, 1, 0, 0), (4, 1, 0, 1), (6, 0, 0, 0)), _a)[0]
-    assert until(w, _c, _b)[0] is True, "released at the activation instant"
-    ok, edge, detail = until(w, _c, _b, after_activation=True)
+    assert until(w, _c, _b, strong=False)[0] is True, "released at the activation instant"
+    ok, edge, detail = until(w, _c, _b, after_activation=True, strong=False)
     assert ok is False and edge == 2 and "before any release" in detail
 
 
@@ -549,8 +549,8 @@ def test_the_two_untils_state_one_release_rule_between_them():
     trace = _t3((0, 1, 1, 0), (2, 1, 0, 0), (4, 1, 1, 0), (6, 0, 0, 0))
     w = after(trace, _a, until=_b)[0]
     assert [r["edge"] for r in w.rows] == [0, 2, 4], "the release AT 0 is skipped"
-    assert until(w, lambda r: True, _b)[1] == 0, "the operator reads row 0"
-    assert until(w, lambda r: True, _b, after_activation=True)[1] == 4
+    assert until(w, lambda r: True, _b, strong=False)[1] == 0, "the operator reads row 0"
+    assert until(w, lambda r: True, _b, after_activation=True, strong=False)[1] == 4
 
 
 # ------------------------------------------------- `disable iff`: aborts_on
@@ -752,69 +752,58 @@ def test_nth_counts_occurrences_where_runs_measures_duration():
     assert runs(pulsing, "p", value=1, at_least=2) == set()   # no run of two
 
 
-# --- `strong` has no default, because neither default is safe ---------------
+# --- `strong` is REQUIRED, and the omission is caught BEFORE replay ---------
 #
-# MEASURED, E0h: 15 of 68 authored checks called `eventually` without stating
-# `strong`, took the weak reading silently, and NOT ONE ended up both sound and
-# able to catch a broken design. Forcing the other answer on those same 15 was
-# no better -- 2 good checks for 6 NEW convictions of a correct design. Both
-# errors are large, so the caller must answer. These pin the WARNING PHASE:
-# an omission is recorded and warned, and the historical weak reading is kept
-# so that no already-frozen oracle changes verdict on this commit.
+# MEASURED, E0h: with a weak default, 15 of 68 authored checks took it silently
+# and NOT ONE ended up both sound and able to catch a broken design. Neither
+# answer is safe as a default either -- patching `True` onto those same 15
+# bought 1-2 good checks for 4-6 NEW convictions of a correct design. So the
+# caller answers or the call does not happen.
 
 def _unclosed():
-    """A window that runs off the end -- where weak and strong differ."""
     return after(ISSUE_THEN_ACK, lambda r: r["inputs"]["cmd"] == 8,
                  until=lambda r: False)[0]
 
 
-def test_omitting_strong_is_recorded_and_warned():
-    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
-    clear_omitted_strong()
-    with pytest.warns(DeprecationWarning, match="without stating `strong`"):
-        eventually(_unclosed(), lambda r: r["outputs"]["ack"] == 1)
-    assert len(omitted_strong()) == 1
-    assert "eventually" in omitted_strong()[0]
+@pytest.mark.parametrize("call", [
+    lambda w, p: eventually(w, p),
+    lambda w, p: sequence(w, p),
+    lambda w, p: until(w, p, p),
+    lambda w, p: nth(w, p, 2),
+])
+def test_omitting_strong_does_not_run(call):
+    """Every operator that takes it refuses to run without it."""
+    with pytest.raises(TypeError, match="strong"):
+        call(_unclosed(), lambda r: r["outputs"]["ack"] == 1)
 
 
-def test_stating_strong_records_nothing():
-    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
-    for value in (True, False):
-        clear_omitted_strong()
-        eventually(_unclosed(), lambda r: r["outputs"]["ack"] == 1, strong=value)
-        assert omitted_strong() == []
+def test_stating_strong_still_distinguishes_the_two_readings():
+    """The parameter is required, and it still means what it meant."""
+    w, absent = _unclosed(), lambda r: r["outputs"]["ack"] == 9   # noqa: E731
+    assert eventually(w, absent, strong=False)[0] is None   # stopped looking
+    assert eventually(w, absent, strong=True)[0] is False    # never discharged
 
 
-def test_the_warning_phase_does_not_change_any_verdict():
-    """An omission still reads WEAK, so no frozen oracle moves on this commit."""
-    w = _unclosed()
-    #: a response that NEVER arrives -- the only place weak and strong differ.
-    absent = lambda r: r["outputs"]["ack"] == 9                 # noqa: E731
-    with pytest.warns(DeprecationWarning):
-        omitted = eventually(w, absent)
-    assert omitted[0] is None                       # the historical reading
-    assert eventually(w, absent, strong=False)[0] is None
-    assert eventually(w, absent, strong=True)[0] is False       # and strong differs
+def test_the_omission_is_detected_statically():
+    """`strong_not_stated` reads the TEXT, so a gate can refuse the body
+    before it is ever replayed. That ordering is the point: a check that
+    raises during replay is a BROKEN CHECK, and h2-i2c is on record with
+    22 of 96 frozen oracles dying that way."""
+    from specflow.refmodel.temporal import strong_not_stated
+    assert strong_not_stated("def decide(t):\n    return eventually(w, p)") == ["eventually"]
+    assert strong_not_stated("def decide(t):\n    return until(w, p, q)") == ["until"]
+    assert strong_not_stated("def decide(t):\n    return eventually(w, p, strong=True)") == []
+    assert strong_not_stated("def decide(t):\n    return throughout(w, p)") == []
+    #: a body that does not parse belongs to another gate, not this one
+    assert strong_not_stated("def decide(t) return") == []
 
 
-def test_every_operator_taking_strong_records_its_own_name():
-    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
-    w = _unclosed()
-    p = lambda r: r["outputs"]["ack"] == 1                      # noqa: E731
-    for op, call in (("eventually", lambda: eventually(w, p)),
-                     ("sequence", lambda: sequence(w, p)),
-                     ("until", lambda: until(w, p, p)),
-                     ("nth", lambda: nth(w, p, 2))):
-        clear_omitted_strong()
-        with pytest.warns(DeprecationWarning):
-            call()
-        assert omitted_strong() and omitted_strong()[0].startswith(op), op
-        #: `nth` delegates to `sequence`; it must not book the omission twice.
-        assert len(omitted_strong()) == 1, op
-
-
-def test_the_sentinel_refuses_to_be_read_as_a_boolean():
-    """`strong` unset is the ABSENCE of an answer, not a False."""
-    from specflow.refmodel.temporal import NOT_STATED
-    with pytest.raises(TypeError, match="never stated"):
-        bool(NOT_STATED)
+def test_well_formed_refuses_the_omission_with_a_usable_objection():
+    from specflow.refmodel.oracles import RequirementOracle, well_formed
+    o = RequirementOracle(req_uid="R", clause="",
+                          source="def decide(trace):\n    return eventually(w, p)",
+                          tp_uids=["TP-0"])
+    why = well_formed(o, {"io": []}, [{"uid": "TP-0"}])
+    assert why and "strong" in why
+    #: the objection has to say HOW to answer, not just that it is missing
+    assert "obliges a response" in why and "condition" in why
