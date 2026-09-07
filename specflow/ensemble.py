@@ -56,7 +56,9 @@ order them backwards at -0.54. `conviction_count_is_not_a_descent_criterion`
 carries that, and it is the reason to score a repair loop on requirements it
 satisfies rather than on objections it has left, and
 `soundness_buys_termination_not_correctness` for the one property a sound
-set does have and the one it does not.
+set does have and the one it does not, and
+`the_residue_is_check_strength` for where the remaining gap actually is
+once span, stimulus and volume have each been excluded by measurement.
 
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
@@ -325,6 +327,41 @@ def soundness_buys_termination_not_correctness() -> str:
         "least demanding sentences in the population. A requirement without a "
         "sound check is not an unattempted one; it is a harder one."
     )
+
+def the_residue_is_check_strength() -> str:
+    """Where the gap actually is, after span, stimulus and volume are excluded.
+
+    A sound set that says almost nothing about a mostly-wrong design fails one
+    of two ways, and they demand opposite work: SILENCE (the checks never decide
+    where the design is wrong -- a stimulus finding) or BLINDNESS (they decide
+    there and pass -- which no stimulus fixes). Separating them is the same
+    distinction staging conflates, asked of the accept criterion instead.
+    """
+    return (
+        "Measured on k1, per check, restricted to the testpoints where a port "
+        "THAT CHECK ITSELF READS differs from the known-good design -- because a "
+        "testpoint is wrong if any of ten outputs differs, and a check watching "
+        "one port is not blind for passing a defect on another. Of 50 sound "
+        "checks against a held-out design: 3 are exposed to a wrong port and "
+        "never decide there, 36 DECIDE where their own port is wrong and PASS, "
+        "and 7 object. Across 3,399 decisions on exposed testpoints there are "
+        "134 objections -- 3.9%. One check reads a single port, decided on all "
+        "99 testpoints where that port is wrong, and objected zero times.\n\n"
+        "So the stimulus loop is worth 3 checks of 50 here, not the lever it is "
+        "usually assumed to be: the suite already drives the design into the "
+        "wrong behaviour on the exact ports the checks read. The residue is "
+        "CHECK STRENGTH -- a check asserts a fragment of its sentence and the "
+        "design violates the sentence elsewhere in the same port. That single "
+        "fact explains why more checks do not help (the ones already watching "
+        "do not object), why selection does not help (the blindness is uniform, "
+        "36 of 50, not a removable subset), and why a correct repair gradient is "
+        "still far too shallow to finish.\n\n"
+        "The uncomfortable half: raising 3.9% means each check asserting MORE of "
+        "its sentence, and asserting more is what produces over-strictness. This "
+        "set is at 3.9% strength and ZERO unsound simultaneously, which is the "
+        "first time both ends of that trade have been measured on one set."
+    )
+
 
 
 

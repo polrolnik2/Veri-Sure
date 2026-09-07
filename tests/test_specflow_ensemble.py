@@ -13,6 +13,7 @@ from specflow.ensemble import (
     conviction_count_is_not_a_descent_criterion,
     soundness_buys_termination_not_correctness,
     split_cells_are_a_specification_finding,
+    the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
     refuted_by,
@@ -146,6 +147,15 @@ def test_a_perfectly_sound_set_gives_direction_but_not_sufficiency():
     assert "53%" in why and "40 to 43 of 89" in why
 
 
+def test_the_stimulus_lever_is_sized_and_the_residue_named():
+    # The lever everyone reaches for when a check set says nothing, and the
+    # per-port measurement that sizes it at 3 of 50. The 3.9% has to travel
+    # with it or the finding reads as "add stimulus".
+    why = the_residue_is_check_strength()
+    assert "3.9%" in why and "36 DECIDE" in why
+    assert "CHECK STRENGTH" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -155,7 +165,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "conviction_count_is_not_a_descent_criterion",
                  "split_cells_are_a_specification_finding",
                  "accuracy_is_the_wrong_axis_for_a_reference",
-                 "soundness_buys_termination_not_correctness"):
+                 "soundness_buys_termination_not_correctness",
+                 "the_residue_is_check_strength"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
