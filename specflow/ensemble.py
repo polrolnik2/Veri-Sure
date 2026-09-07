@@ -20,8 +20,10 @@ had been pointed at the check set, so they are a floor.
                            filter measured.
     disagreement_cells     97% of a held-out design's errors fall in the 11% of
                            cells the ensemble cannot agree on -- an 8.6x
-                           localisation. It says WHERE the question is; it does
-                           not answer it.
+                           localisation. It says WHERE the question is, and
+                           NOTHING here can answer it: see
+                           `split_cells_are_a_specification_finding`. Put the
+                           map in front of whoever owns the specification.
     refuted_by             a check that spares every candidate and convicts a
                            mechanical mutant is 100% sound (19 of 19) and 0%
                            discriminating (0 of 19). Use it to reject a check
@@ -53,6 +55,16 @@ better than +0.20 Spearman, and the checks that DISCRIMINATE between designs
 order them backwards at -0.54. `conviction_count_is_not_a_descent_criterion`
 carries that, and it is the reason to score a repair loop on requirements it
 satisfies rather than on objections it has left.
+
+WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
+On the cells the population cannot agree on, a reader asked ONE targeted question
+-- one cell, one port, the specification and the input sequence, no design at all
+-- scores WORSE than the population it was meant to beat, and reproduces the
+population's exact wrong answer on most of the cells it gets wrong. The
+correlated error belongs to the specification-and-reader pair, not to the
+design-writing task, so no change of instrument, ordering or granularity
+decorrelates it. `split_cells_are_a_specification_finding` carries the numbers
+and the one thing that follows from them.
 """
 from __future__ import annotations
 
@@ -230,4 +242,32 @@ def conviction_count_is_not_a_descent_criterion() -> str:
         "outlier. Score a repair loop on requirements it satisfies, not on "
         "objections it has left, and do not read a falling objection count as "
         "progress toward correctness."
+    )
+
+
+def split_cells_are_a_specification_finding() -> str:
+    """Why a disagreement cell is escalated, never resolved automatically.
+
+    `disagreement_cells` localises the residue better than anything else here,
+    and the natural next step -- have a model resolve those cells, or at least
+    flag the ones the specification leaves open -- is measured and does not work.
+    """
+    return (
+        "Measured on k1 over 20 cells drawn from the 3,863 a 13-design "
+        "population cannot agree on. Each was put to a fresh reader as ONE "
+        "targeted question: one cell, one port, the specification, the declared "
+        "interface, and the input sequence from reset, with no design of any "
+        "kind. The population majority is right on 60.9% of split cells and on "
+        "11 of the 20 sampled; the questioner scored 7 of 20 -- WORSE than the "
+        "population, not better. On the 9 cells where the population is wrong it "
+        "was right once, and produced the population's exact wrong answer 7 "
+        "times. So the correlated error is not an artifact of writing a whole "
+        "module under a budget; it is what this text produces in a competent "
+        "reader, and no simpler task decorrelates it. Worse for tooling: the "
+        "prompt offered 'the specification does not determine this' as a first "
+        "class answer, and 0 of 20 used it -- the ambiguity is invisible to the "
+        "reader it misleads, so a model cannot be asked to flag the gaps either. "
+        "Treat a split cell as a SPECIFICATION defect and route the map to "
+        "whoever owns the specification. Do not resolve it with another model, "
+        "and do not gate on a model's claim that the text is clear."
     )

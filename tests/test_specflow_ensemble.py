@@ -10,6 +10,7 @@ from specflow.ensemble import (
     agreement_is_not_an_oracle,
     check_agreement_is_not_an_oracle,
     conviction_count_is_not_a_descent_criterion,
+    split_cells_are_a_specification_finding,
     consensus_cells,
     disagreement_cells,
     refuted_by,
@@ -98,13 +99,24 @@ def test_the_objection_count_is_refuted_as_a_descent_signal():
     assert "requirements it satisfies, not on objections it has left" in why
 
 
+def test_resolving_a_split_cell_with_another_model_is_refuted():
+    # disagreement_cells is the one instrument here that works, so the next move
+    # -- ask a model to resolve or flag those cells -- is the one most likely to
+    # be tried. Both halves of why it fails have to survive in the text: the
+    # reader is worse than the population, AND it cannot see the gap.
+    why = split_cells_are_a_specification_finding()
+    assert "7 of 20" in why and "0 of 20" in why
+    assert "SPECIFICATION defect" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
     doc = ensemble.__doc__ or ""
     for name in ("agreement_is_not_an_oracle",
                  "check_agreement_is_not_an_oracle",
-                 "conviction_count_is_not_a_descent_criterion"):
+                 "conviction_count_is_not_a_descent_criterion",
+                 "split_cells_are_a_specification_finding"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
