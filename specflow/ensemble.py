@@ -54,7 +54,9 @@ weighting orders designs by their actual distance from the known-good design at
 better than +0.20 Spearman, and the checks that DISCRIMINATE between designs
 order them backwards at -0.54. `conviction_count_is_not_a_descent_criterion`
 carries that, and it is the reason to score a repair loop on requirements it
-satisfies rather than on objections it has left.
+satisfies rather than on objections it has left, and
+`soundness_buys_termination_not_correctness` for the one property a sound
+set does have and the one it does not.
 
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
@@ -275,6 +277,36 @@ def conviction_count_is_not_a_descent_criterion() -> str:
         "objections it has left, and do not read a falling objection count as "
         "progress toward correctness."
     )
+
+def soundness_buys_termination_not_correctness() -> str:
+    """What a perfectly sound check set does and does not do for a repair loop.
+
+    The one positive property any rule here has produced: a set no correct
+    design violates makes zero objections REACHABLE, which is necessary --
+    against a set carrying one unsatisfiable demand the loop can never
+    terminate. The mistake is to read that as progress toward correctness.
+    """
+    return (
+        "Measured on k1 with the largest perfectly sound set the corpus can "
+        "produce: 50 checks over 40 requirements, 45% of the specification, "
+        "ZERO of them convicting the known-good design. A Sonnet editor drove "
+        "a held-out design from 7 objections to 2 in nine trials, and found "
+        "four genuine defects doing it -- a refill counter initialised from a "
+        "byte count on a word-beat bus, a missing abort path when the "
+        "requester withdrew mid-transaction, and an acknowledgement computed "
+        "from the state AFTER the same-edge transition, so it could never fire "
+        "on the cycle it names. Testpoints differing from the known-good "
+        "design went 194 to 217: WORSE. The signal is in the per-output "
+        "breakdown -- the output the editor reworked most went from 307 "
+        "differing cells to 411, because the check constrained the OBSERVABLE "
+        "and the editor invented an ARCHITECTURE to satisfy it that was not "
+        "the known-good one. Fourth independent reproduction of an accept "
+        "criterion not tracking the grade, and the first where unsoundness, "
+        "set size and author competence are all excluded. Soundness buys "
+        "termination. It does not buy correctness, and a falling objection "
+        "count against a sound set is evidence of neither."
+    )
+
 
 
 def split_cells_are_a_specification_finding() -> str:

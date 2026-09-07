@@ -11,6 +11,7 @@ from specflow.ensemble import (
     agreement_is_not_an_oracle,
     check_agreement_is_not_an_oracle,
     conviction_count_is_not_a_descent_criterion,
+    soundness_buys_termination_not_correctness,
     split_cells_are_a_specification_finding,
     consensus_cells,
     disagreement_cells,
@@ -119,6 +120,15 @@ def test_a_highly_accurate_reference_is_refuted_as_a_loop_driver():
     assert "right WHERE THE DESIGN UNDER TEST IS WRONG" in why
 
 
+def test_a_perfectly_sound_set_is_refuted_as_evidence_of_correctness():
+    # The one positive property any rule here produced, and the exact way it
+    # is misread. Both numbers must travel together: 45% of the spec with zero
+    # unsound checks is what makes the 194 -> 217 mean anything.
+    why = soundness_buys_termination_not_correctness()
+    assert "194 to 217" in why and "45% of the specification" in why
+    assert "Soundness buys termination" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -127,7 +137,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "check_agreement_is_not_an_oracle",
                  "conviction_count_is_not_a_descent_criterion",
                  "split_cells_are_a_specification_finding",
-                 "accuracy_is_the_wrong_axis_for_a_reference"):
+                 "accuracy_is_the_wrong_axis_for_a_reference",
+                 "soundness_buys_termination_not_correctness"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
