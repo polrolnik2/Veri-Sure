@@ -703,9 +703,33 @@ def nexttime(w: Window, holds: Pred, *, after_activation: bool = True,
     ORDERING, NOT A CYCLE COUNT, and the difference is the whole reason this
     one is admissible while `##[2:5]` is not. A row is a STATE: consecutive
     edges with identical inputs and outputs collapse into one. So "the next
-    row" means "the next time anything changed", which is what "then" means in
-    a specification -- not "one clock later", which the specification does not
-    state and Phases 3-6 stopped this pipeline from asserting.
+    row" means "the next time anything changed" -- not "one clock later",
+    which the specification does not state and Phases 3-6 stopped this
+    pipeline from asserting.
+
+    AN EARLIER VERSION OF THIS PARAGRAPH ADDED "WHICH IS WHAT `THEN` MEANS IN A
+    SPECIFICATION", AND THAT IS REFUTED. Measured on k1's 2,389 rows: a row
+    boundary moves a MEDIAN OF FIVE PORTS, 79% of boundaries move three or
+    more, and only 17% move exactly one. So "the next state" is "the next time
+    any of ten signals moved", and in four of the six checks that got this
+    wrong the port the check ASSERTS on was not among the ones that moved. A
+    specification's "then" means the next RELEVANT thing; this operator cannot
+    mean that, because a row boundary is not about any particular signal.
+
+    Its `##1` reading is also only sometimes true: `body[0]` sits at raw edge
+    `w.edge + held`, so on an activation row holding h edges this is `##h`.
+    On k1, h == 1 for 80% of rows and h >= 9 for 187 of the other 470, up to
+    2000. And `##1` is NOT expressible here instead: rows collapse only when
+    identical, so the raw edge at `##1` after a compressed activation lies
+    INSIDE the activation row, and reading it is the same-row vacuity
+    `Window.body` exists to prevent -- six of a2-i2c's fourteen vacuous checks
+    did exactly that. There is no third option, which is the honest reason to
+    reach for `eventually` instead.
+
+    USE, MEASURED: zero. 0 of 172 authored bodies across four populations
+    (E0j both arms, E0d both arms, k1's frozen production set) call it, so
+    none of the twenty measured false alarms came through here -- those are
+    hand-rolled `trace[i + 1]`, which no operator contract governs.
     """
     if w.aborted:
         return _discarded(w)
