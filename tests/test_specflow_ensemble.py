@@ -120,6 +120,16 @@ def test_a_highly_accurate_reference_is_refuted_as_a_loop_driver():
     assert "right WHERE THE DESIGN UNDER TEST IS WRONG" in why
 
 
+def test_objecting_to_no_candidate_is_not_a_rejection_reason():
+    # The leg this project ran for months and has now measured as harmful:
+    # three of the fourteen checks that caught a held-out design convict none
+    # of the population. The warning has to sit on the function that tempts
+    # you into the rejection, or it will be re-derived.
+    doc = refuted_by.__doc__ or ""
+    assert "is NOT" in doc and "may simply be RIGHT" in doc
+    assert "THREE convict none" in doc
+
+
 def test_a_perfectly_sound_set_gives_direction_but_not_sufficiency():
     # The one positive property any rule here produced, and the exact way it
     # is misread. Both numbers must travel together: 45% of the spec with zero

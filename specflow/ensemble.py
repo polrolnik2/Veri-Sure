@@ -166,9 +166,16 @@ def refuted_by(decide_on, candidates: Iterable[Rows],
     ITS LIMIT IS MEASURED AND IS SEVERE: of 19 checks this promoted, 19 spare
     the known-good design and ZERO catch a from-scratch design that is wrong on
     61% of the suite. A mechanical mutant is an operator substitution; a real
-    design's errors are different readings of an ambiguous sentence. Use this to
-    REJECT a check that can never fail. Do not read a pass as evidence the check
-    is any good.
+    design's errors are different readings of an ambiguous sentence.
+
+    AND DO NOT USE THE CONVERSE AS A REJECTION, which is what an earlier
+    version of this docstring advised. "It objects to no candidate" is NOT
+    "it cannot fail": the population may simply be RIGHT about that
+    requirement. Measured on two designs held out of the population -- of the
+    14 sound checks that caught one of them, THREE convict none of the 13
+    candidates, so a refutable leg would have discarded 21% of the entire
+    measured yield, and this function promotes 0 of those 3. Keep such a
+    check. A pass here is still not evidence the check is any good.
     """
     if any(decide_on(rows) for rows in candidates):
         return False
