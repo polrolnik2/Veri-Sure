@@ -5,8 +5,10 @@ a filter that cannot fail is worth nothing, so every predicate here is shown
 returning both verdicts on inputs that differ only in the thing it claims to
 detect.
 """
+import specflow.ensemble as ensemble
 from specflow.ensemble import (
     agreement_is_not_an_oracle,
+    check_agreement_is_not_an_oracle,
     consensus_cells,
     disagreement_cells,
     refuted_by,
@@ -73,6 +75,24 @@ def test_the_refutation_of_consensus_as_an_oracle_is_carried_in_the_code():
     why = agreement_is_not_an_oracle()
     assert "correlated" in why
     assert "174 against 189" in why
+
+
+def test_the_per_requirement_check_ensemble_is_refuted_in_the_code_too():
+    # The tempting variant of the same idea, and the reason it needs its own
+    # entry: the correlation argument that kills the DESIGN ensemble does not
+    # obviously apply to several checks written for one sentence. It is still
+    # refuted, so the numbers must be where the next reader will look.
+    why = check_agreement_is_not_an_oracle()
+    assert "never reaches past its own best member" in why
+    assert "15.2" in why and "observed overlap is 4" in why
+
+
+def test_both_refutations_are_named_where_someone_reaching_for_them_will_look():
+    # A refutation kept in a function nothing points at is a refutation nobody
+    # finds. The module docstring is the entry point, so it must name both.
+    doc = ensemble.__doc__ or ""
+    assert "agreement_is_not_an_oracle" in doc
+    assert "check_agreement_is_not_an_oracle" in doc
 
 
 def test_empty_population_is_not_an_error():

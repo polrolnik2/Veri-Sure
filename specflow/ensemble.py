@@ -8,8 +8,11 @@ written independently from the same specification, and mechanical mutants of
 one of them.
 
 WHAT WAS MEASURED, so a caller knows what these are worth. On 134 checks that
-fire, 4 are both SOUND (spare the known-good design) and DISCRIMINATING (convict
-a design wrong on 61% of the suite) -- a 3.0% base rate.
+fire, 7 are both SOUND (spare the known-good design) and DISCRIMINATING (convict
+a design wrong on 61% of the suite, written from the specification and held out
+of every selection) -- a 5.2% base rate, spanning 7 requirements of 89. Figures
+below quoting a 3.0% base rate were taken against that design AFTER an editor
+had been pointed at the check set, so they are a floor.
 
     split_cell_soundness   84% precision as an unsoundness predictor; the checks
                            it keeps convict the known-good design 29% of the
@@ -32,6 +35,15 @@ the specification they were all written from. Correctness is what makes the
 known-good design an outlier. `consensus_cells` is exported for the
 disagreement map only, and `agreement_is_not_an_oracle` documents the refutation
 so it cannot be rediscovered as a good idea.
+
+THE SAME IDEA ONE LEVEL DOWN IS ALSO REFUTED, and it is the more tempting one
+because the correlation argument above does not obviously apply: a requirement
+usually carries two to four independently authored checks, so "the requirement
+objects when at least k of its checks object" is an ensemble over readings of
+ONE SENTENCE rather than of a whole specification. Measured at k = 1, 2, a
+majority and unanimity, it adds ZERO requirements that the best single check for
+that requirement did not already supply. `check_agreement_is_not_an_oracle`
+carries the numbers.
 """
 from __future__ import annotations
 
@@ -153,4 +165,29 @@ def agreement_is_not_an_oracle() -> str:
         "unanimity encodes the shared misreading and being right is what the "
         "criterion penalises. Use `disagreement_cells` to find where the "
         "question is; never use the agreed value as the answer."
+    )
+
+
+def check_agreement_is_not_an_oracle() -> str:
+    """Why an ensemble of CHECKS for one requirement buys nothing either.
+
+    The companion to `agreement_is_not_an_oracle`, and the more tempting idea of
+    the two: a requirement typically carries several independently authored
+    checks, so requiring k of them to agree looks like a way to cancel one
+    author's misreading without any reference design. It does not.
+    """
+    return (
+        "Measured on k1 over 134 checks spanning 63 requirements, 1 to 4 checks "
+        "each. Taking 'the requirement objects when at least k of its checks "
+        "object': at k=1 the requirement is SOUND (spares the known-good design) "
+        "12 times and DISCRIMINATING (convicts a held-out wrong design) 49 "
+        "times, at unanimity 40 and 24 -- so k trades one for the other exactly "
+        "as a conviction-count threshold does. The cell that needs BOTH peaks at "
+        "4 requirements, and its union with the per-check set is the per-check "
+        "set, so the ensemble never reaches past its own best member. At "
+        "unanimity the marginals 40 and 24 of 63 predict an overlap of 15.2 if "
+        "the two properties were independent; the observed overlap is 4, close "
+        "to the minimum the marginals allow. Sound and discriminating are not "
+        "merely uncorrelated but near-disjoint, which is why every threshold, "
+        "filter and ensemble measured here lands in the same place."
     )
