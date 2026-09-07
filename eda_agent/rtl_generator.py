@@ -212,6 +212,14 @@ Hard rules:
   LREFILL3);`). It must not change the module's functional behaviour in any way;
   it exists so a check can name the situation the specification names, and it is
   stripped before the design is compared against a reference.
+- A PROBE'S NAME IS TAKEN. Several probes are named after signals the
+  specification also describes as internal state -- `hitmiss_eval` is the
+  clearest case -- so if you need an internal register for the same thing, give
+  the REGISTER a different name (`hitmiss_eval_r`) and drive the probe port from
+  it. Declaring both under one name does not compile: Verilator refuses with
+  "Duplicate declaration of signal", and the whole design is lost over an
+  identifier. This is measured, not hypothetical -- it is how one of three
+  generated designs failed.
 
 In `reasoning`, write a short summary of key decisions and assumptions (no step-by-step chain-of-thought).
 
