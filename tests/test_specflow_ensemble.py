@@ -9,6 +9,7 @@ import specflow.ensemble as ensemble
 from specflow.ensemble import (
     agreement_is_not_an_oracle,
     check_agreement_is_not_an_oracle,
+    conviction_count_is_not_a_descent_criterion,
     consensus_cells,
     disagreement_cells,
     refuted_by,
@@ -87,12 +88,24 @@ def test_the_per_requirement_check_ensemble_is_refuted_in_the_code_too():
     assert "15.2" in why and "observed overlap is 4" in why
 
 
-def test_both_refutations_are_named_where_someone_reaching_for_them_will_look():
+def test_the_objection_count_is_refuted_as_a_descent_signal():
+    # The one a repair loop reaches for first, and the only refutation here that
+    # is about USING a check set rather than selecting one. It must carry the
+    # sign, because a reader who remembers only "weakly correlated" will still
+    # descend on it.
+    why = conviction_count_is_not_a_descent_criterion()
+    assert "-0.223" in why and "-0.542" in why
+    assert "requirements it satisfies, not on objections it has left" in why
+
+
+def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
-    # finds. The module docstring is the entry point, so it must name both.
+    # finds. The module docstring is the entry point, so it must name them all.
     doc = ensemble.__doc__ or ""
-    assert "agreement_is_not_an_oracle" in doc
-    assert "check_agreement_is_not_an_oracle" in doc
+    for name in ("agreement_is_not_an_oracle",
+                 "check_agreement_is_not_an_oracle",
+                 "conviction_count_is_not_a_descent_criterion"):
+        assert name in doc, f"{name} is unreachable from the module docstring"
 
 
 def test_empty_population_is_not_an_error():

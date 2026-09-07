@@ -44,6 +44,15 @@ ONE SENTENCE rather than of a whole specification. Measured at k = 1, 2, a
 majority and unanimity, it adds ZERO requirements that the best single check for
 that requirement did not already supply. `check_agreement_is_not_an_oracle`
 carries the numbers.
+
+AND THE SET IS NOT A DESCENT CRITERION EITHER, which is the one that matters for
+a repair loop: a loop does not need an accept threshold, it needs a number that
+falls as the design improves. Over 16 designs and six golden-free weightings, no
+weighting orders designs by their actual distance from the known-good design at
+better than +0.20 Spearman, and the checks that DISCRIMINATE between designs
+order them backwards at -0.54. `conviction_count_is_not_a_descent_criterion`
+carries that, and it is the reason to score a repair loop on requirements it
+satisfies rather than on objections it has left.
 """
 from __future__ import annotations
 
@@ -190,4 +199,35 @@ def check_agreement_is_not_an_oracle() -> str:
         "to the minimum the marginals allow. Sound and discriminating are not "
         "merely uncorrelated but near-disjoint, which is why every threshold, "
         "filter and ensemble measured here lands in the same place."
+    )
+
+
+def conviction_count_is_not_a_descent_criterion() -> str:
+    """Why a repair loop must not descend on how many checks object.
+
+    The natural way to drive an editor with a check set: count the objections
+    and minimise them. Measured here and it points the wrong way, which is worth
+    more than the two failed loop trajectories that suggested it -- those were
+    two runs, this is a property of the corpus.
+    """
+    return (
+        "Measured on k1 over 16 designs -- the known-good one, 13 written "
+        "independently from the specification, and two held out. Scoring each "
+        "by total (check, testpoint) convictions, the known-good design ranks "
+        "2nd, but by 0.7% over a population spanning 15%, and among the 15 "
+        "wrong designs the Spearman against testpoints actually differing from "
+        "the known-good design is -0.223: the count is slightly ANTI-correlated "
+        "with correctness. Six golden-free weightings were tried (equal, "
+        "discriminating, checkwise, rare, split-cell-clean, and the "
+        "intersection); none reaches +0.3, and every one either separates the "
+        "known-good design from the population or orders the population, never "
+        "both -- split-cell-clean is the only positive ordering at +0.201 and "
+        "ranks the known-good design 13th of 16, while the intersection ranks "
+        "it LAST. Worst is the subset that ought to carry the signal: checks "
+        "whose verdict varies across the population order designs BACKWARDS at "
+        "-0.542, because a check that separates spec-derived designs separates "
+        "them along their shared misreading, on which the correct design is the "
+        "outlier. Score a repair loop on requirements it satisfies, not on "
+        "objections it has left, and do not read a falling objection count as "
+        "progress toward correctness."
     )
