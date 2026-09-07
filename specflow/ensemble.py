@@ -312,7 +312,18 @@ def soundness_buys_termination_not_correctness() -> str:
         "injected defect, not the set, and is not evidence about the gradient.) "
         "Soundness buys termination and a usable direction. It does not buy "
         "sufficiency, and zero objections against a sparse sound set still "
-        "means very little."
+        "means very little.\n\n"
+        "AND MORE CHECKS DO NOT CLOSE THE GAP, measured rather than assumed. "
+        "Authoring three fresh checks each for the 22 behavioural "
+        "requirements the sound set does not cover -- 66 calls, all parsing, "
+        "all compiling, no duplicate bodies -- moved span from 40 to 43 of 89 "
+        "and produced ZERO new objections against the design under test. The "
+        "comparison explains it: on the requirements the set ALREADY covers, "
+        "53% of firing checks pass the rule; on the ones it does not, the "
+        "original corpus scored 0% over 54 prior attempts and the fresh round "
+        "13% over 66 more, six of its seven survivors landing on the three "
+        "least demanding sentences in the population. A requirement without a "
+        "sound check is not an unattempted one; it is a harder one."
     )
 
 

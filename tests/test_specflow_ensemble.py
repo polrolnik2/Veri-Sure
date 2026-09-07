@@ -141,6 +141,9 @@ def test_a_perfectly_sound_set_gives_direction_but_not_sufficiency():
     assert "249 to 188" in why and "45% of the specification" in why
     assert "194 to 217" in why and "injected" in why
     assert "SPARSITY, not direction" in why
+    # and the obvious response to sparsity, with its measured yield, so the
+    # 53%-against-0% split travels with the diagnosis that invites it
+    assert "53%" in why and "40 to 43 of 89" in why
 
 
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
