@@ -58,7 +58,9 @@ satisfies rather than on objections it has left, and
 `soundness_buys_termination_not_correctness` for the one property a sound
 set does have and the one it does not, and
 `the_residue_is_check_strength` for where the remaining gap actually is
-once span, stimulus and volume have each been excluded by measurement.
+once span, stimulus and volume have each been excluded by measurement, and
+`strength_and_soundness_are_exchanged_not_traded` for what happens when you
+attack that residue directly.
 
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
@@ -361,6 +363,41 @@ def the_residue_is_check_strength() -> str:
         "set is at 3.9% strength and ZERO unsound simultaneously, which is the "
         "first time both ends of that trade have been measured on one set."
     )
+
+def strength_and_soundness_are_exchanged_not_traded() -> str:
+    """The sharpest form of the finding this whole module is about.
+
+    Every other measurement here reports the two properties as anti-correlated
+    ACROSS a corpus, which leaves room for hoping a better author or a better
+    prompt lands in between. This one watches a single author make a single
+    change to a single check, 34 times, and there is no in between.
+    """
+    return (
+        "Measured on k1. 34 sound checks that read a real output, decide on 13 "
+        "independently written designs and object to none of them, each "
+        "re-authored to assert every obligation in its own requirement sentence. "
+        "The objection was admissible -- the sentence itself, plus a count over "
+        "the candidate population -- and named the over-reach hazard outright. "
+        "All 34 returned, compiled, and none came back unchanged.\n\n"
+        "Strength, measured as objections over decisions on testpoints where a "
+        "port the check itself reads is wrong, went 1.8% to 44.1%: a 24x rise, "
+        "so asserting the whole sentence is well within what the author can do. "
+        "Checks objecting to a held-out design went 3 to 18. And checks "
+        "convicting the known-good design went 0 to 23 of 34.\n\n"
+        "THE BOTH CELL IS 0 OF 34. Sound after the edit: 11. Discriminating "
+        "after the edit: 21. Overlap: zero, against 6.8 expected under "
+        "independence -- and zero is the MINIMUM the marginals allow, since 11 + "
+        "21 = 32 of 34. Every check that gained discrimination lost soundness "
+        "and every check that kept soundness gained none, with no exceptions.\n\n"
+        "So this is not a correlation between two properties of a corpus; it is "
+        "a partition produced by the edit itself. The few percent of checks that "
+        "are both sound and discriminating are not a low yield from a hard task "
+        "-- they are authors happening to stop at exactly the right point. What "
+        "would fix it is a soundness oracle available WHILE authoring, so the "
+        "author can stop at the boundary instead of crossing it. Nothing here "
+        "builds one without the known-good design."
+    )
+
 
 
 

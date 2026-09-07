@@ -13,6 +13,7 @@ from specflow.ensemble import (
     conviction_count_is_not_a_descent_criterion,
     soundness_buys_termination_not_correctness,
     split_cells_are_a_specification_finding,
+    strength_and_soundness_are_exchanged_not_traded,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -156,6 +157,16 @@ def test_the_stimulus_lever_is_sized_and_the_residue_named():
     assert "CHECK STRENGTH" in why
 
 
+def test_the_strength_edit_is_measured_as_a_partition_not_a_trade():
+    # The one result that forecloses "a better author would land in between":
+    # 34 single edits, 0 landed in between. Both marginals and the zero have
+    # to travel together, or it reads as an ordinary anti-correlation.
+    why = strength_and_soundness_are_exchanged_not_traded()
+    assert "1.8% to 44.1%" in why
+    assert "BOTH CELL IS 0 OF 34" in why and "6.8 expected" in why
+    assert "MINIMUM the marginals allow" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -166,7 +177,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "split_cells_are_a_specification_finding",
                  "accuracy_is_the_wrong_axis_for_a_reference",
                  "soundness_buys_termination_not_correctness",
-                 "the_residue_is_check_strength"):
+                 "the_residue_is_check_strength",
+                 "strength_and_soundness_are_exchanged_not_traded"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
