@@ -191,3 +191,78 @@ def test_a_discharged_bin_stops_blocking_the_gate(tmp_path, rtl):
         report=build_report(denominator=denom, results=results, dispositions=disposed),
     )
     assert after.outcome == "ACCEPT"
+
+
+def test_the_wrapper_forbids_an_identifier_it_does_not_declare():
+    """A condition naming an undeclared signal must not silently become a free wire.
+
+    The wrapper declares the contract's PORTS. A condition naming anything else
+    -- an internal register, or a typo -- is an implicit net in Verilog:
+    undriven, unconstrained, and free for the solver to set to whatever refutes
+    the assertion. Measured on golden or1200_dc_fsm, `cache_inhibit && biu_read
+    && biudata_valid` came back `reachable` with a counterexample in which
+    `cache_inhibit` is a floating wire the solver simply chose, and a
+    hierarchical `dut.cache_inhibit` was parsed as ONE implicit identifier and
+    was equally vacuous. Every condition naming an internal signal would read
+    `reachable` for that reason alone.
+
+    `default_nettype none` does not stop it -- yosys reports an implicit
+    declaration as a WARNING and carries on -- so the guard reads the log.
+    """
+    from specflow.unreach import render_cover_probe
+
+    contract = {
+        "io": [{"name": "clk", "dir": "input"}, {"name": "rst", "dir": "input"},
+               {"name": "q", "dir": "output"}],
+        "clocking": {"clock": {"name": "clk"}, "reset": {"name": "rst"}},
+    }
+    sv = render_cover_probe(dut_module="dut_mod", contract=contract,
+                            condition_sv="q")
+    # the directive is emitted and then restored, so the DUT source is unaffected
+    assert sv.startswith("`default_nettype none")
+    assert sv.rstrip().endswith("`default_nettype wire")
+
+
+def test_an_implicitly_declared_identifier_makes_the_discharge_an_error(
+        tmp_path, monkeypatch):
+    """The log guard turns the vacuity into a loud failure, not a verdict.
+
+    sby is stubbed so this runs offline, but `discharge_bin`'s real path runs:
+    it renders the wrapper, "runs" the tool, and then reads the log. The stub
+    writes the yosys log yosys actually produced for this case, plus the PASS
+    status that made the vacuous verdict look like a real one.
+    """
+    import subprocess
+
+    from specflow import unreach
+
+    monkeypatch.setattr(unreach.shutil, "which", lambda _tool: "/usr/bin/true")
+
+    def fake_run(cmd, cwd=None, **kw):
+        model = Path(cwd) / "probe" / "model"
+        model.mkdir(parents=True, exist_ok=True)
+        (model / "design.log").write_text(
+            "cover_probe.sv:56: Warning: Identifier `\\cache_inhibit' is "
+            "implicitly declared.\n")
+        (Path(cwd) / "probe" / "status").write_text("PASS 0 0\n")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(unreach.subprocess, "run", fake_run)
+
+    rtl = tmp_path / "dut_mod.v"
+    rtl.write_text("module dut_mod(input clk, input rst, output q);\n"
+                   "assign q = 1'b0;\nendmodule\n")
+    d = unreach.discharge_bin(
+        bin_uid="vacuous", condition_sv="cache_inhibit && q",
+        rtl_path=rtl, dut_module="dut_mod",
+        contract={"io": [{"name": "clk", "dir": "input"},
+                         {"name": "rst", "dir": "input"},
+                         {"name": "q", "dir": "output"}],
+                  "clocking": {"clock": {"name": "clk"},
+                               "reset": {"name": "rst"}}},
+        workdir=tmp_path / "w")
+    # Without the guard this reads `unreachable` off a PASS status that was
+    # decided with `cache_inhibit` free -- a confident verdict about nothing.
+    assert d.status == "error", d
+    assert "does not declare" in d.reason
+    assert "dut.<name>" in d.reason

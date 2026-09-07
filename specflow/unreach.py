@@ -162,12 +162,32 @@ def render_cover_probe(
             f"  always @(posedge {clk}) _past_reset <= 1'b1;\n\n")
         gate = "if (_past_reset) "
 
+    # AND AN IDENTIFIER THE WRAPPER DOES NOT DECLARE MUST NOT BECOME A FREE
+    # VARIABLE, which is a second and independent way this instrument can be
+    # vacuous.
+    #
+    # The condition may legitimately name an internal signal -- that is most of
+    # what a state is. But the wrapper declares only the contract's PORTS, so a
+    # bare internal name is an implicit net: undriven, unconstrained, and free
+    # for the solver to set. Measured on golden or1200_dc_fsm: the condition
+    # `cache_inhibit && biu_read && biudata_valid` came back `reachable` with a
+    # counterexample in which `cache_inhibit` is a floating wire the solver
+    # simply chose. EVERY condition naming an internal signal would be
+    # "reachable" for that reason alone, and the verdict looked exactly like a
+    # real one.
+    #
+    # `default_nettype none` makes an undeclared identifier a COMPILE ERROR, so
+    # the condition either names something real or the discharge fails loudly as
+    # `error`. Reaching an internal signal is still available and is now
+    # explicit: write it hierarchically, `dut.cache_inhibit`.
     return (
+        "`default_nettype none\n"
         f"module {probe_top} (\n" + ",\n".join(decls) + "\n);\n\n"
         f"  {dut_module} dut (\n    " + ",\n    ".join(conns) + "\n  );\n\n"
         f"{preamble}"
         f"  {guard}{gate}assert (!({condition_sv}));\n\n"
         "endmodule\n"
+        "`default_nettype wire\n"
     )
 
 
@@ -217,6 +237,37 @@ def discharge_bin(
         )
     except subprocess.TimeoutExpired:
         timed_out = True
+
+    # AN IMPLICITLY DECLARED IDENTIFIER MAKES THE VERDICT MEANINGLESS.
+    #
+    # The wrapper declares the contract's ports. A condition naming anything
+    # else -- an internal signal, or a typo -- becomes an implicit net: no
+    # driver, no constraint, and free for the solver to set to whatever
+    # refutes the assertion. `default_nettype none` does not stop this; yosys
+    # reports it as a WARNING and carries on.
+    #
+    # Measured on golden or1200_dc_fsm: `cache_inhibit && biu_read &&
+    # biudata_valid` returned `reachable` with a counterexample in which
+    # `cache_inhibit` is a floating wire. Every condition naming an internal
+    # signal would be "reachable" for that reason alone, and nothing in the
+    # result said so. Reaching an internal signal is still available and is now
+    # explicit: write it hierarchically, `dut.cache_inhibit`.
+    log = workdir / "probe" / "model" / "design.log"
+    if log.exists():
+        implicit = [
+            ln.strip() for ln in log.read_text(errors="replace").splitlines()
+            if "is implicitly declared" in ln
+        ]
+        if implicit:
+            return Discharge(
+                bin_uid=bin_uid, status="error", depth=depth,
+                assumptions=(f"contract:{dut_module}", f"depth:{depth}"),
+                log_path=str(log),
+                reason=("condition names an identifier the wrapper does not "
+                        "declare, so it is an undriven free wire and any "
+                        "verdict is vacuous; use a hierarchical reference "
+                        f"such as dut.<name>. {implicit[0]}"),
+            )
 
     status = read_sby_status(workdir / "probe" / "status")
     resolved = classify(status, timed_out=timed_out)
