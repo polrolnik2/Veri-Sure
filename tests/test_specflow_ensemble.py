@@ -120,13 +120,17 @@ def test_a_highly_accurate_reference_is_refuted_as_a_loop_driver():
     assert "right WHERE THE DESIGN UNDER TEST IS WRONG" in why
 
 
-def test_a_perfectly_sound_set_is_refuted_as_evidence_of_correctness():
+def test_a_perfectly_sound_set_gives_direction_but_not_sufficiency():
     # The one positive property any rule here produced, and the exact way it
     # is misread. Both numbers must travel together: 45% of the spec with zero
     # unsound checks is what makes the 194 -> 217 mean anything.
     why = soundness_buys_termination_not_correctness()
-    assert "194 to 217" in why and "45% of the specification" in why
-    assert "Soundness buys termination" in why
+    # BOTH runs must survive in the text. The clean one is the evidence that
+    # the gradient is right; the confounded one is named as confounded so it
+    # cannot be re-quoted as a reproduction, which is how it was first read.
+    assert "249 to 188" in why and "45% of the specification" in why
+    assert "194 to 217" in why and "injected" in why
+    assert "SPARSITY, not direction" in why
 
 
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
