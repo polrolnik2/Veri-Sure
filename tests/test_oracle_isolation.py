@@ -637,3 +637,53 @@ def test_the_objection_docstring_does_not_miscount_its_own_evidence() -> None:
     src = inspect.getsource(G)
     assert "THE THREE OBJECTIONS" not in src
     assert "NOT part of the 20-of-51" in src
+
+
+POSITIONAL = (
+    "def decide(trace):\n"
+    "    for i in range(len(trace) - 1):\n"
+    "        if trace[i]['inputs']['cmd'] == 1:\n"
+    "            next_row = trace[i + 1]\n"
+    "            if next_row['outputs']['cmd_ack'] != 1:\n"
+    "                return (False, trace[i]['edge'], 'no ack')\n"
+    "    return (True, None, 'ok')\n"
+)
+
+
+def _gate(requirement):
+    out = OracleOutput(clause="c", source=POSITIONAL, reasoning="r",
+                       tp_uids=["TP-0000"])
+    return gate_one(out, req_uid="REQ-0000", tp_uids=["TP-0000"],
+                    contract=CONTRACT, testplan=TESTPLAN,
+                    requirement=requirement)
+
+
+def test_a_positional_claim_is_refused_when_the_sentence_states_no_count():
+    """Measured on k1: 20 of 20 positional checks have a requirement stating
+    no count, across two generation runs and the frozen production set, the
+    four SOUND ones included. Their conviction rate is 1.7-2.0x base in all
+    three populations.
+
+    A failure means an author can assert that a response arrives a fixed
+    number of states after the trigger, with nothing in the specification
+    saying so -- which is `correspondence` section 4's rule going unenforced.
+    """
+    issues = _gate({"text": "cmd_ack follows the command"})
+    assert len(issues) == 1
+    assert "POSITION" in issues[0].message
+    assert "eventually" in issues[0].message      # names the licensed form
+
+
+def test_a_requirement_that_STATES_a_count_licenses_the_position():
+    """The gate is about the LICENCE, not about the construct. A specification
+    that says "on the next clock" has given the author exactly this claim."""
+    assert _gate({"text": "cmd_ack is asserted on the next clock"}) == []
+    assert _gate({"obligation": {"quote": "high for exactly one clock"}}) == []
+
+
+def test_an_unreadable_licence_never_refuses():
+    """No requirement text means the licence cannot be read, and a gate that
+    cannot read its licence must stay silent rather than guess. This is also
+    what keeps every existing caller unchanged."""
+    assert _gate(None) == []
+    assert _gate({}) == []

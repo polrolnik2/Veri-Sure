@@ -48,6 +48,7 @@ from ..model_io import ModelPort
 from ..schema import Issue
 from ..stage import StageResult, run_fanout, run_stage
 from .oracles import RequirementOracle, well_formed
+from .temporal import licenses_a_cycle_count, positional_claims
 
 STAGE = "oracle"
 
@@ -1215,6 +1216,11 @@ def gate_one(
     conforming_source: str = "",
     stimulus_by_tp: dict[str, list[dict]] | None = None,
     base: str = "step",
+    #: The requirement's own sentence, for the one gate that needs it: a
+    #: positional claim is licensed only where the text states a count.
+    #: Empty means the licence cannot be read, and an unreadable licence
+    #: never refuses -- the gate stays silent rather than guessing.
+    requirement: dict | None = None,
 ) -> list[Issue]:
     """Screen the oracle before it costs anything downstream.
 
@@ -1257,6 +1263,38 @@ def gate_one(
     why = well_formed(oracle, contract, testplan)
     if why:
         return [Issue("error", f"oracle.{req_uid}.source", why)]
+
+    #: A ROW NAMED BY POSITION IS A CYCLE COUNT, and this pipeline severed
+    #: cycle-exactness from its accept criterion in Phases 3-6. So the check is
+    #: not being accused of being wrong -- it is being told it made a claim the
+    #: requirement never gave it, which is `correspondence` section 4's own rule
+    #: ("any cycle count in the check is unlicensed" where the text states
+    #: none) enforced where it can be enforced mechanically.
+    #:
+    #: Measured on k1: 20 of 20 positional checks, across two generation runs
+    #: and the frozen production set, have a requirement stating no count.
+    #: Their conviction rate is 1.7-2.0x the base rate in all three
+    #: populations. The four SOUND ones are sound by luck.
+    text = " ".join(str(v) for v in (
+        (requirement or {}).get("text", ""),
+        ((requirement or {}).get("obligation") or {}).get("quote", ""),
+    ) if v)
+    named = positional_claims(out.source) if text else []
+    if named and not licenses_a_cycle_count(text):
+        where = "`, `".join(named)
+        return [Issue("error", f"oracle.{req_uid}.source",
+                      f"`{where}` names a row by POSITION, which is the claim "
+                      f"that the response arrives a fixed number of states "
+                      f"after the trigger. This requirement's own sentence "
+                      f"states no such count, so nothing licenses it -- and a "
+                      f"row is not a clock edge, so the count is not even the "
+                      f"one you meant. Say what the requirement says instead: "
+                      f"`eventually(w, holds, strong=True)` when it obliges a "
+                      f"response and names no deadline, or search forward for "
+                      f"the row where the port you are asserting on actually "
+                      f"moves. If the requirement DOES name a number of "
+                      f"clocks, quote those words in `clause` and the position "
+                      f"is licensed.")]
 
     return []
 
@@ -1353,7 +1391,8 @@ def run_oracle_gen(
             gate=lambda out: gate_one(
                 out, req_uid=uid, tp_uids=tps, contract=contract,
                 testplan=testplan, conforming_source=conforming_source,
-                stimulus_by_tp=stimulus_by_tp, base=base),
+                stimulus_by_tp=stimulus_by_tp, base=base,
+                requirement=req),
             max_repairs=max_repairs,
         )
 

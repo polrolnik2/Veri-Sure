@@ -807,3 +807,55 @@ def test_well_formed_refuses_the_omission_with_a_usable_objection():
     assert why and "strong" in why
     #: the objection has to say HOW to answer, not just that it is missing
     assert "obliges a response" in why and "condition" in why
+
+
+# --- a row named by POSITION is a cycle count, and this pipeline severed those
+#
+# Phases 3-6 stopped `latency_cycles` gating and replaced edge-exact comparison
+# with `transactional_view` after measuring it three times worse at separating
+# good RTL from bad. So a positional claim is one the pipeline has already
+# decided it cannot make -- these pin the rule, not a heuristic about badness.
+
+def test_every_positional_form_is_named():
+    from specflow.refmodel.temporal import positional_claims
+
+    assert positional_claims("x = trace[i + 1]") == ["trace[i + 1]"]
+    assert positional_claims("n = rows[j + 1]") == ["rows[j + 1]"]
+    assert positional_claims("next_row = t[k]") == ["next_row"]
+    assert positional_claims("return nexttime(w, p)") == ["nexttime("]
+
+
+def test_ordering_and_duration_are_not_positional():
+    """The rest of the vocabulary must pass, or the gate bans the fix it names.
+
+    `eventually` and a forward scan are exactly what the objection tells an
+    author to write instead, so a false positive here would leave no legal way
+    to express the requirement at all.
+    """
+    from specflow.refmodel.temporal import positional_claims
+
+    for ok in ("eventually(w, p, strong=True)",
+               "for j in range(i + 1, len(trace)):",
+               "throughout(w, p)", "until(w, p, q, strong=False)",
+               "pulse(w, 'ack')", "sum(r['held'] for r in w.rows)",
+               "nth(w, p, 2, strong=True)"):
+        assert positional_claims(ok) == [], ok
+
+
+def test_the_licence_is_the_requirements_own_words_and_is_generous():
+    """A false licence lets an unlicensed check through -- the status quo. A
+    false refusal rejects a check the specification actually permitted, which
+    is strictly worse, so the reading errs toward licensing."""
+    from specflow.refmodel.temporal import licenses_a_cycle_count
+
+    for licensed in ("cmd_ack is high for exactly one clock",
+                     "the flag clears immediately",
+                     "ack is asserted on the next clock",
+                     "the response arrives within 3 cycles",
+                     "busy falls on the same cycle"):
+        assert licenses_a_cycle_count(licensed), licensed
+    for unlicensed in ("cnt is decremented and saved_addr_r[3:2] is incremented",
+                       "when the final refill word is received, the FSM returns to IDLE",
+                       "biu_read is asserted during miss evaluation",
+                       ""):
+        assert not licenses_a_cycle_count(unlicensed), unlicensed

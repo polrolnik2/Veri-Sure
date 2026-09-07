@@ -46,6 +46,7 @@ from __future__ import annotations
 
 
 import ast
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -435,6 +436,63 @@ def strong_not_stated(source: str) -> list[str]:
         if not any(k.arg == "strong" for k in node.keywords):
             out.append(name)
     return sorted(set(out))
+
+
+#: A row named by POSITION rather than by order. `trace[i + 1]`, `next_row`,
+#: `rows[j + 1]` and `nexttime` are the only constructs in this vocabulary that
+#: do it: every other operator quantifies over the window (`eventually`,
+#: `until`, `never`, `throughout`, `sequence`, `nth`) or sums `held` and says
+#: so (`pulse`, `runs`).
+_POSITIONAL = re.compile(
+    r"\btrace\s*\[\s*\w+\s*\+\s*1\s*\]"
+    r"|\brows\s*\[\s*\w+\s*\+\s*1\s*\]"
+    r"|\bnext_row\b"
+    r"|\bnexttime\s*\(")
+
+#: What LICENSES one. correspondence section 4 already states the rule -- "for
+#: exactly one clock / within N cycles: a count, and licensed ONLY if the text
+#: states the number. If it does not, any cycle count in the check is
+#: unlicensed" -- and this is that rule made mechanical. Deliberately GENEROUS:
+#: a false licence lets an unlicensed check through, which is the status quo,
+#: while a false refusal rejects a check the specification actually permitted.
+_STATES_A_COUNT = re.compile(
+    r"\b(immediately|next (clock|cycle|edge)|same (clock|cycle|edge)"
+    r"|one clock|single (clock|cycle)|one cycle|following (clock|cycle)"
+    r"|within [\w-]+ (clock|cycle)|after (one|a|1|two|2) (clock|cycle)"
+    r"|\d+\s*(clock|cycle)s?|cycle-accurate|back-to-back|on the very next)\b",
+    re.I)
+
+
+def positional_claims(source: str) -> list[str]:
+    """The expressions in this check that name a row by POSITION.
+
+    Text only -- a regex over the body, admissible anywhere in the loop.
+
+    This is not a heuristic about badness and its precision is not the point.
+    A position is a CYCLE COUNT, and Phases 3-6 severed cycle-exactness from
+    this pipeline's accept criterion: `latency_cycles` stopped gating,
+    `transactional_view` replaced edge-exact comparison after measuring it
+    three times worse at separating good RTL from bad. So a positional claim
+    is one the pipeline has already decided it cannot make, and the only
+    question left is whether the requirement's own sentence licenses it.
+
+    Measured on k1: **20 of 20** checks making a positional claim -- across two
+    generation runs and the frozen production set, the four SOUND ones
+    included -- have a requirement that states no count at all. Those four are
+    sound by luck: they assert a cycle the sentence never gave them and the
+    design happens to satisfy it.
+    """
+    return sorted(set(m.group(0) for m in _POSITIONAL.finditer(source)))
+
+
+def licenses_a_cycle_count(requirement_text: str) -> bool:
+    """Does this requirement's own sentence state a number of cycles?
+
+    Generous by design -- see `_STATES_A_COUNT`. A sentence that says
+    "immediately", "on the next clock" or "within 3 cycles" licenses a
+    positional claim; one that says "then" or "is incremented" does not.
+    """
+    return bool(_STATES_A_COUNT.search(requirement_text or ""))
 
 
 def eventually(w: Window, holds: Pred, *, strong: bool,
