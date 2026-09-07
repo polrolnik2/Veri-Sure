@@ -660,8 +660,16 @@ THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
     false for a STATE, where running out of trace means only that you stopped
     looking. Passing it on a requirement that says "is high while X" converts
     a short testpoint into a conviction. Read the requirement for an obligation
-    before you pass it; the default is weak because most requirements are not
-    obligations.
+    before you pass it. THERE IS NO DEFAULT -- `strong` is a claim about the
+    REQUIREMENT, not a formatting choice, and nothing in the trace answers it,
+    so you must state it every time you call `eventually`, `until`, `sequence`
+    or `nth`. Omitting it is currently accepted with a warning and read as
+    weak, and that reading is why, in one measured round, 15 of 68 checks took
+    it silently and NOT ONE of them ended up both sound and able to catch a
+    broken design. Forcing the other answer on those same 15 was no better: it
+    bought 2 good checks for 6 NEW convictions of a design that was correct.
+    Both errors are large, which is exactly why the answer is yours and has to
+    be written down.
 
 Write the check the way you would write the assertion, and reach for the
 operator you would reach for in SVA. EIGHT PLACES THE ANALOGY BREAKS, and the

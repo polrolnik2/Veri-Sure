@@ -750,3 +750,71 @@ def test_nth_counts_occurrences_where_runs_measures_duration():
 
     assert nth(w, p, 4, strong=True)[0] is True          # four occurrences
     assert runs(pulsing, "p", value=1, at_least=2) == set()   # no run of two
+
+
+# --- `strong` has no default, because neither default is safe ---------------
+#
+# MEASURED, E0h: 15 of 68 authored checks called `eventually` without stating
+# `strong`, took the weak reading silently, and NOT ONE ended up both sound and
+# able to catch a broken design. Forcing the other answer on those same 15 was
+# no better -- 2 good checks for 6 NEW convictions of a correct design. Both
+# errors are large, so the caller must answer. These pin the WARNING PHASE:
+# an omission is recorded and warned, and the historical weak reading is kept
+# so that no already-frozen oracle changes verdict on this commit.
+
+def _unclosed():
+    """A window that runs off the end -- where weak and strong differ."""
+    return after(ISSUE_THEN_ACK, lambda r: r["inputs"]["cmd"] == 8,
+                 until=lambda r: False)[0]
+
+
+def test_omitting_strong_is_recorded_and_warned():
+    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
+    clear_omitted_strong()
+    with pytest.warns(DeprecationWarning, match="without stating `strong`"):
+        eventually(_unclosed(), lambda r: r["outputs"]["ack"] == 1)
+    assert len(omitted_strong()) == 1
+    assert "eventually" in omitted_strong()[0]
+
+
+def test_stating_strong_records_nothing():
+    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
+    for value in (True, False):
+        clear_omitted_strong()
+        eventually(_unclosed(), lambda r: r["outputs"]["ack"] == 1, strong=value)
+        assert omitted_strong() == []
+
+
+def test_the_warning_phase_does_not_change_any_verdict():
+    """An omission still reads WEAK, so no frozen oracle moves on this commit."""
+    w = _unclosed()
+    #: a response that NEVER arrives -- the only place weak and strong differ.
+    absent = lambda r: r["outputs"]["ack"] == 9                 # noqa: E731
+    with pytest.warns(DeprecationWarning):
+        omitted = eventually(w, absent)
+    assert omitted[0] is None                       # the historical reading
+    assert eventually(w, absent, strong=False)[0] is None
+    assert eventually(w, absent, strong=True)[0] is False       # and strong differs
+
+
+def test_every_operator_taking_strong_records_its_own_name():
+    from specflow.refmodel.temporal import clear_omitted_strong, omitted_strong
+    w = _unclosed()
+    p = lambda r: r["outputs"]["ack"] == 1                      # noqa: E731
+    for op, call in (("eventually", lambda: eventually(w, p)),
+                     ("sequence", lambda: sequence(w, p)),
+                     ("until", lambda: until(w, p, p)),
+                     ("nth", lambda: nth(w, p, 2))):
+        clear_omitted_strong()
+        with pytest.warns(DeprecationWarning):
+            call()
+        assert omitted_strong() and omitted_strong()[0].startswith(op), op
+        #: `nth` delegates to `sequence`; it must not book the omission twice.
+        assert len(omitted_strong()) == 1, op
+
+
+def test_the_sentinel_refuses_to_be_read_as_a_boolean():
+    """`strong` unset is the ABSENCE of an answer, not a False."""
+    from specflow.refmodel.temporal import NOT_STATED
+    with pytest.raises(TypeError, match="never stated"):
+        bool(NOT_STATED)

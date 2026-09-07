@@ -44,6 +44,9 @@ and SVA's answer in several of them is a vacuous pass this pipeline refuses.
 
 from __future__ import annotations
 
+import sys
+import warnings
+
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -391,7 +394,79 @@ def _discarded(w: Window) -> Verdict:
     return (None, edge, f"the attempt was aborted at edge {edge}")
 
 
-def eventually(w: Window, holds: Pred, *, strong: bool = False,
+class _StrongNotStated:
+    """`strong` was not passed. NOT a value -- the absence of an answer.
+
+    `strong` is a claim about the REQUIREMENT (does it oblige a response, so
+    that the response failing to arrive is a violation?) and nothing in the
+    trace answers it. Defaulting it either way books that judgement silently:
+    False turns every violated obligation into "no evidence", True convicts a
+    correct design whenever the trace is short. Measured on E0h: 15 of 68
+    bodies took the False default without stating it, none of them screened;
+    forcing True on those same 15 bought 2 screened for 6 NEW convictions of
+    the known-good design. Both errors are large, so neither is a safe default
+    and the caller must answer.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:                              # pragma: no cover
+        return "<strong not stated>"
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "`strong` was never stated. Pass strong=True when the requirement "
+            "obliges a response (its absence is a violation) or strong=False "
+            "when it describes a condition (running out of trace means only "
+            "that you stopped looking).")
+
+
+#: The sentinel default, during the WARNING PHASE. It is not `bool`, so any
+#: code that reads it as one raises rather than guessing.
+NOT_STATED = _StrongNotStated()
+
+#: Every call that omitted `strong`, as the compiled unit it came from --
+#: `_oracle_fn` compiles each body as `<oracle:REQ-xxxx>`, so this names the
+#: check. Read it with `omitted_strong()`; the oracle stage reports the count
+#: so the phase can be ended on evidence rather than on a guess.
+_OMITTED: list[str] = []
+
+
+def omitted_strong() -> list[str]:
+    """Call sites that did not state `strong`, oldest first."""
+    return list(_OMITTED)
+
+
+def clear_omitted_strong() -> None:
+    """Reset the record. For tests and for per-run reporting."""
+    _OMITTED.clear()
+
+
+def _resolve_strong(strong: object, op: str) -> bool:
+    """Answer, or record that the caller did not.
+
+    WARNING PHASE: an omission is recorded and warned about, and the historical
+    weak reading is kept so no frozen oracle changes verdict. When the recorded
+    count reaches zero on a real run, the parameter becomes required outright
+    and this function collapses to `bool(strong)`.
+    """
+    if not isinstance(strong, _StrongNotStated):
+        return bool(strong)
+    try:
+        where = sys._getframe(2).f_code.co_filename
+    except (AttributeError, ValueError):                    # pragma: no cover
+        where = "<unknown>"
+    _OMITTED.append(f"{op} in {where}")
+    warnings.warn(
+        f"`{op}` was called without stating `strong`. It is a claim about the "
+        "requirement, not a formatting choice: pass strong=True when the "
+        "requirement obliges a response, strong=False when it describes a "
+        "condition. The weak reading is being used for now.",
+        DeprecationWarning, stacklevel=3)
+    return False
+
+
+def eventually(w: Window, holds: Pred, *, strong: bool = NOT_STATED,
                after_activation: bool = False,
                what: str = "the expected response") -> Verdict:
     """`holds` must be true at some row before the window closes.
@@ -427,6 +502,7 @@ def eventually(w: Window, holds: Pred, *, strong: bool = False,
     answering that question trades vacuity for over-strictness one check at a
     time.
     """
+    strong = _resolve_strong(strong, "eventually")
     if w.aborted:
         return _discarded(w)
     rows = w.body if after_activation else w.rows
@@ -682,7 +758,7 @@ def nexttime(w: Window, holds: Pred, *, after_activation: bool = True,
         f"{what} did not hold at the state after edge {w.edge}{note}")
 
 
-def sequence(w: Window, *steps: Pred, strong: bool = False,
+def sequence(w: Window, *steps: Pred, strong: bool = NOT_STATED,
              after_activation: bool = False,
              what: str = "the sequence") -> Verdict:
     """The steps must occur IN ORDER within the window -- SVA `a ##[1:$] b`.
@@ -705,6 +781,7 @@ def sequence(w: Window, *steps: Pred, strong: bool = False,
     cannot be satisfied by the activation row itself -- the same vacuity
     `eventually` guards against, one operator along.
     """
+    strong = _resolve_strong(strong, "sequence")
     if w.aborted:
         return _discarded(w)
     if not steps:
@@ -726,7 +803,7 @@ def sequence(w: Window, *steps: Pred, strong: bool = False,
     return True, w.edge, f"{what} completed all {len(steps)} steps in order"
 
 
-def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
+def until(w: Window, holds: Pred, release: Pred, *, strong: bool = NOT_STATED,
           after_activation: bool = False,
           what: str = "the condition") -> Verdict:
     """`holds` at every row until `release` occurs -- SVA `until` / `s_until`.
@@ -756,6 +833,7 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     where `release` fires, because `release` is tested first. There is no
     `until_with` here -- see `docs/sva-divergence.md`, D8.
     """
+    strong = _resolve_strong(strong, "until")
     if w.aborted:
         return _discarded(w)
     for row in (w.body if after_activation else w.rows):
@@ -777,7 +855,7 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool = False,
     return True, w.edge, f"{what} held and was never released"
 
 
-def nth(w: Window, holds: Pred, n: int, *, strong: bool = False,
+def nth(w: Window, holds: Pred, n: int, *, strong: bool = NOT_STATED,
         after_activation: bool = False) -> Verdict:
     """The `n`th time `holds` becomes true in the window -- SVA's `holds[->n]`.
 
@@ -798,8 +876,11 @@ def nth(w: Window, holds: Pred, n: int, *, strong: bool = False,
     the window; weak lets an unclosed window abstain, the same split every
     other operator here makes.
     """
+    strong = _resolve_strong(strong, "nth")
     if n < 1:
         raise ValueError(f"nth() needs a positive occurrence index, not {n}")
+    # `strong` is already resolved above, so `sequence` sees a real bool and
+    # does not record a SECOND omission for one call site.
     return sequence(w, *([holds] * n), strong=strong,
                     after_activation=after_activation)
 
