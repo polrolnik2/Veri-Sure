@@ -44,12 +44,13 @@ and SVA's answer in several of them is a vacuous pass this pipeline refuses.
 
 from __future__ import annotations
 
-#: Operators whose `strong` must be stated.
-_TAKES_STRONG = frozenset({"eventually", "sequence", "until", "nth"})
 
-
+import ast
 from dataclasses import dataclass, field
 from typing import Callable
+
+#: Operators whose `strong` must be stated.
+_TAKES_STRONG = frozenset({"eventually", "sequence", "until", "nth"})
 
 #: A predicate over one trace row. A row is a STATE, not a clock edge:
 #: consecutive edges with identical inputs AND outputs collapse into one entry
@@ -420,7 +421,6 @@ def strong_not_stated(source: str) -> list[str]:
     admissible anywhere in the loop. Returns the operator names, so the
     objection can quote them.
     """
-    import ast
     try:
         tree = ast.parse(source)
     except SyntaxError:
