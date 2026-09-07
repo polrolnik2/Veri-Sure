@@ -64,7 +64,10 @@ population's exact wrong answer on most of the cells it gets wrong. The
 correlated error belongs to the specification-and-reader pair, not to the
 design-writing task, so no change of instrument, ordering or granularity
 decorrelates it. `split_cells_are_a_specification_finding` carries the numbers
-and the one thing that follows from them.
+and the one thing that follows from them, and
+`accuracy_is_the_wrong_axis_for_a_reference` carries the last shape the idea
+takes -- the consensus as an expected-value column rather than as a criterion,
+which is 99.822% accurate and drives a loop nowhere.
 """
 from __future__ import annotations
 
@@ -186,6 +189,35 @@ def agreement_is_not_an_oracle() -> str:
         "unanimity encodes the shared misreading and being right is what the "
         "criterion penalises. Use `disagreement_cells` to find where the "
         "question is; never use the agreed value as the answer."
+    )
+
+
+def accuracy_is_the_wrong_axis_for_a_reference() -> str:
+    """Why 99.822% accurate is compatible with driving a repair loop nowhere.
+
+    The last shape this idea takes: not the consensus as a pass/fail criterion
+    over checks, which `agreement_is_not_an_oracle` refutes, but the consensus as
+    an EXPECTED VALUE COLUMN -- a mismatch table for a repair loop, which is the
+    one thing this pipeline has never given its editor. The reference really is
+    that accurate, and it still cannot drive anything.
+    """
+    return (
+        "Measured on k1 over 36,440 cells. The 13-design population is unanimous "
+        "on 89.6% of them and the agreed value matches the known-good design on "
+        "99.822% of those -- a reference wrong 18 times in ten thousand, built "
+        "with no known-good design anywhere in its provenance. Used as a mismatch "
+        "table over 16 designs it ranks the known-good design 15th of 16: all 13 "
+        "population members score exactly 0 disagreements, and so does a held-out "
+        "design written from the same specification that differs from the "
+        "known-good design on 193 of 318 testpoints. Only the known-good design "
+        "(58) and one design that corrected a real defect (298) disagree at all, "
+        "and both scores are penalties for leaving the population's distribution. "
+        "The failure is structural: a consensus over a population is satisfied by "
+        "that population by construction, and by anything drawn from the same "
+        "distribution. What a reference needs is not to be right often but to be "
+        "right WHERE THE DESIGN UNDER TEST IS WRONG, and this one is silent on "
+        "100% of what makes that held-out design wrong. Do not read a high "
+        "accuracy figure as evidence that a reference can drive a loop."
     )
 
 

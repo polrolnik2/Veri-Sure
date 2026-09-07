@@ -7,6 +7,7 @@ detect.
 """
 import specflow.ensemble as ensemble
 from specflow.ensemble import (
+    accuracy_is_the_wrong_axis_for_a_reference,
     agreement_is_not_an_oracle,
     check_agreement_is_not_an_oracle,
     conviction_count_is_not_a_descent_criterion,
@@ -109,6 +110,15 @@ def test_resolving_a_split_cell_with_another_model_is_refuted():
     assert "SPECIFICATION defect" in why
 
 
+def test_a_highly_accurate_reference_is_refuted_as_a_loop_driver():
+    # The most seductive number on this plan -- 99.822% accurate, golden-free --
+    # attached to the instrument that ranks the known-good design 15th of 16.
+    # Both halves must survive together or the text becomes an endorsement.
+    why = accuracy_is_the_wrong_axis_for_a_reference()
+    assert "99.822%" in why and "15th of 16" in why
+    assert "right WHERE THE DESIGN UNDER TEST IS WRONG" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -116,7 +126,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     for name in ("agreement_is_not_an_oracle",
                  "check_agreement_is_not_an_oracle",
                  "conviction_count_is_not_a_descent_criterion",
-                 "split_cells_are_a_specification_finding"):
+                 "split_cells_are_a_specification_finding",
+                 "accuracy_is_the_wrong_axis_for_a_reference"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
