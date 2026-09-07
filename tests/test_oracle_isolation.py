@@ -15,6 +15,8 @@ failed by that control outright.
 from __future__ import annotations
 
 import inspect
+
+import pytest
 import json
 
 from specflow.refmodel import oracle_gen
@@ -52,9 +54,34 @@ def test_the_prompt_cannot_carry_an_implementation():
     """
     params = set(inspect.signature(build_prompt).parameters)
     assert params == {"requirement", "contract_json", "contract",
-                      "normalized", "spec", "siblings", "issues", "previous"}
+                      "normalized", "spec", "siblings", "issues", "previous",
+                      "rows"}
     assert not (params & {"source", "model", "trace", "behaviour",
                           "stimulus_by_tp", "testpoints", "verdict"})
+
+
+def test_rows_carry_the_witness_and_the_type_is_what_refuses_golden():
+    """The third parameter added after this guard, and the only one that is a TRACE.
+
+    I1 forbids a channel a DESIGN UNDER TEST could arrive through, not every
+    channel -- the sibling test below states the same rule. Rows are the shape
+    most able to break it, so they do not arrive as a list: `WitnessRows`
+    refuses any origin but the witness, and the witness is the one artifact
+    `oracles_stage._witness` exists to make quotable ("the design the repair
+    loop is allowed to quote"). It is built from `requirements` and
+    `contract_json` alone -- the two inputs `build_prompt` already receives --
+    so the author is shown a second reading of what it already holds.
+
+    A failure means a caller can hand the author golden's own behaviour, which
+    would destroy `golden_check` as an independent grade.
+    """
+    from specflow.refmodel.oracle_gen import WitnessRows
+
+    ok = WitnessRows(by_tp={"TP-0001": [{"edge": 0, "inputs": {}, "outputs": {}}]})
+    assert ok.origin == "witness"
+    for forbidden in ("golden", "dut", "rtl", ""):
+        with pytest.raises(ValueError):
+            WitnessRows(by_tp={}, origin=forbidden)
 
 
 def test_spec_and_siblings_are_upstream_and_cannot_carry_a_design():

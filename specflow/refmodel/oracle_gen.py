@@ -38,6 +38,7 @@ named testpoints traded 1 true finding for 27 false ones).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 from pydantic import BaseModel
@@ -1046,6 +1047,96 @@ def _named_siblings(requirement: dict, normalized: dict | None,
     return out
 
 
+#: The rows an author is shown, and the ONLY provenance that may reach it.
+#:
+#: `build_prompt`'s contract is that no parameter can carry a design, and rows
+#: are exactly the shape that could. So the rows do not arrive as a bare list:
+#: they arrive wrapped, and the wrapper records where they came from. The
+#: witness is written by `oracles_stage._witness` from `requirements` and
+#: `contract_json` and nothing else -- the same two inputs the author already
+#: holds -- so witness rows tell the author nothing about the design under test.
+#: Golden's rows would, which is why `origin` is checked rather than trusted.
+@dataclass(frozen=True)
+class WitnessRows:
+    """Replay rows from the witness, keyed by testpoint.
+
+    Constructed only from a witness replay. `origin` is not decoration: a
+    later caller that wanted to pass golden's rows would have to write the
+    word, which is a visible change at the call site rather than one more
+    dict flowing through.
+    """
+
+    by_tp: dict[str, list[dict]]
+    origin: str = "witness"
+
+    def __post_init__(self) -> None:
+        if self.origin != "witness":
+            raise ValueError(
+                f"rows shown to the author must come from the witness, not "
+                f"{self.origin!r}: quoting the design under test to the author "
+                f"is the control leak `oracles_stage` holds out as the grade")
+
+
+def _first_activity(rows: list[dict]) -> int:
+    """The first row whose outputs differ from the trace's own first row.
+
+    A testpoint opens with the design idle, and an author shown that prefix
+    learns nothing. The rule needs only the rows -- no activation, no
+    normalized form -- so it cannot go wrong on a requirement that has none.
+    """
+    if not rows:
+        return 0
+    base = rows[0].get("outputs") or {}
+    for i, row in enumerate(rows):
+        if (row.get("outputs") or {}) != base:
+            return max(0, i - 1)
+    return 0
+
+
+def witness_rows_block(rows: WitnessRows, *, per_tp: int = 12) -> str:
+    """A CONTIGUOUS window of real rows per testpoint, with `held` on each.
+
+    Contiguous, never sampled. The same rule the skew detectors are written
+    under: a check compares row i against row i-1, so a scattered sample
+    destroys the structure the author is being shown the rows to reason about.
+
+    It exists because the author has never seen one. `build_prompt` takes a
+    requirement, a contract, a specification and a normalized form, and out of
+    that the author writes `trace[i + 1]` against a row list whose unit it
+    cannot know: measured on k1, four rows in five hold a single clock edge
+    and the rest absorb up to two thousand, and a row boundary moves a median
+    of five ports -- so "the next row" is almost never "the next state of the
+    signal I am asserting on". Sixteen of k1's twenty false alarms are the
+    author guessing at exactly that.
+    """
+    out = []
+    for tp in sorted(rows.by_tp):
+        rs = rows.by_tp[tp] or []
+        start = _first_activity(rs)
+        window = rs[start:start + per_tp]
+        shown = [
+            {"edge": r.get("edge"), "held": r.get("held", 1),
+             "inputs": r.get("inputs") or {}, "outputs": r.get("outputs") or {}}
+            for r in window
+        ]
+        out.append({"tp_uid": tp, "rows_in_full": len(rs),
+                    "showing": f"{start}..{start + len(window) - 1}"
+                               if window else "none",
+                    "rows": shown})
+    return (
+        json_block("witness_rows", out)
+        + "\n\nTHESE ARE REAL ROWS, from the witness -- a second reading of the "
+        "same requirements, not the design under test, so they are evidence "
+        "about the TRACE SHAPE and never about whether the design is right. "
+        "`held` is how many clock edges that row lasted: where it is 1 the row "
+        "IS a clock edge, and where it is larger the row absorbed that many. "
+        "Read them before you decide what `the next row` means in your check. "
+        "If the response you are asserting has not arrived by the row after "
+        "the trigger, the requirement almost certainly did not promise it "
+        "there -- say what it did promise."
+    )
+
+
 def build_prompt(
     *,
     requirement: dict,
@@ -1056,14 +1147,23 @@ def build_prompt(
     siblings: dict[str, dict] | None = None,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    rows: WitnessRows | None = None,
 ) -> str:
-    """Compose the prompt. There is no parameter that could carry a design.
+    """Compose the prompt. No parameter can carry the DESIGN UNDER TEST.
 
     That is the structural half of invariant I1, and it is why this function
     takes a requirement rather than taking `**kwargs` or a context object: a
     later edit that wanted to pass the model source would have to add a
     parameter, which is a visible change to a signature rather than one more key
     in a dict.
+
+    `rows` is the one parameter that carries a trace, and it is why the
+    invariant is stated about the design under test rather than about traces in
+    general. It is typed, not a list: `WitnessRows` refuses any origin but the
+    witness, which `oracles_stage._witness` builds from `requirements` and
+    `contract_json` alone -- the two inputs this function already receives. So
+    the author is shown rows produced by a second reading of its own inputs,
+    and golden cannot reach it without a caller writing the word.
     """
     parts = [json_block("requirement", requirement)]
     #: THE REQUIREMENTS THIS ONE POINTS AT, and only those. A route's
@@ -1084,6 +1184,11 @@ def build_prompt(
     #: with no normalized form still gets them on a repair round.
     if issues:
         parts.append(REJECTION_CLASSES)
+    #: LAST, and outside every other guard. The rows are evidence about the
+    #: trace's SHAPE, which applies whether or not the requirement normalized
+    #: and whether or not this is a repair.
+    if rows is not None and rows.by_tp:
+        parts.append(witness_rows_block(rows))
     return compose(
         shared_prefix(contract_json, contract, spec),
         "\n\n".join(parts),

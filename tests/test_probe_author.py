@@ -7,6 +7,10 @@ in the probe architecture is plumbing that makes these three true.
 """
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from specflow.normalize import NormalizeOutput, gate_one
 from specflow.refmodel.oracle_gen import shared_prefix
 from specflow.refmodel.oracles import RequirementOracle, well_formed
@@ -255,3 +259,95 @@ def test_the_held_input_answer_is_absent_without_probes() -> None:
     """It names probes as the remedy, so it cannot appear where there are none
     -- and the probe-free prefix must stay byte-identical for the cache."""
     assert "ANSWER TO A HELD INPUT" not in shared_prefix("{}", PLAIN, spec="")
+
+
+# --- the rows an author is shown ------------------------------------------
+#
+# The author had never seen a row. `build_prompt` takes a requirement, a
+# contract, a specification and a normalized form, and out of that it writes
+# `trace[i + 1]` against a row list whose unit it cannot know. These pin the
+# provenance rule and the shape of what it is now shown.
+
+def _rows(n: int, *, moving_from: int = 2) -> list[dict]:
+    out = []
+    for i in range(n):
+        out.append({
+            "edge": i, "held": 1 if i >= moving_from else 3,
+            "inputs": {"req": 1 if i else 0},
+            "outputs": {"ack": 1 if i >= moving_from else 0},
+        })
+    return out
+
+
+def test_rows_from_anything_but_the_witness_are_refused():
+    """The one parameter that carries a trace refuses golden BY TYPE.
+
+    A failure means the author could be handed the design under test, which
+    is the control leak `oracles_stage` holds out as the grade.
+    """
+    from specflow.refmodel.oracle_gen import WitnessRows
+
+    WitnessRows(by_tp={"TP-0001": _rows(4)})          # the witness is fine
+    with pytest.raises(ValueError) as exc:
+        WitnessRows(by_tp={"TP-0001": _rows(4)}, origin="golden")
+    assert "witness" in str(exc.value)
+
+
+def test_the_block_shows_a_contiguous_window_that_starts_at_the_activity():
+    """Contiguous, never sampled, and never the idle prefix.
+
+    A check compares row i against row i-1, so a scattered sample destroys the
+    structure the rows are being shown to convey; and an author shown only the
+    quiet opening of a testpoint learns nothing it did not already assume.
+    """
+    from specflow.refmodel.oracle_gen import WitnessRows, witness_rows_block
+
+    rows = _rows(30, moving_from=10)
+    block = witness_rows_block(WitnessRows(by_tp={"TP-0001": rows}), per_tp=5)
+    shown = json.loads(block.split("<witness_rows>")[1].split("</witness_rows>")[0])
+    edges = [r["edge"] for r in shown[0]["rows"]]
+    assert edges == [9, 10, 11, 12, 13], edges
+    assert shown[0]["rows_in_full"] == 30
+    assert all("held" in r for r in shown[0]["rows"])
+
+
+def test_the_block_says_what_held_means_because_that_is_the_whole_point():
+    """`held` is the fact the author was missing, so the prose must state it.
+
+    Four rows in five hold a single clock edge and the rest absorb up to two
+    thousand; without that sentence the number is decoration.
+    """
+    from specflow.refmodel.oracle_gen import WitnessRows, witness_rows_block
+
+    block = witness_rows_block(WitnessRows(by_tp={"TP-0001": _rows(6)}))
+    assert "clock edge" in block
+    assert "next row" in block
+
+
+def test_a_prompt_without_rows_is_byte_identical_to_before():
+    """The default changes nothing, so no cached prefix and no arm moves.
+
+    A failure means landing this altered every existing prompt, which would
+    make every before/after comparison in the experiment series incomparable.
+    """
+    from specflow.refmodel.oracle_gen import build_prompt
+
+    req = {"uid": "REQ-0001", "text": "ack rises after req"}
+    contract = {"io": [{"name": "req", "dir": "input", "width": 1},
+                       {"name": "ack", "dir": "output", "width": 1}]}
+    cj = json.dumps(contract, indent=2, sort_keys=True)
+    assert (build_prompt(requirement=req, contract_json=cj, contract=contract)
+            == build_prompt(requirement=req, contract_json=cj, contract=contract,
+                            rows=None))
+
+
+def test_the_rows_reach_the_prompt_when_they_are_given():
+    from specflow.refmodel.oracle_gen import WitnessRows, build_prompt
+
+    req = {"uid": "REQ-0001", "text": "ack rises after req"}
+    contract = {"io": [{"name": "req", "dir": "input", "width": 1},
+                       {"name": "ack", "dir": "output", "width": 1}]}
+    cj = json.dumps(contract, indent=2, sort_keys=True)
+    p = build_prompt(requirement=req, contract_json=cj, contract=contract,
+                     rows=WitnessRows(by_tp={"TP-0001": _rows(6)}))
+    assert "<witness_rows>" in p and "TP-0001" in p
