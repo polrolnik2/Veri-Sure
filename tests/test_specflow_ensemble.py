@@ -252,6 +252,17 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
+def test_the_definition_of_sound_requires_the_check_to_decide():
+    # An off-by-one in this plan's headline came from writing SOUND as "convicts
+    # the known-good design nowhere", which a check that never decides there
+    # satisfies for free. The module is where anyone recomputing these numbers
+    # will look for the definition, so the requirement has to be stated there.
+    doc = ensemble.__doc__ or ""
+    assert "DECIDES ON THE KNOWN-GOOD DESIGN" in doc
+    assert "sound by\nsilence" in doc
+    assert "decides 0 of 318" in doc
+
+
 def test_empty_population_is_not_an_error():
     assert consensus_cells({}, PORTS) == {}
     assert disagreement_cells({}, PORTS) == set()

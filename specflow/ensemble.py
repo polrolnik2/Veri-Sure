@@ -14,6 +14,16 @@ of every selection) -- a 5.2% base rate, spanning 7 requirements of 89. Figures
 below quoting a 3.0% base rate were taken against that design AFTER an editor
 had been pointed at the check set, so they are a floor.
 
+SOUND HERE MEANS "DECIDES ON THE KNOWN-GOOD DESIGN AND NEVER CONVICTS IT", AND
+THE FIRST HALF IS LOAD-BEARING. Written as "convicts it nowhere" the predicate is
+satisfied vacuously by a check that never decides there at all, which is sound by
+silence rather than by evidence -- the same conflation `stage_unexercised` names
+in capitals, arriving in the metric instead of in the staging loop. It is not
+hypothetical: recomputing this plan's headline adequacy without the first half
+counted one extra check, one that decides 0 of 318 testpoints on the known-good
+design and exactly 1 on a held-out one. Every figure here requires the check to
+decide.
+
     split_cell_soundness   84% precision as an unsoundness predictor; the checks
                            it keeps convict the known-good design 29% of the
                            time against a 63% base rate. The best soundness
