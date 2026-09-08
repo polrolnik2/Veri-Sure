@@ -699,3 +699,22 @@ def test_the_surviving_instrument_carries_its_recall_loss():
     t = ensemble.the_refutable_leg_predicts_discrimination_and_still_must_not_select()
     assert "misses 9 of the 25 catchers" in t
     assert "Report with it; never select with it" in t
+
+
+def test_the_majority_validation_reports_the_grade_and_the_residue():
+    t = ensemble.a_majority_span_set_satisfied_in_full_is_still_not_equivalent()
+    assert "DIFFERS, three pins green" in t
+    assert "0 objections in 6,542 exposed decisions = 0.0%" in t
+
+
+def test_the_majority_validation_excludes_every_excuse_by_name():
+    t = ensemble.a_majority_span_set_satisfied_in_full_is_still_not_equivalent()
+    for excuse in ("Not soundness", "Not span", "Not selection", "Not stimulus",
+                   "Not the editor", "Not the gradient"):
+        assert excuse in t
+
+
+def test_the_majority_validation_says_span_is_not_the_target():
+    t = ensemble.a_majority_span_set_satisfied_in_full_is_still_not_equivalent()
+    assert "Span is not the quantity to optimise" in t
+    assert "every SOUND check the set contains" in t

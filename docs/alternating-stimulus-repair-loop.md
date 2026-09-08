@@ -705,3 +705,73 @@ refutable leg; the refutable leg predicts one of adequacy's two halves and canno
 be selected on. **The measure of a check set is the validation run**, and its
 cost — roughly an hour of simulation plus an editor — is the real constraint on
 how often a set can be judged.
+
+## THE VALIDATION, ON THE MAJORITY SET: every sound check satisfied, and still `DIFFERS`
+
+The finish condition, run on the set that spans a majority. 117 checks over 50 of
+89 requirements = 56%, selected by a conviction-count rule over seven
+spec-derived designs and nothing else. Design `L`, written from the
+specification by an agent forbidden to open any other design and held out of
+every selection. A Sonnet editor through the shipped `_EditSession` policy.
+
+| trial | objections of 117 | |
+|---|---|---|
+| init | 25 | over 18 requirements |
+| 1 | 9 | |
+| 2 | 4 | |
+| 3 | 4 | *did not latch — the requirement ratchet refused it, and correctly* |
+| **4** | **2** | **49 of 50 requirements pass** |
+
+**THE TWO IT STOPPED ON ARE EXACTLY THE TWO THE AUDIT CALLS UNSOUND** — both
+`REQ-0081` bodies, demanding something on entry to a state whose feature is
+compiled out. The editor called it an occurrence claim and counted it; verified
+twice independently and exactly: **`in_srefill4` is true in 0 of the reference's
+5,723 rows and 0 of the accepted design's 6,127.**
+
+So the design satisfies **every sound check the set contains**, in 4 of 14
+trials.
+
+| | testpoints differing | cells |
+|---|---|---|
+| L at init | 279 of 348 = 80% | 4,450 |
+| **L after the loop** | **236 of 348 = 68%** | **3,533** |
+
+**GRADE: `DIFFERS`, with all three pins green in the same process.**
+
+### Three sets, one design, and span does not move the grade
+
+| set | span | objections | testpoints differing | cells | trials |
+|---|---|---|---|---|---|
+| 21 checks | 16 reqs = 18% | 8 -> 2 | **223 = 64%** | 3,969 | 3 of 14 |
+| 111 checks | 44 reqs = 49% | 23 -> 7 | **220 = 63%** | 3,834 | 5 of 14 |
+| **117 checks** | **50 reqs = 56%** | **25 -> 2** | **236 = 68%** | **3,533** | 4 of 14 |
+
+**SPAN TRIPLED AND THE GRADE MOVED FIVE POINTS, IN THE WRONG DIRECTION AT THE
+TOP.** The majority set clears the most objections and produces the fewest
+differing CELLS — 3,533, the best of the three — while differing on the most
+TESTPOINTS. Errors got shallower and more widespread. Cells and testpoints
+disagree, so neither alone is the grade, and the bounded miter is.
+
+### And the residue is now ZERO, which is the sharpest form of the finding
+
+On the accepted design, restricted to the 117-check set and to decisions where
+**a port the check itself reads is wrong**:
+
+    decisions on exposed testpoints    6,542
+    of those, objections                   0 = 0.0%
+
+**THE DESIGN IS WRONG ON 236 TESTPOINTS AND EVERY SOUND CHECK IN A SET SPANNING
+A MAJORITY OF THE SPECIFICATION WATCHES IT HAPPEN AND SAYS NOTHING.** 3.9% was
+measured twice on earlier sets; 1.5% after an editor had worked on the 49% set;
+0.0% here. That is not a set that ran out of things to say — it is a set whose
+every member is satisfied by a design that differs from the reference on more
+than two thirds of the suite.
+
+**So the finish condition is NOT met, and the mechanism is named and measured
+rather than inferred.** It is not soundness (every sound member is satisfied),
+not span (a majority), not selection (five of the corpus's six sound catchers
+were already kept), not stimulus (348 testpoints, the design driven wrong on
+236 of them), not the editor (4 of 14 trials, stopping on demonstrably wrong
+checks), and not the gradient (objections, cells and testpoints all fell within
+the run). **It is what a check ASSERTS: a fragment of its requirement, satisfied
+by designs that violate the rest of the sentence.**

@@ -1428,3 +1428,49 @@ def the_refutable_leg_predicts_discrimination_and_still_must_not_select() -> str
         "span and quadruple the false-reject rate. Report with it; never select "
         "with it."
     )
+
+
+def a_majority_span_set_satisfied_in_full_is_still_not_equivalent() -> str:
+    """The finish condition, run on a set spanning a majority of a specification.
+
+    Every earlier negative here had an available excuse -- the set was unsound,
+    or thin, or badly selected, or the editor stopped early. This one has none
+    of them, and the residue it leaves is zero.
+    """
+    return (
+        "Measured on k1. A 117-check set over 50 of 89 requirements = 56%, "
+        "selected by a conviction-count rule over seven spec-derived designs and "
+        "nothing else, drove a Sonnet editor on a design written from the "
+        "specification and held out of every selection.\n\n"
+        "    init  25 objections over 18 requirements\n"
+        "      1    9\n"
+        "      2    4\n"
+        "      3    4   did not latch; the requirement ratchet refused it, correctly\n"
+        "      4    2   49 of 50 requirements pass, 4 of 14 trials used\n\n"
+        "The two it stopped on are exactly the two the audit calls UNSOUND -- "
+        "both demanding something on entry to a state whose feature is compiled "
+        "out of the build, verified twice as an occurrence claim: that state's "
+        "probe is true in 0 of the reference's 5,723 rows and 0 of the accepted "
+        "design's 6,127. **So the design satisfies every SOUND check the set "
+        "contains.**\n\n"
+        "    testpoints differing   279 of 348 = 80%  ->  236 = 68%\n"
+        "    differing cells                   4,450  ->  3,533\n"
+        "    GRADE                                        DIFFERS, three pins green\n\n"
+        "**AND THE RESIDUE IS ZERO.** Restricted to that set and to decisions "
+        "where a port THE CHECK ITSELF READS is wrong: **0 objections in 6,542 "
+        "exposed decisions = 0.0%.** The design is wrong on 236 testpoints and "
+        "every sound check in a majority-span set watches it happen and says "
+        "nothing. Earlier sets measured 3.9% twice and 1.5% once.\n\n"
+        "**EVERY AVAILABLE EXCUSE IS EXCLUDED BY THE RUN'S OWN PROPERTIES.** Not "
+        "soundness -- every sound member is satisfied. Not span -- a majority. "
+        "Not selection -- five of the corpus's six sound catchers were already "
+        "kept. Not stimulus -- 348 testpoints, the design driven wrong on 236. "
+        "Not the editor -- 4 of 14 trials, stopping on checks it disproved by "
+        "counting. Not the gradient -- objections, cells and testpoints all fell "
+        "together inside the run.\n\n"
+        "**WHAT IS LEFT IS WHAT A CHECK ASSERTS: a fragment of its requirement, "
+        "satisfied by a design that violates the rest of the sentence.** Span is "
+        "not the quantity to optimise, and a set can span a majority, be "
+        "satisfied in full, and certify a design wrong on two thirds of its "
+        "observable behaviour."
+    )
