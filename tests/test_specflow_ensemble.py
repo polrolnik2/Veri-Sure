@@ -558,3 +558,23 @@ def test_the_vacuous_finding_refuses_to_be_read_as_a_rule_calibration():
     t = ensemble.a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is()
     assert "WHAT THIS DOES NOT SAY" in t
     assert "1.03x" in t and "31%" in t
+
+
+def test_the_evidence_round_reports_the_agreement_in_both_directions():
+    t = ensemble.new_evidence_moves_the_rule_and_the_audit_together()
+    assert "state-changed but still sound                 0" in t
+    assert "newly unsound but state unchanged             0" in t
+
+
+def test_the_evidence_round_says_why_it_is_not_a_fitted_threshold():
+    t = ensemble.new_evidence_moves_the_rule_and_the_audit_together()
+    assert "Nothing was fitted" in t
+    assert "neither column had seen" in t
+
+
+def test_the_evidence_round_reports_the_span_loss_beside_the_agreement():
+    """A round that removes false keeps reads as a loss and must say so."""
+    t = ensemble.new_evidence_moves_the_rule_and_the_audit_together()
+    assert "BOUGHT NO SPAN" in t
+    assert "14 before, 14 after" in t
+    assert "A span that falls when the evidence widens was never a span" in t

@@ -1130,3 +1130,47 @@ def a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is() -> str:
         "a population already selected for soundness; what this table answers is "
         "the different question of what the cut is worth INSIDE the loop."
     )
+
+
+def new_evidence_moves_the_rule_and_the_audit_together() -> str:
+    """The strongest evidence here that the golden-free routing tracks soundness.
+
+    Every other figure in this module compares a rule against an audit on ONE
+    body of evidence, where a threshold can be fitted. This is a before/after
+    across an evidence change neither column had seen.
+    """
+    return (
+        "Measured on k1. A stimulus round staged 18 testpoints on axes the suite "
+        "had never exercised -- bus errors, requests aborted mid-transaction, "
+        "reset arriving while a transaction is outstanding, back-to-back "
+        "refills, and the data-valid strobe pausing mid-sequence -- taking the "
+        "evidence from 330 to 348 testpoints. Both halves were scored INSIDE ONE "
+        "RENDER, because a probe declaration fixes the row-compression key and "
+        "two renders differ in every row.\n\n"
+        "    checks whose golden-free STATE changed        8\n"
+        "    checks that BECAME unsound on the audit       8\n"
+        "    intersection                                  8\n"
+        "    state-changed but still sound                 0\n"
+        "    newly unsound but state unchanged             0\n\n"
+        "**EVERY CHECK THE RULE MOVED TO OVER-STRICT IS EXACTLY A CHECK THAT "
+        "STARTED CONVICTING THE KNOWN-GOOD DESIGN, AND NO OTHER CHECK DID "
+        "EITHER.** The eight went from 0 or 1 convictions to 6 or 7 of a "
+        "seven-design population, so it is a decisive conviction event and not a "
+        "marginal one. Nothing was fitted: the movement was caused by stimulus "
+        "neither column had seen, and the two were computed independently.\n\n"
+        "This is the mechanism the conviction-count rule claims, observed rather "
+        "than assumed -- a demand no independent implementation satisfies is "
+        "more likely one the check misread than one all those authors got "
+        "wrong, and on all eight the known-good design agrees with the "
+        "authors.\n\n"
+        "AND THE SAME ROUND BOUGHT NO SPAN, WHICH IS THE HALF TO CARRY. The keep "
+        "set went 21 checks over 16 requirements to 17 over 12, while the "
+        "ADEQUATE count did not move at all -- 14 before, 14 after, every "
+        "adequate member surviving. What the wider evidence removed was four "
+        "FALSE keeps. So a stimulus round is an EVIDENCE move, not a span move: "
+        "it can only make the measurement more nearly right, and a measurement "
+        "getting more nearly right looks like a loss whenever the previous "
+        "number was too high. **Quote a keep-set span only beside the evidence "
+        "it was measured on. A span that falls when the evidence widens was "
+        "never a span.**"
+    )

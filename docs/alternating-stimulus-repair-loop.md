@@ -273,3 +273,70 @@ CAN fail, on the artifact the editor edits, with no golden and no model call —
 and it should be KEPT rather than strengthened. Until that leg runs, the accept
 gate is what contains the damage: a strengthened check is discarded unless it
 lands in BAND, so an adequate VACUOUS check survives the round unchanged.
+
+## Invariant 9: new stimulus and the audit named the SAME eight checks, 8 of 8
+
+Stimulus round 3 staged **18 testpoints on axes the suite had never exercised** —
+bus errors, requests aborted mid-transaction, reset arriving while a transaction
+is outstanding, back-to-back refills, and the data-valid strobe pausing
+mid-sequence. Evidence went 330 → 348 testpoints, and both halves of the
+comparison were taken **inside one render**, as invariant 1 requires.
+
+**Eight checks changed state, all eight in the same direction, and the audit
+agrees with the routing exactly:**
+
+| | 330 testpoints | 348 |
+|---|---|---|
+| BAND (keep) | 21 | **17** |
+| its span | 16 of 89 = 18% | **12 of 89 = 13%** |
+| VACUOUS | 82 | 78 |
+| OVER_STRICT | 16 | **24** |
+| *audit: convict the reference* | *6 of 119* | *14 of 119* |
+| *audit: **adequate*** | ***14*** | ***14*** |
+
+    checks whose golden-free STATE changed        8
+    checks that BECAME unsound on the audit       8
+    intersection                                  8
+    state-changed but still sound                 0
+    newly unsound but state unchanged             0
+
+**EVERY CHECK THE GOLDEN-FREE RULE MOVED TO OVER_STRICT IS EXACTLY A CHECK THAT
+STARTED CONVICTING THE KNOWN-GOOD DESIGN, AND NO OTHER CHECK DID EITHER.** That
+is not a fitted threshold: the movement was caused by stimulus that no part of
+the rule or the audit had seen, both columns were computed independently, and
+they agree in both directions with nothing left over. The eight went from 0 or 1
+convictions to **6 or 7 of 7**, so it is a decisive conviction event rather than
+a marginal one.
+
+This is the mechanism the minority rule claims, observed rather than assumed: *a
+demand no independent implementation satisfies is more likely one the check
+misread than one all those authors got wrong* — and here, on all eight, the
+known-good design agrees with the authors.
+
+### And round 3 bought no span at all, which is the honest half
+
+The keep set lost four members and four requirements. **It also lost zero
+adequate checks: 14 before, 14 after, and all six of BAND's adequate members
+survived.** What the wider evidence removed was four false keeps — checks that
+looked like a minority conviction on 330 testpoints and demand something no
+design satisfies on 348.
+
+| round | cost | BAND | span | *audit unsound* | *adequate* |
+|---|---|---|---|---|---|
+| P0 — original 318 | -- | 9 | 8 = 9% | *0* | -- |
+| **STIMULUS r1+r2** — 12 testpoints, 0 authoring calls | 12 sims | **18** | 14 = 16% | *6* | -- |
+| REPAIR — 101 authoring calls, gated | 101 calls | 21 | 16 = 18% | *6* | *14* |
+| **STIMULUS r3** — 18 testpoints, 0 authoring calls | 18 sims | **17** | **12 = 13%** | *14* | *14* |
+
+**SO THE STIMULUS LEVER'S RETURN IS NOT MONOTONE IN SPAN, AND SPAN IS THE WRONG
+THING TO SCORE IT ON.** Stimulus is an EVIDENCE move: it can only make the
+measurement more nearly right, and a measurement getting more nearly right looks
+like a loss whenever the previous number was too high. The user's prediction for
+this loop was exactly that — *"the testpoints differing on golden will not be
+monotone with the number of checks; one bad behaviour can wreck everything"* —
+and one round of new behaviours removed a fifth of the keep set.
+
+**The consequence for reporting is a rule.** A keep-set span is only meaningful
+beside the evidence it was measured on, and a span that falls when the evidence
+widens was never a span — it was an artefact of what the suite did not do. Quote
+both, or quote neither.
