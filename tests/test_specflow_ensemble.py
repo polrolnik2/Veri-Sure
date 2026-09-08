@@ -8,6 +8,7 @@ detect.
 import specflow.ensemble as ensemble
 from specflow.ensemble import (
     accuracy_is_the_wrong_axis_for_a_reference,
+    adequacy_is_soundness_and_refutability,
     agreement_is_not_an_oracle,
     check_agreement_is_not_an_oracle,
     conviction_count_is_not_a_descent_criterion,
@@ -239,6 +240,26 @@ def test_the_endorsement_does_not_read_as_a_tuning_problem():
     assert "same property" in why
 
 
+def test_adequacy_has_a_decomposition_and_it_names_both_legs():
+    # The only entry here that says what the adequate cell IS rather than how
+    # hard it is to reach. The 52/16 split is the load-bearing evidence; the
+    # composite's n = 7 is not, and must travel with it.
+    why = adequacy_is_soundness_and_refutability()
+    assert "52 checks,  3 adequate" in why and "16 checks, 15 adequate" in why
+    assert "94% precision and 83% recall" in why
+    assert "n = 7" in why
+
+
+def test_the_adequacy_gate_is_labelled_calibrated_and_not_a_score():
+    # Two ways this becomes an overclaim: quoting the 10.7x without saying the
+    # threshold was set by reading the known-good design, and reading the
+    # refutable leg as PREDICTING discrimination when it is at chance there.
+    why = adequacy_is_soundness_and_refutability()
+    assert "CALIBRATED rule" in why and "not a score" in why
+    assert "at chance on its own" in why
+    assert "do not use it to build the set" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -253,7 +274,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "strength_and_soundness_are_exchanged_not_traded",
                  "zero_objections_can_be_incompatible_with_correctness",
                  "authoring_populations_are_complementary_not_ordered",
-                 "the_minority_rule_is_precise_and_that_is_what_it_costs"):
+                 "the_minority_rule_is_precise_and_that_is_what_it_costs",
+                 "adequacy_is_soundness_and_refutability"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 

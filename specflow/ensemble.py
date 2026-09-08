@@ -100,6 +100,14 @@ is also why the set it produces is weak: of the 18 adequate checks in the larges
 perfectly sound set, it keeps 9. Its precision and its cost are the same
 property. `the_minority_rule_is_precise_and_that_is_what_it_costs` carries both.
 
+AND THE CELL ITSELF NOW HAS A DECOMPOSITION RATHER THAN ONLY A SIZE. Among sound
+checks, the 52 that convict no candidate hold 3 adequate ones and the 16 that
+convict at least one hold 15 -- so ADEQUATE = SOUND AND REFUTABLE at 94%
+precision and 83% recall, with the second leg reading no known-good design.
+Composed with the soundness gate it is the first golden-free adequacy instrument
+here, at a 10.7x lift on n = 7. `adequacy_is_soundness_and_refutability` carries
+it, including why it must not be used to SELECT.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -580,6 +588,45 @@ def the_minority_rule_is_precise_and_that_is_what_it_costs() -> str:
         "selector for the final set: gate with it, then take the union with "
         "whatever else the corpus offers, because the checks it rejects are where "
         "half the discrimination lives."
+    )
+
+def adequacy_is_soundness_and_refutability() -> str:
+    """The first near-exact decomposition of the cell everything here is about.
+
+    Every other entry measures how hard the adequate cell is to reach. This one
+    says what it IS, on this corpus, in two properties that are each cheap to
+    compute -- and the more interesting half of the answer is that the leg doing
+    the work is one this plan dropped as harmful.
+    """
+    return (
+        "Measured on k1 over 218 checks that decide on the known-good design, "
+        "with discrimination against BOTH held-out designs. Among the 68 SOUND "
+        "checks, where the chance of discriminating is 26% -- three times BELOW "
+        "the 75% base rate over all firing checks, which is the anti-correlation "
+        "this module exists to document:\n\n"
+        "    SOUND and convicting NO candidate   52 checks,  3 adequate =  6%\n"
+        "    SOUND and convicting AT LEAST ONE   16 checks, 15 adequate = 94%\n\n"
+        "**ADEQUATE = SOUND AND REFUTABLE, at 94% precision and 83% recall.** "
+        "Not a correlation -- a decomposition, and the second leg reads only "
+        "spec-derived candidates, so it needs no known-good design.\n\n"
+        "COMPOSED WITH THE SOUNDNESS GATE IT IS THE FIRST GOLDEN-FREE ADEQUACY "
+        "INSTRUMENT HERE. 'Convicts between 1 and 2 of 13' keeps 7 checks of "
+        "which 6 are adequate: 86% against an 8% base rate, a 10.7x lift, where "
+        "the best previously measured was 3.4x at 10% precision. Recall is 6 of "
+        "18 = 33%, and n = 7, so it is an instrument for saying WHICH checks do "
+        "the work, not a way of getting more of them.\n\n"
+        "TWO THINGS IT IS NOT, and both matter. The upper bound at 2 was chosen "
+        "by reading the known-good design, so the composite is a CALIBRATED rule "
+        "and not a score. And the lift does not come from the refutable leg "
+        "predicting discrimination: at 86% against a 75% base rate that leg is "
+        "at chance on its own. It works by REMOVING the 52 sound-and-blind "
+        "checks, which is a different mechanism from the one its name suggests.\n\n"
+        "SO THE DECISION TO DROP THE REFUTABLE LEG AS A SELECTION RULE STANDS, "
+        "AND NOW HAS ITS REASON. It discards 52 checks to keep 16, and the 52 are "
+        "SOUND AND SILENT -- a check that never objects never mis-steers a repair "
+        "loop, so keeping it costs nothing, while dropping it loses the 3 adequate "
+        "checks among them. Use this to REPORT which members of a set carry its "
+        "discrimination; do not use it to build the set."
     )
 
 def split_cells_are_a_specification_finding() -> str:
