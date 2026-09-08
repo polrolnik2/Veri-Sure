@@ -813,3 +813,16 @@ def test_the_obligation_finding_names_the_prize_and_the_prescription():
     t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
     assert "61 of 89 = 69%" in t
     assert "name the obligation it fires on" in t
+
+
+def test_the_obligation_cuts_were_read_not_trusted():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "READ RATHER THAN TRUSTED" in t
+    assert "All four are real cuts" in t
+
+
+def test_the_obligation_instrument_admits_the_syntactic_luck():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "SYNTACTIC LUCK" in t
+    assert "the +4 is not robust either" in t
+    assert "STRUCTURED FIELD" in t

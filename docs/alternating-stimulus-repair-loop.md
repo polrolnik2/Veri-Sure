@@ -1060,3 +1060,28 @@ The ratchet defect above is a criterion coarser than the EDITS being made, and i
 rejects correct work. This is a criterion coarser than the OBLIGATIONS being
 asserted, and it rejects correct assertions. Both say one thing: **the unit you
 JUDGE at should not be forced to be the unit you AUTHOR at.**
+
+### The four were READ rather than trusted, and the false positive is the sharpest part
+
+| requirement | how it cuts |
+|---|---|
+| REQ-0016 | two `return (False, …)` sites — delete one |
+| REQ-0074 | two `return (False, …)` sites — delete one |
+| REQ-0084 | two independent loops its own comments label `Case 1` and `Case 2` |
+| REQ-0021 | ONE verdict over a conjunction of two asserted outputs — drop a conjunct, not a branch |
+
+All four are real cuts, and three different mechanisms produce them.
+
+**AND THE ONE FALSE POSITIVE WAS EXCLUDED BY SYNTACTIC LUCK.** REQ-0039 emits
+`outputs changed without a rising clk edge: [a, b, c]` — **one** obligation whose
+message varies with which signals witnessed it, on a check that convicts the
+reference on 342 of 348 testpoints. REQ-0021 emits `asserted dcram_we=1,
+tag_we=1` — **two** obligations whose message varies with which one fired. My
+normaliser kept the second and dropped the first **because one used brackets and
+the other used a comma-join.** That is a formatting accident, not a principle, so
+the +4 is not robust either.
+
+**SO THE PRESCRIPTION IS NARROWER AND STRONGER THAN "PRINT MORE".** The
+obligation an objection fires on must be a **structured field the check returns**,
+not a phrase inside a message written for a human to read. As prose it is
+unreadable for 78% of the population and misreadable for the rest.
