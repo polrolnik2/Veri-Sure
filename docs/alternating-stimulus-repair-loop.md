@@ -125,6 +125,53 @@ object to NOTHING across seven independently written implementations.** Not
 silent — deciding, and finding all seven acceptable. That is the vacuity problem
 in its starkest form and it is what the loop's repair move has to move.
 
+## Invariant 7: a repair is ACCEPTED only if it improved the state
+
+The repair move must not bank its own output. Measured on 101 repair calls, each
+carrying the objection its own latest evidence implied:
+
+| | BAND (keep) | VACUOUS | OVER_STRICT | SILENT | *audit unsound* |
+|---|---|---|---|---|---|
+| before repairing | 18 | 83 | 18 | 0 | *6 of 119* |
+| **every repair accepted** | 21 | 36 | **59** | 3 | ***59 of 119*** |
+| **accepted only if improved** | **21** | 82 | 16 | 0 | ***6 of 119*** |
+
+**Both columns reach the same 21. Only one of them destroys the set.** Accepting
+unconditionally moved 49 checks straight from VACUOUS to OVER_STRICT and took the
+set from 113 sound of 119 to 60 — the oscillation this plan has measured seven
+times, at scale, in one round.
+
+The gate is one line and it is GOLDEN-FREE, because BAND is a conviction count
+over spec-derived candidates:
+
+    accept the repaired body iff its new state is BAND and the old state was not;
+    otherwise discard the repair and keep the original.
+
+3 of 101 were accepted. **The landing rate is unchanged at 3% — the gate does not
+make repair work, it makes repair FREE**, and a move that lands 3% is worth
+running only when its failures cost nothing.
+
+## The economics of the two moves, which is the actionable result
+
+One full alternation, same population, same evidence, everything logged:
+
+| move | cost | BAND | *audit* |
+|---|---|---|---|
+| start | -- | 9 | *0* |
+| **STIMULUS** -- 12 staged testpoints, **zero authoring calls** | 12 sims | **18** | *6* |
+| **REPAIR** -- 101 authoring calls, gated | 101 calls | **21** | *6* |
+
+**Stimulus bought +9 keepable checks with no model calls at all; repair bought +3
+for 101.** Per call the stimulus move is not merely better, it is the only one of
+the two that scales. The golden-free keep set went from **8 of 89 = 9%** span to
+**16 of 89 = 18%**, at a false-reject rate of 10%.
+
+**So the prescription reverses where this plan has spent.** Nine authoring rounds
+and one stimulus round is the wrong ratio; the loop should stage first, re-derive
+every check's state from the wider evidence, and only then repair what the new
+evidence disproves — with the accept gate on, so that the 97% which do not land
+cost nothing.
+
 ## What to build, in order
 
 1. `reachability.observed()` over the run's own replays -> the pool, per state,
