@@ -736,3 +736,26 @@ def test_the_gated_round_reports_its_own_prompt_defect():
     t = ensemble.a_gate_makes_a_failing_repair_free_without_making_it_work()
     assert "11 of 40 strengthened bodies dropped an input" in t
     assert "3 of 40 is a FLOOR" in t
+
+
+def test_the_consensus_oracle_reports_its_false_reject_rate_in_advance():
+    t = ensemble.the_consensus_is_an_oracle_even_though_it_is_not_a_ranking()
+    assert "2,073" in t and "0.86%" in t
+    assert "known IN ADVANCE" in t
+
+
+def test_the_consensus_oracle_refuses_zero_as_an_accept_criterion():
+    t = ensemble.the_consensus_is_an_oracle_even_though_it_is_not_a_ranking()
+    assert "ZERO IS STILL NOT THE ACCEPT CRITERION" in t
+    assert "DESCENT under a trial budget" in t
+
+
+def test_the_consensus_correction_names_what_it_cannot_separate():
+    t = ensemble.the_consensus_is_an_oracle_even_though_it_is_not_a_ranking()
+    assert "CANNOT BE SEPARATED" in t
+    assert "closed on a sample of one held-out design" in t
+
+
+def test_the_consensus_oracle_excludes_probes_on_the_port_only_argument():
+    t = ensemble.the_consensus_is_an_oracle_even_though_it_is_not_a_ranking()
+    assert "convict a correct design for its encoding" in t

@@ -1513,3 +1513,56 @@ def a_gate_makes_a_failing_repair_free_without_making_it_work() -> str:
         "the round asks, so 3 of 40 is a FLOOR and this is not a clean test of "
         "the lever."
     )
+
+
+def the_consensus_is_an_oracle_even_though_it_is_not_a_ranking() -> str:
+    """CORRECTS `accuracy_is_the_wrong_axis_for_a_reference`, which closed this
+    route on a sample of one held-out design.
+
+    That entry reports a unanimous consensus ranking the known-good design 15 of
+    16 while every population member AND a held-out design scored 0, and
+    concludes a consensus "has nothing to say to any design a
+    specification-reading author would write". Measured again on a second
+    held-out design, that is too strong.
+    """
+    return (
+        "Measured on k1. Seven designs written independently from the "
+        "specification by agents forbidden to open any other implementation, all "
+        "run on one 348-testpoint stimulus. Wherever all seven produce the "
+        "identical value at a (clock edge, DECLARED OUTPUT) sample, that value "
+        "is the reference: **240,573 unanimous cells**.\n\n"
+        "Declared outputs only, deliberately -- two output-equivalent designs "
+        "may encode their states differently, so demanding the population's "
+        "value at a probe would convict a correct design for its encoding. Raw "
+        "edges, not transactional rows, because the transactional view "
+        "compresses each design independently and cannot be aligned across "
+        "designs.\n\n"
+        "    a population member (the control)          0   by construction\n"
+        "    THE KNOWN-GOOD DESIGN                  2,073   = 0.86%\n"
+        "    held-out L, unedited                   9,857\n"
+        "    held-out L, after a 117-check loop     5,602\n\n"
+        "**THE KNOWN-GOOD DESIGN SCORES 4.8x BETTER THAN THE HELD-OUT ONE** -- "
+        "the first instrument here on which it is clearly the best "
+        "non-population design -- and its false-reject rate is known IN ADVANCE, "
+        "which no check set's ever is.\n\n"
+        "**ZERO IS STILL NOT THE ACCEPT CRITERION.** A design scoring zero has "
+        "matched the population everywhere including the 2,073 cells where the "
+        "population is wrong, which is evidence against equivalence by the same "
+        "arithmetic that makes an over-strict check set's zero fatal. The "
+        "criterion is DESCENT under a trial budget.\n\n"
+        "AND IT SUPPLIES THE ONE THING AN EDITOR HAS NEVER HAD HERE: an "
+        "expected value that is OBSERVED rather than reconstructed. Not "
+        "synthesised, not inferred -- what seven agents who never saw each "
+        "other's work all produced at that moment.\n\n"
+        "**THE CORRECTION.** The earlier entry closed this route because held-out "
+        "J scored 0. Held-out L, written the same way by the same kind of agent "
+        "and held out of everything, scores 9,857. The discrimination is a "
+        "property of the (reference, design) PAIR, as the both-cell turned out to "
+        "be. THREE THINGS DIFFER BETWEEN THE TWO MEASUREMENTS AND CANNOT BE "
+        "SEPARATED -- thirteen designs against seven, 318 testpoints against 348, "
+        "all cells against declared outputs only -- and unanimity over seven is "
+        "easier than over thirteen, so this table has more cells and more chances "
+        "to disagree. The gap is far too large to be only that. The honest "
+        "statement is that the route was closed on a sample of one held-out "
+        "design and should not have been."
+    )

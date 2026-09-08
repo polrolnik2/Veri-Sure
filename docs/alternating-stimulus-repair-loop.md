@@ -838,3 +838,78 @@ selection drives this set from 25 objections to 2 in 4 of 14 trials, satisfying
 calls unsound, disproved by counting rather than argued. The bounded miter says
 `DIFFERS` at 236 of 348 testpoints, and the set objects **0 times in 6,542
 decisions where a port it reads is wrong.**
+
+## A different proxy: the consensus as an ORACLE, and it separates where checks do not
+
+The goal now asks for proxy metrics chosen by how well they help the editor
+succeed. The 117-check set gives the editor **two objections on a design wrong
+on 68% of the suite, and the audit says both are wrong.** So the proxy was
+changed rather than the set.
+
+**THE INSTRUMENT.** Seven designs written independently from the specification by
+agents forbidden to open any other implementation, all run on the same
+348-testpoint stimulus. Wherever **all seven produce the identical value** at a
+(clock edge, declared output) sample, that value is the reference.
+
+    240,573 unanimous cells, over 348 testpoints
+
+**Declared outputs only, and that is a decision rather than an omission.** Two
+output-equivalent designs may encode their states differently, so a probe
+disagreement is a legitimate design choice and demanding the population's value
+there would convict a correct design for its encoding — the port-only argument
+this project proved once as a theorem, applied to a reference table.
+
+**RAW EDGES, NOT TRANSACTIONAL ROWS.** Every design is driven by the same
+stimulus, so edge *i* is the same moment in all of them; the transactional view
+compresses each design independently and cannot be aligned across designs. That
+is also why the testpoint-level version of the disagreement question, measured
+earlier, could not answer anything.
+
+| | cells disagreeing with the consensus |
+|---|---|
+| a member of the population (candidate D) | **0** — by construction, the control firing |
+| ***the known-good design*** | ***2,073 = 0.86%*** |
+| **held-out L, unedited** | **9,857** |
+| held-out L, after the 117-check editor loop | 5,602 |
+
+**THE KNOWN-GOOD DESIGN SCORES 4.8x BETTER THAN THE HELD-OUT ONE.** That is the
+first instrument on this plan where it is clearly the best non-population
+design, and the false-reject rate — 0.86% — is known IN ADVANCE, which no check
+set's ever is.
+
+**AND ZERO IS STILL NOT THE ACCEPT CRITERION.** A design scoring zero has matched
+the population everywhere including the 2,073 cells where the population is
+wrong, which is evidence against equivalence by exactly the arithmetic that made
+an over-strict check set's zero fatal. The criterion is DESCENT under a trial
+budget, and the floor is where the known-good design sits.
+
+### It also supplies the one thing the editor has never had
+
+The companion document names the editor's weakest point outright: *"expected/
+actual is reconstructed, not observed ... a fabricated expected value would make
+it CONFIDENT in a wrong theory."* **A unanimous consensus cell IS an observed
+expected value** — not reconstructed, not synthesised, but what seven agents who
+never saw each other's work all produced at that moment. The editor now gets,
+per output: the testpoint, the edge, what all seven produce, what its design
+produces, and the inputs driving that edge.
+
+### CORRECTING THIS PLAN: the consensus route was closed on ONE held-out design
+
+The earlier measurement reads *"a consensus over a population is satisfied by
+that population BY CONSTRUCTION, and by anything drawn from the same
+distribution — which is what J is. So the reference has nothing to say to any
+design a specification-reading author would write."* Held-out J scored **0**.
+
+**Held-out L scores 9,857.** L was written the same way, from the same
+specification, by the same kind of agent, and held out of everything. So
+*"nothing to say to any design a specification-reading author would write"* is
+too strong: the instrument's discrimination is a property of the (reference,
+design) PAIR, exactly as the both-cell turned out to be.
+
+**THREE THINGS DIFFER BETWEEN THE TWO MEASUREMENTS AND I CANNOT SEPARATE THEM.**
+The old table was over THIRTEEN designs, 318 testpoints, and all cells including
+probes; this one is SEVEN designs, 348 testpoints, declared outputs only.
+Unanimity over seven is easier than over thirteen, so this table has more cells
+and more chances to disagree. The 0-against-9,857 gap is far too large to be
+only that, and the honest statement is that **the earlier route was closed on a
+sample of one held-out design and should not have been.**
