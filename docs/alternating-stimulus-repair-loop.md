@@ -606,3 +606,50 @@ wrongness is exactly what these checks are blind to.
 **So the binding constraint is AUTHORING, and it is not the number of checks —
 it is what a check asserts.** The corpus has 484 bodies over 68 requirements and
 six of them can soundly convict a design wrong on 63% of the suite.
+
+## A MAJORITY: 50 of 89 = 56%, at an 11% false-reject rate, and all three columns moved together
+
+Selection is exhausted, so the remaining lever is authoring — and exactly one
+authoring move on this plan has ever had a positive measured yield: **narrowing
+an over-strict check**. It was aimed at the only population where it can add
+span: the **23 requirements that have an OVER-STRICT body and no keepable one.**
+One body each, the least over-strict, one call.
+
+**Admissible, and checked before dispatch.** The objection is *"your check
+objects to N of seven independently written implementations of this
+specification"* — no known-good design, no held-out design, no equivalence
+verdict. Leak check: **0 violations over 23 prompts against 182 lines of the
+reference's source.**
+
+**Integrity: 23 of 23 returned, 23 of 23 parse, 0 duplicates, 0 unchanged** —
+after one filename correction, recorded rather than absorbed: a worker wrote
+`REQ-0065.t2.json` for the key `REQ-0065.t2.prompt`, the plan's own
+suffix-stripping event. It was verified distinct from every other answer and
+from the body it was given before being renamed.
+
+    23 calls, 6 accepted by the gate = 26%
+      REQ-0015  REQ-0019  REQ-0064  REQ-0065  REQ-0071  REQ-0076
+      all six SOUND; two of them ADEQUATE
+      17 not accepted: 16 still over-strict, 1 silent, 0 gone vacuous-and-blind
+
+| the golden-free keep set | checks | requirements | of 89 | *audit* | *adequate* |
+|---|---|---|---|---|---|
+| before round 3 | 111 | 44 | 49% | *12%* | *14* |
+| **after round 3** | **117** | **50** | **56% — A MAJORITY** | ***11%*** | ***16*** |
+
+**SPAN UP, FALSE REJECTS DOWN, ADEQUACY UP — the first round on this plan where
+all three moved the right way at once.** And the landing rate is 26%, against
+narrowing round 1's 15% and round 2's 4%, because the population was chosen
+tightly: one body per requirement, the least over-strict, only where span could
+be gained, with the cut re-derived for the seven-design population.
+
+**The score, stated as the pair and nothing else.** A golden-free rule reading
+only seven independently written spec-derived designs keeps **117 checks over 50
+of 89 requirements = 56% of the specification**, and **13 of the 117 — 11% —
+convict the known-good design**, which is computed last and feeds nothing.
+
+**And 56% span is not 56% adequacy, which is the distinction this document exists
+to keep.** The set carries **16 measured-adequate checks**: sound, and objecting
+to a design held out of every selection. That is 16 of 89 = 18% of the
+specification, and it is the number the goal's optimisation target actually
+names.

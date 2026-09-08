@@ -664,3 +664,21 @@ def test_the_exhaustion_finding_reports_the_residue_per_check():
 def test_the_exhaustion_finding_says_it_is_not_a_count_of_checks():
     t = ensemble.selection_is_exhausted_and_authoring_is_the_constraint()
     assert "not the NUMBER of" in t and "what a check asserts" in t
+
+
+def test_the_majority_round_reports_all_three_columns():
+    t = ensemble.narrowing_the_span_gap_reaches_a_majority()
+    assert "SPAN UP, FALSE REJECTS DOWN, ADEQUACY UP" in t
+    assert "| **after** | **117** | **50** | **56%** | ***11%*** | ***16*** |" in t
+
+
+def test_the_majority_round_does_not_quote_span_as_adequacy():
+    t = ensemble.narrowing_the_span_gap_reaches_a_majority()
+    assert "56% SPAN IS NOT 56% ADEQUACY" in t
+    assert "16 of 89 = 18%" in t
+
+
+def test_the_majority_round_records_its_admissibility_check():
+    t = ensemble.narrowing_the_span_gap_reaches_a_majority()
+    assert "0 violations over 23 prompts" in t
+    assert "0 duplicates, 0 unchanged" in t

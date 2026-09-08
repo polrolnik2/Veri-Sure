@@ -1348,3 +1348,43 @@ def selection_is_exhausted_and_authoring_is_the_constraint() -> str:
         "checks -- it is what a check asserts.** 484 bodies over 68 requirements "
         "yield six that can soundly convict a design wrong on 63% of the suite."
     )
+
+
+def narrowing_the_span_gap_reaches_a_majority() -> str:
+    """The one authoring move with a positive yield, aimed where span can grow.
+
+    Selection is exhausted (see
+    `selection_is_exhausted_and_authoring_is_the_constraint`), so the remaining
+    lever is authoring. Of every authoring round measured on this plan, exactly
+    one has a positive yield: narrowing a check that objects to most of an
+    independently written population.
+    """
+    return (
+        "Measured on k1. The population is the ONLY one in which narrowing can "
+        "add span: the 23 requirements holding an OVER-STRICT body (convicts 4 "
+        "to 7 of seven spec-derived designs) and no keepable one. One call each, "
+        "on the least over-strict body.\n\n"
+        "Admissible and checked before dispatch -- the objection is 'your check "
+        "objects to N of seven independently written implementations of this "
+        "specification', with no known-good design, no held-out design and no "
+        "equivalence verdict in it. Leak check: 0 violations over 23 prompts "
+        "against 182 lines of the reference's source. Integrity: 23 of 23 "
+        "returned, 23 parse, 0 duplicates, 0 unchanged.\n\n"
+        "    23 calls, 6 ACCEPTED by the gate = 26%\n"
+        "      all six sound; two of them adequate\n"
+        "      17 refused: 16 still over-strict, 1 silent, 0 gone blind\n\n"
+        "| the golden-free keep set | checks | requirements | of 89 | *audit* | *adequate* |\n"
+        "|---|---|---|---|---|---|\n"
+        "| before | 111 | 44 | 49% | *12%* | *14* |\n"
+        "| **after** | **117** | **50** | **56%** | ***11%*** | ***16*** |\n\n"
+        "**SPAN UP, FALSE REJECTS DOWN, ADEQUACY UP -- the first round here where "
+        "all three moved the right way at once.** The landing rate is 26% against "
+        "an earlier 15% and 4%, because the population was chosen tightly: one "
+        "body per requirement, the least over-strict, only where span could be "
+        "gained, with the conviction cut re-derived for the population size.\n\n"
+        "**AND 56% SPAN IS NOT 56% ADEQUACY.** The set carries 16 "
+        "measured-adequate checks -- sound, and objecting to a design held out of "
+        "every selection -- which is 16 of 89 = 18% of the specification. Quoting "
+        "the span without the adequacy is the defect this module's own history "
+        "has retracted headlines for."
+    )
