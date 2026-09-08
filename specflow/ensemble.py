@@ -74,6 +74,14 @@ final 3 to 0. `zero_objections_can_be_incompatible_with_correctness` carries it,
 and it is why a loop is stopped on a trial budget rather than on its criterion
 going quiet.
 
+AND ONE THING HERE IS CHEAP AND POSITIVE, WHICH IS RARE ENOUGH TO SAY SEPARATELY.
+Two authoring populations that measure equally bad are not interchangeable: on
+the 34 requirements answered by both a port-only author and a probe-using one,
+the adequate sets are 3 and 2 and their INTERSECTION IS ZERO, so the union is 5
+where the better arm alone is 3. An arm comparison decides which prompt to ship
+and must not decide which bodies to keep.
+`authoring_populations_are_complementary_not_ordered` carries it.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -469,6 +477,42 @@ def zero_objections_can_be_incompatible_with_correctness() -> str:
         "the loop on requirements it satisfies, stop it on a trial budget, and "
         "treat a run that reaches zero as a set defect to investigate rather than "
         "a design to ship."
+    )
+
+def authoring_populations_are_complementary_not_ordered() -> str:
+    """Whether to keep a second population, when the first one measures better.
+
+    Every arm comparison on this plan asks which population is BETTER, gets an
+    answer inside the noise, and moves on. That is the wrong question for a set
+    that is a union: two populations equally bad on average are worth keeping
+    together if they are bad in different places, and worth collapsing if not.
+    Measured here for the first time, and they are disjoint.
+    """
+    return (
+        "Measured on k1, on the 34 behavioural requirements the production run "
+        "never trusted, each answered by BOTH a port-only author and one given "
+        "spec-licensed state probes -- so the comparison is paired on the "
+        "requirement and a vague sentence subtracts from both arms equally.\n\n"
+        "NEITHER ARM IS BETTER. Adequate checks: 3 from the port-only arm, 2 "
+        "from the probe arm, two-sided sign test p = 1.000. The two legs move in "
+        "opposite directions and cancel -- the probe arm is more often sound (9 "
+        "against 6 paired, p = 0.607) and the port-only arm more often "
+        "discriminating (11 against 6, p = 0.332). That is the same exchange this "
+        "module measures inside a single check, appearing between two authors.\n\n"
+        "AND THE ADEQUATE SETS ARE DISJOINT: 3 + 2, INTERSECTION 0. No "
+        "requirement got an adequate check from both arms. So the union is 5 of "
+        "34 where the better arm alone is 3 -- two thirds more, from a lever that "
+        "costs nothing, because in an A/B both populations have already been "
+        "authored and the losing arm is usually discarded.\n\n"
+        "The rule this sets: an arm comparison decides which PROMPT to ship and "
+        "must not decide which BODIES to keep. Score arms against each other, "
+        "then select the set over their union. On this corpus the widest "
+        "perfectly sound set draws from every arm that was ever run, and "
+        "discarding any losing arm would have cost it span.\n\n"
+        "What this does NOT say is that more arms keep paying. Two arms are two "
+        "samples, the disjointness is measured once, and a third arm might "
+        "overlap both. The claim is the narrow one: a losing arm is not an empty "
+        "arm, and this plan has been treating it as one."
     )
 
 def split_cells_are_a_specification_finding() -> str:

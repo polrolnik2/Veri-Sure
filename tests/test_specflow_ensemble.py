@@ -14,6 +14,7 @@ from specflow.ensemble import (
     soundness_buys_termination_not_correctness,
     split_cells_are_a_specification_finding,
     strength_and_soundness_are_exchanged_not_traded,
+    authoring_populations_are_complementary_not_ordered,
     zero_objections_can_be_incompatible_with_correctness,
     the_residue_is_check_strength,
     consensus_cells,
@@ -194,6 +195,24 @@ def test_the_stopping_rule_is_stated_and_not_only_the_refutation():
     assert "requirements it satisfies" in why
 
 
+def test_a_losing_arm_is_not_an_empty_arm():
+    # The one cheap positive here, and the half that gets dropped when it is
+    # summarised. "Neither arm is better" is true and is NOT the finding; the
+    # finding is that their adequate sets do not overlap, so the union beats
+    # either. Both halves have to survive or this reads as another null result.
+    why = authoring_populations_are_complementary_not_ordered()
+    assert "p = 1.000" in why                       # neither arm is better
+    assert "INTERSECTION 0" in why                  # and they are disjoint
+    assert "union is 5 of" in why and "better arm alone is 3" in why
+
+
+def test_the_arm_comparison_is_scoped_to_what_it_can_decide():
+    # Without this the finding licenses "run more arms", which is not measured.
+    why = authoring_populations_are_complementary_not_ordered()
+    assert "which PROMPT to ship" in why and "which BODIES to keep" in why
+    assert "does NOT say" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -206,7 +225,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "soundness_buys_termination_not_correctness",
                  "the_residue_is_check_strength",
                  "strength_and_soundness_are_exchanged_not_traded",
-                 "zero_objections_can_be_incompatible_with_correctness"):
+                 "zero_objections_can_be_incompatible_with_correctness",
+                 "authoring_populations_are_complementary_not_ordered"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
