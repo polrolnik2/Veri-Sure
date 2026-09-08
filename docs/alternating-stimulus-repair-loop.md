@@ -410,3 +410,68 @@ precision at 3.34x over a 26% base, n = 111.** The plan's own warning was that
 the threshold is a function of the population SIZE; it is now re-derived rather
 than carried across, and the majority cut is still the right one — it holds 14 of
 the 15 adequate checks where the strict cut at 1 holds 13.
+
+## The validation clause, run: the loop stopped at TWO, and both are the unsound two
+
+The goal's own criterion — *can a Sonnet RTL editor, driven by this set alone,
+produce a design equivalent to the reference* — run on the keep set the loop
+produced. **Answer: no, and the way it fails is the best result on this plan.**
+
+* **The set.** 21 checks over 16 of 89 requirements, selected by the golden-free
+  band rule on 330 testpoints. *Its population descends from a soundness-selected
+  set, so this is not the corrected 49% set — that arm is separate.*
+* **The design.** `L`, written from the specification by an agent forbidden to
+  open any other design, held out of every selection that produced the set.
+* **The editor.** Sonnet through the shipped `_EditSession` policy — staged
+  buffer, content-anchored splice, commit as the one trial. No reference design,
+  no reference trace, no expected value.
+
+| | objections of 21 | testpoints differing | cells | trials |
+|---|---|---|---|---|
+| L at init | **8** | 279 of 348 = **80%** | 4,450 | 0 |
+| **L after the loop** | **2** | **223 of 348 = 64%** | **3,969** | **3 of 14** |
+
+**Objections fell 75%, divergence fell 20% and cells fell 11% — all three the
+same way — in three trials, with eleven unused.** Grade: `DIFFERS`, with all
+three pins green in the same process (reference vs itself `EQUIVALENT`,
+reference+probes `NO-DIFF-40`, a live mutant `DIFFERS`).
+
+### And the two objections it could not clear are exactly the two unsound checks
+
+The audit says **2 of the 21 convict the reference: `REQ-0081.control` and
+`REQ-0081.merge_merge`.** Those are the two the loop stopped on, and the editor
+refused them with a reason it could check rather than argue:
+
+> `OR1200_DC_STORE_REFILL` is false in this build, so the SREFILL4 entry path is
+> inside a dead `ifdef`; the check fires an "incremented on SREFILL4 entry"
+> template on a back-to-back store that is legitimate pipeline behaviour.
+
+Verified independently, and it is exact: **`in_srefill4` is true in 0 of the
+reference's 5,723 rows across all 348 testpoints.** The state does not occur, so
+no design can be wrong about it and no edit can satisfy a check that demands
+something there.
+
+| run | the editor's soundness judgement | |
+|---|---|---|
+| the earlier ceiling run | **1 of 3** | refused one unsound check and two sound ones, and its stated reason was false |
+| **this run** | **2 of 2** | refused exactly the unsound pair, for a reason readable off the trace |
+
+**THE DIFFERENCE IS THAT THE STATE IS A DECLARED PROBE.** *"This state never
+occurs"* stopped being a belief the editor argues for and became a fact it reads
+out of recorded rows. That is the probe architecture earning its keep somewhere
+this plan never looked — not in the author, in the EDITOR — and it is the first
+time on this plan that the editor's soundness judgement was right for a reason
+that can be verified rather than asserted.
+
+### What this settles, and what it does not
+
+* **The gradient is right on a golden-free-selected set.** Objections, testpoints
+  and cells moved together, which the rule-B run did not manage and the MAXSOUND
+  run reversed over its final approach.
+* **The loop terminated for a correct reason with 11 trials in hand.** Every
+  earlier stop on this plan was either the budget or a criterion that was
+  satisfied while the design was wrong.
+* **And it is still `DIFFERS` at 64% of testpoints.** 16 of 89 requirements is
+  not enough to finish, which is a statement about the set's SIZE and not its
+  direction — the same reading the clean ceiling run reached, now on a set no
+  known-good design selected.

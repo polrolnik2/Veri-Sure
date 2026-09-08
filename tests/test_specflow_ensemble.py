@@ -605,3 +605,21 @@ def test_the_ten_percent_audit_is_retracted_as_a_population_artefact():
     t = ensemble.the_keep_state_must_include_the_zero()
     assert "10% false-reject rate" in t
     assert "artefact of the population" in t
+
+
+def test_the_validation_run_reports_the_grade_beside_the_objection_fall():
+    t = ensemble.the_editor_can_read_a_state_it_cannot_argue_about()
+    assert "DIFFERS" in t and "pins green" in t
+    assert "too SPARSE" in t
+
+
+def test_the_validation_run_names_the_two_it_stopped_on_as_the_unsound_two():
+    t = ensemble.the_editor_can_read_a_state_it_cannot_argue_about()
+    assert "EXACTLY THE TWO CHECKS THE AUDIT CALLS UNSOUND" in t
+    assert "0 of the reference's 5,723 rows" in t
+
+
+def test_the_validation_run_attributes_the_judgement_to_the_probe():
+    t = ensemble.the_editor_can_read_a_state_it_cannot_argue_about()
+    assert "THE STATE IS A DECLARED PROBE" in t
+    assert "n is two" in t

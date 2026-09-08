@@ -1219,3 +1219,46 @@ def the_keep_state_must_include_the_zero() -> str:
         "audit whose denominator was chosen by the instrument being audited is a "
         "lower bound and must be labelled as one."
     )
+
+
+def the_editor_can_read_a_state_it_cannot_argue_about() -> str:
+    """The validation run, and the one thing that made the editor's refusal right.
+
+    An editor handed an over-strict check has, on this plan's own measurement,
+    no way to tell it from a legitimate demand: it scored 1 of 3 on that
+    judgement in an earlier run and its stated reason was false. This is the
+    same judgement made correctly, and the difference is what the check reads.
+    """
+    return (
+        "Measured on k1. A 21-check set over 16 of 89 requirements, selected by "
+        "a conviction-count rule over seven spec-derived designs, drove a Sonnet "
+        "editor on a design written from the specification and held out of every "
+        "selection. No reference design, no reference trace, no expected "
+        "value.\n\n"
+        "| | objections of 21 | testpoints differing | cells | trials |\n"
+        "|---|---|---|---|---|\n"
+        "| at init | 8 | 279 of 348 = 80% | 4,450 | 0 |\n"
+        "| after the loop | **2** | **223 of 348 = 64%** | **3,969** | **3 of 14** |\n\n"
+        "Objections fell 75%, divergence 20% and cells 11%, all the same way, in "
+        "three trials with eleven unused. The bounded miter says DIFFERS with all "
+        "three pins green in the same process, so the set is still too SPARSE to "
+        "finish -- a statement about its size, not its direction.\n\n"
+        "**AND THE TWO OBJECTIONS IT COULD NOT CLEAR ARE EXACTLY THE TWO CHECKS "
+        "THE AUDIT CALLS UNSOUND.** The editor refused them with a reason it "
+        "could check rather than argue: the requirement demands something on "
+        "entry to a state whose feature is compiled out of this build, and the "
+        "check fires that template on ordinary back-to-back traffic. Verified "
+        "independently and exactly -- the state's probe is true in 0 of the "
+        "reference's 5,723 rows across 348 testpoints.\n\n"
+        "    earlier ceiling run   1 of 3   refused one unsound check and two\n"
+        "                                   sound ones, for a reason that is false\n"
+        "    this run              2 of 2   refused exactly the unsound pair, for\n"
+        "                                   a reason readable off the trace\n\n"
+        "**THE DIFFERENCE IS THAT THE STATE IS A DECLARED PROBE.** 'This state "
+        "never occurs' stops being a belief the editor argues for and becomes a "
+        "fact it reads out of recorded rows. That is the probe architecture "
+        "paying somewhere this plan never looked -- not in the check author, in "
+        "the EDITOR -- and it is the first time here that the editor's soundness "
+        "judgement was right for a reason that can be verified rather than "
+        "asserted. n is two; the mechanism is what to carry, not the rate."
+    )
