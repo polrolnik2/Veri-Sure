@@ -1452,3 +1452,29 @@ was `None`, all seven "agreed" on `None`, and nothing ever differed. A clean
 sheet is the signature of an instrument that never ran, and this is the
 fourteenth time on this plan. The script now **refuses to report zero on a design
 known to differ.**
+
+# THE GOAL, ANSWERED CLAUSE BY CLAUSE — FINAL
+
+**Every figure below is golden-free except the audit column, which is computed
+last and feeds no selection, no prompt and no routing decision.**
+
+| the goal asked | the answer |
+|---|---|
+| *an adequate set spanning the majority of the spec* | **span met, adequacy not.** 117 checks over **50 of 89 = 56%**, selected by a conviction-count rule over seven spec-derived designs and nothing else. *Audit: 11% convict the reference.* Measured adequacy **17 of 89 = 19%** |
+| *validated by a Sonnet RTL Editor loop producing a design equivalent to golden* | **No — five times, and the fifth removes the last explanation.** 21-, 111-, 117-check sets, the 117-check set again on a fixed harness, and an *observed* expected value from seven implementations. All `DIFFERS`, all pins green |
+| *…and it is now a bound rather than a tally* | **146 of 348 testpoints = 42% differ at cells the specification does not determine.** Only 6% differ exclusively where a spec-derived criterion has an opinion. Equivalence is not reachable by steering from this text |
+| *finish the stimulus loop* | **measured unnecessary, twice.** 3 checks of 50 are silent where their own port is wrong; 36 of 50 look at it and pass. And the residue is in cells the suite already reaches — adding stimulus in the split region *adds* unanswerable cells |
+| *the untrusted-without-probes population* | **no better success rate**, p = 1.000 on 34 paired requirements — but the adequate sets are **disjoint**, so the union is 5 where the better arm alone is 3. An arm comparison decides which prompt to ship, never which bodies to keep |
+| *take oscillations between repairs into account* | measured as a decay curve: repair lands 18% then 4%; narrowing 15% then 4%. Two levers, opposite directions, identical second-round rate |
+| *an arbitrary unchecked LLM design as the source* | design L, written from the specification by an agent forbidden to open any other implementation, held out of every selection that produced the sets judging it |
+| *proxy metrics chosen by how well they facilitate the editor* | three, all measured: **ratchet at the granularity of the property, not the evidence**; **a descent criterion needs a knowable floor**, and this one has one and the loop still walked past it; **the number an agent optimises must be the number that latches** |
+| *prompts and gates are fair game* | a run-directory **lock** (three destroyed runs), the **dataflow slice** repaired (dead in every editor run on this plan), the **ratchet** re-encoded, narrowing and strengthening rounds re-authored |
+
+## WHAT WOULD CHANGE THE ANSWER, AND IT IS NOT A LEVER IN THIS PIPELINE
+
+A decision on the underdetermined cells, from outside the
+specification-and-reader loop. The disagreement map localises them at **10–12x**
+and is the artifact to put in front of whoever can make that decision. Nothing
+here can make it: a targeted reader asked one question about one such cell
+reproduces the population's own wrong answer 7 times in 9, and **0 of 20 noticed
+the question was open.**
