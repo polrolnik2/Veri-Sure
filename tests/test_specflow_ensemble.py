@@ -883,3 +883,22 @@ def test_the_ratchet_correction_states_the_rule_as_the_property():
     assert "GRANULARITY OF THE PROPERTY BEING CLAIMED, NOT OF THE EVIDENCE" in t
     assert "lower than any of the three designs the cell ratchet would have accepted" in t
     assert "must be the number that latches" in t
+
+
+def test_the_consensus_bound_names_the_share_the_criterion_cannot_see():
+    t = ensemble.the_consensus_route_is_bounded_by_the_specification_not_the_editor()
+    assert "66% OF WHAT IS STILL WRONG" in t
+    assert "12.0x" in t
+    assert "SILENT on, by construction" in t
+
+
+def test_the_consensus_bound_explains_the_floor_result():
+    t = ensemble.the_consensus_route_is_bounded_by_the_specification_not_the_editor()
+    assert "0.7%" in t and "0.86%" in t
+    assert "one event seen from two sides" in t
+
+
+def test_the_consensus_bound_refuses_the_unregistered_tiebreak():
+    t = ensemble.the_consensus_route_is_bounded_by_the_specification_not_the_editor()
+    assert "NOT PRE-REGISTERED AND MUST NOT BE USED AS A TIEBREAK" in t
+    assert "mixed is what stands" in t

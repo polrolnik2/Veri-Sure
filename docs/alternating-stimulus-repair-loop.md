@@ -1278,3 +1278,41 @@ criterion, in one run.
 told its score was cells while the loop latched on pairs, so three refusals
 looked arbitrary from where it sat — it reported the discrepancy itself. **The
 number an agent is asked to optimise must be the number that latches.**
+
+### AND THE ROUTE IS BOUNDED BY THE SPECIFICATION, NOT BY THE EDITOR
+
+The design the consensus loop produced, re-scored at **raw edges** — the
+transactional view compresses each design independently, so only raw edges are
+alignable across designs — with every cell classified by whether the seven agree
+there:
+
+| | cells | of all | still wrong | rate |
+|---|---|---|---|---|
+| the seven **AGREE** | 238,559 | 94% | 1,718 | **0.7%** |
+| the seven **SPLIT** | 13,951 | 6% | 3,405 | **24.4%** |
+
+**66% of what is still wrong is where the population cannot agree — a 12.0x
+concentration — and those are exactly the cells the consensus criterion is
+SILENT on, by construction.** A unanimous reference has nothing to say where
+there is no unanimity.
+
+**So the route is exhausted by the specification rather than by the editor.**
+Even a perfect consensus-driven loop could address at most the 34% of the residue
+in agreed cells. The other 66% sits where a targeted reader was measured
+reproducing the population's own wrong answer 7 times in 9 — so no instrument
+drawn from this text resolves it: not a check, not a consensus, not a better
+editor.
+
+**And it explains the floor result mechanically.** The loop drove the error rate
+on cells the criterion *can* see down to **0.7% — below the 0.86% at which the
+reference itself is wrong** — while the part it cannot see stayed wrong at 24.4%.
+Descending through the floor and stalling at `DIFFERS` are one event seen from
+two sides: the loop over-fitted the agreeable half of the behaviour because that
+is the only half its criterion scores.
+
+**One figure here was NOT pre-registered and must not be used as a tiebreak.** At
+raw edges this design is wrong on **5,123** cells against **10,926** for the
+design the 117-check loop produced — which looks decisive for the consensus
+criterion, and is a *third* measure computed afterwards as the input to this
+analysis. The pre-registered pair reads 210 against 236 testpoints and 3,890
+against 3,533 transactional cells. **That is MIXED, and mixed is what stands.**

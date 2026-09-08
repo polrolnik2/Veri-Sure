@@ -1887,3 +1887,45 @@ def the_loop_descended_through_the_reference_designs_own_floor() -> str:
         "correctness satisfies it. Stop on the floor, not on the trial budget, "
         "whenever the floor can be computed."
     )
+
+
+def the_consensus_route_is_bounded_by_the_specification_not_the_editor() -> str:
+    """Where the divergence that SURVIVES a consensus-driven loop actually sits.
+
+    Raw edges, not transactional rows: the transactional view compresses each
+    design independently, so row i of one design is not row i of another, while
+    raw edges share an index because every design was driven by one stimulus.
+    """
+    return (
+        "The design the consensus loop produced, re-scored at raw edges against "
+        "the known-good design over 252,510 (edge, declared output) cells, with "
+        "each cell classified by whether the seven independent implementations "
+        "agree there:\\n\\n"
+        "                        cells    of all   still wrong    rate\\n"
+        "    the seven AGREE   238,559      94%          1,718    0.7%\\n"
+        "    the seven SPLIT    13,951       6%          3,405   24.4%\\n\\n"
+        "**66% OF WHAT IS STILL WRONG IS WHERE THE POPULATION CANNOT AGREE, A "
+        "12.0x CONCENTRATION** -- and those are precisely the cells the "
+        "consensus criterion is SILENT on, by construction. A unanimous "
+        "reference has nothing to say where there is no unanimity.\\n\\n"
+        "**SO THE ROUTE IS EXHAUSTED BY THE SPECIFICATION RATHER THAN BY THE "
+        "EDITOR.** Even a perfect consensus-driven loop could address at most "
+        "the 34% of the residue that lies in agreed cells. The other 66% sits "
+        "where `split_cells_are_a_specification_finding` measured a targeted "
+        "reader reproducing the population's own wrong answer 7 times in 9, so "
+        "no instrument drawn from this text resolves it -- not a check, not a "
+        "consensus, not a better editor.\\n\\n"
+        "**AND IT EXPLAINS THE FLOOR RESULT MECHANICALLY.** The loop drove the "
+        "error rate on cells the criterion CAN see down to 0.7%, which is below "
+        "the 0.86% at which the reference itself is wrong -- it over-fitted the "
+        "agreeable part of the design's behaviour -- while the disagreeable part "
+        "stayed wrong at 24.4%. Descending through the floor and stalling at "
+        "`DIFFERS` are one event seen from two sides.\\n\\n"
+        "**ONE FIGURE HERE WAS NOT PRE-REGISTERED AND MUST NOT BE USED AS A "
+        "TIEBREAK.** At raw edges this design is wrong on 5,123 cells against "
+        "10,926 for the design the 117-check loop produced. That looks decisive "
+        "for the consensus criterion and is a THIRD measure, computed afterwards "
+        "as the input to this analysis. The pre-registered pair -- testpoints "
+        "differing and transactional cells -- reads 210 against 236 and 3,890 "
+        "against 3,533, which is MIXED, and mixed is what stands."
+    )
