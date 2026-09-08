@@ -13,6 +13,7 @@ from specflow.ensemble import (
     check_agreement_is_not_an_oracle,
     conviction_count_is_not_a_descent_criterion,
     soundness_buys_termination_not_correctness,
+    soundness_is_what_makes_the_criterion_work,
     split_cells_are_a_specification_finding,
     strength_and_soundness_are_exchanged_not_traded,
     authoring_populations_are_complementary_not_ordered,
@@ -260,6 +261,25 @@ def test_the_adequacy_gate_is_labelled_calibrated_and_not_a_score():
     assert "do not use it to build the set" in why
 
 
+def test_the_audit_column_is_a_defect_and_not_a_rate_to_trade():
+    # This module quotes a false-reject rate beside every span, which invites
+    # reading it as a price. The matched-pair measurement says otherwise, and
+    # both halves have to travel: the corpus catches the design widely, and
+    # almost none of those catches are sound.
+    why = soundness_is_what_makes_the_criterion_work()
+    assert "129, over 57 of 89 requirements = 64%" in why
+    assert "SOUNDLY WITH EXACTLY ONE CHECK" in why
+    assert "0 objections   ACCEPTED" in why and "1 objection    REJECTED" in why
+
+
+def test_the_matched_pair_claim_is_bounded_to_what_it_shows():
+    # One objection on a badly wrong design is discrimination, not adequacy.
+    # Without this the entry reads as an endorsement of the sound set.
+    why = soundness_is_what_makes_the_criterion_work()
+    assert "not adequacy" in why
+    assert "The claim is" in why and "narrow" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -275,7 +295,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "zero_objections_can_be_incompatible_with_correctness",
                  "authoring_populations_are_complementary_not_ordered",
                  "the_minority_rule_is_precise_and_that_is_what_it_costs",
-                 "adequacy_is_soundness_and_refutability"):
+                 "adequacy_is_soundness_and_refutability",
+                 "soundness_is_what_makes_the_criterion_work"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 

@@ -108,6 +108,14 @@ Composed with the soundness gate it is the first golden-free adequacy instrument
 here, at a 10.7x lift on n = 7. `adequacy_is_soundness_and_refutability` carries
 it, including why it must not be used to SELECT.
 
+AND THE AUDIT COLUMN IS A DEFECT, NOT A RATE TO TRADE AGAINST REACH. Two 68-check
+sets spanning the same 45 of 89 requirements, differing only in whether 7 members
+convict the known-good design: against a design wrong on 200 of 318 testpoints,
+the one with the unsound members scores ZERO objections and accepts it, and the
+perfectly sound one objects. Over the whole corpus 129 bodies catch that design
+across 64% of the specification and exactly ONE of them is sound.
+`soundness_is_what_makes_the_criterion_work` carries it.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -627,6 +635,46 @@ def adequacy_is_soundness_and_refutability() -> str:
         "loop, so keeping it costs nothing, while dropping it loses the 3 adequate "
         "checks among them. Use this to REPORT which members of a set carry its "
         "discrimination; do not use it to build the set."
+    )
+
+def soundness_is_what_makes_the_criterion_work() -> str:
+    """The counterweight to every "over-strictness is the cost of span" reading.
+
+    This module measures soundness as something a set PAYS for -- a false-reject
+    rate quoted beside a span. Measured against a design that a set actually
+    accepted, the sign flips: the unsound members are not a tax on an otherwise
+    working criterion, they are why it stopped working.
+    """
+    return (
+        "Measured on k1 against the design a 68-check golden-free set drove to "
+        "ZERO objections and which the bounded miter calls DIFFERS -- wrong on "
+        "200 of 318 testpoints and on all ten declared outputs. Every one of the "
+        "259 corpus bodies re-decided against its traces:\n\n"
+        "    decide on it                                215 of 259\n"
+        "    OBJECT to it            129, over 57 of 89 requirements = 64%\n"
+        "    of those, inside the set that accepted it     0\n"
+        "    of those, SOUND                               1\n\n"
+        "**THE CORPUS KNOWS THE DESIGN IS WRONG ACROSS 64% OF THE "
+        "SPECIFICATION AND CAN SAY SO SOUNDLY WITH EXACTLY ONE CHECK.** 128 of "
+        "the 129 catches are bought by also condemning the known-good design. "
+        "That is this module's central anti-correlation stated where it costs "
+        "something, rather than as a distribution over a corpus.\n\n"
+        "AND THE ONE SOUND CATCH IS THE ACTIONABLE HALF. Swap the accepting "
+        "set's 7 over-strict members for 7 sound ones -- same 68 checks, same 45 "
+        "of 89 requirements, same 51% span, audit 10% down to 0 -- and the "
+        "resulting set OBJECTS to that design where the original accepted it:\n\n"
+        "    the set with 7 unsound members   0 objections   ACCEPTED\n"
+        "    the perfectly sound set          1 objection    REJECTED\n\n"
+        "So the false-reject rate is not the price of the span. On this pair it "
+        "is the whole difference between a criterion that discriminates and one "
+        "that does not, at identical size and identical coverage. A set's audit "
+        "column should be read as a defect to remove, not as a rate to trade "
+        "against reach.\n\n"
+        "WHAT IT DOES NOT SAY: that the sound set is sufficient. One objection on "
+        "a design wrong on 200 testpoints is discrimination, not adequacy, and "
+        "the sound set's own limit is measured elsewhere here. The claim is "
+        "narrow and it is about the AUDIT COLUMN: unsound members do not merely "
+        "add false rejects, they remove the criterion's ability to reject."
     )
 
 def split_cells_are_a_specification_finding() -> str:
