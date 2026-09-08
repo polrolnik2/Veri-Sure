@@ -137,6 +137,16 @@ sound check in the corpus there are none a better selection could have found.
 `a_perfectly_sound_majority_set_still_false_accepts` carries it, and the residue
 it leaves is check strength rather than any property of the set.
 
+AND GROWING THE CORPUS AND RE-RUNNING IT CHANGES NOTHING. Rebuilt over the
+484-body corpus the authoring rounds produced, the same construction gives 119
+checks over 52 of 89 = 58% at a zero false-reject rate, with 31 discriminating
+members against 18. An editor drove the same held-out design to 0 objections and
+the miter still says DIFFERS -- at 187 of 318 testpoints, with objections,
+testpoints and cells all falling together and one output repaired, so not even a
+wrong gradient is left to blame. The objection rate on exposed decisions is 3.9%
+both times. `a_wider_sound_set_lands_the_same_design_in_the_same_place` carries
+it.
+
 AND THE TWO PROPERTIES CANNOT BE COMPOSED FROM SEPARATE BODIES, WHICH RETIRES
 THE LAST CEILING ARGUMENT HERE. On the 26 requirements holding a sound body and
 a discriminating body that are never the same body, an author shown BOTH and
@@ -986,6 +996,61 @@ def golden_free_span_grew_and_the_precision_did_not_hold() -> str:
         "once it starts shaping one**, which is the same Goodhart the target "
         "round measured directly and is why the audit column must be recomputed "
         "after every authoring round rather than carried forward."
+    )
+
+
+def a_wider_sound_set_lands_the_same_design_in_the_same_place() -> str:
+    """The ceiling result, re-run on the corpus four authoring rounds grew.
+
+    `a_perfectly_sound_majority_set_still_false_accepts` closed the corpus AS IT
+    THEN WAS: no sound body objected to the design that set accepted, so there
+    were none a better rule could have found. Bodies have since been authored
+    that did not exist. This is the same construction over the larger corpus,
+    and it is the only run whose input had changed.
+    """
+    return (
+        "Measured on k1. The set is every body in the 484-body corpus that "
+        "decides on the known-good design and convicts it nowhere -- the same "
+        "construction as before, on a corpus grown by the narrowing, merge and "
+        "band rounds:\n\n"
+        "                       checks   span        *audit*  DISCRIMINATING\n"
+        "    the earlier set       68   45 of 89=51%    *0*        18\n"
+        "    **this one**         119   52 of 89=58%    *0*        31\n\n"
+        "75% more checks, seven more points of span, 72% more discriminating "
+        "members, at the same zero false-reject rate. The extra discrimination "
+        "is real where it can be seen: **12 objections against a held-out design "
+        "at init where the earlier set found 7.**\n\n"
+        "A Sonnet editor through the shipped edit-session policy, on that design "
+        "-- written from the specification by an agent forbidden to open any "
+        "other, and held out of every selection that produced this set -- reached "
+        "**0 objections of 119 on trial 7 of 14**, and the reset-constrained "
+        "bounded miter says **DIFFERS**, with all three grade pins green in the "
+        "same process. The zero-objection design was re-scored from scratch in "
+        "its own run directory, 0 of 119, before any of this was quoted.\n\n"
+        "                    objections   testpoints differing   cells   repaired\n"
+        "    at init            12 of 119    249 of 318 (78%)     2,904    none\n"
+        "    the earlier set     0 of  68    193 of 318 (61%)     2,798    one output\n"
+        "    **this set**        0 of 119    187 of 318 (59%)     2,786    one output\n\n"
+        "**AND THE GRADIENT IS CORRECT THE WHOLE WAY, WHICH IS WHAT MAKES THIS "
+        "THE CLEAN NEGATIVE.** Objections, testpoints and cells all fell "
+        "together and one output was repaired to never differing, with no "
+        "inversion over the final approach -- unlike the earlier over-strict run, "
+        "whose last three objections cost 8 testpoints and 342 cells and broke "
+        "the output it had repaired. Nothing went backwards here and the design "
+        "is still wrong on 59% of the suite.\n\n"
+        "SO EVERY REMAINING EXPLANATION IS EXCLUDED. Not unsoundness (audit zero "
+        "by construction). Not thinness (the widest sound set this corpus has "
+        "produced). Not weak discrimination (31 adequate members against 18). "
+        "Not a wrong gradient (all four measures moved together). Not an editor "
+        "stopping early (7 trials unspent, and its criterion is correct that no "
+        "check objects).\n\n"
+        "**AND THE RESIDUE DID NOT MOVE, TO ONE DECIMAL PLACE.** Judged only on "
+        "the testpoints where a port each check itself reads is wrong: the "
+        "earlier 50-check set objected on 134 of 3,399 exposed decisions = 3.9%; "
+        "this one objects on **300 of 7,677 = 3.9%**. Twice the decisions, twice "
+        "the objections, the identical rate, and the same two checks deciding on "
+        "249 of 249 exposed testpoints without objecting once. **Check strength "
+        "is not a property of a set's size, its span, or its selection rule.**"
     )
 
 

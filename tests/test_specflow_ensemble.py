@@ -24,6 +24,7 @@ from specflow.ensemble import (
     the_two_legs_cannot_be_composed_from_separate_bodies,
     the_adequacy_filter_does_not_survive_being_a_target,
     golden_free_span_grew_and_the_precision_did_not_hold,
+    a_wider_sound_set_lands_the_same_design_in_the_same_place,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -363,7 +364,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "the_soundness_boundary_is_reachable_from_one_side_only",
                  "the_two_legs_cannot_be_composed_from_separate_bodies",
                  "the_adequacy_filter_does_not_survive_being_a_target",
-                 "golden_free_span_grew_and_the_precision_did_not_hold"):
+                 "golden_free_span_grew_and_the_precision_did_not_hold",
+                 "a_wider_sound_set_lands_the_same_design_in_the_same_place"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
@@ -478,6 +480,42 @@ def test_the_precision_loss_is_attributed_to_the_rounds_that_used_the_rule():
     why = golden_free_span_grew_and_the_precision_did_not_hold()
     assert "did not shape" in why
     assert "recomputed" in why
+
+
+def test_the_rerun_names_what_changed_about_the_set():
+    # "we re-ran it and got the same answer" is only worth recording if the input
+    # actually differed. The row pair is what makes this a second experiment
+    # rather than a repetition.
+    why = a_wider_sound_set_lands_the_same_design_in_the_same_place()
+    assert "the earlier set       68   45 of 89=51%    *0*        18" in why
+    assert "**this one**         119   52 of 89=58%    *0*        31" in why
+    assert "12 objections against a held-out design" in why
+
+
+def test_the_rerun_excludes_a_wrong_gradient_explicitly():
+    # The earlier over-strict run failed with an INVERTED gradient, which left
+    # "the set mis-steered it" available as an explanation. This run has no
+    # inversion, and the text has to say so or the negative is weaker than it is.
+    why = a_wider_sound_set_lands_the_same_design_in_the_same_place()
+    assert "no\ninversion over the final approach" in why or "inversion" in why
+    assert "Not a wrong gradient" in why
+    assert "7 trials unspent" in why
+
+
+def test_the_rerun_reports_the_grade_with_its_pins_and_a_clean_rescore():
+    # A verdict quoted without its pins is the defect that produced a spurious
+    # UNKNOWN here once, and a verdict taken in a directory a commit overwrote is
+    # the compare-a-design-against-itself defect. Both guards are in the text.
+    why = a_wider_sound_set_lands_the_same_design_in_the_same_place()
+    assert "all three grade pins green" in why
+    assert "re-scored from scratch in " in why
+
+
+def test_the_residue_is_unchanged_and_that_is_the_conclusion():
+    why = a_wider_sound_set_lands_the_same_design_in_the_same_place()
+    assert "134 of 3,399 exposed decisions = 3.9%" in why
+    assert "300 of 7,677 = 3.9%" in why
+    assert "not a property of a set" in why
 
 
 def test_the_definition_of_sound_requires_the_check_to_decide():
