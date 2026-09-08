@@ -988,3 +988,75 @@ not touch it while that agent holds it** — and it belongs beside the other
 harness rules this plan has had to learn by breaking them: select over the same
 corpus the score was taken over, re-score in a fresh directory rather than
 comparing a design against itself, and give every arm the same row list.
+
+## THE PRIZE IS 69% AND THE UNIT OF JUDGEMENT IS WHAT KEEPS IT AT 19%
+
+Every measurement on this plan judges a check as a WHOLE BODY. A requirement's
+sentence states several obligations, and a body asserting three of them convicts
+a design if ANY of the three is violated — so **one over-reaching obligation
+makes the body unsound and takes its other two down with it.**
+
+Asked without authoring anything, by partitioning each body's convictions by the
+DETAIL STRING it itself emitted. 547 authored bodies, 481 of which decide on both
+the reference and held-out L.
+
+| | |
+|---|---|
+| bodies that are UNSOUND **and** DISCRIMINATING — the class a split can rescue | **307** |
+| **requirements they span** | **61 of 89 = 69%** |
+| requirements with an adequate body today | 17 of 89 = 19% |
+
+**69% AGAINST 19% IS THE SIZE OF THE PRIZE.** It is this document's central
+anti-correlation asked as a granularity question instead of as a distribution:
+the discrimination for two thirds of the specification **is already authored**,
+sitting inside bodies whose soundness a single obligation ruins.
+
+### The measured ceiling is +4, and it is GOLDEN-SELECTED
+
+Keep only the reasons a body fires with on the held-out design and never on the
+reference:
+
+| requirement | the obligation to KEEP | the obligation to DROP |
+|---|---|---|
+| REQ-0016 | `saved_addr[…] not incremented` | `first_miss_ack not asserted` |
+| REQ-0021 | cache-inhibited store asserted `dcram_we` | …asserted `tag_we` |
+| REQ-0074 | FSM did not reach idle after the final refill word | load flag not cleared |
+| REQ-0084 | store BIU error: `biu_write` not cleared | store ABORT: `biu_write` not cleared |
+
+**Adequacy 17 → 21 of 89, 19% → 24%.** Choosing which reason to drop reads the
+reference, so this is a ceiling in exactly the sense MAXSOUND is and **never a
+score.** The golden-free form — keep a reason objecting to a MINORITY of the
+candidate population, the minority rule applied per REASON instead of per BODY —
+is not measured here.
+
+### And the ceiling is itself a FLOOR, because the instrument is 78% blind
+
+| of the 307 eligible bodies | |
+|---|---|
+| emit **one** message for every conviction they ever make | **239 = 78%** |
+| name more than one | 68 |
+| of those 68, one reason fires only on the held-out design | **24 = 35%** |
+
+At the requirement level the instrument sees **24 of the 61 eligible = 39%**, and
+of those 24 nine carry a held-out-only reason (38%), four of them new.
+
+**WHAT BLINDS IT IS THE DETAIL STRING THE AUTHOR CHOSE, NOT THE CHECK.** A body
+asserting three obligations behind one message cannot be cut along them by
+anything reading its output. That is a reporting defect and it is free to fix:
+**require every objection to name the obligation it fires on.** It costs an
+author nothing and takes this instrument from 39% coverage to 100%.
+
+### Even the optimistic extrapolation stops short of a majority
+
+At the observed 38% over all 61 eligible requirements the split would reach
+roughly **31 of 89 = 35%**, against the 45 a majority needs. That is an ESTIMATE
+and not a measurement — the 37 requirements the instrument cannot see may split
+at a different rate, and a body whose obligations share one `if` cannot be cut at
+all whatever it prints.
+
+### It is the ratchet finding at the other end of the pipeline
+
+The ratchet defect above is a criterion coarser than the EDITS being made, and it
+rejects correct work. This is a criterion coarser than the OBLIGATIONS being
+asserted, and it rejects correct assertions. Both say one thing: **the unit you
+JUDGE at should not be forced to be the unit you AUTHOR at.**

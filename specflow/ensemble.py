@@ -194,6 +194,19 @@ directory written by two agents at once yields a design, a state file and a scor
 that describe different moments, with nothing in it saying so;
 `a_run_directory_written_by_two_agents_is_not_a_measurement` carries the tell and
 the only remedy, which is to archive it unread and start again.
+
+AND THE SAME GRANULARITY QUESTION HAS A SECOND HALF, AT THE OTHER END OF THE
+PIPELINE. Every judgement here is of a WHOLE BODY, and a requirement states
+several obligations, so one over-reaching obligation makes a body unsound and
+takes its others down with it. 307 bodies are unsound AND discriminating and
+they span 61 of 89 requirements = 69%, against 17 = 19% with an adequate body --
+which is the size of the prize. Splitting each body along the objection reasons
+it itself emits buys +4 requirements, is GOLDEN-SELECTED and therefore a ceiling,
+and is blind to 78% of its own population because that many bodies print one
+message for every conviction they make. What blinds it is the author's detail
+string rather than the check, which is free to fix.
+`a_body_is_judged_whole_and_its_obligations_are_not` carries it, including why
+even the optimistic extrapolation stops short of a majority.
 """
 from __future__ import annotations
 
@@ -1657,4 +1670,63 @@ def a_run_directory_written_by_two_agents_is_not_a_measurement() -> str:
         "breaking them: select over the same corpus the score was taken over, "
         "re-score in a fresh directory rather than comparing a design against "
         "itself, and give every arm the same row list."
+    )
+
+
+def a_body_is_judged_whole_and_its_obligations_are_not() -> str:
+    """Every judgement on this plan is of a WHOLE BODY, and a requirement's
+    sentence states several obligations.
+
+    A body asserting three of them convicts a design if ANY of the three is
+    violated, so ONE over-reaching obligation makes the body unsound and takes
+    the other two down with it. This asks, without authoring anything, whether
+    the adequate cell is reachable at obligation granularity where it is not at
+    body granularity -- by partitioning each body's convictions by the DETAIL
+    STRING it itself emitted.
+    """
+    return (
+        "Measured over 547 authored bodies, 481 of which decide on both the "
+        "known-good design and held-out L. The class a split can rescue is the "
+        "UNSOUND AND DISCRIMINATING one -- it convicts the known-good design "
+        "somewhere and the held-out design elsewhere:\n\n"
+        "    bodies in that class                              307\n"
+        "    requirements they span                    61 of 89 = 69%\n"
+        "    requirements with an adequate body today  17 of 89 = 19%\n\n"
+        "**69% AGAINST 19% IS THE SIZE OF THE PRIZE**, and it is the same "
+        "anti-correlation this module is about, seen as a granularity question "
+        "rather than as a distribution: the discrimination for two thirds of "
+        "the specification is already authored, inside bodies whose soundness "
+        "one obligation ruins.\n\n"
+        "**THE MEASURED CEILING IS +4 REQUIREMENTS AND IT IS GOLDEN-SELECTED.** "
+        "Keeping only the reasons a body fires with on the held-out design and "
+        "never on the known-good one -- REQ-0016, REQ-0021, REQ-0074, REQ-0084 "
+        "-- takes adequacy 17 -> 21 of 89, 19% -> 24%. Choosing WHICH reason to "
+        "drop reads the known-good design, so this is a ceiling in the sense "
+        "MAXSOUND is, never a score. The golden-free form -- keep a reason that "
+        "objects to a minority of the candidate population, the minority rule "
+        "applied per REASON instead of per BODY -- is not measured here.\n\n"
+        "**AND THE CEILING IS ITSELF A FLOOR, BECAUSE THE INSTRUMENT IS BLIND TO "
+        "78% OF ITS OWN POPULATION.** 239 of the 307 bodies emit ONE message for "
+        "every conviction they ever make, so a body asserting several "
+        "obligations behind one string cannot be cut along them by anything "
+        "reading its output. At the requirement level the instrument sees 24 of "
+        "the 61 eligible requirements = 39%.\n\n"
+        "    of the 24 it can see, a reason fires only on the held-out design  9 = 38%\n"
+        "    of those 9, requirements with no adequate body today             4\n\n"
+        "**WHAT BLINDS IT IS THE DETAIL STRING THE AUTHOR CHOSE, NOT THE "
+        "CHECK.** That is a reporting defect and it is free to fix: require "
+        "every objection to name the obligation it fires on, which costs an "
+        "author nothing and takes this instrument from 39% coverage to 100%.\n\n"
+        "**AND EVEN THE OPTIMISTIC EXTRAPOLATION DOES NOT REACH A MAJORITY.** At "
+        "the observed 38% over all 61 eligible requirements the split would "
+        "reach roughly 31 of 89 = 35%, against the 45 a majority needs. That is "
+        "an ESTIMATE and not a measurement -- the 37 requirements the instrument "
+        "cannot see may split at a different rate, and a body whose obligations "
+        "share one `if` cannot be cut at all whatever it prints.\n\n"
+        "This is `a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` at "
+        "the other end of the pipeline. There a criterion coarser than the edits "
+        "being made rejects correct work; here a criterion coarser than the "
+        "obligations being asserted rejects correct assertions. Both say the "
+        "same thing: the unit you JUDGE at should not be forced to be the unit "
+        "you AUTHOR at."
     )

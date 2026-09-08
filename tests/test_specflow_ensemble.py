@@ -789,3 +789,27 @@ def test_the_module_docstring_carries_the_two_driver_findings():
     d = ensemble.__doc__ or ""
     assert "a_ratchet_on_counts_refuses_an_improvement_it_cannot_see" in d
     assert "a_run_directory_written_by_two_agents_is_not_a_measurement" in d
+
+
+def test_the_obligation_ceiling_is_labelled_golden_selected():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "GOLDEN-SELECTED" in t
+    assert "ceiling in the sense MAXSOUND is, never a score" in t
+
+
+def test_the_obligation_instrument_reports_its_own_blindness():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "BLIND TO 78% OF ITS OWN POPULATION" in t
+    assert "39%" in t
+
+
+def test_the_obligation_extrapolation_is_marked_an_estimate():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "DOES NOT REACH A MAJORITY" in t
+    assert "an ESTIMATE and not a measurement" in t
+
+
+def test_the_obligation_finding_names_the_prize_and_the_prescription():
+    t = ensemble.a_body_is_judged_whole_and_its_obligations_are_not()
+    assert "61 of 89 = 69%" in t
+    assert "name the obligation it fires on" in t
