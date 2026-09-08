@@ -22,6 +22,7 @@ from specflow.ensemble import (
     the_minority_rule_is_precise_and_that_is_what_it_costs,
     the_soundness_boundary_is_reachable_from_one_side_only,
     the_two_legs_cannot_be_composed_from_separate_bodies,
+    the_adequacy_filter_does_not_survive_being_a_target,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -359,7 +360,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "soundness_is_what_makes_the_criterion_work",
                  "a_perfectly_sound_majority_set_still_false_accepts",
                  "the_soundness_boundary_is_reachable_from_one_side_only",
-                 "the_two_legs_cannot_be_composed_from_separate_bodies"):
+                 "the_two_legs_cannot_be_composed_from_separate_bodies",
+                 "the_adequacy_filter_does_not_survive_being_a_target"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
@@ -400,6 +402,41 @@ def test_the_merge_round_states_the_prompt_defect_and_bounds_it():
     why = the_two_legs_cannot_be_composed_from_separate_bodies()
     assert "declared-port block" in why
     assert "22 of the 26 dropped no" in why
+
+
+def test_the_target_round_says_what_the_band_actually_contains():
+    # "2 of 24 reached the band" alone reads as a weak round. The result is that
+    # BOTH of the two are sound and NEITHER discriminates, which is what makes it
+    # a statement about the rule rather than about the authors.
+    why = the_adequacy_filter_does_not_survive_being_a_target()
+    assert "both are sound and NEITHER" in why
+    assert "CONVICTS 12 OF 13 -- OUTSIDE THE BAND" in why
+
+
+def test_the_target_round_does_not_blame_the_feedback():
+    # If the count were simply unusable the finding would be about the signal's
+    # legibility, not about what it points at. The text has to record that the
+    # distribution moved, or the negative overstates itself.
+    why = the_adequacy_filter_does_not_survive_being_a_target()
+    assert "The distribution moved" in why
+    assert "five do after" in why
+
+
+def test_the_marginal_minimum_is_carried_for_all_three_rounds():
+    # One round at the marginal floor is a coincidence; three is the structure.
+    # Dropping any row turns the claim back into a tally of low yields.
+    why = the_adequacy_filter_does_not_survive_being_a_target()
+    for row in ("strength   -- blind, assert MORE  34     11     21    32    0    0",
+                "merge      -- both ends shown     26      8     18    26    0    0",
+                "band       -- numeric target      24     10     15    25    1    1"):
+        assert row in why
+    assert "6.8, " in why and "5.5 and 6.2 expected under independence" in why
+
+
+def test_the_third_four_percent_is_recorded_beside_the_other_two():
+    why = the_adequacy_filter_does_not_survive_being_a_target()
+    assert "1 of 28" in why and "1 of 24" in why
+    assert "24 to 25 " in why
 
 
 def test_the_definition_of_sound_requires_the_check_to_decide():

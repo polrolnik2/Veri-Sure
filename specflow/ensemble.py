@@ -140,6 +140,16 @@ two legs separately counts a vacuous body as half a check and an over-strict
 body as the other half. `the_two_legs_cannot_be_composed_from_separate_bodies`
 carries it.
 
+AND THE BEST GOLDEN-FREE FILTER HERE DOES NOT SURVIVE BEING A TARGET, WHICH
+CLOSES THE AUTHORING ROUTE. Given to 24 authors as a stated numeric goal with
+each check's own measured count fed back, "objects to 1 or 2 of 13" drove two
+into the band -- both sound, neither discriminating -- and the round's one
+adequate check convicts 12 of 13, so the rule would have rejected it. The count
+is a soundness signal, and there is no second golden-free signal for the other
+leg. `the_adequacy_filter_does_not_survive_being_a_target` carries it, together
+with the through-line all three authoring rounds share: every one lands on the
+overlap its own marginals force and never above it.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -866,6 +876,62 @@ def the_two_legs_cannot_be_composed_from_separate_bodies() -> str:
         "probe and none of those is adequate either. And it is one author, one "
         "round, one design, at the first-attempt rate -- which on this plan has "
         "always been the high one."
+    )
+
+
+def the_adequacy_filter_does_not_survive_being_a_target() -> str:
+    """What happens when the best golden-free filter here is optimised for.
+
+    `adequacy_is_soundness_and_refutability` measures "objects to 1 or 2 of 13"
+    at 86% precision on adequacy as a FILTER over checks that landed there by
+    themselves, and says outright it must not be used to SELECT. This measures
+    the stronger misuse -- handing it to an author as a TARGET, with the check's
+    own measured count fed back so it can tell which way it overshot.
+    """
+    return (
+        "Measured on k1, on 24 checks whose conviction count over 13 "
+        "independently written implementations sat outside the band. Each author "
+        "got its own body, its measured count, the direction to move, the target "
+        "stated as a number, and the complete declared-port list. Integrity: 24 "
+        "of 24 returned, 24 of 24 compile, 0 duplicates, 0 unchanged.\n\n"
+        "                                  before   after\n"
+        "    IN BAND -- convicts 1-2 of 13      0       2\n"
+        "    SOUND                              7      10\n"
+        "    DISCRIMINATING                    17      15\n"
+        "    **ADEQUATE**                       0   **1**\n\n"
+        "AND THE TWO THAT REACHED THE BAND SETTLE WHAT THE BAND IS. One convicts "
+        "2 of 13 and one convicts 1; **both are sound and NEITHER "
+        "discriminates**. The rule delivers the leg it was built on and does not "
+        "deliver the other one when it is aimed at rather than filtered with.\n\n"
+        "AND THE ONE ADEQUATE CHECK CONVICTS 12 OF 13 -- OUTSIDE THE BAND, so "
+        "the rule would have rejected the only check the round produced that "
+        "works. Both halves fail in the same round on the same population: it "
+        "does not drive authors to adequacy, and it does not select the adequate "
+        "check when one appears.\n\n"
+        "THE FEEDBACK IS NOT THE PROBLEM, AND SAYING SO KEEPS THE NEGATIVE "
+        "HONEST. The distribution moved: one check sat between 1 and 5 "
+        "convictions before the round and five do after. An author handed the "
+        "count can steer. It steers into a region that is sound and blind, "
+        "because the count is a soundness signal and there is no second "
+        "golden-free signal for the other leg -- discrimination is defined "
+        "against a design that is wrong, and every wrong design available is "
+        "drawn from the same specification-and-reader pair.\n\n"
+        "AND IT IS THE THIRD CONSECUTIVE ROUND TO LAND ON THE MARGINAL MINIMUM, "
+        "which is the structural claim this module has been circling:\n\n"
+        "    round                              n   SOUND  DISCR  S+D  min  OBS\n"
+        "    strength   -- blind, assert MORE  34     11     21    32    0    0\n"
+        "    merge      -- both ends shown     26      8     18    26    0    0\n"
+        "    band       -- numeric target      24     10     15    25    1    1\n\n"
+        "**Three rounds, three instructions, three populations, and every one "
+        "lands exactly on the floor its own marginals permit** -- against 6.8, "
+        "5.5 and 6.2 expected under independence. No round here has ever "
+        "produced an overlap larger than arithmetic forces. The two properties "
+        "are not merely anti-correlated across a corpus; they are exchanged one "
+        "for one by whatever edit the author makes.\n\n"
+        "AND THE ADEQUACY RATE IS 4% FOR THE THIRD TIME. Repair round 2 landed 1 "
+        "of 28, narrowing round 2 landed 1 of 28, and this lands 1 of 24 -- "
+        "three levers, three different objections, one figure. Adequacy 24 to 25 "
+        "of 89 = 28%, against the 45 a majority needs."
     )
 
 
