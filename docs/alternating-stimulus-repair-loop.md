@@ -775,3 +775,66 @@ were already kept), not stimulus (348 testpoints, the design driven wrong on
 checks), and not the gradient (objections, cells and testpoints all fell within
 the run). **It is what a check ASSERTS: a fragment of its requirement, satisfied
 by designs that violate the rest of the sentence.**
+
+## The strength round, GATED: 3 of 40, and the gate is the whole difference
+
+The residue is 0.0%, and its mechanism is that a check asserts a FRAGMENT of its
+sentence. The one lever aimed at that was measured once at **34 of 34 crossing
+into over-strictness and 0 landing** — and that round banked every crossing as a
+loss. Re-run with the accept gate, on the 40 requirements whose keep-set member
+convicts none of the seven:
+
+    accept iff the new body convicts 1 to 3 of the seven AND the old convicted 0
+
+| | |
+|---|---|
+| calls | 40 |
+| **accepted by the gate** | **3 = 8%** — all three SOUND, two of them ADEQUATE |
+| crossed to over-strict and were discarded | **21** |
+| still convict none, discarded | 16 |
+
+**THE GATE IS THE ENTIRE DIFFERENCE BETWEEN THIS AND THE ROUND THAT FAILED.**
+Banking every body would have taken the round's false-reject count from **0 to 19
+of 40**; the gate keeps **0**. The authors did not get better — 21 of 40 still
+crossed, exactly as before. What changed is that crossing now costs nothing.
+
+**By the pre-registered bar this lands at 1-4: real, marginal, record the rate
+and do not build on it.** No further editor run was dispatched on it, which is
+what the bar says to do and is recorded here because moving a bar after seeing
+the number is the defect this document exists to prevent.
+
+### A prompt defect, mine, and it biases AGAINST the round
+
+The prompt enumerated the declared OUTPUTS and the probes and said *"do not
+invent any other signal name"* — **and never enumerated the declared INPUTS**,
+though it said in the same breath that every row carries them. One author said so
+outright, calling a declared input "NOT in the declared interface".
+
+Measured: **11 of 40 strengthened bodies dropped an input the old body read**, 5
+added one, 27 kept everything they had. A check that drops an input it needs
+asserts LESS, which is the opposite of what the round asks for, **so 3 of 40 is a
+floor and the round is not a clean test of the lever.** Recorded rather than
+re-run, because re-running it would be a second sample of the same population and
+the bar has already been read.
+
+## THE FINAL GOLDEN-FREE SCORE
+
+Selected by a rule that reads only seven independently written spec-derived
+designs and mechanical mutants of one. The audit is computed last and feeds
+nothing.
+
+| | |
+|---|---|
+| **checks** | **117** |
+| **requirements spanned** | **50 of 89 = 56% — a majority** |
+| *audit: convict the known-good design* | ***13 = 11%*** |
+| *adequate — sound AND catching a design held out of everything* | ***17 = 19% of 89*** |
+| of the set, refutable — convicts 1 to 3 of the seven | 31 |
+
+**And the validation it does not pass, stated beside it as the pair demands.** A
+Sonnet editor on a design written from the specification and held out of every
+selection drives this set from 25 objections to 2 in 4 of 14 trials, satisfying
+**every sound check it contains**; the two it cannot clear are the two the audit
+calls unsound, disproved by counting rather than argued. The bounded miter says
+`DIFFERS` at 236 of 348 testpoints, and the set objects **0 times in 6,542
+decisions where a port it reads is wrong.**

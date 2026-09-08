@@ -718,3 +718,21 @@ def test_the_majority_validation_says_span_is_not_the_target():
     t = ensemble.a_majority_span_set_satisfied_in_full_is_still_not_equivalent()
     assert "Span is not the quantity to optimise" in t
     assert "every SOUND check the set contains" in t
+
+
+def test_the_gate_is_credited_and_the_authors_are_not():
+    t = ensemble.a_gate_makes_a_failing_repair_free_without_making_it_work()
+    assert "THE ENTIRE DIFFERENCE FROM THE ROUND THAT FAILED" in t
+    assert "The authors did not improve" in t
+
+
+def test_the_gated_round_honours_its_pre_registered_bar():
+    t = ensemble.a_gate_makes_a_failing_repair_free_without_making_it_work()
+    assert "no further validation run was dispatched" in t
+    assert "Moving a bar after seeing the number" in t
+
+
+def test_the_gated_round_reports_its_own_prompt_defect():
+    t = ensemble.a_gate_makes_a_failing_repair_free_without_making_it_work()
+    assert "11 of 40 strengthened bodies dropped an input" in t
+    assert "3 of 40 is a FLOOR" in t

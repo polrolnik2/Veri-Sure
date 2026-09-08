@@ -1474,3 +1474,42 @@ def a_majority_span_set_satisfied_in_full_is_still_not_equivalent() -> str:
         "satisfied in full, and certify a design wrong on two thirds of its "
         "observable behaviour."
     )
+
+
+def a_gate_makes_a_failing_repair_free_without_making_it_work() -> str:
+    """The strength lever, re-run with an accept gate, and what the gate buys.
+
+    Strength repair -- ask an author to assert every obligation in its
+    requirement's sentence -- is the only lever aimed at what
+    `the_residue_is_check_strength` names. It was measured once at 34 of 34
+    crossing into over-strictness and 0 landing.
+    """
+    return (
+        "Measured on k1 over 40 requirements whose keep-set check convicts NONE "
+        "of seven independently written spec-derived designs. Gate: accept iff "
+        "the new body convicts 1 to 3 of the seven and the old convicted 0 -- a "
+        "conviction count, so golden-free.\n\n"
+        "    calls                                40\n"
+        "    ACCEPTED by the gate                  3 = 8%, all sound, two adequate\n"
+        "    crossed to over-strict, discarded    21\n"
+        "    still convict none, discarded        16\n\n"
+        "**THE GATE IS THE ENTIRE DIFFERENCE FROM THE ROUND THAT FAILED.** "
+        "Banking every body would have taken this round's false-reject count "
+        "from 0 to 19 of 40; the gate keeps 0. The authors did not improve -- 21 "
+        "of 40 still crossed, as 34 of 34 did before. What changed is that "
+        "crossing now costs nothing, so a lever that lands 8% is worth running "
+        "and a lever that lands 8% ungated is not.\n\n"
+        "**AND 8% IS NOT ENOUGH TO BUILD ON.** The pre-registered bar was 5 of 40 "
+        "to justify re-validating the set; 3 lands in the band that says record "
+        "the rate and stop, and no further validation run was dispatched. Moving "
+        "a bar after seeing the number is the defect this module's history is "
+        "made of.\n\n"
+        "A PROMPT DEFECT IN THIS ROUND, AND IT BIASES AGAINST IT. The prompt "
+        "enumerated the declared outputs and probes, said 'do not invent any "
+        "other signal name', and never enumerated the declared INPUTS -- one "
+        "author called a declared input 'NOT in the declared interface'. **11 of "
+        "40 strengthened bodies dropped an input the old body read.** A check "
+        "that drops an input it needs asserts LESS, which is the opposite of what "
+        "the round asks, so 3 of 40 is a FLOOR and this is not a clean test of "
+        "the lever."
+    )
