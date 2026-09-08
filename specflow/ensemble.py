@@ -130,6 +130,16 @@ sound check in the corpus there are none a better selection could have found.
 `a_perfectly_sound_majority_set_still_false_accepts` carries it, and the residue
 it leaves is check strength rather than any property of the set.
 
+AND THE TWO PROPERTIES CANNOT BE COMPOSED FROM SEPARATE BODIES, WHICH RETIRES
+THE LAST CEILING ARGUMENT HERE. On the 26 requirements holding a sound body and
+a discriminating body that are never the same body, an author shown BOTH and
+told in numbers where the answer sits between them landed 0 adequate of 26 --
+and 8 sound + 18 discriminating = 26 = n, so the two sets came out exactly
+disjoint, at the minimum the marginals allow. A ceiling computed by counting the
+two legs separately counts a vacuous body as half a check and an over-strict
+body as the other half. `the_two_legs_cannot_be_composed_from_separate_bodies`
+carries it.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -796,6 +806,68 @@ def the_soundness_boundary_is_reachable_from_one_side_only() -> str:
         "majority needs. **Authoring does not reach a majority on this corpus, "
         "and that is now a decay curve rather than a tally of failed rounds.**"
     )
+
+def the_two_legs_cannot_be_composed_from_separate_bodies() -> str:
+    """Why "both legs exist for N requirements" is not "N is reachable".
+
+    `the_soundness_boundary_is_reachable_from_one_side_only` measures a check
+    moved across the boundary from each side and reads the asymmetry as a
+    prescription. This measures the one configuration neither round had: an
+    author shown BOTH ends for the same requirement, and told in numbers where
+    the answer sits between them.
+    """
+    return (
+        "Measured on k1, on the 26 requirements where the corpus holds a body "
+        "that is SOUND and a body that DISCRIMINATES and never the same body. "
+        "One author per requirement, shown both, told each body's conviction "
+        "count over 13 independently written implementations, and told outright "
+        "that the check the requirement needs objects to a MINORITY of the 13 "
+        "and to more than zero. Both failure modes named. Integrity: 26 of 26 "
+        "returned, 26 of 26 compile, 0 duplicate bodies across requirements, and "
+        "0 returned either input unchanged.\n\n"
+        "                     INPUT A   INPUT B   THE MERGE\n"
+        "    SOUND                 26         0           8\n"
+        "    DISCRIMINATING         0        26          18\n"
+        "    **ADEQUATE**           0         0       **0**\n\n"
+        "AND ZERO IS THE MINIMUM THE MARGINALS ALLOW, WHICH IS THE CLAIM. "
+        "8 + 18 = 26 = n, so the two sets COULD have been disjoint and they "
+        "are, exactly: every merge is sound XOR discriminating, never both and "
+        "never neither. The overlap expected under independence is 5.5.\n\n"
+        "THAT IS THE SECOND ROUND TO LAND ON THE MARGINAL MINIMUM, and it is "
+        "tighter than the first. The strength round's 11 + 21 = 32 of 34 left "
+        "two requirements free to fall in neither cell; this leaves none.\n\n"
+        "AND THE TARGET WAS STATED IN NUMBERS, SO THIS IS NOT A READING "
+        "FAILURE. Where the 26 landed on the scale the prompt named: SIX at 0 "
+        "convictions of 13, THREE in the 2-4 band the prompt asked for, and "
+        "SEVENTEEN at 10-13. **Three hit the band and none of the three is "
+        "adequate** -- two are sound and catch no held-out design, one is "
+        "unsound and narrow. The minority rule identifies a SOUNDNESS band; "
+        "landing in it buys soundness and buys no discrimination.\n\n"
+        "THE EXCHANGE IS EXACT ON THE ONE OBJECTION THAT MATTERS. 18 of the 26 "
+        "discriminating inputs object to the design the largest perfectly sound "
+        "set accepted at zero objections; after the merge 16 still do, and "
+        "every one of the 16 is over-strict, so not one can enter a sound set. "
+        "The merges that became sound are exactly the merges that stopped "
+        "objecting to it.\n\n"
+        "SO A CEILING COMPUTED BY COUNTING THE TWO LEGS SEPARATELY DOES NOT "
+        "TRANSFER. Over this corpus a sound body exists for 52 of 89 "
+        "requirements and a discriminating body for 64, with both present in "
+        "different bodies for 50 -- and that 50 counts a vacuous body as half "
+        "an adequate check and an over-strict body as the other half. They do "
+        "not compose. **Read every 'both legs exist' figure as an upper bound "
+        "on a quantity that is not reachable by combining them.**\n\n"
+        "TWO LIMITS, AND NEITHER EXPLAINS THE RESULT. The prompt listed the "
+        "ports each input reads but not the contract's declared-port block, so "
+        "some authors described a DECLARED probe as a signal that does not "
+        "exist: 11 of 15 probe-bearing pairs kept one, 4 dropped every one, 1 "
+        "added one -- far better than the 12 of 12 a repair round drops, and "
+        "the clause that did it is 'use only the ports the two checks already "
+        "read'. It cannot explain 0 of 26, because 22 of the 26 dropped no "
+        "probe and none of those is adequate either. And it is one author, one "
+        "round, one design, at the first-attempt rate -- which on this plan has "
+        "always been the high one."
+    )
+
 
 def split_cells_are_a_specification_finding() -> str:
     """Why a disagreement cell is escalated, never resolved automatically.

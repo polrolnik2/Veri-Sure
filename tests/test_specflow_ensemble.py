@@ -21,6 +21,7 @@ from specflow.ensemble import (
     zero_objections_can_be_incompatible_with_correctness,
     the_minority_rule_is_precise_and_that_is_what_it_costs,
     the_soundness_boundary_is_reachable_from_one_side_only,
+    the_two_legs_cannot_be_composed_from_separate_bodies,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -357,8 +358,48 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "adequacy_is_soundness_and_refutability",
                  "soundness_is_what_makes_the_criterion_work",
                  "a_perfectly_sound_majority_set_still_false_accepts",
-                 "the_soundness_boundary_is_reachable_from_one_side_only"):
+                 "the_soundness_boundary_is_reachable_from_one_side_only",
+                 "the_two_legs_cannot_be_composed_from_separate_bodies"):
         assert name in doc, f"{name} is unreachable from the module docstring"
+
+
+def test_the_merge_round_reports_zero_and_says_zero_is_the_floor():
+    # "0 of 26" alone reads as a weak round. The claim is stronger and rests on
+    # the marginals: 8 sound + 18 discriminating = 26 = n, so the sets COULD be
+    # disjoint and are. Dropping that arithmetic turns a structural result into
+    # a tally, which is the retraction this module exists to prevent.
+    why = the_two_legs_cannot_be_composed_from_separate_bodies()
+    assert "**ADEQUATE**           0         0       **0**" in why
+    assert "8 + 18 = 26 = n" in why
+    assert "MINIMUM THE MARGINALS ALLOW" in why
+    assert "5.5" in why                      # the independence expectation
+
+
+def test_the_merge_round_records_that_the_target_was_stated_in_numbers():
+    # The result only means what it says if the author was told where the answer
+    # sits. If the prompt merely gestured at "between", 0 of 26 would measure the
+    # instruction rather than the task.
+    why = the_two_legs_cannot_be_composed_from_separate_bodies()
+    assert "MINORITY of the 13" in why
+    assert "Three hit the band and none of the three is" in why
+
+
+def test_the_merge_round_retires_the_ceiling_that_licensed_it():
+    # The round was run because 50 of 89 requirements hold both legs in different
+    # bodies. Reporting the negative without retiring that arithmetic leaves the
+    # next reader free to re-derive the same unreachable ceiling.
+    why = the_two_legs_cannot_be_composed_from_separate_bodies()
+    assert "50" in why and "upper bound" in why
+    doc = ensemble.__doc__ or ""
+    assert "exactly\ndisjoint" in doc
+
+
+def test_the_merge_round_states_the_prompt_defect_and_bounds_it():
+    # A round with a defect in its own prompt must say so, and must say why the
+    # defect cannot carry the result -- otherwise the negative is unfalsifiable.
+    why = the_two_legs_cannot_be_composed_from_separate_bodies()
+    assert "declared-port block" in why
+    assert "22 of the 26 dropped no" in why
 
 
 def test_the_definition_of_sound_requires_the_check_to_decide():
