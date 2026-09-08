@@ -70,7 +70,11 @@ set does have and the one it does not, and
 `the_residue_is_check_strength` for where the remaining gap actually is
 once span, stimulus and volume have each been excluded by measurement, and
 `strength_and_soundness_are_exchanged_not_traded` for what happens when you
-attack that residue directly.
+attack that residue directly -- and
+`the_soundness_boundary_is_reachable_from_one_side_only` for the correction that
+makes that partition actionable, because the boundary turns out to be findable
+from the over-strict side (7 of 47) and not from the weak side (0 of 34),
+p = 0.0196. Author strict and narrow; never author weak and strengthen.
 
 AND THE STOPPING POINT IS WORSE THAN WEAK, WHICH IS THE ONE A LOOP AUTHOR MUST
 READ BEFORE ANY OF THE ABOVE. On a set carrying even one check the known-good
@@ -730,6 +734,48 @@ def a_perfectly_sound_majority_set_still_false_accepts() -> str:
         "and never decide, seven object, and **54 decide where their own port is "
         "wrong and pass**, at 134 objections in 4,804 exposed decisions = 2.8%. "
         "See `the_residue_is_check_strength`."
+    )
+
+def the_soundness_boundary_is_reachable_from_one_side_only() -> str:
+    """The one prescription this module produces, and it corrects its own claim.
+
+    `strength_and_soundness_are_exchanged_not_traded` measures 34 checks widened
+    across the soundness boundary with 0 landing in between, and reads that as a
+    partition -- the boundary is not findable. Measured from the OTHER side it is
+    findable, and the asymmetry is the actionable result.
+    """
+    return (
+        "Measured on k1, on the two rounds that move a single check across the "
+        "same boundary in opposite directions, by the same author family, one "
+        "edit each:\n\n"
+        "    STRENGTH   sound and blind -> assert MORE   34 checks,  0 adequate =  0%\n"
+        "    NARROWING  over-strict -> assert LESS       47 checks,  7 adequate = 15%\n\n"
+        "**Two-sided Fisher exact p = 0.0196.** The boundary is reachable from the "
+        "over-strict side and not from the weak side.\n\n"
+        "WHY THE POPULATIONS ARE COMPARABLE, since that is what the claim rests "
+        "on. Both are single-edit repairs of an existing body, both are Haiku, "
+        "both got an admissible objection that reads only spec-derived designs -- "
+        "'you decided N times and objected zero times' one way, 'you object to N "
+        "of 13 independently written implementations' the other. Neither author "
+        "saw a known-good design, a held-out design, or any equivalence verdict. "
+        "The narrowing round's leak check was 0 violations over 47 prompts.\n\n"
+        "SO THE PRESCRIPTION IS TO AUTHOR STRICT AND NARROW, NEVER WEAK AND "
+        "STRENGTHEN. A check that objects to most of a spec-derived population is "
+        "a repairable check; a check that objects to none of it is, on this "
+        "evidence, not. That reverses the direction every repair round on this "
+        "plan has pushed -- unexercised, vacuous and off-target all push a check "
+        "toward FIRING, and none of them pushes it toward demanding less.\n\n"
+        "THE COST, WHICH IS THE HALF THAT MAKES IT A RATE AND NOT A ROUTE. Of the "
+        "47, twelve came back VACUOUS -- sound by asserting nothing, which the "
+        "pre-registration scores as a loss exactly as harshly as still "
+        "over-reaching -- and 24 did not move. Adequacy went 16 to 23 of 89, 18% "
+        "to 26%: the largest single-round gain here, and not a majority.\n\n"
+        "AND THE ROUTE IS BOUNDED, not merely slow. Its population is the "
+        "requirements that have an over-strict body which already catches a "
+        "held-out design, and there are 47 of them. Even if every one landed, "
+        "adequacy would reach 16 + 47 = 63 of 89 = 71%. At 15% a round on a "
+        "shrinking pool it converges well short of that, so this raises the "
+        "measured ceiling and does not by itself deliver a majority."
     )
 
 def split_cells_are_a_specification_finding() -> str:

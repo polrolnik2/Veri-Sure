@@ -20,6 +20,7 @@ from specflow.ensemble import (
     authoring_populations_are_complementary_not_ordered,
     zero_objections_can_be_incompatible_with_correctness,
     the_minority_rule_is_precise_and_that_is_what_it_costs,
+    the_soundness_boundary_is_reachable_from_one_side_only,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -305,6 +306,28 @@ def test_the_ceiling_result_is_exhaustive_and_not_a_selection_miss():
     assert "54 decide where their own port is" in why and "2.8%" in why
 
 
+def test_the_boundary_asymmetry_carries_both_directions_and_its_cost():
+    # The only prescription this module makes. It corrects the partition claim
+    # rather than replacing it, so both rates must be present -- the 0 of 34 is
+    # what makes the 7 of 47 mean something.
+    why = the_soundness_boundary_is_reachable_from_one_side_only()
+    assert "34 checks,  0 adequate" in why and "47 checks,  7 adequate" in why
+    assert "p = 0.0196" in why
+    assert "AUTHOR STRICT AND NARROW" in why
+    # and the cost, without which this reads as a route rather than a rate
+    assert "twelve came back VACUOUS" in why
+    assert "18%" in why and "26%" in why
+
+
+def test_the_boundary_asymmetry_is_bounded_to_a_ceiling():
+    # "Then run it again until a majority" is the obvious response and it is
+    # wrong: the population is finite and its exhaustion is short of a majority
+    # only if every member landed, which 15% a round does not deliver.
+    why = the_soundness_boundary_is_reachable_from_one_side_only()
+    assert "BOUNDED" in why and "63 of 89 = 71%" in why
+    assert "does not by itself deliver a majority" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -322,7 +345,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "the_minority_rule_is_precise_and_that_is_what_it_costs",
                  "adequacy_is_soundness_and_refutability",
                  "soundness_is_what_makes_the_criterion_work",
-                 "a_perfectly_sound_majority_set_still_false_accepts"):
+                 "a_perfectly_sound_majority_set_still_false_accepts",
+                 "the_soundness_boundary_is_reachable_from_one_side_only"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
