@@ -328,6 +328,17 @@ def test_the_boundary_asymmetry_is_bounded_to_a_ceiling():
     assert "does not by itself deliver a majority" in why
 
 
+def test_the_narrowing_decay_is_measured_and_not_overclaimed():
+    # Round 2 is what turns "a bounded route" into a number, and it is also the
+    # place to overclaim: two levers landing on 1 of 28 is striking and is not
+    # significant at that n. Both the coincidence and the caveat must be present.
+    why = the_soundness_boundary_is_reachable_from_one_side_only()
+    assert "1 of 28 = 4%" in why
+    assert "8 of 45 = 18%" in why and "7 of 47 = 15%" in why
+    assert "p = 0.245" in why and "NOT independently" in why
+    assert "27-28 of 89 = 31%" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
