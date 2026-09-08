@@ -62,6 +62,18 @@ once span, stimulus and volume have each been excluded by measurement, and
 `strength_and_soundness_are_exchanged_not_traded` for what happens when you
 attack that residue directly.
 
+AND THE STOPPING POINT IS WORSE THAN WEAK, WHICH IS THE ONE A LOOP AUTHOR MUST
+READ BEFORE ANY OF THE ABOVE. On a set carrying even one check the known-good
+design fails, zero objections is not poor evidence of correctness -- it is proof
+of INCORRECTNESS, by arithmetic rather than by measurement, because the
+known-good design does not score zero either. Measured on the widest golden-free
+set here, spanning a majority of the specification at a 10% false-reject rate: a
+Sonnet editor reached zero and the bounded miter says DIFFERS, having moved
+TOWARD the reference while objections fell 11 to 3 and back AWAY from it over the
+final 3 to 0. `zero_objections_can_be_incompatible_with_correctness` carries it,
+and it is why a loop is stopped on a trial budget rather than on its criterion
+going quiet.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -414,6 +426,50 @@ def strength_and_soundness_are_exchanged_not_traded() -> str:
 
 
 
+
+def zero_objections_can_be_incompatible_with_correctness() -> str:
+    """The result a repair loop is most likely to be built on, and it is false.
+
+    Every other refutation here says a check set is a WEAK guide. This one says
+    something stronger about the moment the guide declares success: on a set that
+    carries even one over-strict check, reaching zero objections is not weak
+    evidence of correctness -- it is PROOF of incorrectness, available before any
+    equivalence instrument runs, and the loop cannot see it.
+    """
+    return (
+        "Measured on k1, on the widest golden-free set this corpus has produced: "
+        "68 checks over 45 of 89 requirements = 51%, A MAJORITY OF THE "
+        "SPECIFICATION, selected by a rule that reads only spec-derived designs. "
+        "The audit, computed afterwards and feeding nothing: 7 of the 68 convict "
+        "the known-good design -- a 10% false-reject rate.\n\n"
+        "THAT 10% IS THE WHOLE FINDING, READ FORWARD RATHER THAN AS A COST. "
+        "The known-good design scores SEVEN objections against this set. A design "
+        "scoring ZERO therefore disagrees with it on at least those seven checks, "
+        "so it is not that design. Zero objections and equivalence are MUTUALLY "
+        "EXCLUSIVE here, and the exclusion is arithmetic -- no miter, no held-out "
+        "grade and no sampling is involved in deriving it.\n\n"
+        "It is not hypothetical. A Sonnet editor, driven through the shipped "
+        "staged-buffer policy on a design written from the specification and held "
+        "out of every selection, went 11 objections to 3 to 0 in 12 of 14 trials "
+        "and stopped, correctly, because the criterion it was given said it was "
+        "finished. The bounded miter returns DIFFERS, with all three grade pins "
+        "green in the same process.\n\n"
+        "AND THE LAST LEG IS THE PART TO KEEP. Objections 11 -> 3 moved the "
+        "design toward the reference: 249 of 318 testpoints differing -> 192, "
+        "2,904 differing cells -> 2,733, and one output repaired to NEVER "
+        "differing. Objections 3 -> 0 moved it back: 200 testpoints, 3,075 cells, "
+        "that repaired output broken again at 54 cells, and every one of the ten "
+        "declared outputs differing. The three points were each re-measured in "
+        "their own clean run directory. So the gradient was real and it INVERTED "
+        "over the final approach, at exactly the objection count that reads as "
+        "success.\n\n"
+        "The consequence for a loop is a disposition rule, not a better set: a "
+        "check set whose over-strict count is unknown -- which is every set "
+        "outside a benchmark -- cannot have zero objections read as done. Score "
+        "the loop on requirements it satisfies, stop it on a trial budget, and "
+        "treat a run that reaches zero as a set defect to investigate rather than "
+        "a design to ship."
+    )
 
 def split_cells_are_a_specification_finding() -> str:
     """Why a disagreement cell is escalated, never resolved automatically.

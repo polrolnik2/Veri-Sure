@@ -14,6 +14,7 @@ from specflow.ensemble import (
     soundness_buys_termination_not_correctness,
     split_cells_are_a_specification_finding,
     strength_and_soundness_are_exchanged_not_traded,
+    zero_objections_can_be_incompatible_with_correctness,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -170,6 +171,29 @@ def test_the_strength_edit_is_measured_as_a_partition_not_a_trade():
     assert "MINIMUM the marginals allow" in why
 
 
+def test_reaching_zero_objections_is_pinned_as_a_negative_result():
+    # The one a repair loop acts on without reading anything else here: its
+    # criterion going quiet. Three things have to travel together or the text
+    # becomes an endorsement of the run that produced it -- the majority span
+    # that makes the set look finished, the audit that makes zero unreachable
+    # for a correct design, and the grade that confirms it.
+    why = zero_objections_can_be_incompatible_with_correctness()
+    assert "45 of 89 requirements = 51%" in why and "7 of the 68" in why
+    assert "MUTUALLY" in why and "EXCLUSIVE" in why
+    assert "DIFFERS" in why
+    # and the inversion, which is the half a reader who already believes the
+    # gradient is right will otherwise skip
+    assert "249" in why and "192" in why and "200 testpoints" in why
+
+
+def test_the_stopping_rule_is_stated_and_not_only_the_refutation():
+    # A refutation that leaves the loop author with nothing to do gets ignored.
+    # The disposition has to be in the same text as the number that motivates it.
+    why = zero_objections_can_be_incompatible_with_correctness()
+    assert "trial budget" in why
+    assert "requirements it satisfies" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -181,7 +205,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "accuracy_is_the_wrong_axis_for_a_reference",
                  "soundness_buys_termination_not_correctness",
                  "the_residue_is_check_strength",
-                 "strength_and_soundness_are_exchanged_not_traded"):
+                 "strength_and_soundness_are_exchanged_not_traded",
+                 "zero_objections_can_be_incompatible_with_correctness"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
