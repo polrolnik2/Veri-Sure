@@ -23,6 +23,7 @@ from specflow.ensemble import (
     the_soundness_boundary_is_reachable_from_one_side_only,
     the_two_legs_cannot_be_composed_from_separate_bodies,
     the_adequacy_filter_does_not_survive_being_a_target,
+    golden_free_span_grew_and_the_precision_did_not_hold,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -361,7 +362,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "a_perfectly_sound_majority_set_still_false_accepts",
                  "the_soundness_boundary_is_reachable_from_one_side_only",
                  "the_two_legs_cannot_be_composed_from_separate_bodies",
-                 "the_adequacy_filter_does_not_survive_being_a_target"):
+                 "the_adequacy_filter_does_not_survive_being_a_target",
+                 "golden_free_span_grew_and_the_precision_did_not_hold"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
@@ -437,6 +439,45 @@ def test_the_third_four_percent_is_recorded_beside_the_other_two():
     why = the_adequacy_filter_does_not_survive_being_a_target()
     assert "1 of 28" in why and "1 of 24" in why
     assert "24 to 25 " in why
+
+
+def test_the_golden_free_table_never_prints_a_span_without_its_audit():
+    # A span without its false-reject rate is the defect nine headlines here were
+    # retracted for. Every row of the golden-free table carries both, and the
+    # ceiling row is labelled as selected BY the known-good design.
+    why = golden_free_span_grew_and_the_precision_did_not_hold()
+    for row in ("C  convicts <= 2 of 13        108         44          49%    *3%*",
+                "B  convicts a minority        125         50        **56%**  *10%*"):
+        assert row in why
+    assert "selected BY the" in why
+
+
+def test_the_majority_span_is_not_reported_as_an_accept_criterion():
+    # 56% is the largest golden-free span measured here and it is still unusable
+    # as an accept criterion, for the arithmetic reason. Dropping that sentence
+    # turns the number into the claim the plan keeps having to withdraw.
+    why = golden_free_span_grew_and_the_precision_did_not_hold()
+    assert "STILL NOT AN ACCEPT CRITERION" in why
+    assert "any design scoring " in why and "zero is a different design" in why
+
+
+def test_the_minority_rules_perfect_precision_is_corrected_with_its_base_rate():
+    # 59 of 59 was quoted as perfect. It is not, on the corpus that grew, and a
+    # precision without its base rate is not a measurement either.
+    why = golden_free_span_grew_and_the_precision_did_not_hold()
+    assert "105 of them spare the known-good design: 97%, not " in why
+    assert "126 sound among 424 deciding = 30%" in why
+    doc = ensemble.__doc__ or ""
+    assert "97%, not 100%" in doc
+
+
+def test_the_precision_loss_is_attributed_to_the_rounds_that_used_the_rule():
+    # If the rule simply degraded with size, the lesson would be "measure on more
+    # bodies". The measured cause is that the rounds authored against it, which
+    # is a different and actionable rule about when to recompute an audit.
+    why = golden_free_span_grew_and_the_precision_did_not_hold()
+    assert "did not shape" in why
+    assert "recomputed" in why
 
 
 def test_the_definition_of_sound_requires_the_check_to_decide():

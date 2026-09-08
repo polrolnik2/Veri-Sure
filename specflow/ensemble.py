@@ -103,6 +103,13 @@ spanning 44% of the specification and reading no known-good design to do it. It
 is also why the set it produces is weak: of the 18 adequate checks in the largest
 perfectly sound set, it keeps 9. Its precision and its cost are the same
 property. `the_minority_rule_is_precise_and_that_is_what_it_costs` carries both.
+**Corrected after four more authoring rounds: on the grown 484-body corpus it
+keeps 108 and 105 spare the known-good design -- 97%, not 100% -- and the three
+exceptions are bodies those rounds produced.** The golden-free span rose with it,
+rule B reaching 50 of 89 = 56% at a 10% false-reject rate and rule C 44 of 89 =
+49% at 3%; neither can be an accept criterion, for the reason the audit column
+always gives. `golden_free_span_grew_and_the_precision_did_not_hold` carries the
+table and the correction.
 
 AND THE CELL ITSELF NOW HAS A DECOMPOSITION RATHER THAN ONLY A SIZE. Among sound
 checks, the 52 that convict no candidate hold 3 adequate ones and the 16 that
@@ -932,6 +939,53 @@ def the_adequacy_filter_does_not_survive_being_a_target() -> str:
         "of 28, narrowing round 2 landed 1 of 28, and this lands 1 of 24 -- "
         "three levers, three different objections, one figure. Adequacy 24 to 25 "
         "of 89 = 28%, against the 45 a majority needs."
+    )
+
+
+def golden_free_span_grew_and_the_precision_did_not_hold() -> str:
+    """The golden-free score after four authoring rounds, and a correction.
+
+    `the_minority_rule_is_precise_and_that_is_what_it_costs` reports the rule at
+    59 of 59 -- PERFECT precision -- on a 259-body corpus. Precision is a
+    property of the population a rule is applied to, and the corpus has since
+    grown to 484. Re-measured, it is not perfect.
+    """
+    return (
+        "Measured on k1 over 484 check bodies -- the original 259 plus the "
+        "narrowing, merge and band rounds. Every row below is produced by a rule "
+        "reading only spec-derived designs; the audit is computed last and feeds "
+        "nothing.\n\n"
+        "    rule                        checks   requirements   of 89   *audit*\n"
+        "    C  convicts <= 2 of 13        108         44          49%    *3%*\n"
+        "    B  convicts a minority        125         50        **56%**  *10%*\n"
+        "    the ceiling, selected BY the\n"
+        "    known-good design            126         52          58%     *0*\n\n"
+        "**A GOLDEN-FREE SET NOW SPANS 56% OF THE SPECIFICATION**, up from the "
+        "51% the same rule reached before these rounds, and rule C is up from "
+        "44% to 49%. The ceiling moved 51% to 58%, so the golden-free rules "
+        "tracked it rather than closing on it.\n\n"
+        "**AND SPAN IS STILL NOT AN ACCEPT CRITERION, WHICH IS THE HALF THAT "
+        "MATTERS.** 13 of rule B's 125 members convict the known-good design, so "
+        "that design scores 13 against its own criterion and any design scoring "
+        "zero is a different design -- the arithmetic that made the earlier "
+        "rule-B run's termination a certificate of NON-equivalence. Rule C is "
+        "the same defect in miniature at 3.\n\n"
+        "THE CORRECTION, AND IT IS TO A HEADLINE HERE. The minority rule at "
+        "threshold 2 was measured 59 of 59 -- perfect -- and quoted as the best "
+        "golden-free soundness instrument by a wide margin. On the grown corpus "
+        "it keeps 108 and **105 of them spare the known-good design: 97%, not "
+        "100%**, against a base rate of 126 sound among 424 deciding = 30%. That "
+        "is a 3.2x lift at n = 108 and it is still the best instrument here -- "
+        "but the perfect figure was a property of the smaller population, and "
+        "the three exceptions are bodies these authoring rounds produced.\n\n"
+        "SO THE RULE DID NOT DEGRADE BY BEING WRONG; IT DEGRADED BY BEING "
+        "APPLIED TO CHECKS AUTHORED AGAINST IT. Three of the rounds scored here "
+        "used the conviction count as an objection or a target, and the checks "
+        "that came back are the ones the rule now misjudges. **A golden-free "
+        "gate measured on a corpus it did not shape is measuring something else "
+        "once it starts shaping one**, which is the same Goodhart the target "
+        "round measured directly and is why the audit column must be recomputed "
+        "after every authoring round rather than carried forward."
     )
 
 
