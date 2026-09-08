@@ -1085,3 +1085,47 @@ the +4 is not robust either.
 obligation an objection fires on must be a **structured field the check returns**,
 not a phrase inside a message written for a human to read. As prose it is
 unreadable for 78% of the population and misreadable for the rest.
+
+## PRE-REGISTERED, BEFORE THE CONSENSUS RUN REPORTS
+
+Written while the editor is still working, so the reading cannot be chosen after
+the numbers are in — the discipline this document has had to apply to itself
+nine times.
+
+**The conditions are matched to the three check-set runs.** Same held-out design
+L, unedited, from a corrected brief and held out of every selection; the same
+348-testpoint suite; the same shipped `_EditSession` policy; a 14-trial budget;
+one Sonnet editor; one agent in the run directory and nothing else touching it.
+The only thing that differs is what the editor is handed — an **observed expected
+value** from seven independent implementations instead of **objections** from a
+check set.
+
+| criterion | span | testpoints differing of 348 | cells | trials |
+|---|---|---|---|---|
+| **L, unedited — the baseline** | — | **279 = 80%** | **4,450** | — |
+| 21 checks | 16 reqs = 18% | 223 = 64% | 3,969 | 3 of 14 |
+| 111 checks | 44 reqs = 49% | **220 = 63%** | 3,834 | 5 of 14 |
+| 117 checks | 50 reqs = 56% | 236 = 68% | **3,533** | 4 of 14 |
+| **the consensus reference** | — | *pending* | *pending* | *pending* |
+
+All three check-set runs end `DIFFERS`, and the best figure on each measure comes
+from a *different* run — 220 testpoints from the 111-check set, 3,533 cells from
+the 117-check set — so "best" has to name its measure.
+
+**How the outcome will be read, fixed now:**
+
+| outcome | reading |
+|---|---|
+| **`NO-DIFF-40`** | the observed expected value is a sufficient criterion where four check sets were not. It answers the goal's validation question, and check authoring is superseded rather than improved |
+| **`DIFFERS`, under 220 testpoints AND under 3,533 cells** | the best descent criterion measured on this plan, on both measures at once, which no check set has managed. Report it as that and not as sufficiency |
+| **one measure better, the other worse** | mixed. Report both columns and claim nothing — the check-set runs already show the two can move apart |
+| **`DIFFERS` in the 220–236 band** | indistinguishable from the check sets, and that is a STRONG negative rather than a null: it removes the one explanation the companion document offers for the editor's weakness, that *"expected/actual is reconstructed, not observed"*. Here it is observed, and it changes nothing |
+| **worse than 236 testpoints or 3,969 cells** | the consensus actively misdirects, and the 2,073 cells where the population is collectively wrong are the mechanism to look at first |
+
+**Two readings that are fixed in advance because they are easy to get wrong.**
+A run that stops with trials unspent measures the EDITOR and must not be reported
+as a result about the criterion. And a run that drives the consensus-cell count
+very low while the miter gets worse is the over-strict-zero pattern arriving on a
+new criterion — the reference is wrong about 2,073 of its own cells, so matching
+it everywhere is evidence against equivalence, exactly as reaching zero against a
+set carrying an unsound check is.
