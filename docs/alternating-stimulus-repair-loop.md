@@ -102,6 +102,29 @@ That is one alternation of a loop designed for many, on a suite whose staged
 fraction is 12 of 330, and it is reported here as the current figure rather than
 as a verdict on the design.
 
+### What invariant 6 cost, measured
+
+Before the recorder was fixed, the loop's first state read **SILENT = 26** — 26
+checks deciding on no candidate design at all, which routes to STIMULUS. With the
+probe list corrected and nothing else changed:
+
+    SILENT   26  ->  0
+    VACUOUS  69  ->  95
+
+**Every one of those 26 was reading dead probe columns, not waiting on stimulus.**
+Routed on the broken recording the loop would have spent 26 stimulus budgets on
+checks that needed none, and the plan would have carried "26 checks are
+stimulus-starved" as a finding. This is why a run whose probes are dead must
+refuse rather than report: the failure is silent, it looks exactly like the thing
+the loop exists to detect, and it points the loop's most expensive move at the
+wrong population.
+
+**And it changes what the residue is.** With live probes, on a 7-design
+population and 318 testpoints, **95 of 119 checks that are sound on the reference
+object to NOTHING across seven independently written implementations.** Not
+silent — deciding, and finding all seven acceptable. That is the vacuity problem
+in its starkest form and it is what the loop's repair move has to move.
+
 ## What to build, in order
 
 1. `reachability.observed()` over the run's own replays -> the pool, per state,
