@@ -116,6 +116,16 @@ perfectly sound one objects. Over the whole corpus 129 bodies catch that design
 across 64% of the specification and exactly ONE of them is sound.
 `soundness_is_what_makes_the_criterion_work` carries it.
 
+AND REMOVING THE UNSOUND MEMBERS IS STILL NOT ENOUGH, WHICH CLOSES THE CORPUS.
+The largest perfectly sound set here spans a majority -- 68 checks over 45 of 89
+requirements at a zero false-reject rate -- an editor drove a held-out design to
+ZERO objections against it in 6 of 14 trials, and the miter says DIFFERS at 193
+of 318 testpoints. 124 corpus bodies catch that design across 62% of the
+specification and NOT ONE of them is sound, and since this set already is every
+sound check in the corpus there are none a better selection could have found.
+`a_perfectly_sound_majority_set_still_false_accepts` carries it, and the residue
+it leaves is check strength rather than any property of the set.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -675,6 +685,51 @@ def soundness_is_what_makes_the_criterion_work() -> str:
         "the sound set's own limit is measured elsewhere here. The claim is "
         "narrow and it is about the AUDIT COLUMN: unsound members do not merely "
         "add false rejects, they remove the criterion's ability to reject."
+    )
+
+def a_perfectly_sound_majority_set_still_false_accepts() -> str:
+    """The ceiling result, and the one that closes the corpus rather than a lever.
+
+    `zero_objections_can_be_incompatible_with_correctness` shows that a set
+    carrying an over-strict check makes termination a certificate of
+    NON-equivalence. The obvious response is to remove the over-strict checks --
+    and this is that experiment, run on the largest perfectly sound set the
+    corpus can produce, which happens to span a majority.
+    """
+    return (
+        "Measured on k1. MAXSOUND is every one of the 259 corpus bodies that "
+        "decides on the known-good design and convicts it nowhere: **68 checks "
+        "over 45 of 89 requirements = 51%, A MAJORITY, at a false-reject rate of "
+        "ZERO.** It is selected BY the known-good design, so it is a CEILING and "
+        "never a score -- but that is what makes the negative below exhaustive "
+        "rather than a sampling result.\n\n"
+        "A Sonnet editor through the shipped staged-buffer policy, on a design "
+        "written from the specification and held out of every selection, reached "
+        "**0 objections of 68 in 6 of 14 trials.** Re-scored in its own clean run "
+        "directory. All three grade pins green in the same process.\n\n"
+        "**THE MITER RETURNS DIFFERS. The design is wrong on 193 of 318 "
+        "testpoints -- 61% -- and on nine of its ten declared outputs.**\n\n"
+        "EVERY AVAILABLE EXPLANATION IS EXCLUDED BY THE SET'S OWN PROPERTIES. Not "
+        "unsoundness: the audit is zero, so unlike the set in "
+        "`zero_objections_can_be_incompatible_with_correctness` reaching zero here "
+        "is CONSISTENT with equivalence rather than proof against it. Not "
+        "thinness: 51% of the specification, the widest sound set the corpus "
+        "holds. Not a wrong gradient: divergence fell on both measures, 249 "
+        "testpoints to 193 and 2,904 differing cells to 2,798, and one output was "
+        "repaired to never differing. Not an editor stopping early: it terminated "
+        "with 8 trials unspent because its criterion was satisfied.\n\n"
+        "AND THE CORPUS CANNOT FIX IT, WHICH IS THE PART THAT CLOSES THE "
+        "QUESTION. Re-deciding all 259 bodies against that design: **124 object, "
+        "across 55 of 89 requirements = 62% of the specification, and ZERO of the "
+        "124 are sound.** MAXSOUND already IS every sound check in the corpus, so "
+        "these are not checks a better selection missed -- there are none to "
+        "miss. **No sound set this corpus can produce rejects this design.**\n\n"
+        "So the binding constraint is not soundness, span, selection, termination "
+        "or the gradient. It is that the checks watch the right ports and pass: "
+        "of these 68, four read no real output, three are exposed to a wrong port "
+        "and never decide, seven object, and **54 decide where their own port is "
+        "wrong and pass**, at 134 objections in 4,804 exposed decisions = 2.8%. "
+        "See `the_residue_is_check_strength`."
     )
 
 def split_cells_are_a_specification_finding() -> str:

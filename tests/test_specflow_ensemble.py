@@ -7,6 +7,7 @@ detect.
 """
 import specflow.ensemble as ensemble
 from specflow.ensemble import (
+    a_perfectly_sound_majority_set_still_false_accepts,
     accuracy_is_the_wrong_axis_for_a_reference,
     adequacy_is_soundness_and_refutability,
     agreement_is_not_an_oracle,
@@ -280,6 +281,30 @@ def test_the_matched_pair_claim_is_bounded_to_what_it_shows():
     assert "The claim is" in why and "narrow" in why
 
 
+def test_the_ceiling_result_excludes_every_alternative_explanation():
+    # The negative that closes the corpus. Each excluded explanation is one a
+    # reader will otherwise supply for themselves, and the span and the audit
+    # together are what make "zero objections" mean something here rather than
+    # being the arithmetic impossibility of the unsound case.
+    why = a_perfectly_sound_majority_set_still_false_accepts()
+    assert "45 of 89 requirements = 51%" in why and "ZERO" in why
+    assert "0 objections of 68 in 6 of 14 trials" in why
+    assert "DIFFERS" in why and "193 of 318" in why
+    assert "CONSISTENT with equivalence" in why      # not the unsound-set case
+    assert "249" in why and "193" in why             # the gradient was right
+
+
+def test_the_ceiling_result_is_exhaustive_and_not_a_selection_miss():
+    # Without this the finding reads as "a better rule would have found them",
+    # which is the response every other negative here has attracted. It cannot
+    # apply: the set already contains every sound check in the corpus.
+    why = a_perfectly_sound_majority_set_still_false_accepts()
+    assert "ZERO of the\n124 are sound" in why or "ZERO of the " in why
+    assert "there are none to " in why
+    assert "No sound set this corpus can produce rejects this design" in why
+    assert "54 decide where their own port is" in why and "2.8%" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -296,7 +321,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "authoring_populations_are_complementary_not_ordered",
                  "the_minority_rule_is_precise_and_that_is_what_it_costs",
                  "adequacy_is_soundness_and_refutability",
-                 "soundness_is_what_makes_the_criterion_work"):
+                 "soundness_is_what_makes_the_criterion_work",
+                 "a_perfectly_sound_majority_set_still_false_accepts"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
