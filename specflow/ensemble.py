@@ -412,7 +412,17 @@ def the_residue_is_check_strength() -> str:
         "The uncomfortable half: raising 3.9% means each check asserting MORE of "
         "its sentence, and asserting more is what produces over-strictness. This "
         "set is at 3.9% strength and ZERO unsound simultaneously, which is the "
-        "first time both ends of that trade have been measured on one set."
+        "first time both ends of that trade have been measured on one set.\n\n"
+        "REPRODUCED ON A SET 36% LARGER, AND IT DOES NOT SCALE. The same "
+        "measurement on the largest perfectly sound set this corpus contains -- "
+        "68 checks over 45 of 89 requirements, against the same held-out design "
+        "-- reads 4 probe-only, 3 SILENT, 54 BLIND, 7 objecting, and strength "
+        "134/4804 = 2.8%. **THE STIMULUS OPPORTUNITY IS THE SAME THREE CHECKS AT "
+        "68 AS AT 50**: the 18 checks added are 18 more blind ones and zero more "
+        "silent ones, and strength FELL, because the additions decide more and "
+        "object no more. So the 3-of-50 is not an artifact of that set's size, "
+        "and a stimulus round is worth the same three checks however wide the set "
+        "gets."
     )
 
 def strength_and_soundness_are_exchanged_not_traded() -> str:

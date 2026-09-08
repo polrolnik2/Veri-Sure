@@ -161,6 +161,11 @@ def test_the_stimulus_lever_is_sized_and_the_residue_named():
     why = the_residue_is_check_strength()
     assert "3.9%" in why and "36 DECIDE" in why
     assert "CHECK STRENGTH" in why
+    # and the reproduction on a larger set, without which this reads as a
+    # one-set number that a wider set might dilute. It does not: same 3 silent,
+    # 18 more blind, strength DOWN.
+    assert "SAME THREE CHECKS AT " in why and "68 AS AT 50" in why
+    assert "54 BLIND" in why and "2.8%" in why
 
 
 def test_the_strength_edit_is_measured_as_a_partition_not_a_trade():
