@@ -1394,3 +1394,61 @@ the 111-check set, **1 of 5** here. And it is the **second** time an editor has
 declared a sound set self-contradictory. The editor cannot substitute for a
 soundness gate, its confidence runs the wrong way, and this is the one claim it
 makes that it has no means of checking.
+
+## THE FLOOR: 146 OF 348 TESTPOINTS, AND IT ANSWERS THE GOAL'S FINISH CONDITION
+
+Grant a spec-derived criterion its best case. Suppose it drove the design to be
+correct on **every cell the seven independent readings agree on** — perfect,
+which no run here comes near. Where they disagree it has no opinion to drive
+with: a check convicting there is as likely wrong as right, and a consensus is
+silent by construction.
+
+Per testpoint, on the design the consensus loop produced, at raw edges:
+
+| | testpoints | |
+|---|---|---|
+| differing anywhere | 168 = 48% | |
+| …at a cell the seven **AGREE** on | 84 = 24% | reachable |
+| …at a cell the seven **CANNOT agree** on | **146 = 42%** | **THE FLOOR** |
+
+**Only 22 of 348 testpoints — 6% — differ exclusively at cells a spec-derived
+criterion has an opinion about.** Every other differing testpoint contains at
+least one cell the specification, read seven independent times, does not
+determine.
+
+**So equivalence is not reachable by steering from this specification.** Not by a
+wider check set, not by more adequate checks, not by an ensemble of checks or of
+designs, not by an observed expected value, not by more trials or a better
+editor — each of those is computed from the text, and the text is silent where
+the design is wrong.
+
+### One precision, because the claim is easy to overstate
+
+This bounds what a criterion can **steer**, not what a design can **achieve**. A
+design may be right in a split cell by luck, or because its author happened to
+guess as the reference did — 94% of cells are agreed and the population is right
+on 99.1% of those. What no check set, ensemble or consensus can do is *drive* it
+there, having no opinion to drive with.
+
+### And it is a trajectory, not two endpoints
+
+| design | agreed-cell wrongness | split-cell wrongness | share of residue in SPLIT |
+|---|---|---|---|
+| L, unedited | 9,140 (3.8%) | 5,464 (39.5%) | **37%** |
+| after the 117-check loop | 3,066 (1.3%) | 3,837 (27.5%) | **56%** |
+| after the consensus loop | **1,718 (0.7%)** | 3,405 (24.4%) | **66%** |
+
+The agreed-cell wrongness falls **81%**; the split-cell wrongness falls 38%; and
+the share of what remains that sits in split cells rises monotonically. **The
+loops clear what the specification determines and stall on what it does not** —
+the mechanism, not a correlation.
+
+### A fourteenth counting-shaped defect, mine, caught by the guard it now carries
+
+The first run of `floorbound.py` printed **0 testpoints differing** on a design
+the miter had already graded `DIFFERS` at 210. Cause: it read a recorded edge's
+port values from `e["outputs"]` — the key a ROW has, not an EDGE — so every value
+was `None`, all seven "agreed" on `None`, and nothing ever differed. A clean
+sheet is the signature of an instrument that never ran, and this is the
+fourteenth time on this plan. The script now **refuses to report zero on a design
+known to differ.**

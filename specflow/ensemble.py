@@ -1975,3 +1975,49 @@ def two_criteria_on_one_harness_land_the_same_design_in_the_same_place() -> str:
         "Better on both, and confounded with the trial count -- so the slice is "
         "worth something and how much is not separable here."
     )
+
+
+def the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints() -> str:
+    """What the grade would still read for a pipeline that extracted everything
+    the specification determines.
+
+    Grant a spec-derived criterion its best case -- suppose it drove the design
+    to be correct on every cell the seven independent readings AGREE on, which
+    no run here comes near. Where they disagree it has no opinion to drive with:
+    a check convicting there is as likely wrong as right, and a consensus is
+    silent by construction.
+    """
+    return (
+        "Per testpoint, on the design the consensus loop produced, at raw edges "
+        "over declared outputs:\\n\\n"
+        "    testpoints differing anywhere                168 = 48%\\n"
+        "    ... at a cell the seven AGREE on              84 = 24%   reachable\\n"
+        "    ... at a cell the seven CANNOT agree on      146 = 42%   THE FLOOR\\n\\n"
+        "**ONLY 22 OF 348 TESTPOINTS = 6% DIFFER EXCLUSIVELY AT CELLS A "
+        "SPEC-DERIVED CRITERION HAS AN OPINION ABOUT.** Every other differing "
+        "testpoint contains at least one cell the specification, read seven "
+        "independent times, does not determine.\\n\\n"
+        "**SO EQUIVALENCE IS NOT REACHABLE BY STEERING FROM THIS "
+        "SPECIFICATION.** Not by a wider check set, not by more adequate checks, "
+        "not by an ensemble, not by an observed expected value, not by more "
+        "trials or a better editor -- every one of those is computed from the "
+        "text, and the text is silent where the design is wrong.\\n\\n"
+        "**ONE PRECISION, BECAUSE THE CLAIM IS EASY TO OVERSTATE.** This bounds "
+        "what a criterion can STEER, not what a design can ACHIEVE. A design may "
+        "be right in a split cell by luck, or because its author happened to "
+        "guess as the reference did -- 94% of cells are agreed and the population "
+        "is right on 99.1% of those. What no check set, ensemble or consensus "
+        "can do is DRIVE it there, having no opinion to drive with.\\n\\n"
+        "**AND IT IS A TRAJECTORY, NOT TWO ENDPOINTS.** The share of remaining "
+        "wrongness sitting in split cells rises monotonically as the loops do "
+        "their work -- 37% on the unedited design, 56% after the 117-check loop, "
+        "66% after the consensus loop -- while the agreed-cell wrongness falls "
+        "9,140 -> 3,066 -> 1,718. The loops clear what the specification "
+        "determines and stall on what it does not, which is the mechanism rather "
+        "than a correlation.\\n\\n"
+        "**WHAT WOULD CHANGE IT IS UNCHANGED FROM WHAT THIS MODULE ALREADY "
+        "SAYS**: a decision on the underdetermined cells from outside the "
+        "specification-and-reader loop. The disagreement map localises them at "
+        "10-12x and is the artifact to put in front of whoever can make that "
+        "decision. It is not an instrument this pipeline can build."
+    )

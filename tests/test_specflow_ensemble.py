@@ -920,3 +920,21 @@ def test_the_head_to_head_names_both_confounds_and_their_direction():
     t = ensemble.two_criteria_on_one_harness_land_the_same_design_in_the_same_place()
     assert "handicaps the check set" in t
     assert "not separable here" in t
+
+
+def test_the_floor_is_stated_in_testpoints_with_the_reachable_share():
+    t = ensemble.the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints()
+    assert "146 = 42%" in t
+    assert "ONLY 22 OF 348 TESTPOINTS = 6%" in t
+
+
+def test_the_floor_bounds_steering_not_achievement():
+    t = ensemble.the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints()
+    assert "what a criterion can STEER, not what a design can ACHIEVE" in t
+    assert "by luck" in t
+
+
+def test_the_floor_is_supported_by_a_trajectory():
+    t = ensemble.the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints()
+    assert "37%" in t and "56%" in t and "66%" in t
+    assert "mechanism rather than a correlation" in t
