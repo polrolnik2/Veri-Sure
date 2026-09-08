@@ -532,3 +532,29 @@ def test_the_definition_of_sound_requires_the_check_to_decide():
 def test_empty_population_is_not_an_error():
     assert consensus_cells({}, PORTS) == {}
     assert disagreement_cells({}, PORTS) == set()
+
+
+def test_the_vacuous_state_is_named_as_holding_adequate_checks():
+    t = ensemble.a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is()
+    assert "8 OF THE 14 ADEQUATE CHECKS ARE CLASSIFIED VACUOUS" in t
+    assert "3 of 14" in t and "8 of 14" in t
+
+
+def test_the_vacuous_finding_names_the_instrument_that_fixes_it():
+    t = ensemble.a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is()
+    assert "refuted_by" in t
+    assert "Route a refutable vacuous check" in t
+
+
+def test_the_keep_band_is_reported_below_the_base_rate_not_above_it():
+    """The keep set is 90% sound against a 95% base, and that is the point."""
+    t = ensemble.a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is()
+    assert "90% against 95%" in t
+    assert "choosing against adequacy" in t
+
+
+def test_the_vacuous_finding_refuses_to_be_read_as_a_rule_calibration():
+    """A soundness filter measured on a soundness-selected set says nothing."""
+    t = ensemble.a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is()
+    assert "WHAT THIS DOES NOT SAY" in t
+    assert "1.03x" in t and "31%" in t

@@ -209,3 +209,67 @@ population reads as port-only. Nothing fails; the counts just quietly change.
 The recorder must take the probe list from the contract for a generated design
 and the internals list only for the reference, and a run whose probes are all
 dead should refuse rather than report.
+
+## Invariant 8: the cut is not a soundness gate inside the loop, and VACUOUS is not a defect state
+
+The minority cut was calibrated on the **whole 259-body corpus** against a
+**13-design** population, where it read 59 of 59 precise on soundness against a
+**31% base rate**. Only seven of those thirteen can be re-run, so the cut the
+loop actually applies is `conv <= N//2 = 3`, and what that is worth had never
+been measured on the population it runs against.
+
+Measured on round P3 — 119 bodies, every one of them deciding both on a
+candidate and on the reference:
+
+| cut `t` | kept | sound | precision | recall | *lift* |
+|---|---|---|---|---|---|
+| base rate | 119 | 113 | **95%** | -- | -- |
+| 0 | 82 | 82 | 100% | 73% | *1.05x* |
+| 1 | 98 | 98 | 100% | 87% | *1.05x* |
+| **3 — the cut the loop uses** | **103** | **101** | **98%** | **89%** | ***1.03x*** |
+| 7 — no cut at all | 119 | 113 | 95% | 100% | *1.00x* |
+
+**THE CUT IS WORTH 1.03x HERE, AND THAT IS NOT A REFUTATION OF THE RULE — IT IS
+THE WRONG POPULATION TO ASK.** This body set descends from MAXSOUND and from a
+gated repair round, so it is 95% sound before any rule touches it. A soundness
+filter cannot be calibrated on a set already selected for soundness, and the
+100%-at-31% figure stands on the corpus it was measured on. What this table does
+answer is the question the loop needs: *inside the loop, the cut is not buying
+soundness.*
+
+**WHAT IT DOES BUY IS THE SEPARATION BETWEEN A CHECK THAT SAYS SOMETHING AND ONE
+THAT DOES NOT**, and the price is legible:
+
+| state | checks | sound | *adequate — sound AND catches the held-out design* |
+|---|---|---|---|
+| VACUOUS — convicts 0 of 7 | 82 | **82 = 100%** | ***8*** |
+| **BAND — convicts 1 to 3** | **21** | **19 = 90%** | ***6*** |
+| OVER_STRICT — convicts 4 to 7 | 16 | 12 | *0* |
+
+**The keep set is the only state that is BELOW the base rate on soundness, and it
+is the only state worth keeping.** #99 at the level of the routing: the two
+unsound members of BAND are the price of the six adequate ones, and the 82 that
+spare the reference perfectly are the 82 that mostly say nothing.
+
+### And the routing sends 8 of the 14 adequate checks to REPAIR
+
+The audit column above is the sharp part. Of the **14 adequate checks in the
+whole set, 8 are classified VACUOUS**, so `classify` routes them to
+`REPAIR:STRENGTHEN` — the move measured to trade soundness for discrimination 34
+times out of 34. **The loop's largest single risk is that it repairs checks that
+are already adequate.**
+
+This is not a threshold to retune: at every cut from 1 to 7 the adequate count is
+the same 14, because those 8 convict **zero** candidates. The rule cannot see
+them, and the reason is the one this plan wrote down before it was measured —
+*"'no candidate objected' is weak evidence a check cannot fail, because every
+candidate may simply be RIGHT."* It was 3 of 14 when first observed. It is now
+**8 of 14**.
+
+**The fix is not a threshold and it is not golden.** It is the instrument the
+plan already specifies for exactly this: a one-line mechanical mutant of a
+candidate design. A VACUOUS check that convicts a live mutant has demonstrated it
+CAN fail, on the artifact the editor edits, with no golden and no model call —
+and it should be KEPT rather than strengthened. Until that leg runs, the accept
+gate is what contains the damage: a strengthened check is discarded unless it
+lands in BAND, so an adequate VACUOUS check survives the round unchanged.

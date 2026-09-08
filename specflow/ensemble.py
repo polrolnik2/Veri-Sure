@@ -1080,3 +1080,53 @@ def split_cells_are_a_specification_finding() -> str:
         "whoever owns the specification. Do not resolve it with another model, "
         "and do not gate on a model's claim that the text is clear."
     )
+
+
+def a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is() -> str:
+    """Why "convicts no candidate" must not route to a strengthen repair.
+
+    The alternating loop classifies a check by how many of N spec-derived
+    designs it objects to: none is VACUOUS, a minority is KEEP, a majority is
+    OVER-STRICT. The first of those three is the one with no instrument behind
+    it, and this measures what that costs on the set the loop actually holds.
+    """
+    return (
+        "Measured on k1 over a 119-body set and a SEVEN-design population, with "
+        "adequacy audited last: SOUND means the check decides on the known-good "
+        "design and convicts it nowhere, ADEQUATE adds that it convicts a design "
+        "held out of every selection.\n\n"
+        "| state | checks | sound | adequate |\n"
+        "|---|---|---|---|\n"
+        "| VACUOUS -- convicts 0 of 7 | 82 | 82 = 100% | **8** |\n"
+        "| KEEP -- convicts 1 to 3 | 21 | 19 = 90% | **6** |\n"
+        "| OVER-STRICT -- convicts 4 to 7 | 16 | 12 | 0 |\n\n"
+        "**8 OF THE 14 ADEQUATE CHECKS ARE CLASSIFIED VACUOUS**, so the routing "
+        "sends them to the one repair move measured to trade soundness for "
+        "discrimination 34 times out of 34. No threshold reaches them: they "
+        "convict ZERO candidates, so the adequate count is the same 14 at every "
+        "cut from 1 to 7. The population is simply RIGHT about those "
+        "requirements, which is what this module's `refuted_by` docstring warns "
+        "about in the abstract and this measures at scale -- it was 3 of 14 when "
+        "first seen and it is 8 of 14 here.\n\n"
+        "TWO CONSEQUENCES, AND THE SECOND IS THE ONE TO BUILD ON.\n\n"
+        "The keep state is the only one BELOW the base rate on soundness -- 90% "
+        "against 95% -- and it is the only one worth keeping. Its two unsound "
+        "members are the price of its six adequate ones, and the 82 that spare "
+        "the known-good design perfectly are the 82 that mostly say nothing. A "
+        "cut chosen for soundness precision is choosing against adequacy.\n\n"
+        "And the instrument the VACUOUS state lacks already exists here: "
+        "`refuted_by`. A check that spares every candidate and convicts a "
+        "mechanical one-line mutant of one has demonstrated it CAN fail, with no "
+        "known-good design and no model call. **Route a refutable vacuous check "
+        "to KEEP, not to a repair.** Until that leg runs, an accept gate is what "
+        "contains the damage -- discard a strengthened body unless it lands in "
+        "the keep band, so an adequate vacuous check survives the round "
+        "unchanged.\n\n"
+        "WHAT THIS DOES NOT SAY. It is not a measurement of the minority rule's "
+        "precision. This body set descends from a soundness-selected set and a "
+        "gated repair round, so it is 95% sound before any rule touches it, and "
+        "the cut reads 1.03x lift on it against the 100%-at-a-31%-base-rate "
+        "measured on the full corpus. A soundness filter cannot be calibrated on "
+        "a population already selected for soundness; what this table answers is "
+        "the different question of what the cut is worth INSIDE the loop."
+    )
