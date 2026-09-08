@@ -653,3 +653,55 @@ to keep.** The set carries **16 measured-adequate checks**: sound, and objecting
 to a design held out of every selection. That is 16 of 89 = 18% of the
 specification, and it is the number the goal's optimisation target actually
 names.
+
+## The golden-free substitute for adequacy: it collapses to the refutable leg
+
+Adequacy cannot be a reported score — soundness needs the known-good design and
+discrimination needs a held-out one — and against the only thing that matters it
+did not predict: **6 adequate checks landed a design at 64% of testpoints
+differing and 14 landed it at 63%.** So a golden-free replacement was proposed
+and measured: *on the situations where independently written implementations
+DISAGREE about a port you read, how often do you say anything?* The predictor is
+computed on the seven candidates and the outcome on a design held out of
+everything, so the two share no evidence.
+
+| rule | checks | catch the held-out design | precision | *lift over the 22% base* |
+|---|---|---|---|---|
+| every check that decides | 113 | 25 | 22% | *1.00x* |
+| **convicts >= 1 candidate — the refutable leg** | **28** | **16** | **57%** | ***2.58x*** |
+| **objects in a DISPUTED situation** | **28** | **16** | **57%** | ***2.58x*** |
+
+**THE TWO SETS ARE IDENTICAL — the same 28 checks, nothing in either
+difference.** The disputed filter removes nothing, because at testpoint
+granularity **64% of (testpoint, port) pairs are already disputed**, against the
+11% the plan's 8.6x localisation reports per CELL. So the substitute is the
+refutable leg wearing a new name, and it is refuted as a new instrument.
+
+**WHY THE WEAKER TEST WAS THE ONLY ONE AVAILABLE, and it is a structural limit
+rather than an excuse.** `transactional_view` compresses each design's rows
+independently, so row *i* of one candidate is not row *i* of another and a
+cell-level comparison has nothing to align on. Testpoint-level is what can be
+computed across designs, and it is far too coarse to localise. A cell-level
+disagreement strength is untested and would need raw-edge alignment.
+
+### What survives, and it is worth having
+
+**The refutable leg predicts DISCRIMINATION at 57% against a 22% base — 2.58x,
+n = 28, golden-free, no model call.** That is a real instrument for the half of
+adequacy that has never had one.
+
+**And it still must not select, which is the same conclusion from a third
+direction.** It **misses 9 of the 25 catchers** — sound-and-blind checks that
+catch a wrong design the seven candidates happen to get right — and using it as a
+keep rule was already measured to cost 30 requirements of span and quadruple the
+false-reject rate. So: **report with it, never select with it**, and the reason
+is now a number on both halves rather than a warning.
+
+### The honest position on the metric
+
+There is no cheap golden-free proxy here that beats what was already in hand.
+Adequacy is not reportable and did not predict; its proposed replacement is the
+refutable leg; the refutable leg predicts one of adequacy's two halves and cannot
+be selected on. **The measure of a check set is the validation run**, and its
+cost — roughly an hour of simulation plus an editor — is the real constraint on
+how often a set can be judged.

@@ -682,3 +682,20 @@ def test_the_majority_round_records_its_admissibility_check():
     t = ensemble.narrowing_the_span_gap_reaches_a_majority()
     assert "0 violations over 23 prompts" in t
     assert "0 duplicates, 0 unchanged" in t
+
+
+def test_the_substitute_for_adequacy_is_reported_as_collapsing():
+    t = ensemble.the_refutable_leg_predicts_discrimination_and_still_must_not_select()
+    assert "THE TWO SETS ARE IDENTICAL" in t
+    assert "under a new name" in t
+
+
+def test_the_substitute_names_the_structural_reason_the_test_was_weak():
+    t = ensemble.the_refutable_leg_predicts_discrimination_and_still_must_not_select()
+    assert "nothing to align on" in t and "untested" in t
+
+
+def test_the_surviving_instrument_carries_its_recall_loss():
+    t = ensemble.the_refutable_leg_predicts_discrimination_and_still_must_not_select()
+    assert "misses 9 of the 25 catchers" in t
+    assert "Report with it; never select with it" in t

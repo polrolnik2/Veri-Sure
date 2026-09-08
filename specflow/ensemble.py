@@ -1388,3 +1388,43 @@ def narrowing_the_span_gap_reaches_a_majority() -> str:
         "the span without the adequacy is the defect this module's own history "
         "has retracted headlines for."
     )
+
+
+def the_refutable_leg_predicts_discrimination_and_still_must_not_select() -> str:
+    """A golden-free substitute for adequacy, measured, and what it turned into.
+
+    Adequacy needs a known-good design for one leg and a held-out wrong one for
+    the other, so it cannot be a reported score; and across two editor runs it
+    did not predict the grade. This is the replacement that was proposed for it
+    and what happened when it was measured.
+    """
+    return (
+        "Measured on k1 over a 117-check set. The proposal was: on the "
+        "situations where independently written implementations DISAGREE about a "
+        "port a check reads, how often does it say anything? The predictor is "
+        "computed on seven candidates and the outcome on a design held out of "
+        "everything, so the two share no evidence.\n\n"
+        "| rule | checks | catch the held-out design | precision | *lift over 22%* |\n"
+        "|---|---|---|---|---|\n"
+        "| every check that decides | 113 | 25 | 22% | *1.00x* |\n"
+        "| convicts >= 1 candidate | 28 | 16 | **57%** | ***2.58x*** |\n"
+        "| objects in a DISPUTED situation | 28 | 16 | **57%** | ***2.58x*** |\n\n"
+        "**THE TWO SETS ARE IDENTICAL -- the same 28 checks, nothing in either "
+        "difference.** At testpoint granularity 64% of (testpoint, port) pairs "
+        "are already disputed, against the 11% `disagreement_cells` reports per "
+        "CELL, so the filter removes nothing and the substitute is the refutable "
+        "leg under a new name.\n\n"
+        "WHY ONLY THE WEAK TEST WAS AVAILABLE, and it is structural. The "
+        "transactional view compresses each design's rows independently, so row "
+        "i of one candidate is not row i of another and a cell-level comparison "
+        "has nothing to align on. A cell-level disagreement strength would need "
+        "raw-edge alignment and is untested.\n\n"
+        "**WHAT SURVIVES: the refutable leg predicts DISCRIMINATION at 57% "
+        "against a 22% base, 2.58x, n=28, golden-free and with no model call** -- "
+        "an instrument for the half of adequacy that never had one. **AND IT "
+        "STILL MUST NOT SELECT.** It misses 9 of the 25 catchers -- sound and "
+        "blind checks that catch a wrong design the candidates happen to get "
+        "right -- and as a keep rule it was measured to cost 30 requirements of "
+        "span and quadruple the false-reject rate. Report with it; never select "
+        "with it."
+    )
