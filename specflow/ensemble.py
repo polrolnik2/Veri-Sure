@@ -82,6 +82,14 @@ where the better arm alone is 3. An arm comparison decides which prompt to ship
 and must not decide which bodies to keep.
 `authoring_populations_are_complementary_not_ordered` carries it.
 
+AND ONE GATE HERE IS ENDORSED RATHER THAN REFUTED, WITH ITS PRICE ATTACHED.
+"objects to at most 2 of 13 independently written designs" keeps 59 checks and
+59 of 59 spare the known-good design -- precision 100% against a 31% base rate,
+spanning 44% of the specification and reading no known-good design to do it. It
+is also why the set it produces is weak: of the 18 adequate checks in the largest
+perfectly sound set, it keeps 9. Its precision and its cost are the same
+property. `the_minority_rule_is_precise_and_that_is_what_it_costs` carries both.
+
 WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
 On the cells the population cannot agree on, a reader asked ONE targeted question
 -- one cell, one port, the specification and the input sequence, no design at all
@@ -513,6 +521,45 @@ def authoring_populations_are_complementary_not_ordered() -> str:
         "samples, the disjointness is measured once, and a third arm might "
         "overlap both. The claim is the narrow one: a losing arm is not an empty "
         "arm, and this plan has been treating it as one."
+    )
+
+def the_minority_rule_is_precise_and_that_is_what_it_costs() -> str:
+    """The one golden-free gate on this plan that works, and its price.
+
+    Everything else here refutes an instrument. This one endorses one -- and the
+    endorsement is the smaller half, because a filter that is perfectly precise
+    about soundness turns out to be perfectly precise about removing the checks
+    that discriminate. Read both numbers or this becomes a recommendation.
+    """
+    return (
+        "THE RULE: keep a check that objects to at most 2 of 13 independently "
+        "written spec-derived designs. It reads no known-good design, and its "
+        "rationale is not tuning -- a requirement that MOST competent independent "
+        "implementations violate is more likely one the CHECK has misread than "
+        "one all those authors got wrong.\n\n"
+        "Measured on k1 over 218 checks that fire, where the base rate of "
+        "soundness is 68/218 = 31%: the rule keeps 59, and **59 OF 59 SPARE THE "
+        "KNOWN-GOOD DESIGN. PRECISION 100%.** An earlier version of this was 7 of "
+        "7 and readable as an accident; at 59 of 59 against a 31% base rate it is "
+        "not. It spans 39 of 89 requirements = 44%, and it is the best "
+        "golden-free soundness instrument measured here by a wide margin -- the "
+        "next is the split-cell filter at 84%.\n\n"
+        "AND IT REMOVES HALF THE ADEQUACY, WHICH IS THE PART TO CARRY. The "
+        "largest perfectly sound set this corpus contains is 68 checks over 45 "
+        "requirements = 51%, and it holds 18 checks that are also discriminating. "
+        "The rule recovers 59 of those 68 checks -- 87% -- but only **9 of the 18 "
+        "adequate ones**. It drops 13% of the set and 50% of what makes the set "
+        "worth having.\n\n"
+        "The mechanism is visible in what it drops: the nine rejected checks "
+        "convict 6, 8, 11, 12 and 13 of the 13 candidates. They are sound AND "
+        "they object to most of the population -- which is exactly the profile "
+        "the rule is built to reject, and exactly the profile of a check that "
+        "discriminates. So this is not a tuning loss to be recovered at another "
+        "threshold; the rule's precision and its cost are the same property.\n\n"
+        "Use it as a soundness gate, which is what it is, and never as a "
+        "selector for the final set: gate with it, then take the union with "
+        "whatever else the corpus offers, because the checks it rejects are where "
+        "half the discrimination lives."
     )
 
 def split_cells_are_a_specification_finding() -> str:

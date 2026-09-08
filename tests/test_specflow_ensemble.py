@@ -16,6 +16,7 @@ from specflow.ensemble import (
     strength_and_soundness_are_exchanged_not_traded,
     authoring_populations_are_complementary_not_ordered,
     zero_objections_can_be_incompatible_with_correctness,
+    the_minority_rule_is_precise_and_that_is_what_it_costs,
     the_residue_is_check_strength,
     consensus_cells,
     disagreement_cells,
@@ -213,6 +214,26 @@ def test_the_arm_comparison_is_scoped_to_what_it_can_decide():
     assert "does NOT say" in why
 
 
+def test_the_one_endorsed_gate_carries_its_price():
+    # The only instrument here that is recommended rather than refuted, which
+    # makes it the one most likely to be quoted with the caveat stripped. The
+    # 100% and the 9-of-18 have to be in the same text: a reader who takes only
+    # the precision builds a set with half the discrimination removed.
+    why = the_minority_rule_is_precise_and_that_is_what_it_costs()
+    assert "59 OF 59" in why and "31%" in why          # precision against its base rate
+    assert "9 of the 18" in why                        # and what that precision costs
+    assert "never as a selector" in why
+
+
+def test_the_endorsement_does_not_read_as_a_tuning_problem():
+    # The obvious response -- "then use a looser threshold" -- is refuted in the
+    # text, because the rejected checks convict most of the population by the
+    # same property that makes them discriminate.
+    why = the_minority_rule_is_precise_and_that_is_what_it_costs()
+    assert "not a tuning loss" in why
+    assert "same property" in why
+
+
 def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
     # A refutation kept in a function nothing points at is a refutation nobody
     # finds. The module docstring is the entry point, so it must name them all.
@@ -226,7 +247,8 @@ def test_every_refutation_is_named_where_someone_reaching_for_it_will_look():
                  "the_residue_is_check_strength",
                  "strength_and_soundness_are_exchanged_not_traded",
                  "zero_objections_can_be_incompatible_with_correctness",
-                 "authoring_populations_are_complementary_not_ordered"):
+                 "authoring_populations_are_complementary_not_ordered",
+                 "the_minority_rule_is_precise_and_that_is_what_it_costs"):
         assert name in doc, f"{name} is unreachable from the module docstring"
 
 
