@@ -327,7 +327,20 @@ def soundness_buys_termination_not_correctness() -> str:
         "original corpus scored 0% over 54 prior attempts and the fresh round "
         "13% over 66 more, six of its seven survivors landing on the three "
         "least demanding sentences in the population. A requirement without a "
-        "sound check is not an unattempted one; it is a harder one."
+        "sound check is not an unattempted one; it is a harder one.\n\n"
+        "REPRODUCED ON A SECOND SET, AND SPAN IS NOT THE VARIABLE. A "
+        "golden-free set spanning 45 of 89 requirements -- 51%, a majority, "
+        "at a 10% false-reject rate -- drove the same held-out design from "
+        "11 objections to 3 in six trials, divergence 249 to 192, one "
+        "output repaired to never differing, and one edit clearing four "
+        "objections at once by finding a shared root cause. The gradient is "
+        "therefore confirmed twice, independently. But the SMALLER set -- 40 "
+        "requirements, 44%, zero unsound -- finished four testpoints CLOSER "
+        "to correct on the same design. Nine more requirements, eighteen "
+        "more checks and four more objections bought no extra correctness. "
+        "Spanning a majority and driving a design to correctness are "
+        "independent properties of a set, and neither run reached "
+        "equivalence."
     )
 
 def the_residue_is_check_strength() -> str:

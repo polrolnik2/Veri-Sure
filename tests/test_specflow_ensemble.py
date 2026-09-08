@@ -146,6 +146,9 @@ def test_a_perfectly_sound_set_gives_direction_but_not_sufficiency():
     # and the obvious response to sparsity, with its measured yield, so the
     # 53%-against-0% split travels with the diagnosis that invites it
     assert "53%" in why and "40 to 43 of 89" in why
+    # and the second, larger set -- without it this reads as "a bigger set
+    # would finish", which is measured and false
+    assert "249 to 192" in why and "51%, a majority" in why
 
 
 def test_the_stimulus_lever_is_sized_and_the_residue_named():
