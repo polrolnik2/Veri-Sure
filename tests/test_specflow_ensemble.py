@@ -623,3 +623,26 @@ def test_the_validation_run_attributes_the_judgement_to_the_probe():
     t = ensemble.the_editor_can_read_a_state_it_cannot_argue_about()
     assert "THE STATE IS A DECLARED PROBE" in t
     assert "n is two" in t
+
+
+def test_the_occurrence_meaning_split_corrects_the_earlier_rate():
+    t = ensemble.an_occurrence_claim_is_checkable_and_a_meaning_claim_is_not()
+    assert "1 of 5, not 2 of 2" in t
+    assert "RIGHT, 1 of 1" in t and "WRONG, 0 of 4" in t
+
+
+def test_the_occurrence_meaning_split_states_the_bound():
+    t = ensemble.an_occurrence_claim_is_checkable_and_a_meaning_claim_is_not()
+    assert "does nothing for a meaning claim" in t
+    assert "recorded rather than trusted" in t
+
+
+def test_more_span_did_not_buy_more_correctness_reports_both_grades():
+    t = ensemble.more_span_did_not_buy_more_correctness()
+    assert "THREE TESTPOINTS CLOSER" in t
+    assert "both are DIFFERS" in t
+
+
+def test_more_span_excludes_the_editor_running_out_of_room():
+    t = ensemble.more_span_did_not_buy_more_correctness()
+    assert "trial budget unspent" in t

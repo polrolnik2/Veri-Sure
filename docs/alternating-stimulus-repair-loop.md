@@ -475,3 +475,94 @@ that can be verified rather than asserted.
   not enough to finish, which is a statement about the set's SIZE and not its
   direction — the same reading the clean ceiling run reached, now on a set no
   known-good design selected.
+
+## The 49% set, run: tripling the span moved the grade by one point
+
+The corrected keep set — 111 checks over **44 of 89 requirements = 49%**, audit
+12% — put through the identical experiment: unedited held-out `L`, a Sonnet
+editor through the shipped policy, the same 348-testpoint suite, the same grade.
+
+| set | span | objections | testpoints differing | cells | trials |
+|---|---|---|---|---|---|
+| band, 21 checks | 16 reqs = 18% | 8 -> **2** | 279 -> **223 = 64%** | 4,450 -> 3,969 | 3 of 14 |
+| **keep, 111 checks** | **44 reqs = 49%** | 23 -> **7** | 279 -> **220 = 63%** | 4,450 -> **3,834** | 5 of 14 |
+
+**THREE TIMES THE SPAN LANDED THE DESIGN THREE TESTPOINTS CLOSER.** Both runs
+`DIFFERS`, pins green. This is the plan's earlier rule-B-against-ceiling
+comparison reproduced at a much larger span gap, on one design, with one editor
+family and one evidence set: **"spans a majority of the specification" and
+"drives a design to correctness" are independent properties of a set**, and the
+second does not follow from the first at any span this corpus can reach.
+
+### RETRACTED: the editor's soundness judgement is 1 of 5, not 2 of 2
+
+The band run stopped on two checks and both were the unsound pair, which I
+reported as the editor's soundness judgement being right. **On the larger set it
+named FIVE requirements as the check's fault and exactly one of them is
+unsound.**
+
+| the editor's claim | audit |
+|---|---|
+| REQ-0081 — the state it names is compiled out of this build | **UNSOUND — correct** |
+| REQ-0026 — the requirement demands one increment and the check wants two | *sound* |
+| REQ-0068 — same | *sound* |
+| REQ-0059 — `dc_en` governs acceptance, not continuation | *sound* |
+| REQ-0060 — same | *sound* |
+
+**So the 2-of-2 was a small-n artefact and the rate is the same 1-in-3-to-5 this
+plan measured before.** What survives is a sharper distinction the two runs
+together make, and it is worth more than the rate:
+
+* **An OCCURRENCE claim is checkable and the editor got it right.** *"This state
+  never happens"* is a count over recorded rows, and the state is a declared
+  probe, so the editor counted it: 0 of 27,278 edges. Verified independently.
+* **A MEANING claim is not, and the editor got 0 of 4.** *"The requirement owes
+  one increment, not two"* and *"`dc_en` need not be held to the acknowledge"*
+  are readings of a sentence. The editor supported each with real counted
+  evidence from the traces — and the evidence was about what the design does,
+  never about what the requirement means, which is the question it was actually
+  answering.
+
+**A probe makes an occurrence claim decidable and does nothing for a meaning
+claim.** That is the honest version of what the band run seemed to show, and it
+is a bound on what any amount of trace evidence can buy an editor arguing with a
+check.
+
+## The mutant leg: 27 of 84, all sound, and it still must not select
+
+Invariant 8 said the VACUOUS state has no instrument and named the one this
+project already has — a mechanical one-line mutant of a candidate, wrong by
+construction, with no known-good design in its provenance. It was run: 15
+mutants of candidate `D`, **2 excluded as behaviourally identical to their
+parent** (the control firing exactly as it must), 13 live, differing from `D` on
+8 to 348 testpoints.
+
+| of the 84 checks that convict no candidate | checks | requirements | *audit* | *adequate* |
+|---|---|---|---|---|
+| **a live mutant convicts it — demonstrably CAN fail** | **27** | 14 | ***0%*** | *5* |
+| no live mutant convicts it | 57 | 25 | *0%* | *3* |
+
+**0 of the 27 promoted checks convict the reference.** That reproduces this
+module's `refuted_by` figure — 19 of 19 sound before, 27 of 27 now — on a
+different population, a different mutant parent and wider evidence.
+
+**AND IT STILL MUST NOT SELECT, for the reason the plan wrote down before it was
+measured.** Rejecting the 57 that no mutant convicts would discard **3 of the
+corpus's 14 adequate checks** — 21%, the identical fraction the earlier round
+measured. A check that catches nothing here is usually a check the seven
+candidates and the thirteen mutants all happen to satisfy, not a check that
+cannot fail.
+
+### And that is the refutability requirement failing a second time, with a second instrument
+
+| set | checks | requirements | of 89 | *audit* | *adequate* |
+|---|---|---|---|---|---|
+| **convicts at most 3 of 7 — the keep rule** | **111** | **44** | **49%** | ***12%*** | ***14*** |
+| ...and must convict a candidate | 27 | 14 | 16% | *48%* | *6* |
+| ...and must convict a live mutant | 54 | 25 | 28% | *24%* | *11* |
+
+**Both refutability requirements make every column worse — span, false rejects
+and adequacy — and they do it independently of each other.** The rule to carry is
+the plain one: *keep a check that convicts at most half of an independently
+written population, including none of it.* Refutability is a fact worth
+REPORTING beside a check and is not a criterion for keeping one.

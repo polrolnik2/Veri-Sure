@@ -1262,3 +1262,55 @@ def the_editor_can_read_a_state_it_cannot_argue_about() -> str:
         "judgement was right for a reason that can be verified rather than "
         "asserted. n is two; the mechanism is what to carry, not the rate."
     )
+
+
+def an_occurrence_claim_is_checkable_and_a_meaning_claim_is_not() -> str:
+    """CORRECTS `the_editor_can_read_a_state_it_cannot_argue_about`.
+
+    That entry reported the editor's soundness judgement as 2 of 2 on a
+    21-check set. On a 111-check set the same editor family named FIVE
+    requirements as the check's fault and one of them is unsound, so the 2-of-2
+    was small-n. What survives is the distinction between the two kinds of
+    claim, which is the part worth carrying.
+    """
+    return (
+        "Measured on k1, two editor runs on the same held-out design with the "
+        "same evidence. **The rate is 1 of 5, not 2 of 2** -- the smaller set "
+        "happened to stop on the unsound pair. The DISTINCTION is what "
+        "survives:\n\n"
+        "    OCCURRENCE  'this state never happens'      RIGHT, 1 of 1\n"
+        "    MEANING     'the requirement owes one X'    WRONG, 0 of 4\n\n"
+        "The occurrence claim is a count over recorded rows and the state is a "
+        "declared probe, so the editor counted it -- 0 of 27,278 edges -- and it "
+        "is the one check in the set the audit calls unsound. The four meaning "
+        "claims are readings of a sentence: whether a requirement owes one "
+        "increment or two, whether an enable governs acceptance or continuation. "
+        "The editor supported each with real counted evidence from the traces, "
+        "and the evidence was about what the DESIGN does, never about what the "
+        "REQUIREMENT means -- which is the question it was answering.\n\n"
+        "**A probe makes an occurrence claim decidable and does nothing for a "
+        "meaning claim.** That is a bound on what any quantity of trace evidence "
+        "can buy an editor arguing with a check, and it is why an editor's "
+        "refusal must be recorded rather than trusted."
+    )
+
+
+def more_span_did_not_buy_more_correctness() -> str:
+    """Two sets, one design, a 3x span gap, and one testpoint of difference."""
+    return (
+        "Measured on k1. Two golden-free-selected sets drove the same Sonnet "
+        "editor on the same design -- written from the specification, held out "
+        "of every selection -- over the same 348-testpoint suite, graded by the "
+        "same bounded miter with all three pins green.\n\n"
+        "| set | span | objections | testpoints differing | cells | trials |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 21 checks | 16 of 89 = 18% | 8 -> 2 | 279 -> **223 = 64%** | 4,450 -> 3,969 | 3 of 14 |\n"
+        "| 111 checks | 44 of 89 = **49%** | 23 -> 7 | 279 -> **220 = 63%** | 4,450 -> 3,834 | 5 of 14 |\n\n"
+        "**THREE TIMES THE SPAN LANDED THE DESIGN THREE TESTPOINTS CLOSER**, and "
+        "both are DIFFERS. Spanning a majority of the specification and driving "
+        "a design to correctness are independent properties of a check set, and "
+        "the second does not follow from the first at any span this corpus "
+        "reaches. Both runs also stopped with most of their trial budget unspent "
+        "and with only checks the editor declined left, so neither is a "
+        "measurement of the editor running out of room."
+    )
