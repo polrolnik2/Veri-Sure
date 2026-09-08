@@ -1636,7 +1636,38 @@ def a_ratchet_on_counts_refuses_an_improvement_it_cannot_see() -> str:
         "This is the same shape as "
         "`conviction_count_is_not_a_descent_criterion`, from the other side: "
         "there the count is fine enough and points the wrong way, here it points "
-        "the right way and is too coarse to move."
+        "the right way and is too coarse to move.\n\n"
+        "**CORRECTED BY THE RUN THAT FOLLOWED, AND THE CORRECTION MATTERS MORE "
+        "THAN THE DEFECT.** I wrote above that a criterion coarser than the edits "
+        "\"is NO gradient, and it rejects correct work\". That is true of the "
+        "per-output ratchet and FALSE as a general claim -- finer is not better. "
+        "Over seven trials of one editor run, the raw CELL count and the "
+        "(output, testpoint) PAIR count disagreed about whether the design had "
+        "improved THREE TIMES:\n\n"
+        "    trial  cells         pairs passing   latched\n"
+        "      3    3,003->2,721  3,210->3,192    REFUSED\n"
+        "      4    3,003->2,786  3,210->3,186    REFUSED\n"
+        "      5    3,003->2,216  3,210->3,205    REFUSED\n"
+
+        "Trial 5 is the sharpest: a **26% improvement in cells** that made the "
+        "property worse. A cell ratchet would have taken all three.\n\n"
+        "**AND THE REFUSALS COST NOTHING, ON EITHER MEASURE.** A refused commit "
+        "keeps the staged buffer, trials 6 and 7 built on it, and the run ended "
+        "at **1,758 cells -- lower than any of the three designs the cell "
+        "ratchet would have accepted.** The coarser criterion was right three "
+        "times out of three and lost nothing by being right.\n\n"
+        "**SO THE RULE IS NOT \"RATCHET FINELY\". IT IS: RATCHET AT THE "
+        "GRANULARITY OF THE PROPERTY BEING CLAIMED, NOT OF THE EVIDENCE.** A "
+        "cell is evidence. A (output, testpoint) pair is the property -- this "
+        "output is right in this situation. Per-output is coarser than the "
+        "property and refuses real progress; per-cell is finer than the property "
+        "and accepts real regressions. Both failure modes are measured here, on "
+        "one criterion, in one run.\n\n"
+        "**ONE DEFECT REMAINS AND IT IS IN THE BRIEF, NOT THE RATCHET.** The "
+        "editor was told its score was cells and the loop latched on pairs, so "
+        "three refusals looked arbitrary from where it sat -- it reported the "
+        "discrepancy itself. The number an agent is asked to optimise must be "
+        "the number that latches."
     )
 
 
@@ -1805,4 +1836,54 @@ def the_editors_dataflow_slice_was_dead_in_every_run_here() -> str:
         "arms run against the broken one. The honest course is to re-run the "
         "arms that carry the conclusion, not to leave a tool broken for the sake "
         "of a table."
+    )
+
+
+def the_loop_descended_through_the_reference_designs_own_floor() -> str:
+    """The consensus reference used as a DESCENT criterion for a repair loop,
+    run to the same conditions as the check-set runs.
+
+    `the_consensus_is_an_oracle_even_though_it_is_not_a_ranking` establishes that
+    the known-good design scores 2,073 of 240,573 unanimous cells -- 0.86% --
+    because seven readers of one specification share misreadings. That figure was
+    written down in advance as the FLOOR: a design scoring below it has matched
+    the population where the population is wrong.
+    """
+    return (
+        "One Sonnet editor, held-out design L unedited, 348-testpoint suite, "
+        "14-trial budget, the shipped `_EditSession` policy, one writer in the "
+        "run directory. The editor is handed an OBSERVED expected value -- what "
+        "all seven independent implementations produce at that sample -- instead "
+        "of objections from a check set.\n\n"
+        "    consensus cells disagreeing   9,857 -> 1,758 in 7 of 14 trials\n"
+        "    THE KNOWN-GOOD DESIGN'S OWN SCORE           2,073\n\n"
+        "**THE LOOP DESCENDED THROUGH THE FLOOR, AND THAT IS PROOF OF "
+        "NON-EQUIVALENCE BEFORE ANY MITER RUNS.** The known-good design scores "
+        "2,073 against this reference. A design scoring 1,758 therefore agrees "
+        "with the seven on at least 315 cells where the known-good design does "
+        "NOT, so it cannot be the known-good design -- by arithmetic, exactly as "
+        "a design scoring zero against a set that convicts the known-good design "
+        "seven times cannot be it. The miter agrees: `DIFFERS`, three pins "
+        "green, 210 of 348 testpoints.\n\n"
+        "**AND THE PROXY MOVED SEVERAL TIMES FASTER THAN THE TRUTH.** Over the "
+        "same seven trials the criterion fell 82% while the actual divergence "
+        "from the known-good design fell 25% by testpoints (279 -> 210) and 13% "
+        "by cells (4,450 -> 3,890). Different denominators, so the percentages "
+        "are not directly comparable -- but the loop reduced its own objective "
+        "far faster than it reduced its distance from correctness, which is what "
+        "Goodharting looks like when the criterion is honest and merely "
+        "incomplete.\n\n"
+        "**THIS REMOVES THE COMPANION DOCUMENT'S OWN EXPLANATION FOR THE "
+        "EDITOR'S WEAKNESS.** That document names the loop's weakest point as "
+        "*\"expected/actual is reconstructed, not observed ... a fabricated "
+        "expected value would make it CONFIDENT in a wrong theory\"*. Here it is "
+        "OBSERVED -- seven agents who never saw each other's work -- and the "
+        "design still ends `DIFFERS`. Being real rather than reconstructed is "
+        "not what was missing.\n\n"
+        "**WHAT A LOOP AUTHOR TAKES FROM IT: A DESCENT CRITERION NEEDS A FLOOR, "
+        "AND THE FLOOR HAS TO BE KNOWN.** This one has a floor that is knowable "
+        "in advance, which no check set's ever is -- and the loop still walked "
+        "past it, because nothing stops a criterion being satisfied harder than "
+        "correctness satisfies it. Stop on the floor, not on the trial budget, "
+        "whenever the floor can be computed."
     )

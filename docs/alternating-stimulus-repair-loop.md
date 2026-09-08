@@ -1186,3 +1186,95 @@ centre of its evidence**, so they are pessimistic by an unknown amount.
 A fixed driver running one new arm cannot be compared against arms run on the
 broken one. The course taken is to fix the driver and re-run the arms that carry
 the conclusion, not to leave a tool broken for the sake of a table.
+
+## THE CONSENSUS RUN: IT DESCENDED THROUGH THE REFERENCE'S OWN FLOOR
+
+One Sonnet editor, held-out design L unedited, 348 testpoints, 14 trials, one
+writer under the lock, and — for the first time on this plan — a **working
+dataflow slice.** The editor is handed an OBSERVED expected value instead of
+objections.
+
+| trial | consensus cells | (output, testpoint) pairs passing | failing | latched? |
+|---|---|---|---|---|
+| init | 9,857 | 2,975 | 515 | — |
+| 1 | 3,022 | 2,975 → 3,167 | 515 → 323 | latched |
+| 2 | 3,003 | 3,167 → 3,210 | 323 → 280 | latched |
+| 3 | *2,721* | 3,210 → 3,192 | 280 → *298* | **refused** |
+| 4 | *2,786* | 3,210 → 3,186 | 280 → *304* | **refused** |
+| 5 | *2,216* | 3,210 → 3,205 | 280 → *285* | **refused** |
+| 6 | 2,109 | 3,210 → 3,237 | 280 → 253 | latched |
+| 7 | **1,758** | 3,237 → **3,278** | 253 → **212** | latched |
+
+**82% off the criterion in 7 of 14 trials.** Graded in its own clean directory,
+three pins green: **`DIFFERS`, 210 of 348 testpoints (60%), 3,890 cells.**
+
+### THE FLOOR WAS 2,073 AND THE LOOP WENT UNDER IT
+
+`the_consensus_is_an_oracle_even_though_it_is_not_a_ranking` measured the
+reference wrong on **2,073 of its own 240,573 cells** — 0.86%, because seven
+readers of one specification share misreadings — and that figure was written down
+**in advance** as the floor.
+
+**The design finished at 1,758. That is proof of non-equivalence before any miter
+runs**: it agrees with the seven on at least 315 cells where the known-good
+design does *not*, so it cannot be the known-good design. Exactly the arithmetic
+that made zero fatal against a set convicting the reference seven times, arriving
+on a criterion that is honest and merely incomplete.
+
+### AND THE PROXY MOVED SEVERAL TIMES FASTER THAN THE TRUTH
+
+| | start | end | move |
+|---|---|---|---|
+| the criterion | 9,857 | 1,758 | **−82%** |
+| testpoints differing from the reference | 279 | 210 | −25% |
+| cells differing from the reference | 4,450 | 3,890 | −13% |
+
+Different denominators, so the percentages are not directly comparable — but the
+loop reduced its own objective far faster than it reduced its distance from
+correctness. **That is what Goodharting looks like when the criterion is honest.**
+
+### It removes the companion document's own explanation for the editor's weakness
+
+That document names the loop's weakest point outright: *"expected/actual is
+reconstructed, not observed … a fabricated expected value would make it CONFIDENT
+in a wrong theory."* **Here it was observed** — seven agents who never saw each
+other's work — and the design still ends `DIFFERS`. Being real rather than
+reconstructed is not what was missing.
+
+### Against the pre-registered table: MIXED, and confounded
+
+| criterion | span | testpoints of 348 | cells | trials |
+|---|---|---|---|---|
+| L, unedited | — | 279 = 80% | 4,450 | — |
+| 21 checks | 18% | 223 = 64% | 3,969 | 3 of 14 |
+| 111 checks | 49% | 220 = 63% | 3,834 | 5 of 14 |
+| 117 checks | 56% | 236 = 68% | **3,533** | 4 of 14 |
+| **consensus** | — | **210 = 60%** | 3,890 | 7 of 14 |
+
+The pre-registration says: *one measure better, the other worse → mixed, report
+both columns and claim nothing.* Honoured. **And it is confounded in the
+consensus run's favour** — it had a working dataflow slice and the three
+check-set runs did not. The 117-check arm is being re-run on the fixed driver so
+the comparison is between two criteria rather than between two harnesses.
+
+### The ratchet correction, which is the other half
+
+Three times — trials 3, 4 and 5 — the raw **cell** count fell while the
+**(output, testpoint) pair** count rose, and the pair ratchet refused all three.
+Trial 5 was a 26% cell improvement that made the property worse. **The refusals
+cost nothing on either measure**: a refused commit keeps the staged buffer,
+trials 6 and 7 built on it, and the run ended at 1,758 — lower than any of the
+three designs a cell ratchet would have taken.
+
+So the earlier finding needs correcting. *"A criterion coarser than the edits is
+no gradient and rejects correct work"* is true of the per-output ratchet and
+false as a general claim. **Ratchet at the granularity of the PROPERTY being
+claimed, not of the EVIDENCE.** A cell is evidence; a (output, testpoint) pair is
+the property. Per-output is coarser than the property and refuses real progress;
+per-cell is finer and accepts real regressions. Both are measured here, on one
+criterion, in one run.
+
+**One defect remains and it is in the brief, not the ratchet:** the editor was
+told its score was cells while the loop latched on pairs, so three refusals
+looked arbitrary from where it sat — it reported the discrepancy itself. **The
+number an agent is asked to optimise must be the number that latches.**

@@ -851,3 +851,35 @@ def test_the_dead_slice_separates_what_stands_from_what_does_not():
     assert "CONFOUND IS CONSTANT ACROSS ARMS" in t
     assert "pessimistic by an unknown amount" in t
     assert "COSTS COMPARABILITY" in t
+
+
+def test_the_floor_finding_is_arithmetic_before_it_is_a_miter_result():
+    t = ensemble.the_loop_descended_through_the_reference_designs_own_floor()
+    assert "DESCENDED THROUGH THE FLOOR" in t
+    assert "2,073" in t and "1,758" in t
+    assert "before any miter runs" in t.lower()
+
+
+def test_the_floor_finding_removes_the_reconstructed_value_explanation():
+    t = ensemble.the_loop_descended_through_the_reference_designs_own_floor()
+    assert "reconstructed, not observed" in t
+    assert "Being real rather than reconstructed is not what was missing" in t
+
+
+def test_the_floor_finding_does_not_overclaim_the_percentages():
+    t = ensemble.the_loop_descended_through_the_reference_designs_own_floor()
+    assert "Different denominators" in t
+    assert "Stop on the floor, not on the trial budget" in t
+
+
+def test_the_ratchet_finding_is_corrected_by_its_own_follow_up_run():
+    t = ensemble.a_ratchet_on_counts_refuses_an_improvement_it_cannot_see()
+    assert "FALSE as a general claim -- finer is not better" in t
+    assert "26% improvement in cells" in t
+
+
+def test_the_ratchet_correction_states_the_rule_as_the_property():
+    t = ensemble.a_ratchet_on_counts_refuses_an_improvement_it_cannot_see()
+    assert "GRANULARITY OF THE PROPERTY BEING CLAIMED, NOT OF THE EVIDENCE" in t
+    assert "lower than any of the three designs the cell ratchet would have accepted" in t
+    assert "must be the number that latches" in t
