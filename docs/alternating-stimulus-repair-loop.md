@@ -1129,3 +1129,60 @@ very low while the miter gets worse is the over-strict-zero pattern arriving on 
 new criterion — the reference is wrong about 2,073 of its own cells, so matching
 it everywhere is evidence against equivalence, exactly as reaching zero against a
 set carrying an unsound check is.
+
+## CORRECTED WITHIN THE HOUR: THE REMEDY IS NOT A RULE, IT IS A LOCK
+
+The section above ends *"the discipline is one line — one agent per run
+directory, and the operator does not touch it while that agent holds it."*
+**I then broke it a third time, within the hour, having just written it down.**
+
+The rule was in every dispatch brief, in capitals, with both previous failures
+named. The third instance was not an agent ignoring it. It was **me** stopping
+one of two registered agents and dispatching a new one into the directory the
+**other** was still holding, having never enumerated the live writers. The newly
+dispatched agent detected the collision itself, refused to commit, and reported
+it — which is the only reason it was caught.
+
+**A rule that must be remembered by every operator and every agent on every
+dispatch is not a rule; it is a hope, and this one failed three times out of
+three.** Every mutating driver command now takes an exclusive lock on the run
+directory:
+
+    REFUSED: loopCONS is held by pid 15110 running 'commit' since 14:11:03.
+    One writer per run directory -- wait for it, or stop it deliberately.
+
+Reads are unlocked, so a reader can never block a writer. A lock whose pid is
+gone is reclaimed and the takeover is printed rather than done silently, because
+a killed writer must not wedge the directory forever. **Three destroyed runs is
+what it cost to prefer the rule to the mechanism.**
+
+## AND THE EDITOR'S DATAFLOW SLICE WAS DEAD IN EVERY RUN ON THIS PLAN
+
+Found by the third agent, not by any number looking wrong — the thirteenth
+counting-shaped defect here and mine.
+
+Every driver command is a fresh process that rebuilds the edit session from
+`state.json`. All three drivers test `s.focused` to decide whether to build the
+slice **about thirty lines before the line that reads `focused` out of
+`state.json`.** So `s.focused` is the constructor default when it is tested,
+`blocks_by_id` is empty on every invocation, and `blocks` and `readblock` return
+nothing and `unknown block_id`.
+
+**So no editor run here — not the ceiling runs, not the golden-free rule runs,
+not the 21-, 111- or 117-check runs — had `list_suspect_blocks` or `read_block`.**
+What it had was the `focus` call's own output, computed in-process and therefore
+correct, and nothing afterwards. Every editor read the whole module and worked
+from that. The companion document puts the slice at the centre of the editor's
+evidence — *"`focus(req_uid)`. Slice from one requirement's ports at a time"* —
+and it was never delivered.
+
+**The confound is CONSTANT ACROSS ARMS, which is the one piece of good news.**
+Every run was degraded identically, so the comparisons *between* check sets
+stand. What does not stand is any absolute reading: **every `DIFFERS` on this
+plan was produced by an editor missing the tool the architecture puts at the
+centre of its evidence**, so they are pessimistic by an unknown amount.
+
+**And fixing it costs comparability, which has to be paid rather than avoided.**
+A fixed driver running one new arm cannot be compared against arms run on the
+broken one. The course taken is to fix the driver and re-run the arms that carry
+the conclusion, not to leave a tool broken for the sake of a table.

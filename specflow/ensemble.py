@@ -1664,12 +1664,27 @@ def a_run_directory_written_by_two_agents_is_not_a_measurement() -> str:
         "only remedy: a partial result from a contended directory cannot be "
         "repaired by inspection, because the question is not what the files say "
         "but which moment each of them is from.\n\n"
-        "The discipline is one line -- **one agent per run directory, and the "
-        "operator does not touch it while that agent holds it** -- and it "
-        "belongs beside the other harness rules this plan has had to learn by "
+        "It belongs beside the other harness rules this plan has had to learn by "
         "breaking them: select over the same corpus the score was taken over, "
         "re-score in a fresh directory rather than comparing a design against "
-        "itself, and give every arm the same row list."
+        "itself, and give every arm the same row list.\n\n"
+        "**CORRECTED, AND THE CORRECTION IS THE USEFUL HALF. I FIRST WROTE THAT \"the "
+        "discipline is one line -- one agent per run directory\", AND THEN BROKE IT A "
+        "THIRD TIME WITHIN THE HOUR.** The rule was stated in every dispatch brief, "
+        "in capitals, with the two previous failures named. The third instance was "
+        "not an agent ignoring it: it was me stopping one of two registered agents "
+        "and dispatching a new one into the directory the OTHER was still holding, "
+        "having never enumerated the live writers. The freshly dispatched agent "
+        "detected the collision itself, refused to commit, and said so -- which is "
+        "the only reason the third instance was caught at all.\n\n"
+        "**SO THE REMEDY IS NOT A RULE, IT IS A LOCK.** A rule that must be "
+        "remembered by every operator and every agent on every dispatch is not a "
+        "rule; it is a hope, and this one failed three times out of three. Every "
+        "MUTATING driver command now takes an exclusive lock on the run directory "
+        "and refuses with the holder's pid, command and start time; reads are "
+        "unlocked so a reader can never block a writer; a lock whose pid is gone is "
+        "reclaimed and the takeover is printed rather than done silently. Three "
+        "destroyed runs is what it cost to prefer the rule to the mechanism."
     )
 
 
@@ -1749,4 +1764,45 @@ def a_body_is_judged_whole_and_its_obligations_are_not() -> str:
         "returns, not a phrase inside a message written for a human to read. As "
         "prose it is unreadable for 78% of the population and misreadable for the "
         "rest."
+    )
+
+
+def the_editors_dataflow_slice_was_dead_in_every_run_here() -> str:
+    """A thirteenth counting-shaped defect, mine, found by a subagent rather
+    than by any number looking wrong.
+
+    The companion document names the dataflow slice as the editor's answer to
+    the one problem a whole-module view creates -- *"`focus(req_uid)`. Slice
+    from one requirement's ports at a time"* -- and every editor run measured on
+    this plan was driven through a harness in which it returned nothing.
+    """
+    return (
+        "Every driver command is a fresh process that rebuilds the edit session "
+        "from `state.json`. All three drivers here test `s.focused` to decide "
+        "whether to build the slice -- **about thirty lines BEFORE the line that "
+        "reads `focused` out of `state.json`.** So `s.focused` is the "
+        "constructor default at the moment it is tested, `blocks_by_id` is empty "
+        "on every invocation, and `blocks` and `readblock` return nothing and "
+        "`unknown block_id`.\\n\\n"
+        "**THE EDITOR HAD NO DATAFLOW SLICE IN ANY RUN ON THIS PLAN** -- not the "
+        "ceiling runs, not the golden-free rule runs, not the 21-, 111- or "
+        "117-check runs. What it had was the `focus` call's own output, which is "
+        "computed in-process and therefore correct, and nothing afterwards. Every "
+        "editor here read the whole module and worked from it.\\n\\n"
+        "**IT WAS FOUND BY A SUBAGENT, NOT BY A NUMBER LOOKING WRONG**, which is "
+        "the same signature as the twelve before it: the harness ran clean, "
+        "printed plausible output, and answered a question nobody had asked. An "
+        "empty block list reads exactly like a slice that legitimately found "
+        "nothing.\\n\\n"
+        "**AND THE CONFOUND IS CONSTANT ACROSS ARMS, WHICH IS THE ONE PIECE OF "
+        "GOOD NEWS.** Every run was degraded identically, so the comparisons "
+        "BETWEEN check sets stand. What does not stand is any absolute reading: "
+        "every `DIFFERS` on this plan was produced by an editor missing the tool "
+        "the architecture puts at the centre of its evidence, so they are "
+        "pessimistic by an unknown amount.\\n\\n"
+        "**AND FIXING IT COSTS COMPARABILITY, WHICH HAS TO BE PAID RATHER THAN "
+        "AVOIDED.** A fixed driver running one new arm cannot be compared with "
+        "arms run against the broken one. The honest course is to re-run the "
+        "arms that carry the conclusion, not to leave a tool broken for the sake "
+        "of a table."
     )

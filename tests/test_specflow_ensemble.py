@@ -826,3 +826,28 @@ def test_the_obligation_instrument_admits_the_syntactic_luck():
     assert "SYNTACTIC LUCK" in t
     assert "the +4 is not robust either" in t
     assert "STRUCTURED FIELD" in t
+
+
+def test_the_contention_finding_corrects_its_own_prescription():
+    t = ensemble.a_run_directory_written_by_two_agents_is_not_a_measurement()
+    assert "BROKE IT A THIRD TIME WITHIN THE HOUR" in t
+    assert "THE REMEDY IS NOT A RULE, IT IS A LOCK" in t
+
+
+def test_the_lock_is_described_as_built_not_proposed():
+    t = ensemble.a_run_directory_written_by_two_agents_is_not_a_measurement()
+    assert "reads are unlocked so a reader can never block a writer" in t
+    assert "reclaimed and the takeover is printed" in t
+
+
+def test_the_dead_slice_names_which_runs_it_touches():
+    t = ensemble.the_editors_dataflow_slice_was_dead_in_every_run_here()
+    assert "NO DATAFLOW SLICE IN ANY RUN ON THIS PLAN" in t
+    assert "21-, 111- or 117-check runs" in t
+
+
+def test_the_dead_slice_separates_what_stands_from_what_does_not():
+    t = ensemble.the_editors_dataflow_slice_was_dead_in_every_run_here()
+    assert "CONFOUND IS CONSTANT ACROSS ARMS" in t
+    assert "pessimistic by an unknown amount" in t
+    assert "COSTS COMPARABILITY" in t
