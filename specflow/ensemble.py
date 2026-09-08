@@ -179,6 +179,21 @@ and the one thing that follows from them, and
 `accuracy_is_the_wrong_axis_for_a_reference` carries the last shape the idea
 takes -- the consensus as an expected-value column rather than as a criterion,
 which is 99.822% accurate and drives a loop nowhere.
+**Corrected on a second held-out design:
+`the_consensus_is_an_oracle_even_though_it_is_not_a_ranking`.**
+
+AND TWO OF THE ENTRIES HERE ARE ABOUT THE DRIVER RATHER THAN THE CRITERION,
+because both cost a measurement before they were understood. A repair loop
+latches on the COUNT of passing requirements, so a criterion encoded one
+pseudo-requirement per output cannot see an edit that removes 70% of the
+disagreement and leaves every output still wrong somewhere -- it reads
+"passing 1 -> 1" and rolls the edit back. Two numbers are needed and they are
+not the same number: a fine one to steer, a coarse one to judge.
+`a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` carries it. And a run
+directory written by two agents at once yields a design, a state file and a score
+that describe different moments, with nothing in it saying so;
+`a_run_directory_written_by_two_agents_is_not_a_measurement` carries the tell and
+the only remedy, which is to archive it unread and start again.
 """
 from __future__ import annotations
 
@@ -1565,4 +1580,81 @@ def the_consensus_is_an_oracle_even_though_it_is_not_a_ranking() -> str:
         "to disagree. The gap is far too large to be only that. The honest "
         "statement is that the route was closed on a sample of one held-out "
         "design and should not have been."
+    )
+
+
+def a_ratchet_on_counts_refuses_an_improvement_it_cannot_see() -> str:
+    """The granularity of a repair loop's ratchet is a proxy-metric choice, and
+    the coarse one is measured to REFUSE a real improvement.
+
+    `_EditSession.commit` latches an edit when the COUNT of passing requirements
+    rises. That is the pipeline's own accept rule and it is not wrong; what is
+    wrong is what a driver hands it as a "requirement" when the criterion is not
+    a check set.
+    """
+    return (
+        "Driving the editor on the consensus reference (one expected value per "
+        "declared output per raw edge, from seven independently written "
+        "implementations) the obvious encoding is ONE PSEUDO-REQUIREMENT PER "
+        "DECLARED OUTPUT -- ten of them, each passing iff that output disagrees "
+        "nowhere.\n\n"
+        "**THAT ENCODING CANNOT SEE PROGRESS, AND THE ARGUMENT IS ARITHMETIC "
+        "RATHER THAN EMPIRICAL.** A wrong design disagrees somewhere on nearly "
+        "every output, so nearly every pseudo-requirement is failing; an edit "
+        "that removes most of the disagreement on an output but not all of it "
+        "leaves that pseudo-requirement failing, and the count does not move. "
+        "The observed instance: an edit taking the disagreement from 9,857 cells "
+        "to under 3,000 -- a ~70% reduction -- read *passing requirements 1 -> 1* "
+        "and was REFUSED and rolled back.\n\n"
+        "**RE-ENCODED ON (OUTPUT, TESTPOINT) PAIRS THE SAME EDIT LATCHES.** A "
+        "pair passes iff that output disagrees nowhere in that testpoint, so an "
+        "edit that fixes an output on 200 testpoints and not on 30 raises the "
+        "count by 200. Re-measured serially from the unedited held-out design, "
+        "one commit under the pair ratchet takes 9,857 cells to **2,540**.\n\n"
+        "**THE RULE THIS SETS IS NOT ABOUT THIS CRITERION.** Two numbers are "
+        "needed and they are not the same number: a FINE one to steer, which "
+        "must fall whenever the design improves, and a COARSE one to judge, "
+        "which is the property being claimed. The companion plan states exactly "
+        "this for the check-set loop -- ratchet on (requirement, testpoint) "
+        "pairs, accept per requirement -- and this is that prescription arriving "
+        "as a defect in a driver that did not follow it. A criterion whose "
+        "granularity is coarser than the edits being made is not a weak "
+        "gradient; it is NO gradient, and it rejects correct work.\n\n"
+        "This is the same shape as "
+        "`conviction_count_is_not_a_descent_criterion`, from the other side: "
+        "there the count is fine enough and points the wrong way, here it points "
+        "the right way and is too coarse to move."
+    )
+
+
+def a_run_directory_written_by_two_agents_is_not_a_measurement() -> str:
+    """A harness discipline finding, made twice in one session, both times mine.
+
+    It is recorded here rather than absorbed because the failure mode is silent:
+    the run directory afterwards contains a design, a state file and a score, all
+    well-formed, and none of them describes the same moment.
+    """
+    return (
+        "An editor run directory holds a staged buffer, an accepted design, a "
+        "best-so-far design, a trial counter and a re-scored result. A commit "
+        "rewrites several of them in sequence over minutes of simulation. **Two "
+        "agents pointed at one such directory, or one agent plus an operator "
+        "re-initialising it, produce a directory in which those files come from "
+        "different moments** -- and nothing in it says so.\n\n"
+        "Both instances here had the same tell and it is worth naming: the "
+        "accepted design's SIZE matched neither the design the run started from "
+        "nor the one the last recorded commit produced. A file that is not any "
+        "of the versions the run is supposed to contain is the signature.\n\n"
+        "**NO NUMBER FROM EITHER DIRECTORY IS QUOTED ANYWHERE IN THIS MODULE OR "
+        "IN THE PLAN.** Both were archived unread and the run restarted from the "
+        "unedited held-out design, serially, with exactly one agent. That is the "
+        "only remedy: a partial result from a contended directory cannot be "
+        "repaired by inspection, because the question is not what the files say "
+        "but which moment each of them is from.\n\n"
+        "The discipline is one line -- **one agent per run directory, and the "
+        "operator does not touch it while that agent holds it** -- and it "
+        "belongs beside the other harness rules this plan has had to learn by "
+        "breaking them: select over the same corpus the score was taken over, "
+        "re-score in a fresh directory rather than comparing a design against "
+        "itself, and give every arm the same row list."
     )

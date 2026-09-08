@@ -759,3 +759,33 @@ def test_the_consensus_correction_names_what_it_cannot_separate():
 def test_the_consensus_oracle_excludes_probes_on_the_port_only_argument():
     t = ensemble.the_consensus_is_an_oracle_even_though_it_is_not_a_ranking()
     assert "convict a correct design for its encoding" in t
+
+
+def test_the_coarse_ratchet_defect_is_stated_as_arithmetic_not_anecdote():
+    t = ensemble.a_ratchet_on_counts_refuses_an_improvement_it_cannot_see()
+    assert "ARITHMETIC RATHER THAN EMPIRICAL" in t
+    assert "passing requirements 1 -> 1" in t
+
+
+def test_the_ratchet_finding_prescribes_two_numbers_not_a_better_one():
+    t = ensemble.a_ratchet_on_counts_refuses_an_improvement_it_cannot_see()
+    assert "a FINE one to steer" in t and "a COARSE one to judge" in t
+    assert "it is NO gradient, and it rejects correct work" in t
+
+
+def test_the_contended_directory_finding_names_its_tell():
+    t = ensemble.a_run_directory_written_by_two_agents_is_not_a_measurement()
+    assert "matched neither the design the run started from" in t
+    assert "NO NUMBER FROM EITHER DIRECTORY IS QUOTED" in t
+
+
+def test_the_contended_directory_finding_refuses_repair_by_inspection():
+    t = ensemble.a_run_directory_written_by_two_agents_is_not_a_measurement()
+    assert "cannot be repaired by inspection" in t
+    assert "one agent per run directory" in t.lower()
+
+
+def test_the_module_docstring_carries_the_two_driver_findings():
+    d = ensemble.__doc__ or ""
+    assert "a_ratchet_on_counts_refuses_an_improvement_it_cannot_see" in d
+    assert "a_run_directory_written_by_two_agents_is_not_a_measurement" in d

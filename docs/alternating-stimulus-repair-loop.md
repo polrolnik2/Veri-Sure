@@ -913,3 +913,78 @@ Unanimity over seven is easier than over thirteen, so this table has more cells
 and more chances to disagree. The 0-against-9,857 gap is far too large to be
 only that, and the honest statement is that **the earlier route was closed on a
 sample of one held-out design and should not have been.**
+
+## TWO DEFECTS IN MY OWN DRIVER, AND THE FIRST IS A PROXY-METRIC FINDING
+
+The goal asks for proxy metrics chosen by *how well they facilitate the RTL
+Editor succeeding*. The consensus run produced one before it produced any
+trajectory, and it is about the shape of the criterion rather than its content.
+
+### THE RATCHET'S GRANULARITY IS A PROXY-METRIC CHOICE, AND THE COARSE ONE REJECTS CORRECT WORK
+
+`_EditSession.commit` latches an edit when the **count of passing requirements**
+rises (`rtl_editor.py:2007`). That is the shipped accept rule and it is not
+wrong. What is wrong is what a driver hands it as a "requirement" when the
+criterion is not a check set at all.
+
+Driving on the consensus reference, the obvious encoding is **one
+pseudo-requirement per declared output** — ten of them, each passing iff that
+output disagrees nowhere.
+
+**THAT ENCODING CANNOT SEE PROGRESS, AND THE ARGUMENT IS ARITHMETIC RATHER THAN
+EMPIRICAL.** A wrong design disagrees somewhere on nearly every output, so nearly
+every pseudo-requirement is failing; an edit that removes most of the
+disagreement on an output but not all of it leaves that pseudo-requirement
+failing and the count does not move. Observed: an edit taking the disagreement
+from **9,857 cells to under 3,000 — a ~70% reduction — read *passing
+requirements 1 → 1* and was REFUSED and rolled back.**
+
+**RE-ENCODED ON (OUTPUT, TESTPOINT) PAIRS THE SAME EDIT LATCHES.** A pair passes
+iff that output disagrees nowhere in that testpoint, so an edit that fixes an
+output on 200 testpoints and not on 30 raises the count by 200. Re-measured
+serially from the unedited held-out design, one commit under the pair ratchet
+takes **9,857 cells to 2,540**.
+
+**SO TWO NUMBERS ARE NEEDED AND THEY ARE NOT THE SAME NUMBER**: a FINE one to
+steer, which must fall whenever the design improves, and a COARSE one to judge,
+which is the property being claimed. The companion document prescribes exactly
+this for the check-set loop — *ratchet on (requirement, testpoint) pairs, accept
+per requirement* — and this is that prescription arriving as a defect in a driver
+that did not follow it. **A criterion coarser than the edits being made is not a
+weak gradient; it is no gradient, and it rejects correct work.**
+
+That is the mirror of this plan's other gradient finding. `conviction_count_is
+_not_a_descent_criterion` is a count fine enough to move and pointing the wrong
+way; this is a count pointing the right way and too coarse to move.
+
+### AND A RUN DIRECTORY WRITTEN BY TWO AGENTS IS NOT A MEASUREMENT — TWICE, BOTH MINE
+
+An editor run directory holds a staged buffer, an accepted design, a best-so-far
+design, a trial counter and a re-scored result, and a commit rewrites several of
+them in sequence over minutes of simulation. **Two agents pointed at one such
+directory — or one agent plus me re-initialising it — leave those files
+describing different moments, and nothing in the directory says so.**
+
+It happened twice in this session. The first time I started a re-init while an
+editor agent was mid-commit. The second time I dispatched a fresh agent into a
+rebuilt directory while the previous agent was still registered and still
+working in it; it staged a batch and issued `commit` at 13:46:18, and my stop
+interrupted that commit mid-run.
+
+**Both had the same tell: the accepted design's SIZE matched neither the design
+the run started from nor the one the last recorded commit produced.** A file that
+is not any of the versions the run is supposed to contain is the signature.
+
+**NO NUMBER FROM EITHER DIRECTORY IS QUOTED ANYWHERE ON THIS PLAN.** Both were
+archived unread and the run restarted from the unedited held-out design,
+serially, with exactly one agent and the full 14-trial budget — which also makes
+it directly comparable with the three check-set runs, each of which started from
+unedited L. A partial result from a contended directory cannot be repaired by
+inspection, because the question is not what the files say but which moment each
+of them is from.
+
+**The discipline is one line — one agent per run directory, and the operator does
+not touch it while that agent holds it** — and it belongs beside the other
+harness rules this plan has had to learn by breaking them: select over the same
+corpus the score was taken over, re-score in a fresh directory rather than
+comparing a design against itself, and give every arm the same row list.
