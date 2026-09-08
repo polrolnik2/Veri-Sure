@@ -114,3 +114,28 @@ as a verdict on the design.
    harness refusals, not conventions.
 5. Alternate until no check changes state or the budget is spent, logging every
    transition with the move that caused it.
+
+## Invariant 6: the trace-internals list is PER DESIGN
+
+The reference design has no probe PORTS — its probes are decoded from internal
+signals, so recording it needs `state,cnt,hitmiss_eval,...`. Every GENERATED
+design declares the probes as real output ports and has **none** of those
+internal names. Hand it the reference's list and its `dut_internal` comes back
+empty: every probe is present as a key and never true.
+
+Measured on one held-out design, same stimulus, two recordings:
+
+| recording | probes ever true |
+|---|---|
+| probe-port list (correct) | **9 of 10** |
+| reference's internal list | **1 of 10** |
+
+and the single survivor is `hitmiss_eval` — the one name that exists on both
+sides, which this plan already records as a probe/internal collision.
+
+**A probe that is never true is, to a check, a probe that does not exist**, so
+every probe-reading check silently stops deciding and the whole candidate
+population reads as port-only. Nothing fails; the counts just quietly change.
+The recorder must take the probe list from the contract for a generated design
+and the internals list only for the reference, and a run whose probes are all
+dead should refuse rather than report.
