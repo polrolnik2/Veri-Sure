@@ -902,3 +902,21 @@ def test_the_consensus_bound_refuses_the_unregistered_tiebreak():
     t = ensemble.the_consensus_route_is_bounded_by_the_specification_not_the_editor()
     assert "NOT PRE-REGISTERED AND MUST NOT BE USED AS A TIEBREAK" in t
     assert "mixed is what stands" in t
+
+
+def test_the_head_to_head_reports_the_two_criteria_as_indistinguishable():
+    t = ensemble.two_criteria_on_one_harness_land_the_same_design_in_the_same_place()
+    assert "INDISTINGUISHABLE" in t
+    assert "206 = 59%" in t and "210 = 60%" in t
+
+
+def test_the_head_to_head_names_the_criterion_as_not_binding():
+    t = ensemble.two_criteria_on_one_harness_land_the_same_design_in_the_same_place()
+    assert "THE CRITERION IS NOT THE BINDING CONSTRAINT" in t
+    assert "0.7%" in t and "1.3%" in t
+
+
+def test_the_head_to_head_names_both_confounds_and_their_direction():
+    t = ensemble.two_criteria_on_one_harness_land_the_same_design_in_the_same_place()
+    assert "handicaps the check set" in t
+    assert "not separable here" in t

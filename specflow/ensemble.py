@@ -1929,3 +1929,49 @@ def the_consensus_route_is_bounded_by_the_specification_not_the_editor() -> str:
         "differing and transactional cells -- reads 210 against 236 and 3,890 "
         "against 3,533, which is MIXED, and mixed is what stands."
     )
+
+
+def two_criteria_on_one_harness_land_the_same_design_in_the_same_place() -> str:
+    """The comparison the whole session was arranged to make.
+
+    Every earlier head-to-head on this plan compared runs that differed in the
+    harness as well as the criterion -- the dataflow slice was dead in all of
+    them, and the drivers ratchet differently. This pair shares a harness: the
+    same held-out design unedited, the same 348-testpoint suite, the same
+    14-trial budget, one writer under a lock, and a WORKING slice on both.
+    """
+    return (
+        "    criterion                     testpoints of 348   cells   trials\\n"
+        "    the design, unedited                279 = 80%     4,450      --\\n"
+        "    117 CHECKS, 50 of 89 = 56%          206 = 59%     3,866   8/14\\n"
+        "    THE CONSENSUS OF SEVEN              210 = 60%     3,890   7/14\\n\\n"
+        "**FOUR TESTPOINTS AND TWENTY-FOUR CELLS APART. THEY ARE "
+        "INDISTINGUISHABLE.** Both end `DIFFERS` with three pins green. A "
+        "golden-free check set spanning a majority of the specification and an "
+        "OBSERVED expected value from seven independent implementations drive "
+        "the same held-out design to the same place, within 1.2%.\\n\\n"
+        "**AND THE CONSENSUS CRITERION IS TWICE AS GOOD AT THE THING IT "
+        "MEASURES, WHICH BOUGHT NOTHING.** On the cells where the seven agree -- "
+        "the only cells it scores -- it leaves the design wrong 0.7% of the time "
+        "against the check set's 1.3%. That advantage does not appear in the "
+        "grade at all, because both designs' remaining wrongness is "
+        "concentrated where the seven CANNOT agree: 66% of the consensus "
+        "residue and 56% of the check set's.\\n\\n"
+        "**SO THE CRITERION IS NOT THE BINDING CONSTRAINT, AND THAT IS THE "
+        "SESSION'S RESULT.** Every route this plan has tried -- more span, "
+        "better selection, narrowing, strengthening, volume, an ensemble of "
+        "checks, an ensemble of designs, an observed expected value -- optimises "
+        "something computed from the specification, and the specification "
+        "underdetermines the cells where these designs are actually wrong.\\n\\n"
+        "TWO CONFOUNDS, BOTH NAMED, BOTH POINTING THE SAME WAY. The check-set "
+        "loop ratchets per CHECK where the consensus loop ratchets per (output, "
+        "testpoint) PAIR, which handicaps the check set -- so if anything it is "
+        "the stronger of the two, and it still only ties. And the check-set arm "
+        "spent 8 trials to the consensus arm's 7, which is close enough not to "
+        "explain four testpoints.\\n\\n"
+        "**WHAT THE SLICE WAS WORTH, PRICED BY THE SAME PAIR.** The identical "
+        "117-check set on the broken harness reached 236 testpoints and 10,926 "
+        "raw-edge cells in 4 trials; on the fixed one, 206 and 6,903 in 8. "
+        "Better on both, and confounded with the trial count -- so the slice is "
+        "worth something and how much is not separable here."
+    )

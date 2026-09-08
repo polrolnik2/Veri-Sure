@@ -1316,3 +1316,81 @@ design the 117-check loop produced — which looks decisive for the consensus
 criterion, and is a *third* measure computed afterwards as the input to this
 analysis. The pre-registered pair reads 210 against 236 testpoints and 3,890
 against 3,533 transactional cells. **That is MIXED, and mixed is what stands.**
+
+## THE HEAD-TO-HEAD, ON ONE HARNESS: THE CRITERION IS NOT THE BINDING CONSTRAINT
+
+Every earlier comparison on this plan differed in the harness as well as the
+criterion — the dataflow slice was dead in all of them. This pair shares one:
+same held-out design L unedited, same 348-testpoint suite, same 14-trial budget,
+one writer under a lock, and a **working slice on both**.
+
+| criterion | testpoints of 348 | cells | trials | grade |
+|---|---|---|---|---|
+| L, unedited | 279 = 80% | 4,450 | — | — |
+| **117 checks, 50 of 89 = 56%** | **206 = 59%** | **3,866** | 8 of 14 | `DIFFERS` |
+| **the consensus of seven** | **210 = 60%** | **3,890** | 7 of 14 | `DIFFERS` |
+
+**Four testpoints and twenty-four cells apart. They are indistinguishable.** A
+golden-free check set spanning a majority of the specification and an *observed*
+expected value from seven independent implementations drive the same design to
+the same place, within 1.2%. Both `DIFFERS`, all pins green.
+
+### And the consensus criterion is twice as good at what it measures, which bought nothing
+
+| | AGREE cells (94%) | rate | SPLIT cells (6%) | rate | share of residue in SPLIT |
+|---|---|---|---|---|---|
+| 117 checks | 3,066 | 1.3% | 3,837 | 27.5% | 56% |
+| consensus | **1,718** | **0.7%** | 3,405 | 24.4% | **66%** |
+
+The consensus criterion scores *only* the agreed cells, and it halves the error
+there — and none of that reaches the grade, because both designs' remaining
+wrongness is concentrated where the seven **cannot** agree.
+
+### So the criterion is not the binding constraint, and that is the session's result
+
+Every route this plan has tried — more span, better selection, narrowing,
+strengthening, volume, an ensemble of checks, an ensemble of designs, and now an
+observed expected value — optimises something computed from the specification.
+**The specification underdetermines the cells where these designs are actually
+wrong**, and that bound is now measured from two directions at once.
+
+**Two confounds, both named, both pointing the same way.** The check-set loop
+ratchets per CHECK where the consensus loop ratchets per (output, testpoint)
+PAIR, which handicaps the check set — so if anything it is the stronger of the
+two, and it still only ties. And it spent 8 trials to the consensus arm's 7,
+which is not enough to explain four testpoints.
+
+**What the slice was worth, priced by the same pair.** The identical 117-check
+set on the broken harness reached 236 testpoints and 10,926 raw-edge cells in 4
+trials; on the fixed one, **206 and 6,903 in 8**. Better on both, confounded with
+the trial count, so the slice is worth something and how much is not separable
+here.
+
+## AND THE EDITOR'S SOUNDNESS JUDGEMENT IS NOW MEASURED THREE TIMES: 1 OF 3, 1 OF 5, 1 OF 5
+
+The 117-check editor reported *"a proven, structural contradiction, not a
+diagnosis of mine alone"* between REQ-0035 and REQ-0059/REQ-0060, having flipped
+the definition three times and watched the three requirements flip in lockstep.
+**The audit refutes it in one column** — every one of those checks convicts the
+reference design ZERO times, so a design satisfying all three exists and the
+reference is it. What the editor measured is that *its* implementation could not,
+which is a different claim.
+
+| the check it judged over-strict | *audit: convicts the reference* | verdict |
+|---|---|---|
+| REQ-0035 (3 members) | *0* | **wrong** |
+| REQ-0059 (4 members), REQ-0060 | *0* | **wrong** |
+| REQ-0069.shipping | *0* — and it catches held-out L: **ADEQUATE** | **wrong** |
+| REQ-0088.shipping | *0* — catches L **37 times**: **ADEQUATE** | **wrong** |
+| REQ-0081 (2 members) | ***1 — genuinely unsound*** | **right** |
+
+**1 of 5.** And the one it got right is the only one it hedged — *"my
+best-evidenced hypothesis, not a certainty"* — while the two it was most
+confident about are not merely sound but **adequate**, and it backed a fix out of
+the design on the strength of judging one of them over-strict.
+
+Three independent measurements now: **1 of 3** on the ceiling run, **1 of 5** on
+the 111-check set, **1 of 5** here. And it is the **second** time an editor has
+declared a sound set self-contradictory. The editor cannot substitute for a
+soundness gate, its confidence runs the wrong way, and this is the one claim it
+makes that it has no means of checking.
