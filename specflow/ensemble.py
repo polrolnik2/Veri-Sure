@@ -1314,3 +1314,37 @@ def more_span_did_not_buy_more_correctness() -> str:
         "and with only checks the editor declined left, so neither is a "
         "measurement of the editor running out of room."
     )
+
+
+def selection_is_exhausted_and_authoring_is_the_constraint() -> str:
+    """Whether a better rule could have caught what a check set missed.
+
+    Every "the rule dropped the good checks" hypothesis on this plan has been
+    argued rather than counted. This counts it: all 484 authored bodies
+    re-decided against the design a golden-free set actually produced.
+    """
+    return (
+        "Measured on k1 against the design a 111-check golden-free set drove a "
+        "Sonnet editor to -- 7 objections remaining, and the bounded miter says "
+        "DIFFERS at 63% of testpoints.\n\n"
+        "    corpus bodies OBJECTING to it        278 of 484, over 60 of 89 = 67%\n"
+        "    of those, SOUND on the reference       6\n"
+        "    of those six, already in the keep set  5\n"
+        "    requirements a sound body catches      6 = 7% of 89\n\n"
+        "**THE CORPUS KNOWS THE DESIGN IS WRONG ACROSS 67% OF THE SPECIFICATION "
+        "AND CAN SAY SO SOUNDLY ON 7%, AND THE GOLDEN-FREE RULE HAS ALREADY "
+        "FOUND FIVE OF THE SIX.** 272 of the 278 catches are bought by also "
+        "condemning the reference. So this is not a selection failure with a "
+        "better rule waiting to be found -- there is ONE more sound catcher in "
+        "the whole corpus, and no rule can select what was never written.\n\n"
+        "AND THE RESIDUE HAS A NUMBER ON THIS SET. Restricted to the keep set and "
+        "to decisions where a port THE CHECK ITSELF READS is wrong -- a check "
+        "watching one output is not blind for passing a defect on another -- it "
+        "objects on **95 of 6,521 exposed decisions = 1.5%**. This plan measured "
+        "3.9% twice, on earlier sets against designs no editor had worked on; "
+        "1.5% is what is left once an editor has cleared everything the set "
+        "could see, which is the same statement one round further on.\n\n"
+        "**So the binding constraint is AUTHORING, and it is not the NUMBER of "
+        "checks -- it is what a check asserts.** 484 bodies over 68 requirements "
+        "yield six that can soundly convict a design wrong on 63% of the suite."
+    )

@@ -646,3 +646,21 @@ def test_more_span_did_not_buy_more_correctness_reports_both_grades():
 def test_more_span_excludes_the_editor_running_out_of_room():
     t = ensemble.more_span_did_not_buy_more_correctness()
     assert "trial budget unspent" in t
+
+
+def test_the_exhaustion_finding_counts_both_sides():
+    t = ensemble.selection_is_exhausted_and_authoring_is_the_constraint()
+    assert "278 of 484" in t and "6 = 7% of 89" in t
+    assert "no rule can select what was never written" in t
+
+
+def test_the_exhaustion_finding_reports_the_residue_per_check():
+    """The strength denominator is per check, not per testpoint."""
+    t = ensemble.selection_is_exhausted_and_authoring_is_the_constraint()
+    assert "95 of 6,521 exposed decisions = 1.5%" in t
+    assert "not blind for passing a defect on another" in t
+
+
+def test_the_exhaustion_finding_says_it_is_not_a_count_of_checks():
+    t = ensemble.selection_is_exhausted_and_authoring_is_the_constraint()
+    assert "not the NUMBER of" in t and "what a check asserts" in t

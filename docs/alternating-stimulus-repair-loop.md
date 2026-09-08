@@ -566,3 +566,43 @@ and adequacy — and they do it independently of each other.** The rule to carry
 the plain one: *keep a check that convicts at most half of an independently
 written population, including none of it.* Refutability is a fact worth
 REPORTING beside a check and is not a criterion for keeping one.
+
+## Selection is exhausted: the corpus supplies SIX sound catchers, and the keep set already holds five
+
+The 49% set drove the held-out design to 7 objections and `DIFFERS` at 63% of
+testpoints. There are two explanations and they demand opposite work — either no
+body in the corpus objects to what remains wrong (**authoring**), or bodies do
+and the rule dropped them (**selection**). All 484 authored bodies were
+re-decided against that design:
+
+| | |
+|---|---|
+| corpus bodies OBJECTING to it | **278 of 484, over 60 requirements = 67% of the spec** |
+| of those, SOUND on the reference | **6** |
+| of those 6, already inside the 49% keep set | **5** |
+| requirements a SOUND body catches it on | **6 = 7% of 89** |
+
+**THE CORPUS KNOWS THE DESIGN IS WRONG ACROSS 67% OF THE SPECIFICATION AND CAN
+SAY SO SOUNDLY ON 7%, AND THE GOLDEN-FREE RULE HAS ALREADY FOUND FIVE OF THE
+SIX.** 272 of the 278 catches are bought by also condemning the reference. So
+this is not a selection failure with a better rule waiting to be found: **there
+is one more sound catcher in the entire corpus, and no rule can select what was
+never written.**
+
+### And the residue has a number on this set: 1.5%
+
+Restricted to the 111 keep-set checks and to the decisions where **a port the
+check itself reads is wrong** — a check watching `burst` is not blind for
+passing a defect on `saved_addr`:
+
+    decisions on exposed testpoints    6,521
+    of those, objections                  95 = 1.5%
+
+The plan measured 3.9% twice, on two earlier sets, against designs no editor had
+worked on. **1.5% is what is left after an editor has cleared everything the set
+could see**, which is the same statement one round further on: the remaining
+wrongness is exactly what these checks are blind to.
+
+**So the binding constraint is AUTHORING, and it is not the number of checks —
+it is what a check asserts.** The corpus has 484 bodies over 68 requirements and
+six of them can soundly convict a design wrong on 63% of the suite.
