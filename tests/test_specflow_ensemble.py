@@ -578,3 +578,30 @@ def test_the_evidence_round_reports_the_span_loss_beside_the_agreement():
     assert "BOUGHT NO SPAN" in t
     assert "14 before, 14 after" in t
     assert "A span that falls when the evidence widens was never a span" in t
+
+
+def test_the_keep_rule_names_what_the_refutable_leg_costs():
+    t = ensemble.the_keep_state_must_include_the_zero()
+    assert "COSTS 30 REQUIREMENTS OF SPAN AND QUADRUPLES THE FALSE-REJECT RATE" in t
+    assert "loses on both" in t
+
+
+def test_the_keep_rule_reports_span_and_audit_as_a_pair_on_every_row():
+    """Every row of the golden-free table carries its false-reject rate."""
+    t = ensemble.the_keep_state_must_include_the_zero()
+    for span, audit in (("16%", "*48%*"), ("49%", "***12%***"), ("39%", "*0%*"),
+                        ("69%", "*96%*"), ("75%", "*74%*")):
+        line = next(ln for ln in t.splitlines() if span in ln and "|" in ln)
+        assert audit in line
+
+
+def test_the_cut_is_rederived_for_the_population_it_runs_on():
+    t = ensemble.the_keep_state_must_include_the_zero()
+    assert "88% precision at 88% recall" in t
+    assert "must be re-derived when N changes" in t
+
+
+def test_the_ten_percent_audit_is_retracted_as_a_population_artefact():
+    t = ensemble.the_keep_state_must_include_the_zero()
+    assert "10% false-reject rate" in t
+    assert "artefact of the population" in t

@@ -1174,3 +1174,48 @@ def new_evidence_moves_the_rule_and_the_audit_together() -> str:
         "it was measured on. A span that falls when the evidence widens was "
         "never a span.**"
     )
+
+
+def the_keep_state_must_include_the_zero() -> str:
+    """The golden-free rule's best form, measured on the whole authored corpus.
+
+    A conviction-count rule has two natural boundaries: drop a check that
+    convicts most of the population, and drop one that convicts none of it. The
+    second is the one that keeps getting reintroduced, and it is the one that
+    does not pay.
+    """
+    return (
+        "Measured on k1 over ALL 484 authored bodies -- not the "
+        "soundness-selected subset an earlier loop ran on -- against SEVEN "
+        "independently written spec-derived designs and 348 testpoints. The "
+        "audit is computed last and feeds nothing.\n\n"
+        "| rule | checks | requirements | of 89 | *audit* | *adequate* |\n"
+        "|---|---|---|---|---|---|\n"
+        "| convicts 1-3 of 7 | 27 | 14 | 16% | *48%* | *6* |\n"
+        "| **convicts AT MOST 3 of 7** | **111** | **44** | **49%** | ***12%*** | ***14*** |\n"
+        "| convicts 0 of 7 alone | 84 | 35 | 39% | *0%* | *8* |\n"
+        "| convicts 4-7 of 7 | 313 | 61 | 69% | *96%* | *1* |\n"
+        "| everything that decides | 424 | 67 | 75% | *74%* | *15* |\n\n"
+        "**REQUIRING A KEPT CHECK TO CONVICT AT LEAST ONE CANDIDATE COSTS 30 "
+        "REQUIREMENTS OF SPAN AND QUADRUPLES THE FALSE-REJECT RATE**, and throws "
+        "away 8 of the corpus's 15 adequate checks. It is not a filter that "
+        "trades reach for precision; it loses on both. The fix is one "
+        "comparison: keep a check that convicts AT MOST half the population, "
+        "including none of it.\n\n"
+        "44 of 89 = 49% at a 12% false-reject rate, holding 14 of the 15 "
+        "adequate checks, is the best golden-free pair measured here -- one "
+        "requirement short of a majority, and the first time reach and precision "
+        "moved the same way at once.\n\n"
+        "AND THE CUT ITSELF, RE-DERIVED FOR THIS POPULATION. It was calibrated "
+        "at 100% precision on THIRTEEN designs against a 31% base rate. On seven "
+        "designs and 484 bodies the base rate is 26% and the cut at half the "
+        "population reads **88% precision at 88% recall, a 3.34x lift, n=111**. "
+        "The 100% does not survive the population shrink and the rule does. A "
+        "conviction threshold is a function of the population SIZE and must be "
+        "re-derived when N changes, never carried across.\n\n"
+        "THE CORRECTION THIS REPLACES. The same rule measured on a body set "
+        "descended from a soundness-selected set reads a 10% false-reject rate. "
+        "That is an artefact of the population, not a property of the rule: an "
+        "audit whose denominator was chosen by the instrument being audited is a "
+        "lower bound and must be labelled as one."
+    )

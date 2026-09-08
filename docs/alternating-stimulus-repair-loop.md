@@ -340,3 +340,73 @@ and one round of new behaviours removed a fifth of the keep set.
 beside the evidence it was measured on, and a span that falls when the evidence
 widens was never a span — it was an artefact of what the suite did not do. Quote
 both, or quote neither.
+
+## Invariant 10, and it corrects this document's own keep rule: KEEP must include the zero
+
+Every keep-set figure above was measured on **119 bodies that descend from
+MAXSOUND**, which was selected BY the known-good design. The selection RULE was
+golden-free; the POPULATION was not, and a keep set is only as golden-free as the
+weaker of the two. It also capped the loop's span at the 52 requirements those
+119 bodies happen to cover, against 68 for the corpus.
+
+Re-run with the same rule, the same 348-testpoint evidence and the same seven
+candidates, over **all 484 authored bodies**:
+
+| rule — reads only the seven spec-derived designs | checks | requirements | of 89 | *audit: convict the reference* | *adequate* |
+|---|---|---|---|---|---|
+| convicts 1–3 of 7 — **the KEEP state as this loop defines it** | 27 | 14 | **16%** | ***48%*** | *6* |
+| convicts 1–2 of 7 | 26 | 13 | 15% | *46%* | *6* |
+| convicts exactly 1 of 7 | 16 | 8 | 9% | *38%* | *5* |
+| **convicts AT MOST 3 of 7 — the same cut, without the refutable leg** | **111** | **44** | **49%** | ***12%*** | ***14*** |
+| convicts 0 of 7 alone | 84 | 35 | 39% | ***0%*** | *8* |
+| convicts 4–7 of 7 — OVER_STRICT | 313 | 61 | 69% | *96%* | *1* |
+| everything that decides | 424 | 67 | 75% | *74%* | *15* |
+
+**THE REFUTABLE LEG COSTS 30 REQUIREMENTS OF SPAN AND QUADRUPLES THE FALSE
+REJECT RATE.** Requiring a keep to convict at least one candidate takes the set
+from 44 requirements at a 12% audit to 14 at 48%, and throws away 8 of the
+corpus's 15 adequate checks. It is not a filter that trades reach for precision;
+it loses on both.
+
+**So the loop's keep state is wrong and the fix is one comparison:**
+
+    BAND    1 <= convicts <= N//2       ->    KEEP    convicts <= N//2
+
+That is not a new idea — this project measured it once before and wrote *"the
+golden-free rule loses a leg and gets better"* — and the loop then reintroduced
+the leg as the boundary of its KEEP state. Invariant 8 saw the same thing from
+the adequacy side; this is the same finding with a span and an audit attached.
+
+**AND IT IS THE BEST GOLDEN-FREE PAIR THIS PROJECT HAS PRODUCED: 44 of 89 = 49%
+of the specification at a 12% false-reject rate, holding 14 of the corpus's 15
+adequate checks.** One requirement short of a majority, and the first time reach
+and precision have moved the same way at once.
+
+### The audit correction that comes with it, and it is mine
+
+The loop has been reporting a **10% false-reject rate** on its keep set all
+session. That figure is an artefact of the golden-selected population: the same
+rule on the honest corpus reads **48%**. Every "audit" column measured on
+`bodies_P3` should be read as a lower bound whose denominator was chosen by the
+instrument it is auditing.
+
+### And the minority cut, properly re-derived at N = 7
+
+The cut was calibrated at 100% precision on **thirteen** designs and 259 bodies
+against a 31% base rate. On seven designs and 484 bodies, with soundness as the
+thing predicted and never an input:
+
+| cut `t` | kept | sound | precision | recall | *lift over the 26% base* |
+|---|---|---|---|---|---|
+| 0 | 84 | 84 | **100%** | 75% | *3.79x* |
+| 1 | 100 | 94 | 94% | 84% | *3.56x* |
+| 2 | 110 | 98 | 89% | 88% | *3.37x* |
+| **3 — the cut the loop uses** | **111** | **98** | **88%** | **88%** | ***3.34x*** |
+| 5 | 125 | 108 | 86% | 96% | *3.27x* |
+| 7 — no cut | 424 | 112 | 26% | 100% | *1.00x* |
+
+**The 100% does not survive the population shrink, and the rule does: 88%
+precision at 3.34x over a 26% base, n = 111.** The plan's own warning was that
+the threshold is a function of the population SIZE; it is now re-derived rather
+than carried across, and the majority cut is still the right one — it holds 14 of
+the 15 adequate checks where the strict cut at 1 holds 13.
