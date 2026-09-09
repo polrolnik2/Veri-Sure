@@ -1767,10 +1767,15 @@ def test_the_target_really_existed_this_time():
     assert "it could have been -- and it was not" in " ".join(t.split())
 
 
-def test_the_finding_is_localisation_not_suspicion():
+def test_the_finding_is_scoped_to_the_run_that_produced_it():
+    # This test previously pinned "THEY CANNOT LOCATE IT" -- the generalisation
+    # a later run refuted at 7 of 7. It now pins the scoped claim instead, so
+    # the retraction cannot be silently undone.
     t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
-    assert "THEY CANNOT LOCATE IT" in t
-    assert "not a substitute for a soundness gate" in " ".join(t.split())
+    flat = " ".join(t.split())
+    assert "THIS EDITOR DID NOT LOCATE IT" in flat
+    assert "THEY CANNOT LOCATE IT" not in flat
+    assert "this identification is at chance or worse" in flat
 
 
 def test_the_matched_pair_separates_on_divergence_closed():
@@ -1946,3 +1951,75 @@ def test_the_general_form_is_stated():
     assert "answers *how do I not have to*" in flat
     assert "Measure the unit against the maximum before reaching for " \
         "concurrency" in flat
+
+
+def test_the_generalisation_is_retracted_not_the_measurement():
+    t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
+    flat = " ".join(t.split())
+    assert "IS RETRACTED" in flat
+    assert "an_editor_can_locate_over_strictness_when_it_tests_the_claim" in flat
+    assert "12 checks and been right about 8" in flat
+    assert "what needs explaining rather than an average" in flat
+
+
+def test_the_difference_is_testing_not_the_editor():
+    t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
+    flat = " ".join(t.split())
+    assert "they do not present identically to an EDIT" in flat
+
+
+def test_the_editor_partitioned_the_survivors_exactly():
+    t = ensemble.an_editor_can_locate_over_strictness_when_it_tests_the_claim()
+    flat = " ".join(t.split())
+    assert "PARTITIONED THE SURVIVORS EXACTLY" in flat
+    assert "false accusations **0**" in flat
+
+
+def test_the_flattering_base_rate_is_named_and_rejected():
+    t = ensemble.an_editor_can_locate_over_strictness_when_it_tests_the_claim()
+    flat = " ".join(t.split())
+    assert "THE BASE RATE THAT MATTERS IS 64%, NOT 19%" in flat
+    assert "the survivors are enriched" in flat
+    assert "p = 0.003" in flat
+
+
+def test_the_unaccused_four_are_credited_correctly():
+    t = ensemble.an_editor_can_locate_over_strictness_when_it_tests_the_claim()
+    flat = " ".join(t.split())
+    assert "its diagnosis is wrong" in flat
+    assert "it declined to convict them" in flat
+
+
+def test_the_mechanism_is_that_a_gate_cannot_run_the_experiment():
+    t = ensemble.an_editor_can_locate_over_strictness_when_it_tests_the_claim()
+    flat = " ".join(t.split())
+    assert "it cannot run the experiment" in flat
+    assert "every one of them was a way of READING checks" in flat
+
+
+def test_the_editor_scope_is_one_run():
+    t = ensemble.an_editor_can_locate_over_strictness_when_it_tests_the_claim()
+    flat = " ".join(t.split())
+    assert "n = 11 survivors" in flat
+    assert "a second run is what would turn a procedure into a method" in flat
+
+
+def test_the_golden_free_set_landed_in_the_middle_band():
+    t = ensemble.a_golden_free_set_did_not_out_drive_the_reference_selected_one()
+    flat = " ".join(t.split())
+    assert "-28%" in flat and "-32%" in flat
+    assert "**-28% is the middle band**" in flat
+
+
+def test_the_matched_pair_slope_does_not_extend():
+    t = ensemble.a_golden_free_set_did_not_out_drive_the_reference_selected_one()
+    flat = " ".join(t.split())
+    assert "THE MATCHED PAIR'S SLOPE DOES NOT EXTEND" in flat
+    assert "From 56.9% to 40.4% it separates nothing" in flat
+
+
+def test_the_two_explanations_are_not_separated():
+    t = ensemble.a_golden_free_set_did_not_out_drive_the_reference_selected_one()
+    flat = " ".join(t.split())
+    assert "a single point cannot distinguish" in flat
+    assert "40% blind AND sound, which this corpus does not contain" in flat
