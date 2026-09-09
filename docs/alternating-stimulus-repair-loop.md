@@ -2215,3 +2215,54 @@ same check at **1 of 28 = 4%**. The observed jump — 7 to 0 with nothing betwee
 — predicts that whatever moves will overshoot as the first nine did. Expected
 yield is about one check, and the shape says it will not be an admissible
 objecting one.
+
+## THE EDITOR COULD NOT AIM AT WHAT IT WAS JUDGED BY
+
+The checks-only arm stopped with three **sound** objections standing and eight
+of twenty-one trials unspent, reporting it could not isolate the remaining
+defect *"without a waveform (unavailable in this harness)"*. That reads as a
+limit of the loop. It was a defect of mine.
+
+**The driver latched on the checks and nothing else** — the consensus cell units
+were deliberately out of the ratchet — **but `views()` still returned one
+pseudo-requirement per declared output and nothing for the checks**, and the
+check verdicts entered `req_results` under synthetic `chk:<key>` ids that no view
+matched. Three consequences, all live in the run:
+
+* `focus <check>` returned *"Unknown requirement"*, so the dataflow slice could
+  only ever start from a **consensus output** — the instrument that arm removed.
+* `explain <check>` failed identically, making the span, the boundary trace and
+  the perturbation `explain_failure` already computes unreachable for every
+  check.
+* `failing` listed outputs, not checks.
+
+**The waveform was there.** It was keyed to a requirement id the session had no
+view for — so the editor's report is literally accurate about its experience and
+wrong about the cause, and neither it nor any gate could have told the
+difference.
+
+### The fix, and what it is worth
+
+One view per check: the check's key as its uid, the requirement's own **sentence**
+as its text, and `ports_read(oracle, contract)` as its ports — which is exactly
+`dynamic_slice`'s input shape. On `REQ-0087.shipping` that is **fifteen ports
+including five probes**, against the single output it could name before.
+
+### The first attempt at the fix did not work, for a reason already on record
+
+The views were built inside `review()` — which `focus` and `explain` never run.
+**Every CLI call is a fresh process**, so the views existed only during a commit
+and every other command still saw ten outputs. That is the same fresh-process
+fact that left the dataflow slice dead in every run on this plan, arriving in a
+different function. It has to be built where the **session** is built, not where
+the verdicts are.
+
+### What this does and does not claim
+
+It does not claim the editor would have converged. It claims the run that
+stopped at five objections with eight trials left was aiming a
+requirement-oriented slice at a requirement it could not name, and that a
+single-variable re-run is the only way to price that. **Reporting the earlier
+stop as a property of the editor, without this, would have been reporting my
+harness as a finding** — which is the mistake this plan has had to retract for
+more than once.

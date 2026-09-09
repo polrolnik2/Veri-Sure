@@ -2623,3 +2623,55 @@ def narrowing_crosses_the_boundary_without_landing_on_it() -> str:
         "the first nine did. Expected yield is about one check, and the shape "
         "says it will not be an admissible objecting one."
     )
+
+
+def the_editor_could_not_aim_at_what_it_was_judged_by() -> str:
+    """The sixteenth counting-shaped defect on this plan, mine, and the first
+    one that plausibly explains a run stopping early rather than a number
+    reading wrong.
+
+    The checks-only arm stopped with three SOUND objections standing and eight
+    of twenty-one trials unspent, reporting that it could not isolate the
+    remaining defect "without a waveform (unavailable in this harness)".
+    """
+    return (
+        "**THE EDITOR WAS JUDGED BY 117 CHECKS AND COULD AIM AT TEN OUTPUTS.** "
+        "The driver latched on the checks and nothing else -- the consensus cell "
+        "units were deliberately out of the ratchet -- but `views()` still "
+        "returned one pseudo-requirement per declared OUTPUT and nothing for the "
+        "checks, and the check verdicts entered `req_results` under synthetic "
+        "`chk:<key>` ids that no view matched. Three consequences, all live in "
+        "the run:\\n\\n"
+        "  * `focus <check>` returned 'Unknown requirement', so the dataflow "
+        "slice could only ever start from a CONSENSUS output -- the instrument "
+        "that arm had removed.\\n"
+        "  * `explain <check>` failed identically, making the span, the boundary "
+        "trace and the perturbation `explain_failure` already computes "
+        "unreachable for every check.\\n"
+        "  * `failing` listed outputs, not checks.\\n\\n"
+        "**THE WAVEFORM WAS THERE.** It was keyed to a requirement id the "
+        "session had no view for, so the editor's report is literally accurate "
+        "about its experience and wrong about the cause -- and neither it nor "
+        "any gate could have told the difference.\\n\\n"
+        "**THE FIX IS ONE VIEW PER CHECK**, carrying the check's key as its uid, "
+        "the requirement's own SENTENCE as its text, and "
+        "`ports_read(oracle, contract)` as its ports -- which is exactly "
+        "`dynamic_slice`'s input shape, so the slice starts from the ports that "
+        "check watches. On one failing check that is fifteen ports including "
+        "five probes, against the single output it could name before.\\n\\n"
+        "**AND THE FIRST ATTEMPT AT THE FIX DID NOT WORK, FOR THE REASON THIS "
+        "PLAN HAS ALREADY RECORDED ONCE.** The views were built inside "
+        "`review()` -- which `focus` and `explain` never run. Every CLI call is "
+        "a fresh process, so the views existed only during a commit and every "
+        "other command still saw ten outputs. That is the same fresh-process "
+        "fact that left the dataflow slice dead in every run on this plan, "
+        "arriving in a different function. It has to be built where the SESSION "
+        "is built, not where the verdicts are.\\n\\n"
+        "**WHAT THIS DOES AND DOES NOT CLAIM.** It does not claim the editor "
+        "would have converged. It claims that the run which stopped at five "
+        "objections with eight trials left was aiming a requirement-oriented "
+        "slice at a requirement it could not name, and that the single-variable "
+        "re-run is the only way to find out what that cost. Reporting the "
+        "earlier stop as a property of the editor, without this, would have "
+        "been reporting my harness as a finding."
+    )

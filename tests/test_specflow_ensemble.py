@@ -1217,3 +1217,27 @@ def test_the_narrowing_round_prices_a_second_attempt():
     t = ensemble.narrowing_crosses_the_boundary_without_landing_on_it()
     assert "1 of 28 = 4%" in t
     assert "about one check" in t
+
+
+def test_the_aiming_defect_names_all_three_consequences():
+    t = ensemble.the_editor_could_not_aim_at_what_it_was_judged_by()
+    assert "JUDGED BY 117 CHECKS AND COULD AIM AT TEN OUTPUTS" in t
+    assert "Unknown requirement" in t and "listed outputs, not checks" in t
+
+
+def test_the_aiming_defect_records_the_waveform_was_present():
+    t = ensemble.the_editor_could_not_aim_at_what_it_was_judged_by()
+    assert "THE WAVEFORM WAS THERE" in t
+    assert "accurate about its experience and wrong about the cause" in t
+
+
+def test_the_aiming_defect_records_the_failed_first_fix():
+    t = ensemble.the_editor_could_not_aim_at_what_it_was_judged_by()
+    assert "every CLI call is\\na fresh process" in t or "fresh process" in t
+    assert "dataflow slice dead in every run" in t
+
+
+def test_the_aiming_defect_bounds_its_own_claim():
+    t = ensemble.the_editor_could_not_aim_at_what_it_was_judged_by()
+    assert "does not claim the editor" in t
+    assert "reporting my harness as a finding" in t
