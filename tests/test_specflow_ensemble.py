@@ -1801,3 +1801,73 @@ def test_the_unequal_trial_counts_are_addressed_not_hidden():
 def test_the_scope_is_two_runs():
     t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
     assert "two points do not establish a slope" in " ".join(t.split())
+
+
+def test_the_curve_is_monotone_in_both_columns():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "99.8%" in flat and "0.0%" in flat
+    assert "64.4%" in flat
+    assert "BLINDNESS FALLS ONLY AS THE AUDIT RISES" in flat
+
+
+def test_the_sweep_reproduces_sets_built_separately():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    assert "byte-for-byte" in " ".join(t.split())
+
+
+def test_the_reference_selected_set_is_off_the_curve():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "56.9% blind with an audit of zero" in flat
+    assert "No golden-free threshold reaches that point" in flat
+
+
+def test_the_mechanism_is_the_thirty_eight_unsound_checks():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "161 of CEIL2's 163" in flat
+    assert "933 disagreement cells" in flat
+
+
+def test_the_completeness_question_is_answered_negatively():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "you cannot" in flat
+    assert "rather than a missing instrument" in flat
+
+
+def test_the_one_knob_scope_is_stated():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    assert "a different golden-free rule could in principle find a different" \
+        in " ".join(t.split())
+
+
+def test_the_complete_set_cannot_order_the_population():
+    t = ensemble.a_complete_set_is_an_undrivable_one()
+    flat = " ".join(t.split())
+    assert "285 - 301" in flat
+    assert "**5.4%**" in flat
+
+
+def test_drivability_is_opposed_independently_of_soundness():
+    t = ensemble.a_complete_set_is_an_undrivable_one()
+    flat = " ".join(t.split())
+    assert "independently of soundness" in flat.lower() or \
+        "INDEPENDENTLY OF SOUNDNESS" in flat
+    assert "not the same reason as the audit" in flat
+
+
+def test_the_amendment_preceded_the_run_it_would_have_explained():
+    t = ensemble.a_complete_set_is_an_undrivable_one()
+    flat = " ".join(t.split())
+    assert "amended in advance" in flat
+    assert "rather than attributing the outcome to soundness after seeing it" \
+        in flat
+
+
+def test_the_raw_count_limit_is_scoped_to_the_raw_count():
+    t = ensemble.a_complete_set_is_an_undrivable_one()
+    flat = " ".join(t.split())
+    assert "Spread is not the only way a set can steer" in flat
+    assert "RAW COUNT" in flat

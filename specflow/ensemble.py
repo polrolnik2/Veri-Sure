@@ -3744,3 +3744,97 @@ def set_blindness_predicts_how_far_an_editor_gets() -> str:
         "is that the number is not inert: a set at 99.8% and a set at 56.9% "
         "produce visibly different loops from identical inputs."
     )
+
+
+def blindness_and_soundness_are_one_golden_free_knob() -> str:
+    """The completeness/false-reject trade, measured as a curve rather than
+    argued from two points -- and the reference-selected set sits off it.
+
+    Eight sets from one selection rule that never reads the reference. The
+    audit is computed last and feeds nothing.
+    """
+    return (
+        "One golden-free knob -- **keep a check that convicts at most t of the "
+        "seven independently written spec-derived designs** -- swept end to "
+        "end. t = 0, 2 and 7 reproduce three sets that were built separately "
+        "and byte-for-byte, which is what says the sweep is the same "
+        "instrument. The intermediate thresholds had never been scored.\n\n"
+        "    t   checks   reqs of 87   SET BLINDNESS   *audit: convict the reference*\n"
+        "    0     126      55 = 63%      99.8%          *  0 =  0.0%*\n"
+        "    1     149      63 = 72%      93.5%          * 11 =  7.4%*\n"
+        "    2     167      68 = 78%      66.5%          * 22 = 13.2%*\n"
+        "    3     171      68 = 78%      64.2%          * 23 = 13.5%*\n"
+        "    4     179      69 = 79%      61.9%          * 27 = 15.1%*\n"
+        "    5     188      70 = 80%      52.7%          * 27 = 14.4%*\n"
+        "    6     201      71 = 82%      40.4%          * 38 = 18.9%*\n"
+        "    7     464      73 = 84%       0.0%          *299 = 64.4%*\n\n"
+        "**BLINDNESS FALLS ONLY AS THE AUDIT RISES, ACROSS EVERY THRESHOLD.** "
+        "Completeness and soundness are not two properties a better rule could "
+        "optimise jointly -- golden-free, on this corpus, they are ONE KNOB "
+        "read in two directions. Reaching the completeness floor costs a set "
+        "that convicts a correct design with two checks in three.\n\n"
+        "**AND THE REFERENCE-SELECTED SET IS OFF THE CURVE, WHICH IS THE PART "
+        "THAT MATTERS.** CEIL2 is 163 checks at **56.9% blind with an audit of "
+        "zero**. No golden-free threshold reaches that point: getting to 52.7% "
+        "golden-free costs 14.4% false rejection. The reference is doing work "
+        "here that no rule over the population reproduces.\n\n"
+        "**THE MECHANISM IS ARITHMETIC RATHER THAN A TENDENCY.** 161 of CEIL2's "
+        "163 checks are inside t = 6, and t = 6 holds exactly 38 audit "
+        "failures. So CEIL2 is very nearly t = 6 with its unsound members "
+        "removed -- and removing them takes blindness from 40.4% back to "
+        "56.9%. **Those 38 checks close 933 disagreement cells, 16.5 points of "
+        "blindness, and nothing sound replaces them**, which is the "
+        "no-sound-hole-closer finding restated where it costs something.\n\n"
+        "**WHAT IT ANSWERS.** The question was how to assure a set's "
+        "completeness without a reference. The answer on this corpus is that "
+        "you cannot: every golden-free step toward completeness is a step into "
+        "false rejection, and the obstruction is a measured monotone trade "
+        "rather than a missing instrument.\n\n"
+        "**SCOPE.** One design, one corpus of 594 bodies, one population of "
+        "seven. The rule is one knob -- a different golden-free rule could in "
+        "principle find a different frontier, and eleven have been tried "
+        "without one doing so. What is established is the shape of THIS "
+        "rule's frontier and that the reference-selected point is not on it."
+    )
+
+
+def a_complete_set_is_an_undrivable_one() -> str:
+    """The second opposition, and it is independent of soundness: the set that
+    sees every disagreement cannot tell the designs apart by its own count.
+
+    Measured on the population before the editor run was dispatched, and
+    recorded as an amendment to that run's pre-registration.
+    """
+    return (
+        "Set blindness says whether SOME check objects somewhere in a "
+        "disagreeing cell. It says nothing about whether the objection COUNT "
+        "orders designs -- and on the set that reaches the completeness floor "
+        "it does not:\n\n"
+        "    set                       blindness   population objections   spread / mean\n"
+        "    ZERO 126, golden-free       99.8%            0 -  0                --\n"
+        "    CEIL2 163, ref-selected     56.9%           11 - 22              69%\n"
+        "    T6   201, golden-free       40.4%           22 - 38              50%\n"
+        "    MIN  464, the floor          0.0%          285 - 301           **5.4%**\n\n"
+        "**EIGHT DESIGNS THAT DIFFER FROM EACH OTHER ACROSS A LARGE FRACTION "
+        "OF THE SUITE ARE SEPARATED BY SIXTEEN CHECKS OF FOUR HUNDRED AND "
+        "SIXTY-FOUR.** The cause is structural rather than incidental: the "
+        "0.0% blindness is bought by admitting 288 bodies that convict a "
+        "correct design, and a check that convicts a correct design convicts "
+        "nearly every design, so it contributes a constant to every score.\n\n"
+        "**SO COMPLETENESS AND DRIVABILITY ARE OPPOSED, INDEPENDENTLY OF "
+        "SOUNDNESS.** A loop descending the count of a complete set is "
+        "descending a signal with a 5% dynamic range. That is a second reason "
+        "the completeness floor is not somewhere to drive from, and it is not "
+        "the same reason as the audit.\n\n"
+        "**IT WAS RECORDED BEFORE THE RUN THAT WOULD HAVE BEEN READ AS "
+        "SOUNDNESS.** The pre-registration for the floor-set editor run named "
+        "two hypotheses, blindness and soundness. This measurement supplies a "
+        "third explanation for a poor result there, so the negative band was "
+        "amended in advance to say the run cannot separate them -- rather than "
+        "attributing the outcome to soundness after seeing it.\n\n"
+        "**WHAT IT DOES NOT SAY.** Spread is not the only way a set can steer: "
+        "a weighting, a per-requirement fold or a subset view could recover a "
+        "gradient the raw count does not have. What is measured is that the "
+        "RAW COUNT -- which is what every loop on this plan has descended -- "
+        "carries almost no information on a complete set."
+    )
