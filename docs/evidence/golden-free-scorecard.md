@@ -79,7 +79,32 @@ project and never before obtained golden-free at set level.
 | selection over the whole corpus | **0** of 431 unused bodies close a hole while demonstrably sound. 296 close one; 288 convict the reference; 2 never decide on it |
 | a golden-free completeness certificate | the pair instrument RANKS blindness at Spearman **+0.908** but its CLEAN cell is 5 of 8, and all five correct cleans are clean *by silence* |
 
-## 7. The bottom line
+## 7. The metric is validated against editor progress — a matched pair
+
+Two editors, **the same unchecked starting design**, same model, same brief and
+budget; the only difference is which set drove them.
+
+| set | **blindness** | objections | testpoints differing | grade |
+|---|---|---|---|---|
+| CEIL2 163, reference-selected | 56.9% | 22 → 5 (−77%) | 279 → 190 (**−32%**) | `DIFFERS` |
+| ZERO 126, golden-free | 99.8% | 11 → 1 (−91%) | 279 → 271 (**−3%**) | `DIFFERS` |
+
+Both grades taken in a clean run directory with three miter pins green in the
+same process. **The golden-free set spent 91% of its objections and moved the
+design 3%.**
+
+So set blindness is not a description of a set after the fact: it says in
+advance how much of a design's divergence a loop driven by that set will close.
+That was pre-registered before the second run was dispatched, and the run landed
+on it. **This is the proxy metric the goal asks for — chosen by how well it
+facilitates the editor succeeding, computable from spec-derived designs alone,
+and validated against what the loop achieves rather than against how a set looks.**
+
+*Trial counts are an output, not a confound: 10 of 21 and 19 of 21, neither
+stopping for budget. A blinder set stops giving feedback sooner. Scope is two
+runs — the gap is large and monotone, and two points do not establish a slope.*
+
+## 8. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus.** The blindness
 ranker is excellent and the soundness rule is perfect at n=126; composing them

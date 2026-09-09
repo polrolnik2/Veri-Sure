@@ -3698,3 +3698,49 @@ def an_editor_cannot_locate_over_strictness_even_when_it_is_there() -> str:
         "and a check no design can satisfy present identically, and nothing "
         "available to the editor separates them."
     )
+
+
+def set_blindness_predicts_how_far_an_editor_gets() -> str:
+    """A matched pair, and the first golden-free number here that PREDICTS
+    editor progress rather than describing a set after the fact.
+
+    The prediction was written down before the second run was dispatched, and
+    the run landed on it.
+    """
+    return (
+        "Two editors, **the same unchecked starting design**, the same model, "
+        "the same brief and budget. The only difference is which set drove "
+        "them, and the sets differ in the golden-free completeness number:\n\n"
+        "    set                      blindness   objections      testpoints differing\n"
+        "    CEIL2 163, ref-selected    56.9%     22 -> 5  (-77%)   279 -> 190  (**-32%**)\n"
+        "    ZERO  126, golden-free     99.8%     11 -> 1  (-91%)   279 -> 271  (** -3%**)\n"
+        "    both grades: *DIFFERS*, three pins green in the same process\n\n"
+        "**THE GOLDEN-FREE SET SPENT 91% OF ITS OBJECTIONS AND MOVED THE DESIGN "
+        "3%.** The reference-selected set spent less of its criterion and moved "
+        "the design ten times further. Set blindness is not a description of a "
+        "set after the fact -- it says in advance how much of a design's "
+        "divergence a loop driven by that set will close.\n\n"
+        "**AND IT WAS PRE-REGISTERED.** Before the second run was dispatched "
+        "the prediction on record was that a set objecting to 12 of 5,656 "
+        "disagreements would be cheap to satisfy, so objections going to nearly "
+        "zero with the grade unmoved would be that number restated rather than "
+        "a fresh negative. That is what happened, which is the difference "
+        "between a metric and a post-hoc story.\n\n"
+        "**THIS IS THE PROXY THE GOAL ASKS FOR.** A metric chosen by how well "
+        "it facilitates the RTL editor succeeding, computable from spec-derived "
+        "designs alone, and validated against editor progress on a matched "
+        "pair. Every earlier proxy here was scored on how well it described "
+        "CHECKS; this one is scored on what the loop achieves.\n\n"
+        "**THE TRIAL COUNTS ARE AN OUTPUT, NOT A CONFOUND -- AND SAY SO.** The "
+        "golden-free run used 10 of 21 trials and the other 19 of 21. Neither "
+        "stopped for budget: each stopped when its criterion ran out of things "
+        "to say. A blinder set stops giving feedback sooner, so unequal effort "
+        "is part of what blindness causes rather than an artefact confounding "
+        "it. Stated because equal effort would be the natural thing to demand "
+        "of a matched pair.\n\n"
+        "**SCOPE, AND IT IS TWO RUNS.** One design, one starting point, two "
+        "sets. The relationship is monotone in the right direction with a large "
+        "gap, and two points do not establish a slope. What they do establish "
+        "is that the number is not inert: a set at 99.8% and a set at 56.9% "
+        "produce visibly different loops from identical inputs."
+    )

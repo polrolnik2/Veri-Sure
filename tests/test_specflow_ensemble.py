@@ -1771,3 +1771,33 @@ def test_the_finding_is_localisation_not_suspicion():
     t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
     assert "THEY CANNOT LOCATE IT" in t
     assert "not a substitute for a soundness gate" in " ".join(t.split())
+
+
+def test_the_matched_pair_separates_on_divergence_closed():
+    t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
+    flat = " ".join(t.split())
+    assert "56.9%" in flat and "99.8%" in flat
+    assert "-32%" in flat and "-3%" in flat
+
+
+def test_the_prediction_was_made_before_the_run():
+    t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
+    assert "PRE-REGISTERED" in t
+    assert "12 of 5,656" in " ".join(t.split())
+
+
+def test_it_is_scored_on_what_the_loop_achieves():
+    t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
+    assert "scored on what the loop achieves" in " ".join(t.split())
+
+
+def test_the_unequal_trial_counts_are_addressed_not_hidden():
+    t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
+    flat = " ".join(t.split())
+    assert "10 of 21" in flat and "19 of 21" in flat
+    assert "Neither stopped for budget" in flat
+
+
+def test_the_scope_is_two_runs():
+    t = ensemble.set_blindness_predicts_how_far_an_editor_gets()
+    assert "two points do not establish a slope" in " ".join(t.split())
