@@ -1739,7 +1739,7 @@ def test_selecting_for_predictable_soundness_is_selecting_for_blindness():
 def test_the_golden_free_completeness_answer_is_no():
     t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
     assert "+0.908" in t
-    assert "it is NO on this corpus" in " ".join(t.split())
+    assert "IT IS NO ON THIS CORPUS" in " ".join(t.split())
 
 
 def test_what_survives_is_stated_and_bounded():
