@@ -2298,3 +2298,62 @@ def test_no_normalized_form_means_no_oracle():
     assert "malformed:" in seg
     # And it must not fire when normalization was simply not run at all.
     assert "if normalized is not None" in seg
+
+
+def test_mutually_exclusive_ifdef_arms_are_one_driver_not_two():
+    """The guard used to accuse conditional compilation of double-driving.
+
+    MEASURED on a generated OR1200 dc_fsm, which writes `burst` the way the
+    original does -- one assign per arm of `ifdef OR1200_DC_STORE_REFILL. No set
+    of defines compiles both, so the signal has exactly one driver.
+
+    The false accusation was not cosmetic. It reached a live RTL editor as the
+    claim that `burst` resolves to X "so anything reading them is unreliable",
+    about the signal two of that run's five objections were about; and because
+    a commit is rejected on `introduced = multi - pre_multi`, an edit that ADDS
+    a conditional would be refused outright, told to "remove the duplicate
+    assignment" -- which deletes a live arm.
+    """
+    conditional = ("module m(input a, input b, output c);\n"
+                   "`ifdef FEATURE\n"
+                   "  assign c = a & b;\n"
+                   "`else\n"
+                   "  assign c = a;\n"
+                   "`endif\n"
+                   "endmodule\n")
+    assert overdriven_signals(conditional) == set()
+
+    # `ifdef with no `else: the guarded arm and nothing to be exclusive with.
+    guarded = ("module m(input a, output c, output d);\n"
+               "  assign c = a;\n"
+               "`ifdef FEATURE\n"
+               "  assign d = a;\n"
+               "`endif\n"
+               "endmodule\n")
+    assert overdriven_signals(guarded) == set()
+
+
+def test_a_double_driver_inside_one_ifdef_arm_still_fires():
+    """The fix must not buy its precision by going blind.
+
+    Both cases below compile both assignments under a single set of defines --
+    the first inside one arm, the second across an arm and the unconditional
+    body -- so both are genuine double drivers and must still be named.
+    """
+    inside_one_arm = ("module m(input a, input b, output c);\n"
+                      "`ifdef FEATURE\n"
+                      "  assign c = a & b;\n"
+                      "  assign c = b;\n"
+                      "`else\n"
+                      "  assign c = a;\n"
+                      "`endif\n"
+                      "endmodule\n")
+    assert overdriven_signals(inside_one_arm) == {"c"}
+
+    arm_and_body = ("module m(input a, input b, output c);\n"
+                    "  assign c = a;\n"
+                    "`ifdef FEATURE\n"
+                    "  assign c = b;\n"
+                    "`endif\n"
+                    "endmodule\n")
+    assert overdriven_signals(arm_and_body) == {"c"}
