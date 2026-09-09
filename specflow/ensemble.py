@@ -4334,3 +4334,64 @@ def six_authored_checks_drove_a_design_further_than_any_selection() -> str:
         "measured to move blindness at zero audit cost, and six checks bought "
         "1.8 points of it."
     )
+
+
+def the_authoring_round_was_capped_by_a_regex_not_by_the_holes() -> str:
+    """Why the first authoring round could not have a second: its target
+    population was exhausted, and the thing that exhausted it was a lexical
+    shortcut over an artifact the pipeline already computes properly.
+
+    Purely mechanical -- two set sizes and their inclusion. No model call, no
+    reference, nothing to pre-register.
+    """
+    return (
+        "The authoring round that closed 102 cells drew 37 targets. Drawing "
+        "again, against the same targeting and the enlarged set's 3,119 "
+        "remaining holes, yields **ONE**. So it was never a sample of the "
+        "residue -- it was the whole reach of the instrument, and the "
+        "instrument stopped.\n\n"
+        "**WHAT DID THE STOPPING.** A target is a (requirement, port) pair: a "
+        "port two spec-derived designs disagree on, and a requirement whose "
+        "sentence is the author's authority for saying which is wrong. The "
+        "pairing was a regex -- *does this behavioural requirement's TEXT "
+        "contain the port's name*. `normalized.json`, which the pipeline "
+        "already produces from specification and contract alone, answers the "
+        "same question structurally, in `activation` / `observable` / "
+        "`observed_via`:\n\n"
+        "    port              lexical   normalized    new\n"
+        "    biu_read                5           38     33\n"
+        "    saved_addr              7           32     25\n"
+        "    biu_write               4           26     22\n"
+        "    burst                   3           26     23\n"
+        "    dc_addr                 3           26     23\n"
+        "    first_miss_ack          3           23     20\n"
+        "    dcram_we                5           21     16\n"
+        "    first_hit_ack           5           20     15\n"
+        "    tag_we                  2           16     14\n"
+        "    first_miss_err          1            9      8\n"
+        "    **TOTAL**             **38**     **237**  **199**\n\n"
+        "**THE REGEX REACHED 16% OF WHAT THE PIPELINE ALREADY KNEW, AND THE "
+        "NORMALIZED MAP IS A STRICT SUPERSET** -- their union is 237, so every "
+        "pair the text names the normalization names too, plus 199 more.\n\n"
+        "**AND ONE SHORTCUT PRODUCED BOTH DIRECTIONS OF ERROR.** It "
+        "over-matched: a requirement that MENTIONS a port need not have an "
+        "obligation GOVERNING it, which is why at least 8 of the 37 targets "
+        "were unanswerable and the round's rate had to be quoted twice, 6 of "
+        "37 and 6 of ~29. It under-matched: 199 requirements with a normalized "
+        "obligation on a hole port were never asked at all. A lexical proxy "
+        "for a structural relation is wrong in both directions at once.\n\n"
+        "**WHAT THIS DOES AND DOES NOT REVISE.** The round's own numbers are "
+        "unchanged -- 6 accepted, 102 cells closed, audit zero, and two of the "
+        "six convict the design the base set's own editor stopped on. What is "
+        "revised is what they were a rate OF: not 16% of an open population "
+        "but 16% of a nearly closed one. **`authoring_at_a_named_hole_closes_"
+        "cells_that_selection_cannot` said the corpus was the limit rather "
+        "than the problem; this says the same of the targeting.** Whether the "
+        "wider population authors at the same rate is a separate measurement "
+        "and is not claimed here.\n\n"
+        "**THE GENERAL FORM, because this is the third time on this plan.** An "
+        "instrument that looked like a sampler was a census. The tell is "
+        "cheap and was available before any call: **draw the sample twice.** "
+        "A population that yields 37 and then 1 is not one you are sampling, "
+        "and no rate measured on it projects."
+    )

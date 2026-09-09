@@ -2233,3 +2233,33 @@ def test_the_unspent_budget_is_not_read_as_an_editor_limit():
     flat = " ".join(t.split())
     assert "spent 10 of 21 trials" in flat
     assert "evidence the set stopped asking" in flat
+
+
+def test_the_second_draw_is_the_tell():
+    t = ensemble.the_authoring_round_was_capped_by_a_regex_not_by_the_holes()
+    flat = " ".join(t.split())
+    assert "yields **ONE**" in flat
+    assert "never a sample of the residue" in flat
+    assert "draw the sample twice" in flat
+
+
+def test_the_normalized_map_is_a_strict_superset():
+    t = ensemble.the_authoring_round_was_capped_by_a_regex_not_by_the_holes()
+    flat = " ".join(t.split())
+    assert "**TOTAL** **38** **237** **199**" in flat
+    assert "REACHED 16% OF WHAT THE PIPELINE ALREADY KNEW" in flat
+    assert "their union is 237" in flat
+
+
+def test_one_shortcut_erred_in_both_directions():
+    t = ensemble.the_authoring_round_was_capped_by_a_regex_not_by_the_holes()
+    flat = " ".join(t.split())
+    assert "over-matched" in flat and "under-matched" in flat
+    assert "wrong in both directions at once" in flat
+
+
+def test_the_round_one_numbers_are_not_revised():
+    t = ensemble.the_authoring_round_was_capped_by_a_regex_not_by_the_holes()
+    flat = " ".join(t.split())
+    assert "The round's own numbers are unchanged" in flat
+    assert "is a separate measurement and is not claimed here" in flat
