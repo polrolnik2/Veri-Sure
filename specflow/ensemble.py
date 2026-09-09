@@ -3650,3 +3650,51 @@ def the_golden_free_soundness_rule_costs_essentially_all_discrimination() -> str
         "-- it is this number restated, and must be reported as the expected "
         "consequence rather than as a fresh finding."
     )
+
+
+def an_editor_cannot_locate_over_strictness_even_when_it_is_there() -> str:
+    """The fourth measurement of this, and the first against a labelled answer
+    on a set that genuinely contains over-strict checks.
+
+    The previous three runs are weaker evidence than they look: those sets were
+    sound, so the editor's suspicion was false by construction and refuting it
+    took no instrument. This run gave it a real target.
+    """
+    return (
+        "An editor ran 6 trials on a 167-check set, took it from 30 objections "
+        "to 10, and reported two of the survivors as check defects rather than "
+        "design defects: `REQ-0015` and `REQ-0064`, on the argument that their "
+        "vectors change an input mid-transaction and compare against the "
+        "post-change value where a real bus latches at acceptance.\n\n"
+        "**THAT SET REALLY DOES CONTAIN OVER-STRICT CHECKS -- 22 of the 167 "
+        "convict the reference -- so unlike every previous instance the "
+        "suspicion was not wrong in principle.** Scored against the labelled "
+        "audit:\n\n"
+        "    checks that convict the reference        22, over 9 requirements\n"
+        "      REQ-0002 0021 0025 0027 0072 0079 0081 0083 0085\n"
+        "    the editor named                          REQ-0015, REQ-0064\n"
+        "    of those, over-strict                     **0**\n"
+        "    of the 22, named by the editor            **0**\n\n"
+        "**ZERO PRECISION AND ZERO RECALL, WITH A REAL TARGET PRESENT.** Both "
+        "checks it accused spare the reference; not one of the nine "
+        "requirements whose checks actually are over-strict appears in its "
+        "report.\n\n"
+        "**THIS IS WHAT MAKES THE EARLIER RUNS INTERPRETABLE.** Three editors "
+        "on three SOUND sets each concluded the remaining checks contradicted "
+        "each other, and each was refuted in one line because the reference "
+        "satisfies every member. That refutation shows the conclusion was "
+        "false; it does not show the editor could not have been right somewhere "
+        "else. Here it could have been -- and it was not.\n\n"
+        "**SO THE FINDING IS NOT THAT EDITORS ARE WRONG TO SUSPECT "
+        "OVER-STRICTNESS. IT IS THAT THEY CANNOT LOCATE IT.** The suspicion is "
+        "well founded roughly 13% of the time on this set and the "
+        "identification is at chance or worse. An editor's judgement is "
+        "therefore not a substitute for a soundness gate, on the one run where "
+        "substituting was possible.\n\n"
+        "**AND IT IS CONSISTENT WITH THE EARLIER 1-OF-3.** Pooled across the "
+        "four runs, editors have named 5 checks as unsatisfiable or over-strict "
+        "and been right about 1. The mechanism is the same one that makes the "
+        "contradiction claim attractive: from inside, a check it cannot satisfy "
+        "and a check no design can satisfy present identically, and nothing "
+        "available to the editor separates them."
+    )

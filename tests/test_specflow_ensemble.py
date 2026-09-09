@@ -1752,3 +1752,22 @@ def test_the_next_run_is_pre_registered_as_not_a_new_negative():
     t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
     assert "PRE-REGISTERED" in t
     assert "not a new negative" in " ".join(t.split()).lower()
+
+
+def test_the_editor_scored_zero_on_a_labelled_set():
+    t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
+    assert "REQ-0015" in t and "REQ-0064" in t
+    assert "ZERO PRECISION AND ZERO RECALL" in t
+
+
+def test_the_target_really_existed_this_time():
+    """What separates this from the three refuted-by-construction runs."""
+    t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
+    assert "22 of the 167" in t
+    assert "it could have been -- and it was not" in " ".join(t.split())
+
+
+def test_the_finding_is_localisation_not_suspicion():
+    t = ensemble.an_editor_cannot_locate_over_strictness_even_when_it_is_there()
+    assert "THEY CANNOT LOCATE IT" in t
+    assert "not a substitute for a soundness gate" in " ".join(t.split())
