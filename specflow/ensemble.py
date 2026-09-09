@@ -3331,3 +3331,60 @@ def the_gradient_holds_on_a_set_that_rejects_everything() -> str:
         "divergence almost unaddressed. That is this plan's 3.9%-of-exposed-"
         "decisions figure with a name on it."
     )
+
+
+def blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify() -> str:
+    """The first golden-free instrument here that strongly tracks a property
+    that matters -- and the cell that would make it a certificate is n=8.
+
+    Completeness has never had an instrument on this plan. This is one, and the
+    honest reading is that it aims work rather than approving it.
+    """
+    return (
+        "**THE CONSTRUCTION NEEDS NO REFERENCE.** Golden-based blindness asks "
+        "whether a check decides where a port it reads is WRONG and passes -- "
+        "and 'wrong' needs the reference. But the property a complete set must "
+        "have is not *objects to wrong values*, it is *forces agreement*, so "
+        "the reference drops out:\n\n"
+        "    a check that PASSES TWO DESIGNS which DIFFER on a port it reads\n"
+        "    is blind to that difference, whichever of the two is right\n\n"
+        "The pair is the witness. Nine designs -- seven written independently "
+        "from the specification and two produced by editors -- give 36 pairs, "
+        "and every differing pair a check passes is a hole in the set with a "
+        "testpoint and a port named.\n\n"
+        "**MEASURED AGAINST THE REFERENCE-BASED ARTICLE, on 143 checks that "
+        "read a real output:**\n\n"
+        "                              golden: BLIND   not-blind\n"
+        "      golden-free BLIND            118           17\n"
+        "      golden-free CLEAN              3            5\n\n"
+        "    Spearman(blind pairs, blind decisions)   **+0.908**\n"
+        "    precision of the flag                    118/135 = 87%\n"
+        "    **purity of the CLEAN cell**             **5/8 = 62%, n=8**\n\n"
+        "**+0.908 IS BY A WIDE MARGIN THE STRONGEST GOLDEN-FREE CORRELATION ON "
+        "THIS PLAN.** Six re-weightings of the corpus-as-an-order route reached "
+        "nothing above +0.3 and the discriminating checks ordered designs "
+        "BACKWARDS at -0.54. This ranks the residue that actually blocks the "
+        "loop, and it reads no reference.\n\n"
+        "**AND IT IS A PRIORITISER, NOT A CERTIFICATE, WHICH IS THE WHOLE "
+        "DISTINCTION.** For approving a set the useful guarantee is the "
+        "converse of precision: if it says CLEAN, is the check really not "
+        "blind? That cell is 5 of 8. Worse, all five correct CLEANs are checks "
+        "that NEVER DECIDE where their port is wrong -- clean by SILENCE, not "
+        "by strength -- so the cell that would certify completeness is filled "
+        "by exactly the checks that assert nothing. That is over-strictness and "
+        "vacuity as one defect with two signs, arriving in the completeness "
+        "instrument.\n\n"
+        "**WHY THE CLEAN CELL CANNOT BE FIXED BY MORE DESIGNS ALONE.** A check "
+        "reads CLEAN when no pair in the population differs on its ports. With "
+        "a finite population that means *these designs happen to agree there*, "
+        "which is the shared-misreading blind spot: the population agrees where "
+        "the specification is clear and agrees WRONGLY where it is ambiguous. "
+        "So the clean cell inherits precisely the failure that closed the "
+        "consensus route.\n\n"
+        "**WHAT IT IS GOOD FOR, STATED NARROWLY.** Ranking which checks to "
+        "re-author, and handing each one a concrete admissible objection -- a "
+        "pair, a testpoint, a port and two values -- which is the first "
+        "COMPLETENESS objection this pipeline has ever been able to emit. "
+        "Whether an author can act on it is a separate question with its own "
+        "pre-registration."
+    )

@@ -1577,3 +1577,29 @@ def test_the_recovered_checks_carry_the_endgame():
 def test_the_untouched_output_is_named():
     t = ensemble.the_gradient_holds_on_a_set_that_rejects_everything()
     assert "first_hit_ack" in t and "1,063" in t and "938" in t
+
+
+def test_the_pair_construction_needs_no_reference():
+    t = ensemble.blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify()
+    assert "PASSES TWO DESIGNS which DIFFER" in t
+    assert "whichever of the two is right" in t
+
+
+def test_the_correlation_is_the_strongest_measured_here():
+    t = ensemble.blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify()
+    assert "+0.908" in t
+    assert "-0.54" in t          # the order route it beats
+
+
+def test_the_clean_cell_is_the_number_that_matters_and_it_is_small():
+    """Precision reads well; the cell that would certify does not."""
+    t = ensemble.blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify()
+    assert "5/8 = 62%, n=8" in t
+    assert "clean by SILENCE" in t
+    assert "PRIORITISER, NOT A CERTIFICATE" in t
+
+
+def test_more_designs_do_not_fix_the_clean_cell():
+    t = ensemble.blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify()
+    assert "shared-misreading blind spot" in t
+    assert "closed the consensus route" in t
