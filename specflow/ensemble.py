@@ -2953,3 +2953,61 @@ def six_designs_satisfy_the_group_three_editors_called_unsatisfiable() -> str:
         "-- the same seven designs the soundness rule already reads are sitting "
         "unused as an existence proof."
     )
+
+
+def seven_readings_seven_designs_and_the_soundness_sufficiency_trade() -> str:
+    """The session's central measurement, with a formal instrument on both ends
+    and golden appearing only in the audit column.
+
+    Sufficiency -- does the set FORCE equivalence -- had never been measurable
+    here. It is, without a reference: if two designs both satisfy the set and
+    are not equivalent to each other, the set does not force equivalence.
+    """
+    return (
+        "**SEVEN INDEPENDENTLY WRITTEN SPEC-DERIVED DESIGNS FALL INTO SEVEN "
+        "EQUIVALENCE CLASSES.** All 21 pairs return `DIFFERS` under a bounded "
+        "reset-constrained miter that reads no known-good design. The "
+        "specification is compatible with at least seven distinct behaviours, "
+        "and that is measured on the designs themselves rather than inferred "
+        "from cell disagreement.\\n\\n"
+        "**SO A CRITERION ACCEPTING EXACTLY ONE IS DOING THE MOST A CORRECT "
+        "CRITERION COULD.** That settles a reading the plan could not settle "
+        "before: 'the set rejects 6 of 7' is DISCRIMINATION, not "
+        "over-strictness, because at most one of seven mutually inequivalent "
+        "designs can match any reference.\\n\\n"
+        "**AND SOUNDNESS DOES NOT SURVIVE CONJUNCTION.** The minority rule "
+        "bounds each CHECK at two convictions of seven, at 59-of-59 precision. "
+        "A design is rejected when ANY of 114 members objects, so rejections "
+        "UNION:\\n\\n"
+        "    worst single check convicts        3 of 7\\n"
+        "    the 114-check SET rejects          6 of 7\\n\\n"
+        "Every per-check soundness filter on this plan is blind to this by "
+        "construction, and eight requirements do all the rejecting.\\n\\n"
+        "**THE TRADE, BOTH ENDS MEASURED, GOLDEN ONLY IN THE AUDIT:**\\n\\n"
+        "    set                    checks  span   accepts  *audit*  objects to\\n"
+        "                                          of 7             the design\\n"
+        "    screened                 114   58%      1      *10*        3\\n"
+        "    UNANIMOUS (convicts 0)    89   47%      7      *0*         2\\n\\n"
+        "**THE UNANIMITY RULE IS THE FIRST GOLDEN-FREE RULE HERE THAT PREDICTS "
+        "SOUNDNESS RATHER THAN BEING HANDED IT.** Dropping every check that "
+        "convicts even one of the seven removes **10 of the 10** checks that "
+        "convict the reference -- **100% recall**, at 40% precision -- and the "
+        "surviving 89 convict the reference **zero** times, verified directly "
+        "with a probe-liveness guard. MAXSOUND was perfectly sound too and was "
+        "SELECTED BY golden, so it was a ceiling; this is selected by the "
+        "population and the audit merely confirms it.\\n\\n"
+        "**AND EACH END FAILS THE GOAL IN THE OPPOSITE WAY, WHICH IS THE POINT."
+        "** The screened set convicts the reference ten times, so zero "
+        "objections is UNREACHABLE for a correct design and its accepted design "
+        "B is measured `DIFFERS`. The unanimous set accepts all seven -- seven "
+        "equivalence classes at once -- so it cannot force equivalence at all. "
+        "**Over-strictness and vacuity as one defect with two signs, now at SET "
+        "level, with a formal equivalence instrument on both ends instead of a "
+        "proxy.**\\n\\n"
+        "**WHAT MAKES THE UNANIMOUS SET WORTH RUNNING ANYWAY:** it is the first "
+        "set on this plan that is simultaneously sound on the reference (0), "
+        "discriminating on the design under repair (2 objections), and "
+        "reachable -- zero objections is a state a correct design occupies. On "
+        "every earlier set, terminating at zero was a certificate of "
+        "NON-equivalence by arithmetic."
+    )

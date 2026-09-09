@@ -1385,3 +1385,34 @@ def test_the_editor_is_never_shown_the_existence_proof():
     t = ensemble.six_designs_satisfy_the_group_three_editors_called_unsatisfiable()
     assert "THREE EDITORS HAVE NOW MADE THE SAME WRONG CALL" in t
     assert "sitting unused as an existence proof" in t
+
+
+def test_the_population_has_seven_equivalence_classes():
+    t = ensemble.seven_readings_seven_designs_and_the_soundness_sufficiency_trade()
+    assert "SEVEN EQUIVALENCE CLASSES" in t
+    assert "All 21 pairs" in t and "reads no known-good design" in t
+
+
+def test_rejecting_six_of_seven_is_discrimination():
+    t = ensemble.seven_readings_seven_designs_and_the_soundness_sufficiency_trade()
+    assert "DISCRIMINATION, not" in t
+    assert "at most one of seven" in t
+
+
+def test_soundness_does_not_survive_conjunction():
+    t = ensemble.seven_readings_seven_designs_and_the_soundness_sufficiency_trade()
+    assert "SOUNDNESS DOES NOT SURVIVE CONJUNCTION" in t
+    assert "rejections UNION" in t.replace("\\n", " ")
+
+
+def test_the_unanimity_rule_has_perfect_recall():
+    t = ensemble.seven_readings_seven_designs_and_the_soundness_sufficiency_trade()
+    assert "10 of the 10" in t and "100% recall" in t
+    assert "SELECTED BY golden" in t and "ceiling" in t
+
+
+def test_both_ends_fail_in_opposite_ways():
+    t = ensemble.seven_readings_seven_designs_and_the_soundness_sufficiency_trade()
+    assert "UNREACHABLE for a correct design" in t
+    assert "cannot force equivalence" in t
+    assert "one defect with two signs" in t
