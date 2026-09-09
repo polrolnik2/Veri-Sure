@@ -1441,3 +1441,60 @@ def test_the_remedy_and_its_blocker_are_both_named():
     assert "NEW CHECKS separating B" in t
     assert "control leak" in t
     assert "one design, one corpus" in t
+
+
+def test_the_impossibility_claim_carries_its_own_retraction():
+    """The correction must live where the claim does, not only below it.
+
+    A reader who reaches `no_sound_subset_of_this_corpus_forces_equivalence`
+    and stops there must not come away with the overstated conclusion.
+    """
+    d = ensemble.no_sound_subset_of_this_corpus_forces_equivalence.__doc__
+    assert "CORRECTED" in d
+    assert "SCORED" in d
+    assert "a_proof_is_exhaustive_only_over_what_it_enumerated" in d
+
+
+def test_the_proof_broke_on_bodies_that_were_never_scored():
+    t = ensemble.a_proof_is_exhaustive_only_over_what_it_enumerated()
+    assert "477 distinct authored bodies" in t
+    assert "not one of which had ever been decided against any design" in t
+    assert "14, over 7 requirements" in t
+
+
+def test_the_recovered_set_is_sound_wide_and_able_to_reject():
+    t = ensemble.a_proof_is_exhaustive_only_over_what_it_enumerated()
+    assert "163" in t and "68%" in t
+    assert "ALL EIGHT REJECTED" in t
+    # the three legs, and that every earlier set failed exactly one of them
+    assert "failed on exactly one of the three legs" in t
+
+
+def test_the_recovered_corpus_moves_the_ceiling_and_not_the_golden_free_set():
+    """The half that would be easy to drop, and it is the half that matters.
+
+    A reader who takes only the 68% away from this finding would think the
+    golden-free pipeline had improved. It did not.
+    """
+    t = ensemble.a_proof_is_exhaustive_only_over_what_it_enumerated()
+    assert "ZERO of them" in t
+    assert "anti-correlation confirmed a third time" in t
+
+
+def test_a_negative_result_needs_its_denominator_checked_too():
+    t = ensemble.a_proof_is_exhaustive_only_over_what_it_enumerated()
+    assert "exhaustive over the population it enumerated" in t
+    assert "the sign is reversed" in t
+    assert "as hard as a positive one" in t
+
+
+def test_a_skipped_check_is_indistinguishable_from_a_passing_one():
+    t = ensemble.a_missing_body_reads_as_a_check_that_passed()
+    assert "104 OF THEM" in t
+    assert "like a check that passed" in t
+
+
+def test_the_scorer_must_refuse_an_incomplete_denominator():
+    t = ensemble.a_missing_body_reads_as_a_check_that_passed()
+    assert "REFUSE AN INCOMPLETE DENOMINATOR, NEVER SKIP IT" in t
+    assert "8 of 348" in t

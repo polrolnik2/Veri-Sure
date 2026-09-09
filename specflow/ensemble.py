@@ -3014,11 +3014,19 @@ def seven_readings_seven_designs_and_the_soundness_sufficiency_trade() -> str:
 
 
 def no_sound_subset_of_this_corpus_forces_equivalence() -> str:
-    """Exhaustive over the corpus, with a witness pair, and it closes selection
-    as a route.
+    """Exhaustive over the SCORED corpus, with a witness pair.
 
-    Every earlier negative here was about a PARTICULAR set. This is about all
-    of them at once, and it needs no further runs to establish.
+    **CORRECTED, AND THE WORD DOING THE DAMAGE IS "CORPUS".** The argument
+    below is valid and its conclusion was overstated: it enumerates the 114
+    checks that were SCORED, and 477 further bodies over the 26 uncovered
+    behavioural requirements existed on disk having never been decided against
+    anything. Scoring them produced 14 checks that spare the reference AND
+    convict B -- so the witness pair is removed and the exhaustive step no
+    longer closes. See `a_proof_is_exhaustive_only_over_what_it_enumerated`.
+
+    What survives unchanged: no sound subset of the checks that WERE scored
+    forces equivalence, and no threshold on population convictions separates
+    a reference-sparing check from a reference-convicting one.
     """
     return (
         "**THE CEILING SET IS EVERY CORPUS CHECK THAT SPARES THE REFERENCE** -- "
@@ -3055,4 +3063,94 @@ def no_sound_subset_of_this_corpus_forces_equivalence() -> str:
         "**THE HONEST SCOPE.** This is one design, one corpus of 259 bodies and "
         "one population of seven. It says selection is exhausted HERE; it does "
         "not say a richer corpus could not contain a separating check."
+    )
+
+
+def a_proof_is_exhaustive_only_over_what_it_enumerated() -> str:
+    """A retraction of this module's own strongest claim, and the cheapest
+    measurement of the session is what forced it.
+
+    The claim was not wrong about its population. It was wrong about which
+    population it had.
+    """
+    return (
+        "**THE CLAIM WAS THAT NO SOUND SUBSET OF THE CORPUS FORCES EQUIVALENCE**, "
+        "argued exhaustively: the ceiling set is every check that spares the "
+        "reference, it accepts design B, B differs from the reference, and any "
+        "sound subset is a subset of the ceiling -- so B satisfies all of them. "
+        "The argument is valid. Its premise was that the ceiling enumerated "
+        "every sound check there is.\n\n"
+        "**IT ENUMERATED EVERY SCORED CHECK.** The 26 behavioural requirements "
+        "the ceiling did not cover had **477 distinct authored bodies on disk, "
+        "not one of which had ever been decided against any design.** They were "
+        "absent from the corpus the score was taken over, so the ceiling was "
+        "never complete and the exhaustive step never closed.\n\n"
+        "    scoring them, 7 designs x 348 testpoints, no model calls:\n"
+        "      decide on some design                              350 of 477\n"
+        "      spare the reference (audit, computed LAST)          59\n"
+        "      **spare the reference AND convict design B**        **14, over 7 requirements**\n\n"
+        "**FOURTEEN CHECKS REMOVE THE WITNESS PAIR.** REQ-0013, 0014, 0020, "
+        "0022, 0032, 0037 and 0077 each carry a body that a correct design "
+        "satisfies and B does not, so the sound set containing them rejects B "
+        "and the impossibility argument no longer has its witness.\n\n"
+        "**AND THE SET THIS BUILDS IS THE FIRST HERE THAT IS SOUND, WIDE AND "
+        "ABLE TO REJECT.** Every check in either corpus that decides on the "
+        "reference and spares it -- 104 scored plus 59 recovered = 163, over 59 "
+        "of 87 requirements = 68%, audit 0:\n\n"
+        "    objections at init, of 163\n"
+        "      the reference                       0\n"
+        "      the eight spec-derived designs      11 to 22 -- **ALL EIGHT REJECTED**\n\n"
+        "Every previous set failed on exactly one of the three legs: rule B "
+        "convicted the reference, so zero objections was unreachable for a "
+        "correct design and terminating there was a certificate of "
+        "NON-equivalence; MAXSOUND and the 104-check ceiling were sound and "
+        "accepted a wrong design at zero. This one leaves zero reachable only "
+        "for something no design in the population is.\n\n"
+        "**WHAT DOES NOT CHANGE, AND IT IS THE HALF THAT MATTERS FOR A "
+        "GOLDEN-FREE PIPELINE.** The 14 checks convict 4 to 7 of the 7 designs; "
+        "the golden-free minority rule keeps at most 2 and therefore keeps "
+        "**ZERO of them.** So the recovered corpus moves the CEILING and not "
+        "the reachable-without-a-reference set, which is this module's central "
+        "anti-correlation confirmed a third time on fresh bodies.\n\n"
+        "**THE DISCIPLINE, WHICH IS THE PORTABLE PART.** An exhaustive argument "
+        "is exhaustive over the population it enumerated, and 'the corpus' and "
+        "'the corpus that was scored' are different sets. Selecting over a "
+        "different corpus than the score is a defect this experiment has made "
+        "eight times and has always caught as an inflated result; here the sign "
+        "is reversed -- the score was taken over a SUBSET -- and it produced an "
+        "impossibility instead. **A negative result needs its denominator "
+        "checked exactly as hard as a positive one, and this one did not get "
+        "it.**"
+    )
+
+
+def a_missing_body_reads_as_a_check_that_passed() -> str:
+    """Caught before it ran, by reading the scorer rather than its output.
+
+    The sixteenth counting-shaped defect on this plan, and the second in the
+    same file -- whose docstring already names the defect class.
+    """
+    return (
+        "`chkscore.py` takes its check SET from an environment variable and "
+        "loaded its BODIES from a hardcoded filename, then looped:\n\n"
+        "    body = BODIES.get(key)\n"
+        "    if not body:\n"
+        "        continue          # <- a check with no body is not scored\n\n"
+        "**SO SCORING A 163-CHECK SET WHOSE BODIES LIVE IN TWO FILES WOULD HAVE "
+        "DECIDED 104 OF THEM AND REPORTED THE RESULT UNDER THE 163's NAME.** "
+        "Not an error, not a warning: 59 checks silently absent, and since the "
+        "criterion is 'no check objects', **every absent check reads exactly "
+        "like a check that passed.** A design rejected by 14 recovered checks "
+        "would have scored zero objections and been reported as accepted.\n\n"
+        "The file's own docstring already names this class -- *'a number that "
+        "reads as a result and is measuring something else'* -- for the SET "
+        "variable, one line above the BODIES variable that had the same defect. "
+        "Fixed by parameterising the body source and REFUSING when any check in "
+        "the set has no body, rather than skipping it.\n\n"
+        "**THE GENERAL RULE: A SCORER MUST REFUSE AN INCOMPLETE DENOMINATOR, "
+        "NEVER SKIP IT.** `drive9.review` learned the same rule from the "
+        "opposite direction, refusing a suite that produced 8 of 348 traces -- "
+        "a missing testpoint is a check that was never given its evidence, not "
+        "a check that passed. Both are the same sentence about a different "
+        "kind of gap."
     )
