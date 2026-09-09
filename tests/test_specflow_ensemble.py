@@ -1630,3 +1630,29 @@ def test_the_trade_survives_the_round():
     t = ensemble.a_witness_makes_blindness_authorable_and_does_not_break_the_trade()
     assert "does not break the trade" in t.lower()
     assert "56%" in t
+
+
+def test_the_per_check_metric_is_not_a_set_metric():
+    t = ensemble.blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing()
+    assert "121 to 136" in t
+    assert "measuring the denominator" in t
+
+
+def test_set_blindness_is_unchanged_by_the_round():
+    t = ensemble.blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing()
+    assert "3,221 = 56.9%" in t
+    assert "ZERO" in t
+    assert "strict subset" in " ".join(t.split())
+
+
+def test_the_identical_numbers_were_verified_not_accepted():
+    """This plan's own signature for a harness defect is byte-identical output."""
+    t = ensemble.blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing()
+    assert "signature for a harness" in t
+    assert "163" in t and "486" in t
+
+
+def test_blindness_is_one_blind_spot_not_many():
+    t = ensemble.blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing()
+    assert "one blind spot with 163 checks in front of it" in t
+    assert "scored on cells the SET newly reaches" in t

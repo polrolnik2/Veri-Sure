@@ -3445,3 +3445,61 @@ def a_witness_makes_blindness_authorable_and_does_not_break_the_trade() -> str:
         "asked to assert more cross the soundness boundary instead of "
         "approaching it."
     )
+
+
+def blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing() -> str:
+    """Why every authoring round on this plan plateaus, measured at set level
+    for the first time -- and a correction to the metric I used to measure it.
+
+    The per-check score said the round worked. The set-level score says its
+    contribution was exactly zero, and the two are not in tension: they are
+    measuring different things and only one of them is completeness.
+    """
+    return (
+        "**FIRST, THE METRIC WAS WRONG AND ITS FAILURE IS THE CLUE.** Blindness "
+        "was scored per check -- *does it decide where a port it reads is wrong "
+        "and pass* -- and 17 checks each measured LESS blind than the body it "
+        "came from were added to the set. Blind checks went **121 to 136** and "
+        "the objection rate on exposed decisions went **0.8% to 0.7%.** A set "
+        "cannot get worse by gaining a check: rejection is a union, so a metric "
+        "that falls when you add one is measuring the denominator, not the "
+        "set.\n\n"
+        "**THE SET-LEVEL QUESTION IS DISCRIMINATION.** For every pair of "
+        "designs and every testpoint where they disagree on a real output, does "
+        "SOME check object to at least one of them? That composes correctly -- "
+        "adding a check can only close holes -- and it is golden-free, since "
+        "the disagreement is the whole evidence.\n\n"
+        "    (pair, testpoint) cells where two designs DISAGREE     5,656\n"
+        "    the 163-check set objects to at least one              2,435\n"
+        "    **SET BLINDNESS**                                      **3,221 = 56.9%**\n"
+        "    the same, after adding the 17                          **3,221 = 56.9%**\n\n"
+        "**IDENTICAL, AND VERIFIED RATHER THAN ACCEPTED**, because byte-identical "
+        "numbers across an edit are this plan's own signature for a harness "
+        "defect. Asked directly: the added checks object at 163 (design, "
+        "testpoint) cells, the base set objects at 486, and the cells the added "
+        "checks reach that the base set does not is **ZERO**. A strict "
+        "subset.\n\n"
+        "**SO THE ROUND'S CONTRIBUTION TO COMPLETENESS IS NOT SMALL, IT IS "
+        "NIL** -- 39 model calls, 6 checks that are genuinely sound and "
+        "genuinely less blind, and the set discriminates exactly as it did "
+        "before.\n\n"
+        "**THE MECHANISM, AND IT EXPLAINS THE WHOLE PLATEAU.** The witness "
+        "pointed each author at a place its own check was silent. The authors "
+        "complied -- the rewrites do object more. But every cell they object at "
+        "was already covered by a DIFFERENT check in the set. Strengthening a "
+        "check moves it toward what the set already says; it does not extend "
+        "the set into where the set is silent.\n\n"
+        "**BLINDNESS IS CORRELATED ACROSS CHECKS, and that is the check-level "
+        "form of this module's oldest finding.** Independently written designs "
+        "agree wrongly where the specification is ambiguous; independently "
+        "written CHECKS are silent in the same places, for the same reason -- "
+        "they are all readings of the same text by the same kind of reader. The "
+        "56.9% the set cannot see is not 163 separate blind spots that could be "
+        "closed one at a time. It is one blind spot with 163 checks in front of "
+        "it.\n\n"
+        "**WHAT FOLLOWS FOR AUTHORING.** Per-check improvement is the wrong "
+        "target and every round here has optimised it: repair, strength, "
+        "narrowing, volume, two-sided, and now blindness. A round should be "
+        "scored on cells the SET newly reaches, which is a number that has "
+        "never been reported for any of them -- and for this one it is zero."
+    )
