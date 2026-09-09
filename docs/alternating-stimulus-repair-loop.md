@@ -1823,3 +1823,59 @@ What is missing is an extractor, and extraction is hard for a reason the plan
 never named — the design under test is a competent reader of the same
 specification, and in the region that matters it is a **better** one than any
 rule over the population that produced it.
+
+## THE LOOP DROVE THE DESIGN PAST ITS OWN CRITERION, AND I RESUMED IT ANYWAY
+
+The weighted run's editor stopped at 9 of 30 trials with 1,325 cells still
+disagreeing with the consensus of seven. I read that as budget left on the table
+and dispatched a resume telling it to spend the rest on those cells. Then the
+precision test from the section above was applied to the criterion itself:
+
+| at the 238,678 cells where the seven AGREE | |
+|---|---|
+| the consensus of seven is right | **99.13%** |
+| **the design under test is right** | **99.30%** |
+
+**The design has overtaken its own criterion**, and the objections it had left
+say so outright. Of the 1,314 cells where the two disagree — which is every
+objection the loop still had:
+
+| | cells | |
+|---|---|---|
+| the consensus is right, the design wrong | 375 | 28.5% |
+| **the design is right, the consensus wrong** | **773** | **58.8%** |
+| both wrong | 166 | 12.6% |
+
+**Twice as often as not, an objection is the criterion being wrong.** Driving
+those 1,325 to zero would have repaired 375 cells and broken 773. The resume was
+stopped before it committed anything.
+
+### The mechanism: one accuracy is fixed and the other rises
+
+A criterion built from a population is a fixed artifact — 99.13% is all the
+seven will ever be. The design's accuracy climbs as the loop works. **They
+cross.** After the crossing every remaining objection is more likely wrong than
+right, while the objection *count* keeps falling — so the loop reads the whole
+descent as progress and has no way to see the inversion.
+
+### It explains the arm-to-arm Goodhart exactly
+
+Between the unweighted and weighted stacked runs the proxy improved 22% while
+true divergence rose 2.4% and the grade did not move. That is not two arms
+disagreeing by chance; **it is what descending past the crossing point looks
+like from inside.**
+
+### The prescription is a stopping rule, not a better criterion
+
+A loop driven by a fixed-accuracy reference must stop when the artifact reaches
+that reference's accuracy. Everything after that is damage the loop scores as
+progress. In a benchmark the crossing is measurable. **In production it is
+not** — which makes the trial budget, the crude device this plan has been
+treating as a cost, the only protection against it.
+
+### And it reframes "the editor stopped early"
+
+This plan has twice recorded a run stopping with budget unspent as a weakness of
+that run. On this evidence the editor stopped at very nearly the right moment,
+for reasons it could not have articulated — and **my correction of it was the
+error**, not its stopping.

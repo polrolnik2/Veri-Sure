@@ -1058,3 +1058,33 @@ def test_the_law_qualifies_the_outside_the_loop_conclusion():
     t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
     assert "The first half is now refuted" in t
     assert "a BETTER one" in t
+
+
+def test_the_inversion_names_both_accuracies():
+    t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
+    assert "99.13%" in t and "99.30%" in t
+    assert "OVERTAKEN ITS OWN CRITERION" in t
+
+
+def test_the_inversion_carries_the_objection_split():
+    t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
+    assert "773   58.8%" in t and "375   28.5%" in t
+    assert "repaired 375 cells and broken" in t
+
+
+def test_the_inversion_states_the_fixed_versus_rising_mechanism():
+    t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
+    assert "one accuracy is fixed and the other rises" in t.lower()
+    assert "no way to see the inversion" in t
+
+
+def test_the_inversion_prescribes_a_stopping_rule():
+    t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
+    assert "STOPPING RULE, NOT A BETTER CRITERION" in t
+    assert "trial budget" in t
+
+
+def test_the_inversion_records_the_authors_own_error():
+    t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
+    assert "my correction of it was" in t
+    assert "stopped at very nearly the right moment" in t

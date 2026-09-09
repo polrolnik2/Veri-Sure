@@ -2313,3 +2313,56 @@ def a_criterion_only_corrects_where_it_beats_the_design_under_test() -> str:
         "same specification, and in the region that matters it is a BETTER one "
         "than any rule over the population that produced it.**"
     )
+
+
+def the_loop_drove_the_design_past_its_own_criterion() -> str:
+    """The sharpest thing measured on this plan, and it stopped a run I had
+    just dispatched on reasoning this refutes.
+
+    `a_criterion_only_corrects_where_it_beats_the_design_under_test` states the
+    law in the split region, where the criterion is silent anyway. This applies
+    the same test where the criterion actually SPEAKS.
+    """
+    return (
+        "**I RESUMED A RUN BECAUSE ITS GRADIENT LOOKED UNEXHAUSTED, AND THE "
+        "GRADIENT HAD INVERTED.** The editor stopped at 9 of 30 trials with "
+        "1,325 cells still disagreeing with the consensus of seven. I read "
+        "that as budget left on the table and dispatched a resume. Then the "
+        "precision test was applied to the criterion itself:\\n\\n"
+        "    at the 238,678 cells where the seven AGREE\\n"
+        "      the consensus of seven is right      99.13%\\n"
+        "      THE DESIGN UNDER TEST is right       99.30%\\n\\n"
+        "**THE DESIGN HAS OVERTAKEN ITS OWN CRITERION**, and the objections it "
+        "has left say so outright. Of the 1,314 cells where the two disagree "
+        "-- every objection the loop had remaining:\\n\\n"
+        "    the consensus is right, the design wrong     375   28.5%\\n"
+        "    THE DESIGN IS RIGHT, THE CONSENSUS WRONG     773   58.8%\\n"
+        "    both wrong                                   166   12.6%\\n\\n"
+        "**TWICE AS OFTEN AS NOT, AN OBJECTION IS THE CRITERION BEING WRONG.** "
+        "Driving those 1,325 to zero would have repaired 375 cells and broken "
+        "773. The resume was stopped before it committed anything.\\n\\n"
+        "**THE MECHANISM IS THAT ONE ACCURACY IS FIXED AND THE OTHER RISES.** "
+        "A criterion built from a population is a fixed artifact: 99.13% is "
+        "all the seven will ever be. The design's accuracy climbs as the loop "
+        "works. They cross, and after the crossing every remaining objection "
+        "is more likely wrong than right -- while the objection COUNT keeps "
+        "falling, so the loop reads the whole descent as progress and has no "
+        "way to see the inversion.\\n\\n"
+        "**AND IT EXPLAINS THE ARM-TO-ARM GOODHART EXACTLY.** Between the "
+        "unweighted and weighted stacked runs the proxy improved 22% while "
+        "true divergence rose 2.4% and the grade did not move. That is not a "
+        "coincidence of two arms; it is what descending past the crossing "
+        "point looks like from inside.\\n\\n"
+        "**THE PRESCRIPTION IS A STOPPING RULE, NOT A BETTER CRITERION.** A "
+        "loop driven by a fixed-accuracy reference must stop when the artifact "
+        "reaches that reference's accuracy, and everything after that is "
+        "damage the loop scores as progress. In a benchmark the crossing is "
+        "measurable. **In production it is not**, which makes the trial budget "
+        "-- the crude device this plan has been treating as a cost -- the only "
+        "protection against it.\\n\\n"
+        "It also reframes 'the editor stopped early with budget unspent', "
+        "which this plan has twice recorded as a weakness of a run. On this "
+        "evidence the editor stopped at very nearly the right moment, for "
+        "reasons it could not have articulated, and my correction of it was "
+        "the error."
+    )
