@@ -3388,3 +3388,60 @@ def blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify() -> st
         "Whether an author can act on it is a separate question with its own "
         "pre-registration."
     )
+
+
+def a_witness_makes_blindness_authorable_and_does_not_break_the_trade() -> str:
+    """The blindness round, against its own pre-registered bar -- which it
+    misses -- and against the strength round, which it beats.
+
+    Both readings are true at once and the pre-registered one governs what
+    happens next.
+    """
+    return (
+        "40 of the blindest checks, one per requirement, re-authored with the "
+        "golden-free objection this pipeline has never been able to emit: *you "
+        "passed design A and design B at testpoint T, they differ there on port "
+        "P which you read, at least one is wrong and you said nothing.* 39 "
+        "usable; integrity clean, 0 unchanged, 0 duplicates, leak check 0.\n\n"
+        "**THE PRE-REGISTERED MEASURE IS A PAIR: sound AND strictly less "
+        "blind.**\n\n"
+        "    SOUND (spares the reference)          17 of 39\n"
+        "    LESS BLIND                            24 of 39\n"
+        "    **WIN = both**                        **6 of 39 = 15%**\n"
+        "    the cost: became UNSOUND              22 = 56%   (strength round 68%)\n\n"
+        "**THE BAR WAS 8 AND IT LANDED ON 6, so by the rule fixed before the "
+        "round ran this is the middle band: real but weak, record the rate, do "
+        "NOT rebuild the set on it.**\n\n"
+        "**AND IT IS THE FIRST LEVER TO BEAT THE STRENGTH ROUND, WHICH IS THE "
+        "OTHER TRUE THING.** Same author family, same direction of travel "
+        "(assert more of the sentence), differing only in whether a concrete "
+        "witness was attached:\n\n"
+        "    STRENGTH   untargeted, 'assert every obligation'   **0 of 34**\n"
+        "    BLINDNESS  a pair, a testpoint, a port, two values  **6 of 39**\n"
+        "    two-sided Fisher exact                              **p = 0.0271**\n\n"
+        "So the strength round's 0-of-34 was not a fact about asserting more. "
+        "**It was a fact about asserting more with nothing to aim at**, and "
+        "targeting is the variable -- which is what the narrowing round already "
+        "suggested from the opposite direction and this confirms with a "
+        "different objection.\n\n"
+        "**A HEADLINE THAT HAD TO BE DEFLATED BEFORE IT WAS REPORTED.** Blind "
+        "pairs over the round fall **26%**, which reads as the round working. "
+        "Split by whether the check stayed sound:\n\n"
+        "    SOUND checks     42,158 -> 38,529   **-9%**\n"
+        "    UNSOUND checks   44,315 -> 25,474   **-43%**\n\n"
+        "**A CHECK THAT CONVICTS THE REFERENCE CONVICTS MORE DESIGNS, SO IT "
+        "PASSES FEWER PAIRS, SO ITS BLINDNESS FALLS FOR THE WRONG REASON.** "
+        "Most of the -26% is over-strictness wearing completeness's clothes, "
+        "and the honest reduction is -9%. `REQ-0001` is the pure case: 4,264 "
+        "blind pairs to ZERO, with 168 convictions of the reference. Quoting "
+        "the aggregate would have been the failure-mode swap this plan has "
+        "retracted nine headlines for, in a metric built this session.\n\n"
+        "**WHAT IT SETTLES.** Blindness IS authorable against -- the objection "
+        "is admissible, emittable and acted on. It does not break the trade: "
+        "22 checks bought their completeness with soundness, and the six that "
+        "did not are 15% of the attempt. The completeness residue is reducible "
+        "at roughly the rate every other authoring lever on this plan has "
+        "measured, and by the same mechanism it always fails -- most authors "
+        "asked to assert more cross the soundness boundary instead of "
+        "approaching it."
+    )

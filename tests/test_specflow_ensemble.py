@@ -1603,3 +1603,30 @@ def test_more_designs_do_not_fix_the_clean_cell():
     t = ensemble.blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify()
     assert "shared-misreading blind spot" in t
     assert "closed the consensus route" in t
+
+
+def test_the_blindness_round_misses_its_own_bar():
+    t = ensemble.a_witness_makes_blindness_authorable_and_does_not_break_the_trade()
+    assert "6 of 39 = 15%" in t
+    assert "BAR WAS 8 AND IT LANDED ON 6" in t
+    assert "do NOT rebuild the set on it" in t
+
+
+def test_targeting_is_the_variable_against_the_strength_round():
+    t = ensemble.a_witness_makes_blindness_authorable_and_does_not_break_the_trade()
+    assert "0 of 34" in t and "p = 0.0271" in t
+    assert "asserting more with nothing to aim at" in t
+
+
+def test_the_blindness_drop_is_split_by_soundness():
+    """The deflation. The aggregate is mostly over-strictness."""
+    t = ensemble.a_witness_makes_blindness_authorable_and_does_not_break_the_trade()
+    assert "-9%" in t and "-43%" in t
+    assert "FOR THE WRONG REASON" in t
+    assert "REQ-0001" in t and "168 convictions" in t
+
+
+def test_the_trade_survives_the_round():
+    t = ensemble.a_witness_makes_blindness_authorable_and_does_not_break_the_trade()
+    assert "does not break the trade" in t.lower()
+    assert "56%" in t
