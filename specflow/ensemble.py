@@ -3154,3 +3154,76 @@ def a_missing_body_reads_as_a_check_that_passed() -> str:
         "a check that passed. Both are the same sentence about a different "
         "kind of gap."
     )
+
+
+def a_recovered_check_catches_a_design_the_scored_set_almost_accepted() -> str:
+    """The enlarged set tested against an EDITED design rather than an unchecked
+    one, which is the only version of the test that can be Goodharted.
+
+    Every earlier "does this set discriminate" measurement here was against
+    designs written from the specification and never repaired. Those are easy:
+    nothing has optimised against the checks. This one is against a design an
+    editor spent seven trials driving down against 104 of the 163.
+    """
+    return (
+        "An RTL editor was run against the 104-check scored ceiling from an "
+        "unchecked spec-derived design, seven trials. Its ACCEPTED design, "
+        "re-measured in a clean run directory with all three miter pins green "
+        "in the same process:\n\n"
+        "    against the 104 it was edited on      1 objection\n"
+        "    **against the 163 with the recovered checks added**   **2**\n"
+        "    testpoints differing from the reference              178 of 348 = 51%\n"
+        "    miter                                               *DIFFERS*\n\n"
+        "**THE EXTRA OBJECTION IS A RECOVERED CHECK** -- `REQ-0037`, one of the "
+        "477 bodies that sat on disk unscored. It spares the reference, it "
+        "convicts 5 of the 7 spec-derived designs, and it fires on a design "
+        "seven trials of editing had driven to a single objection against the "
+        "set it was being edited on.\n\n"
+        "**SO THE RECOVERED CORPUS ADDS DISCRIMINATION AGAINST AN OPTIMISED "
+        "DESIGN, NOT ONLY AGAINST NAIVE ONES.** That is the form of the claim "
+        "worth having: a check set is only interesting where a loop has already "
+        "pushed a design to satisfy everything else it says.\n\n"
+        "**AND THE GOLDEN-FREE RULE REJECTS THAT CHECK.** Convicting 5 of 7 "
+        "puts it far outside the minority rule's threshold of 2. So the check "
+        "carrying the discrimination here is, once more, exactly the kind no "
+        "rule reading only spec-derived designs will keep -- and one objection "
+        "is discrimination, not sufficiency: the design still differs from the "
+        "reference on 51% of testpoints."
+    )
+
+
+def the_accepted_design_is_not_the_last_one_simulated() -> str:
+    """Two artifacts of one loop disagreed, and reading the wrong one produced a
+    wrong number in each direction within the same hour.
+
+    Recorded because the fix is not a code change -- the harness already refuses
+    this -- it is knowing which file answers which question.
+    """
+    return (
+        "A run directory holds three descriptions of 'the design' and they are "
+        "not the same design:\n\n"
+        "    dut.v               the ACCEPTED RTL. `commit` restores it byte for\n"
+        "                        byte when a batch does not latch\n"
+        "    run1/.../results    the traces of whatever was LAST SIMULATED --\n"
+        "                        for a rejected commit, the CANDIDATE\n"
+        "    best.v              selected by `note_best` on the CELL count, an\n"
+        "                        instrument the checks-only arm removed from its\n"
+        "                        own ratchet\n\n"
+        "**MEASURED ON ONE LOOP, ONE HOUR, BOTH DIRECTIONS.** The accepted "
+        "design carried 1 objection of 104. Scoring `run1` gave 3 -- the "
+        "rejected candidate -- and the timestamp gap made it look as though the "
+        "accepted-verdict file was stale, so the true number was called stale "
+        "and the candidate's number reported as the correction. A clean suite "
+        "run on `dut.v` restored the original: **1 of 104, and 2 of 163.**\n\n"
+        "**THE TELL WAS THAT THE TWO DISAGREED IN BOTH DIRECTIONS AT ONCE** -- "
+        "three checks objecting only in one reading, one check objecting only "
+        "in the other. A stale file is behind; it does not also object to "
+        "something the fresh one clears. Two sets differing in both directions "
+        "are two different designs, never one design seen at two times.\n\n"
+        "**THE RULE, AND THE HARNESS ALREADY STATES IT:** grade the accepted "
+        "design in its OWN clean directory, never from the loop's working run "
+        "directory, because that directory is overwritten by every review and "
+        "describes whichever text was last simulated. The instruction existed, "
+        "was written for exactly this, and was skipped because scoring the "
+        "existing traces was faster."
+    )

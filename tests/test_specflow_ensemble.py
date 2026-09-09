@@ -1498,3 +1498,29 @@ def test_the_scorer_must_refuse_an_incomplete_denominator():
     t = ensemble.a_missing_body_reads_as_a_check_that_passed()
     assert "REFUSE AN INCOMPLETE DENOMINATOR, NEVER SKIP IT" in t
     assert "8 of 348" in t
+
+
+def test_the_recovered_check_fires_on_an_optimised_design():
+    t = ensemble.a_recovered_check_catches_a_design_the_scored_set_almost_accepted()
+    assert "1 objection" in t and "**2**" in t
+    assert "REQ-0037" in t and "477 bodies" in t
+
+
+def test_one_objection_is_discrimination_not_sufficiency():
+    t = ensemble.a_recovered_check_catches_a_design_the_scored_set_almost_accepted()
+    assert "51%" in t
+    assert "discrimination, not sufficiency" in t
+    # and the golden-free rule still cannot reach the check that did the work
+    assert "minority rule's threshold" in t
+
+
+def test_the_three_descriptions_of_a_design_are_distinguished():
+    t = ensemble.the_accepted_design_is_not_the_last_one_simulated()
+    assert "dut.v" in t and "run1" in t and "best.v" in t
+    assert "LAST SIMULATED" in t
+
+
+def test_disagreeing_in_both_directions_means_two_designs():
+    t = ensemble.the_accepted_design_is_not_the_last_one_simulated()
+    assert "BOTH DIRECTIONS AT ONCE" in t
+    assert "never one design seen at two times" in t
