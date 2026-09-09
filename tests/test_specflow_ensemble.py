@@ -1689,3 +1689,36 @@ def test_both_routes_reach_zero_on_the_composing_metric():
     t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
     assert "does not close AUTHORING" in t
     assert "Two routes, two zeroes" in t
+
+
+def test_the_minority_rule_loses_its_precision_on_the_full_corpus():
+    t = ensemble.convicting_none_of_the_population_is_the_soundness_rule()
+    assert "59 of 59" in t and "13% false-reject" in t
+    assert "does not survive the corpus growing" in t
+
+
+def test_the_step_is_at_zero_convictions_not_two():
+    t = ensemble.convicting_none_of_the_population_is_the_soundness_rule()
+    assert "126 FOR 126" in t
+    assert "48%" in t and "61%" in t
+    assert "sharp rather than monotone" in " ".join(t.split())
+
+
+def test_the_zero_set_is_sound_and_discriminates_on_held_out():
+    t = ensemble.convicting_none_of_the_population_is_the_soundness_rule()
+    assert "**11**" in t
+    assert "held out of its own selection" in t
+    assert "56%" in t
+
+
+def test_the_rule_predicts_soundness_but_not_sufficiency():
+    t = ensemble.convicting_none_of_the_population_is_the_soundness_rule()
+    assert "self-certification" in t
+    assert "nothing here predicts SUFFICIENCY without one" in t
+
+
+def test_the_audit_re_dates_the_run_in_flight():
+    t = ensemble.convicting_none_of_the_population_is_the_soundness_rule()
+    flat = " ".join(t.split())
+    assert "certificate of NON-equivalence" in flat
+    assert "126-check set is the one to carry forward" in flat

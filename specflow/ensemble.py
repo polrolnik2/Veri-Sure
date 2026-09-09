@@ -3550,3 +3550,56 @@ def no_body_in_this_corpus_closes_a_set_hole_soundly() -> str:
         "same metric was zero. Two routes, two zeroes, on the measure that "
         "composes."
     )
+
+
+def convicting_none_of_the_population_is_the_soundness_rule() -> str:
+    """The best golden-free selection rule measured on this plan, and a
+    retraction of the one it replaces.
+
+    Applied to the FULL corpus rather than the fifth of it that had been
+    scored, the minority rule loses its perfect precision -- and the threshold
+    that keeps it is not the one the plan has been quoting.
+    """
+    return (
+        "**THE RULE THAT WAS BEING QUOTED: *convicts at most 2 of the "
+        "population* -- measured at 59 of 59 sparing the reference, 100% "
+        "precision, and called the best golden-free soundness instrument "
+        "here.** Re-run over all 594 bodies instead of the 114 that had been "
+        "scored, it keeps 167 checks and **22 of them convict the reference: a "
+        "13% false-reject rate.** The perfect precision does not survive the "
+        "corpus growing; 13 of the 22 come from bodies never previously "
+        "scored.\n\n"
+        "**AND THE PROFILE SHOWS THE THRESHOLD WAS IN THE WRONG PLACE:**\n\n"
+        "    convicts 0 of 7    126 checks   **0 convict the reference =  0%**\n"
+        "    convicts 1 of 7     23 checks    11 convict the reference = 48%\n"
+        "    convicts 2 of 7     18 checks    11 convict the reference = 61%\n\n"
+        "**A CHECK CONVICTING NONE OF SEVEN INDEPENDENTLY WRITTEN "
+        "IMPLEMENTATIONS SPARES THE REFERENCE, 126 FOR 126. ONE CONVICTION AND "
+        "IT IS A COIN FLIP.** The step is at zero, not at two, and it is sharp "
+        "rather than monotone -- which is why a threshold fitted at 2 on a "
+        "smaller corpus read as perfect and is not.\n\n"
+        "**THE SET IT SELECTS IS THE STRONGEST GOLDEN-FREE ARTIFACT HERE.**\n\n"
+        "    checks                                   126\n"
+        "    span                                     49 of 87 = 56%\n"
+        "    objections on HELD-OUT design L           **11**\n"
+        "    objections on two edited designs           1 each\n"
+        "    *audit, computed last*                    ***0, measured***\n\n"
+        "Sound AND discriminating on a design held out of its own selection, "
+        "with the soundness PREDICTED golden-free rather than checked "
+        "afterwards. Every earlier rule bought span with false rejects (rule B: "
+        "52% at 10%) or bought soundness by being handed the answer (the "
+        "ceilings are reference-selected).\n\n"
+        "**WHAT IT STILL CANNOT DO, AND IT IS STRUCTURAL.** Selecting *convicts "
+        "none of the population* guarantees every population member passes. The "
+        "set accepts all seven by construction, so it cannot force equivalence "
+        "among them, and 'all accepted designs are mutually equivalent' is "
+        "self-certification rather than a result. The rule predicts SOUNDNESS "
+        "without a reference; nothing here predicts SUFFICIENCY without one.\n\n"
+        "**AND IT RE-DATES A RUN IN FLIGHT.** An editor was dispatched against "
+        "the 167-check version before its audit was computed -- correctly, "
+        "since the audit must come last. That audit is 13%, so the reference "
+        "itself scores 22 against that set and a design reaching zero on it "
+        "cannot be the reference. Terminating there would be a certificate of "
+        "NON-equivalence, which is the rule-B arithmetic exactly. The 126-check "
+        "set is the one to carry forward."
+    )
