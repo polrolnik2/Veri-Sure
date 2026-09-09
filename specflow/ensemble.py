@@ -4395,3 +4395,68 @@ def the_authoring_round_was_capped_by_a_regex_not_by_the_holes() -> str:
         "A population that yields 37 and then 1 is not one you are sampling, "
         "and no rate measured on it projects."
     )
+
+
+def blindness_saturates_at_four_designs_and_two_can_read_zero() -> str:
+    """How to ASSURE completeness golden-free -- the goal's last clause, and
+    the first constructive answer to it here.
+
+    Blindness is the completeness instrument this session proposes, and it is
+    measured against the designs you HAVE. So the question is whether the
+    estimate settles, and at what population size. Purely mechanical: per pair
+    the two counts are independent, so one pass gives every subset by summation.
+    """
+    return (
+        "Blindness -- of the (pair, testpoint) cells where two spec-derived "
+        "designs disagree on a declared output, the share where no check "
+        "objects to either -- reads a set's incompleteness without a "
+        "reference. Its weakness is obvious and had never been sized: a set at "
+        "0% against the designs you have can be blind to the next one.\n\n"
+        "**IT SATURATES, AND EARLY.** The 169-check set, mean over every "
+        "subset of the population at each size:\n\n"
+        "    designs   9 designs (7 written + 2 accepted)   7 independently written\n"
+        "        2                  50.4%                          37.3%\n"
+        "        3                  54.2%                          40.9%\n"
+        "      **4**              **55.1%**                      **42.0%**\n"
+        "        5                  55.3%                          42.4%\n"
+        "        6                  55.3%                          42.6%\n"
+        "        7                  55.3%                          42.9%\n"
+        "        8                  55.2%                            --\n"
+        "        9                  55.1%                            --\n\n"
+        "**FOUR INDEPENDENTLY WRITTEN DESIGNS ESTIMATE A SET'S BLINDNESS AS "
+        "WELL AS NINE**, within a point, on both populations. Blindness is "
+        "therefore cheap to assure: it does not need a large population, and "
+        "the fifth design onward buys nothing on the aggregate.\n\n"
+        "**AND TWO DESIGNS CAN READ ZERO ON A SET THAT IS 43% BLIND.** The "
+        "spread across subsets is the other half of the table and it is the "
+        "part with a failure mode in it:\n\n"
+        "    designs      min      max        (7 independently written)\n"
+        "        2       0.0%    76.3%\n"
+        "        3       0.0%    75.0%\n"
+        "        4       0.0%    72.0%\n"
+        "        5       6.7%    69.0%\n"
+        "        7      42.9%    42.9%\n\n"
+        "**DESIGNS B AND D DISAGREE ON 23 TESTPOINTS AND THE SET OBJECTS ON "
+        "ALL 23 -- 0 of 23, a clean sheet, on a set that is 42.9% blind "
+        "against seven.** So the mean saturates at four and a *particular* "
+        "four can still read zero. The prescription is both numbers: **at "
+        "least four spec-derived designs, and the per-pair spread reported "
+        "beside the aggregate, never the aggregate alone.** A blindness of "
+        "zero on a small population is the same shape of evidence as a check "
+        "that passes because it never fired.\n\n"
+        "**THE DESIGNS YOUR OWN CHECKS ACCEPTED BELONG IN THE POPULATION, AND "
+        "THEY ARE THE VALUABLE ONES.** The two columns differ by the two "
+        "editor-produced designs -- outputs of graded runs, each driven to a "
+        "stopping point against a check set -- and adding them moves the "
+        "estimate **42.9% -> 55.1%, twelve points.** They are adversarially "
+        "selected against the checks by construction: whatever a set could see "
+        "was edited out of them, so what remains is exactly what it cannot. "
+        "They cost nothing, since the pipeline produces them anyway.\n\n"
+        "**WHAT THIS DOES NOT SAY.** Saturation of the ESTIMATE is not "
+        "completeness of the SET: 55.1% blind at nine designs stays 55.1%, and "
+        "the fifth graded run shows a design can satisfy every check at that "
+        "blindness and sit 151 testpoints from the reference. This says the "
+        "instrument is trustworthy and cheap, not that the number it reports "
+        "is good. And the saturation point is measured for one set on one "
+        "design; four is what it took here, not a constant."
+    )

@@ -258,6 +258,44 @@ points of blindness** and **39 testpoints of drive**. At the margin the aggregat
 is not what moved; six checks aimed at named cells were. Report the cells closed
 and which ones, not the percentage alone.
 
+## 9b. How to assure it golden-free — blindness saturates at four designs
+
+Blindness reads a set's incompleteness with no reference, and its weakness was
+never sized: measured against the designs you have, it says nothing about the
+next one. Per pair the two counts are independent, so one pass over the 36 pairs
+gives every subset's blindness by summation.
+
+| designs in the population | 9 (7 written + 2 accepted) | 7 independently written |
+|---|---|---|
+| 2 | 50.4% | 37.3% |
+| 3 | 54.2% | 40.9% |
+| **4** | **55.1%** | **42.0%** |
+| 5 | 55.3% | 42.4% |
+| 7 | 55.3% | 42.9% |
+| 9 | 55.1% | — |
+
+**Four independently written designs estimate a set's blindness as well as
+nine**, within a point, on both populations. The instrument is cheap.
+
+**And a particular two can read zero.** The spread across subsets of the seven:
+min 0.0% at n=2, 3 and 4; 6.7% at n=5; 42.9% only at n=7. **Designs B and D
+disagree on 23 testpoints and the set objects on all 23 — a clean sheet, on a
+set that is 42.9% blind against seven.** So the prescription is both numbers:
+at least four spec-derived designs, and the per-pair spread beside the
+aggregate, never the aggregate alone. Blindness zero on a small population is
+the same shape of evidence as a check that passes because it never fired.
+
+**The designs your own checks accepted belong in the population, and they are
+the valuable ones.** The two columns differ by two editor-produced designs, and
+adding them moves the estimate **42.9% → 55.1%, twelve points**. Whatever a set
+could see was edited out of them, so what remains is exactly what it cannot —
+adversarial selection for free, since the pipeline produces them anyway.
+
+**What this does not say.** Saturation of the *estimate* is not completeness of
+the *set*: 55.1% stays 55.1%, and section 9's fifth run shows a design can
+satisfy every check at that blindness and sit 151 testpoints away. The
+instrument is trustworthy and cheap; the number it reports is not good.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

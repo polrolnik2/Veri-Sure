@@ -2263,3 +2263,32 @@ def test_the_round_one_numbers_are_not_revised():
     flat = " ".join(t.split())
     assert "The round's own numbers are unchanged" in flat
     assert "is a separate measurement and is not claimed here" in flat
+
+
+def test_four_designs_estimate_blindness_as_well_as_nine():
+    t = ensemble.blindness_saturates_at_four_designs_and_two_can_read_zero()
+    flat = " ".join(t.split())
+    assert "FOUR INDEPENDENTLY WRITTEN DESIGNS ESTIMATE A SET'S BLINDNESS AS WELL AS NINE" in flat
+    assert "**4** **55.1%** **42.0%**" in flat
+
+
+def test_a_small_population_can_read_a_clean_sheet():
+    t = ensemble.blindness_saturates_at_four_designs_and_two_can_read_zero()
+    flat = " ".join(t.split())
+    assert "TWO DESIGNS CAN READ ZERO ON A SET THAT IS 43% BLIND" in flat
+    assert "0 of 23, a clean sheet" in flat
+    assert "the per-pair spread reported beside the aggregate, never the aggregate alone" in flat
+
+
+def test_accepted_designs_are_worth_twelve_points():
+    t = ensemble.blindness_saturates_at_four_designs_and_two_can_read_zero()
+    flat = " ".join(t.split())
+    assert "42.9% -> 55.1%, twelve points" in flat
+    assert "adversarially selected against the checks by construction" in flat
+
+
+def test_a_trustworthy_instrument_is_not_a_good_number():
+    t = ensemble.blindness_saturates_at_four_designs_and_two_can_read_zero()
+    flat = " ".join(t.split())
+    assert "Saturation of the ESTIMATE is not completeness of the SET" in flat
+    assert "four is what it took here, not a constant" in flat
