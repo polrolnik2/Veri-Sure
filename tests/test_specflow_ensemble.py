@@ -1871,3 +1871,32 @@ def test_the_raw_count_limit_is_scoped_to_the_raw_count():
     flat = " ".join(t.split())
     assert "Spread is not the only way a set can steer" in flat
     assert "RAW COUNT" in flat
+
+
+def test_the_stop_had_nothing_to_do_with_the_checks():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "trial 2 of 21" in flat and "trial 0 of 21" in flat
+    assert "ends the RUN" in flat
+
+
+def test_a_harness_stop_is_indistinguishable_from_a_satisfied_one():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "looks identical to a loop that finished early" in flat.lower()
+    assert "Nothing in the artifacts distinguishes" in flat
+
+
+def test_the_inference_is_retracted_and_the_earlier_runs_are_not():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "neither is an instance of this" in flat
+    assert "only when the run says, in its own record, what it stopped for" \
+        in flat
+
+
+def test_the_fix_is_stated_and_is_a_brief_change():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "poll the loop's own status" in flat
+    assert "never end a turn with a commit in flight" in flat

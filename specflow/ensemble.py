@@ -3838,3 +3838,42 @@ def a_complete_set_is_an_undrivable_one() -> str:
         "RAW COUNT -- which is what every loop on this plan has descended -- "
         "carries almost no information on a complete set."
     )
+
+
+def an_unspent_budget_is_not_evidence_about_the_set() -> str:
+    """Two editor runs stopped after one trial for a reason that has nothing to
+    do with the checks, and from outside it looked exactly like a loop that had
+    run out of things to fix.
+
+    Observed twice in one session, on two different sets.
+    """
+    return (
+        "A commit runs the whole suite and takes several minutes -- longer "
+        "than a foreground command may run in the agent driving the loop. Both "
+        "editors handled that by backgrounding the commit and **ending their "
+        "turn to wait for it**. The completion notice is delivered to whatever "
+        "dispatched the agent, not to the agent, so ending the turn ends the "
+        "RUN. One stopped at trial 2 of 21 and one at trial 0 of 21.\n\n"
+        "**AND THE RUN DIRECTORY LOOKS IDENTICAL TO A LOOP THAT FINISHED "
+        "EARLY BECAUSE IT WAS SATISFIED.** Trials unspent, a latched design, a "
+        "sensible objection count. Nothing in the artifacts distinguishes *the "
+        "criterion stopped saying useful things* from *the harness stopped the "
+        "agent*, and the first has been read off an unspent budget on this "
+        "plan more than once.\n\n"
+        "**SO AN UNSPENT BUDGET IS NOT A FACT ABOUT THE CHECK SET UNLESS THE "
+        "RUN RECORDS WHY IT STOPPED.** Here the agents' own words were the "
+        "only tell -- *\"I'll stop issuing commands now and wait for the "
+        "background notification\"* -- which is a transcript artefact and not "
+        "something the loop's own record captures.\n\n"
+        "**THE FIX IS IN THE BRIEF, NOT THE HARNESS**, and it is one "
+        "paragraph: background the commit, then poll the loop's own status "
+        "inside your turn until the trial counter increments, and never end a "
+        "turn with a commit in flight. The counter increments on an accepted "
+        "and a rejected commit alike, so it is the signal either way.\n\n"
+        "**WHAT THIS DOES NOT RETRACT.** The two earlier runs that stopped "
+        "with budget left each stated a reason at the time -- one reached zero "
+        "objections, the other argued the remaining objections were check "
+        "defects -- so neither is an instance of this. What is retracted is "
+        "the general inference: *trials left over* is evidence about the set "
+        "only when the run says, in its own record, what it stopped for."
+    )
