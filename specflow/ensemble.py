@@ -4141,3 +4141,59 @@ def the_leak_rule_named_source_and_the_traces_were_next_door() -> str:
         "artifact ENCODES, then check the transcripts rather than trusting "
         "the wording."
     )
+
+
+def the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty() -> str:
+    """A pre-registered experiment that cleared its top band, and a control run
+    afterwards that says the band was set against the wrong null.
+
+    The result is reported as not claimable. The defect is mine and it is the
+    same shape as a dozen others here: a denominator that looks right.
+    """
+    return (
+        "The question was whether an agent with an editor's tools can decide "
+        "soundness -- the thing twelve routes have failed to do without a "
+        "reference. Twenty checks from a 201-check set, **ten that convict the "
+        "reference and ten that do not**, drawn by hash and shuffled, with the "
+        "key sealed. Pre-registered: >= 16 correct means the capability is "
+        "real, <= 13 means chance.\n\n"
+        "    CORRECT 16 of 20, no UNSURE          binomial p = 0.0059\n"
+        "      OVER-STRICT calls   8, right 7      precision 88%\n"
+        "      unsound found       7 of 10         recall 70%\n\n"
+        "**IT CLEARED THE TOP BAND, AND THE BAND IS NOT CLAIMABLE.**\n\n"
+        "**THE CONTROL: SEVEN OF THE TEN SOUND ITEMS NEVER CONVICT ANY DESIGN "
+        "AT ALL.** A check with no reachable `False` is sound trivially, and "
+        "spotting it needs only the source -- the agent said so itself for "
+        "four of them, one of which it noticed cannot convict because it "
+        "throws and the harness reports `ok=None`. So half the sample was "
+        "free, and the 50% coin the p-value is computed against does not "
+        "exist.\n\n"
+        "**ON THE THIRTEEN ITEMS WHERE THE ANSWER IS NOT VISIBLE IN THE TEXT "
+        "-- ten unsound and three sound-and-deciding -- IT SCORED 10.** "
+        "Answering `OVER-STRICT` to all thirteen also scores 10. **No "
+        "measurable lift on the part of the task that was the task.**\n\n"
+        "**THE DEFECT IS IN MY SAMPLER AND IT IS THE FAMILIAR SHAPE.** It "
+        "required each item to DECIDE on the reference, which correctly "
+        "excludes a check that never fires -- and admits one that fires and "
+        "only ever returns True. Balanced by label, unbalanced by difficulty, "
+        "and the imbalance runs entirely one way. **The fix is one clause: "
+        "every sampled check must convict at least one of the nine "
+        "spec-derived designs**, so no item is answerable from whether a "
+        "`False` path exists.\n\n"
+        "**WHAT SURVIVES IS THE SAME NARROW THING THE EARLIER RUN SHOWED.** "
+        "Precision on the OVER-STRICT calls is 7 of 8, and the one false "
+        "accusation is a check that convicts none of the nine. That is a "
+        "DETECTOR with good precision and 70% recall, which the "
+        "pre-registration already named as the smaller claim to report if the "
+        "pattern repeated. It repeated.\n\n"
+        "**AND THE INSTRUMENT WAS NOT THE ONE UNDER TEST.** The agent spent "
+        "**zero** of its 25 commit trials. It executed each check against "
+        "hand-built traces instead of building RTL and observing what broke -- "
+        "cheaper and more general, and not what the earlier run did, so this "
+        "does not replicate that run's method either. Tested items scored 85% "
+        "against untested 71%, on 13 and 7 items with the trivial ones split "
+        "across both, which settles nothing.\n\n"
+        "**SO THE REPLICATION IS STILL OWED, FOR THE THIRD TIME.** Three "
+        "attempts: one informative (exact partition, p = 0.003), one at a 94% "
+        "base rate, one against a null a sampler defect invalidated."
+    )

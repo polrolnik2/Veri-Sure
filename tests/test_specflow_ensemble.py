@@ -2109,3 +2109,45 @@ def test_the_fix_is_free_and_the_general_form_is_stated():
     assert "copies only `suite/tests` and `manifest.json`" in flat
     assert "names artifacts by KIND" in flat
     assert "then check the transcripts rather than trusting the wording" in flat
+
+
+def test_the_top_band_was_cleared_and_is_not_claimed():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "CORRECT 16 of 20" in flat and "p = 0.0059" in flat
+    assert "IT CLEARED THE TOP BAND, AND THE BAND IS NOT CLAIMABLE" in flat
+
+
+def test_the_control_names_the_free_half():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "SEVEN OF THE TEN SOUND ITEMS NEVER CONVICT ANY DESIGN" in flat
+    assert "the 50% coin the p-value is computed against does not exist" in flat
+
+
+def test_there_is_no_lift_on_the_hard_items():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "IT SCORED 10" in flat
+    assert "Answering `OVER-STRICT` to all thirteen also scores 10" in flat
+    assert "No measurable lift" in flat
+
+
+def test_the_sampler_defect_and_its_fix_are_stated():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "admits one that fires and only ever returns True" in flat
+    assert "must convict at least one of the nine" in flat
+
+
+def test_the_instrument_was_not_the_one_under_test():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "spent **zero** of its 25 commit trials" in flat
+    assert "does not replicate that run's method either" in flat
+
+
+def test_the_replication_is_owed_a_third_time():
+    t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
+    flat = " ".join(t.split())
+    assert "STILL OWED, FOR THE THIRD TIME" in flat
