@@ -3503,3 +3503,50 @@ def blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing() ->
         "scored on cells the SET newly reaches, which is a number that has "
         "never been reported for any of them -- and for this one it is zero."
     )
+
+
+def no_body_in_this_corpus_closes_a_set_hole_soundly() -> str:
+    """Selection measured against the SET metric, over the whole corpus, with
+    no model calls -- and it closes the completeness route as the ceiling run
+    closed the soundness one.
+
+    The holes are closable. Closing one soundly is what nothing here can do.
+    """
+    return (
+        "**THE SET IS BLIND ON 3,221 OF 5,656 DISAGREEING (pair, testpoint) "
+        "CELLS = 56.9%, AND THE HOLES ARE UNIFORM.** 196 of 348 testpoints "
+        "carry one, the twenty worst hold 14% of them, and every declared "
+        "output runs between 43% and 76% uncaught -- `first_hit_ack` best at "
+        "43%, `biu_write` worst at 76%. There is no cluster to aim a round "
+        "at.\n\n"
+        "**AND THAT RULES OUT THE STIMULUS BEFORE A CALL IS SPENT.** Every one "
+        "of these cells is a testpoint the suite already runs, on which two "
+        "designs already produce different values. The evidence is present and "
+        "the set is silent on it, so no stimulus round closes any of them -- "
+        "which is the goal's stimulus clause answered with a measurement "
+        "rather than an estimate.\n\n"
+        "**SO: CAN ANY BODY IN THE CORPUS CLOSE ONE?** 431 bodies the set does "
+        "not use, decided over nine designs:\n\n"
+        "    reach a cell the set cannot see              **296** -- the holes ARE closable\n"
+        "      CONVICT the reference                       288\n"
+        "      never DECIDE on it -- sound by silence        2\n"
+        "      soundness unmeasured                          6\n"
+        "      **DECIDE on the reference AND spare it**    **0**\n\n"
+        "**NOT ONE BODY IN THIS CORPUS CLOSES A SET HOLE WHILE BEING "
+        "DEMONSTRABLY SOUND.** Selection is exhausted for COMPLETENESS exactly "
+        "as the ceiling run exhausted it for soundness, and the trade at set "
+        "level is not 288 against 2 -- it is total.\n\n"
+        "**A CORRECTION MADE INSIDE THIS MEASUREMENT, AND IT IS THE ONE THIS "
+        "MODULE NAMES IN CAPITALS.** The first filter kept bodies whose audit "
+        "says *convicts the reference: false*, which two bodies satisfied, and "
+        "a 165-check set was built on them. Both have *decides: false* -- they "
+        "never decide on the reference at all, so they are sound BY SILENCE, "
+        "which is not sound. The set was withdrawn. `SOUND` requires the check "
+        "to decide there AND never convict, and the first half is load-bearing "
+        "precisely so that a silent check cannot buy a completeness result.\n\n"
+        "**WHAT REMAINS OPEN, STATED NARROWLY.** This closes SELECTION over the "
+        "corpus against the set metric. It does not close AUTHORING -- but the "
+        "blindness round is the evidence on that, and its contribution to the "
+        "same metric was zero. Two routes, two zeroes, on the measure that "
+        "composes."
+    )

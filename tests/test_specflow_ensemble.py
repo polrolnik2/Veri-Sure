@@ -1656,3 +1656,36 @@ def test_blindness_is_one_blind_spot_not_many():
     t = ensemble.blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing()
     assert "one blind spot with 163 checks in front of it" in t
     assert "scored on cells the SET newly reaches" in t
+
+
+def test_the_holes_are_uniform_not_concentrated():
+    t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
+    assert "196 of 348" in t and "14%" in t
+    assert "43%" in t and "76%" in t
+
+
+def test_the_stimulus_is_ruled_out_by_construction():
+    """These cells are already driven; the set is silent on evidence it has."""
+    t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
+    assert "the suite already runs" in t
+    assert "no stimulus round closes any of them" in t
+
+
+def test_no_body_closes_a_hole_soundly():
+    t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
+    assert "**296**" in t and "288" in t
+    assert "**0**" in t
+    assert "it is total" in t
+
+
+def test_the_sound_by_silence_correction_is_recorded():
+    t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
+    assert "decides: false" in t
+    assert "sound BY SILENCE" in t
+    assert "withdrawn" in t
+
+
+def test_both_routes_reach_zero_on_the_composing_metric():
+    t = ensemble.no_body_in_this_corpus_closes_a_set_hole_soundly()
+    assert "does not close AUTHORING" in t
+    assert "Two routes, two zeroes" in t
