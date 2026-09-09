@@ -2086,3 +2086,26 @@ def test_the_replication_is_still_owed():
     flat = " ".join(t.split())
     assert "REPLICATION IS STILL OWED" in flat
     assert "a wrong accusation is the default outcome" in flat
+
+
+def test_the_hazard_is_named_precisely():
+    t = ensemble.the_leak_rule_named_source_and_the_traces_were_next_door()
+    flat = " ".join(t.split())
+    assert "It names SOURCE" in flat
+    assert "p4G/suite/results` holds the reference's 348" in flat
+
+
+def test_the_hazard_was_checked_not_assumed():
+    t = ensemble.the_leak_rule_named_source_and_the_traces_were_next_door()
+    flat = " ".join(t.split())
+    assert "CHECKED RATHER THAN ARGUED" in flat
+    assert "zero accesses to `p4G/suite/results`" in flat
+    assert "271, 241, 200 and 190" in flat
+
+
+def test_the_fix_is_free_and_the_general_form_is_stated():
+    t = ensemble.the_leak_rule_named_source_and_the_traces_were_next_door()
+    flat = " ".join(t.split())
+    assert "copies only `suite/tests` and `manifest.json`" in flat
+    assert "names artifacts by KIND" in flat
+    assert "then check the transcripts rather than trusting the wording" in flat

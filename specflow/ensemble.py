@@ -4099,3 +4099,45 @@ def a_second_accusation_run_carried_no_information() -> str:
         "where a wrong accusation is the default outcome, which is what the "
         "first run had and the second did not."
     )
+
+
+def the_leak_rule_named_source_and_the_traces_were_next_door() -> str:
+    """An integrity hazard in all four graded runs, found while building a
+    fifth experiment where it would have been an answer key.
+
+    Checked rather than assumed: both editor transcripts were searched.
+    """
+    return (
+        "Every editor run here carries an absolute rule -- do not go looking "
+        "for a reference implementation, nothing under the benchmark tree, no "
+        "Verilog file the tools did not hand you, no other loop directory. "
+        "**It names SOURCE, and the reference's recorded TRACES sat in a "
+        "directory the loop legitimately reads.**\n\n"
+        "The driver takes its stimulus from `SUITESRC`, which pointed at "
+        "`p4G/suite` -- and `p4G/suite/results` holds the reference's 348 "
+        "recorded traces. An editor had a reason to be in that directory and "
+        "no rule against going one level deeper, where the answer to every "
+        "question it was asked is written out per testpoint.\n\n"
+        "**IT WAS NOT WALKED THROUGH, AND THAT IS CHECKED RATHER THAN "
+        "ARGUED.** Both editor transcripts were searched: **zero accesses to "
+        "`p4G/suite/results`**. What they did read under `p4G` is the stimulus "
+        "(`suite/tests`, `manifest.json`) and the witness -- both spec-derived "
+        "pipeline artifacts the loop replays against anyway, neither the "
+        "reference. Every `benchmarks/` occurrence is the rule text itself or "
+        "a path constant inside the driver they read.\n\n"
+        "**AND THE GRADES CORROBORATE IT.** Four runs ended at 271, 241, 200 "
+        "and 190 of 348 testpoints differing. A run that had read the "
+        "reference's traces could have matched them far more closely; nothing "
+        "in the outcomes looks like it.\n\n"
+        "**THE FIX IS A SANITISED STIMULUS SOURCE, AND IT COSTS NOTHING.** "
+        "The driver copies only `suite/tests` and `manifest.json` out of "
+        "`SUITESRC`, so a directory holding exactly those two runs the loop "
+        "identically with the traces nowhere in reach. The rule is also "
+        "extended to say recorded behaviour is as forbidden as source.\n\n"
+        "**THE GENERAL FORM.** A leak rule that names artifacts by KIND -- *an "
+        "implementation* -- misses them by ROLE. A trace file is the same "
+        "information in another format, and it is the format a checking "
+        "pipeline necessarily keeps lying around. State the rule over what an "
+        "artifact ENCODES, then check the transcripts rather than trusting "
+        "the wording."
+    )
