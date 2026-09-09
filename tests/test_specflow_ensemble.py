@@ -1332,3 +1332,33 @@ def test_the_four_artifacts_are_distinguished():
     for name in ("dut.v", "staged.v", "best.v", "run1/"):
         assert name in t
     assert "note_best" in t
+
+
+def test_the_unreachable_state_is_proved_not_assumed():
+    t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
+    assert "k-induction" in t and "UNREACHABLE" in t
+    assert "control in_lrefill3" in t and "REACHABLE" in t
+
+
+def test_the_population_rule_is_blind_to_abstention():
+    t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
+    assert "silence is scored as soundness" in t
+    assert "convict 2 of 7" in t
+
+
+def test_the_wrong_steer_cost_half_the_budget():
+    t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
+    assert "Commits 1, 2 and 3" in t
+    assert "BUILD\\nCONFIGURATION" in t or "BUILD CONFIGURATION" in t.replace("\\n", " ")
+
+
+def test_the_screen_keeps_partly_live_requirements():
+    t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
+    assert "ENTIRELY about it" in t
+    assert "REQ-0026" in t and "one branch beside a live LREFILL3" in t
+
+
+def test_the_screened_criterion_spans_a_majority():
+    t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
+    assert "52 of 89 = 58%, A MAJORITY" in t
+    assert "3 objections of 114" in t

@@ -2862,3 +2862,58 @@ def a_committing_design_is_not_stable_while_the_commit_runs() -> str:
         "same defect reported would have been a design movement that never "
         "happened."
     )
+
+
+def a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget() -> str:
+    """The population rule's blind spot, found by an editor spending three of
+    six trials trying to satisfy a demand no design in this build can meet.
+
+    This is the first instrument on the plan that removes an over-strict check
+    WITHOUT reading a known-good design and without a population vote.
+    """
+    return (
+        "**TWO OF THE FIVE OBJECTIONS WERE ON A STATE THIS BUILD CANNOT ENTER, "
+        "AND THE GOLDEN-FREE SOUNDNESS RULE KEPT BOTH.**\\n\\n"
+        "    in_srefill4 true on   0 of 27,335 edges, over 9 independent designs\\n"
+        "    k-induction           UNREACHABLE, sby PASS, unbounded\\n"
+        "    control in_lrefill3   REACHABLE, counterexample -- the prover is\\n"
+        "                          not proving everything unreachable\\n"
+        "    the specification     'an OPTIONAL store-miss refill WHEN\\n"
+        "                          OR1200_DC_STORE_REFILL is enabled'\\n"
+        "    build_config          OR1200_DC_STORE_REFILL: false\\n\\n"
+        "So the absence is spec-licensed and formally proved: `UNREACHABLE`, "
+        "not `DESIGN_MISSING_STATE`.\\n\\n"
+        "**AND THE MINORITY RULE CANNOT SEE IT, WHICH IS THE FINDING.** Both "
+        "checks convict 2 of 7 spec-derived designs, so *convicts at most two* "
+        "KEEPS them at its 59-of-59 precision. The mechanism: **a check on an "
+        "unreachable state mostly ABSTAINS, and abstention is not conviction, so "
+        "silence is scored as soundness.** Every population rule on this plan "
+        "counts convictions, so every one of them is blind to exactly this "
+        "class -- and the class is not rare, it is whatever the build "
+        "configuration switches off.\\n\\n"
+        "**THE COST IS NOT A WASTED OBJECTION. IT IS A WRONG STEER, AND IT TOOK "
+        "HALF THE BUDGET.** Commits 1, 2 and 3 of six all `define`d "
+        "`OR1200_DC_STORE_REFILL` -- the editor changing the BUILD "
+        "CONFIGURATION to reach a state its checks demanded. Three trials, zero "
+        "repairs, and one of them cost twelve new objections. An over-strict "
+        "check does not merely fail to help; it can drive the editor to "
+        "contradict the configuration the specification itself fixes.\\n\\n"
+        "**AND THE CHECKS READ NO PROBE**, which is why they fire at all: they "
+        "infer 'SREFILL4 entry' from a port pattern that occurs in other "
+        "states. That is the lossy proxy the probe architecture exists to "
+        "remove, appearing as an unsatisfiable demand rather than as a false "
+        "alarm.\\n\\n"
+        "**THE SCREEN, AND EVERY LEG OF IT IS GOLDEN-FREE:** a requirement "
+        "leaves the denominator when the spec licenses the absence by a quoted "
+        "span, the config key is off, a prover says the state is unreachable ON "
+        "THE DESIGN UNDER TEST, and the requirement is ENTIRELY about it. The "
+        "last leg is what keeps REQ-0026, REQ-0002, REQ-0036 and REQ-0088 in: "
+        "they name SREFILL4 as one branch beside a live LREFILL3 clause.\\n\\n"
+        "    criterion as run      5 objections of 117 checks over 54 requirements\\n"
+        "    after the screen      3 objections of 114 checks over 52 requirements\\n"
+        "    span                  52 of 89 = 58%, A MAJORITY\\n\\n"
+        "**AND THE THREE THAT REMAIN ARE REAL** -- REQ-0015.v2@n3, "
+        "REQ-0064.t1@n3, REQ-0087.shipping -- so for the first time on this "
+        "plan every objection the editor is asked to clear is one some design "
+        "in this build could clear."
+    )
