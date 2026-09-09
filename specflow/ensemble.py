@@ -2159,3 +2159,95 @@ def a_finished_run_cannot_be_asked_what_its_ratchet_refused() -> str:
         "from what it ACCEPTED. That one produced wrong numbers; this one "
         "produces no numbers at all, which is harder to notice."
     )
+
+
+def weighting_the_two_instruments_equally_changes_nothing_at_the_grade() -> str:
+    """The last untried configuration in this space, run to a graded result.
+
+    `stacking_two_criteria_needs_weights_and_mine_had_none` records the defect:
+    two instruments summed into one pass-count, priced against each other at
+    whatever ratio their cardinalities happened to have. This is that defect
+    fixed -- each check emitted as 30 units so the 117 checks weigh what the
+    3,490 cell units weigh -- and everything else held identical.
+    """
+    return (
+        "**THE WEIGHTING WORKED, MECHANICALLY, AND IT IS ON THE RECORD THIS "
+        "TIME.** Between trials 5 and 6 the editor broke a sound check and "
+        "fixed it forward, and the per-commit log shows what the ratchet did "
+        "with that: cells 2,710 -> 2,728 -- EIGHTEEN WORSE -- objecting checks "
+        "8 -> 7, and **the commit latched**. That is the exact trade the "
+        "unweighted run attempted three times and had refused. The editor "
+        "reports zero refusals across nine commits: 'every fix I made was net "
+        "positive under the 30-units-per-check weighting, so I never needed to "
+        "fight the scoreboard.'\\n\\n"
+        "**AND THE GRADE DID NOT MOVE. 205 OF 348, AGAINST THE UNWEIGHTED "
+        "RUN'S 205 OF 348.**\\n\\n"
+        "    criterion                    testpoints   cells   trials\\n"
+        "    L, unedited                    279         4,450    --\\n"
+        "    consensus alone                210         3,890    7 of 14\\n"
+        "    117 checks alone               206         3,866    8 of 14\\n"
+        "    both stacked, unweighted       205         3,608   27 of 30\\n"
+        "    both stacked, EQUAL WEIGHT     205         3,696    9 of 30\\n\\n"
+        "**THIS IS THE CLEANEST GOODHART INSTANCE ON THIS PLAN, BECAUSE THE TWO "
+        "MEASURES MOVE IN OPPOSITE DIRECTIONS BETWEEN THE ARMS.** The proxy "
+        "improved 22% -- 1,693 cells disagreeing with the consensus down to "
+        "1,325 -- while true divergence got 2.4% WORSE, 3,608 differing cells "
+        "up to 3,696, and the testpoint count was IDENTICAL. Earlier Goodhart "
+        "findings here show a proxy falling faster than the grade; this shows "
+        "a proxy falling while the grade rises, on the same instruments, the "
+        "same starting design and the same suite.\\n\\n"
+        "**WHAT IT COSTS AND WHAT IT DOES NOT BUY.** Nine trials against "
+        "twenty-seven for the same grade, so the weighting is cheaper per unit "
+        "of nothing. That is one sample per arm and one editor per arm, so the "
+        "3x is NOT attributable to the weighting -- editor variance is "
+        "uncontrolled and n = 1.\\n\\n"
+        "**SO THE COMBINATION QUESTION IS CLOSED, and it closes on the "
+        "pre-registered reading rather than on a retrofitted one.** Two "
+        "spec-derived instruments, stacked, at every weighting anyone has "
+        "reason to choose, land the same design in the same place. The 205-210 "
+        "band across five arms is a property of what a specification-derived "
+        "criterion can see, not of how its parts are priced."
+    )
+
+
+def the_fifth_contradiction_claim_is_the_fifth_refutation() -> str:
+    """The editor's soundness judgement, audited for the fifth time, and the
+    audit splits its two claims in opposite directions.
+
+    Golden is the audit instrument and nothing else: it runs after the grade,
+    selects nothing, repairs nothing, and reaches no prompt.
+    """
+    return (
+        "The weighted run's editor made two claims about the check set. The "
+        "structural one is the kind this plan has now refuted five times:\\n\\n"
+        "    REQ-0087.shipping wants dc_addr == start_addr while hitmiss_eval\\n"
+        "    is high; REQ-0087.control, REQ-0029.t2 and REQ-0030.* want\\n"
+        "    dc_addr == saved_addr while biu_read or biu_write is high. On\\n"
+        "    TP-9203 both hold at one edge and the two values differ, so no\\n"
+        "    design satisfies both.\\n\\n"
+        "**REFUTED IN ONE LINE, AS THE OTHER FOUR WERE. All five members spare "
+        "the known-good design** -- 348, 348, 348, 256 and 279 decisions, zero "
+        "convictions each -- so a design satisfying the whole group exists. The "
+        "editor resolved the alleged tie 3-checks-to-1 and reported it as 'a "
+        "trade, not a fix'; the audit says there was no trade to make.\\n\\n"
+        "**AND ITS OTHER CLAIM IS CORRECT, WHICH IS WHY THE TALLY IS THE POINT "
+        "RATHER THAN THE VERDICT.** REQ-0081.control and REQ-0081.merge@merge "
+        "both convict the known-good design on TP-9202 edge 11, for the reason "
+        "the editor gave: the check compares the entry row to the NEXT row and "
+        "cannot distinguish 'incremented on entry' from 'correctly began "
+        "receiving the first refill word'. That is the third independent "
+        "editor to name REQ-0081, and all three were right.\\n\\n"
+        "**RUNNING TALLY OVER FIVE RUNS: 9 of 36 = 25%.** 1 of 3, 1 of 5, 1 of "
+        "5, 2 of 8, 2 of 7. An editor with the design, the trace and the "
+        "requirement sentence in front of it, arguing with a check it has "
+        "every incentive to be right about, is at one in four -- and it cannot "
+        "tell its correct call from its incorrect one, since both arrive as "
+        "the same confident structural argument. **No gate can distinguish "
+        "them either**, which is why this is recorded as a bound on the "
+        "editor-as-soundness-instrument route rather than as a defect list.\\n\\n"
+        "One hedge is worth keeping: the editor flagged REQ-0015.v2@n3 as 'a "
+        "hypothesis, not a finding' because it could not get the evidence. The "
+        "audit says that check is SOUND. **It was right to decline**, and the "
+        "hedge is the only part of its judgement that tracked the truth "
+        "reliably."
+    )

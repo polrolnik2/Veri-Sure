@@ -1640,3 +1640,92 @@ nothing ever latched and the tell was a stale timestamp. Both are the loop
 failing to distinguish what it **considered** from what it **accepted**. That
 one produced wrong numbers; this one produces no numbers at all, which is
 harder to notice and took longer to find.
+
+## THE WEIGHTING WAS THE LAST LEVER, AND IT MOVES THE GRADE BY ZERO
+
+The combined criterion summed two instruments into one pass-count and thereby
+priced them against each other at the accident of their cardinalities. This is
+that defect fixed and nothing else changed: each of the 117 checks emitted as
+**30** units, so the checks weigh 3,510 against the cells' 3,490, with the same
+starting design, the same two instruments byte-for-byte, the same 348-testpoint
+suite and the same 30-trial budget.
+
+### The fix works, mechanically, and this time it is on the record
+
+Between trials 5 and 6 the editor broke a sound check and fixed it forward. The
+per-commit log — which no earlier run kept — shows what the ratchet did with
+that:
+
+| | cells | objecting checks | latched? |
+|---|---|---|---|
+| after trial 5 | 2,710 | 8 | — |
+| after trial 6 | **2,728 (eighteen worse)** | **7** | **YES** |
+
+That is the exact trade the unweighted run attempted three times and had
+refused. The editor reports **zero refusals across nine commits**: *"every fix I
+made was net positive under the 30-units-per-check weighting, so I never needed
+to fight the scoreboard."*
+
+### And the grade is identical
+
+| criterion | testpoints of 348 | cells | trials | grade |
+|---|---|---|---|---|
+| L, unedited | 279 = 80% | 4,450 | — | — |
+| consensus alone | 210 = 60% | 3,890 | 7 of 14 | DIFFERS |
+| 117 checks alone | 206 = 59% | 3,866 | 8 of 14 | DIFFERS |
+| both stacked, unweighted | 205 = 59% | 3,608 | 27 of 30 | DIFFERS |
+| **both stacked, EQUAL WEIGHT** | **205 = 59%** | **3,696** | **9 of 30** | **DIFFERS** |
+
+All three miter pins green in the same process.
+
+### THE TWO MEASURES MOVE IN OPPOSITE DIRECTIONS BETWEEN THE ARMS
+
+This is the cleanest Goodhart instance on the plan, and it is cleaner than the
+within-run version because nothing else differs:
+
+* **the proxy improved 22%** — 1,693 cells disagreeing with the consensus down
+  to 1,325;
+* **true divergence got 2.4% worse** — 3,608 differing cells up to 3,696;
+* **the testpoint count did not move at all** — 205 against 205.
+
+Every earlier Goodhart finding here shows a proxy falling faster than the grade.
+This one shows a proxy falling while the grade rises.
+
+### What it does not buy, said before anyone reads the trial count
+
+Nine trials against twenty-seven for the same grade. That is one sample per arm
+with one editor per arm, so **the 3× is not attributable to the weighting** —
+editor variance is uncontrolled at n = 1.
+
+**So the combination question is closed on its pre-registered reading.** Two
+spec-derived instruments, stacked, at every weighting anyone has a reason to
+choose, land the same design in the same place. The 205–210 band across five
+arms is a property of what a specification-derived criterion can see, not of how
+its parts are priced.
+
+### The fifth contradiction claim, and the fifth refutation
+
+The editor reported REQ-0087.shipping (`dc_addr == start_addr` while
+`hitmiss_eval`) as mutually unsatisfiable with REQ-0087.control, REQ-0029.t2 and
+REQ-0030.\* (`dc_addr == saved_addr` while `biu_read || biu_write`) on TP-9203,
+and resolved the tie three-checks-to-one, calling it *"a trade, not a fix"*.
+
+**All five members spare the known-good design** — 348, 348, 348, 256 and 279
+decisions, zero convictions each — so a design satisfying the whole group
+exists, and there was no trade to make.
+
+**Its other claim is correct.** REQ-0081.control and REQ-0081.merge@merge both
+convict the known-good design on TP-9202 edge 11, for exactly the reason given:
+the check compares the entry row to the next row and cannot distinguish
+*incremented on entry* from *correctly began receiving the first refill word*.
+Three independent editors have now named REQ-0081 and all three were right.
+
+**Running tally over five runs: 9 of 36 = 25%** — 1 of 3, 1 of 5, 1 of 5, 2 of
+8, 2 of 7. An editor with the design, the trace and the requirement sentence in
+front of it is right about a check one time in four, and cannot tell its correct
+call from its incorrect one: both arrive as the same confident structural
+argument. No gate can distinguish them either.
+
+One part of its judgement did track the truth. It flagged REQ-0015.v2@n3 as *"a
+hypothesis, not a finding"* because it could not get the evidence, and the audit
+says that check is sound. **The hedge was the reliable half.**

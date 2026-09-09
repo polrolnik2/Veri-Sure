@@ -986,3 +986,39 @@ def test_the_missing_history_states_the_remedy_as_a_log():
     t = ensemble.a_finished_run_cannot_be_asked_what_its_ratchet_refused()
     assert "one append per commit" in t.lower()
     assert "CONSIDERED" in t and "ACCEPTED" in t
+
+
+def test_the_weighted_run_reports_the_same_grade():
+    t = ensemble.weighting_the_two_instruments_equally_changes_nothing_at_the_grade()
+    assert "205 OF 348, AGAINST THE UNWEIGHTED RUN'S 205 OF 348" in t
+    assert "the commit latched" in t
+
+
+def test_the_weighted_run_carries_the_opposed_movement():
+    t = ensemble.weighting_the_two_instruments_equally_changes_nothing_at_the_grade()
+    assert "proxy improved 22%" in t and "2.4% WORSE" in t
+    assert "NOT attributable" in t
+
+
+def test_the_weighted_run_closes_the_combination_question():
+    t = ensemble.weighting_the_two_instruments_equally_changes_nothing_at_the_grade()
+    assert "combination question is closed" in t.lower()
+    assert "not of how its parts are priced" in t
+
+
+def test_the_fifth_contradiction_claim_is_refuted():
+    t = ensemble.the_fifth_contradiction_claim_is_the_fifth_refutation()
+    assert "REFUTED IN ONE LINE" in t
+    assert "All five members spare" in t
+
+
+def test_the_editor_soundness_tally_is_carried_forward():
+    t = ensemble.the_fifth_contradiction_claim_is_the_fifth_refutation()
+    assert "9 of 36 = 25%" in t
+    assert "third independent editor to name REQ-0081" in t
+
+
+def test_the_editors_hedge_is_recorded_as_the_reliable_part():
+    t = ensemble.the_fifth_contradiction_claim_is_the_fifth_refutation()
+    assert "right to decline" in t.lower()
+    assert "REQ-0015.v2@n3" in t
