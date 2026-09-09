@@ -2366,3 +2366,62 @@ def the_loop_drove_the_design_past_its_own_criterion() -> str:
         "reasons it could not have articulated, and my correction of it was "
         "the error."
     )
+
+
+def a_consensus_cannot_outrank_a_competent_reader_at_any_size() -> str:
+    """The population lever, refuted without paying for it, and the crossing
+    point located in the run that crossed it.
+
+    `the_loop_drove_the_design_past_its_own_criterion` measures the inversion
+    and names the fixed-versus-rising mechanism. The obvious remedy is to make
+    the fixed side less fixed: 99.13% is a property of SEVEN designs, and the
+    goal puts oracle regeneration explicitly in scope. This prices that remedy
+    on the designs already in hand before a single new one is generated.
+    """
+    return (
+        "**HEADROOM -- the criterion's accuracy minus the design's, on the "
+        "cells the criterion speaks about -- MEASURED AT EVERY POPULATION SIZE "
+        "FROM TWO TO SEVEN.** Averaged over subsets, against the design nine "
+        "trials of the weighted run produced:\\n\\n"
+        "    designs   coverage   consensus   the design there   HEADROOM\\n"
+        "        2       97.9%     97.161%        98.498%        -1.337%\\n"
+        "        3       96.9%     97.775%        98.702%        -0.926%\\n"
+        "        4       96.1%     98.257%        98.873%        -0.615%\\n"
+        "        5       95.5%     98.642%        99.029%        -0.387%\\n"
+        "        6       94.9%     98.933%        99.171%        -0.238%\\n"
+        "        7       94.5%     99.131%        99.298%        -0.167%\\n\\n"
+        "**NEGATIVE AT EVERY SIZE, AND THE GAP CLOSES WITHOUT EVER CROSSING.** "
+        "Each added design removes about 35% of the remaining deficit, so "
+        "thirteen designs projects to -0.016% and twenty to -0.001%. The curve "
+        "is asymptotic to zero FROM BELOW. **Generating more designs cannot "
+        "restore the criterion's authority**, and that is now measured rather "
+        "than assumed -- six generations and six suite runs unspent.\\n\\n"
+        "**AND THE REASON IS VISIBLE IN THE COLUMN NOBODY WOULD HAVE WATCHED.** "
+        "The design's own accuracy on the surviving cells rises too, 98.498% to "
+        "99.298%, in lockstep. Unanimity SELECTS FOR EASY CELLS, and a design "
+        "written from the same specification is a competent reader of exactly "
+        "those. Both curves are driven by the same hidden variable -- how hard "
+        "the cell is to read correctly -- so growing the population moves them "
+        "together and never apart.\\n\\n"
+        "**THE CROSSING IS REAL AND IT IS NOW LOCATED.** The same measurement "
+        "against the UNEDITED held-out design, same population, same suite:\\n\\n"
+        "                          consensus   the design   HEADROOM\\n"
+        "    L, unedited            99.163%      96.160%     +3.003%\\n"
+        "    after 9 trials         99.131%      99.298%     -0.167%\\n\\n"
+        "The criterion began as a far better reader than the design and was "
+        "overtaken. Interpolating the run's own per-commit log between its two "
+        "measured endpoints puts the crossing near **1,780 disagreeing cells, "
+        "between trials 7 and 8** -- so the editor stopped ONE TRIAL after the "
+        "point where its criterion stopped being right. That is the first time "
+        "this plan can say when a run should have stopped, and it is only "
+        "sayable because the per-commit log was kept.\\n\\n"
+        "**WHAT IT WOULD TAKE, STATED AS A PROPERTY RATHER THAN A WISH.** A "
+        "criterion that can drive a design to equivalence must be a BETTER "
+        "READER than the design on the cells it speaks about, and stay one all "
+        "the way down. No consensus over spec-derived designs is, at any size, "
+        "because it is made of readers of the same text. The instrument that "
+        "could be is one that reads the SENTENCES rather than voting over "
+        "implementations -- which is what the checks are, and 117 of them "
+        "objecting 7 times is not enough coverage to carry a design the rest of "
+        "the way."
+    )

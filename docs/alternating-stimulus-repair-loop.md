@@ -1879,3 +1879,69 @@ This plan has twice recorded a run stopping with budget unspent as a weakness of
 that run. On this evidence the editor stopped at very nearly the right moment,
 for reasons it could not have articulated — and **my correction of it was the
 error**, not its stopping.
+
+## A CONSENSUS CANNOT OUTRANK A COMPETENT READER, AT ANY POPULATION SIZE
+
+The inversion above has an obvious remedy: 99.13% is a property of **seven**
+designs, not of the specification, and the goal puts oracle regeneration
+explicitly in scope. So make the fixed side less fixed — generate more designs,
+and the unanimous set shrinks toward the cells everyone gets right.
+
+**Priced on the designs already in hand, before generating a single new one.**
+Headroom is the criterion's accuracy minus the design's, on the cells the
+criterion actually speaks about, averaged over all subsets of each size:
+
+| designs | coverage | consensus | the design there | headroom |
+|---|---|---|---|---|
+| 2 | 97.9% | 97.161% | 98.498% | **−1.337%** |
+| 3 | 96.9% | 97.775% | 98.702% | **−0.926%** |
+| 4 | 96.1% | 98.257% | 98.873% | **−0.615%** |
+| 5 | 95.5% | 98.642% | 99.029% | **−0.387%** |
+| 6 | 94.9% | 98.933% | 99.171% | **−0.238%** |
+| 7 | 94.5% | 99.131% | 99.298% | **−0.167%** |
+
+**Negative at every size, closing without ever crossing.** Each added design
+removes about 35% of the remaining deficit, so thirteen designs projects to
+−0.016% and twenty to −0.001% — **asymptotic to zero from below.** Growing the
+population cannot restore the criterion's authority, and that is measured rather
+than assumed: six generations and six suite runs unspent.
+
+### The reason is in the column nobody would have watched
+
+**The design's own accuracy on the surviving cells rises too**, 98.498% →
+99.298%, in lockstep with the criterion's. Unanimity *selects for easy cells*,
+and a design written from the same specification is a competent reader of
+exactly those. Both curves are driven by the same hidden variable — how hard the
+cell is to read correctly — so growing the population moves them together and
+never apart.
+
+### The crossing is real, and it is now located
+
+The same measurement against the **unedited** held-out design, same population,
+same suite:
+
+| | consensus | the design | headroom |
+|---|---|---|---|
+| **L, unedited** | 99.163% | 96.160% | **+3.003%** |
+| after 9 trials | 99.131% | 99.298% | **−0.167%** |
+
+The criterion began as a far better reader than the design and was overtaken.
+Interpolating the run's own per-commit log between those two measured endpoints
+puts the crossing near **1,780 disagreeing cells, between trials 7 and 8** — so
+the editor stopped **one trial after** the point where its criterion stopped
+being right.
+
+That is the first time this plan can say *when* a run should have stopped, and
+it is sayable only because the per-commit log was kept. The previous section's
+finding — that a finished run keeps no history — is what made the same question
+unanswerable for the four arms before it.
+
+### What it would take, stated as a property rather than a wish
+
+A criterion that can drive a design to equivalence must be **a better reader
+than the design on the cells it speaks about, and stay one all the way down.**
+No consensus over spec-derived designs is, at any size, because it is made of
+readers of the same text. The instrument that could be is one that reads the
+**sentences** rather than voting over implementations — which is exactly what
+the checks are, and 117 of them objecting 7 times is not enough coverage to
+carry a design the rest of the way.

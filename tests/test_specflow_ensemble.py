@@ -1088,3 +1088,34 @@ def test_the_inversion_records_the_authors_own_error():
     t = ensemble.the_loop_drove_the_design_past_its_own_criterion()
     assert "my correction of it was" in t
     assert "stopped at very nearly the right moment" in t
+
+
+def test_the_population_curve_is_negative_at_every_size():
+    t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
+    assert "NEGATIVE AT EVERY SIZE" in t
+    assert "-1.337%" in t and "-0.167%" in t
+
+
+def test_the_population_curve_extrapolates_before_generating():
+    t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
+    assert "asymptotic to zero FROM BELOW" in t
+    assert "six generations and six suite runs unspent" in t
+
+
+def test_the_population_curve_names_the_hidden_variable():
+    t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
+    assert "SELECTS FOR EASY CELLS" in t
+    assert "how hard" in t and "in lockstep" in t
+
+
+def test_the_crossing_point_is_located():
+    t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
+    assert "+3.003%" in t
+    assert "between trials 7 and 8" in t
+    assert "ONE TRIAL after" in t
+
+
+def test_the_requirement_on_a_working_criterion_is_stated():
+    t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
+    assert "BETTER READER than the design" in t
+    assert "reads the SENTENCES rather than voting" in t
