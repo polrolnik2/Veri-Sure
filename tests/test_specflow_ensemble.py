@@ -2023,3 +2023,66 @@ def test_the_two_explanations_are_not_separated():
     flat = " ".join(t.split())
     assert "a single point cannot distinguish" in flat
     assert "40% blind AND sound, which this corpus does not contain" in flat
+
+
+def test_four_runs_are_not_ordered_by_blindness():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "BLINDNESS DOES NOT ORDER THEM" in flat
+    assert "beaten by one 57 points blinder" in flat
+
+
+def test_splitting_by_soundness_resolves_the_order():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "99.8% closes 3%, 56.9% closes 32%" in flat
+    assert "40.4% closes 28% and 0.0% closes 14%" in flat
+    assert "stops helping the moment it is spent" in flat
+
+
+def test_the_goal_completeness_push_is_answered_negatively():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "AND THE ANSWER IS NO" in flat
+    assert "cost more than the completeness gains" in flat
+
+
+def test_the_audit_cost_shows_up_as_a_rejected_repair():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "970 consensus cells" in flat
+    assert "it rejects right repairs" in flat
+
+
+def test_the_floor_run_is_not_attributed_to_soundness():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "cannot be attributed to soundness alone" in flat.lower()
+    assert "pre-registered as uninterpretable between the two causes" in flat
+
+
+def test_no_run_reached_equivalence():
+    t = ensemble.completeness_bought_with_unsoundness_drives_a_design_worse()
+    flat = " ".join(t.split())
+    assert "orders four failures rather than finding a winner" in flat
+
+
+def test_the_second_accusation_run_is_disclaimed():
+    t = ensemble.a_second_accusation_run_carried_no_information()
+    flat = " ".join(t.split())
+    assert "NOT A SECOND CONFIRMATION" in flat
+    assert "0.71" in flat and "0.003" in flat
+
+
+def test_the_denominator_rule_is_stated():
+    t = ensemble.a_second_accusation_run_carried_no_information()
+    flat = " ".join(t.split())
+    assert "the population the accuser could have drawn from" in flat
+    assert "inverting which one carries evidence" in flat
+
+
+def test_the_replication_is_still_owed():
+    t = ensemble.a_second_accusation_run_carried_no_information()
+    flat = " ".join(t.split())
+    assert "REPLICATION IS STILL OWED" in flat
+    assert "a wrong accusation is the default outcome" in flat

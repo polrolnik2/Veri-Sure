@@ -4015,3 +4015,87 @@ def a_golden_free_set_did_not_out_drive_the_reference_selected_one() -> str:
         "a spec-derived design to equivalence, and the four graded runs land at "
         "271, 200, 190 and -- for the completeness floor -- pending."
     )
+
+
+def completeness_bought_with_unsoundness_drives_a_design_worse() -> str:
+    """Four graded editor runs, one starting design, four sets spanning the
+    whole blindness range. The completeness floor is beaten by a set 57 points
+    blinder, and that settles what a golden-free completeness push is worth.
+
+    Every band was pre-registered before its run was dispatched.
+    """
+    return (
+        "Four Sonnet editors, **the same arbitrary unchecked design**, the same "
+        "brief and 21-trial budget, four sets. Blindness is golden-free; the "
+        "audit is computed last and fed nothing:\n\n"
+        "    set                     blindness  *audit*   objections     testpoints differing\n"
+        "    ZERO  126, sound          99.8%    *  0 = 0%*  11 ->   1     279 -> 271  ( -3%)\n"
+        "    CEIL2 163, sound          56.9%    *  0 = 0%*  22 ->   5     279 -> **190**  (**-32%**)\n"
+        "    T6    201, golden-free    40.4%    * 38 = 19%* 39 ->  11     279 -> 200  (-28%)\n"
+        "    MIN   464, the floor       0.0%    *299 = 64%* 295 -> 277    279 -> 241  (-14%)\n"
+        "    all four grades: *DIFFERS*, three pins green in the same process\n\n"
+        "**RANKED BY WHAT THE EDITOR ACHIEVED: CEIL2, T6, MIN, ZERO. BLINDNESS "
+        "DOES NOT ORDER THEM.** The set that sees every disagreement in the "
+        "population came third, beaten by one 57 points blinder.\n\n"
+        "**SPLIT BY SOUNDNESS AND IT RESOLVES CLEANLY.** Among the two sets "
+        "that convict no correct design, blindness predicts exactly as the "
+        "matched pair said: 99.8% closes 3%, 56.9% closes 32%. Among the two "
+        "bought with false rejection it inverts: 40.4% closes 28% and 0.0% "
+        "closes 14%. **Blindness helps while soundness is held and stops "
+        "helping the moment it is spent.**\n\n"
+        "**SO THE GOAL'S COMPLETENESS PUSH IS ANSWERED, AND THE ANSWER IS "
+        "NO.** Reducing blindness residue makes a set a better driver only "
+        "along the sound frontier, and golden-free there is only one point on "
+        "that frontier this corpus reaches -- 99.8%. Every step toward "
+        "completeness without a reference admits checks that convict correct "
+        "designs, and those cost more than the completeness gains.\n\n"
+        "**THE COST IS VISIBLE AS LOST WORK, NOT ONLY AS A RATE.** On the "
+        "floor set the editor found a real defect -- a refill servicing three "
+        "words where the requirement states four, worth about 970 consensus "
+        "cells in one change -- and the commit was refused every time it was "
+        "tried, by two checks that are in the audit's unsound list. A set at "
+        "64% false rejection does not merely accept wrong designs; it rejects "
+        "right repairs.\n\n"
+        "**AND THE FLOOR SET'S NUMBER CANNOT BE ATTRIBUTED TO SOUNDNESS "
+        "ALONE**, which was recorded before it ran. Its objection count spans "
+        "5.4% over the whole population, so its gradient is nearly flat "
+        "independently of its audit -- and the run showed that live, moving "
+        "the count 6% while divergence moved 14%. Its band was pre-registered "
+        "as uninterpretable between the two causes and it is reported that "
+        "way.\n\n"
+        "**WHAT IS NOT CLAIMED.** No run reached equivalence, so this orders "
+        "four failures rather than finding a winner. Four points, one design, "
+        "one corpus; the two sound points are the matched pair already on "
+        "record and the two unsound ones are new."
+    )
+
+
+def a_second_accusation_run_carried_no_information() -> str:
+    """The editor named five over-strict checks and was right about all five,
+    and it is worth almost nothing. Recorded so the pair is not quoted as two
+    confirmations.
+    """
+    return (
+        "On the 201-check set an editor partitioned its 11 surviving "
+        "objections exactly -- seven unsound named, four sound spared, "
+        "p = 0.003. The obvious next question is whether that reproduces, and "
+        "a second run named five checks on the 464-check floor set and was "
+        "right about all five.\n\n"
+        "**IT IS NOT A SECOND CONFIRMATION AND MUST NOT BE QUOTED AS ONE.**\n\n"
+        "    set   survivors   of those UNSOUND   named   right   p by chance\n"
+        "    T6         11        7 = **64%**       7       7      **0.003**\n"
+        "    MIN       277      259 = **94%**       5       5        0.71\n\n"
+        "**ON A SET WHERE 94% OF THE SURVIVING OBJECTIONS ARE OVER-STRICT, "
+        "BEING RIGHT FIVE TIMES IS THE EXPECTED OUTCOME** -- 4.7 of 5 at "
+        "chance. The first run was informative for the opposite reason: its "
+        "set is 81% sound, so a wrong accusation was the likely result and the "
+        "exact partition was not.\n\n"
+        "**THE GENERAL RULE, WHICH IS THE PART TO KEEP.** An accusation's "
+        "denominator is the population the accuser could have drawn from -- "
+        "here the checks it saw objecting, not the whole set. Quoting the "
+        "whole-set rate would have read 19% for the first run and 64% for the "
+        "second, flattering both and inverting which one carries evidence.\n\n"
+        "**SO THE REPLICATION IS STILL OWED.** It needs a mostly-sound set "
+        "where a wrong accusation is the default outcome, which is what the "
+        "first run had and the second did not."
+    )
