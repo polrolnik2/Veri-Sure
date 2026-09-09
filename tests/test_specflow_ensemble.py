@@ -1174,3 +1174,22 @@ def test_sequencing_attributes_the_residue_to_coverage():
     t = ensemble.sequencing_the_two_instruments_breaks_the_band()
     assert "moved the check count by ZERO" in t
     assert "COVERAGE IS THE ONE THING THE GOAL" in t
+
+
+def test_the_gap_round_reports_total_separation():
+    t = ensemble.the_soundness_filter_selects_exactly_the_silent_checks()
+    assert "NINE OF NINE SILENT, TWENTY-SEVEN OF THIRTY-ONE OBJECTING" in t
+    assert "0 bodies shared across requirements" in t
+
+
+def test_the_gap_round_names_the_selection_coupling():
+    t = ensemble.the_soundness_filter_selects_exactly_the_silent_checks()
+    assert "selects for checks that SPARE spec-derived designs" in t
+    assert "precise about the wrong population" in t
+
+
+def test_the_gap_round_separates_span_from_signal():
+    t = ensemble.the_soundness_filter_selects_exactly_the_silent_checks()
+    assert "52 of 89" in t
+    assert "+5 and +0 now" in t
+    assert "SPAN IS NOT THE METRIC" in t

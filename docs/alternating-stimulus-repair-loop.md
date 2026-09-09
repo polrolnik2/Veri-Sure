@@ -2089,3 +2089,71 @@ instrument the run deliberately does not use. The graded design is `dut.v`, what
 the checks-only latch actually accepted. That is the fifteenth counting-shaped
 defect here and it has the same signature as the other fourteen: a number that
 reads as a result and is measuring something else.
+
+## THE SOUNDNESS FILTER SELECTS EXACTLY THE CHECKS THAT SAY NOTHING
+
+The residue after the sequenced run was attributed to coverage, so a coverage
+round ran. **Population, spec-only:** the 21 behavioural requirements the
+117-check set does not touch, ranked by the split-cells-per-check ratio of the
+outputs their sentences name — `burst` at 839 against `dcram_we`'s 26. Two
+independent draws each, 42 prompts.
+
+**Standard, this plan's own measurement rather than the shipped default:**
+authored STRICT, because the soundness boundary is findable from the over-strict
+side (7 of 47) and not from the weak side (0 of 34), Fisher p = 0.0196.
+
+Integrity, before any number was read: **42 of 42 answered, 0 broken, 0 bodies
+shared across requirements.** Leak check over all 42 prompts: 0 lines of the
+reference design's source, 0 testpoint ids, 0 equivalence verdicts, 0 divergence
+evidence.
+
+### The split, and it is total
+
+The minority rule — keep a check convicting at most two of the seven, measured
+59-of-59 precise against a 31% base rate — divided them 9 / 31. Each half was
+then decided over the design the checks-only arm produced:
+
+| | checks | **object to the design** | decide and pass |
+|---|---|---|---|
+| **kept by the minority rule** | 9 | **0** | 9 |
+| **marked for narrowing** | 31 | **27** | 4 |
+
+**Nine of nine silent; twenty-seven of thirty-one objecting.** The admissible
+checks have nothing to say about the design; every check with something to say
+is inadmissible.
+
+### The mechanism is a coupling this session has now measured three times
+
+A soundness filter built on a population of spec-derived designs **selects for
+checks that spare spec-derived designs** — and the design under test is one. The
+filter cannot tell *spares a correct design* from *spares this design*, because
+on this evidence they are the same predicate.
+
+That is the criterion-versus-design law arriving at the **selection** step
+rather than the scoring step, and it explains why the filter's excellent
+precision buys nothing here: **it is precise about the wrong population.**
+
+### What the round bought, and what it did not
+
+| | before | after |
+|---|---|---|
+| requirements with a check | 47 of 89 = 53% | **52 of 89 = 58%** |
+| behavioural | 47 of 68 = 69% | **52 of 68 = 76%** |
+| **objections on the design** | **5** | **5** |
+
+**+5 requirements, +0 objections.** That is the volume round's result reproduced
+on a targeted population with a better standard — it was +3 and +0 then. The
+third time on this plan that span and signal have come apart.
+
+**So span is not the metric, and this is the cleanest demonstration of it.** A
+set can be grown to cover more of a specification by adding checks selected for
+soundness and gain no ability whatever to say that a wrong design is wrong.
+
+### A directory-purity slip, mine, caught before dispatch
+
+The narrowing prompts were first written into `narrow/`, which already held an
+earlier round's prompts and answers; moving them to `narrow2/` hit the same
+problem again. Both were restored and the round now lives in a directory that
+did not previously exist. This plan already records the rule — *arm purity is a
+property of the directory, not the batch list* — and it is easier to break than
+to remember.

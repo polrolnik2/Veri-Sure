@@ -2525,3 +2525,52 @@ def sequencing_the_two_instruments_breaks_the_band() -> str:
         "the remaining gap has been attributed to something with a known "
         "remedy rather than to a property of specifications."
     )
+
+
+def the_soundness_filter_selects_exactly_the_silent_checks() -> str:
+    """#99 measured on one fresh round, at total separation, with the split
+    made by a rule that never saw the design.
+
+    Every earlier statement of this is distributional -- a corpus scored, a
+    conviction count tabulated. This is 42 checks authored in one round by one
+    standard, partitioned by the best golden-free soundness filter on this plan,
+    and then asked the only question that matters for a repair loop.
+    """
+    return (
+        "**THE GAP ROUND.** 21 behavioural requirements the 117-check set does "
+        "not touch, two independent draws each, authored STRICT because this "
+        "plan measured the soundness boundary findable from the over-strict "
+        "side (7 of 47) and not from the weak side (0 of 34). Integrity: 42 of "
+        "42 answered, 0 broken, 0 bodies shared across requirements.\\n\\n"
+        "**THE MINORITY RULE SPLIT THEM 9 / 31**, keeping a check that convicts "
+        "at most two of the seven spec-derived designs -- the filter this plan "
+        "measures at 59-of-59 precision against a 31% base rate. Then each half "
+        "was decided over the design the checks-only arm produced:\\n\\n"
+        "                                   checks   OBJECT   decide and PASS\\n"
+        "    KEPT by the minority rule         9        0            9\\n"
+        "    marked for NARROWING             31       27            4\\n\\n"
+        "**NINE OF NINE SILENT, TWENTY-SEVEN OF THIRTY-ONE OBJECTING.** The "
+        "admissible checks have nothing to say about the design; every check "
+        "with something to say is inadmissible.\\n\\n"
+        "**AND THE MECHANISM IS THE SAME COUPLING MEASURED TWICE ALREADY.** A "
+        "soundness filter built on a population of spec-derived designs selects "
+        "for checks that SPARE spec-derived designs -- and the design under "
+        "test is one. The filter cannot distinguish 'spares a correct design' "
+        "from 'spares this design', because on this evidence they are the same "
+        "predicate. That is `a_criterion_only_corrects_where_it_beats_the_"
+        "design_under_test` arriving at the SELECTION step rather than the "
+        "scoring step, and it is why the filter's excellent precision buys "
+        "nothing: it is precise about the wrong population.\\n\\n"
+        "**WHAT THE ROUND BOUGHT AND WHAT IT DID NOT.** Span goes 47 -> 52 of "
+        "89 = 58%, and 47 -> 52 of 68 behavioural = 76%. Objections on the "
+        "design go up by ZERO. **That is the volume round's result reproduced "
+        "on a targeted population with a better standard** -- +3 requirements "
+        "and +0 objections then, +5 and +0 now -- and it is the third time span "
+        "and signal have come apart on this plan.\\n\\n"
+        "**SO SPAN IS NOT THE METRIC, AND THIS IS THE CLEANEST DEMONSTRATION "
+        "OF IT.** A set can be grown to cover more of a specification by adding "
+        "checks selected for soundness, and gain no ability whatever to say "
+        "that a wrong design is wrong. The narrowing round is the only route "
+        "from the objecting side to the admissible one, and its measured rate "
+        "is about 15%."
+    )
