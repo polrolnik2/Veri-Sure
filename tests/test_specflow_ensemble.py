@@ -1241,3 +1241,33 @@ def test_the_aiming_defect_bounds_its_own_claim():
     t = ensemble.the_editor_could_not_aim_at_what_it_was_judged_by()
     assert "does not claim the editor" in t
     assert "reporting my harness as a finding" in t
+
+
+def test_the_stuck_run_reports_no_progress():
+    t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
+    assert "5 objections to 5" in t
+    assert "both commits rejected and discarded" in t
+
+
+def test_the_stuck_run_proves_joint_satisfiability():
+    t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
+    assert "ALL FIVE SPARE THE KNOWN-GOOD DESIGN" in t
+    assert "JOINTLY SATISFIABLE" in t
+
+
+def test_the_stuck_run_is_named_a_search_failure():
+    t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
+    assert "SEARCH FAILURE, NOT AN ORACLE FAILURE" in t
+    assert "local optimum" in t and "worse intermediate state" in t
+
+
+def test_the_contradiction_claim_is_recorded_as_reproducible():
+    t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
+    assert "sixth refutation" in t
+    assert "systematic misreading" in t
+
+
+def test_the_stuck_run_qualifies_itself():
+    t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
+    assert "trace=False" in t
+    assert "plus the criterion's" in t

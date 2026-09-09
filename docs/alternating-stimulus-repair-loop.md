@@ -2266,3 +2266,67 @@ single-variable re-run is the only way to price that. **Reporting the earlier
 stop as a property of the editor, without this, would have been reporting my
 harness as a finding** — which is the mistake this plan has had to retract for
 more than once.
+
+## FIVE SOUND CHECKS, JOINTLY SATISFIABLE, AND THE EDITOR IS STUCK
+
+With check-aware `focus`/`explain`, same criterion, same design, same budget as
+the arm that stopped at five: **no progress — 5 objections to 5, two of
+twenty-one trials, both commits rejected and discarded.** What it produced is
+the diagnosis.
+
+**Commit 1 changed `dc_addr` to satisfy REQ-0087.shipping. It did — and broke
+four others**: REQ-0029.t2, REQ-0030.band@band, REQ-0030.control and
+REQ-0087.control, taking the count 5 → 8. The editor concluded that
+REQ-0087.shipping and REQ-0087.control *"are compiled from the same sentence but
+demand opposite values of dc_addr … no memoryless formula satisfies both."*
+
+The audit:
+
+| check | decides on the reference design | convicts it |
+|---|---|---|
+| REQ-0087.shipping | 348 | **0** |
+| REQ-0087.control | 348 | **0** |
+| REQ-0029.t2 | 348 | **0** |
+| REQ-0030.band@band | 256 | **0** |
+| REQ-0030.control | 279 | **0** |
+
+**All five spare the reference design, so a design satisfying all five exists
+and is that one.** The set is sound and **jointly satisfiable**; the design
+satisfies four and fails one; and the single-step edit that fixes the one breaks
+the other four.
+
+### This is a search failure, not an oracle failure — the first here
+
+Every earlier negative on this plan is about a criterion: inverted, silent,
+over-strict, or precise about the wrong population. This one has a criterion
+that is **sound, jointly satisfiable and correctly objecting**, and the editor
+cannot reach the satisfying design because every local move that clears one
+demand violates four.
+
+It is a local optimum, and **the loop has no mechanism for leaving one**:
+`commit` judges the whole suite, so a repair that must pass through a worse
+intermediate state can never latch. That is a property of the accept rule, not
+of the editor or the checks.
+
+### And the contradiction claim is now reproducible
+
+**Two independent Sonnet editors, given different tooling, both concluded the
+REQ-0087 group is mutually unsatisfiable, and both are wrong by the same
+one-line audit.** Sixth structural-contradiction claim on this plan, sixth
+refutation — but the first where two editors reached the same false claim
+independently, which makes it a **systematic misreading of this requirement**
+rather than one agent's error.
+
+### Two qualifications, both mine
+
+**The evidence fix was partial.** The driver runs the suite with `trace=False`
+and never populates `rows` for a check, so `explain` returned the requirement
+sentence, the verdict and the span but **not** the boundary trace, the suspect
+blocks' internals, or the perturbation analysis — the three things that would
+have shown the editor *why* its edit broke four checks. It reported the gap
+precisely rather than treating it as a dead end.
+
+**And the editor read the check bodies from disk.** That is admissible — they
+are spec-derived artifacts containing nothing from the reference design — but it
+changes the experiment from *can an editor repair from objections* to *from
+objections plus the criterion's source*, and those are not the same question.

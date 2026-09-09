@@ -2675,3 +2675,58 @@ def the_editor_could_not_aim_at_what_it_was_judged_by() -> str:
         "earlier stop as a property of the editor, without this, would have "
         "been reporting my harness as a finding."
     )
+
+
+def five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck() -> str:
+    """The first failure on this plan located in the SEARCH rather than in the
+    criterion, and it is the sharpest statement here about the editor as the
+    goal's validator.
+
+    Run with check-aware `focus`/`explain`, same criterion, same design, same
+    budget as the arm that stopped at five objections.
+    """
+    return (
+        "**THE RUN MADE NO PROGRESS: 5 objections to 5, two of twenty-one "
+        "trials, both commits rejected and discarded.** What it produced is the "
+        "diagnosis.\\n\\n"
+        "**COMMIT 1 CHANGED `dc_addr` TO SATISFY REQ-0087.shipping. IT DID -- "
+        "AND BROKE FOUR OTHERS**: REQ-0029.t2, REQ-0030.band@band, "
+        "REQ-0030.control and REQ-0087.control, taking the count 5 -> 8. The "
+        "editor concluded that REQ-0087.shipping and REQ-0087.control 'are "
+        "compiled from the same sentence but demand opposite values of dc_addr "
+        "... no memoryless formula satisfies both'.\\n\\n"
+        "**THE AUDIT SAYS ALL FIVE SPARE THE KNOWN-GOOD DESIGN** -- 348, 348, "
+        "348, 256 and 279 decisions, zero convictions each. **A design "
+        "satisfying all five exists and is that one.** The set is sound and "
+        "JOINTLY SATISFIABLE, the design satisfies four and fails one, and the "
+        "single-step edit that fixes the one breaks the other four.\\n\\n"
+        "**SO THIS IS A SEARCH FAILURE, NOT AN ORACLE FAILURE, AND IT IS THE "
+        "FIRST ONE ON THIS PLAN.** Every earlier negative here is about a "
+        "criterion -- inverted, silent, over-strict, or precise about the wrong "
+        "population. This one has a criterion that is sound, jointly "
+        "satisfiable and correctly objecting, and the editor cannot reach the "
+        "satisfying design because every local move that clears one demand "
+        "violates four. It is a local optimum, and the loop has no mechanism "
+        "for leaving one: `commit` judges the whole suite, so a repair that "
+        "must pass through a worse intermediate state can never latch.\\n\\n"
+        "**AND THE CONTRADICTION CLAIM IS NOW REPRODUCIBLE, WHICH MAKES IT A "
+        "PROPERTY RATHER THAN AN ANECDOTE.** Two independent Sonnet editors, "
+        "given different tooling, both concluded the REQ-0087 group is "
+        "mutually unsatisfiable, and both are wrong by the same one-line audit. "
+        "That is the sixth structural-contradiction claim on this plan and the "
+        "sixth refutation -- but the first where two editors reached the same "
+        "false claim independently, so it is a systematic misreading of this "
+        "requirement rather than one agent's error.\\n\\n"
+        "**TWO THINGS THAT QUALIFY THE RUN, BOTH MINE.** The evidence fix was "
+        "PARTIAL: the driver runs the suite with `trace=False` and never "
+        "populates `rows` for a check, so `explain` returned the requirement "
+        "sentence, the verdict and the span but NOT the boundary trace, the "
+        "suspect blocks' internals or the perturbation analysis -- the three "
+        "things that would have shown the editor WHY its edit broke four "
+        "checks. It reported the gap precisely rather than treating it as a "
+        "dead end. And the editor read the check BODIES from disk. That is "
+        "admissible -- they are spec-derived artifacts and contain nothing from "
+        "the known-good design -- but it changes the experiment from 'can an "
+        "editor repair from objections' to 'from objections plus the criterion's "
+        "source', and the two are not the same question."
+    )
