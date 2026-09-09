@@ -127,18 +127,44 @@ thresholds had never been scored.
 | **6** | **201** | **71 = 82%** | **40.4%** | 22 – 38 | 50% | *38 = 18.9%* |
 | 7 | 464 | 73 = 84% | **0.0%** | 285 – 301 | **5.4%** | *299 = 64.4%* |
 
-**BLINDNESS FALLS ONLY AS THE AUDIT RISES, AT EVERY THRESHOLD.** Completeness
+**BLINDNESS FALLS AND THE AUDIT RISES ACROSS THE WHOLE SWEEP.** Completeness
 and soundness are not two properties a better rule could optimise jointly.
 Golden-free, on this corpus, they are one knob read in two directions.
+
+### The cumulative table overstates how orderly that is
+
+The thresholds nest, so the audit **count** cannot fall as *t* grows — its
+monotonicity is a property of the construction and carries no information. The
+**rate** is not monotone either; it dips at t = 5. Per bucket rather than
+cumulative:
+
+| the check convicts | checks | convict the reference |
+|---|---|---|
+| 0 of 7 | 126 | **0 = 0.0%** |
+| 1 to 6 of 7 | 75 | 38 = **50.7%** |
+| 7 of 7 | 263 | **261 = 99.2%** |
+
+**The rule is exact at both ends and a coin flip in between.** Convicting none
+of the population spares the reference 126 times out of 126; convicting all of
+it convicts the reference 261 times out of 263. In the middle band the rule has
+no signal at all.
+
+**And that middle band is exactly where the blindness reduction lives** — those
+75 checks are everything between the sound-and-blind set and t = 6, and they
+carry blindness from 99.8% to 40.4%. So the trade is not a smooth price to pay;
+it is a region where the golden-free rule stops discriminating altogether, and
+every point inside it is bought blind.
 
 ### And CEIL2 is not on this curve, which is what the reference is worth
 
 CEIL2 is **56.9% blind at an audit of zero**. To reach 52.7% golden-free costs
-14.4% false rejection. The mechanism is arithmetic rather than a tendency: 161
-of CEIL2's 163 checks lie inside t = 6, and t = 6 holds exactly 38 audit
-failures — so **CEIL2 is very nearly t = 6 with its unsound members removed, and
-removing them takes blindness from 40.4% back to 56.9%.** Those 38 checks close
-933 disagreement cells and nothing sound replaces them.
+14.4% false rejection. The arithmetic closes exactly: 161 of CEIL2's 163 checks
+lie inside t = 6, t = 6 holds exactly 38 audit failures, and CEIL2's other two
+are the only two checks in the corpus that convict all seven and still spare the
+reference. So **CEIL2 is t = 6 with its 38 audit failures removed and those two
+added, with nothing left over — and removing the 38 takes blindness from 40.4%
+back to 56.9%.** Those 38 checks close 933 disagreement cells and nothing sound
+replaces them.
 
 ### The second opposition, and it is independent of soundness
 

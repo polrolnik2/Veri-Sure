@@ -1803,12 +1803,35 @@ def test_the_scope_is_two_runs():
     assert "two points do not establish a slope" in " ".join(t.split())
 
 
-def test_the_curve_is_monotone_in_both_columns():
+def test_the_sweep_spans_the_whole_range_in_both_columns():
     t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
     flat = " ".join(t.split())
     assert "99.8%" in flat and "0.0%" in flat
     assert "64.4%" in flat
-    assert "BLINDNESS FALLS ONLY AS THE AUDIT RISES" in flat
+    assert "BLINDNESS FALLS AND THE AUDIT RISES ACROSS THE WHOLE SWEEP" in flat
+
+
+def test_the_cumulative_monotonicity_is_disclaimed():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "CORRECTION TO THE FIRST VERSION OF THIS FINDING" in flat
+    assert "a property of the construction and carries no information" in flat
+    assert "it dips at t = 5" in flat
+
+
+def test_the_rule_is_a_step_function_with_a_coin_flip_in_the_middle():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "126 times out of 126" in flat
+    assert "261 times out of 263" in flat
+    assert "NO SIGNAL AT ALL, at 50.7%" in flat
+
+
+def test_the_blind_band_is_where_the_blindness_reduction_lives():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "Those 75 checks are everything between" in flat
+    assert "every point inside it is bought blind" in flat
 
 
 def test_the_sweep_reproduces_sets_built_separately():
@@ -1828,6 +1851,14 @@ def test_the_mechanism_is_the_thirty_eight_unsound_checks():
     flat = " ".join(t.split())
     assert "161 of CEIL2's 163" in flat
     assert "933 disagreement cells" in flat
+
+
+def test_the_set_arithmetic_closes_with_nothing_left_over():
+    t = ensemble.blindness_and_soundness_are_one_golden_free_knob()
+    flat = " ".join(t.split())
+    assert "the only two checks in the whole corpus that convict all seven " \
+        "and still spare the reference" in flat
+    assert "with nothing left over" in flat
 
 
 def test_the_completeness_question_is_answered_negatively():
