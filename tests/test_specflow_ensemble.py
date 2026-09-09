@@ -1295,3 +1295,40 @@ def test_the_earlier_stops_are_not_editor_results():
     t = ensemble.three_dropped_values_and_one_root_cause()
     assert "NEITHER\\nMEASURED THE EDITOR" in t or "MEASURED THE EDITOR" in t
     assert "reporting my harness as a finding" in t
+
+
+def test_the_editor_trades_one_clause_for_the_other():
+    t = ensemble.the_editor_oscillates_between_two_clauses_of_one_sentence()
+    assert "FOUR COMMITS, ALL REJECTED" in t
+    assert "One objection traded for four." in t
+
+
+def test_the_two_clauses_come_from_one_sentence():
+    t = ensemble.the_editor_oscillates_between_two_clauses_of_one_sentence()
+    assert "REQ-0087" in t and "REQ-0029" in t and "REQ-0030" in t
+    assert "clause A" in t and "clause B" in t
+
+
+def test_the_ratchet_is_cleared_before_the_editor_is_blamed():
+    t = ensemble.the_editor_oscillates_between_two_clauses_of_one_sentence()
+    assert "RATCHET IS NOT MISCALIBRATED" in t
+    assert "4 failing to 6" in t
+
+
+def test_the_perturbation_verdict_was_available_and_unused():
+    t = ensemble.the_editor_oscillates_between_two_clauses_of_one_sentence()
+    assert "the defect is TEMPORAL" in t
+    assert "fact about the editor rather than about the harness" in t
+
+
+def test_a_committing_run_has_no_stable_design():
+    t = ensemble.a_committing_design_is_not_stable_while_the_commit_runs()
+    assert "ROLLED BACK" in t
+    assert "diff that went empty" in t.lower() or "DIFF THAT WENT EMPTY" in t
+
+
+def test_the_four_artifacts_are_distinguished():
+    t = ensemble.a_committing_design_is_not_stable_while_the_commit_runs()
+    for name in ("dut.v", "staged.v", "best.v", "run1/"):
+        assert name in t
+    assert "note_best" in t

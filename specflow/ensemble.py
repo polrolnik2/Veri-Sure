@@ -2778,3 +2778,87 @@ def three_dropped_values_and_one_root_cause() -> str:
         "either earlier stop as an editor result would have been reporting my "
         "harness as a finding."
     )
+
+
+def the_editor_oscillates_between_two_clauses_of_one_sentence() -> str:
+    """The first run on this plan where the editor was BOTH judged by checks it
+    could aim at AND handed the evidence to aim with -- so the first that is
+    evidence about the editor rather than about my harness.
+
+    `three_dropped_values_and_one_root_cause` closed the evidence path and said
+    the run after it would be the measurement. This is that run's first four
+    trials, scored by re-deciding the 117 checks over each design's own traces
+    rather than by reading the run's bookkeeping.
+    """
+    return (
+        "**FOUR COMMITS, ALL REJECTED, AND THE ACCEPTED DESIGN IS BYTE-IDENTICAL "
+        "TO THE ONE THE RUN STARTED FROM.** Not a stalled loop -- a ratchet doing "
+        "exactly its job, on a design that sits at a point the editor cannot "
+        "leave in one step.\\n\\n"
+        "**THE SPECIFICATION STATES TWO OBLIGATIONS ABOUT ONE WIRE, AND THIS "
+        "DESIGN SATISFIES EXACTLY ONE OF THEM AT A TIME.** REQ-0087 carries both "
+        "in a single sentence -- *drive dc_addr to start_addr during hit/miss "
+        "evaluation and to saved_addr during post-evaluation BIU transfers* -- "
+        "and REQ-0029 and REQ-0030 restate them separately:\\n\\n"
+        "    clause A  start_addr WHILE EVALUATING      REQ-0029, REQ-0087.shipping\\n"
+        "    clause B  saved_addr DURING THE TRANSFER   REQ-0030 (5 bodies), REQ-0087.control\\n\\n"
+        "    accepted   (biu_read || biu_write) ? saved_addr_r : start_addr\\n"
+        "               satisfies B, fails A          -> 5 objections of 117\\n"
+        "    staged     (hitmiss_eval_r || in_idle) ? start_addr : saved_addr_r\\n"
+        "               satisfies A, fails B          -> 8 objections of 117\\n\\n"
+        "Every attempt clears `REQ-0087.shipping` and introduces `REQ-0029.t2`, "
+        "`REQ-0030.band@band`, `REQ-0030.control` and `REQ-0087.control`. **One "
+        "objection traded for four.**\\n\\n"
+        "**AND THE RATCHET IS NOT MISCALIBRATED, WHICH HAD TO BE CHECKED BEFORE "
+        "THE OSCILLATION COULD BE BLAMED ON THE EDITOR.** REQ-0030 carries five "
+        "bodies against REQ-0029's one, so a body-count latch could have been "
+        "encoding an authoring accident as a preference between two obligations "
+        "the specification weights equally. It is not: at REQUIREMENT "
+        "granularity the trade is 4 failing to 6, worse by the same sign. The "
+        "refusal is correct at both granularities.\\n\\n"
+        "**SO THIS IS THE OSCILLATION THE GOAL ASKS ABOUT, ON RTL REPAIR, WITH A "
+        "SOUND SPEC-ONLY CRITERION AND A COMPLETE EVIDENCE PATH** -- and it is "
+        "not the criterion swapping failure modes, which is what every earlier "
+        "oscillation on this plan turned out to be. Both clauses are real, both "
+        "are stated, and a correct design meets both; the design meets one, and "
+        "one memoryless edit can only move which.\\n\\n"
+        "**THE INSTRUMENT HAD ALREADY SAID SO AND WAS NOT ACTED ON.** The "
+        "perturbation analysis reports on this exact check that *no single-value "
+        "change at the deciding edge satisfies it, so the defect is TEMPORAL*. "
+        "Both rejected edits are memoryless mux rewrites, and the second differs "
+        "from the first mainly by which registered flag it reads. **That is now "
+        "a fact about the editor rather than about the harness, which is what "
+        "closing the evidence path bought.**"
+    )
+
+
+def a_committing_design_is_not_stable_while_the_commit_runs() -> str:
+    """Mine, caught by a diff that went empty between two reads.
+
+    The lesson is not the file layout; it is that a run's artifacts have a
+    meaning ONLY at rest, and this plan's instruments read them while moving.
+    """
+    return (
+        "**`dut.v` IS REWRITTEN DURING A COMMIT AND ROLLED BACK WHEN THE RATCHET "
+        "REFUSES, SO A MID-FLIGHT READ RETURNS A CANDIDATE THAT MAY NEVER HAVE "
+        "BEEN ACCEPTED.** I read it between a commit's start and its verdict, "
+        "found it changed, concluded the design had moved, and started grading "
+        "it. Thirty seconds later the same file was back to the baseline.\\n\\n"
+        "**THE TELL WAS A DIFF THAT WENT EMPTY.** `diff L_afterCHK.v "
+        "loopEV/dut.v` printed fifteen lines, then nothing, with no edit of mine "
+        "in between -- which is not something a settled run does.\\n\\n"
+        "**THREE ARTIFACTS OF THIS RUN MEAN DIFFERENT THINGS AND ONLY ONE IS THE "
+        "ACCEPTED DESIGN:**\\n\\n"
+        "    dut.v      the accepted design AT REST; a candidate mid-commit\\n"
+        "    staged.v   the staged buffer, which SURVIVES a rejection by design\\n"
+        "    best.v     written by `note_best`, which tracks the CELL count --\\n"
+        "               an instrument this arm removed from the ratchet\\n"
+        "    run1/      overwritten by every review, so it describes whichever\\n"
+        "               text was last simulated, not the one that latched\\n\\n"
+        "**SO A DESIGN MUST BE READ WITH THE RUN QUIESCENT AND SCORED IN ITS OWN "
+        "CLEAN DIRECTORY**, which this plan already required for the second "
+        "reason and had not stated for the first. The cost here was one wasted "
+        "scoring run, caught before any number from it was reported -- and the "
+        "same defect reported would have been a design movement that never "
+        "happened."
+    )
