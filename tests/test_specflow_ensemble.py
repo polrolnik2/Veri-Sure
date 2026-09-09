@@ -2151,3 +2151,46 @@ def test_the_replication_is_owed_a_third_time():
     t = ensemble.the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty()
     flat = " ".join(t.split())
     assert "STILL OWED, FOR THE THIRD TIME" in flat
+
+
+def test_the_pair_landed_blindness_down_and_audit_zero():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "**55.1%**" in flat and "56.9%" in flat
+    assert "102 CELLS CLOSED AT AN AUDIT OF ZERO" in flat
+
+
+def test_the_previous_authoring_round_is_the_null_it_beats():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "closed **exactly zero** new cells" in flat
+    assert "Naming the cell is the difference" in flat
+
+
+def test_the_corpus_finding_stands_and_the_generalisation_does_not():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "STANDS AND THE GENERALISATION I BUILT ON IT DOES NOT" in flat
+    assert "a curve over SELECTIONS, and authoring moves off that curve" in flat
+
+
+def test_the_authoring_rate_did_not_move():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "6 of 37 = 16%" in flat
+    assert "naming the cell did not change how often an author lands" in flat
+
+
+def test_the_mis_assignment_denominator_is_corrected():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "TEXT MENTIONED THE PORT" in flat
+    assert "~29 answerable targets it is 21%" in flat
+    assert "Both numbers, never one" in flat
+
+
+def test_the_positive_is_a_rate_not_a_set():
+    t = ensemble.authoring_at_a_named_hole_closes_cells_that_selection_cannot()
+    flat = " ".join(t.split())
+    assert "102 of 3,221 is 3% of the residue" in flat
+    assert "a positive RATE, not a complete set" in flat

@@ -4197,3 +4197,61 @@ def the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty() -> str:
         "attempts: one informative (exact partition, p = 0.003), one at a 94% "
         "base rate, one against a null a sampler defect invalidated."
     )
+
+
+def authoring_at_a_named_hole_closes_cells_that_selection_cannot() -> str:
+    """The first positive of the session on the goal's central axis, and it
+    refutes a generalisation I drew from the corpus three findings earlier.
+
+    Pre-registered as a PAIR -- blindness down AND audit zero -- because
+    blindness bought with false rejection is measured to drive designs worse.
+    """
+    return (
+        "Every set measured here was a SELECTION over 594 bodies authored in "
+        "earlier sessions, and over that corpus the answer is flat: of 431 "
+        "unused bodies, 296 close a set hole and **every one convicts the "
+        "reference**; 0 decide-and-spare. I let that harden into a claim about "
+        "the problem. It is a claim about the corpus.\n\n"
+        "**37 checks authored AT A NAMED HOLE** -- a (pair, testpoint, port) "
+        "cell where two spec-derived designs disagree on a declared output and "
+        "no check in the sound 163-check set objects to either. The author gets "
+        "the port, the testpoint, both designs' rows and its requirement's "
+        "sentence. Golden-free by construction: the disagreement between two "
+        "spec-written designs is the whole evidence, and at most one can be "
+        "right.\n\n"
+        "    integrity   37 of 37 returned, 37 compile, 0 duplicate bodies,\n"
+        "                0 identical to any existing corpus body\n"
+        "    vacuous     6      object on no cell at all\n"
+        "    over-strict 25     convict 5 to 7 of the 7-design population\n"
+        "    ACCEPTED     6     decide, and convict at most 3 of 7\n\n"
+        "**THE PAIR, AND BOTH HALVES LANDED:**\n\n"
+        "    set                          checks   SET BLINDNESS   *audit*\n"
+        "    CEIL2, the sound base          163       56.9%        *0*\n"
+        "    CEIL2 + the six authored       169       **55.1%**    ***0***\n"
+        "    cells closed                                102\n\n"
+        "**102 CELLS CLOSED AT AN AUDIT OF ZERO.** Small -- 1.8 points of "
+        "3,221 holes -- and it is the thing selection cannot do at any price. "
+        "The one previous authoring round closed **exactly zero** new cells: "
+        "its 17 accepted checks were a strict subset of what the base already "
+        "caught. Naming the cell is the difference.\n\n"
+        "**SO `no_body_in_this_corpus_closes_a_set_hole_soundly` STANDS AND THE "
+        "GENERALISATION I BUILT ON IT DOES NOT.** The corpus contains no sound "
+        "hole-closer; a sound hole-closer is nonetheless writable. Every "
+        "blindness-versus-audit figure here is a curve over SELECTIONS, and "
+        "authoring moves off that curve.\n\n"
+        "**THE RATE, WITH THE DENOMINATOR CORRECTED FOR MY OWN DEFECT.** 6 of "
+        "37 = 16%, which is the 15% the previous round got and the 3% every "
+        "earlier round got -- naming the cell did not change how often an "
+        "author lands. At least 8 targets were mis-assigned, because "
+        "`mkhole.py` paired a requirement to a hole when its TEXT MENTIONED "
+        "THE PORT rather than when its sentence GOVERNED THE CELL; against ~29 "
+        "answerable targets it is 21%. Both numbers, never one.\n\n"
+        "**WHAT IT DOES NOT ESTABLISH.** 102 of 3,221 is 3% of the residue, "
+        "and these are the cells a first pass reaches -- there is no reason to "
+        "think the rate holds as the easy ones are consumed. It is a positive "
+        "RATE, not a complete set, and only an editor run says whether a set "
+        "built this way reaches the goal's terminal condition. What is settled "
+        "is the direction: the lever is authoring, the residue is addressable "
+        "at zero audit cost, and the corpus was the limit rather than the "
+        "problem."
+    )
