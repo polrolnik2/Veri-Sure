@@ -1119,3 +1119,33 @@ def test_the_requirement_on_a_working_criterion_is_stated():
     t = ensemble.a_consensus_cannot_outrank_a_competent_reader_at_any_size()
     assert "BETTER READER than the design" in t
     assert "reads the SENTENCES rather than voting" in t
+
+
+def test_the_two_instruments_are_scored_side_by_side():
+    t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
+    assert "28.5%" in t and "71.4%" in t
+    assert "ONE HAS INVERTED AND THE OTHER HAS NOT" in t
+
+
+def test_the_mechanism_predicts_which_instrument_survives():
+    t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
+    assert "vote over IMPLEMENTATIONS" in t
+    assert "reads one requirement SENTENCE" in t
+
+
+def test_the_editor_is_recorded_as_discarding_true_objections():
+    t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
+    assert "five true objections" in t
+    assert "REQ-0081" in t and "right about those" in t
+
+
+def test_the_conclusion_is_split_rather_than_generalised():
+    t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
+    assert "TRUE of a consensus" in t and "NOT SHOWN of checks" in t
+    assert "COVERAGE" in t
+
+
+def test_the_calibration_is_labelled_before_the_arm_runs():
+    t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
+    assert "that is calibration" in t
+    assert "may be quoted as an uncalibrated golden-free score" in t

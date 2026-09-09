@@ -2425,3 +2425,51 @@ def a_consensus_cannot_outrank_a_competent_reader_at_any_size() -> str:
         "objecting 7 times is not enough coverage to carry a design the rest of "
         "the way."
     )
+
+
+def the_two_instruments_came_apart_and_only_one_was_overtaken() -> str:
+    """The precision test applied to the OTHER instrument, and it is the first
+    positive result in this region.
+
+    Every finding above measures the consensus and concludes that spec-derived
+    criteria are exhausted. That generalised from one instrument to a class
+    without checking the other member of it.
+    """
+    return (
+        "**THE SAME TEST, ON BOTH INSTRUMENTS, ON THE SAME DESIGN, RESTRICTED "
+        "TO WHERE EACH WOULD ACTUALLY OBJECT:**\\n\\n"
+        "    the consensus of seven     375 right of 1,314 objections   28.5%\\n"
+        "    the 117 spec checks          5 SOUND of 7 objections       71.4%\\n\\n"
+        "**ONE HAS INVERTED AND THE OTHER HAS NOT**, and 71.4% against 28.5% is "
+        "not a margin that needs statistics.\\n\\n"
+        "**THE MECHANISM SAYS WHY, AND IT PREDICTS THE SPLIT RATHER THAN "
+        "EXCUSING IT.** A consensus is a vote over IMPLEMENTATIONS, so its "
+        "accuracy tracks how hard a cell is to read -- which is the same "
+        "variable that governs the design's accuracy, so the two move together "
+        "and the design overtakes it. A check reads one requirement SENTENCE. "
+        "Nothing ties its errors to the population's errors and nothing ties "
+        "its accuracy to cell difficulty, so it is not overtaken by a design "
+        "getting better at reading the same text.\\n\\n"
+        "**AND THE EDITOR STOPPED BECAUSE IT DISBELIEVED THE ONE INSTRUMENT "
+        "THAT WAS STILL RIGHT.** It reported the remaining objections as "
+        "'check-methodology artifacts or genuine spec contradictions' and "
+        "stopped with 21 trials unspent. The audit says 5 of the 7 are SOUND -- "
+        "REQ-0015.v2@n3, REQ-0064.t1@n3, REQ-0073.shipping@narrow, "
+        "REQ-0087.shipping and REQ-0088.shipping each decide on a design that "
+        "satisfies the specification and convict it nowhere, so each objection "
+        "is a real defect. Only REQ-0081's two bodies are unsound, and the "
+        "editor was right about those. **It threw away five true objections "
+        "along with two false ones, on one mis-diagnosis.**\\n\\n"
+        "**SO THE PLAN'S OWN CONCLUSION NEEDS SPLITTING.** 'A spec-derived "
+        "criterion cannot carry this design further' is TRUE of a consensus "
+        "over designs and NOT SHOWN of checks over sentences. The gap for the "
+        "checks is COVERAGE -- 117 of them produce 7 objections on a design "
+        "wrong at 205 of 348 testpoints -- and coverage is the one thing the "
+        "goal explicitly licenses regenerating.\\n\\n"
+        "**WHAT IS CALIBRATED AND WHAT IS NOT, stated before the arm runs.** "
+        "Choosing WHICH instrument to keep was decided by an audit against the "
+        "known-good design; that is calibration, which the goal permits, and it "
+        "is labelled. The criterion that then drives the editor reads only "
+        "requirement sentences. No figure from a run built this way may be "
+        "quoted as an uncalibrated golden-free score."
+    )

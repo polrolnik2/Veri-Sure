@@ -1945,3 +1945,64 @@ readers of the same text. The instrument that could be is one that reads the
 **sentences** rather than voting over implementations — which is exactly what
 the checks are, and 117 of them objecting 7 times is not enough coverage to
 carry a design the rest of the way.
+
+## THE TWO INSTRUMENTS CAME APART, AND ONLY ONE WAS OVERTAKEN
+
+Every finding above measures the **consensus** and concludes that spec-derived
+criteria are exhausted. That generalised from one instrument to a class without
+checking the other member of it. The same precision test, both instruments, same
+design, each restricted to where it would actually object:
+
+| instrument | right | objections | **precision** |
+|---|---|---|---|
+| the consensus of seven | 375 | 1,314 | **28.5%** |
+| the 117 spec checks | 5 SOUND | 7 | **71.4%** |
+
+**One has inverted and the other has not**, and 71.4% against 28.5% is not a
+margin that needs statistics.
+
+### The mechanism predicts the split rather than excusing it
+
+A consensus is a vote over **implementations**, so its accuracy tracks how hard a
+cell is to read — the same variable that governs the design's accuracy. The two
+move together and the design overtakes it, which is the population curve above.
+
+A check reads one requirement **sentence**. Nothing ties its errors to the
+population's errors and nothing ties its accuracy to cell difficulty, so it is
+not overtaken by a design getting better at reading the same text.
+
+### And the editor stopped because it disbelieved the instrument that was right
+
+It reported the remaining objections as *"check-methodology artifacts or genuine
+spec contradictions"* and stopped with 21 trials unspent. The audit:
+
+| check | decides on the reference design | convicts it | |
+|---|---|---|---|
+| REQ-0015.v2@n3 | 132 | 0 | **SOUND** |
+| REQ-0064.t1@n3 | 212 | 0 | **SOUND** |
+| REQ-0073.shipping@narrow | 73 | 0 | **SOUND** |
+| REQ-0081.control | 34 | **1** | unsound |
+| REQ-0081.merge@merge | 34 | **1** | unsound |
+| REQ-0087.shipping | 348 | 0 | **SOUND** |
+| REQ-0088.shipping | 73 | 0 | **SOUND** |
+
+Five of seven objections are real defects. Only REQ-0081's two bodies are
+unsound, and the editor was right about those. **It threw away five true
+objections along with two false ones, on one mis-diagnosis** — the REQ-0087
+contradiction claim the audit refutes.
+
+### So the plan's conclusion needs splitting, not repeating
+
+*"A spec-derived criterion cannot carry this design further"* is **true of a
+consensus over designs** and **not shown of checks over sentences.** The gap for
+the checks is **coverage** — 117 of them produce 7 objections on a design wrong
+at 205 of 348 testpoints — and coverage is the one thing the goal explicitly
+licenses regenerating.
+
+### What is calibrated here, stated before the arm runs
+
+Choosing **which** instrument to keep was decided by an audit against the
+reference design. That is calibration, which the goal permits, and it is
+labelled. The criterion that then drives the editor reads only requirement
+sentences. **No figure from a run built this way may be quoted as an
+uncalibrated golden-free score.**
