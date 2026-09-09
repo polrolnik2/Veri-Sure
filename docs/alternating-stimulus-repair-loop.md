@@ -1478,3 +1478,113 @@ and is the artifact to put in front of whoever can make that decision. Nothing
 here can make it: a targeted reader asked one question about one such cell
 reproduces the population's own wrong answer 7 times in 9, and **0 of 20 noticed
 the question was open.**
+
+# THE STACKED SPEC-ONLY CRITERION: ONE TESTPOINT, AND THE FLOOR AGAIN
+
+The strongest spec-only configuration this plan can build. Unanimity over seven
+independently written implementations gives a dense gradient, right 99.1% where
+it speaks and **silent** on the 6% of cells they split on — which is the whole of
+the floor. The 117 requirement-derived checks are the only other spec-only
+instrument that says anything *there*. Both in one ratchet, 30 trials, from
+unedited L, one writer under the lock, working dataflow slice.
+
+| criterion | testpoints of 348 | cells | trials | grade |
+|---|---|---|---|---|
+| L, unedited | 279 = 80% | 4,450 | — | — |
+| consensus alone | 210 = 60% | 3,890 | 7 of 14 | `DIFFERS` |
+| 117 checks alone | 206 = 59% | 3,866 | 8 of 14 | `DIFFERS` |
+| **both, stacked** | **205 = 59%** | 3,608 | **27 of 30** | **`DIFFERS`** |
+
+**Stacking a second spec-only instrument bought ONE testpoint, on nearly four
+times the budget.**
+
+## The split residue, for the fourth time, monotone
+
+| design | agree-cell wrongness | split-cell wrongness | share of residue in SPLIT |
+|---|---|---|---|
+| L, unedited | 9,140 (3.8%) | 5,464 | 37% |
+| after the checks | 3,066 (1.3%) | 3,837 | 56% |
+| after the consensus | 1,718 (0.7%) | 3,405 | 66% |
+| **after both** | **1,302 (0.5%)** | 3,129 | **71%** |
+
+Each instrument clears what it can see. **Stacking them clears more of the
+visible region and nothing of the invisible one.**
+
+## The Goodhart measurement, now with seventeen trials behind it
+
+The editor was resumed and explicitly told not to stop early. Trials 11–27:
+
+| | proxy: cells | proxy: checks | **GRADE: testpoints** | **GRADE: cells** |
+|---|---|---|---|---|
+| after trial 10 | 1,924 | 8 of 117 | **204** | **3,577** |
+| after trial 27 | **1,693** | **6 of 117** | **205** | **3,608** |
+
+**−12% and −25% on what the loop optimises; backwards on both measures of what
+it is judged by.** Once the region a spec-derived criterion can see is
+exhausted, further descent on it is uncorrelated with correctness.
+
+## And a majority vote cannot fill the silence — measured BEFORE this run
+
+In the cells where the seven split, the majority value equals the reference's
+**38.4% of the time.** Below chance: a majority criterion steers *away* in 62% of
+the cells where it speaks. By margin:
+
+| agreement | cells | majority right |
+|---|---|---|
+| 4 of 7 | 422 | 74.9% |
+| **5 of 7** | 5,731 | **12.3%** |
+| 6 of 7 | 7,820 | 55.5% |
+
+At five-of-seven the two dissenters are right **87.7%** of the time — the
+population converges on the wrong answer and the outliers read the specification
+correctly. **So unanimity's refusal to speak there is OPTIMAL for a population
+criterion, not conservative**, and the floor is a property of the specification
+rather than of the choice of vote.
+
+## AND A DEFECT IN MY OWN COMBINED CRITERION: TWO INSTRUMENTS, NO WEIGHTS
+
+`_EditSession.commit` latches on a COUNT of passing units. Putting two
+instruments in that count without weighting them makes the ratio of their
+cardinalities the exchange rate between them, silently:
+
+| | units |
+|---|---|
+| (output, testpoint) pairs | 3,480 |
+| per-output | 10 |
+| **checks** | **117 — 3.2% of the total** |
+
+**One check weighs the same as one output on one testpoint — 1/29 of the
+cell-derived mass.** The checks were nominally in the ratchet and effectively
+powerless, which is the mechanism behind the stacked run gaining a single
+testpoint.
+
+**And it shipped a design violating a sound check, deliberately.** The editor
+added a live cache-inhibit guard to `tag_we`, gained ~11 cells, and broke
+REQ-0034 — a check all six of whose members spare the reference. It attempted the
+revert **three times, in three forms, and the ratchet refused every one**, because
+returning the pair-units cost more than the single check unit regained. It
+documented the trade and could not act on it.
+
+**So a combined criterion is a weighting decision and must be made explicitly.**
+Summing two instruments does not combine them; it prices one in units of the
+other at whatever ratio their cardinalities happen to have — and **the sparse
+instrument is exactly the one that loses, because sparse is what it is for.**
+
+## THE EDITOR'S SOUNDNESS JUDGEMENT, FOUR RUNS: 7 OF 29
+
+This editor claimed REQ-0087.shipping and REQ-0087.control are unsatisfiable
+together, having tested *both* formulations and concluded no third exists. Both
+convict the reference **zero** times, so a design satisfying both exists and so
+does the third formula. That is the **fourth** structural-contradiction claim in
+four runs and the fourth refutation.
+
+| flagged unsatisfiable | *convicts the reference* | |
+|---|---|---|
+| REQ-0087.shipping, REQ-0087.control | *0, 0* | **wrong** |
+| REQ-0029.t2, REQ-0030.control, REQ-0030.band@band | *0* | **wrong** |
+| REQ-0015.v2@n3, REQ-0064.t1@n3 | *0* | **wrong** |
+| **REQ-0081.control, REQ-0081.merge@merge** | ***1, 1*** | **right** |
+
+**2 of 8, and 7 of 29 across four runs ≈ 24%.** REQ-0081 is the one genuinely
+unsound check in the set, and **the last two editors independently found it** —
+a real signal inside a 24%-precision channel.

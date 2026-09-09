@@ -2021,3 +2021,93 @@ def the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints() -> str:
         "10-12x and is the artifact to put in front of whoever can make that "
         "decision. It is not an instrument this pipeline can build."
     )
+
+
+def two_spec_only_instruments_stacked_still_stop_at_the_floor() -> str:
+    """The strongest spec-only configuration this plan can build, run to 27 of
+    30 trials, graded on the same instrument as every other arm.
+
+    Unanimity over seven independently written implementations gives a dense
+    gradient and is right 99.1% where it speaks, but is SILENT on the 6% of
+    cells the seven split on -- and that silence is the whole of the measured
+    floor. The 117 requirement-derived checks are the only other spec-only
+    instrument that says anything there. Both were put in one ratchet.
+    """
+    return (
+        "    criterion                    testpoints of 348   cells   trials\\n"
+        "    the design, unedited               279 = 80%     4,450      --\\n"
+        "    consensus alone                    210 = 60%     3,890    7/14\\n"
+        "    117 checks alone                   206 = 59%     3,866    8/14\\n"
+        "    BOTH, stacked                      205 = 59%     3,608   27/30\\n\\n"
+        "**`DIFFERS`, three pins green.** Stacking a second spec-only instrument "
+        "on the first bought ONE testpoint over either alone, on nearly four "
+        "times the trial budget.\\n\\n"
+        "**AND THE SPLIT RESIDUE SAYS WHY, FOR THE FOURTH TIME.** The share of "
+        "remaining wrongness sitting in cells the seven CANNOT agree on rises "
+        "monotonically as the criterion gets stronger -- 37% unedited, 56% after "
+        "the checks alone, 66% after the consensus alone, **71% after both** -- "
+        "while the error rate on cells they CAN agree on falls to 0.5%. Each "
+        "instrument clears what it can see; stacking them clears more of the "
+        "visible region and nothing of the invisible one.\\n\\n"
+        "**THE GOODHART MEASUREMENT, WITH A LARGE SAMPLE.** Trials 11-27 -- "
+        "seventeen of them, on an editor explicitly told not to stop early -- "
+        "improved BOTH proxies substantially and moved the grade backwards:\\n\\n"
+        "                        proxy: cells   proxy: checks   GRADE: testpoints\\n"
+        "    after trial 10             1,924         8 of 117            204\\n"
+        "    after trial 27             1,693         6 of 117            205\\n\\n"
+        "-12% and -25% on what the loop optimises, +1 on what it is judged by. "
+        "Once the region a spec-derived criterion can see is exhausted, further "
+        "descent on it is uncorrelated with correctness -- which is the same "
+        "shape as `conviction_count_is_not_a_descent_criterion`, now with 17 "
+        "trials behind it instead of a trajectory.\\n\\n"
+        "**A MAJORITY VOTE CANNOT FILL THE SILENCE, AND THAT WAS MEASURED "
+        "BEFORE THIS RUN RATHER THAN ASSUMED.** In the cells where the seven "
+        "split, the majority value equals the known-good design's **38.4% of "
+        "the time** -- below chance, so a majority criterion would steer AWAY "
+        "in 62% of the cells where it speaks. The breakdown is worse than the "
+        "headline: at 5-of-7 agreement the majority is right **12.3%** of the "
+        "time, meaning the two dissenters are right 87.7%. Unanimity's refusal "
+        "to speak there is therefore OPTIMAL for a population criterion, not "
+        "conservative, and the floor is a property of the specification rather "
+        "than of the choice of vote."
+    )
+
+
+def stacking_two_criteria_needs_weights_and_mine_had_none() -> str:
+    """A defect in the combined criterion, mine, found by reading what the loop
+    actually shipped rather than by any number looking wrong.
+
+    `_EditSession.commit` latches on a COUNT of passing units. Putting two
+    instruments in that count without weighting them makes the ratio of their
+    unit counts the exchange rate between them -- silently.
+    """
+    return (
+        "    (output, testpoint) pair units   3,480\\n"
+        "    per-output units                    10\\n"
+        "    CHECK units                        117   = 3.2% of the total\\n\\n"
+        "**ONE CHECK WEIGHS THE SAME AS ONE OUTPUT ON ONE TESTPOINT** -- 1/29 "
+        "of the cell-derived mass. The checks were nominally in the ratchet and "
+        "effectively powerless, which is the mechanism behind the combined run "
+        "beating the check-only run by a single testpoint.\\n\\n"
+        "**AND IT SHIPPED A DESIGN VIOLATING A SOUND CHECK, DELIBERATELY.** On "
+        "one trial the editor added a live cache-inhibit guard to `tag_we`, "
+        "gained ~11 cells, and broke REQ-0034 -- a check all six of whose "
+        "members spare the known-good design. It attempted the revert THREE "
+        "times, in three forms, and **the ratchet refused every one**, because "
+        "returning the pair-units cost more than the single check unit regained. "
+        "The editor documented the trade and could not act on it. The arithmetic "
+        "preferred cells and there was no way for it to say otherwise.\\n\\n"
+        "**SO A COMBINED CRITERION IS A WEIGHTING DECISION AND MUST BE MADE "
+        "EXPLICITLY.** Summing two instruments does not combine them; it prices "
+        "one in units of the other at whatever ratio their cardinalities "
+        "happen to have. The sparse instrument -- the one carrying the semantic "
+        "content, and the only one that speaks where the dense one is silent -- "
+        "is exactly the one that loses under an unweighted sum, because sparse "
+        "is what it is FOR.\\n\\n"
+        "This is the third granularity finding here and the first about "
+        "composition rather than resolution. "
+        "`a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` says ratchet "
+        "at the granularity of the property; this says that when two properties "
+        "share a ratchet, their relative weight is a design parameter and "
+        "leaving it implicit sets it to an accident of counting."
+    )

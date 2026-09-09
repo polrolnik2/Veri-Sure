@@ -938,3 +938,33 @@ def test_the_floor_is_supported_by_a_trajectory():
     t = ensemble.the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints()
     assert "37%" in t and "56%" in t and "66%" in t
     assert "mechanism rather than a correlation" in t
+
+
+def test_the_stacked_criterion_reports_one_testpoint_of_gain():
+    t = ensemble.two_spec_only_instruments_stacked_still_stop_at_the_floor()
+    assert "205 = 59%" in t
+    assert "bought ONE testpoint over either alone" in t
+
+
+def test_the_stacked_criterion_carries_the_goodhart_sample():
+    t = ensemble.two_spec_only_instruments_stacked_still_stop_at_the_floor()
+    assert "-12% and -25% on what the loop optimises" in t
+    assert "17 trials behind it" in t
+
+
+def test_the_majority_vote_is_recorded_as_below_chance():
+    t = ensemble.two_spec_only_instruments_stacked_still_stop_at_the_floor()
+    assert "38.4%" in t and "12.3%" in t
+    assert "OPTIMAL for a population criterion" in t
+
+
+def test_the_weighting_defect_names_the_exchange_rate():
+    t = ensemble.stacking_two_criteria_needs_weights_and_mine_had_none()
+    assert "3.2% of the total" in t and "1/29" in t
+    assert "the ratchet refused every one" in t.lower()
+
+
+def test_the_weighting_defect_states_the_general_rule():
+    t = ensemble.stacking_two_criteria_needs_weights_and_mine_had_none()
+    assert "prices one in units of the other" in t
+    assert "sparse is what it is FOR" in t
