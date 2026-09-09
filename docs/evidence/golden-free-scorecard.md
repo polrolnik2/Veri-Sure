@@ -104,15 +104,78 @@ and validated against what the loop achieves rather than against how a set looks
 stopping for budget. A blinder set stops giving feedback sooner. Scope is two
 runs — the gap is large and monotone, and two points do not establish a slope.*
 
-## 8. The bottom line
+## 8. The trade is a curve, not two points — and the reference is off it
 
-**Completeness cannot be assured golden-free on this corpus.** The blindness
-ranker is excellent and the soundness rule is perfect at n=126; composing them
-yields a set that is sound, spans 56% of the specification, and is blind to
-99.8% of the disagreements it is shown. The 288 corpus bodies that *do* close
-holes all convict a correct design, so the missing instrument is the one twelve
-routes have failed to build: something that separates a legitimate demand from
-an over-strict one without a reference.
+Section 2's four sets were built separately and read as anecdotes. They are four
+samples of ONE golden-free knob, and sweeping it end to end turns the trade into
+a measurement. The knob: **keep a check that convicts at most t of the seven
+independently written spec-derived designs.**
+
+**The sweep reproduces three of the separately-built sets byte for byte** —
+t = 0 is ZERO, t = 2 is FREE, t = 7 is the minimum-blindness set — which is what
+says it is the same instrument rather than a new one. The five intermediate
+thresholds had never been scored.
+
+| t | checks | span of 87 | **set blindness** | population objections | spread/mean | *audit* |
+|---|---|---|---|---|---|---|
+| 0 | 126 | 55 = 63% | **99.8%** | 0 – 0 | — | *0 = 0.0%* |
+| 1 | 149 | 63 = 72% | 93.5% | 0 – 19 | 578% | *11 = 7.4%* |
+| 2 | 167 | 68 = 78% | 66.5% | 0 – 32 | 380% | *22 = 13.2%* |
+| 3 | 171 | 68 = 78% | 64.2% | 0 – 34 | 335% | *23 = 13.5%* |
+| 4 | 179 | 69 = 79% | 61.9% | 7 – 34 | 184% | *27 = 15.1%* |
+| 5 | 188 | 70 = 80% | 52.7% | 11 – 34 | 109% | *27 = 14.4%* |
+| **6** | **201** | **71 = 82%** | **40.4%** | 22 – 38 | 50% | *38 = 18.9%* |
+| 7 | 464 | 73 = 84% | **0.0%** | 285 – 301 | **5.4%** | *299 = 64.4%* |
+
+**BLINDNESS FALLS ONLY AS THE AUDIT RISES, AT EVERY THRESHOLD.** Completeness
+and soundness are not two properties a better rule could optimise jointly.
+Golden-free, on this corpus, they are one knob read in two directions.
+
+### And CEIL2 is not on this curve, which is what the reference is worth
+
+CEIL2 is **56.9% blind at an audit of zero**. To reach 52.7% golden-free costs
+14.4% false rejection. The mechanism is arithmetic rather than a tendency: 161
+of CEIL2's 163 checks lie inside t = 6, and t = 6 holds exactly 38 audit
+failures — so **CEIL2 is very nearly t = 6 with its unsound members removed, and
+removing them takes blindness from 40.4% back to 56.9%.** Those 38 checks close
+933 disagreement cells and nothing sound replaces them.
+
+### The second opposition, and it is independent of soundness
+
+Set blindness asks whether SOME check objects somewhere in a disagreeing cell.
+It says nothing about whether the objection COUNT orders designs — and at the
+completeness floor it does not. **Eight designs that differ across a large
+fraction of the suite are separated by sixteen checks of 464.** The bodies that
+close the last holes convict every design, so they contribute a constant to
+every score.
+
+So a loop descending the raw count of a complete set descends a signal with a 5%
+dynamic range. **Completeness and drivability are opposed too, for a different
+reason than the audit.** What is measured is a limit on the RAW COUNT, which is
+what every loop here has descended; a weighting or a per-requirement fold could
+in principle recover a gradient it does not have.
+
+## 9. The bottom line
+
+**Completeness cannot be assured golden-free on this corpus, and section 8
+makes that a measured curve rather than an inference from two sets.** Every
+golden-free step toward completeness is a step into false rejection, monotonically,
+across all eight thresholds — so the obstruction is a trade rather than a missing
+instrument that a thirteenth route might supply. The blindness ranker is
+excellent and the soundness rule is perfect at n=126; composing them yields a set
+that is sound, spans 56% of the specification, and is blind to 99.8% of the
+disagreements it is shown. The 288 corpus bodies that *do* close holes all convict
+a correct design.
+
+**And the reference is doing work no rule over the population reproduces.** A
+set at 56.9% blindness and zero false rejection exists; it is reachable only by
+asking the reference which checks to keep. That is the sharpest statement this
+corpus supports of what a golden-free pipeline gives up.
+
+**A second, independent opposition:** the set that reaches the completeness floor
+cannot order the population by its own count — 5.4% dynamic range over eight
+visibly different designs — so completeness costs drivability as well as
+soundness.
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains
