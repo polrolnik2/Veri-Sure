@@ -2330,3 +2330,48 @@ precisely rather than treating it as a dead end.
 are spec-derived artifacts containing nothing from the reference design — but it
 changes the experiment from *can an editor repair from objections* to *from
 objections plus the criterion's source*, and those are not the same question.
+
+## THREE DROPPED VALUES, ONE ROOT CAUSE, AND THE FIFTH PART SAYS SOMETHING NEW
+
+`explain_failure` has rendered all five parts of §5.6's annotation since it was
+written. **The driver was feeding it three empty arguments.**
+
+| what was missing | why | the fix |
+|---|---|---|
+| the boundary trace | `_Res(rows=…)` never set | pass the rows |
+| the perturbation | emitted only `if rows` | the same rows |
+| the block internals | `vcd_by_tp` never populated | map by filename |
+
+**One root cause, three functions, and it is the one this plan has already
+recorded twice: every CLI call is a fresh process.** The rows were computed in
+`review()` and thrown away one line later. `req_accepted.json` round-trips
+`ok`, `edge`, `detail` and `tp_uid` and nothing else, so a reloaded `_Res` has
+no rows even when the review that produced them succeeded. And the suite had
+written **349 waveforms** to disk while the payload told the editor *"this run
+dumped no waveform"* — which is exactly why an editor spent a whole run reading
+boundary ports and source, and said so in its report.
+
+The rows did not need persisting: they are derivable from the trace the loader
+already reads, so the fix is to rebuild rather than store them. The waveforms
+needed nothing but a filename map.
+
+### And the fifth part says something no editor here has seen
+
+On the check two independent editors called unsatisfiable:
+
+> **NO single-value change at the deciding edge satisfies this check, so the
+> defect is TEMPORAL — the ordering or the timing, not a wrong value at one
+> edge.**
+
+**Both editors treated it as a formula problem** — *"no memoryless formula
+satisfies both"* — and made memoryless edits to `dc_addr`. The instrument that
+would have told them the *class* of defect was built, was correct, and was
+unreachable because three values were dropped between the review and the prompt.
+
+### So neither earlier stop measured the editor
+
+The first measured a loop that judged by checks and could not aim at one. The
+second measured a loop that could aim but had nothing to show. **Only the run
+after this one is evidence about whether a Sonnet editor can repair from a sound
+spec-derived criterion** — and reporting either earlier stop as an editor result
+would have been reporting my harness as a finding.

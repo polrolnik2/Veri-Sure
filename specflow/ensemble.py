@@ -2730,3 +2730,51 @@ def five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck() -> str:
         "editor repair from objections' to 'from objections plus the criterion's "
         "source', and the two are not the same question."
     )
+
+
+def three_dropped_values_and_one_root_cause() -> str:
+    """The evidence path, completed -- and the three defects between the editor
+    and the evidence were all the same mistake in three functions.
+
+    `the_editor_could_not_aim_at_what_it_was_judged_by` fixed the first. The
+    editor's next report named the remaining two precisely, and neither was a
+    missing capability: both were values computed and then dropped.
+    """
+    return (
+        "**`explain_failure` HAS RENDERED ALL FIVE PARTS OF ITS ANNOTATION SINCE "
+        "IT WAS WRITTEN. THE DRIVER WAS FEEDING IT THREE EMPTY ARGUMENTS.**\\n\\n"
+        "    what was missing        why                          the fix\\n"
+        "    the boundary trace      `_Res(rows=)` never set      pass the rows\\n"
+        "    the perturbation        emitted only `if rows`       the same rows\\n"
+        "    the block internals     `vcd_by_tp` never populated  map by filename\\n\\n"
+        "**ONE ROOT CAUSE, THREE FUNCTIONS, AND IT IS THE SAME ONE THIS PLAN HAS "
+        "ALREADY RECORDED TWICE: every CLI call is a fresh process.** The rows "
+        "were computed in `review()` and thrown away one line later. "
+        "`req_accepted.json` round-trips `ok`, `edge`, `detail` and `tp_uid` and "
+        "nothing else, so a reloaded `_Res` has no rows even when the review "
+        "that produced them succeeded. And the suite had written **349 "
+        "waveforms** to disk while the payload told the editor 'this run dumped "
+        "no waveform' -- which is why an editor spent a whole run reading "
+        "boundary ports and source, and said so.\\n\\n"
+        "**THE ROWS DID NOT NEED PERSISTING.** They are derivable from the trace "
+        "the loader already reads, so the fix is to rebuild rather than store "
+        "them -- and the waveforms needed nothing but a filename map.\\n\\n"
+        "**AND THE FIFTH PART SAYS SOMETHING NO EDITOR ON THIS PLAN HAS SEEN.** "
+        "On the check two independent editors called unsatisfiable, the "
+        "perturbation analysis reports:\\n\\n"
+        "    NO single-value change at the deciding edge satisfies this check,\\n"
+        "    so the defect is TEMPORAL -- the ordering or the timing, not a\\n"
+        "    wrong value at one edge.\\n\\n"
+        "**BOTH EDITORS TREATED IT AS A FORMULA PROBLEM** -- 'no memoryless "
+        "formula satisfies both' -- and made memoryless edits to `dc_addr`. The "
+        "instrument that would have told them the class of defect was built, "
+        "was correct, and was unreachable because three values were dropped "
+        "between the review and the prompt.\\n\\n"
+        "**SO THE HONEST READING OF THE TWO EARLIER STOPS IS THAT NEITHER "
+        "MEASURED THE EDITOR.** They measured a loop that judged by checks and "
+        "could not aim at one, then a loop that could aim but had nothing to "
+        "show. Only the run after this one is evidence about whether a Sonnet "
+        "editor can repair from a sound spec-derived criterion, and reporting "
+        "either earlier stop as an editor result would have been reporting my "
+        "harness as a finding."
+    )

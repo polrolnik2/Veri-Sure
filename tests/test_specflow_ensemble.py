@@ -1271,3 +1271,27 @@ def test_the_stuck_run_qualifies_itself():
     t = ensemble.five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck()
     assert "trace=False" in t
     assert "plus the criterion's" in t
+
+
+def test_the_evidence_path_names_three_dropped_values():
+    t = ensemble.three_dropped_values_and_one_root_cause()
+    assert "FEEDING IT THREE EMPTY ARGUMENTS" in t
+    assert "349" in t and "vcd_by_tp" in t
+
+
+def test_the_evidence_path_names_the_shared_root_cause():
+    t = ensemble.three_dropped_values_and_one_root_cause()
+    assert "every CLI call is a fresh process" in t
+    assert "did not need persisting" in t.lower()
+
+
+def test_the_perturbation_contradicts_both_editors():
+    t = ensemble.three_dropped_values_and_one_root_cause()
+    assert "the defect is TEMPORAL" in t
+    assert "memoryless edits" in t
+
+
+def test_the_earlier_stops_are_not_editor_results():
+    t = ensemble.three_dropped_values_and_one_root_cause()
+    assert "NEITHER\\nMEASURED THE EDITOR" in t or "MEASURED THE EDITOR" in t
+    assert "reporting my harness as a finding" in t
