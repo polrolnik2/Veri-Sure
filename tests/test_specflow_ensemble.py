@@ -1022,3 +1022,39 @@ def test_the_editors_hedge_is_recorded_as_the_reliable_part():
     t = ensemble.the_fifth_contradiction_claim_is_the_fifth_refutation()
     assert "right to decline" in t.lower()
     assert "REQ-0015.v2@n3" in t
+
+
+def test_the_answer_is_measured_present_in_the_population():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "13,210 of 13,973 cells = 94.5%" in t
+    assert "SELECTION, not absence" in t
+
+
+def test_the_split_distribution_is_recorded_as_bimodal():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "24.5%" in t and "31.4%" in t and "31.1%" in t
+    assert "opposite polarity" in t
+
+
+def test_dissent_is_recorded_as_a_spec_only_predictor():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "r = +0.882" in t
+    assert "correctness makes a design dissent" in t
+
+
+def test_no_selector_reaches_fifty_percent_precision():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "NOT ONE REACHES 50%" in t
+    assert "30.8%" in t and "19.2%" in t
+
+
+def test_the_general_law_names_the_design_under_test():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "CORRECTS ONLY WHERE ITS ACCURACY EXCEEDS THE DESIGN'S" in t
+    assert "77.5%" in t
+
+
+def test_the_law_qualifies_the_outside_the_loop_conclusion():
+    t = ensemble.a_criterion_only_corrects_where_it_beats_the_design_under_test()
+    assert "The first half is now refuted" in t
+    assert "a BETTER one" in t

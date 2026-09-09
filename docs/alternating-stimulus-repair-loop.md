@@ -1729,3 +1729,97 @@ argument. No gate can distinguish them either.
 One part of its judgement did track the truth. It flagged REQ-0015.v2@n3 as *"a
 hypothesis, not a finding"* because it could not get the evidence, and the audit
 says that check is sound. **The hedge was the reliable half.**
+
+## A CRITERION CORRECTS ONLY WHERE IT BEATS THE DESIGN IT IS JUDGING
+
+Five arms have now landed at 205, 206, 210, 205 and 205 testpoints of 348. That
+band has been reported as "where a spec-derived criterion stops" without a
+mechanism. Two audits supply one, and the first refutes half of this plan's own
+conclusion.
+
+### The answer is IN the population, 94.5% of the time
+
+The split region — the 6% of cells the seven spec-derived designs cannot agree
+on, carrying 65% of what the best arm still gets wrong — was assumed to be where
+the specification's answer is simply absent. It is not:
+
+| in a split cell, the right value is held by | cells | |
+|---|---|---|
+| **at least one of the seven** | **13,210** | **94.5%** |
+| none of them | 763 | 5.5% |
+
+**So the problem is selection, not absence.**
+
+### And the distribution is bimodal, which is why no vote can work
+
+| the right value is held by | share of split cells |
+|---|---|
+| 1 of 7 | 24.5% |
+| 2 of 7 | 31.4% |
+| 3 of 7 | 0.2% |
+| 4 of 7 | 2.3% |
+| 5 of 7 | 5.0% |
+| **6 of 7** | **31.1%** |
+
+Fifty-six percent of split cells have the answer in a minority of one or two;
+thirty-one percent have it in six of seven. **The two regimes want opposite
+polarity**, so any threshold wins one and loses the other — which is exactly the
+majority's measured 38.4%.
+
+### Dissent predicts who holds it, and dissent is spec-only
+
+| design | dissent rate (spec-only) | *audit: right in split cells* |
+|---|---|---|
+| G | 91.7% | *63.7%* |
+| C | 38.3% | *63.9%* |
+| F | 5.2% | *34.1%* |
+| H | 3.9% | *38.8%* |
+| E | 3.0% | *35.7%* |
+| B | 2.5% | *36.4%* |
+| D | 2.3% | *36.1%* |
+
+**Pearson r = +0.882** over the seven — n = 7, so a shape rather than a
+statistic. This is the outlier finding arriving *inside* the population:
+correctness makes a design dissent.
+
+### And every selector built on it is useless, for one reason
+
+Each selector reads only the seven designs. Each is scored twice — accuracy over
+all split cells, and **precision restricted to the cells where it would actually
+object**, which is the only place it can do harm or good:
+
+| selector | accuracy | objects on | **precision** |
+|---|---|---|---|
+| majority | 38.4% | 9,822 | **19.2%** |
+| minority | 56.0% | 4,787 | **13.2%** |
+| follow the top dissenter | 63.7% | 3,861 | **17.8%** |
+| follow the 2nd dissenter | 63.9% | 6,217 | **30.8%** |
+| anti-majority | 56.1% | 4,791 | **12.9%** |
+
+**Not one reaches 50%, so obeying any of them makes the design worse** — and the
+best accuracy in the table has the second-worst yield per objection.
+
+### The law, and it is arithmetic
+
+**The design under test is already right on 77.5% of split cells.** On the cells
+where a 63.9%-accurate selector disagrees with a 77.5%-accurate design, the
+selector is usually the one that is wrong. So its objections are mostly false
+whatever its headline accuracy says.
+
+> **A criterion corrects only where its accuracy exceeds the design's.**
+
+That is why five arms land in the same place. Where the seven agree the
+consensus is right 99.1% and beats the design comfortably, and every arm drives
+the agreed-cell error under 1%. Where they split, **nothing spec-derived beats
+it** — not a vote, not a minority, not the best single member — so the loop has
+nothing to say and the grade stops at the floor.
+
+### What this qualifies
+
+This plan concludes that the missing input is *"a decision on the
+underdetermined cells, from something outside the specification-plus-reader
+loop."* **The first half is refuted: the decision is inside, 94.5% of the time.**
+What is missing is an extractor, and extraction is hard for a reason the plan
+never named — the design under test is a competent reader of the same
+specification, and in the region that matters it is a **better** one than any
+rule over the population that produced it.
