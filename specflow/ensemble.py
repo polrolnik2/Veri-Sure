@@ -3282,3 +3282,52 @@ def three_editors_called_a_sound_set_self_contradictory() -> str:
         "the set is jointly achievable, and the difference is precisely where "
         "all three runs stopped."
     )
+
+
+def the_gradient_holds_on_a_set_that_rejects_everything() -> str:
+    """The 163-check run, reported under the reading its pre-registration fixed
+    BEFORE dispatch -- which is not the reading its numbers invite.
+
+    The numbers are the best on this plan. The pre-registration says they do not
+    answer the question the run was built to answer, and that is the reading
+    that governs.
+    """
+    return (
+        "A Sonnet editor, 21 trials, on the 163-check set -- sound (audit 0), "
+        "68% span, and objecting to all eight spec-derived designs. Started "
+        "from an unchecked design written from the specification and never "
+        "repaired. Re-measured in a clean run directory, three miter pins green "
+        "in the same process:\n\n"
+        "    at init          22 objections   279 of 348 testpoints (80%)   4,450 cells\n"
+        "    after 19 trials   **5**          **190 of 348 (55%)**          **3,287**\n"
+        "    grade            ***DIFFERS***\n\n"
+        "**OBJECTIONS FELL 77%, DIVERGENCE 32%, CELLS 26% -- ALL THREE TOGETHER.** "
+        "That has happened once before here and never on a set of this size. On "
+        "a set where zero objections is reachable by a correct design and no "
+        "design in the population reaches it, the accept criterion and the "
+        "grade move the same way for 19 consecutive trials.\n\n"
+        "**AND IT IS NOT A RESULT ABOUT THE SET, BY THE RULE FIXED BEFORE IT "
+        "RAN.** The pre-registration named three outcomes; this is the third -- "
+        "*an editor that stalls above zero with trials left measures the EDITOR, "
+        "not the set.* It stopped at 5 objections with **2 trials unspent.** So "
+        "the question the run was built to decide -- can this set drive a design "
+        "to equivalence -- is still open. It is not the strongest negative and "
+        "it is not a positive, and the temptation to bank the best numbers on "
+        "the plan as one is exactly what the pre-registration exists to "
+        "refuse.\n\n"
+        "**FOUR OF THE FIVE REMAINING OBJECTIONS ARE RECOVERED CHECKS** -- "
+        "bodies that had never been decided against any design before this "
+        "round. Three are variants of one requirement firing at the same "
+        "testpoint and edge, so the five objections are three distinct defects. "
+        "Together with the same corpus catching a design already driven to one "
+        "objection on the scored ceiling, **the checks doing the discriminating "
+        "at the END of a long run are overwhelmingly the ones that were sitting "
+        "unused**, which is where a Goodharted design would otherwise look "
+        "finished.\n\n"
+        "**AND THE BLINDNESS RESIDUE SHOWS UP AS A PORT, NOT A STATISTIC.** "
+        "`first_hit_ack` is the worst output at init (1,063 differing cells) and "
+        "ends at 938 -- essentially untouched, while every other output moved. A "
+        "set spanning 68% of the specification left the single largest source of "
+        "divergence almost unaddressed. That is this plan's 3.9%-of-exposed-"
+        "decisions figure with a name on it."
+    )

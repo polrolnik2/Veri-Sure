@@ -1551,3 +1551,29 @@ def test_the_joint_satisfiability_witness_is_circular():
     assert "circular" in t.lower() or "CIRCULAR" in t
     assert "artifact the loop is trying to produce" in t
     assert "not a missing instrument someone could go and build" in t
+
+
+def test_all_three_measures_moved_together():
+    t = ensemble.the_gradient_holds_on_a_set_that_rejects_everything()
+    assert "22 objections" in t and "**5**" in t
+    assert "80%" in t and "55%" in t
+    assert "ALL THREE TOGETHER" in t
+
+
+def test_the_run_is_not_reported_as_a_set_result():
+    """The pre-registered reading must survive the numbers being good."""
+    t = ensemble.the_gradient_holds_on_a_set_that_rejects_everything()
+    assert "2 trials unspent" in t
+    assert "measures the EDITOR" in t
+    assert "not the strongest negative and it is not a positive" in t
+
+
+def test_the_recovered_checks_carry_the_endgame():
+    t = ensemble.the_gradient_holds_on_a_set_that_rejects_everything()
+    assert "FOUR OF THE FIVE" in t
+    assert "three distinct defects" in t
+
+
+def test_the_untouched_output_is_named():
+    t = ensemble.the_gradient_holds_on_a_set_that_rejects_everything()
+    assert "first_hit_ack" in t and "1,063" in t and "938" in t
