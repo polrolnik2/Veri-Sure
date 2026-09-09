@@ -2157,3 +2157,61 @@ problem again. Both were restored and the round now lives in a directory that
 did not previously exist. This plan already records the rule — *arm purity is a
 property of the directory, not the batch list* — and it is easier to break than
 to remember.
+
+## NARROWING CROSSES THE BOUNDARY WITHOUT LANDING ON IT: 0 OF 31
+
+The gap round split 0-of-9 admissible-and-objecting against 27-of-31
+objecting-and-inadmissible. Narrowing is the only route between those states,
+and this plan measures it at 7 of 47 on a first attempt. So it was run: 31
+over-strict checks, each given the admissible objection — *your check objects to
+N of seven independently written implementations of this specification* — with
+integrity clean (31 of 31 answered, 0 broken, 0 shared bodies) and a leak check
+showing 0 reference-source lines, 0 testpoint ids, 0 equivalence verdicts and 0
+occurrences of the word "golden".
+
+| outcome | checks | convictions |
+|---|---|---|
+| narrowed to death — admissible, **silent** | 9 | **7 → 0** |
+| still over-strict | 22 | 7 → 7, or 6 → 5 |
+| **ADMISSIBLE AND OBJECTING** | **0** | — |
+
+**Zero of thirty-one, against a measured 15%.**
+
+### The conviction column is the finding, not the count
+
+**Every check that became admissible went from seven convictions to zero.** Not
+one landed at one or two. There is no gradual narrowing here — a check either
+demands something all seven independent implementations violate, or it demands
+nothing at all.
+
+### Which is the strength round's result from the opposite direction
+
+| round | direction | n | landed in between |
+|---|---|---|---|
+| STRENGTH — sound and blind, assert MORE | weak → strict | 34 | **0** |
+| **NARROWING — over-strict, assert LESS** | strict → weak | 31 | **0** |
+
+Both directions overshoot, and **the target between them is measured empty on 65
+attempts.**
+
+### So the coverage route closes on a transformation, not a yield
+
+The residue after the sequenced run was attributed to coverage — 117 checks
+producing five objections on a design differing at 186 of 348 testpoints — and
+coverage is exactly what the goal licenses regenerating. It was regenerated: on
+a targeted spec-only population, at the standard this plan's own measurements
+prescribe, with both rounds' integrity clean.
+
+| | before | after |
+|---|---|---|
+| requirements with a check | 47 of 89 = 53% | **52 of 89 = 58%** |
+| behavioural | 69% | **76%** |
+| **objections on the design** | **5** | **5** |
+
+### What a second narrowing round is worth, priced rather than guessed
+
+22 checks remain over-strict, and this plan measured a second attempt on the
+same check at **1 of 28 = 4%**. The observed jump — 7 to 0 with nothing between
+— predicts that whatever moves will overshoot as the first nine did. Expected
+yield is about one check, and the shape says it will not be an admissible
+objecting one.

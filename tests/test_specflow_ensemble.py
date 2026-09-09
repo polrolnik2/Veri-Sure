@@ -1193,3 +1193,27 @@ def test_the_gap_round_separates_span_from_signal():
     assert "52 of 89" in t
     assert "+5 and +0 now" in t
     assert "SPAN IS NOT THE METRIC" in t
+
+
+def test_the_narrowing_round_landed_zero():
+    t = ensemble.narrowing_crosses_the_boundary_without_landing_on_it()
+    assert "ZERO OF THIRTY-ONE, AGAINST A MEASURED FIRST-ATTEMPT RATE OF 15%" in t
+    assert "0 shared bodies" in t
+
+
+def test_the_narrowing_round_names_the_jump():
+    t = ensemble.narrowing_crosses_the_boundary_without_landing_on_it()
+    assert "SEVEN convictions to ZERO" in t
+    assert "no gradual narrowing" in t
+
+
+def test_the_narrowing_round_joins_the_strength_round():
+    t = ensemble.narrowing_crosses_the_boundary_without_landing_on_it()
+    assert "34 of 34 crossed" in t
+    assert "measured empty on 65 attempts" in t
+
+
+def test_the_narrowing_round_prices_a_second_attempt():
+    t = ensemble.narrowing_crosses_the_boundary_without_landing_on_it()
+    assert "1 of 28 = 4%" in t
+    assert "about one check" in t

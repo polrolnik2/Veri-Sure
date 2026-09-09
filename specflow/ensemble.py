@@ -2574,3 +2574,52 @@ def the_soundness_filter_selects_exactly_the_silent_checks() -> str:
         "from the objecting side to the admissible one, and its measured rate "
         "is about 15%."
     )
+
+
+def narrowing_crosses_the_boundary_without_landing_on_it() -> str:
+    """The coverage route closed with a mechanism rather than a tally, and it
+    is the strength round's finding arriving from the opposite direction.
+
+    `the_soundness_filter_selects_exactly_the_silent_checks` measures the gap
+    round splitting 0-of-9 admissible-and-objecting against 27-of-31
+    objecting-and-inadmissible. Narrowing is the only route between those
+    states. This is that route, run.
+    """
+    return (
+        "**31 OVER-STRICT CHECKS, NARROWED, WITH THE ADMISSIBLE OBJECTION THIS "
+        "PLAN VALIDATED** -- *your check objects to N of seven independently "
+        "written implementations of this specification* -- and a leak check "
+        "showing 0 lines of the reference design's source, 0 testpoint ids, 0 "
+        "equivalence verdicts and 0 occurrences of the word 'golden' across all "
+        "31 prompts. Integrity: 31 of 31 answered, 0 broken, 0 shared bodies.\\n\\n"
+        "    outcome                                    checks   convictions\\n"
+        "    narrowed to death -- admissible, SILENT       9      7 -> 0\\n"
+        "    still over-strict                            22      7 -> 7, 6 -> 5\\n"
+        "    ADMISSIBLE AND OBJECTING                      0        --\\n\\n"
+        "**ZERO OF THIRTY-ONE, AGAINST A MEASURED FIRST-ATTEMPT RATE OF 15%.** "
+        "And the conviction column is the finding rather than the count: **every "
+        "check that became admissible went from SEVEN convictions to ZERO.** Not "
+        "one landed at one or two. There is no gradual narrowing here -- a check "
+        "either demands something all seven independent implementations violate, "
+        "or it demands nothing.\\n\\n"
+        "**THAT IS THE STRENGTH ROUND'S RESULT FROM THE OPPOSITE DIRECTION.** "
+        "That round pushed 34 sound-and-blind checks to assert more: 34 of 34 "
+        "crossed the boundary and 0 landed in between. This pushes 31 "
+        "over-strict checks to assert less: 9 of 9 that moved crossed it "
+        "completely. **Both directions overshoot, and the target between them is "
+        "measured empty on 65 attempts.**\\n\\n"
+        "**SO THE COVERAGE ROUTE IS CLOSED, AND IT CLOSES ON A TRANSFORMATION "
+        "RATHER THAN A YIELD.** The residue after the sequenced run was "
+        "attributed to coverage -- 117 checks producing five objections on a "
+        "design differing at 186 of 348 testpoints -- and coverage is what the "
+        "goal licenses regenerating. It was regenerated, on a targeted "
+        "population, at the standard this plan's own measurements prescribe, "
+        "with both rounds' integrity clean. Span went 47 -> 52 of 89 = 58%, "
+        "and objections went 5 -> 5.\\n\\n"
+        "**WHAT A SECOND NARROWING ROUND IS WORTH, PRICED RATHER THAN GUESSED.** "
+        "22 checks are still over-strict, and this plan measured a second "
+        "attempt on the same check at 1 of 28 = 4%. The observed jump -- 7 to 0 "
+        "with nothing between -- predicts that whatever moves will overshoot as "
+        "the first nine did. Expected yield is about one check, and the shape "
+        "says it will not be an admissible objecting one."
+    )
