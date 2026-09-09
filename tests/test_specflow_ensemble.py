@@ -1416,3 +1416,28 @@ def test_both_ends_fail_in_opposite_ways():
     assert "UNREACHABLE for a correct design" in t
     assert "cannot force equivalence" in t
     assert "one defect with two signs" in t
+
+
+def test_the_ceiling_set_accepts_two_inequivalent_designs():
+    t = ensemble.no_sound_subset_of_this_corpus_forces_equivalence()
+    assert "0 convict it" in t
+    assert "B, and only B" in t and "DIFFERS" in t
+
+
+def test_the_impossibility_generalises_to_every_sound_subset():
+    t = ensemble.no_sound_subset_of_this_corpus_forces_equivalence()
+    assert "No sound subset of this corpus forces" in t
+    assert "Exhaustive" in t
+
+
+def test_no_threshold_separates_sound_from_convicting():
+    t = ensemble.no_sound_subset_of_this_corpus_forces_equivalence()
+    assert "near-even at every level" in t
+    assert "ceiling, not a score" in t
+
+
+def test_the_remedy_and_its_blocker_are_both_named():
+    t = ensemble.no_sound_subset_of_this_corpus_forces_equivalence()
+    assert "NEW CHECKS separating B" in t
+    assert "control leak" in t
+    assert "one design, one corpus" in t

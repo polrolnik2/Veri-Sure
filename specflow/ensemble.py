@@ -3011,3 +3011,48 @@ def seven_readings_seven_designs_and_the_soundness_sufficiency_trade() -> str:
         "every earlier set, terminating at zero was a certificate of "
         "NON-equivalence by arithmetic."
     )
+
+
+def no_sound_subset_of_this_corpus_forces_equivalence() -> str:
+    """Exhaustive over the corpus, with a witness pair, and it closes selection
+    as a route.
+
+    Every earlier negative here was about a PARTICULAR set. This is about all
+    of them at once, and it needs no further runs to establish.
+    """
+    return (
+        "**THE CEILING SET IS EVERY CORPUS CHECK THAT SPARES THE REFERENCE** -- "
+        "104 checks over 49 requirements, the 89 that convict none of the seven "
+        "spec-derived designs plus the 15 that convict some and spare the "
+        "reference. Verified: 104 decide on the reference, **0 convict it**.\\n\\n"
+        "    designs it accepts of the seven      B, and only B\\n"
+        "    B against the reference              *DIFFERS* (miter, three pins green)\\n\\n"
+        "**SO THE REFERENCE PASSES, B PASSES, AND THEY ARE NOT EQUIVALENT.** "
+        "That is sufficiency refuted with a WITNESS PAIR rather than left "
+        "untestable, and the argument generalises in one step: any SOUND subset "
+        "of this corpus is a subset of the 104, B satisfies all 104, so B "
+        "satisfies every sound subset. **No sound subset of this corpus forces "
+        "equivalence.** Exhaustive, no further runs required.\\n\\n"
+        "**AND NO GOLDEN-FREE RULE RECOVERS THE CEILING EITHER**, which closes "
+        "the other half. Splitting the 25 checks that convict at least one of "
+        "the seven by whether they also convict the reference:\\n\\n"
+        "    convicts 1 of 7    16 checks    5 convict the reference, 11 do not\\n"
+        "    convicts 2 of 7     8 checks    4 convict the reference,  4 do not\\n"
+        "    convicts 3 of 7     1 check     1 convicts the reference\\n\\n"
+        "The split is near-even at every level, so **no threshold on population "
+        "convictions separates a check that spares the reference from one that "
+        "convicts it.** The ceiling set is selected BY the reference and is a "
+        "ceiling, not a score.\\n\\n"
+        "**WHAT THIS LEAVES.** Selection over this corpus is closed as a route "
+        "to a set that forces equivalence -- not 'has not worked yet' but "
+        "cannot, because the best sound set the corpus admits accepts two "
+        "inequivalent designs. The remedy has to be NEW CHECKS separating B "
+        "from the reference. Authoring those from the reference's behaviour is "
+        "the control leak `oracles_stage.py:66-73` forbids, and nothing "
+        "golden-free identifies that particular gap -- the seven designs are "
+        "SEVEN equivalence classes and none of them is the reference, so the "
+        "population cannot point at it either.\\n\\n"
+        "**THE HONEST SCOPE.** This is one design, one corpus of 259 bodies and "
+        "one population of seven. It says selection is exhausted HERE; it does "
+        "not say a richer corpus could not contain a separating check."
+    )
