@@ -1524,3 +1524,30 @@ def test_disagreeing_in_both_directions_means_two_designs():
     t = ensemble.the_accepted_design_is_not_the_last_one_simulated()
     assert "BOTH DIRECTIONS AT ONCE" in t
     assert "never one design seen at two times" in t
+
+
+def test_the_conflict_conclusion_is_refuted_by_the_selection_rule():
+    t = ensemble.three_editors_called_a_sound_set_self_contradictory()
+    assert "no subset of the set is jointly unsatisfiable" in t
+    assert "REQ-0032" in t and "REQ-0069" in t
+
+
+def test_the_conflict_conclusion_costs_budget_not_just_accuracy():
+    t = ensemble.three_editors_called_a_sound_set_self_contradictory()
+    assert "8 of 14 trials unspent" in t
+    assert "adjudicating the oracle set" in t
+
+
+def test_per_check_satisfiability_does_not_compose():
+    """The number that separates the admissible fact from the needed one."""
+    t = ensemble.three_editors_called_a_sound_set_self_contradictory()
+    assert "161 of 163" in t
+    assert "**0**" in t
+    assert "does not compose" in t
+
+
+def test_the_joint_satisfiability_witness_is_circular():
+    t = ensemble.three_editors_called_a_sound_set_self_contradictory()
+    assert "circular" in t.lower() or "CIRCULAR" in t
+    assert "artifact the loop is trying to produce" in t
+    assert "not a missing instrument someone could go and build" in t

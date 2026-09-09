@@ -3227,3 +3227,58 @@ def the_accepted_design_is_not_the_last_one_simulated() -> str:
         "was written for exactly this, and was skipped because scoring the "
         "existing traces was faster."
     )
+
+
+def three_editors_called_a_sound_set_self_contradictory() -> str:
+    """The failure mode that ends these runs, now on its third reproduction --
+    and the one-line refutation is not available without the reference.
+
+    This is not a finding about a bad editor. All three were right that they
+    could not find a joint reading, and wrong about what that implied.
+    """
+    return (
+        "Three RTL editors, three different check sets, one conclusion: **the "
+        "remaining objections are checks that contradict each other, so no "
+        "design can satisfy them all.** Each time it is refutable in a single "
+        "line, because every member of each set was selected by *decides on the "
+        "reference and spares it*:\n\n"
+        "    the reference satisfies all N of them AT ONCE\n"
+        "    => no subset of the set is jointly unsatisfiable\n"
+        "    => for every pair called contradictory, a joint reading exists\n\n"
+        "On the 50-check ceiling an editor called `REQ-0032` and `REQ-0069` *a "
+        "contradiction baked into the check set*; on the 163-check set another "
+        "reported *three genuine, textually-evidenced conflicts between check "
+        "variants that cannot both be satisfied*. Both false, same way.\n\n"
+        "**AND IT IS EXPENSIVE RATHER THAN MERELY WRONG.** The ceiling run "
+        "terminated with 8 of 14 trials unspent on this basis. The budget is "
+        "not spent on the design; it is spent adjudicating the oracle set, and "
+        "then abandoned.\n\n"
+        "**WHY NO PROMPT FIXES IT.** From inside, *I cannot find a reading in "
+        "which both hold* and *there is no such reading* are the same "
+        "observation. The brief already says in as many words not to dismiss a "
+        "check as unsatisfiable, and says to find the reading in which both "
+        "hold. All three editors had that instruction and reached the "
+        "conclusion anyway, with budget remaining.\n\n"
+        "**THE PART THAT MATTERS FOR A GOLDEN-FREE PIPELINE, AND IT IS THE "
+        "SHARP ONE.** The refutation above reads the reference. Nothing else "
+        "here can supply it:\n\n"
+        "    checks each satisfied by >=1 of 7 spec-derived designs   161 of 163\n"
+        "    **designs in the population satisfying ALL 163**          **0**\n\n"
+        "Per-check satisfiability does not compose -- 161 checks each having "
+        "some design that satisfies it says nothing about whether one design "
+        "satisfies them together, and here no design in the population does. "
+        "**So *this set is jointly satisfiable* is exactly the fact the "
+        "editor needs, and exactly the fact a golden-free pipeline cannot "
+        "give it.**\n\n"
+        "**AND THE WITNESS IS CIRCULAR.** The only golden-free evidence that a "
+        "set is jointly satisfiable is a design satisfying all of it -- which "
+        "is the artifact the loop is trying to produce. It cannot be an input "
+        "to producing it. That is a structural gap in the golden-free story, "
+        "not a missing instrument someone could go and build.\n\n"
+        "**WHAT IS ADMISSIBLE, AND IT IS WEAKER.** A per-check population fact "
+        "-- *N of seven independently written implementations satisfy this "
+        "check* -- reads no reference and is true of 161 of the 163. It tells "
+        "an editor that a check is individually achievable. It does not tell it "
+        "the set is jointly achievable, and the difference is precisely where "
+        "all three runs stopped."
+    )
