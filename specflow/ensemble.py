@@ -2917,3 +2917,39 @@ def a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget() -> 
         "plan every objection the editor is asked to clear is one some design "
         "in this build could clear."
     )
+
+
+def six_designs_satisfy_the_group_three_editors_called_unsatisfiable() -> str:
+    """The 'mutually unsatisfiable' claim, refuted constructively rather than
+    by argument -- with witnesses, from the spec-derived population alone.
+
+    Three editors in succession have stopped on this group and reported that no
+    design can satisfy it. Each was reasoning from its own failed attempts.
+    """
+    return (
+        "**SIX OF SEVEN INDEPENDENTLY WRITTEN SPEC-DERIVED DESIGNS SATISFY ALL "
+        "SEVEN dc_addr CHECKS AT ONCE.** B, C, D, E, F and H pass every one of "
+        "`REQ-0087.shipping`, `REQ-0087.control`, `REQ-0029.t2`, "
+        "`REQ-0030.control`, `REQ-0030.band@band`, `REQ-0030.shipping` and "
+        "`REQ-0030.merge@merge`. G fails four. The design under repair fails "
+        "**exactly one** -- `REQ-0087.shipping`.\\n\\n"
+        "**SO THE GROUP IS JOINTLY SATISFIABLE, AND THE PROOF IS SIX WITNESSES "
+        "RATHER THAN AN ARGUMENT.** Every previous refutation of this claim on "
+        "the plan was an audit saying the checks spare a known-good design, "
+        "which is admissible only as an audit. This one reads nothing but "
+        "designs the specification produced, so it is a golden-free refutation "
+        "of a golden-free claim.\\n\\n"
+        "**AND IT RECLASSIFIES THE FAILURE.** The editor is ONE check away from "
+        "a point six of its siblings occupy. That is not an oracle defect, not "
+        "an over-strict demand and not a contradiction in the set -- it is a "
+        "SEARCH failure, in a place where the target is known to be occupied "
+        "and known to be one step from where the loop is standing.\\n\\n"
+        "**THREE EDITORS HAVE NOW MADE THE SAME WRONG CALL**, each from its own "
+        "failed attempts and each stating it as a property of the checks. The "
+        "pattern is worth naming: an editor that cannot find a satisfying edit "
+        "concludes none exists, and nothing in the loop can contradict it, "
+        "because the loop shows it only its own trajectory. **The population "
+        "can contradict it, cheaply, and no editor has ever been shown that** "
+        "-- the same seven designs the soundness rule already reads are sitting "
+        "unused as an existence proof."
+    )

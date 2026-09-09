@@ -1362,3 +1362,26 @@ def test_the_screened_criterion_spans_a_majority():
     t = ensemble.a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget()
     assert "52 of 89 = 58%, A MAJORITY" in t
     assert "3 objections of 114" in t
+
+
+def test_the_group_is_satisfiable_by_six_witnesses():
+    t = ensemble.six_designs_satisfy_the_group_three_editors_called_unsatisfiable()
+    assert "SIX OF SEVEN" in t and "B, C, D, E, F and H" in t
+    assert "exactly one" in t
+
+
+def test_the_refutation_is_golden_free():
+    t = ensemble.six_designs_satisfy_the_group_three_editors_called_unsatisfiable()
+    assert "golden-free refutation of a golden-free claim" in t
+
+
+def test_the_failure_is_reclassified_as_search():
+    t = ensemble.six_designs_satisfy_the_group_three_editors_called_unsatisfiable()
+    assert "SEARCH failure" in t
+    assert "one step from where the loop is standing" in t
+
+
+def test_the_editor_is_never_shown_the_existence_proof():
+    t = ensemble.six_designs_satisfy_the_group_three_editors_called_unsatisfiable()
+    assert "THREE EDITORS HAVE NOW MADE THE SAME WRONG CALL" in t
+    assert "sitting unused as an existence proof" in t
