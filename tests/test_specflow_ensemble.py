@@ -1722,3 +1722,33 @@ def test_the_audit_re_dates_the_run_in_flight():
     flat = " ".join(t.split())
     assert "certificate of NON-equivalence" in flat
     assert "126-check set is the one to carry forward" in flat
+
+
+def test_both_ends_of_the_trade_are_scored_on_one_metric():
+    t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
+    assert "56.9%" in t and "99.8%" in t
+    assert "12 of 5,656" in " ".join(t.split())
+
+
+def test_selecting_for_predictable_soundness_is_selecting_for_blindness():
+    t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
+    assert "same predicate read twice" in t
+    assert "126 for 126" in t
+
+
+def test_the_golden_free_completeness_answer_is_no():
+    t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
+    assert "+0.908" in t
+    assert "it is NO on this corpus" in " ".join(t.split())
+
+
+def test_what_survives_is_stated_and_bounded():
+    t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
+    assert "11 times to design L" in t
+    assert "two orders of magnitude short" in " ".join(t.split())
+
+
+def test_the_next_run_is_pre_registered_as_not_a_new_negative():
+    t = ensemble.the_golden_free_soundness_rule_costs_essentially_all_discrimination()
+    assert "PRE-REGISTERED" in t
+    assert "not a new negative" in " ".join(t.split()).lower()

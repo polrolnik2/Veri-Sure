@@ -3603,3 +3603,50 @@ def convicting_none_of_the_population_is_the_soundness_rule() -> str:
         "NON-equivalence, which is the rule-B arithmetic exactly. The 126-check "
         "set is the one to carry forward."
     )
+
+
+def the_golden_free_soundness_rule_costs_essentially_all_discrimination() -> str:
+    """The trade, measured at SET level on a metric that composes, with both
+    ends built and scored the same way.
+
+    This module has measured the soundness/discrimination anti-correlation nine
+    ways per check. This is the first time both ends exist as SETS and are
+    scored on the same golden-free completeness number.
+    """
+    return (
+        "Two sets, each audited at zero false rejects, differing only in what "
+        "SELECTED them:\n\n"
+        "    set     selected by            span   *audit*   **set blindness**\n"
+        "    CEIL2   the REFERENCE           68%    *0%*      **56.9%**\n"
+        "    ZERO    the POPULATION only     56%    *0%*      **99.8%**\n\n"
+        "Set blindness is the golden-free completeness number: of 5,656 (pair, "
+        "testpoint) cells where two spec-derived designs disagree, how many does "
+        "no check in the set object to. **The golden-free set sees 12 of "
+        "5,656.**\n\n"
+        "**AND THE MECHANISM IS THE RULE ITSELF, NOT A WEAKNESS IN IT.** The "
+        "rule that predicts soundness perfectly without a reference is *convicts "
+        "NONE of the seven*, measured 126 for 126 sparing the reference. A check "
+        "convicting none of the population is, by the definition of the rule, a "
+        "check that does not discriminate on the population. **Selecting for "
+        "predictable soundness IS selecting for blindness**; the two are the "
+        "same predicate read twice.\n\n"
+        "**SO THE ANSWER TO WHETHER COMPLETENESS CAN BE ASSURED GOLDEN-FREE IS "
+        "MEASURED, AND IT IS NO ON THIS CORPUS.** The instrument that ranks "
+        "blindness golden-free is excellent -- Spearman +0.908 -- and the rule "
+        "that predicts soundness golden-free is perfect at n=126. Composing "
+        "them yields a set that is sound, wide enough to span 56% of the "
+        "specification, and blind to 99.8% of the disagreements it is shown.\n\n"
+        "**WHAT SURVIVES, AND IT IS NARROW BUT REAL.** The ZERO set still "
+        "objects **11 times to design L, held out of the seven that selected "
+        "it** -- the both-cell, reached by a rule that read no reference. Sound "
+        "and discriminating on unseen designs is a property this plan has "
+        "measured at 3-5% per check and never before obtained from a "
+        "golden-free rule at set level. It is a real capability and it is two "
+        "orders of magnitude short of forcing equivalence.\n\n"
+        "**PRE-REGISTERED, BEFORE THE EDITOR ON THIS SET REPORTS.** A set seeing "
+        "12 of 5,656 disagreements should be easy to satisfy: the prediction is "
+        "that the editor drives 11 objections to zero in few trials and the "
+        "miter still says `DIFFERS`. If that happens it is NOT a new negative "
+        "-- it is this number restated, and must be reported as the expected "
+        "consequence rather than as a fresh finding."
+    )
