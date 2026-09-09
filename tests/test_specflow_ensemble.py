@@ -1926,8 +1926,23 @@ def test_the_inference_is_retracted_and_the_earlier_runs_are_not():
         in flat
 
 
-def test_the_fix_is_stated_and_is_a_brief_change():
+def test_the_first_prescription_is_retracted():
     t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
     flat = " ".join(t.split())
-    assert "poll the loop's own status" in flat
-    assert "never end a turn with a commit in flight" in flat
+    assert "THE FIRST FIX I WROTE DOWN WAS THE WRONG ONE" in flat
+    assert "both stopped again the same way" in flat
+
+
+def test_the_working_fix_removes_the_wait():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "ORDINARY FOREGROUND COMMAND with an explicit long timeout" in flat
+    assert "four to six minutes against a ten-minute maximum" in flat
+
+
+def test_the_general_form_is_stated():
+    t = ensemble.an_unspent_budget_is_not_evidence_about_the_set()
+    flat = " ".join(t.split())
+    assert "answers *how do I not have to*" in flat
+    assert "Measure the unit against the maximum before reaching for " \
+        "concurrency" in flat
