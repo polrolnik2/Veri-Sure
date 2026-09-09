@@ -2006,3 +2006,86 @@ reference design. That is calibration, which the goal permits, and it is
 labelled. The criterion that then drives the editor reads only requirement
 sentences. **No figure from a run built this way may be quoted as an
 uncalibrated golden-free score.**
+
+## SEQUENCING THE TWO INSTRUMENTS BREAKS THE BAND: 186 OF 348
+
+The precision test says the consensus has inverted (28.5%) and the checks have
+not (71.4%). Acting on that means using each instrument only where it is still
+the better reader: run the dense population criterion until it is overtaken,
+then switch to the sentence-derived checks.
+
+The consensus carried the design from 279 differing testpoints to 205 and was
+measured overtaken doing it. Starting the checks from exactly that point, with
+the cell units out of the latch:
+
+| arm | testpoints of 348 | cells |
+|---|---|---|
+| L, unedited | 279 = 80% | 4,450 |
+| consensus alone | 210 = 60% | 3,890 |
+| 117 checks alone, from unedited L | 206 = 59% | 3,866 |
+| both stacked, unweighted | 205 = 59% | 3,608 |
+| both stacked, equal weight | 205 = 59% | 3,696 |
+| **consensus, then checks at the crossing** | **186 = 53%** | **3,052** |
+
+All three miter pins green in the same process. `first_miss_err` is repaired to
+never differing.
+
+### Sequence is the whole of it, and the other arms isolate that
+
+The same 117 checks driven from the **unedited** design reach 206. The same two
+instruments **summed**, at either weighting, reach 205. Only using each where it
+still has headroom reaches 186. **This is not a better criterion — it is the
+same two criteria applied in the order their accuracies dictate.**
+
+### The verdict is still DIFFERS, and the pre-registration says where it lands
+
+The target was **two** objections, because REQ-0081's two bodies convict the
+reference design and the other five spare it, so two is what a correct design
+scores against this set. The run reached **five**:
+
+| check | |
+|---|---|
+| REQ-0081.control, REQ-0081.merge@merge | unsound — cannot be cleared by a correct design |
+| **REQ-0015.v2@n3** | **sound — a real defect, still standing** |
+| **REQ-0064.t1@n3** | **sound — a real defect, still standing** |
+| **REQ-0087.shipping** | **sound — a real defect, still standing** |
+
+That is the pre-registered *partial* band.
+
+### So the checks had not run out either — and the residue is coverage
+
+Three of five remaining objections are real, their precision on this design is
+**60%** — still above the 50% at which an instrument starts doing harm — and the
+editor stopped with **8 of 21 trials unspent**.
+
+So the binding constraint here is neither the criterion's authority nor the
+budget. It is that **117 checks produce five objections on a design differing at
+186 testpoints**, and the editor reported a genuine repair — an off-by-one in
+the refill-completion count, traced concretely from the boundary data — that
+moved the check count by **zero**.
+
+**That is a coverage number, and coverage is the one thing the goal licenses
+regenerating.** It is also the first time on this plan that the remaining gap
+has been attributed to something with a known remedy rather than to a property
+of specifications.
+
+### The loop oscillates, which the goal asks about by name
+
+The per-commit log, which no earlier arm kept:
+
+    trial   0   1   2   4   5   6   7   8   9  11  12  13
+    object  7  10  11   7  11   9   7   5   8   5  16   8
+
+**Not a descent — an oscillation**, with the best point reached twice and left
+twice, and one commit taking the count from 5 to 16. A 117-check criterion is
+coarse enough that a structural edit flips several checks at once in both
+directions, and a loop scored on the count alone cannot see which.
+
+### A harness defect, mine, caught before the grade was quoted
+
+`drive7` removes the consensus cell units from the ratchet but `note_best` still
+tracks the **cell** count — so `best.v` in a checks-only run is selected by the
+instrument the run deliberately does not use. The graded design is `dut.v`, what
+the checks-only latch actually accepted. That is the fifteenth counting-shaped
+defect here and it has the same signature as the other fourteen: a number that
+reads as a result and is measuring something else.

@@ -2473,3 +2473,55 @@ def the_two_instruments_came_apart_and_only_one_was_overtaken() -> str:
         "requirement sentences. No figure from a run built this way may be "
         "quoted as an uncalibrated golden-free score."
     )
+
+
+def sequencing_the_two_instruments_breaks_the_band() -> str:
+    """The first arm on this plan to leave the 205-210 band, and it is the
+    measured law applied rather than another instrument.
+
+    `the_two_instruments_came_apart_and_only_one_was_overtaken` measures that
+    the consensus has inverted (28.5%) and the checks have not (71.4%). This is
+    what follows if that is acted on: use each instrument only in the region
+    where it is still the better reader.
+    """
+    return (
+        "**RUN THE DENSE CRITERION UNTIL IT IS OVERTAKEN, THEN SWITCH.** The "
+        "consensus carried the design from 279 differing testpoints to 205 and "
+        "was measured overtaken doing it. Starting the CHECKS from exactly "
+        "that point, with the cell units out of the latch:\\n\\n"
+        "    arm                                 testpoints of 348   cells\\n"
+        "    L, unedited                               279           4,450\\n"
+        "    consensus alone                           210           3,890\\n"
+        "    117 checks alone, from unedited L         206           3,866\\n"
+        "    both stacked, unweighted                  205           3,608\\n"
+        "    both stacked, equal weight                205           3,696\\n"
+        "    CONSENSUS, THEN CHECKS AT THE CROSSING    186           3,052\\n\\n"
+        "**186 of 348, against a band five arms could not leave.** All three "
+        "miter pins green in the same process; `first_miss_err` is repaired to "
+        "never differing.\\n\\n"
+        "**AND SEQUENCE IS THE WHOLE OF IT, WHICH THE ARMS ABOVE ISOLATE.** The "
+        "same 117 checks driven from the UNEDITED design reach 206. The same "
+        "two instruments SUMMED, at either weighting, reach 205. Only using "
+        "each where it still has headroom reaches 186 -- so this is not a "
+        "better criterion, it is the same two criteria applied in the order "
+        "their accuracies dictate.\\n\\n"
+        "**THE VERDICT IS STILL `DIFFERS`, AND THE PRE-REGISTRATION SAYS WHERE "
+        "THIS LANDS.** The target was TWO objections, because REQ-0081's two "
+        "bodies convict the known-good design and the other five spare it, so "
+        "two is what a correct design scores against this set. The run reached "
+        "**five**: REQ-0081's two unsound ones, plus **three SOUND objections "
+        "still standing** -- REQ-0015.v2@n3, REQ-0064.t1@n3 and "
+        "REQ-0087.shipping. That is the pre-registered 'partial' band.\\n\\n"
+        "**SO THE CHECKS HAD NOT RUN OUT EITHER: 3 of 5 remaining objections "
+        "are real, and the editor stopped with 8 of 21 trials unspent.** Their "
+        "precision on this design is 60%, still above the 50% at which an "
+        "instrument starts doing harm. The binding constraint here is not the "
+        "criterion's authority and not the budget -- it is that 117 checks "
+        "produce five objections on a design differing at 186 testpoints, and "
+        "the editor reported a genuine repair (an off-by-one in the "
+        "refill-completion count) that moved the check count by ZERO.\\n\\n"
+        "**THAT IS A COVERAGE NUMBER, AND COVERAGE IS THE ONE THING THE GOAL "
+        "LICENSES REGENERATING.** It is also the first time on this plan that "
+        "the remaining gap has been attributed to something with a known "
+        "remedy rather than to a property of specifications."
+    )

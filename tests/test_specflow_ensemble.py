@@ -1149,3 +1149,28 @@ def test_the_calibration_is_labelled_before_the_arm_runs():
     t = ensemble.the_two_instruments_came_apart_and_only_one_was_overtaken()
     assert "that is calibration" in t
     assert "may be quoted as an uncalibrated golden-free score" in t
+
+
+def test_sequencing_reports_the_best_grade_on_the_plan():
+    t = ensemble.sequencing_the_two_instruments_breaks_the_band()
+    assert "186 of 348, against a band five arms could not leave" in t
+    assert "first_miss_err" in t
+
+
+def test_sequencing_is_isolated_from_a_better_criterion():
+    t = ensemble.sequencing_the_two_instruments_breaks_the_band()
+    assert "reach 206" in t and "reach 205" in t
+    assert "not a better criterion" in t
+
+
+def test_sequencing_reports_against_its_pre_registration():
+    t = ensemble.sequencing_the_two_instruments_breaks_the_band()
+    assert "target was TWO objections" in t
+    assert "three SOUND objections" in t
+    assert "'partial' band" in t
+
+
+def test_sequencing_attributes_the_residue_to_coverage():
+    t = ensemble.sequencing_the_two_instruments_breaks_the_band()
+    assert "moved the check count by ZERO" in t
+    assert "COVERAGE IS THE ONE THING THE GOAL" in t
