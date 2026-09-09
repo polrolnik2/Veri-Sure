@@ -181,9 +181,9 @@ reason than the audit.** What is measured is a limit on the RAW COUNT, which is
 what every loop here has descended; a weighting or a per-requirement fold could
 in principle recover a gradient it does not have.
 
-## 9. Four graded runs, and blindness does not order them
+## 9. Five graded runs, and blindness does not order them
 
-Four Sonnet editors, **the same arbitrary unchecked design**, same brief, same
+Five Sonnet editors, **the same arbitrary unchecked design**, same brief, same
 21-trial budget. Blindness and the objection counts are golden-free; the audit
 and the testpoint column are computed last.
 
@@ -193,10 +193,11 @@ and the testpoint column are computed last.
 | **CEIL2 163, sound** | 56.9% | *0%* | 22 → 5 | 279 → **190** | **−32%** | `DIFFERS` |
 | T6 201, golden-free | 40.4% | *19%* | 39 → 11 | 279 → 200 | −28% | `DIFFERS` |
 | MIN 464, the floor | **0.0%** | *64%* | 295 → 277 | 279 → 241 | −14% | `DIFFERS` |
+| **CEIL2 + 6 authored = 169** | 55.1% | *0%* | 24 → **0** | 279 → **151** | **−46%** | `DIFFERS` |
 
-**Ranked by what the editor achieved: CEIL2, T6, MIN, ZERO.** The set that sees
-every disagreement in the population came third, beaten by one 57 points
-blinder.
+**Ranked by what the editor achieved: the authored set, CEIL2, T6, MIN, ZERO.**
+The set that sees every disagreement in the population came fourth, beaten by
+one 55 points blinder.
 
 ### Split by soundness and it resolves cleanly
 
@@ -218,6 +219,44 @@ designs; it rejects right repairs.**
 recorded before it ran: its objection count spans 5.4% of the population, so its
 gradient is nearly flat regardless of its audit — and the run showed it live,
 moving the count 6% while divergence moved 14%.*
+
+### The fifth run is the only one authoring produced, and it is the best
+
+Runs 1–4 are SELECTIONS over a fixed corpus. Run 5 is run 4's set plus **six
+checks authored at named holes** — a (pair, testpoint, port) cell where two
+spec-derived designs disagree and no check in the base objects to either.
+
+**It is the only run to reach zero objections on a set whose audit is also zero
+and broad enough to be worth reaching, and it drove the design 39 testpoints
+further than any other.** It is still `DIFFERS`, and section 8's number is the
+golden-free explanation: **3,119 of 5,656 disagreement cells — 55.1% — are
+invisible to that set.** A design can satisfy every check and sit 151 testpoints
+from the reference because the checks cannot see the other 55%. Blindness and the
+residual divergence are the same fact measured twice, and only the first needs no
+reference.
+
+**The six are attributable without any run-to-run comparison.** Scored directly
+against each graded accepted design:
+
+| design | of the six, objecting |
+|---|---|
+| `L_afterHOLE` (run 5's own) | 0 of 6 |
+| `L_afterSOUND` | 0 of 6 |
+| `L_afterZERO`, `L_afterSD` | 1 of 6 |
+| **`L_afterFULL` (run 4's own)** | **2 of 6** |
+| `L_afterT6` | 2 of 6 |
+| `L_afterMIN` | 4 of 6 |
+
+**Two of the six convict the design run 4 stopped on** — `REQ-0029@dc_addr` at
+TP-9203 edge 22 and `REQ-0087@biu_read` at TP-0033 edge 5 — defects the
+163-check set that produced it could not see, named by checks that convict the
+reference nowhere. That is the blindness residue closing on a fixed design, with
+no editor in the loop and no run variance in the comparison.
+
+**And blindness did not predict the improvement.** Runs 4 and 5 differ by **1.8
+points of blindness** and **39 testpoints of drive**. At the margin the aggregate
+is not what moved; six checks aimed at named cells were. Report the cells closed
+and which ones, not the percentage alone.
 
 ## 10. The bottom line
 
@@ -241,19 +280,32 @@ cannot order the population by its own count — 5.4% dynamic range over eight
 visibly different designs — so completeness costs drivability as well as
 soundness.
 
-**And the four graded runs in section 9 close the loop the goal actually asks
-about.** Reducing blindness residue makes a set a better driver *only along the
-sound frontier*, and golden-free this corpus reaches exactly one point on that
-frontier — 99.8% blind, the worst driver of the four. Every step toward
-completeness without a reference admits checks that convict correct designs, and
-those cost more than the completeness gains. **So "reduce blindness to make the
-set complete" and "do it golden-free" are, on this corpus, incompatible
-instructions** — not because the instrument is missing, but because the only
-available knob moves both properties at once and the second one costs more.
+**And the graded runs in section 9 close the loop the goal actually asks
+about — with one correction the fifth run forces.** *By selection*, reducing
+blindness residue makes a set a better driver only along the sound frontier, and
+golden-free this corpus reaches exactly one point on that frontier — 99.8% blind,
+the worst driver of the five. Every selection step toward completeness admits
+checks that convict correct designs, and those cost more than the completeness
+gains. **So "reduce blindness by selecting from this corpus" and "do it
+golden-free" are incompatible instructions**, and that is a property of the
+corpus rather than of a missing instrument.
 
-**No run reached equivalence.** Four sets spanning the whole blindness range,
-one held-out design, four `DIFFERS`. The goal's terminal condition is not met,
-and section 9 orders four failures rather than finding a winner.
+**AUTHORING IS NOT ON THAT CURVE, AND IT IS GOLDEN-FREE.** A hole is named
+without any reference — it is a cell where two spec-derived designs disagree and
+nothing objects, and at most one of the two can be right. Six checks written at
+named holes moved blindness 56.9% → 55.1% **at an audit of zero**, closed 102
+cells, produced the best-driven design measured here, and two of them convict the
+design the base set itself stopped on. Selection cannot do that at any price. So
+the incompatibility above is real *for selection* and the goal's instruction is
+not, on this evidence, self-defeating: **the lever is authoring at named holes,
+and its measured cost in false rejection so far is nothing.**
+
+**No run reached equivalence.** Five sets spanning the whole blindness range, one
+held-out design, five `DIFFERS`. The goal's terminal condition is not met. What
+changed with the fifth run is the reason it is not met: not soundness, not
+termination, not the gradient, but **3,119 disagreement cells the best available
+sound set still cannot see** — a golden-free number, and the named target for the
+next round.
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains

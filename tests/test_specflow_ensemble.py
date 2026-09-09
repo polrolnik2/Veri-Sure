@@ -2194,3 +2194,42 @@ def test_the_positive_is_a_rate_not_a_set():
     flat = " ".join(t.split())
     assert "102 of 3,221 is 3% of the residue" in flat
     assert "a positive RATE, not a complete set" in flat
+
+
+def test_the_fifth_run_is_the_best_drive_and_still_differs():
+    t = ensemble.six_authored_checks_drove_a_design_further_than_any_selection()
+    flat = " ".join(t.split())
+    assert "279 -> **151 (43%)**" in flat
+    assert "BEST-DRIVEN DESIGN ON THIS PLAN BY 39 TESTPOINTS" in flat
+    assert "IT IS `DIFFERS`" in flat
+
+
+def test_zero_at_audit_zero_is_explained_by_blindness_not_thinness():
+    t = ensemble.six_authored_checks_drove_a_design_further_than_any_selection()
+    flat = " ".join(t.split())
+    assert "ZERO STILL DOES NOT MEAN EQUIVALENT" in flat
+    assert "3,119 of 5,656 disagreement cells -- 55.1% -- are invisible" in flat
+    assert "Blindness and the residual divergence are the same fact" in flat
+
+
+def test_the_attribution_is_a_fixed_design_not_two_runs():
+    t = ensemble.six_authored_checks_drove_a_design_further_than_any_selection()
+    flat = " ".join(t.split())
+    assert "TWO OF THE SIX CONVICT THE DESIGN CEIL2's OWN RUN STOPPED ON" in flat
+    assert "REQ-0029@dc_addr" in flat and "REQ-0087@biu_read" in flat
+    assert "with no editor in the loop" in flat
+
+
+def test_blindness_is_a_poor_unit_of_account_at_the_margin():
+    t = ensemble.six_authored_checks_drove_a_design_further_than_any_selection()
+    flat = " ".join(t.split())
+    assert "BLINDNESS DID NOT PREDICT THE IMPROVEMENT" in flat
+    assert "1.8 points of blindness** and by **39 testpoints of drive" in flat
+    assert "report the cells closed and which they were, not the percentage" in flat
+
+
+def test_the_unspent_budget_is_not_read_as_an_editor_limit():
+    t = ensemble.six_authored_checks_drove_a_design_further_than_any_selection()
+    flat = " ".join(t.split())
+    assert "spent 10 of 21 trials" in flat
+    assert "evidence the set stopped asking" in flat
