@@ -1588,3 +1588,55 @@ four runs and the fourth refutation.
 **2 of 8, and 7 of 29 across four runs ≈ 24%.** REQ-0081 is the one genuinely
 unsound check in the set, and **the last two editors independently found it** —
 a real signal inside a 24%-precision channel.
+
+## A FINISHED RUN CANNOT BE ASKED WHAT ITS RATCHET REFUSED, AND THAT IS MINE
+
+The combined criterion weighted its two instruments by the accident of their
+cardinalities — 3,480 cell-pair units against 117 check units, so one check was
+worth 1/29th of one cell-pair. That is recorded above. The obvious next question
+is a counterfactual: **which of the finished run's 27 commits would a different
+weighting have latched, and which would it have refused?** It is free to ask if
+the run kept its per-commit numbers.
+
+**IT DOES NOT. A 27-TRIAL RUN RECORDS 27 DECISIONS AND KEEPS ONE.**
+
+| artifact | what it holds |
+|---|---|
+| `state.json` | the CURRENT counters — trials used, last latched score, best score |
+| `report.json` | the LAST review. **Overwritten by every commit** |
+| `best.v` | the design, with no provenance |
+
+The accept criterion is the object under study on this whole plan, and its own
+decisions are the one thing not written down.
+
+### The cost is exact, and it was paid
+
+Re-weighting is one line of arithmetic. Pricing it against the run it was
+written for should have been a replay over recorded numbers — no simulation, no
+model call, seconds. Instead it takes a fresh 30-trial run: a full 348-testpoint
+suite per commit, plus an editor. **The change is trivial and the measurement is
+not, entirely because of what was not kept.**
+
+### And it bounds what may be claimed about every arm already run
+
+Four arms landed at **205, 206, 210 and 205** testpoints of 348. Whether that
+band is a property of the specification, of the design space, or of a ratchet
+refusing correct work in all four is a question about the **refused** commits —
+and not one of the four runs can be asked it. The band is reported as measured;
+its **cause is not attributable** from the artifacts those runs left. Every
+"the loop stops here" sentence on this plan should be read with that limit
+attached.
+
+### The remedy is one append per commit, and it is not a rule
+
+A ratchet that decides must log what it decided and on what evidence: the
+proposed unit counts, the latched unit counts, the verdict, and the
+per-instrument numbers on both sides. Anything less makes the loop's own accept
+criterion the only unaudited component of a pipeline built to audit criteria.
+
+**This is the phantom-baseline defect again, in its quieter form.**
+`req_results.json` was rewritten by every review including rolled-back ones, so
+nothing ever latched and the tell was a stale timestamp. Both are the loop
+failing to distinguish what it **considered** from what it **accepted**. That
+one produced wrong numbers; this one produces no numbers at all, which is
+harder to notice and took longer to find.

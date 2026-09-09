@@ -968,3 +968,21 @@ def test_the_weighting_defect_states_the_general_rule():
     t = ensemble.stacking_two_criteria_needs_weights_and_mine_had_none()
     assert "prices one in units of the other" in t
     assert "sparse is what it is FOR" in t
+
+
+def test_the_missing_history_names_what_a_run_retains():
+    t = ensemble.a_finished_run_cannot_be_asked_what_its_ratchet_refused()
+    assert "records 27 decisions and keeps ONE" in t
+    assert "Overwritten by every commit" in t
+
+
+def test_the_missing_history_bounds_the_band_claim():
+    t = ensemble.a_finished_run_cannot_be_asked_what_its_ratchet_refused()
+    assert "205, 206, 210 and 205" in t
+    assert "not attributable" in t
+
+
+def test_the_missing_history_states_the_remedy_as_a_log():
+    t = ensemble.a_finished_run_cannot_be_asked_what_its_ratchet_refused()
+    assert "one append per commit" in t.lower()
+    assert "CONSIDERED" in t and "ACCEPTED" in t

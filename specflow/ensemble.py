@@ -2111,3 +2111,51 @@ def stacking_two_criteria_needs_weights_and_mine_had_none() -> str:
         "share a ratchet, their relative weight is a design parameter and "
         "leaving it implicit sets it to an accident of counting."
     )
+
+
+def a_finished_run_cannot_be_asked_what_its_ratchet_refused() -> str:
+    """A harness gap of mine, found by trying to price a one-line change and
+    discovering the finished run could not answer.
+
+    `stacking_two_criteria_needs_weights_and_mine_had_none` records that the
+    combined criterion weighted its two instruments by the accident of their
+    cardinalities. The obvious next question is a counterfactual -- WHICH of the
+    finished run's commits would a different weighting have latched, and which
+    would it have refused -- and it costs nothing to ask if the run kept the
+    per-commit numbers. It did not.
+    """
+    return (
+        "**WHAT A FINISHED RUN ON THIS PLAN RETAINS, in full:**\\n\\n"
+        "    state.json    the CURRENT counters -- trials used, last latched\\n"
+        "                  score, best score. No history.\\n"
+        "    report.json   the LAST review. Overwritten by every commit.\\n"
+        "    best.v        the design. No provenance.\\n\\n"
+        "So a 27-trial run records 27 decisions and keeps ONE. The accept "
+        "criterion is the object under study on this plan, and its own "
+        "decisions are the one thing not written down.\\n\\n"
+        "**THE COST IS EXACT AND WAS PAID.** Re-weighting the two instruments "
+        "is one line of arithmetic. Pricing it against the run it was written "
+        "for should have been a replay over recorded numbers -- no simulation, "
+        "no model call, seconds. Instead it needs a fresh 30-trial run: a full "
+        "348-testpoint suite per commit, plus an editor. The change is trivial "
+        "and the measurement is not, entirely because of what was not kept.\\n\\n"
+        "**AND IT SILENTLY BOUNDS WHAT CAN BE CLAIMED ABOUT EVERY ARM ALREADY "
+        "RUN.** Four arms landed at 205, 206, 210 and 205 testpoints of 348. "
+        "Whether that band is a property of the specification, of the design "
+        "space, or of a ratchet refusing correct work in all four is a question "
+        "about the refused commits -- and not one of the four runs can be asked "
+        "it. The band is reported as measured; its CAUSE is not attributable "
+        "from the artifacts those runs left.\\n\\n"
+        "**THE REMEDY IS ONE APPEND PER COMMIT, and it is not a rule.** A "
+        "ratchet that decides is a ratchet that must log what it decided and on "
+        "what evidence: the proposed unit counts, the latched unit counts, the "
+        "verdict, and the per-instrument numbers on both sides. Anything less "
+        "makes the loop's own accept criterion the only unaudited component of "
+        "a pipeline built to audit criteria.\\n\\n"
+        "This is the same shape as the phantom-baseline defect this plan "
+        "already records -- `req_results.json` rewritten by every review "
+        "including rolled-back ones, so nothing ever latched and the tell was a "
+        "timestamp. Both are the loop failing to distinguish what it CONSIDERED "
+        "from what it ACCEPTED. That one produced wrong numbers; this one "
+        "produces no numbers at all, which is harder to notice."
+    )
