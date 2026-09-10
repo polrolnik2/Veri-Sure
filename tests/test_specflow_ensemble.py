@@ -2907,3 +2907,45 @@ def test_the_three_pricing_errors_are_owned_as_one():
     flat = " ".join(t.split())
     assert "the same one three times" in flat.lower()
     assert "a statement about cells that ignored what an optimiser does with them" in flat
+
+
+def test_the_stimulus_opportunity_is_zero_on_three_designs():
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "THE STIMULUS OPPORTUNITY IS ZERO ON ALL THREE" in flat
+    assert "0 of 146, 0 of 151 and 0 of 279" in flat
+
+
+def test_the_fourth_class_is_zero_too():
+    """`no check watches a wrong port` being zero is what makes the claim total
+    rather than partial."""
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "no check watches a wrong port at all -- is **also zero**" in flat
+
+
+def test_the_editor_consumes_the_discriminating_power():
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "**6.4% -> 0.4% -> 0.0%**" in flat
+    assert "THE EDITOR CONSUMES THE SET'S DISCRIMINATING POWER" in flat
+
+
+def test_the_residue_is_named_as_strength_alone():
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "The residue is check STRENGTH and only check strength" in flat
+    assert "0.4% of 4,529 exposed decisions" in flat
+
+
+def test_strength_is_shown_to_cost_soundness():
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "**23 of 34 began convicting the reference**" in flat
+    assert "**0 of 34**" in flat
+
+
+def test_the_claim_is_bounded_to_this_set():
+    t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
+    flat = " ".join(t.split())
+    assert "does NOT claim is that stimulus is worthless in general" in flat

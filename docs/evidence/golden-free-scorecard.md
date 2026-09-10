@@ -1043,6 +1043,54 @@ figure from a different denominator; run 9 on the reading's aggregate accuracy.
 them.** The per-unit table is the measurement that would have predicted every
 one, and computing its *split* needs no reference — only scoring it does.
 
+## 9p. Finishing the stimulus loop — measured at zero opportunity, on three designs
+
+The goal names the stimulus loop as likely necessary. §9g sized it as a
+*blindness* lever at 1 of 20 and closed it there. §9o makes a different question
+the right one: the 169 checks are audit **zero**, so where they speak they are
+right, and the only thing that could be wrong with them is **reach** — which is
+exactly what stimulus buys.
+
+Two ways a set can fail to speak where a design is wrong, demanding opposite
+work: **silence** (no check *decides* there — a stimulus gap) and **blindness**
+(a check decides on a port that *is* wrong there and passes — no stimulus fixes
+that). Restricted to testpoints where a port the check itself reads differs.
+
+| design | differing | objects | **silent** | blind | strength |
+|---|---|---|---|---|---|
+| the start design L | 279 | 169 | **0** | 110 | 6.4% |
+| run 5 accepted | 151 | 0 | **0** | 151 | **0.0%** |
+| run 6 accepted | 146 | 20 | **0** | 126 | **0.4%** |
+
+**The stimulus opportunity is zero on all three** — not small, zero. And the
+fourth class, *no check watches a wrong port at all*, is **also zero**. The suite
+already drives every one of these designs into its wrong behaviour, on the exact
+ports the checks read, and the checks decide there and pass.
+
+**So finishing the stimulus loop cannot move this set**, and that is a
+measurement on three graded designs rather than an estimate on a different set.
+It is a stronger form of §9's `3 of 50`: for the 169-check set it is 0 of 146, 0
+of 151, 0 of 279.
+
+### The strength column is a mechanism nobody has named
+
+Objections per exposed decision fall **6.4% → 0.4% → 0.0%** as the loop works.
+**The editor consumes the set's discriminating power.** It does not fail to
+satisfy the checks — it satisfies exactly the few percent they can see, and what
+remains is what they were always going to decide on and pass. That is why every
+run ends quiet and wrong.
+
+**The residue is check strength and only check strength** — 0.4% of 4,529 exposed
+decisions. And strength is the one thing measured to cost soundness one for one:
+the strength round raised it 24x, **23 of 34 checks began convicting the
+reference**, and the both-cell was **0 of 34**, the minimum the marginals allow.
+The lever that raises 0.4% is the lever that destroys the audit-zero property,
+and §9o says accuracy where a criterion acts is what governs.
+
+**What this does not claim** is that stimulus is worthless in general — a set
+whose checks did not already decide everywhere would have a real gap. It
+measures that this set is not one.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

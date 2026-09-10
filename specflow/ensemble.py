@@ -5381,3 +5381,60 @@ def a_proxys_aggregate_accuracy_is_not_its_effective_accuracy() -> str:
         "predicted all three is the per-unit table above, and it needs no "
         "reference to compute the split -- only the reference to score it."
     )
+
+
+def the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength() -> str:
+    """FINISHING THE STIMULUS LOOP: measured to be worth NOTHING on this set,
+    and the measurement replaces the argument.
+
+    The goal names the stimulus loop as likely necessary. An earlier round sized
+    it as a BLINDNESS lever at 1 of 20 and closed it there. This asks the
+    different question run 9's law makes the right one: the 169 checks are audit
+    ZERO, so where they speak they are right, and the only thing wrong with them
+    could be REACH -- which is exactly what stimulus buys.
+
+    Two ways a check set can fail to speak where a design is wrong, and they
+    demand opposite work: SILENCE (no check DECIDES there -- a stimulus gap) and
+    BLINDNESS (a check decides on a port that IS wrong there and passes -- no
+    stimulus fixes that). The fair test restricts to testpoints where a port THE
+    CHECK ITSELF READS differs. The classification is golden-free; which
+    testpoints differ is the thing being explained, computed last.
+    """
+    return (
+        "    design                differing  objects  **SILENT**  blind  strength\n"
+        "      the START design L      279      169      **0**      110    6.4%\n"
+        "      run 5 accepted          151        0      **0**      151    **0.0%**\n"
+        "      run 6 accepted          146       20      **0**      126    **0.4%**\n\n"
+        "**THE STIMULUS OPPORTUNITY IS ZERO ON ALL THREE.** Not small -- zero. "
+        "There is no testpoint, on any of these designs, where the design is "
+        "wrong and no check decides. And the fourth class -- no check watches a "
+        "wrong port at all -- is **also zero**. The suite already drives every "
+        "one of these designs into its wrong behaviour, on the exact ports the "
+        "checks read, and the checks decide there and pass.\n\n"
+        "**SO FINISHING THE STIMULUS LOOP CANNOT MOVE THIS SET**, and that is now "
+        "a measurement on three graded designs rather than the earlier estimate "
+        "on a different set. It is a stronger form of the plan's `3 of 50`: for "
+        "the 169-check set it is 0 of 146, 0 of 151 and 0 of 279.\n\n"
+        "**AND THE STRENGTH COLUMN IS A MECHANISM NOBODY HAS NAMED: THE EDITOR "
+        "CONSUMES THE SET'S DISCRIMINATING POWER.** Objections per exposed "
+        "decision fall **6.4% -> 0.4% -> 0.0%** as the loop works. The editor "
+        "does not fail to satisfy the checks -- it satisfies exactly the few "
+        "percent they can see, and what is left is what they were always going "
+        "to decide on and pass.\n\n"
+        "**THAT IS WHY EVERY RUN ENDS QUIET AND WRONG.** A set at audit zero "
+        "cannot be over-strict, its stimulus reaches everything it needs, and it "
+        "still ends with 126 of 146 differing testpoints where a check looked at "
+        "a wrong port and said nothing. **The residue is check STRENGTH and only "
+        "check strength** -- 0.4% of 4,529 exposed decisions.\n\n"
+        "**AND STRENGTH IS THE ONE THING MEASURED TO COST SOUNDNESS ONE FOR "
+        "ONE.** The strength round re-authored 34 sound-and-blind checks to "
+        "assert every obligation in their own sentences: strength rose 24x, "
+        "**23 of 34 began convicting the reference**, and the both-cell was "
+        "**0 of 34** -- the minimum the marginals allow. So the lever that would "
+        "raise 0.4% is the lever that destroys the audit-zero property, and run "
+        "9's law says accuracy where a criterion acts is what governs.\n\n"
+        "**WHAT THIS CLOSES.** The stimulus loop, as a lever on this set, with a "
+        "number. What it does NOT claim is that stimulus is worthless in "
+        "general: a set whose checks did not already decide everywhere would "
+        "have a real gap, and this measures that this set is not one."
+    )
