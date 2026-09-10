@@ -2986,3 +2986,72 @@ def test_the_closure_does_not_overclaim_impossibility():
     flat = " ".join(t.split())
     assert "Not that no sound check exists" in flat
     assert "no author working from this specification produced one in 640 attempts" in flat
+
+
+def test_no_declared_output_is_dark_to_the_requirements():
+    """The lever needed a port the specification failed to reach. There is
+    none, and that alone closes it."""
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "**NO PORT IS DARK, AND THAT ALONE CLOSES THE LEVER.**" in flat
+    assert "declared by between 3 and 16" in flat
+    assert "read by between 17 and 51" in flat
+    assert "re-extracting S1 to cover where the divergence lives has NO TARGET" in flat
+
+
+def test_the_coverage_correlation_runs_the_wrong_way_for_the_lever():
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "requirement count **+0.52 to +0.93**" in flat
+    assert "check count **+0.36 to +0.54**" in flat
+    assert "MORE wrong, not less" in flat
+
+
+def test_the_width_control_is_stated_and_it_changes_the_reading():
+    """saved_addr and dc_addr are 32 bits; a correlation across all ten ports is
+    confounded, and controlling it moves the check reading from +0.01 to +0.45."""
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "confounded by width" in flat
+    assert "+0.01 uncontrolled and +0.45" in flat
+
+
+def test_activity_is_the_predictor_and_check_count_is_a_restatement_of_it():
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "CHECK COUNT CARRIES NO INFORMATION ONCE ACTIVITY IS HELD FIXED" in flat
+    assert "Spearman(checks reading a port, golden transitions) = +0.857" in flat
+    assert "activity wearing coverage's name" in flat
+
+
+def test_the_requirement_correlation_is_reported_as_not_robust():
+    """It survives one activity control and collapses under the other on three
+    designs of five. The weak statement is the one the data supports."""
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "**THE REQUIREMENT CORRELATION IS NOT ROBUST EITHER.**" in flat
+    assert "may not predict it at all" in flat
+
+
+def test_the_loader_defect_is_recorded_in_the_docstring():
+    """The first run loaded zero requirements and printed a clean table saying
+    every port was uncovered. A finding that would have been reported as the
+    lever's confirmation is recorded as the ninth counting-shaped defect."""
+    d = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor.__doc__
+    flat = " ".join((d or "").split())
+    assert "loaded ZERO of them" in flat
+    assert "ninth counting-shaped defect" in flat
+    assert "REFUSES on a short set" in flat
+
+
+def test_the_extraction_closure_names_its_own_limits():
+    t = ensemble.requirement_extraction_is_not_the_limit_and_activity_is_the_predictor()
+    flat = " ".join(t.split())
+    assert "no single coefficient here is significant and none is offered as one" in flat
+    assert "first_miss_err" in flat
+
+
+def test_the_extraction_closure_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "requirement_extraction_is_not_the_limit_and_activity_is_the_predictor" in flat
+    assert "no port is dark and the lever has no target" in flat

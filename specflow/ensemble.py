@@ -207,6 +207,21 @@ message for every conviction they make. What blinds it is the author's detail
 string rather than the check, which is free to fix.
 `a_body_is_judged_whole_and_its_obligations_are_not` carries it, including why
 even the optimistic extrapolation stops short of a majority.
+
+AND THE ONE STAGE UPSTREAM OF EVERYTHING HERE IS NOT THE LIMIT EITHER, WHICH IS
+THE LAST PLACE A LEVER COULD HAVE BEEN. Every measurement in this module is
+downstream of the 89 extracted requirements, so if divergence lived on the ports
+those requirements barely constrain, re-extracting them would be untried and
+live. It does not: every declared output is declared by 3 to 16 requirements and
+read by 17 to 51 checks, so no port is dark and the lever has no target. What
+predicts a port's divergence is how ACTIVE it is on the reference, and the number
+of checks reading a port is very nearly a restatement of that -- Spearman +0.857
+against the reference's transitions, and once activity is held fixed the check
+correlation goes negative on four designs of five.
+`requirement_extraction_is_not_the_limit_and_activity_is_the_predictor` carries
+it, together with the ninth counting-shaped defect on this plan: its first run
+loaded zero requirements and printed a clean table saying every port was
+uncovered.
 """
 from __future__ import annotations
 
@@ -5485,4 +5500,87 @@ def the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit() -> str:
         "from this specification produced one in 640 attempts**, which is the "
         "specification-plus-reader limit measured over the corpus rather than "
         "over a round."
+    )
+
+
+def requirement_extraction_is_not_the_limit_and_activity_is_the_predictor() -> str:
+    """THE LAST UNTOUCHED STAGE, measured -- and the lever it would open is shut.
+
+    Every measurement in this module is downstream of S1: the 89 requirements an
+    extraction stage read out of the specification. If divergence lived on the
+    ports the requirements barely constrain, re-extracting S1 would be a live
+    lever nothing has tried, and the goal puts regenerating oracles to new
+    standards explicitly in scope.
+
+    Two golden-free readings of "does the specification constrain this port",
+    per declared output: how many requirements DECLARE it in their own `ports`
+    list, and how many of the 169 checks READ it. Divergence from the reference
+    is the calibration, computed last, on five graded designs.
+
+    A HARNESS DEFECT OF MINE PRECEDED THIS AND IS RECORDED RATHER THAN QUIETLY
+    FIXED. The first version of the script looked for the requirements in the
+    scratch directory, found nothing, loaded ZERO of them, and printed a clean
+    ten-row table in which every port had no requirement mentioning it -- which
+    reads exactly like the finding the run was looking for. The loader now reads
+    the same path the driver reads and REFUSES on a short set. That is the ninth
+    counting-shaped defect on this plan and it has the signature of the other
+    eight: a plausible table that is an artifact of a file never opened.
+    """
+    return (
+        "**NO PORT IS DARK, AND THAT ALONE CLOSES THE LEVER.** Every one of the "
+        "ten declared outputs is declared by between 3 and 16 of the 89 "
+        "requirements, and read by between 17 and 51 of the 169 checks. There is "
+        "no port the specification failed to reach, so re-extracting S1 to cover "
+        "where the divergence lives has NO TARGET.\n\n"
+        "    port             REQ decl   CHECKS   divergence, five designs\n"
+        "      first_hit_ack       7        37    1063    6  963  963   81\n"
+        "      biu_read           10        51     584  373  542  573  550\n"
+        "      burst              10        24     412  168  331  308  294\n"
+        "      tag_we             10        32     299  153  358  313  320\n"
+        "      biu_write           9        39     262   73  262  270  180\n"
+        "      first_miss_ack      5        36     222   13  217  297  290\n"
+        "      first_miss_err      3        21      13    1    3    1    0\n\n"
+        "*(One-bit ports only. `saved_addr` and `dc_addr` are 32 bits and "
+        "`dcram_we` is 4, and a wide port has far more ways to be wrong, so a "
+        "correlation across all ten is confounded by width. Controlling it "
+        "MATTERS: the check correlation reads +0.01 uncontrolled and +0.45 "
+        "across the seven narrow ports.)*\n\n"
+        "**AND THE CORRELATION RUNS THE WRONG WAY FOR THE LEVER.** Against "
+        "divergence, over the seven one-bit ports, on each of five designs: "
+        "requirement count **+0.52 to +0.93**, check count **+0.36 to +0.54**. "
+        "Five of five positive on both. A port that more requirements constrain "
+        "and more checks watch is MORE wrong, not less.\n\n"
+        "**THE ACTIVITY CONTROL IS WHAT SETTLES IT, AND IT CORRECTS THE READING "
+        "ABOVE IN BOTH DIRECTIONS.** A port that is almost always idle has almost "
+        "no opportunity to diverge, so activity on the reference -- rows the port "
+        "is high, transitions it makes -- is the rival explanation for the whole "
+        "table. Measured, and it is not a rival, it is the answer:\n\n"
+        "    predictor of divergence, seven one-bit ports          five designs\n"
+        "      golden HIGH rows, alone                          +0.46 .. +0.93\n"
+        "      CHECKS reading the port, alone                   +0.36 .. +0.54\n"
+        "      CHECKS,   holding HIGH rows fixed    -0.48 -0.03 -0.12 -0.15 +0.07\n"
+        "      REQ decl, holding HIGH rows fixed    +0.03 +0.13 +0.05 +0.88 +0.81\n\n"
+        "**CHECK COUNT CARRIES NO INFORMATION ONCE ACTIVITY IS HELD FIXED -- FOUR "
+        "OF FIVE DESIGNS GO NEGATIVE.** And the reason is visible in one number: "
+        "**Spearman(checks reading a port, golden transitions) = +0.857.** How "
+        "many checks watch a port is very nearly a restatement of how busy that "
+        "port is. So the raw +0.45 was activity wearing coverage's name, and this "
+        "is the check-strength finding at port granularity: the checks are where "
+        "the action is and they say nothing there.\n\n"
+        "**THE REQUIREMENT CORRELATION IS NOT ROBUST EITHER.** It survives holding "
+        "transitions fixed and collapses on three of five designs holding high "
+        "rows fixed. So the honest statement is the weak one: requirement "
+        "coverage does not predict divergence in the direction the lever needs, "
+        "and may not predict it at all.\n\n"
+        "**WHAT THIS CLOSES.** The requirement extraction, as a lever. Divergence "
+        "is predicted by how much a port DOES, which is a property of the "
+        "design's behaviour and not of the specification's coverage -- and the "
+        "coverage is already maximal everywhere. `first_miss_err` is the clean "
+        "instance from the other end: 3 requirements, 21 checks, 62 high rows of "
+        "5,714, and 0 to 13 differing cells across five designs. The thinnest "
+        "coverage in the set sits on the port nothing gets wrong.\n\n"
+        "**WHAT IT DOES NOT CLAIM.** Seven ports and five designs that share a "
+        "common ancestor, so no single coefficient here is significant and none "
+        "is offered as one. What is solid is the raw table: no dark port, and "
+        "activity dominating both coverage instruments."
     )

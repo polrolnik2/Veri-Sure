@@ -1135,6 +1135,97 @@ possible in principle. It says **no author working from this specification
 produced one in 640 attempts**, which is the specification-plus-reader limit
 measured over the corpus rather than over a round.
 
+## 9r. The last untouched stage — requirement extraction is not the limit
+
+Every figure above sits downstream of S1: the 89 requirements an extraction stage
+read out of the specification. If divergence lived on the ports those
+requirements barely constrain, re-extracting S1 would be a live lever nothing has
+tried, and the goal puts regenerating oracles to new standards explicitly in
+scope. This is the measurement of that, and it shuts the lever.
+
+Two golden-free readings of *does the specification constrain this port*, per
+declared output: how many of the 89 requirements **declare** it in their own
+`ports` list, and how many of the 169 checks **read** it. Divergence from the
+reference is the calibration, computed last, on five graded designs — the start
+design L and the four accepted designs of runs 6, 7, 8 and 9.
+
+### There is no dark port, and that alone closes it
+
+| port | REQ declare | checks read | L | run 6 | run 7 | run 8 | run 9 |
+|---|---|---|---|---|---|---|---|
+| `first_hit_ack` | 7 | 37 | 1063 | 6 | 963 | 963 | 81 |
+| `biu_read` | 10 | 51 | 584 | 373 | 542 | 573 | 550 |
+| `burst` | 10 | 24 | 412 | 168 | 331 | 308 | 294 |
+| `tag_we` | 10 | 32 | 299 | 153 | 358 | 313 | 320 |
+| `biu_write` | 9 | 39 | 262 | 73 | 262 | 270 | 180 |
+| `first_miss_ack` | 5 | 36 | 222 | 13 | 217 | 297 | 290 |
+| `first_miss_err` | 3 | 21 | 13 | 1 | 3 | 1 | 0 |
+
+**EVERY DECLARED OUTPUT IS DECLARED BY 3 TO 16 REQUIREMENTS AND READ BY 17 TO 51
+CHECKS.** No port the specification failed to reach, so *re-extract S1 to cover
+where the divergence lives* has no target. (The table is the seven **one-bit**
+ports. `saved_addr` and `dc_addr` are 32 bits and `dcram_we` is 4, and a wide port
+has far more ways to be wrong; controlling that matters, because the check
+correlation reads **+0.01 uncontrolled and +0.45** across the narrow seven.)
+
+### And the correlation runs the wrong way for the lever
+
+Spearman against divergence, seven one-bit ports, each of the five designs:
+
+| | run range |
+|---|---|
+| requirements declaring the port | **+0.52 to +0.93**, five of five positive |
+| checks reading the port | **+0.36 to +0.54**, five of five positive |
+
+A port that more requirements constrain and more checks watch is **more** wrong,
+not less.
+
+### The activity control settles it, and corrects the reading in both directions
+
+A port that is almost always idle has almost no opportunity to diverge, so
+activity on the reference — rows the port is high, transitions it makes — is the
+rival explanation for the whole table. It is not a rival; it is the answer.
+
+| predictor of divergence, seven one-bit ports | five designs |
+|---|---|
+| **golden HIGH rows, alone** | **+0.46 .. +0.93** |
+| checks reading the port, alone | +0.36 .. +0.54 |
+| checks, *holding HIGH rows fixed* | **−0.48, −0.03, −0.12, −0.15, +0.07** |
+| requirements, *holding HIGH rows fixed* | +0.03, +0.13, +0.05, +0.88, +0.81 |
+
+**CHECK COUNT CARRIES NO INFORMATION ONCE ACTIVITY IS HELD FIXED — four of five
+designs go negative.** The reason is one number: **Spearman(checks reading a port,
+golden transitions) = +0.857.** How many checks watch a port is very nearly a
+restatement of how busy that port is, so the raw +0.45 was activity wearing
+coverage's name. This is §9p's check-strength collapse at port granularity: the
+checks are where the action is and they say nothing there.
+
+**The requirement correlation is not robust either** — it survives holding
+transitions fixed and collapses on three of five designs holding high rows fixed
+— so the honest statement is the weak one: requirement coverage does not predict
+divergence in the direction the lever needs, and may not predict it at all.
+
+`first_miss_err` is the clean instance from the other end: 3 requirements, 21
+checks, 62 high rows of 5,714, and 0 to 13 differing cells across five designs.
+**The thinnest coverage in the set sits on the port nothing gets wrong.**
+
+### A ninth counting-shaped defect, mine, caught before it was reported
+
+The first version of the script looked for the requirements in the scratch
+directory, found nothing, **loaded zero of them**, and printed a clean ten-row
+table in which every port had no requirement mentioning it — which reads exactly
+like the finding the run was looking for. The check and divergence columns of that
+run were valid; the requirements column was void, and nothing in the output said
+so. The loader now reads the same path the driver reads and refuses on a short
+set. **Same signature as the other eight: a plausible table that is an artifact of
+a file never opened.**
+
+### What it does not claim
+
+Seven ports and five designs that share a common ancestor, so no single
+coefficient is significant and none is offered as one. What is solid is the raw
+table — no dark port — and activity dominating both coverage instruments.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -1224,6 +1315,17 @@ design is in front of them. **The specification underdetermines those cells and
 the misreading is what it produces in a competent reader** — so completeness is
 not reachable by any instrument built from the specification plus a reader, and
 the missing input is a decision on those cells from outside that loop.
+
+**AND THE OBSTRUCTION IS NOT UPSTREAM EITHER, WHICH WAS THE LAST PLACE IT COULD
+HAVE BEEN — §9r.** Everything above sits downstream of S1's 89 extracted
+requirements, so a specification whose extraction missed the divergent ports
+would have made re-extraction a live lever. It did not miss them: **every declared
+output is declared by 3 to 16 requirements and read by 17 to 51 checks**, so no
+port is dark and the lever has no target. What predicts a port's divergence is
+how ACTIVE it is on the reference, and check count is very nearly a restatement
+of activity — **Spearman +0.857 against the reference's transitions**, and once
+activity is held fixed the check correlation goes negative on four designs of
+five. **Coverage follows difficulty; it does not overcome it.**
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains
