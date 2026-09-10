@@ -815,6 +815,17 @@ measured — and this supplies the reason §9i's arm could not have worked: the
 report was drawn from the one sample on which no rule over this population beats
 any other.
 
+### CORRECTED — whether de-duplication helps depends entirely on the denominator
+
+On **raw edges** the same blocs on the same blind cells read plain majority
+**82%** and de-duplicated **54%** — the reverse of the 56%/73% above, and by
+more. Neither denominator is privileged: transactional rows weight transitions,
+raw edges weight sustained stretches, and the population is right on stretches
+and wrong at transitions. Per design on raw-edge blind cells: C 89%, the bloc
+**82%**, SD 54%, FULL 53%, **G 20%** — one vote per bloc gives G's 20% the same
+weight as the bloc's 82%. **The structural claim stands; the claim that
+correcting for it improves the reading is withdrawn.** See §9n.
+
 ### It also prices the phrase "independently written"
 
 Nine agents, each forbidden to read another's work, produced **five** opinions
@@ -947,6 +958,37 @@ disagreement evidence. **The population's reading is 54% accurate where the
 checks are blind, so no criterion built from it can certify a design better than
 that** — the ceiling of the whole route, stated as a number rather than as
 another failed round.
+
+## 9n. The de-duplication reversal, and what it says about run 8
+
+§9k reported that de-duplicating the population takes the vote from 56% to 73%
+at blind cells and called it a golden-free fix with no fitted parameter. On the
+other available weighting of the same cells it goes the other way, and by more.
+
+| at blind cells | plain majority | de-duplicated |
+|---|---|---|
+| **raw edges** (3,827 cells) | **82%** | **54%** |
+| transactional rows (812 cells) | 56% | 73% |
+
+**Neither figure is quotable without its denominator, and §9k quoted one as the
+answer.** Transactional rows collapse runs of identical values and so weight
+transitions; raw edges weight sustained stretches. The population is right on
+stretches and wrong at transitions — that is the entire reversal.
+
+Per design on raw-edge blind cells: **C 89%, the bloc B/D/E/F/H 82%, SD 54%,
+FULL 53%, G 20%.** One vote per bloc gives G's 20% reading the same weight as
+the bloc's 82%. **The bloc of five is the most accurate group in the population,
+and its multiplicity is what made the plain majority good.** The a priori
+argument for de-duplicating — five copies are one opinion — is not obviously
+right against the alternative that five independent agents agreeing is evidence,
+and I took the first without measuring.
+
+**This explains run 8 completely.** It put the de-duplicated reading in the latch,
+drove it to a perfect score, and produced the worst design of the eight — the
+design's accuracy ending at the reading's 54%, from a start of 58%. The plain
+majority was available in the same coordinates at **82%**. §9m's law (a criterion
+cannot take a design past its own accuracy) is confirmed and was applied to the
+wrong reading.
 
 ## 10. The bottom line
 

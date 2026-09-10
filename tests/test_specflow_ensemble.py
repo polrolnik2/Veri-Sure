@@ -2831,3 +2831,43 @@ def test_the_population_ceiling_is_stated_as_a_number():
     flat = " ".join(t.split())
     assert "54% accurate where the checks are blind" in flat
     assert "no criterion built from it can certify a design better than that" in flat
+
+
+def test_the_dedup_reversal_is_stated_in_both_denominators():
+    t = ensemble.whether_dedup_helps_the_vote_depends_entirely_on_the_denominator()
+    flat = " ".join(t.split())
+    assert "**82%**" in flat and "**54%**" in flat
+    assert "HELPS by 17 points in one weighting and HURTS by 28 in the other" in flat
+    assert "neither figure is quotable without its denominator" in flat.lower()
+
+
+def test_the_bloc_is_the_most_accurate_group_not_a_defect():
+    t = ensemble.whether_dedup_helps_the_vote_depends_entirely_on_the_denominator()
+    flat = " ".join(t.split())
+    assert "**G 20%**" in flat
+    assert "the most accurate group in the population" in flat
+    assert "its multiplicity is exactly what made the plain majority good" in flat
+
+
+def test_the_structural_claim_survives_and_the_fix_claim_does_not():
+    t = ensemble.whether_dedup_helps_the_vote_depends_entirely_on_the_denominator()
+    flat = " ".join(t.split())
+    assert "The structural observation stands" in flat
+    assert "What is withdrawn is that correcting for it improves the reading" in flat
+
+
+def test_the_dedup_finding_carries_its_own_correction():
+    """A correction that lives only in the correcting function is one the
+    original's reader never sees."""
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "WHETHER DE-DUPLICATION HELPS DEPENDS ENTIRELY ON THE DENOMINATOR" in flat
+    assert "is WITHDRAWN" in flat
+    assert "whether_dedup_helps_the_vote_depends_entirely_on_the_denominator" in flat
+
+
+def test_the_eighth_run_is_explained_by_the_wrong_reading():
+    t = ensemble.whether_dedup_helps_the_vote_depends_entirely_on_the_denominator()
+    flat = " ".join(t.split())
+    assert "I chose the one reading below the design's own accuracy" in flat
+    assert "confirmed and was applied to the wrong reading" in flat

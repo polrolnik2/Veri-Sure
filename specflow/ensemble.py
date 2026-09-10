@@ -5156,6 +5156,13 @@ def the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote() -> st
         "where the checks are blind. Every majority figure on this document is "
         "a bloc of five wearing the authority of nine, and every 'widening the "
         "population' result should be read against that."
+        "\n\n**CORRECTED: WHETHER DE-DUPLICATION HELPS DEPENDS ENTIRELY ON "
+        "THE DENOMINATOR.** On RAW EDGES the same blocs on the same blind "
+        "cells read plain majority **82%** and de-duplicated **54%** -- the "
+        "reverse of the 56%/73% above, and by more. The structural claim "
+        "stands; **the claim that correcting for it improves the reading is "
+        "WITHDRAWN.** See "
+        "`whether_dedup_helps_the_vote_depends_entirely_on_the_denominator`."
     )
 
 
@@ -5274,4 +5281,50 @@ def a_criterion_cannot_take_a_design_past_its_own_accuracy() -> str:
         "are blind, so no criterion built from it can certify a design better "
         "than that** -- which is the ceiling the whole route runs into, stated "
         "as a number rather than as a failed round."
+    )
+
+
+def whether_dedup_helps_the_vote_depends_entirely_on_the_denominator() -> str:
+    """CORRECTION, MINE, TO A FINDING LANDED THE SAME DAY.
+
+    `the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote`
+    reports that grouping behaviourally identical designs takes the vote from
+    56% to 73% at blind cells, and calls de-duplication a golden-free fix with
+    no fitted parameter. Re-measured on the OTHER available weighting of the
+    same cells, it goes the other way, and by more.
+    """
+    return (
+        "**THE SAME CELLS, THE SAME BLOCS, OPPOSITE ANSWERS:**\n\n"
+        "    at blind cells        plain majority   de-duplicated\n"
+        "      **raw edges** (3,827)   **82%**          **54%**\n"
+        "      transactional rows (812)    56%              73%\n\n"
+        "**De-duplication HELPS by 17 points in one weighting and HURTS by 28 in "
+        "the other.** Neither denominator is privileged: transactional rows "
+        "collapse runs of identical values, so they weight transitions; raw "
+        "edges weight sustained stretches. The population is right on stretches "
+        "and wrong at transitions, and that is the whole reversal.\n\n"
+        "**SO NEITHER FIGURE IS QUOTABLE WITHOUT ITS DENOMINATOR, AND THE "
+        "ORIGINAL FINDING QUOTED ONE AS THE ANSWER.**\n\n"
+        "**AND THE PER-DESIGN TABLE SAYS WHY DE-DUPLICATION HURTS WHERE IT "
+        "HURTS.** On raw-edge blind cells: C **89%**, the bloc B/D/E/F/H "
+        "**82%**, SD 54%, FULL 53%, **G 20%**. One vote per bloc gives G's 20% "
+        "reading the same weight as the bloc's 82%. **The bloc of five is the "
+        "most accurate group in the population, and its multiplicity is exactly "
+        "what made the plain majority good.**\n\n"
+        "**THE A PRIORI ARGUMENT I USED WAS NOT OBVIOUSLY RIGHT AND I DID NOT "
+        "MEASURE IT.** *Five copies are one opinion* is one reading; *five "
+        "agents independently arriving at the same behaviour is evidence* is the "
+        "other, and this corpus says the second is the better one where the "
+        "checks are blind. The structural observation stands -- five of nine "
+        "designs ARE behaviourally identical at every blind split cell, and a "
+        "majority over nine IS structurally their answer. **What is withdrawn is "
+        "that correcting for it improves the reading.**\n\n"
+        "**AND IT EXPLAINS THE EIGHTH GRADED RUN COMPLETELY.** That run put the "
+        "de-duplicated reading in the latch, drove it to a perfect score, and "
+        "produced the worst design of the eight -- the design's accuracy ending "
+        "at the reading's 54%, having started at 58%. **The plain majority was "
+        "available in the same coordinates at 82%, and I chose the one reading "
+        "below the design's own accuracy.** The run's law -- a criterion cannot "
+        "take a design past its own accuracy -- is confirmed and was applied to "
+        "the wrong reading."
     )
