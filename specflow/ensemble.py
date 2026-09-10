@@ -309,6 +309,21 @@ differing for a reason, and 'the loop beats one-shot generation' becomes 'in one
 of two runs'. What survives is every claim resting on a COUNT over a fixed
 population rather than on a spread between runs.
 `one_graded_run_is_not_a_measurement` carries it.
+
+AND THAT VARIANCE HAS AN ANSWER, WHICH IS THE FIRST PIPELINE CHANGE HERE THAT
+MEASURABLY IMPROVES WHAT IS DELIVERED. Five draws of one configuration span 146
+to 220 testpoints -- range 74, sd 28, within a point of the sd across seven
+independently WRITTEN designs, so re-running this loop is about as noisy as
+re-writing the module. Selecting among them by the GOLDEN-FREE count -- fewest
+objections of 169 on the accepted design -- picks run 6 at 1 objection, which is
+the best of the five: **0 of 5 draws beat the selected one, and it is 45
+testpoints better than an average draw**. The ordering behind that is only
+partial (+0.564, and one draw scores four times worse on the checks for an
+identical grade), so the rule works as a SELECTOR of a clear minimum and not as a
+ranking. It does not produce equivalence -- it buys the best member of a bad
+distribution.
+`best_of_n_with_a_golden_free_rule_picks_the_best_draw` carries it, with the two
+counts these draws correct.
 """
 from __future__ import annotations
 
@@ -6127,4 +6142,76 @@ def one_graded_run_is_not_a_measurement() -> str:
         "distinguished the two runs but the session. **The variance of this loop "
         "is comparable to the entire effect this plan has been measuring**, and "
         "no amount of care in a single run recovers that."
+    )
+
+
+def best_of_n_with_a_golden_free_rule_picks_the_best_draw() -> str:
+    """THE ANSWER TO THE VARIANCE, AND THE FIRST PIPELINE CHANGE HERE THAT
+    MEASURABLY IMPROVES THE DELIVERED DESIGN.
+
+    The replicate established that one graded run is not a measurement: two runs
+    of an identical configuration landed 61 testpoints apart. That is a problem
+    for the science and an OPPORTUNITY for the pipeline -- if the spread is real,
+    running the loop several times and picking is worth more than tuning it, and
+    the picking can be done without a reference.
+
+    Five draws of ONE configuration: the same start design (md5 34a7fd66, verified
+    byte-equal in every loop), the same 169 checks with only the checks in the
+    latch, the same disagreement report (one md5 across all copies), the same
+    21-trial budget, the same brief but for paths. Each reported 24 objections of
+    169 at init. Only the session differed.
+
+    THE SELECTION RULE WAS FIXED BEFORE ANY GRADE WAS READ: fewest objections of
+    169 on the accepted design, ties broken by fewest consensus cells. It reads no
+    reference. Every objection count comes from the GRADER re-scoring `dut.v` in a
+    clean directory, never from the editor's own summary -- one editor reported
+    its accepted design as 14 objections where the re-score says 11.
+    """
+    return (
+        "    draw        trials   objections   testpoints   cells\n"
+        "      run 6         5          1          146      1,358\n"
+        "      N3           19          4          192      3,572\n"
+        "      replicate     9          8          207      3,674\n"
+        "      N2           21         11          220      3,973\n"
+        "      N1           11         16          192      3,367\n\n"
+        "**FIVE IDENTICAL RUNS SPAN 146 TO 220 OF 348 -- A RANGE OF 74, MEAN 191, "
+        "SD 28.** That is the replicate's 61-testpoint gap confirmed and sized on "
+        "five samples, and the sd lands within a point of the 23 measured across "
+        "seven independently WRITTEN designs. **Re-running this loop is about as "
+        "noisy as re-writing the module from scratch.**\n\n"
+        "**AND THE GOLDEN-FREE RULE PICKED THE BEST OF THE FIVE.** It selects run "
+        "6 at 1 objection, which is the 146 -- the best design available. **0 of "
+        "5 draws beat the selected one**, and the selected design is 45 "
+        "testpoints better than an average draw (146 against 191), a 24% "
+        "reduction bought with no reference and no new checks.\n\n"
+        "**THE ORDERING IS ONLY PARTIAL, AND THE PRE-REGISTERED BAR SAYS SO.** "
+        "Spearman(objections, testpoints) = **+0.564**, in the +0.5 to +0.9 band "
+        "fixed in advance as PARTIAL rather than the >= +0.9 that would make the "
+        "count a reliable order. **N1 is the counterexample and it is stark: 16 "
+        "objections -- the worst golden-free score of the five -- and 192 "
+        "testpoints, tied with N3's 4.** A design can score four times worse on "
+        "the checks and be exactly as good.\n\n"
+        "**SO THE RULE WORKS AS A SELECTOR AND NOT AS A RANKING**, and the "
+        "distinction is the whole finding: picking the MINIMUM of five is robust "
+        "to an ordering that is wrong in the middle, because the minimum here is "
+        "a clear outlier (1 against a next-best 4). A rule that had to separate 4 "
+        "from 8 from 11 would not have this property.\n\n"
+        "**AND IT DOES NOT PRODUCE EQUIVALENCE.** 146 of 348 testpoints still "
+        "differ, the miter says `DIFFERS`, and all three pins are green on every "
+        "one of the five. Best-of-N buys the best member of a bad distribution; "
+        "it does not move the distribution.\n\n"
+        "**TWO COUNTS THESE DRAWS CORRECT, BOTH AGAINST FINDINGS LANDED EARLIER "
+        "THE SAME DAY.** N2 spent 21 of 21 trials, so **the editor declines its "
+        "budget in 6 of 7 runs, not 7 of 7**. And across the two resumed sessions "
+        "eight late-run trials latched **zero** commits -- every one repaired two "
+        "or three checks and broke more. Late trials are not merely noisy; on "
+        "this evidence they are unproductive.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Five draws on one configuration and one "
+        "specification. 'Picked the best of five' has a one-in-five chance of "
+        "happening by luck and is not significant alone; it is offered together "
+        "with the +0.564, which points the same way and is also not significant "
+        "at n = 5. And two of the five were interrupted by a machine restart and "
+        "RESUMED in a fresh session, so they are not single continuous runs -- "
+        "recorded here because it is a deviation from the protocol rather than a "
+        "detail."
     )

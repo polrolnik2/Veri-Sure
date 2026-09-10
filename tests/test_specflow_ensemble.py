@@ -3440,3 +3440,71 @@ def test_the_replicate_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "one_graded_run_is_not_a_measurement" in flat
     assert "landed **61 testpoints away**" in flat
+
+
+def test_five_identical_runs_span_seventy_four_testpoints():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "SPAN 146 TO 220 OF 348 -- A RANGE OF 74, MEAN 191, SD 28" in flat
+    assert "about as noisy as re-writing the module from scratch" in flat
+
+
+def test_the_golden_free_rule_picks_the_best_of_five():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "GOLDEN-FREE RULE PICKED THE BEST OF THE FIVE" in flat
+    assert "**0 of 5 draws beat the selected one**" in flat
+    assert "45 testpoints better than an average draw" in flat
+
+
+def test_the_ordering_is_only_partial_and_named_as_such():
+    """+0.564 sits in the pre-registered PARTIAL band, and one draw scores four
+    times worse on the checks for an identical grade."""
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "**+0.564**" in flat
+    assert "PARTIAL rather than the >= +0.9" in flat
+    assert "16 objections -- the worst golden-free score of the five -- and 192 testpoints" in flat
+
+
+def test_the_rule_is_a_selector_not_a_ranking():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "WORKS AS A SELECTOR AND NOT AS A RANKING" in flat
+    assert "the minimum here is a clear outlier" in flat
+
+
+def test_best_of_n_does_not_produce_equivalence():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "AND IT DOES NOT PRODUCE EQUIVALENCE" in flat
+    assert "buys the best member of a bad distribution; it does not move the distribution" in flat
+
+
+def test_the_draws_correct_two_earlier_counts():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "declines its budget in 6 of 7 runs, not 7 of 7" in flat
+    assert "eight late-run trials latched **zero** commits" in flat
+
+
+def test_the_grader_not_the_editor_is_the_source_of_every_count():
+    """One editor reported its accepted design as 14 objections where the
+    independent re-score says 11."""
+    d = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw.__doc__
+    flat = " ".join((d or "").split())
+    assert "never from the editor's own summary" in flat
+    assert "14 objections where the re-score says 11" in flat
+
+
+def test_the_resumption_deviation_is_recorded():
+    t = ensemble.best_of_n_with_a_golden_free_rule_picks_the_best_draw()
+    flat = " ".join(t.split())
+    assert "interrupted by a machine restart and RESUMED in a fresh session" in flat
+    assert "deviation from the protocol rather than a detail" in flat
+
+
+def test_best_of_n_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "best_of_n_with_a_golden_free_rule_picks_the_best_draw" in flat
+    assert "0 of 5 draws beat the selected one" in flat

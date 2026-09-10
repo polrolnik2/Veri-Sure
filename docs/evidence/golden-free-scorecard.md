@@ -1675,6 +1675,79 @@ generalised from one design.
 not a rate, offered as the *shape* of the failure — optimistic in both directions
 — rather than as a reliability figure.
 
+## 9y. Best-of-N — the variance has a golden-free answer, and it is a selector
+
+§9t made one graded run unquotable: two runs of an identical configuration landed
+61 testpoints apart. That is a problem for the science and an **opportunity for
+the pipeline** — if the spread is real, running the loop several times and picking
+is worth more than tuning it, and the picking can be done without a reference.
+
+**Five draws of one configuration.** Same start design (md5 `34a7fd66…`, verified
+byte-equal in every loop), same 169 checks with only the checks in the latch, same
+disagreement report (one md5 across all copies), same 21-trial budget, same brief
+but for paths. Each reported **24 objections of 169 at init**. Only the session
+differed.
+
+**The selection rule was fixed before any grade was read:** fewest objections of
+169 on the accepted design, ties broken by fewest consensus cells. It reads no
+reference. Every count comes from the **grader** re-scoring `dut.v` in a clean
+directory — never from the editor's own summary, because one editor reported its
+accepted design as 14 objections where the re-score says 11.
+
+| draw | trials | objections | testpoints | cells |
+|---|---|---|---|---|
+| **run 6** | 5 | **1** | **146** | 1,358 |
+| N3 | 19 | 4 | 192 | 3,572 |
+| replicate | 9 | 8 | 207 | 3,674 |
+| N2 | 21 | 11 | 220 | 3,973 |
+| N1 | 11 | **16** | **192** | 3,367 |
+
+**Five identical runs span 146 to 220 — range 74, mean 191, sd 28.** That sd lands
+within a point of the **23** measured across seven independently *written* designs
+(§9w). **Re-running this loop is about as noisy as re-writing the module from
+scratch.**
+
+### The golden-free rule picked the best of the five
+
+It selects run 6 at 1 objection — which is the 146, the best design available.
+**0 of 5 draws beat the selected one**, and the selected design is **45 testpoints
+better than an average draw** (146 against 191), a 24% reduction bought with no
+reference and no new checks.
+
+### The ordering is only partial, and the pre-registered bar says so
+
+Spearman(objections, testpoints) = **+0.564**, inside the +0.5–0.9 band fixed in
+advance as *partial* rather than the ≥ +0.9 that would make the count a reliable
+order. **N1 is the counterexample and it is stark: 16 objections — the worst
+golden-free score of the five — and 192 testpoints, tied with N3's 4.** A design
+can score four times worse on the checks and be exactly as good.
+
+**So the rule works as a SELECTOR and not as a RANKING**, and that distinction is
+the finding: picking the *minimum* of five is robust to an ordering that is wrong
+in the middle, because the minimum here is a clear outlier (1 against a next-best
+4). A rule that had to separate 4 from 8 from 11 would not have this property.
+
+### And it does not produce equivalence
+
+146 of 348 testpoints still differ, the miter says `DIFFERS`, and all three pins
+are green on every one of the five. **Best-of-N buys the best member of a bad
+distribution; it does not move the distribution.**
+
+### Two counts these draws correct, both against findings landed the same day
+
+* **N2 spent 21 of 21 trials.** So the editor declines its budget in **6 of 7**
+  runs, not 7 of 7 (§9s).
+* **Across the two resumed sessions, eight late-run trials latched zero commits** —
+  every one repaired two or three checks and broke more. Late trials are not
+  merely noisy; on this evidence they are unproductive.
+
+**Scope.** Five draws, one configuration, one specification. "Picked the best of
+five" has a one-in-five chance of happening by luck and is not significant alone;
+it is offered together with the +0.564, which points the same way and is also not
+significant at n = 5. **Two of the five were interrupted by a machine restart and
+resumed in a fresh session**, so they are not single continuous runs — recorded
+because it is a deviation from the protocol, not a detail.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -1782,6 +1855,18 @@ how ACTIVE it is on the reference, and check count is very nearly a restatement
 of activity — **Spearman +0.857 against the reference's transitions**, and once
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
+
+**AND THE VARIANCE HAS A GOLDEN-FREE ANSWER, WHICH IS THE ONE PIPELINE CHANGE
+THIS SESSION FOUND THAT IMPROVES WHAT IS DELIVERED — §9y.** Five draws of one
+configuration span 146 to 220 testpoints, sd 28 — within a point of the sd across
+seven independently *written* designs, so re-running the loop is about as noisy as
+re-writing the module. **Selecting among them by the golden-free count picks the
+best of the five: 0 of 5 draws beat it, and it is 45 testpoints better than an
+average draw.** The ordering behind that is only partial (+0.564; one draw scores
+four times worse on the checks for an identical grade), so it is a **selector of a
+clear minimum, not a ranking** — and it buys the best member of a bad
+distribution rather than moving the distribution. **It does not reach
+equivalence.**
 
 **AND ONE GRADED RUN IS NOT A MEASUREMENT, WHICH UNDERCUTS SEVERAL OF THE ABOVE
 — §9t.** Every graded run here is n = 1. A pre-registered replicate of run 6's
