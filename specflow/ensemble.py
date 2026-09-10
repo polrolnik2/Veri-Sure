@@ -4460,3 +4460,65 @@ def blindness_saturates_at_four_designs_and_two_can_read_zero() -> str:
         "is good. And the saturation point is measured for one set on one "
         "design; four is what it took here, not a constant."
     )
+
+
+def the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection() -> str:
+    """The pre-registered negative, and the clearest case this plan has for why
+    blindness may never be quoted without its audit.
+
+    Recorded in PREREG_HOLE2.md before the round ran: "a round that raises the
+    accept count while the audit moves off zero is a NEGATIVE and is reported
+    as one." It did, and it is.
+    """
+    return (
+        "40 checks authored at named holes, on targets drawn from normalize's "
+        "own port map -- the widened instrument that reaches 237 "
+        "(requirement, port) pairs against a regex's 38. A defect in my "
+        "ranking, recorded before any score was read, sent all 40 calls to the "
+        "**eleven broadest requirements in the specification**: candidates were "
+        "ordered by uid, and the generic overview sentences name every port in "
+        "their normalization, so they win every port and sort first. REQ-0001 "
+        "is the module's one-line purpose statement; REQ-0003 says sequential "
+        "state updates on the rising edge of the clock.\n\n"
+        "    integrity     40 of 40 returned, 40 compile, 0 duplicate bodies,\n"
+        "                  0 identical to any of the 600 corpus bodies\n"
+        "    over-strict   32   convict 7 of the 7 spec-derived designs\n"
+        "    vacuous        6   object on no cell at all\n"
+        "    accepted       2   decide, and convict at most 3 of 7\n\n"
+        "**AND THE TWO ACCEPTED CHECKS CLOSED 1,293 CELLS -- BLINDNESS 55.1% "
+        "-> 32.3%, THE LARGEST MOVE ON THIS PLAN BY AN ORDER OF MAGNITUDE.** "
+        "The previous round's six closed 102. Quoted alone that is the "
+        "session's headline: two checks, 23 points of completeness, from a "
+        "golden-free rule.\n\n"
+        "**THE AUDIT IS 2 OF 2.**\n\n"
+        "    REQ-0001@dc_addr    decides 329   convicts the reference on 41   UNSOUND\n"
+        "    REQ-0001@dcram_we   decides  80   convicts the reference on  7   UNSOUND\n\n"
+        "**EVERY ONE OF THOSE 1,293 CELLS WAS BOUGHT WITH FALSE REJECTION**, "
+        "and four graded runs already measure what that does: a set carrying "
+        "over-strict checks does not merely admit wrong designs, it rejects "
+        "right repairs, and the run that reached the completeness floor at 64% "
+        "audit drove a design *worse* than one 57 points blinder. So this is "
+        "the pair discipline earning its keep on the largest number it has ever "
+        "had to reject.\n\n"
+        "**AND IT LOCATES A LIMIT OF THE MINORITY RULE THAT CONVICTION COUNT "
+        "CANNOT SEE.** Both checks convict **2 of 7** -- inside the strict end "
+        "of a rule measured at 126 of 126 precision. The previous round "
+        "accepted checks at 0, 1 and 2 of 7 and its audit was **0 of 6**. Same "
+        "rule, same threshold, same population, opposite outcome. What differs "
+        "is the SENTENCE: those six came from specific behavioural obligations, "
+        "these two from the module's purpose statement.\n\n"
+        "**A SCAFFOLDING SENTENCE LICENSES NOTHING, SO THE AUTHOR INVENTS AN "
+        "OBLIGATION** -- and an invented obligation can be violated by only a "
+        "couple of the population and by the reference as well, which is "
+        "exactly the profile the minority rule is built to accept. The rule "
+        "reads how many designs a check convicts; it cannot read whether the "
+        "check's own requirement gave it anything to say. **Requirement "
+        "specificity is a golden-free property the selection rules here have "
+        "never used, and this is the measurement that says they should.**\n\n"
+        "**WHAT THIS ROUND DOES NOT SETTLE.** It is the BROAD arm and it was "
+        "run by accident. Whether authoring at named holes scales is a question "
+        "about the specific requirements -- 40 of the 67 name at most three "
+        "hole ports and supply 82 targets -- and that arm is separate. This "
+        "round becomes its control: same holes, same brief, same exemplar rule, "
+        "opposite end of the breadth distribution."
+    )

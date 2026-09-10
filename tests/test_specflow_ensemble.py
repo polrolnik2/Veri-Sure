@@ -2292,3 +2292,34 @@ def test_a_trustworthy_instrument_is_not_a_good_number():
     flat = " ".join(t.split())
     assert "Saturation of the ESTIMATE is not completeness of the SET" in flat
     assert "four is what it took here, not a constant" in flat
+
+
+def test_the_largest_blindness_drop_is_a_negative():
+    t = ensemble.the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection()
+    flat = " ".join(t.split())
+    assert "1,293 CELLS -- BLINDNESS 55.1% -> 32.3%" in flat
+    assert "THE AUDIT IS 2 OF 2" in flat
+    assert "EVERY ONE OF THOSE 1,293 CELLS WAS BOUGHT WITH FALSE REJECTION" in flat
+
+
+def test_the_minority_rule_cannot_see_the_sentence():
+    t = ensemble.the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection()
+    flat = " ".join(t.split())
+    assert "Both checks convict **2 of 7**" in flat
+    assert "its audit was **0 of 6**" in flat
+    assert "Same rule, same threshold, same population, opposite outcome" in flat
+    assert "Requirement specificity is a golden-free property" in flat
+
+
+def test_a_scaffolding_sentence_makes_the_author_invent():
+    t = ensemble.the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection()
+    flat = " ".join(t.split())
+    assert "A SCAFFOLDING SENTENCE LICENSES NOTHING, SO THE AUTHOR INVENTS AN OBLIGATION" in flat
+    assert "cannot read whether the check's own requirement gave it anything to say" in flat
+
+
+def test_the_broad_arm_is_labelled_as_the_control():
+    t = ensemble.the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection()
+    flat = " ".join(t.split())
+    assert "It is the BROAD arm and it was run by accident" in flat
+    assert "This round becomes its control" in flat
