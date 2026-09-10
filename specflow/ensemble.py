@@ -5102,3 +5102,58 @@ def the_monotone_predictor_is_a_two_point_instrument() -> str:
         "call that a trade, and it is recorded as the reason the ordering is not "
         "quotable rather than as a mechanism."
     )
+
+
+def the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote() -> str:
+    """WHY EVERY CONSENSUS ROUTE ON THIS PLAN FAILED, AND A GOLDEN-FREE FIX.
+
+    `the_population_vote_is_inverted_on_one_port_and_perfect_on_another` closes
+    the population's vote as an adjudicator. That is right about the PLAIN
+    majority and it left the mechanism unexamined. The mechanism is that the
+    population is not nine independent readings where it matters, and once that
+    is corrected the vote recovers most of the available ceiling -- with no
+    fitted parameter and no reference.
+    """
+    return (
+        "**AT EVERY ONE OF THE 812 BLIND SPLIT CELLS, DESIGNS B, D, E, F AND H "
+        "PRODUCE IDENTICAL VALUES.** Grouped by behavioural signature -- a "
+        "golden-free operation over the traces -- the nine designs are **FIVE "
+        "distinct opinions**: a bloc of five, and C, G, FULL and SD alone.\n\n"
+        "**SO A MAJORITY OVER NINE IS STRUCTURALLY THE BLOC'S ANSWER, ALWAYS.** "
+        "The bloc holds 5 of 9 votes, so the vote is capped at the bloc's own "
+        "accuracy however many designs are added -- which is the saturation this "
+        "plan measured from the outside and never explained. Adding a tenth "
+        "design drawn from the same distribution makes it worse, not better.\n\n"
+        "    rule                          the 60 NAMED cells   all blind split cells\n"
+        "      MAJORITY -- all 9              20/60   33%          456/812   56%\n"
+        "      **DEDUP -- one vote per bloc** 23/60   38%      **595/812   73%**\n"
+        "      LEAST-5 -- calibrated k        23/60   38%          637/812   78%\n"
+        "      *ORACLE-BEST (C) -- ceiling*   23/60   38%          637/812   78%\n\n"
+        "**DEDUP IS GOLDEN-FREE AND HAS NO FITTED PARAMETER**: group designs by "
+        "behavioural signature, give each group one vote. It moves the vote "
+        "**56% -> 73%**, recovering most of the distance to the single-best "
+        "design. 4% of its decisions are ties broken by order and are reported "
+        "as such. **LEAST-5** -- vote among the five designs the check set "
+        "convicts least -- reaches the ceiling exactly, 637 of 812 on the same "
+        "cells as C, with **zero** ties; its k was chosen by reading the audit, "
+        "so it is a CALIBRATION exactly as rule C's threshold at two is, not a "
+        "score.\n\n"
+        "**AND ON THE CELLS THAT CARRY THE RESIDUE, NOTHING HELPS: EVERY RULE "
+        "TIES AT 38%, INCLUDING THE CEILING.** The 60 cells the disagreement "
+        "report named are the FIRST split of each blind testpoint, and there "
+        "even the best single design in the population is wrong 62% of the "
+        "time. So the earlier closure stands where it was measured, and this "
+        "adds the reason the arm could not have worked: **the report was drawn "
+        "from the one sample on which no rule over this population beats any "
+        "other.**\n\n"
+        "**WHAT THIS CHANGES.** The vote is reopened as an adjudicator for blind "
+        "cells IN GENERAL, at 73% golden-free against 56%, and the instrument "
+        "is de-duplication rather than a better threshold. What stays closed is "
+        "adjudicating the first-divergence cells, where the ceiling itself is "
+        "38%.\n\n"
+        "**AND IT PRICES THE PHRASE 'INDEPENDENTLY WRITTEN' ON THIS PLAN.** Nine "
+        "agents, each forbidden to read another's work, produced five opinions "
+        "where the checks are blind. Every majority figure on this document is "
+        "a bloc of five wearing the authority of nine, and every 'widening the "
+        "population' result should be read against that."
+    )

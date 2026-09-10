@@ -2709,3 +2709,47 @@ def test_the_middle_inversion_is_not_sold_as_a_mechanism():
     t = ensemble.the_monotone_predictor_is_a_two_point_instrument()
     flat = " ".join(t.split())
     assert "Two runs is not enough to call that a trade" in flat
+
+
+def test_the_population_is_five_opinions_not_nine():
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "DESIGNS B, D, E, F AND H PRODUCE IDENTICAL VALUES" in flat
+    assert "**FIVE distinct opinions**" in flat
+
+
+def test_the_majority_is_structurally_the_bloc():
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "A MAJORITY OVER NINE IS STRUCTURALLY THE BLOC'S ANSWER, ALWAYS" in flat
+    assert "Adding a tenth design drawn from the same distribution makes it worse" in flat
+
+
+def test_dedup_is_golden_free_and_unfitted():
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "DEDUP IS GOLDEN-FREE AND HAS NO FITTED PARAMETER" in flat
+    assert "**56% -> 73%**" in flat
+    assert "4% of its decisions are ties broken by order" in flat
+
+
+def test_least_k_is_labelled_a_calibration_not_a_score():
+    """k was chosen by reading the audit. If this ever reads as golden-free, the
+    distinction rule C carries has been lost."""
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "it is a CALIBRATION exactly as rule C's threshold at two is, not a score" in flat
+
+
+def test_nothing_helps_on_the_first_split_cells():
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "EVERY RULE TIES AT 38%, INCLUDING THE CEILING" in flat
+    assert "the report was drawn from the one sample on which no rule over this population beats any other" in flat
+
+
+def test_independently_written_is_priced():
+    t = ensemble.the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote()
+    flat = " ".join(t.split())
+    assert "produced five opinions where the checks are blind" in flat
+    assert "a bloc of five wearing the authority of nine" in flat

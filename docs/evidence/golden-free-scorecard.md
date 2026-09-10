@@ -665,6 +665,11 @@ is read correctly; the 6% is the population being wrong.
 **What it does not say.** The disagreement is still evidence — at most one side
 can be right, whatever the counts do. What is closed is resolving it *by vote*.
 
+**PARTLY REOPENED BY §9k.** That closure is right about the PLAIN majority and
+about these 60 first-split cells. De-duplicating the population first — a
+golden-free operation with no fitted parameter — takes the vote from 56% to
+**73%** on blind cells generally. See §9k.
+
 ## 9i. The sixth graded run — the disagreement report did not move the cells it named
 
 §9h closed the population's *vote* as an adjudicator. The disagreement itself
@@ -769,6 +774,53 @@ sits on a caught testpoint. `CAUGHT` says the set can adjudicate the
 *population's* disagreements there. It says nothing about whether it catches the
 errors of the design under test, and every use of the word on this page should
 be read that way.
+
+## 9k. The population is five opinions, not nine — and de-duplication recovers the vote
+
+§9h closed the population's vote as an adjudicator. That is right about the
+*plain* majority, and it left the mechanism unexamined. The mechanism turns out
+to be a fixable defect in the rule rather than a property of the evidence.
+
+**At every one of the 812 blind split cells, designs B, D, E, F and H produce
+identical values.** Grouped by behavioural signature — golden-free, just a
+comparison of traces — the nine designs are **five distinct opinions**: a bloc
+of five, plus C, G, FULL and SD alone.
+
+**So a majority over nine is structurally the bloc's answer, always.** The bloc
+holds 5 of 9 votes, so the vote is capped at the bloc's own accuracy however
+many designs are added — which is the saturation §9b measured from the outside
+and never explained. A tenth design from the same distribution makes it worse.
+
+| rule | the 60 NAMED cells | all blind split cells |
+|---|---|---|
+| MAJORITY — all 9 | 20/60 = 33% | 456/812 = 56% |
+| **DEDUP — one vote per bloc** | 23/60 = 38% | **595/812 = 73%** |
+| LEAST-5 — calibrated k | 23/60 = 38% | 637/812 = 78% |
+| *ORACLE-BEST (C) — ceiling* | 23/60 = 38% | 637/812 = 78% |
+
+**DEDUP is golden-free and has no fitted parameter**: group by behavioural
+signature, one vote per group. It moves the vote **56% → 73%**, recovering most
+of the distance to the best single design. 4% of its decisions are ties broken
+by order, reported as such. **LEAST-5** — vote among the five designs the check
+set convicts least — hits the ceiling exactly (637 of 812, the same cells as C)
+with zero ties, but its k was read off the audit, so it is a **calibration**
+exactly as rule C's threshold at two is.
+
+### And on the cells that carry the residue, nothing helps
+
+Every rule ties at **38%** on the 60 named cells, **including the ceiling**.
+Those are the *first* split of each blind testpoint, and there even the best
+design in the population is wrong 62% of the time. So §9h stands where it was
+measured — and this supplies the reason §9i's arm could not have worked: the
+report was drawn from the one sample on which no rule over this population beats
+any other.
+
+### It also prices the phrase "independently written"
+
+Nine agents, each forbidden to read another's work, produced **five** opinions
+where the checks are blind. Every majority figure on this page is a bloc of five
+wearing the authority of nine, and every population-widening result should be
+read against that.
 
 ## 10. The bottom line
 
