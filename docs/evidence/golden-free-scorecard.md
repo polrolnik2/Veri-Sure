@@ -521,6 +521,45 @@ closes those cells — 95 of 95 attempts convict the reference, and that stands.
 What it says is that the cells were never the only variable: they are the
 disagreements *this* stimulus happens to produce.
 
+### Why a testpoint is blind — the sizing that decides the stimulus loop
+
+Both classes are already on disk, so the discriminator costs nothing. If they
+disagree on *different ports*, blindness is about which outputs the specification
+underdetermines and no stimulus helps. If the *same ports* appear in both, it is
+about the scenario those ports are put in, and stimulus is a lever.
+
+| port | caught | blind | ratio |
+|---|---|---|---|
+| `biu_write` | 8.0% | 40.5% | **5.06×** |
+| `first_miss_ack` | 15.1% | 18.3% | 1.21× |
+| `biu_read` | 18.2% | 14.7% | 0.81× |
+| `dc_addr` | 10.8% | 12.3% | 1.13× |
+| `first_hit_ack` | 5.7% | 3.6% | 0.64× |
+| `tag_we` | 7.3% | 3.6% | 0.48× |
+| `saved_addr` | 6.5% | 3.3% | 0.50× |
+| `dcram_we` | 10.1% | 2.2% | 0.22× |
+| `burst` | 14.7% | 1.6% | **0.11×** |
+| `first_miss_err` | 3.7% | 0.0% | **0.00×** |
+
+Total-variation distance between the profiles: **0.372**.
+
+**It is both, and the scenario half is larger.** 63% of the mass overlaps and **8
+of 10 ports carry >2% in both classes** — the same output is adjudicated on one
+testpoint and invisible on another. There is also a port component with a name:
+`biu_write` at a 5× concentration in the blind class, `burst` and
+`first_miss_err` essentially never blind. The store write-through path is where
+blindness collects.
+
+**This is the first positive sizing for the stimulus loop here.** The earlier one
+— *worth 3 checks of 50* — asked whether checks are silent rather than blind on
+one design; that answer stands and does not bear on this.
+
+**What it does not establish.** That a port is caught somewhere and blind
+elsewhere does not mean a stimulus author can reach the caught kind on demand.
+The settling experiment is a stimulus round aimed at the 70 fully-blind
+testpoints' scenarios, scored on whether the new testpoints are also fully blind.
+That is not run. And `biu_write`'s concentration is a co-occurrence, not a cause.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

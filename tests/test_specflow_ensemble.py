@@ -2497,3 +2497,33 @@ def test_the_closed_levers_are_reframed_not_reopened():
     flat = " ".join(t.split())
     assert "95 of 95 attempts convict the reference. That stands." in flat
     assert "nothing has tested whether another stimulus produces better ones" in flat
+
+
+def test_the_same_ports_appear_in_both_classes():
+    t = ensemble.the_blind_testpoints_differ_from_the_caught_ones_by_scenario_not_only_port()
+    flat = " ".join(t.split())
+    assert "**0.372**" in flat
+    assert "8 of the 10 ports carry more than 2% in BOTH classes" in flat
+    assert "IT IS BOTH, AND THE SCENARIO HALF IS THE LARGER ONE" in flat
+
+
+def test_biu_write_is_named_as_the_port_component():
+    t = ensemble.the_blind_testpoints_differ_from_the_caught_ones_by_scenario_not_only_port()
+    flat = " ".join(t.split())
+    assert "40.5% of blind disagreements against 8.0% of caught ones" in flat
+    assert "the store write-through path is where it collects" in flat
+
+
+def test_the_earlier_stimulus_sizing_is_distinguished_not_contradicted():
+    t = ensemble.the_blind_testpoints_differ_from_the_caught_ones_by_scenario_not_only_port()
+    flat = " ".join(t.split())
+    assert "the stimulus loop is worth 3 checks of 50" in flat
+    assert "That answer stands and does not bear on this" in flat
+
+
+def test_the_sizing_does_not_claim_the_experiment():
+    t = ensemble.the_blind_testpoints_differ_from_the_caught_ones_by_scenario_not_only_port()
+    flat = " ".join(t.split())
+    assert "does NOT mean a stimulus author can reach the caught kind on demand" in flat
+    assert "That is not run here" in flat
+    assert "the concentration is a co-occurrence, not a cause".upper() in flat.upper()
