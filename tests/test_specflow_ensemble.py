@@ -3055,3 +3055,61 @@ def test_the_extraction_closure_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "requirement_extraction_is_not_the_limit_and_activity_is_the_predictor" in flat
     assert "no port is dark and the lever has no target" in flat
+
+
+def test_no_graded_run_reached_its_trial_budget():
+    """`give the editor more trials` is closed for nothing: the editor already
+    declines the budget it has, in four runs of four."""
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "**NOT ONE OF THE FOUR REACHED ITS BUDGET.**" in flat
+    assert "6 to 16 of 21 trials unspent" in flat
+    assert "the editor already declines the budget it has" in flat
+
+
+def test_every_run_stopped_past_its_own_best_and_the_ratchet_saved_it():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "4 OF 4 STOPPED ON A TRIAL WORSE THAN THEIR OWN BEST" in flat
+    assert "0 OF 4 STOPPED AT THEIR BEST" in flat
+    assert "ratchet on the accepted design is what preserved every grade" in flat
+
+
+def test_the_oscillation_is_quantified_as_the_goal_asks():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "OSCILLATION IS BETWEEN A QUARTER AND A HALF OF ALL TRIALS" in flat
+    assert "1 of 4, 3 of 11, 7 of 13 and 4 of 14" in flat
+
+
+def test_the_trials_confound_is_stated_and_called_inseparable():
+    """Trials are an output of the criterion, not an independent variable, so
+    the +1.000 must not be read as `editing more makes it worse` on its own."""
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "SPEARMAN +1.000 ON n = 4" in flat
+    assert "confound is stated and is not separable" in flat
+    assert "trials are an OUTPUT of the criterion" in flat
+
+
+def test_the_positive_ordering_is_bounded_to_designs_the_set_drove():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "+0.949" in flat
+    assert "ordering designs it itself drove" in flat
+    assert "rank designs it did not drive" in flat
+
+
+def test_the_trial_counter_source_is_recorded_in_the_docstring():
+    """Counting tracker lines would over-report three of four runs by one,
+    because three log an init reading at trial 0 and one does not."""
+    d = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best.__doc__
+    flat = " ".join((d or "").split())
+    assert "`action_calls`, not from the tracker's line count" in flat
+    assert "over-report three runs by one" in flat
+
+
+def test_the_budget_closure_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_editor_declines_its_budget_and_stops_past_its_own_best" in flat
+    assert "stopped voluntarily with 6 to 16 trials unspent" in flat

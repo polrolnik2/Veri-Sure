@@ -222,6 +222,18 @@ correlation goes negative on four designs of five.
 it, together with the ninth counting-shaped defect on this plan: its first run
 loaded zero requirements and printed a clean table saying every port was
 uncovered.
+
+AND THE LOOP ITSELF DOES NOT WANT MORE ROOM, WHICH CLOSES THE CHEAPEST LEVER OF
+ALL FOR NOTHING. Four graded runs shared a 21-trial budget and not one reached
+it: they stopped voluntarily with 6 to 16 trials unspent. All four stopped on a
+trial WORSE than their own best and none stopped at its best, so the ratchet on
+the accepted design is what preserved every grade reported here. Between a
+quarter and a half of all trials move the criterion's own count UP -- the
+oscillation the goal asks to be taken into account, measured -- and trials spent
+rank-order the final grade perfectly on four runs, confounded with criterion
+volume in a way that is not separable because the criterion is what decides how
+much the editor edits.
+`the_editor_declines_its_budget_and_stops_past_its_own_best` carries the table.
 """
 from __future__ import annotations
 
@@ -5583,4 +5595,62 @@ def requirement_extraction_is_not_the_limit_and_activity_is_the_predictor() -> s
         "common ancestor, so no single coefficient here is significant and none "
         "is offered as one. What is solid is the raw table: no dark port, and "
         "activity dominating both coverage instruments."
+    )
+
+
+def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
+    """THE OSCILLATION THE GOAL ASKS FOR, AND THE TRIAL BUDGET -- both read off
+    artifacts four graded runs already wrote. No new run, no model call.
+
+    Every graded run used the shipped editor policy with the same trial budget
+    (21) and the same 169-check reporting instrument; they differ only in what
+    extra evidence the criterion carried. The loop's own `state.json` records
+    trials spent, and its tracker records the objection count after each one.
+
+    Trials used is taken from `action_calls`, not from the tracker's line count:
+    three of the four trackers log an init reading at trial 0 and one does not,
+    so counting lines would over-report three runs by one. The reader asserts the
+    two agree before printing anything.
+    """
+    return (
+        "    run              used  declined   best  at trial  stopped at  up-moves   testpoints\n"
+        "      run 6 loopDIS     5        16      1       4          3       1/4          146\n"
+        "      run 7 loopDIS2   12         9      5      10          7       3/11         214\n"
+        "      run 8 loopLATCH  14         7     13      12         19       7/13         221\n"
+        "      run 9 loopMAJ2   15         6     13       7         18       4/14         271\n\n"
+        "**NOT ONE OF THE FOUR REACHED ITS BUDGET.** Each stopped voluntarily "
+        "with 6 to 16 of 21 trials unspent, so *give the editor more trials* is "
+        "not a lever -- the editor already declines the budget it has. That is a "
+        "closure bought for nothing, off data on disk.\n\n"
+        "**AND 4 OF 4 STOPPED ON A TRIAL WORSE THAN THEIR OWN BEST; 0 OF 4 "
+        "STOPPED AT THEIR BEST.** Run 6 reached 1 objection at trial 4 and "
+        "stopped at trial 5 with 3. Run 8 reached 13 at trial 12 and stopped at "
+        "19. **The ratchet on the accepted design is what preserved every grade "
+        "reported here** -- without it each run would have shipped a design worse "
+        "than the one it had already found, and the loop gives no sign of "
+        "knowing which trial was its best.\n\n"
+        "**OSCILLATION IS BETWEEN A QUARTER AND A HALF OF ALL TRIALS.** Up-moves "
+        "on the criterion's own count run 1 of 4, 3 of 11, 7 of 13 and 4 of 14. "
+        "Run 8's sequence is the plainest: 21, 39, 21, 34, 33, 16, 22, 28, 14, "
+        "15, 23, 13, 13, 19 -- six reversals of two or more, and the run ends "
+        "above where it stood two trials earlier.\n\n"
+        "**TRIALS SPENT AND THE FINAL GRADE ARE PERFECTLY RANK-ORDERED: "
+        "SPEARMAN +1.000 ON n = 4** -- 5 trials to 146 testpoints, 12 to 214, 14 "
+        "to 221, 15 to 271, against a start design at 279. **The confound is "
+        "stated and is not separable:** the criterion determines how much the "
+        "editor edits, so trials are an OUTPUT of the criterion rather than an "
+        "independent variable, and the runs that carried more scored proxy "
+        "evidence are the runs that edited more. Read as one mechanism rather "
+        "than two: **more units on a criterion barely better than chance means "
+        "more edits, and the harm scales with the volume.**\n\n"
+        "**ONE POSITIVE READING, AND IT DOES NOT GENERALISE.** Each run's "
+        "MINIMUM objection count ranks the four designs at +0.949 against the "
+        "grade. That is the check set ordering designs it itself drove, which is "
+        "the condition the -0.223 measured over sixteen designs was NOT taken "
+        "under. A golden-free pipeline needs to rank designs it did not drive, "
+        "and nothing here shows it can.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Four runs from one start design against "
+        "one check set. The budget closure is exact -- the counters are on disk. "
+        "The ordering correlations are n = 4 and are offered as shape, not "
+        "significance."
     )

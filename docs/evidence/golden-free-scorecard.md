@@ -1226,6 +1226,68 @@ Seven ports and five designs that share a common ancestor, so no single
 coefficient is significant and none is offered as one. What is solid is the raw
 table — no dark port — and activity dominating both coverage instruments.
 
+## 9s. The oscillation, and the trial budget nobody spent
+
+The goal asks for oscillations between repairs to be taken into account. This is
+that, read off artifacts the four graded runs already wrote — the loop's own
+`state.json` for trials spent and its tracker for the objection count after each
+one. No new run, no model call. All four used the same 21-trial budget, the same
+start design, and the same 169-check reporting instrument; they differ only in
+what extra evidence the criterion carried.
+
+| run | used | declined | best | at trial | stopped at | up-moves | testpoints |
+|---|---|---|---|---|---|---|---|
+| run 6 `loopDIS` | 5 | **16** | **1** | 4 | 3 | 1/4 | **146** |
+| run 7 `loopDIS2` | 12 | 9 | 5 | 10 | 7 | 3/11 | 214 |
+| run 8 `loopLATCH` | 14 | 7 | 13 | 12 | 19 | 7/13 | 221 |
+| run 9 `loopMAJ2` | 15 | 6 | 13 | 7 | 18 | 4/14 | 271 |
+
+### Not one of the four reached its budget
+
+Each stopped **voluntarily**, with 6 to 16 of 21 trials unspent. So *give the
+editor more trials* is not a lever — **the editor already declines the budget it
+has** — and that closure costs nothing, because the counters were on disk.
+
+### And 4 of 4 stopped on a trial worse than their own best
+
+Run 6 reached 1 objection at trial 4 and stopped at trial 5 with 3. Run 8 reached
+13 at trial 12 and stopped at 19. **Zero of four stopped at their best.** The
+ratchet on the accepted design is what preserved every grade in §9 — without it
+each run would have shipped a design worse than one it had already found, and
+nothing in the loop's own reading tells it which trial was its best.
+
+### The oscillation is between a quarter and a half of all trials
+
+Up-moves on the criterion's own count: 1 of 4, 3 of 11, 7 of 13, 4 of 14. Run 8's
+sequence is the plainest — 21, 39, 21, 34, 33, 16, 22, 28, 14, 15, 23, 13, 13,
+**19** — six reversals of two or more, ending above where it stood two trials
+earlier. Run 9's proxy units churn the same way: its 160 majority units read 91,
+101, 90, 42, 90, 42, 53, 42, 48, 42 across fifteen trials, traded back and forth
+without converging.
+
+### Trials spent and the grade are perfectly rank-ordered, and the confound is not separable
+
+**Spearman +1.000 on n = 4**: 5 trials → 146 testpoints, 12 → 214, 14 → 221,
+15 → 271, against a start design at 279. But **the criterion determines how much
+the editor edits**, so trials are an *output* of the criterion rather than an
+independent variable, and the runs carrying more scored proxy evidence are the
+runs that edited more. Read as one mechanism, not two: **more units on a criterion
+barely better than chance means more edits, and the harm scales with the
+volume.** That is §9o's law — a proxy's aggregate accuracy is not its effective
+accuracy — expressed as a budget.
+
+### One positive reading, and it does not generalise
+
+Each run's **minimum** objection count ranks the four designs at **+0.949**
+against the grade. That is the check set ordering designs *it itself drove*,
+which is not the condition under which §8's −0.223 over sixteen designs was
+taken. A golden-free pipeline must rank designs it did not drive, and nothing
+here shows it can.
+
+**Scope.** Four runs from one start design against one check set. The budget
+closure is exact — the counters are on disk. The ordering correlations are n = 4
+and are shape, not significance.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -1326,6 +1388,13 @@ how ACTIVE it is on the reference, and check count is very nearly a restatement
 of activity — **Spearman +0.857 against the reference's transitions**, and once
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
+
+**AND THE LOOP DOES NOT WANT MORE ROOM — §9s.** Four graded runs shared a
+21-trial budget and none reached it; each stopped voluntarily with 6 to 16 trials
+unspent, and all four stopped on a trial *worse* than their own best. So the
+cheapest remaining lever — give the editor more budget — is closed by counters
+already on disk, and the ratchet on the accepted design is what preserved every
+grade quoted here.
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains
