@@ -344,7 +344,7 @@ addressable at zero audit cost *at a usable rate*.
 check needs 40–180 accepted checks; at an accept rate that fell from 16% to 5%
 between rounds, that is **250 to 3,600 authoring calls**.
 
-## 9d. The residue is closeable, and 0.7% of it soundly — the decisive number
+## 9d. The residue is closeable, and none of it soundly — the decisive number
 
 §9c left one thing open: whether the 65 checks the minority rule rejects are
 genuinely over-strict or whether the rule is discarding real completeness at
@@ -369,13 +369,26 @@ of it. The author is not failing to reach the cells.
 
 | | |
 |---|---|
+| of the 76 authored checks, sparing the reference | 9 |
+| **of those 9, blind cells closed** | **0** |
 | of the 65 rejected checks, sparing the reference | 0 |
-| of the 4 kept checks, sparing the reference | 2 |
-| cells those two object on, between them | **21** |
-| **soundly closeable residue** | **21 of 3,119 = 0.7%** |
+| **soundly closeable residue** | **0 of 3,119 = 0.00%** |
 
-**An author asked to close a named blind cell succeeds every time, and 99.3% of
-the time the check it writes convicts a correct design.** That is the
+*Corrected, and the error was mine.* The first version read **21 of 3,119 =
+0.7%**, taken from "cells the sound checks object on" — every cell, blind or
+not. All 21 are cells the 169-check set already covers, and the tell sat in the
+same table: adding those two checks moved blindness from 3,119 to 3,119.
+
+*And a second leg was never implemented.* Every write-up here says an accepted
+check "decides at the named cell, objects to one of the two designs there, and
+convicts at most 3 of 7". The scorer accepts on *decides anywhere* plus the
+minority rule. Measured afterwards: of the four accepted, the two that do close
+their own cell are the two that convict the reference, and the two that spare it
+close some other cell instead. **Zero of 76 checks both closed the cell it was
+given and spared the reference.**
+
+**An author asked to close a named blind cell succeeds every time, and every
+time the check it writes convicts a correct design.** That is the
 completeness/soundness trade as a property of the *cells*, and it is why every
 lever on this plan lands in the same place.
 
@@ -390,15 +403,18 @@ soundly closeable. What it cannot do is close it anyway.
 
 ### And blindness should be reported as a pair
 
-Reporting 55.1% invites the reading that 55.1% is work outstanding. It is not:
-**0.7% is outstanding and 54.4% is the specification's own underdetermination.**
-A set should report *residue, and the share of it any check could soundly close*
-— the second is what further authoring buys, the first is not.
+Reporting 55.1% invites the reading that 55.1% is work outstanding. On this
+evidence **none of it is** — 55.1% of the disagreements two competent readers
+produce are cells where no adjudicating check spares a correct design. A set
+should report *residue, and the share of it any check could soundly close* — the
+second is what further authoring buys, and here it is zero.
 
-**Limits.** 76 checks is a cover, not an exhaustive search; a 77th could be the
-sound closer for a cell these close only unsoundly, so 0.7% is a floor. And
-"closed" means the check objects to one of the two designs there — not that it
-is right about which.
+**Limits, and the first is load-bearing now the number is zero.** 76 checks are
+a cover, not an exhaustive search; a 77th could be the sound closer for a cell
+these close only unsoundly, so 0.00% is a floor and the gap to the truth is
+unmeasured — which is what the narrowing round pre-registered in
+`PREREG_NARROW.md` measures. And "closed" means the check objects to one of the
+two designs there — not that it is right about which.
 
 ## 10. The bottom line
 

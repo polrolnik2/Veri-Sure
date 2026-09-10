@@ -2381,8 +2381,25 @@ def test_every_blind_cell_is_closeable():
 def test_the_soundly_closeable_share_is_the_headline():
     t = ensemble.the_blindness_residue_is_closeable_and_almost_none_of_it_soundly()
     flat = " ".join(t.split())
-    assert "**21 of 3,119 = 0.7%**" in flat
-    assert "99.3% OF THE TIME THE CHECK IT WRITES CONVICTS A CORRECT DESIGN" in flat
+    assert "**0 of 3,119 = 0.00%**" in flat
+    assert "EVERY TIME THE CHECK IT WRITES CONVICTS A CORRECT DESIGN" in flat
+
+
+def test_the_zero_point_seven_percent_is_retracted():
+    """Pins the correction so it cannot be silently undone."""
+    t = ensemble.the_blindness_residue_is_closeable_and_almost_none_of_it_soundly()
+    flat = " ".join(t.split())
+    assert "A CORRECTION, AND IT IS MINE" in flat
+    assert "The first version of this finding read **21 of 3,119 = 0.7%**" in flat
+    assert "counts EVERY cell they object on, blind or not" in flat
+    assert "moved blindness by exactly nothing, 3,119 to 3,119" in flat
+
+
+def test_the_named_cell_leg_was_never_implemented():
+    t = ensemble.the_blindness_residue_is_closeable_and_almost_none_of_it_soundly()
+    flat = " ".join(t.split())
+    assert "the named-cell leg was never coded" in flat
+    assert "Zero of 76 checks both closed the cell it was given and spared the reference" in flat
 
 
 def test_the_partition_is_golden_free_and_the_audit_only_calibrates():
@@ -2396,12 +2413,12 @@ def test_the_partition_is_golden_free_and_the_audit_only_calibrates():
 def test_blindness_should_be_reported_as_a_pair():
     t = ensemble.the_blindness_residue_is_closeable_and_almost_none_of_it_soundly()
     flat = " ".join(t.split())
-    assert "0.7% is outstanding and 54.4% is the specification's own underdetermination" in flat
-    assert "residue, and the share of it that any check could soundly close" in flat
+    assert "On this evidence **none of it is**" in flat
+    assert "residue, and the share of it any check could soundly close" in flat
 
 
 def test_the_floor_is_named_as_a_floor():
     t = ensemble.the_blindness_residue_is_closeable_and_almost_none_of_it_soundly()
     flat = " ".join(t.split())
     assert "76 checks is a cover, not an exhaustive search" in flat
-    assert "the 0.7% is therefore a floor" in flat
+    assert "0.00% is a floor and the gap between it and the truth is unmeasured" in flat
