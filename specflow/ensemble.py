@@ -380,6 +380,17 @@ Zero objections on an audit-zero set is CONSISTENT with equivalence, and
 equivalence did not follow.
 `a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite`
 carries it.
+
+AND THE EXHAUSTIVE TEST OF THE ONE EXPLANATION IT LEFT STANDING CLOSES SELECTION
+FOR GOOD. All 502 live corpus bodies re-decided against that accepted design: 154
+are sound, 255 object to it, and the overlap is ZERO against an expected 78. The
+87-set is inside the 154, and the 67 sound checks outside it do not object either,
+so this is not the design having been optimised against its own criterion -- ALL
+154 SOUND CHECKS IN THE CORPUS PASS IT, and the 255 that catch it are exactly the
+ones a sound set may not contain. Selection is finished: the residue is
+unauthored, not unselected.
+`every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it`
+carries it.
 """
 from __future__ import annotations
 
@@ -6525,4 +6536,56 @@ def a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_
         "disagree about will terminate on a design wrong about most of it.** "
         "Soundness is solved, weighting is now excluded, and completeness is the "
         "binding constraint -- with blindness as its measure."
+    )
+
+
+def every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it() -> str:
+    """SELECTION IS FINISHED, AND THIS IS THE MEASUREMENT THAT ENDS IT.
+
+    The seventh graded run excluded unsoundness, redundancy weighting, thinness,
+    early stopping, a wrong gradient and oscillation one at a time, leaving
+    completeness as the only standing explanation for a criterion that terminates
+    on a design differing on half the suite.
+
+    This is the exhaustive test of that. Every live corpus body re-decided against
+    the design the de-duplicated set accepted -- the closest design to the
+    reference this pipeline has produced, and one that did not exist when the
+    corpus was previously closed at the level of catches.
+
+    Pre-registered as a binary bar before the scan: one sound objector means the
+    set is improvable by selection; zero means selection is over.
+    """
+    return (
+        "    of 502 live corpus bodies\n"
+        "      **SOUND** -- decide on the reference and spare it     **154**  (31%)\n"
+        "      **OBJECT** to the accepted design                     **255**  (51%)\n"
+        "      **BOTH**                                                **0**\n"
+        "      *expected overlap if independent*                        *78*\n\n"
+        "**ZERO AGAINST AN EXPECTED SEVENTY-EIGHT.** Not below chance -- at the "
+        "floor the marginals allow, on the best design this pipeline has produced, "
+        "judged by the best set it can build.\n\n"
+        "**AND IT IS NOT THE DESIGN HAVING BEEN OPTIMISED AGAINST ITS OWN "
+        "CRITERION.** The 87-check set is audit-zero and every member decides, so "
+        "all 87 are among the 154. That leaves **67 sound checks in the corpus "
+        "outside the set, and not one of them objects either.** All 154 sound "
+        "checks in the corpus pass this design; the 255 that catch it are exactly "
+        "the ones a sound set may not contain. They span **60 requirements** -- the "
+        "corpus knows the design is wrong across that much of the specification "
+        "and can say so soundly with **zero** checks.\n\n"
+        "**WHAT IT SETTLES.** Not that no better rule was found -- that there is "
+        "nothing left to select. Every check that would reject the best design "
+        "convicts a correct one, so the golden-free soundness rule, whose reject "
+        "side is 95 of 95, correctly discards all 255. **A sound set that rejects "
+        "this design does not exist in this corpus at any size, under any rule, "
+        "with or without the reference.**\n\n"
+        "**SO THE RESIDUE IS UNAUTHORED RATHER THAN UNSELECTED** -- and the "
+        "authoring half is already priced: 76 calls aimed at named blind cells "
+        "closed ZERO cells soundly, with the checks that close the residue "
+        "measured as exactly the ones the soundness rule rejects. Both halves of "
+        "the remaining route are closed.\n\n"
+        "**AND THAT IS WHY THE LOOP TERMINATES WHERE IT DOES.** Not a tuning, "
+        "weighting, stimulus or editor failure -- each was excluded individually. "
+        "Soundness and discrimination are, on this specification and this "
+        "population, very nearly disjoint properties, and the finish condition "
+        "needs their intersection."
     )

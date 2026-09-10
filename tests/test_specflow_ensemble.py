@@ -3722,3 +3722,52 @@ def test_the_seventh_run_does_not_claim_the_blindness_agreement_is_numerical():
 def test_the_seventh_run_is_named_in_the_module_docstring():
     assert ("a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite"
             in ensemble.__doc__)
+
+
+def _closure():
+    return ensemble.every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it()
+
+
+def test_the_closure_reports_both_marginals_and_the_expected_overlap():
+    """Zero is only sharp if sound checks are not themselves rare; the marginals
+    are what turn it from an assertion into a number."""
+    t = _closure()
+    assert "154" in t and "255" in t and "502" in t
+    assert "expected overlap if independent" in t
+    assert "*78*" in t
+
+
+def test_the_closure_excludes_the_optimised_against_itself_reading():
+    """The design was driven to zero against 87 of the 154 sound checks, so the
+    other 67 are what make the result mean anything."""
+    t = _closure()
+    assert "67 sound checks in the corpus" in t
+    assert "not one of them objects either" in t
+
+
+def test_the_closure_says_selection_and_not_merely_this_rule():
+    t = _closure()
+    assert "at any size, under any rule" in t
+    assert "nothing left to select" in t
+    assert "unauthored rather than unselected" in t.replace("**", "").replace("\n", " ").lower() \
+        or "UNAUTHORED RATHER THAN UNSELECTED" in t
+
+
+def test_the_closure_carries_the_authoring_half_so_it_is_not_half_a_route():
+    """Closing selection alone would leave authoring open; section 9c priced it."""
+    t = _closure()
+    assert "76 calls" in t
+    assert "ZERO cells soundly" in t
+    assert "Both halves" in t
+
+
+def test_the_closure_names_what_the_seventh_run_excluded():
+    t = _closure()
+    for k in ("tuning", "weighting", "stimulus", "editor"):
+        assert k in t, k
+    assert "disjoint properties" in t
+
+
+def test_the_closure_is_named_in_the_module_docstring():
+    assert ("every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it"
+            in ensemble.__doc__)

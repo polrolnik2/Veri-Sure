@@ -2061,6 +2061,61 @@ disagree about will terminate on a design that is wrong about most of it.**
 Completeness, not soundness and not weighting, is the binding constraint, and
 blindness is the measure of it.
 
+## 9ad. All 154 sound checks in the corpus pass the design; 255 unsound ones catch it
+
+§9ac left completeness as the only standing explanation. This is the exhaustive
+test of it, and it is the sharpest number on this page.
+
+Every one of the 502 live corpus bodies re-decided against **the design the
+de-duplicated set accepted** — the closest design to the reference this pipeline
+has produced, and one that did not exist when §9q closed the corpus at the level
+of catches. Pre-registered binary bar: **one sound objector means the set is
+improvable by selection; zero means selection is finished.**
+
+| of 502 live corpus bodies | n | |
+|---|---|---|
+| **SOUND** — decide on the reference and spare it | **154** | 31% |
+| **OBJECT** to the accepted design | **255** | 51% |
+| **BOTH** | **0** | |
+| *expected overlap if the two were independent* | *78* | |
+
+**ZERO AGAINST AN EXPECTED SEVENTY-EIGHT.** Not below chance — at the floor the
+marginals allow, on the best design this pipeline has produced, judged by the best
+set it can build.
+
+### And the set already holds every sound check that could have helped
+
+The 87-set is audit-zero and all 87 decide, so all 87 are among the 154. **That
+leaves 67 sound checks in the corpus outside the set, and not one of them objects
+to this design either.** So the result is not an artifact of the design having
+been optimised against the 87: *all 154 sound checks in the corpus pass it*, and
+the 255 that catch it are exactly the ones a sound set may not contain.
+
+**The 255 objectors span 60 requirements.** The corpus knows this design is wrong
+across 60 requirements of the specification and **can say so soundly with zero
+checks.**
+
+### What this settles, and it is the end of one road
+
+**SELECTION IS FINISHED.** Not "no better rule was found" — there is nothing left
+to select. Every check that would reject the best design convicts a correct one,
+so the golden-free soundness rule, whose reject side is measured 95 of 95, will
+correctly discard all 255. A sound set that rejects this design does not exist in
+this corpus at any size, under any rule, with or without the reference.
+
+**So the residue is UNAUTHORED, not unselected** — and §9c already priced
+authoring it: 76 calls aimed at named blind cells closed **zero** cells soundly,
+with the checks that close the residue measured as exactly the ones the soundness
+rule rejects (Spearman +0.350). Both halves of the remaining route are now
+measured and both are closed.
+
+**This is why the loop terminates at 174 of 348 and no set on this corpus can do
+better.** It is not a tuning failure, a weighting failure, a stimulus failure or
+an editor failure — §9ac excluded each of those individually. It is that
+soundness and discrimination are, on this specification and this population,
+very nearly disjoint properties, and the finish condition needs their
+intersection.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
