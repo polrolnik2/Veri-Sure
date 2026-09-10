@@ -3508,3 +3508,57 @@ def test_best_of_n_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "best_of_n_with_a_golden_free_rule_picks_the_best_draw" in flat
     assert "0 of 5 draws beat the selected one" in flat
+
+
+def test_the_set_holds_seventy_seven_vectors_not_one_hundred_forty_nine():
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "DISTINCT VERDICT VECTORS 77" in flat
+    assert "largest identical group 21" in flat
+
+
+def test_the_population_under_reports_and_the_followup_says_by_how_much():
+    """11% of the population-mute set wakes on a graded design, so the
+    nine-design figure alone would have overstated the result."""
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "**12 do object on a graded design**" in flat
+    assert "quoting the nine-design figure as though it settled the matter" in flat
+
+
+def test_the_span_figure_is_corrected_by_thirty_points():
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "96 OF 149 NEVER OBJECT ON ANY OF FIFTEEN SPEC-DERIVED DESIGNS" in flat
+    assert "**43 of 89 = 48%**" in flat
+    assert "SPAN FIGURE IS WRONG BY THIRTY POINTS AND THE ERROR IS MINE" in flat
+
+
+def test_the_minority_rule_accept_side_is_dominated_by_silence():
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "a check convicting NONE passes it trivially" in flat
+    assert "its ACCEPT side is dominated by silence" in flat
+    assert "95-of-95 precision on the reject side is real and unaffected" in flat
+
+
+def test_the_mute_checks_are_not_called_useless():
+    """Three checks that caught a held-out design convict none of the thirteen
+    candidates, so silence on a population is not proof of uselessness."""
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "DOES NOT SAY: THAT THE 96 ARE USELESS" in flat
+    assert "may catch the sixteenth" in flat
+
+
+def test_the_new_vector_authoring_target_is_stated_with_its_caveat():
+    t = ensemble.the_set_holds_far_fewer_opinions_than_checks()
+    flat = " ".join(t.split())
+    assert "Score a candidate check on whether its verdict vector is NEW" in flat
+    assert "Whether authoring against that target produces adequate checks is unmeasured" in flat
+
+
+def test_the_opinion_count_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_set_holds_far_fewer_opinions_than_checks" in flat
+    assert "96 that never object on any of the fifteen" in flat

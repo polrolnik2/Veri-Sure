@@ -1748,6 +1748,71 @@ significant at n = 5. **Two of the five were interrupted by a machine restart an
 resumed in a fresh session**, so they are not single continuous runs — recorded
 because it is a deviation from the protocol, not a detail.
 
+## 9z. The set holds 53 opinions, not 169 — and the span figure is wrong by 30 points
+
+Every count in this document treats the set as **169 checks**. But a check's usable
+content is its **verdict vector** — what it says about each (design, testpoint) it
+decides. Two checks with identical vectors are one opinion counted twice: they can
+never separate a pair the other cannot, they add nothing to blindness, and an
+editor satisfying one satisfies the other. That had never been counted.
+
+| over the nine population designs | checks |
+|---|---|
+| live, reading a real output | 149 |
+| **distinct verdict vectors** | **77** |
+| exact duplicates of another check | **72 (48%)** |
+| largest identical group | **21 checks, one vector** |
+| vectors that never object | 49, covering **108 checks** |
+
+### The population under-reports, which is why the follow-up ran
+
+"Never objects on the nine" is not "never objects" — a check silent on the
+population may still object on a design an editor produced, and reading the first
+as the second is the conflation `stage_unexercised` names in capitals. So every
+population-mute check was re-decided against the **six graded designs** too:
+**12 of the 108 do object** (11 on the start design, 1 on an edited one). 11% of
+the population-mute set is merely unexercised, and the nine-design figure alone
+would have overstated the result.
+
+### But 96 of 149 never object on any of fifteen spec-derived designs
+
+| the effective set | checks | requirements |
+|---|---|---|
+| ever object on any of fifteen | **53** | **43** |
+| never object on any of fifteen | **96** | 31 requirements have nothing else |
+
+**SO THE SPAN FIGURE IS WRONG BY THIRTY POINTS, AND THE ERROR IS MINE.** This
+document quotes **69 of 89 requirements = 78%**. Counted by requirements holding a
+check that ever objects on *anything*, it is **43 of 89 = 48%**. The remainder is
+span made of checks that have never said a word.
+
+### And the minority rule selects for them
+
+The rule keeps a check convicting **at most t** of the population — and a check
+convicting **none** passes it trivially. Its 95-of-95 precision on the *reject*
+side is real and unaffected; what is new is that its **accept side is dominated by
+silence**. §5's endorsement of it should be read with this beside it.
+
+### What this explicitly does not say: that the 96 are useless
+
+§9 already measured the opposite case — of 14 checks that caught a held-out
+design, **three convict none of the thirteen candidates**, and they are not
+unfalsifiable; the population simply happens to be right about those requirements
+and a fourteenth design is not. A check silent on fifteen designs may catch the
+sixteenth. What is established is narrower and still large: **the 96 contribute
+nothing to any golden-free instrument built on this population, they inflate every
+span figure here by thirty points, and the endorsed selection rule prefers them.**
+
+### The lever this opens — the first aimed at blindness rather than coverage
+
+Every authoring round in §9 scored a new check on which requirement it cites, or
+on the sound-and-discriminating pair. **Neither notices that 21 checks can share
+one vector.** Score a candidate on whether its **verdict vector is new** —
+computable over the population with no reference, mechanical, and it rejects the
+48% duplicate rate by construction. Whether authoring against that target produces
+*adequate* checks is unmeasured, and §9's authoring rounds have a 3–5% base rate
+that nothing has moved.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -1822,7 +1887,11 @@ This is the goal's last clause, and it is the part that survives:
    Every blindness figure in §§8–9 is over mixed widths.
 2. **The minority rule** — keep a check convicting ≤ t of the population — is the
    only golden-free selection knob measured to work: **95 of 95** agreement with
-   the audit on its reject side.
+   the audit on its reject side. **But its ACCEPT side is dominated by silence
+   (§9z):** a check convicting *none* of the population passes "convicts ≤ t"
+   trivially, and 96 of 149 checks never object on any of fifteen spec-derived
+   designs. The reject-side precision is unaffected; the accept side must be
+   paired with an ever-objects filter or it selects for mute checks.
 3. **A two-point warning, held out across two independent editor runs (§9j).** A
    testpoint no two spec-derived designs disagree on carries a design that is
    right there (**1%**, both runs); a testpoint whose every disagreement is
@@ -1855,6 +1924,17 @@ how ACTIVE it is on the reference, and check count is very nearly a restatement
 of activity — **Spearman +0.857 against the reference's transitions**, and once
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
+
+**AND THE SET IS A THIRD THE SIZE ITS CHECK COUNT SUGGESTS, WHICH CORRECTS THE
+SPAN QUOTED THROUGHOUT — §9z.** 149 live checks hold 77 distinct verdict vectors;
+72 are exact duplicates and one vector is shared by 21 checks. Re-decided against
+the six graded designs as well — fifteen spec-derived designs, no reference — 12
+of 108 population-mute checks wake up and **96 never object on any of them**. The
+effective set is **53 checks over 43 requirements = 48% of the specification**,
+against the **78%** this document has been quoting. And the minority rule keeps a
+check convicting none of the population by construction, so its accept side is
+dominated by silence. What it does NOT say is that the 96 are useless — three
+checks that caught a held-out design convict none of the thirteen candidates.
 
 **AND THE VARIANCE HAS A GOLDEN-FREE ANSWER, WHICH IS THE ONE PIPELINE CHANGE
 THIS SESSION FOUND THAT IMPROVES WHAT IS DELIVERED — §9y.** Five draws of one

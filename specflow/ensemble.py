@@ -324,6 +324,23 @@ ranking. It does not produce equivalence -- it buys the best member of a bad
 distribution.
 `best_of_n_with_a_golden_free_rule_picks_the_best_draw` carries it, with the two
 counts these draws correct.
+
+AND THE SET IS SMALLER THAN ITS CHECK COUNT BY A FACTOR OF THREE, WHICH CORRECTS
+THE SPAN FIGURE QUOTED THROUGHOUT THIS MODULE. A check's usable content is its
+VERDICT VECTOR, and 149 live checks hold 77 distinct vectors -- 72 are exact
+duplicates and one vector is shared by 21 checks. Re-deciding every
+population-mute check against the six graded designs as well (fifteen
+spec-derived designs in total, no reference anywhere) shows 12 of 108 merely
+unexercised and **96 that never object on any of the fifteen**. So the effective
+set is **53 checks over 43 requirements = 48% of the specification**, against the
+**69 of 89 = 78%** this module and the scorecard have been quoting. And the
+minority rule keeps a check convicting NONE of the population by construction, so
+the one endorsed golden-free selection knob has an accept side dominated by
+silence. What this does NOT say is that the 96 are useless -- three checks that
+caught a held-out design convict none of the thirteen candidates.
+`the_set_holds_far_fewer_opinions_than_checks` carries it, including the
+golden-free authoring target it opens: score a new check on whether its verdict
+vector is NEW.
 """
 from __future__ import annotations
 
@@ -6214,4 +6231,72 @@ def best_of_n_with_a_golden_free_rule_picks_the_best_draw() -> str:
         "RESUMED in a fresh session, so they are not single continuous runs -- "
         "recorded here because it is a deviation from the protocol rather than a "
         "detail."
+    )
+
+
+def the_set_holds_far_fewer_opinions_than_checks() -> str:
+    """WHAT A 169-CHECK SET ACTUALLY CONTAINS -- measured, and it corrects the
+    span figure this module has quoted all session.
+
+    Every count here treats the set as 169 checks. But a check's usable content
+    is its VERDICT VECTOR: what it says about each (design, testpoint) it decides.
+    Two checks with identical vectors are one opinion counted twice -- they can
+    never separate a pair the other cannot, they add nothing to blindness, and an
+    editor satisfying one satisfies the other. That had never been counted.
+
+    THE FOLLOW-UP MATTERS AS MUCH AS THE COUNT, and it was run before anything was
+    claimed. 'Never objects on the nine population designs' is not 'never
+    objects': a check silent on the population may still object on a design an
+    editor produced, and reading the first as the second is `stage_unexercised`'s
+    own conflation. So every population-mute check was re-decided against the six
+    GRADED designs as well -- fifteen spec-derived designs in total. No reference
+    is read anywhere here.
+    """
+    return (
+        "    over nine population designs        checks\n"
+        "      live, reading a real output          149\n"
+        "      DISTINCT VERDICT VECTORS              77\n"
+        "      exact duplicates of another check     72   (48%)\n"
+        "      largest identical group               21\n"
+        "      vectors that never object             49   covering 108 checks\n\n"
+        "**THE POPULATION UNDER-REPORTS, AND THAT IS WHY THE FOLLOW-UP RAN.** Of "
+        "the 108 mute on the nine, **12 do object on a graded design** -- 11 on "
+        "the start design and 1 on an edited one. So 11% of the population-mute "
+        "set is merely unexercised, and quoting the nine-design figure as though "
+        "it settled the matter would have overstated the result.\n\n"
+        "**BUT 96 OF 149 NEVER OBJECT ON ANY OF FIFTEEN SPEC-DERIVED DESIGNS.**\n\n"
+        "    the effective set                       checks   requirements\n"
+        "      ever object on any of fifteen            53         43\n"
+        "      never object on any of fifteen           96         31 requirements\n"
+        "                                                          have nothing else\n\n"
+        "**SO THE SPAN FIGURE IS WRONG BY THIRTY POINTS AND THE ERROR IS MINE.** "
+        "This module and the scorecard quote **69 of 89 requirements = 78%**. "
+        "Counted by requirements holding a check that ever objects on anything, it "
+        "is **43 of 89 = 48%**. The rest is span made of checks that have never "
+        "said a word.\n\n"
+        "**AND THE MINORITY RULE SELECTS FOR THEM, WHICH IS A DEFECT IN THE ONE "
+        "GOLDEN-FREE SELECTION KNOB THIS MODULE ENDORSES.** The rule keeps a check "
+        "convicting at most t of the population -- and a check convicting NONE "
+        "passes it trivially. Its measured 95-of-95 precision on the reject side "
+        "is real and unaffected; what is new is that its ACCEPT side is dominated "
+        "by silence. `the_minority_rule_is_precise_and_that_is_what_it_costs` "
+        "should be read with this beside it.\n\n"
+        "**WHAT THIS EXPLICITLY DOES NOT SAY: THAT THE 96 ARE USELESS.** This plan "
+        "has already measured the opposite case -- of 14 checks that caught a "
+        "held-out design, **three convict NONE of the thirteen candidates**, and "
+        "they are not unfalsifiable; the population simply happens to be right "
+        "about those requirements and a fourteenth design is not. A check silent "
+        "on fifteen designs may catch the sixteenth. What is established is "
+        "narrower and still large: **the 96 contribute nothing to any golden-free "
+        "instrument built on this population, they inflate every span figure here "
+        "by thirty points, and the endorsed selection rule prefers them.**\n\n"
+        "**THE LEVER THIS OPENS, AND IT IS THE FIRST AIMED AT BLINDNESS RATHER "
+        "THAN AT COVERAGE.** Every authoring round on this plan scored a new check "
+        "on which requirement it cites or on the sound-and-discriminating pair. "
+        "Neither notices that 21 checks can share one vector. **Score a candidate "
+        "check on whether its verdict vector is NEW** -- computable over the "
+        "population with no reference, mechanical, and it rejects the 48% "
+        "duplicate rate by construction. Whether authoring against that target "
+        "produces adequate checks is unmeasured, and this plan's authoring rounds "
+        "have a 3-5% base rate that nothing has moved."
     )
