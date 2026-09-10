@@ -1372,6 +1372,66 @@ new lever**, because §9q already answers it: of 640 authored bodies, 302 object
 to that design, exactly one is sound, and that one is already in the set. A check
 for `biu_read` there would have to be one 640 attempts did not produce.
 
+## 9v. Set blindness is dominated by port width — and inverts there
+
+§9u's strength table is calibration: it asks where a port is *wrong*, which needs
+the reference. The golden-free instrument this document has quoted all session —
+**set blindness**, a cell where two spec-derived designs differ on a port and no
+check watching it objects to either — needs none. Both now exist per port, so the
+goal's own question can be asked directly: **does the reference-free instrument
+point at the ports the reference-based one would have named?**
+
+Nine designs, 348 testpoints, 36 pairs, 169 checks, 17,681 split cells.
+
+| port | width | GF sighted (1 − blindness) | golden strength |
+|---|---|---|---|
+| `first_hit_ack` | 1 | 66.0% | 2.8% |
+| `burst` | 1 | 49.3% | **31.9%** |
+| `biu_read` | 1 | 26.1% | 5.8% |
+| `dcram_we` | 4 | 21.8% | 2.5% |
+| `first_miss_ack` | 1 | 8.6% | 0.1% |
+| `tag_we` | 1 | 7.7% | 2.7% |
+| `first_miss_err` | 1 | 6.9% | 0.0% |
+| **`dc_addr`** | **32** | 1.8% | 4.3% |
+| `biu_write` | 1 | 0.8% | 1.5% |
+| **`saved_addr`** | **32** | **0.4% — worst of ten** | **7.0% — second best** |
+
+**OVER ALL TEN PORTS THE TWO BARELY AGREE: Spearman +0.200, and 26 of 45 port
+pairs = 58% ordered the same way against a 50% chance.** Restricted to the seven
+**one-bit** ports it is **+0.714**. The whole difference is width, and the
+inversion is total — `saved_addr` sits at opposite ends of the two rankings.
+
+### The mechanism is the denominator, not the checks
+
+On a 32-bit port two independently written designs differ almost everywhere —
+`saved_addr` and `dc_addr` carry 1,939 and 2,694 split cells — and a check must be
+right about a specific 32-bit value to catch any of them. So *two designs disagree
+here* is nearly always true, and is a far weaker signal than *the design disagrees
+with the reference*. **The golden-free denominator explodes with width; the golden
+one does not.**
+
+### So the headline figure is dominated by the ports its own instrument is worst on
+
+| population | split cells | caught | blind | blindness |
+|---|---|---|---|---|
+| all ten ports | 17,681 | 3,074 | 14,607 | **82.6%** |
+| seven one-bit | 11,276 | 2,632 | 8,644 | **76.7%** |
+| three multi-bit | 6,405 | 442 | 5,963 | **93.1%** |
+
+**41% of every blind cell in the set sits on three ports of ten**, and on those
+three the instrument is measured not to track the reference-based one at all.
+
+**The prescription is narrow and checkable: stratify set blindness by port width,
+or do not quote it.** A single number over mixed widths is a weighted average of a
+signal that works and one that inverts, with the inverting half carrying 41% of
+the weight. **Every blindness figure in §§8–9 is over mixed widths and should be
+read that way.**
+
+**What this does not claim.** Ten ports and seven, so +0.714 is not significant at
+that n and is not offered as significant; the 58% of ordered pairs is the
+assumption-free reading and is barely above chance. What is solid is the inversion
+itself and the arithmetic share of blind cells the wide ports carry.
+
 ## 9t. PRE-REGISTERED, and running: is a single graded run a measurement?
 
 *Written and committed before the replicate was dispatched. The outcome is not
@@ -1472,6 +1532,13 @@ This is the goal's last clause, and it is the part that survives:
 1. **Set blindness**, from **four or more** spec-derived designs — it saturates
    there (§9b). Two designs can read 0.0% on a set that is 42.9% blind, and a
    design your own checks accepted is worth about 12 points of over-estimate.
+   **And it must be STRATIFIED BY PORT WIDTH or not quoted (§9v):** against the
+   reference-based instrument it agrees at +0.714 over the seven one-bit ports
+   and at +0.200 over all ten, because on a 32-bit port two spec-derived designs
+   differ almost everywhere and the denominator explodes. 41% of the set's blind
+   cells sit on the three multi-bit ports, where the instrument inverts — the
+   widest port is worst of ten golden-free and second best against the reference.
+   Every blindness figure in §§8–9 is over mixed widths.
 2. **The minority rule** — keep a check convicting ≤ t of the population — is the
    only golden-free selection knob measured to work: **95 of 95** agreement with
    the audit on its reject side.

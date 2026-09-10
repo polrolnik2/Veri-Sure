@@ -250,6 +250,19 @@ worst run's design is not one the set had run out on: it stands at 3.1% strength
 with objections on all ten ports, so its latch preferred a state the checks were
 still objecting to.
 `the_strength_collapse_is_port_by_port_not_a_uniform_dimming` carries it.
+
+AND THE GOLDEN-FREE INSTRUMENT, CHECKED AGAINST THE GOLDEN ONE AT THAT SAME
+GRANULARITY, HAS A DEFECT THIS MODULE HAS BEEN QUOTING THROUGH. Set blindness per
+port and check strength per port agree at Spearman +0.714 over the seven ONE-BIT
+ports and at +0.200 over all ten -- 58% of port pairs ordered the same way,
+against a 50% chance. The whole difference is width, and the inversion is total:
+the widest port is the worst of ten on the golden-free reading and the second
+best on the golden one, because on a 32-bit port two spec-derived designs differ
+almost everywhere, so "two designs disagree" is a far weaker signal than "the
+design disagrees with the reference". 41% of every blind cell in the set sits on
+the three multi-bit ports. **Stratify set blindness by port width, or do not
+quote it** -- every blindness figure here is over mixed widths.
+`set_blindness_is_dominated_by_port_width_and_inverts_there` carries it.
 """
 from __future__ import annotations
 
@@ -5751,4 +5764,68 @@ def the_strength_collapse_is_port_by_port_not_a_uniform_dimming() -> str:
         "bodies, 302 object to that design and exactly one is sound, and that one "
         "is already in the set. A check for `biu_read` there would have to be one "
         "640 attempts did not produce."
+    )
+
+
+def set_blindness_is_dominated_by_port_width_and_inverts_there() -> str:
+    """THE GOLDEN-FREE INSTRUMENT, CHECKED AGAINST THE GOLDEN ONE PER PORT --
+    and a defect in this module's own headline measure.
+
+    Both instruments now exist at port granularity and they answer the goal's
+    question directly: does the reference-free one point at the ports the
+    reference-based one would have named?
+
+      GOLDEN-FREE  set blindness per port -- of (pair, testpoint) cells where two
+                   spec-derived designs differ on that port, the share where no
+                   check watching it objects to either. No reference anywhere.
+      GOLDEN       check strength per port -- objections per exposed decision,
+                   where exposed means the port differs FROM THE REFERENCE.
+
+    Nine designs, 348 testpoints, 36 pairs, 169 checks, 17,681 split cells.
+    """
+    return (
+        "    port             width   GF sighted   GOLD strength\n"
+        "      first_hit_ack      1      66.0%          2.8%\n"
+        "      burst              1      49.3%         31.9%\n"
+        "      biu_read           1      26.1%          5.8%\n"
+        "      dcram_we           4      21.8%          2.5%\n"
+        "      first_miss_ack     1       8.6%          0.1%\n"
+        "      tag_we             1       7.7%          2.7%\n"
+        "      first_miss_err     1       6.9%          0.0%\n"
+        "      **dc_addr**       32       1.8%          4.3%\n"
+        "      biu_write          1       0.8%          1.5%\n"
+        "      **saved_addr**    32       0.4%          7.0%\n\n"
+        "**OVER ALL TEN PORTS THE TWO INSTRUMENTS BARELY AGREE: SPEARMAN +0.200, "
+        "AND 26 OF 45 PORT PAIRS = 58% ORDERED THE SAME WAY AGAINST A 50% "
+        "CHANCE.** Restricted to the seven ONE-BIT ports it is **+0.714**. The "
+        "whole difference is the wide ports, and the inversion is total: "
+        "`saved_addr` is the WORST port of ten on the golden-free reading and the "
+        "SECOND BEST on the golden one.\n\n"
+        "**AND THE MECHANISM IS THE DENOMINATOR, NOT THE CHECKS.** On a 32-bit "
+        "port two independently written designs differ almost everywhere -- "
+        "`saved_addr` and `dc_addr` carry 1,939 and 2,694 split cells -- and a "
+        "check must be right about a specific 32-bit value to catch any of them. "
+        "So *two designs disagree here* is nearly always true and is a far weaker "
+        "signal than *the design disagrees with the reference*. **The golden-free "
+        "denominator explodes with width and the golden one does not.**\n\n"
+        "**SO THE HEADLINE BLINDNESS FIGURE IS DOMINATED BY THE PORTS ITS OWN "
+        "INSTRUMENT IS WORST ON.**\n\n"
+        "    population          split cells   caught    blind   blindness\n"
+        "      all ten ports        17,681      3,074   14,607     82.6%\n"
+        "      seven one-bit        11,276      2,632    8,644     76.7%\n"
+        "      three multi-bit       6,405        442    5,963     93.1%\n\n"
+        "**41% of every blind cell in the set sits on three ports of ten**, and "
+        "on those three the instrument is measured not to track the reference-"
+        "based one at all.\n\n"
+        "**THE PRESCRIPTION IS NARROW AND CHECKABLE: STRATIFY SET BLINDNESS BY "
+        "PORT WIDTH, OR DO NOT QUOTE IT.** A single number over mixed widths is a "
+        "weighted average of a signal that works and one that inverts, with the "
+        "inverting half carrying 41% of the weight. Every blindness figure on "
+        "this plan is over mixed widths and should be read that way.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Ten ports and seven, so +0.714 is not "
+        "significant at that n and is not offered as significant; the 58% of "
+        "ordered pairs is the assumption-free reading and it is barely above "
+        "chance. What is solid is the inversion itself -- the two widest ports "
+        "sit at opposite ends of the two rankings -- and the arithmetic share of "
+        "blind cells they carry."
     )

@@ -3194,3 +3194,51 @@ def test_the_port_decomposition_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_strength_collapse_is_port_by_port_not_a_uniform_dimming" in flat
     assert "COMPLETELY SILENT on nine ports of ten" in flat
+
+
+def test_the_two_per_port_instruments_agree_only_on_narrow_ports():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert "SPEARMAN +0.200" in flat
+    assert "26 OF 45 PORT PAIRS = 58% ORDERED THE SAME WAY" in flat
+    assert "Restricted to the seven ONE-BIT ports it is **+0.714**" in flat
+
+
+def test_the_widest_port_sits_at_opposite_ends_of_the_two_rankings():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert ("`saved_addr` is the WORST port of ten on the golden-free reading "
+            "and the SECOND BEST on the golden one") in flat
+
+
+def test_the_mechanism_is_the_denominator_not_the_checks():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert "The golden-free denominator explodes with width and the golden one does not" in flat
+
+
+def test_the_headline_blindness_is_dominated_by_the_inverting_half():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert "82.6%" in flat and "76.7%" in flat and "93.1%" in flat
+    assert "41% of every blind cell in the set sits on three ports of ten" in flat
+
+
+def test_the_prescription_is_to_stratify_by_width():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert "STRATIFY SET BLINDNESS BY PORT WIDTH, OR DO NOT QUOTE IT" in flat
+    assert "Every blindness figure on this plan is over mixed widths" in flat
+
+
+def test_the_width_finding_does_not_overclaim_significance():
+    t = ensemble.set_blindness_is_dominated_by_port_width_and_inverts_there()
+    flat = " ".join(t.split())
+    assert "is not offered as significant" in flat
+    assert "barely above chance" in flat
+
+
+def test_the_width_inversion_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "set_blindness_is_dominated_by_port_width_and_inverts_there" in flat
+    assert "Stratify set blindness by port width, or do not quote it" in flat
