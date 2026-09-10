@@ -2670,3 +2670,42 @@ def test_the_oscillation_is_recorded_with_the_rejected_commits():
     t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
     assert "**27**" in t and "**rejected**" in t
     assert "1**           2,840        latched" in t
+
+
+def test_the_monotone_four_class_predictor_is_withdrawn():
+    t = ensemble.the_monotone_predictor_is_a_two_point_instrument()
+    flat = " ".join(t.split())
+    assert "THE MONOTONE ORDERING DOES NOT HOLD OUT OF SAMPLE" in flat
+    assert "**The four-point predictor is withdrawn.**" in flat
+
+
+def test_the_two_endpoints_survive_out_of_sample():
+    t = ensemble.the_monotone_predictor_is_a_two_point_instrument()
+    flat = " ".join(t.split())
+    assert "**1% in both runs**" in flat
+    assert "**86% and 87%**" in flat
+    assert "a two-point instrument, not a ranking" in flat
+
+
+def test_caught_does_not_mean_the_set_catches_this_designs_errors():
+    t = ensemble.the_monotone_predictor_is_a_two_point_instrument()
+    flat = " ".join(t.split())
+    assert "differs from the reference on **29**" in flat
+    assert "**ONE objection in the entire suite**" in flat
+    assert "It says nothing about whether it catches the errors of the design under test" in flat
+
+
+def test_the_fitted_finding_carries_its_own_refutation():
+    """A correction that lives only in the correcting function is a correction a
+    reader of the original will never see."""
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "CORRECTED OUT OF SAMPLE, AND THE MONOTONE SHAPE DOES NOT SURVIVE" in flat
+    assert "the_monotone_predictor_is_a_two_point_instrument" in flat
+    assert "Quote the endpoints; do not quote the ranking" in flat
+
+
+def test_the_middle_inversion_is_not_sold_as_a_mechanism():
+    t = ensemble.the_monotone_predictor_is_a_two_point_instrument()
+    flat = " ".join(t.split())
+    assert "Two runs is not enough to call that a trade" in flat

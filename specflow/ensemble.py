@@ -4794,6 +4794,7 @@ def blindness_is_a_property_of_the_stimulus_too_and_it_predicts() -> str:
         "the reference. That stands. This says the cells were never the only "
         "variable: they are the disagreements THIS stimulus happens to produce, "
         "and nothing has tested whether another stimulus produces better ones."
+        "\n\n**CORRECTED OUT OF SAMPLE, AND THE MONOTONE SHAPE DOES NOT SURVIVE.** The four-class ordering above was read off ONE design. On a second, independent editor run it reads 1% -> 48% -> 44% -> 87% and the middle two classes INVERT. **The two extremes hold and the ordering does not** -- see `the_monotone_predictor_is_a_two_point_instrument`. Quote the endpoints; do not quote the ranking."
     )
 
 
@@ -5054,4 +5055,50 @@ def the_disagreement_report_did_not_move_the_cells_it_named() -> str:
         "and at 54 of 60 named cells the design is on the wrong side. What is "
         "refuted is that handing that split to a spec-reading editor resolves "
         "it."
+    )
+
+
+def the_monotone_predictor_is_a_two_point_instrument() -> str:
+    """CORRECTION, MINE, REFUTED OUT OF SAMPLE BY THE SIXTH GRADED RUN.
+
+    `blindness_is_a_property_of_the_stimulus_too_and_it_predicts` reports a
+    monotone four-class predictor -- 1% / 25% / 60% / 86% of testpoints
+    differing, rising with how blind the class is. That was measured on ONE
+    design, and a monotone shape read off one sample is exactly what this plan
+    has retracted headlines for. The sixth graded run is a held-out test: an
+    independent editor session, same start design, same set, its accepted design
+    never seen when the classes were computed. The classes are golden-free;
+    divergence is the thing predicted, computed last.
+    """
+    return (
+        "    golden-free class of the testpoint   tps   run 5 FITTED   run 6 HELD OUT\n"
+        "      inert -- no pair disagrees          91      1 =  1%        1 =  1%\n"
+        "      every disagreement CAUGHT           61     15 = 25%     **29 = 48%**\n"
+        "      partly blind                       126     75 = 60%     **55 = 44%**\n"
+        "      every disagreement BLIND            70     60 = 86%       61 = 87%\n"
+        "      TOTAL                              348    151 = 43%      146 = 42%\n\n"
+        "**THE MONOTONE ORDERING DOES NOT HOLD OUT OF SAMPLE.** Run 6 reads "
+        "1% -> 48% -> 44% -> 87%: the middle two classes INVERT, and the "
+        "blind-against-caught ratio falls from 3.5x to 1.8x. **The four-point "
+        "predictor is withdrawn.**\n\n"
+        "**WHAT SURVIVES IS THE PAIR OF ENDPOINTS, AND THEY SURVIVE WELL.** A "
+        "testpoint on which no two spec-derived designs disagree carries a "
+        "design that is right there -- **1% in both runs**. A testpoint on which "
+        "every disagreement is unadjudicated carries a design that is wrong "
+        "there -- **86% and 87%**, 60 of 70 and 61 of 70, across two independent "
+        "editor sessions. That is the golden-free warning a practitioner can "
+        "actually be given, and it is a two-point instrument, not a ranking.\n\n"
+        "**AND `CAUGHT` DOES NOT MEAN THE SET CATCHES THIS DESIGN'S ERRORS, "
+        "WHICH IS A VOCABULARY DEFECT OF MINE.** On the 61 fully-caught "
+        "testpoints run 6's design differs from the reference on **29**, while "
+        "the set raises **ONE objection in the entire suite** -- and that one "
+        "sits on a caught testpoint. `CAUGHT` says the set can adjudicate the "
+        "POPULATION's disagreements there. It says nothing about whether it "
+        "catches the errors of the design under test, and every use of the word "
+        "on this plan should be read that way.\n\n"
+        "**THE HONEST READING OF WHY THE MIDDLE MOVED.** Run 6 improved on "
+        "partly-blind testpoints (75 -> 55) and got WORSE on fully-caught ones "
+        "(15 -> 29), at one more objection than run 5. Two runs is not enough to "
+        "call that a trade, and it is recorded as the reason the ordering is not "
+        "quotable rather than as a mechanism."
     )

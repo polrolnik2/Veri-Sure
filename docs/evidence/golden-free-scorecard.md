@@ -560,6 +560,13 @@ The settling experiment is a stimulus round aimed at the 70 fully-blind
 testpoints' scenarios, scored on whether the new testpoints are also fully blind.
 That is not run. And `biu_write`'s concentration is a co-occurrence, not a cause.
 
+### CORRECTED out of sample — the monotone ordering does not survive
+
+The four-class table above was read off ONE design. The sixth graded run (§9i)
+is a held-out test, and it reads **1% → 48% → 44% → 87%**: the middle two
+classes invert. **The four-point predictor is withdrawn; the two endpoints
+hold.** See §9j.
+
 ## 9g. The stimulus loop, run — a different route is blinder, not clearer
 
 §9f licensed the question; this answers it. The 20 fully-blind testpoints
@@ -727,6 +734,41 @@ holes, narrowing, the stimulus, and disagreement evidence. What is *not* closed
 is that the disagreement is evidence: at 54 of 60 named cells the design is on
 the wrong side of a split. What is refuted is that handing that split to a
 spec-reading editor resolves it.
+
+## 9j. The golden-free predictor, tested out of sample — a two-point instrument
+
+§9f reported a monotone four-class predictor fitted on run 5. Run 6's design is
+an independent editor session's product, never seen when the classes were
+computed. The classes are golden-free; divergence is predicted, computed last.
+
+| golden-free class of the testpoint | tps | run 5 (fitted) | run 6 (held out) |
+|---|---|---|---|
+| inert — no pair disagrees | 91 | 1 = **1%** | 1 = **1%** |
+| every disagreement CAUGHT | 61 | 15 = 25% | **29 = 48%** |
+| partly blind | 126 | 75 = 60% | **55 = 44%** |
+| every disagreement BLIND | 70 | 60 = **86%** | 61 = **87%** |
+| total | 348 | 151 = 43% | 146 = 42% |
+
+**The monotone ordering does not hold.** The middle two classes invert and the
+blind-against-caught ratio falls 3.5x → 1.8x. The four-point predictor is
+withdrawn.
+
+**What survives, and survives well, is the pair of endpoints.** A testpoint no
+two spec-derived designs disagree on carries a design that is right there — 1%
+in both runs. A testpoint whose every disagreement is unadjudicated carries a
+design that is wrong there — 86% and 87%, 60 of 70 and 61 of 70, across two
+independent editor sessions. **That is the golden-free warning a practitioner
+can be given: not a ranking, two points.**
+
+### And `CAUGHT` does not mean the set catches this design's errors
+
+A vocabulary defect of mine, visible here for the first time. On the 61
+fully-caught testpoints run 6's design differs from the reference on **29**,
+while the set raises **one objection in the entire suite** — and that objection
+sits on a caught testpoint. `CAUGHT` says the set can adjudicate the
+*population's* disagreements there. It says nothing about whether it catches the
+errors of the design under test, and every use of the word on this page should
+be read that way.
 
 ## 10. The bottom line
 
