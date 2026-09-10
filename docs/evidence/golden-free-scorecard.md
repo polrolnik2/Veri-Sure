@@ -1251,10 +1251,37 @@ has** — and that closure costs nothing, because the counters were on disk.
 ### And 4 of 4 stopped on a trial worse than their own best
 
 Run 6 reached 1 objection at trial 4 and stopped at trial 5 with 3. Run 8 reached
-13 at trial 12 and stopped at 19. **Zero of four stopped at their best.** The
-ratchet on the accepted design is what preserved every grade in §9 — without it
-each run would have shipped a design worse than one it had already found, and
-nothing in the loop's own reading tells it which trial was its best.
+13 at trial 12 and stopped at 19. **Zero of four stopped at their best**, and
+nothing in the loop's own reading tells it which trial was its best — so what a
+run *ships* is decided by the latch, not by where it stopped.
+
+### And the latch is where the proxy did its damage
+
+The editor latches on the **highest count of passing entries in `req_results`**
+(`note_best(..., passing=…)`). Runs 6 and 7 publish the 169 checks there; runs 8
+and 9 publish **160 proxy units beside them**, so the proxy holds 160 votes
+against the checks' 169. Reconstructed trial by trial from the trackers, and
+**pinned against the grader's own objection count on each accepted design, which
+it reproduces 4 of 4**:
+
+| run | units in latch | what the latch picked | fewest objections seen |
+|---|---|---|---|
+| 6 | no | trial 4 — 1 objection | 1, at trial 4 |
+| 7 | no | trial 10 — 5 objections | 5, at trial 10 |
+| 8 | yes | trial 12 — 13 obj, 0 units | 13, at trial 12 |
+| 9 | **yes** | trial 11 — **18 obj**, 42 units | **13, at trial 7** |
+
+**RUN 9's LATCH REJECTED THE STATE WITH THE FEWEST CHECK OBJECTIONS.** Moving
+from 13 objections to 18 cost 5 check votes and bought 48 proxy votes — 90
+failing units down to 42 — so **the proxy outvoted the checks 48 to 5**, and the
+design it chose is the worst of the four at 271 of 348. Run 8 escapes only
+because its proxy units hit zero at trial 10 and stopped voting.
+
+**So the harm has a mechanism and it is arithmetic, not judgement.** Adding units
+to a latch is not neutral: it re-weights what the loop ships. 160 units of a
+reading measured 54% accurate per unit (§9n) will outvote 169 checks whenever the
+checks disagree by less than the units do, and here they did. **A proxy may inform
+an editor and must not enter the criterion that decides which design is kept.**
 
 ### The oscillation is between a quarter and a half of all trials
 
@@ -1393,8 +1420,12 @@ five. **Coverage follows difficulty; it does not overcome it.**
 21-trial budget and none reached it; each stopped voluntarily with 6 to 16 trials
 unspent, and all four stopped on a trial *worse* than their own best. So the
 cheapest remaining lever — give the editor more budget — is closed by counters
-already on disk, and the ratchet on the accepted design is what preserved every
-grade quoted here.
+already on disk. **And the latch is where the added proxy did its damage:** it
+keeps whichever trial has the most passing entries, so 160 proxy units published
+beside 169 checks hold 160 votes — and in the worst of the four runs they
+rejected the state with the fewest check objections, 5 check votes lost against
+48 proxy votes gained. A proxy may inform an editor and must not enter the
+criterion that decides which design is kept.
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains

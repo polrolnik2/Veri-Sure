@@ -232,7 +232,12 @@ quarter and a half of all trials move the criterion's own count UP -- the
 oscillation the goal asks to be taken into account, measured -- and trials spent
 rank-order the final grade perfectly on four runs, confounded with criterion
 volume in a way that is not separable because the criterion is what decides how
-much the editor edits.
+much the editor edits. AND THE LATCH IS WHERE THE PROXY DOES ITS DAMAGE: the
+editor keeps whichever trial has the most PASSING entries, so 160 proxy units
+published beside 169 checks hold 160 votes, and in the worst of the four runs
+they rejected the state with the fewest check objections -- 5 check votes lost
+against 48 proxy votes gained. A proxy may inform an editor and must not enter
+the criterion that decides which design is kept.
 `the_editor_declines_its_budget_and_stops_past_its_own_best` carries the table.
 """
 from __future__ import annotations
@@ -5611,6 +5616,12 @@ def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
     three of the four trackers log an init reading at trial 0 and one does not,
     so counting lines would over-report three runs by one. The reader asserts the
     two agree before printing anything.
+
+    AND THE LATCH RECONSTRUCTION BELOW IS PINNED RATHER THAN ASSERTED. It
+    recomputes, trial by trial, the passing count the editor latches on, and
+    checks the trial it picks against the objection count the GRADER measured on
+    that run's accepted design. It reproduces the grader 4 of 4; had it not, none
+    of it would be quotable.
     """
     return (
         "    run              used  declined   best  at trial  stopped at  up-moves   testpoints\n"
@@ -5625,10 +5636,34 @@ def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
         "**AND 4 OF 4 STOPPED ON A TRIAL WORSE THAN THEIR OWN BEST; 0 OF 4 "
         "STOPPED AT THEIR BEST.** Run 6 reached 1 objection at trial 4 and "
         "stopped at trial 5 with 3. Run 8 reached 13 at trial 12 and stopped at "
-        "19. **The ratchet on the accepted design is what preserved every grade "
-        "reported here** -- without it each run would have shipped a design worse "
-        "than the one it had already found, and the loop gives no sign of "
-        "knowing which trial was its best.\n\n"
+        "19. The loop gives no sign of knowing which trial was its best, so what "
+        "each run SHIPS is decided by the latch rather than by where it "
+        "stopped.\n\n"
+        "**AND THE LATCH IS WHERE THE PROXY DID ITS DAMAGE, WHICH CORRECTS A "
+        "SENTENCE THAT STOOD HERE.** I wrote that the ratchet preserved every "
+        "grade reported here. It preserved three. The editor latches on the "
+        "HIGHEST count of PASSING entries in `req_results`, and runs 8 and 9 "
+        "publish 160 proxy units there beside the 169 checks -- so the proxy "
+        "holds 160 votes against the checks' 169. Reconstructed trial by trial "
+        "from the trackers and PINNED against the grader's own objection count "
+        "on each accepted design, which it reproduces 4 of 4:\n\n"
+        "    run    units in latch   latch picks   fewest objections seen\n"
+        "      6         no          trial 4, 1 objection      1 at trial 4\n"
+        "      7         no          trial 10, 5 objections    5 at trial 10\n"
+        "      8        yes          trial 12, 13 obj, 0 units  13 at trial 12\n"
+        "      9        yes          trial 11, **18** obj, 42 units  **13 at trial 7**\n\n"
+        "**RUN 9's LATCH REJECTED THE STATE WITH THE FEWEST CHECK OBJECTIONS.** "
+        "Going from 13 objections to 18 cost 5 check votes and bought 48 proxy "
+        "votes -- 90 failing units down to 42 -- so **the proxy outvoted the "
+        "checks 48 to 5**, and the design it chose is the worst of the four at "
+        "271 of 348. Run 8 escapes only because its proxy units reached zero at "
+        "trial 10 and stopped voting.\n\n"
+        "**SO THE HARM HAS A MECHANISM AND IT IS ARITHMETIC, NOT JUDGEMENT.** "
+        "Adding units to a latch is not neutral: it re-weights what the loop "
+        "ships. 160 units of a reading measured 54% accurate per unit will "
+        "outvote 169 checks whenever they disagree by less than the units do, "
+        "and here they did. **A proxy may inform an editor and must not enter "
+        "the criterion that decides which design is kept.**\n\n"
         "**OSCILLATION IS BETWEEN A QUARTER AND A HALF OF ALL TRIALS.** Up-moves "
         "on the criterion's own count run 1 of 4, 3 of 11, 7 of 13 and 4 of 14. "
         "Run 8's sequence is the plainest: 21, 39, 21, 34, 33, 16, 22, 28, 14, "

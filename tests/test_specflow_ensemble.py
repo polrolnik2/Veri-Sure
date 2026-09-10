@@ -3067,12 +3067,14 @@ def test_no_graded_run_reached_its_trial_budget():
     assert "the editor already declines the budget it has" in flat
 
 
-def test_every_run_stopped_past_its_own_best_and_the_ratchet_saved_it():
+def test_every_run_stopped_past_its_own_best_and_the_latch_decides_what_ships():
+    """Where a run stopped is not what it shipped: the latch decides that, and
+    the finding must not conflate the two."""
     t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
     flat = " ".join(t.split())
     assert "4 OF 4 STOPPED ON A TRIAL WORSE THAN THEIR OWN BEST" in flat
     assert "0 OF 4 STOPPED AT THEIR BEST" in flat
-    assert "ratchet on the accepted design is what preserved every grade" in flat
+    assert "what each run SHIPS is decided by the latch rather than by where it stopped" in flat
 
 
 def test_the_oscillation_is_quantified_as_the_goal_asks():
@@ -3113,3 +3115,35 @@ def test_the_budget_closure_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_editor_declines_its_budget_and_stops_past_its_own_best" in flat
     assert "stopped voluntarily with 6 to 16 trials unspent" in flat
+
+
+def test_the_ratchet_claim_carries_its_own_correction():
+    """The first version of this finding said the ratchet preserved every grade.
+    It preserved three; run 9's latch chose against the checks."""
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "CORRECTS A SENTENCE THAT STOOD HERE" in flat
+    assert "I wrote that the ratchet preserved every grade reported here. It preserved three." in flat
+
+
+def test_the_proxy_outvoted_the_checks_in_the_latch():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "RUN 9's LATCH REJECTED THE STATE WITH THE FEWEST CHECK OBJECTIONS" in flat
+    assert "the proxy outvoted the checks 48 to 5" in flat
+    assert "its proxy units reached zero at trial 10 and stopped voting" in flat
+
+
+def test_the_prescription_separates_informing_from_deciding():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert ("A proxy may inform an editor and must not enter the criterion "
+            "that decides which design is kept.") in flat
+
+
+def test_the_latch_reconstruction_is_pinned_against_the_grader():
+    """A reconstruction that did not reproduce the grader would not be quotable."""
+    d = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best.__doc__
+    flat = " ".join((d or "").split())
+    assert "It reproduces the grader 4 of 4" in flat
+    assert "had it not, none of it would be quotable" in flat
