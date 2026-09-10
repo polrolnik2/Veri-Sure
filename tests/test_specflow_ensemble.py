@@ -3337,3 +3337,46 @@ def test_the_baseline_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_loops_best_output_beats_every_independent_draw" in flat
     assert "**better than all seven**" in flat
+
+
+def test_the_placement_agrees_on_three_of_five_and_errs_optimistically():
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert "AGREES WITH THE REFERENCE ON 3 OF 5, AND BOTH ERRORS ARE OPTIMISTIC" in flat
+    assert "both are in the direction that would ship a bad one" in flat
+
+
+def test_the_instrument_can_place_but_not_side():
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert ("CAN SAY 'OUTSIDE THE POPULATION' AND CANNOT RELIABLY SAY "
+            "'ON THE GOOD SIDE'") in flat
+    assert "concrete misplacement rather than as a coefficient" in flat
+
+
+def test_inside_the_population_is_not_a_clean_bill():
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert "run 9 sits inside the range and is worse than every member of it" in flat
+    assert "'inside the population' is not a clean bill" in flat
+
+
+def test_the_one_positive_is_marked_as_reference_based():
+    """The loop-beats-generation claim rests on the reference grade; its
+    golden-free counterpart agrees on one design and must not be generalised."""
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert "rests on the REFERENCE grade" in flat
+    assert "cannot be generalised from one design" in flat
+
+
+def test_the_placement_count_is_not_offered_as_a_rate():
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert "3 of 5 is a count, not a rate" in flat
+
+
+def test_the_placement_test_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_golden_free_placement_test_and_what_it_cannot_say" in flat
+    assert "both errors are optimistic" in flat

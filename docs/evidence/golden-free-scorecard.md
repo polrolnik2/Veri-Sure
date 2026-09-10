@@ -1559,6 +1559,60 @@ can support, not a golden-free result, and it selects nothing.
 design would meet the finish condition; anything else is `DIFFERS` and is not
 partial credit.
 
+## 9x. How to assure it golden-free — the procedure, and what each step is worth
+
+The goal's last clause asks how completeness is assured without a reference. This
+document has metrics for it and no **procedure**. Here is the procedure, with each
+step's measured reliability and the thing it cannot do.
+
+| step | what it is worth, measured |
+|---|---|
+| **1. Build the population** — ≥ 4 spec-derived designs, none of them one your own checks accepted | blindness **saturates at four** (§9b); two designs read 0.0% on a set that is 42.9% blind, and a design your checks accepted is worth ~12 points of over-estimate |
+| **2. Select with the minority rule** — keep a check convicting ≤ *t* of the population | **95 of 95** agreement with the audit on its reject side; on the grown corpus 105 of 108 spare the reference (97%). The only golden-free selection knob measured to work |
+| **3. Report a PAIR, never a number** — span *and* set blindness, blindness **stratified by port width** | mixed-width blindness is a weighted average of a signal that works (+0.714 on one-bit ports) and one that inverts (+0.200 over all ten), with the inverting half carrying **41%** of the weight (§9v) |
+| **4. Keep the proxy OUT of the latch** | 160 proxy units beside 169 checks **outvoted the checks 48 to 5** and shipped the worst of four designs (§9s). A proxy may inform an editor and must not decide which design is kept |
+| **5. Never read zero objections as done** | a set whose over-strict count is unknown — every set outside a benchmark — can reach zero and be *further* from correct. Score on requirements satisfied; stop on a trial budget |
+| **6. Expect the editor to decline its budget** | 4 of 4 runs stopped voluntarily with 6–16 of 21 trials unspent, and 4 of 4 stopped on a trial worse than their own best. The latch is what preserves the grade (§9s) |
+
+### Step 7 is the only verdict available on a finished design, and it is half right
+
+With no reference you cannot ask *how far from correct is this*. You can ask where
+it sits relative to the population that selected its checks. Scored on five
+designs whose grade is known:
+
+| design | objections of 169 | golden-free placement | grade | reference placement | |
+|---|---|---|---|---|---|
+| L (start) | 24 | ABOVE (pop 13–23) | 279 | ABOVE (pop 151–230) | agree |
+| **run 6** | **1** | **BELOW** | **146** | **BELOW** | agree |
+| run 7 | 5 | BELOW | 214 | inside | **disagree** |
+| run 8 | 13 | inside | 221 | inside | agree |
+| run 9 | 18 | inside | 271 | **ABOVE** | **disagree** |
+
+**The placement agrees on 3 of 5, and both errors are optimistic.** Run 7 the
+checks call *better than any independent design* and the reference calls typical.
+Run 9 the checks call *typical* and the reference calls **worse than every one of
+the seven**. Neither error would reject a good design; both would ship a bad one.
+
+**So the instrument can say "outside the population" and cannot reliably say "on
+the good side."** That is §8's Spearman −0.223 arriving as a concrete
+misplacement, and it is the honest limit of what a reference-free pipeline can
+certify about a finished artifact.
+
+**It is still worth computing, for a narrow reason.** A design scoring 1 against a
+population scoring 13–23 is outside anything the specification's readers produced
+— much better or much worse than they are, and worth a human look either way. What
+it must not do is decide which: **run 9 sits inside the range and is worse than
+every member of it**, so "inside the population" is not a clean bill.
+
+**And it qualifies §9w.** "The loop beats one-shot generation" rests on the
+*reference* grade. Its golden-free counterpart — 1 objection against 13–23 — points
+the same way, and the table above is exactly why that agreement cannot be
+generalised from one design.
+
+**Scope.** Five designs from one lineage on one specification. 3 of 5 is a count,
+not a rate, offered as the *shape* of the failure — optimistic in both directions
+— rather than as a reliability figure.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -1666,6 +1720,16 @@ how ACTIVE it is on the reference, and check count is very nearly a restatement
 of activity — **Spearman +0.857 against the reference's transitions**, and once
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
+
+**AND THE PROCEDURE IS WRITTEN DOWN AT LAST, WITH THE THING IT CANNOT DO — §9x.**
+Six steps, each with its measured worth, and a seventh that is the only verdict a
+reference-free pipeline can pass on a finished design: where it sits relative to
+the population that selected its checks. **That placement agrees with the
+reference on 3 of 5 designs and both errors are optimistic** — one design the
+checks call better than any independent draw is merely typical, one they call
+typical is worse than every member of the population. So the instrument can say
+*outside the population* and cannot reliably say *on the good side*, which makes
+it a trigger for a human look and never a clean bill.
 
 **AND THE LOOP IS WORTH RUNNING, WHICH IS THE ONE POSITIVE THIS DOCUMENT CAN
 STATE ABOUT ITS OWN PRODUCT — §9w.** Seven designs written from this

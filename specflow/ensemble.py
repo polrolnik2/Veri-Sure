@@ -285,6 +285,17 @@ graded runs land at 214, 221 and 271, inside or above the population's own range
 which is the sharpest reading of what their added proxy evidence cost.
 `the_loops_best_output_beats_every_independent_draw` carries it, including why an
 sd of 23 makes a 60-testpoint gap between two runs unremarkable.
+
+AND THE GOAL'S LAST CLAUSE -- HOW TO ASSURE IT GOLDEN-FREE -- HAS AN ANSWER WITH A
+MEASURED FAILURE SHAPE. The only reference-free verdict available on a finished
+design is where it sits relative to the population that selected its checks. On
+five designs whose grade is known the placement agrees with the reference on 3,
+and **both errors are optimistic**: one design the checks call better than any
+independent draw is merely typical, and one they call typical is worse than every
+member of the population. So the instrument can say OUTSIDE THE POPULATION and
+cannot reliably say ON THE GOOD SIDE -- which makes it worth computing as a
+trigger for a human look and unfit as a clean bill.
+`the_golden_free_placement_test_and_what_it_cannot_say` carries it.
 """
 from __future__ import annotations
 
@@ -5971,4 +5982,56 @@ def the_loops_best_output_beats_every_independent_draw() -> str:
         "125-testpoint spread across four runs only about five sd -- so the "
         "pre-registered +/-20 band on the replicate is roughly ONE generation sd, "
         "which is the right order without having been chosen for that reason."
+    )
+
+
+def the_golden_free_placement_test_and_what_it_cannot_say() -> str:
+    """THE GOAL'S LAST CLAUSE, ANSWERED: how to assure it golden-free, and the
+    measured reliability of the one statement a reference-free pipeline can make
+    about a finished design.
+
+    A production pipeline has no reference, so it cannot ask *how far from
+    correct is this design*. It CAN ask where the design sits relative to the
+    population that selected its checks -- the same nine spec-derived designs the
+    blindness instrument already needs. That placement is the only golden-free
+    verdict available on a finished artifact, and it has never been scored.
+
+    Scored here on five designs whose reference grade is known: the start design
+    and the four graded runs. The check count is golden-free; the grade is the
+    calibration, computed last.
+    """
+    return (
+        "    design    objections of 169   golden-free placement   grade   reference placement\n"
+        "      L                24         ABOVE  (pop 13-23)       279     ABOVE  (pop 151-230)   agree\n"
+        "      run 6             1         BELOW                    146     BELOW                  agree\n"
+        "      run 7             5         BELOW                    214     inside               **disagree**\n"
+        "      run 8            13         inside                   221     inside                 agree\n"
+        "      run 9            18         inside                   271     ABOVE                **disagree**\n\n"
+        "**THE PLACEMENT AGREES WITH THE REFERENCE ON 3 OF 5, AND BOTH ERRORS ARE "
+        "OPTIMISTIC.** On run 7 the checks say *better than any independent "
+        "design* and the reference says *typical*. On run 9 the checks say "
+        "*typical* and the reference says **worse than every one of the seven**. "
+        "Neither error is in the direction that would reject a good design; both "
+        "are in the direction that would ship a bad one.\n\n"
+        "**SO THE GOLDEN-FREE INSTRUMENT CAN SAY 'OUTSIDE THE POPULATION' AND "
+        "CANNOT RELIABLY SAY 'ON THE GOOD SIDE'.** That is the -0.223 measured "
+        "over sixteen designs arriving as a concrete misplacement rather than as "
+        "a coefficient, and it is the honest limit of what a reference-free "
+        "pipeline can certify about a finished artifact.\n\n"
+        "**AND IT IS STILL WORTH COMPUTING, FOR A NARROW REASON.** A design "
+        "scoring 1 against a population scoring 13 to 23 is outside anything the "
+        "specification's readers produced, so it is either much better or much "
+        "worse than they are, and it is worth a human look either way. What the "
+        "instrument must not do is decide which -- **run 9 sits inside the range "
+        "and is worse than every member of it**, so 'inside the population' is "
+        "not a clean bill.\n\n"
+        "**WHAT THIS MEANS FOR THE ONE POSITIVE ON THIS PLAN.** The loop's best "
+        "output beats every independent draw, and that statement rests on the "
+        "REFERENCE grade. Its golden-free counterpart -- 1 objection against 13 "
+        "to 23 -- points the same way, and the table above is exactly why that "
+        "agreement cannot be generalised from one design.\n\n"
+        "**WHAT IT DOES NOT CLAIM.** Five designs from one lineage on one "
+        "specification. 3 of 5 is a count, not a rate, and is offered as the "
+        "shape of the failure -- optimistic in both directions -- rather than as "
+        "a reliability figure."
     )
