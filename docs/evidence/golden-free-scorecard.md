@@ -990,6 +990,59 @@ majority was available in the same coordinates at **82%**. §9m's law (a criteri
 cannot take a design past its own accuracy) is confirmed and was applied to the
 wrong reading.
 
+## 9o. The ninth graded run — a proxy's aggregate accuracy is not its effective accuracy
+
+§9n showed run 8 scored the *worse* of two available readings. Run 9 is identical
+but scores the **plain majority**: 82% accurate on the same cells in the same
+coordinates, 24 points of headroom over the start design's 58%, where run 8's was
+minus four. Bands and a mechanism check fixed in `PREREG_MAJ.md`.
+
+| | run 5 | run 6 | run 7 | run 8 | **run 9** |
+|---|---|---|---|---|---|
+| checks objecting | 0 | 1 | 5 | 13 | 18 of 169 |
+| units failing | — | — | — | 0 of 160 | 42 of 160 (from 91) |
+| **testpoints differing** | 151 | 146 | 214 | 221 | **271 of 348** |
+
+**The worst of the nine.** The pre-registered `> 160` band reads: scoring the
+population's reading drives the design away whichever reading is used, and the
+route is closed on both.
+
+### The mechanism check failed in the informative direction
+
+It predicted blind-cell accuracy would rise toward 82%. **It fell, 58% → 53%**,
+while the criterion improved by 49 units.
+
+| unit transition | units | cells | the **reading** is right | design before → after |
+|---|---|---|---|---|
+| pass → pass | 72 | 2,171 | 87% | 87% → 87% |
+| **FAIL → pass** | **43** | 387 | **17%** | 66% → **17%** |
+| **FAIL → FAIL** | **42** | 1,269 | **94%** | 6% → 6% |
+
+**The editor repaired exactly the units where the reading is worst (17%) and left
+the ones where it is best (94%).**
+
+### The law
+
+**A proxy's aggregate accuracy is not its effective accuracy.** What governs is
+its accuracy on the subset an optimiser can *move*, and for a population-derived
+proxy those anti-correlate: a unit the population gets systematically wrong is
+wrong for a **structural** reason — a whole port's convention most designs share
+— so one edit flips it; a unit it gets right demands the design be genuinely
+correct there, which no single edit buys. **The criterion is easiest to satisfy
+exactly where it is most wrong.**
+
+This explains all three preceding runs at once — the unscored report (adopted at
+1 of 97), the de-duplicated latch (perfect score, worst design), and this one.
+None failed for want of a more accurate reading.
+
+### And it names my own error, which was the same one three times
+
+Run 7 priced on a per-cell counterfactual an editor cannot perform; run 8 on a
+figure from a different denominator; run 9 on the reading's aggregate accuracy.
+**All three are statements about cells that ignore what an optimiser does with
+them.** The per-unit table is the measurement that would have predicted every
+one, and computing its *split* needs no reference — only scoring it does.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

@@ -2871,3 +2871,39 @@ def test_the_eighth_run_is_explained_by_the_wrong_reading():
     flat = " ".join(t.split())
     assert "I chose the one reading below the design's own accuracy" in flat
     assert "confirmed and was applied to the wrong reading" in flat
+
+
+def test_the_ninth_run_is_the_worst_of_the_nine():
+    t = ensemble.a_proxys_aggregate_accuracy_is_not_its_effective_accuracy()
+    flat = " ".join(t.split())
+    assert "**271 of 348 testpoints differing**" in flat
+    assert "the route is closed on both" in flat
+
+
+def test_the_mechanism_check_failed_informatively():
+    t = ensemble.a_proxys_aggregate_accuracy_is_not_its_effective_accuracy()
+    flat = " ".join(t.split())
+    assert "**FELL, 58% -> 53%**" in flat
+    assert "improving substantially while its own region gets less accurate" in flat
+
+
+def test_the_editor_repaired_the_units_where_the_reading_is_worst():
+    t = ensemble.a_proxys_aggregate_accuracy_is_not_its_effective_accuracy()
+    flat = " ".join(t.split())
+    assert "REPAIRED EXACTLY THE UNITS WHERE THE READING IS WORST" in flat
+    assert "17% against 94%" in flat
+
+
+def test_the_general_law_is_stated_with_its_mechanism():
+    t = ensemble.a_proxys_aggregate_accuracy_is_not_its_effective_accuracy()
+    flat = " ".join(t.split())
+    assert "AGGREGATE ACCURACY IS NOT ITS EFFECTIVE ACCURACY" in flat
+    assert "accuracy on the subset an optimiser can actually MOVE" in flat
+    assert "easiest to satisfy exactly where it is most wrong" in flat
+
+
+def test_the_three_pricing_errors_are_owned_as_one():
+    t = ensemble.a_proxys_aggregate_accuracy_is_not_its_effective_accuracy()
+    flat = " ".join(t.split())
+    assert "the same one three times" in flat.lower()
+    assert "a statement about cells that ignored what an optimiser does with them" in flat

@@ -5328,3 +5328,56 @@ def whether_dedup_helps_the_vote_depends_entirely_on_the_denominator() -> str:
         "take a design past its own accuracy -- is confirmed and was applied to "
         "the wrong reading."
     )
+
+
+def a_proxys_aggregate_accuracy_is_not_its_effective_accuracy() -> str:
+    """THE NINTH GRADED RUN, and the finding the whole latch line was for.
+
+    Run 8 put the DE-DUPLICATED reading in the latch (54% accurate) and failed.
+    Run 9 is identical but scores the PLAIN MAJORITY, which is 82% accurate on
+    the same cells in the same coordinates -- 24 points of headroom over the
+    start design's 58%, where run 8's was minus four. `PREREG_MAJ.md` fixed the
+    bands and a mechanism check before dispatch.
+    """
+    return (
+        "**IT IS THE WORST OF THE NINE.** 18 objections of 169, majority units "
+        "91 -> 42 of 160, 15 of 21 trials, **271 of 348 testpoints differing** "
+        "against 146 and 151. Pins green, `DIFFERS`. The pre-registered `> 160` "
+        "band reads: **scoring the population's reading drives the design away "
+        "whichever reading is used, and the route is closed on both.**\n\n"
+        "**AND THE PRE-REGISTERED MECHANISM CHECK FAILED IN THE INFORMATIVE "
+        "DIRECTION.** It predicted blind-cell accuracy would rise toward the "
+        "criterion's own 82%. It **FELL, 58% -> 53%**, while the criterion "
+        "improved by 49 units. A criterion improving substantially while its own "
+        "region gets less accurate is not measuring what it claims to.\n\n"
+        "**WHY, AND IT IS EXACT.** Split the 160 units by what the editor did "
+        "with them:\n\n"
+        "    unit transition   units  cells   THE READING is right   design before -> after\n"
+        "      pass -> pass       72   2171          87%                 87% -> 87%\n"
+        "      **FAIL -> pass**   43    387        **17%**             66% -> **17%**\n"
+        "      **FAIL -> FAIL**   42   1269        **94%**              6% ->   6%\n\n"
+        "**THE EDITOR REPAIRED EXACTLY THE UNITS WHERE THE READING IS WORST AND "
+        "LEFT THE ONES WHERE IT IS BEST** -- 17% against 94%. Every unit it "
+        "satisfied dragged the design to a value the reading gets wrong five "
+        "times in six.\n\n"
+        "**SO A PROXY'S AGGREGATE ACCURACY IS NOT ITS EFFECTIVE ACCURACY.** What "
+        "governs is its accuracy on the subset an optimiser can actually MOVE, "
+        "and for a population-derived proxy those anti-correlate: a unit the "
+        "population gets systematically wrong is wrong for a STRUCTURAL reason -- "
+        "a whole port's convention most designs share -- so one edit flips it, "
+        "while a unit the population gets right demands the design be genuinely "
+        "correct there, which no single edit buys. **The criterion is easiest to "
+        "satisfy exactly where it is most wrong.**\n\n"
+        "**THIS EXPLAINS ALL THREE OF THE PRECEDING RUNS AT ONCE** -- the "
+        "unscored report (adopted at 1 of 97), the de-duplicated latch (perfect "
+        "score, worst design), and this one. None of them failed for want of a "
+        "more accurate reading.\n\n"
+        "**AND IT NAMES MY OWN ERROR IN THE CHAIN, WHICH WAS THE SAME ONE THREE "
+        "TIMES.** I priced this arm on the reading's AGGREGATE accuracy (82%), "
+        "having priced run 8's on a figure from a different denominator, having "
+        "priced run 7's on a per-cell counterfactual an editor cannot perform. "
+        "**Every one of the three was a statement about cells that ignored what "
+        "an optimiser does with them.** The measurement that would have "
+        "predicted all three is the per-unit table above, and it needs no "
+        "reference to compute the split -- only the reference to score it."
+    )
