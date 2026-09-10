@@ -813,12 +813,52 @@ Spearman +0.350). **So authoring escapes the corpus, not the anti-correlation** 
 the residue is reachable in principle and expensive in practice, at a projected
 250–3,600 calls with the accept rate falling.
 
-**No run reached equivalence.** Five sets spanning the whole blindness range, one
-held-out design, five `DIFFERS`. The goal's terminal condition is not met. What
-changed with the fifth run is the reason it is not met: not soundness, not
-termination, not the gradient, but **3,119 disagreement cells the best available
-sound set still cannot see** — a golden-free number, and the named target for the
-next round.
+**No run reached equivalence — SIX now, and the residue is named.** Six graded
+runs, one held-out start design, six `DIFFERS`, best 146 of 348. **The goal's
+terminal condition is not met.** What has changed is that the reason is no longer
+a candidate list:
+
+| aimed at the blindness residue | result |
+|---|---|
+| selection over 594 corpus bodies | 296 hole-closers, **0 sound** |
+| authoring at named holes (76 checks) | cover 100% of the residue, **0** cells closed soundly, 95 of 95 sound attempts convict the reference |
+| narrowing the 30 largest closers | **0 of 30** |
+| the stimulus loop (20 new testpoints) | 1 of 20 caught; new routes **84.5%** blind against 55.1% |
+| **the disagreement report (§9i)** | **NAMED cells 53 → 54 of 60 — worse.** The run's whole 5-testpoint gain is in the group the report says nothing about |
+
+**Five levers, all closed by measurement rather than by a budget running out.**
+
+### What a golden-free pipeline can actually report, validated
+
+This is the goal's last clause, and it is the part that survives:
+
+1. **Set blindness**, from **four or more** spec-derived designs — it saturates
+   there (§9b). Two designs can read 0.0% on a set that is 42.9% blind, and a
+   design your own checks accepted is worth about 12 points of over-estimate.
+2. **The minority rule** — keep a check convicting ≤ t of the population — is the
+   only golden-free selection knob measured to work: **95 of 95** agreement with
+   the audit on its reject side.
+3. **A two-point warning, held out across two independent editor runs (§9j).** A
+   testpoint no two spec-derived designs disagree on carries a design that is
+   right there (**1%**, both runs); a testpoint whose every disagreement is
+   unadjudicated carries one that is wrong there (**86%** and **87%**). The
+   monotone four-class ranking that stood this morning **does not survive out of
+   sample and is withdrawn**.
+
+**What it cannot do, and both are measured rather than assumed.** It cannot
+adjudicate a blind cell by the population's vote — that swings from **6% to 100%
+between two ports at the same margin** (§9h). And it cannot resolve one by
+handing the disagreement to a spec-reading editor: given all 60, an editor
+concluded 59 of 60 already satisfied the requirement text and was **wrong at 54
+of them**, with 16 trials unspent (§9i).
+
+**So the obstruction is located outside the pipeline.** A check that closes a
+blind cell convicts the reference, 95 times out of 95; a reader asked what the
+specification requires there reproduces the population's answer whether or not a
+design is in front of them. **The specification underdetermines those cells and
+the misreading is what it produces in a competent reader** — so completeness is
+not reachable by any instrument built from the specification plus a reader, and
+the missing input is a decision on those cells from outside that loop.
 
 **Scope.** One design, one corpus of 594 bodies, one population of nine. Every
 figure names its denominator. Nothing here is claimed for i2c, which remains
