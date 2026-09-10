@@ -3670,3 +3670,55 @@ def test_the_earlier_closure_now_carries_its_population_qualifier():
     t = ensemble.__doc__
     assert "exactly ONE sound opinion nine designs could not see" in t
     assert "one is sound by silence" in t
+
+
+def _seventh():
+    return ensemble.a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite()
+
+
+def test_the_seventh_run_reports_the_miter_beside_the_objection_count():
+    """Objections alone booked a failure-mode swap as a win three times on this
+    plan; the grade is the pair or it is not reportable."""
+    t = _seventh()
+    assert "0 of 87" in t and "22 of 87" in t
+    assert "174 of 348" in t and "279 of 348" in t
+    assert "DIFFERS" in t
+    assert "three pins green" in t
+
+
+def test_the_seventh_run_turns_on_the_audit_being_zero():
+    """Zero objections means opposite things at audit 7 and audit 0, and the
+    finding is only sharp because this set has the second."""
+    t = _seventh()
+    assert "CONSISTENT with equivalence" in t
+    assert "seven checks convict the reference" in t
+    assert "no check convicts" in t
+
+
+def test_the_seventh_run_excludes_every_alternative_explanation():
+    t = _seventh()
+    for k in ("Not unsoundness", "Not redundancy weighting", "Not thinness",
+              "Not a wrong gradient", "oscillation"):
+        assert k in t, k
+    assert "86 of the 87 decide" in t
+    assert "nine trials unspent" in t
+
+
+def test_the_seventh_run_reports_the_lever_as_doing_nothing():
+    """It was pre-registered that inside the control spread means no effect, and
+    reporting it any other way after the fact is the defect the bar exists for."""
+    t = _seventh()
+    assert "146 to 220" in t
+    assert "not shown to help" in t
+    assert "not comparable across the two sets" in t
+
+
+def test_the_seventh_run_does_not_claim_the_blindness_agreement_is_numerical():
+    t = _seventh()
+    assert "different denominators" in t
+    assert "not a numerical claim" in t
+
+
+def test_the_seventh_run_is_named_in_the_module_docstring():
+    assert ("a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite"
+            in ensemble.__doc__)

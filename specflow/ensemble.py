@@ -368,6 +368,18 @@ POPULATION THAT FINDS THE RESIDUE AND THE CORPUS THAT WOULD CLOSE IT SCALE APART
 BY A FACTOR OF TWENTY-TWO.
 `widening_the_population_reveals_more_blindness_than_the_corpus_can_close`
 carries it.
+
+AND THE WHOLE PICTURE IS THEN PUT THROUGH AN EDITOR, ON THE ONE SET COMPOSITION
+NOBODY HAD RUN. De-duplicating the set to one check per distinct opinion -- which
+removes nothing, since two checks with the same verdict vector agree everywhere
+either decides -- gives 87 checks with a ZERO audit, none of them silent on the
+reference. A Sonnet editor drove it from 22 objections to ZERO in 12 of 21 trials
+and stopped because the criterion was satisfied. The design went from 279 of 348
+testpoints differing to 174, and the miter says DIFFERS with all three pins green.
+Zero objections on an audit-zero set is CONSISTENT with equivalence, and
+equivalence did not follow.
+`a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite`
+carries it.
 """
 from __future__ import annotations
 
@@ -6456,4 +6468,61 @@ def widening_the_population_reveals_more_blindness_than_the_corpus_can_close() -
         "is unmet at 146 of 348 on the best of five draws, the one sound check "
         "catches the WORST of those draws and not the best, and a correction to a "
         "closure is not progress toward equivalence."
+    )
+
+
+def a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite() -> str:
+    """THE SEVENTH GRADED RUN, AND THE STRONGEST NEGATIVE THE PLAN HOLDS.
+
+    Every earlier zero-objection run had an escape. The rule-B run reached zero on
+    a set seven of whose checks convict the reference, so zero was arithmetic proof
+    of non-equivalence rather than a failure of the criterion. The MAXSOUND ceiling
+    run had a perfect audit and reached zero -- but it was selected BY the
+    reference and was labelled a ceiling, not a result a pipeline could reach.
+
+    This run has neither escape. The set is selected golden-free -- one check per
+    distinct verdict vector over the population's own traces, plus the one sound
+    opinion the corpus widening found, filtered by the minority rule -- and its
+    audit, computed last, is zero.
+
+    Pre-registered before dispatch, including the bar: five control draws of the
+    undeduplicated set from this same start design graded at 146, 192, 192, 207,
+    220, so anything inside that spread means the de-duplication did nothing.
+    """
+    return (
+        "**THE CRITERION TERMINATES, AND THE DESIGN IS WRONG ON HALF THE SUITE.**\n\n"
+        "    objections            22 of 87  ->  **0 of 87**   (12 of 21 trials, nine unspent)\n"
+        "    testpoints differing  279 of 348  ->  **174 of 348**\n"
+        "    differing cells       4,450  ->  **2,071**\n"
+        "    miter                 **DIFFERS**, three pins green in one process\n\n"
+        "**AND THE AUDIT IS WHAT MAKES THIS THE SHARP ONE.** On the rule-B set "
+        "seven checks convict the reference, so a design scoring zero could not be "
+        "correct -- by arithmetic, before any miter ran. **Here no check convicts "
+        "the reference, so reaching zero is CONSISTENT with equivalence.** The "
+        "criterion could have been satisfied by a correct design. It was satisfied "
+        "by one differing on 174 of 348 testpoints, on all ten declared outputs, "
+        "with not one output repaired to never-differing.\n\n"
+        "**EVERY AVAILABLE EXPLANATION IS EXCLUDED BY THE RUN'S OWN PROPERTIES.** "
+        "Not unsoundness -- the audit is zero and was verified before dispatch. Not "
+        "redundancy weighting -- this is the de-duplicated set, one opinion one "
+        "vote, where the shipped set let a single opinion carried by 19 checks cast "
+        "19 votes. Not thinness -- 86 of the 87 decide on the accepted design. Not "
+        "an editor stopping early -- nine trials unspent and the criterion "
+        "satisfied. Not a wrong gradient -- objections, testpoints and cells all "
+        "fell together, the largest correct-direction move on record. **Not "
+        "oscillation** -- the ratchet was offered three regressions and refused all "
+        "three, and the loop never returned to a design it already had.\n\n"
+        "**ON THE PRE-REGISTERED BAR, THE LEVER DID NOTHING.** 174 sits inside the "
+        "control spread of 146 to 220 -- better than the median, worse than the "
+        "best. De-duplication is not shown to help, which is what was predicted, "
+        "and the objection count is not comparable across the two sets because the "
+        "denominators differ by construction.\n\n"
+        "**WHAT IT LEAVES, AND IT IS A STATEMENT ABOUT COMPLETENESS.** The set is "
+        "59.4% blind on the population this pipeline produces, and the design it "
+        "accepted differs on 50% of testpoints. Those are different denominators "
+        "and the agreement is not a numerical claim, but the direction is the "
+        "point: **a criterion that cannot see most of what two spec-derived designs "
+        "disagree about will terminate on a design wrong about most of it.** "
+        "Soundness is solved, weighting is now excluded, and completeness is the "
+        "binding constraint -- with blindness as its measure."
     )

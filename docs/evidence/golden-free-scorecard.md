@@ -1977,6 +1977,90 @@ unmet at **146 of 348** on the best of five draws and nothing here touches that.
 One check that catches the *worst* graded draw and not the best is a correction to
 a closure, not progress toward equivalence.
 
+## 9ac. The seventh graded run — a golden-free set with a perfect audit reaches zero, and is wrong on half the suite
+
+Pre-registered in `docs/evidence/prereg/dedup-set-editor-run.md` before dispatch.
+§9z found the 169-check set holds 77 opinions, 48% of its checks exact duplicates
+and one vector carried by 19 — and reported it as a *span* correction. It bites
+where §9z never looked: **the editor counts objections**, so an opinion carried by
+19 checks casts 19 votes. Every graded draw so far ran on that weighting.
+
+**The set.** One check per distinct verdict vector over all 29 designs, plus
+§9ab's one sound opinion. De-duplication removes nothing by construction — two
+checks with the same vector agree on every (design, testpoint) either decides.
+
+| | 169-check set | **de-duplicated** |
+|---|---|---|
+| checks | 169 | **87** |
+| reads no real declared output | 20 | **0** |
+| ***audit: convict the reference*** | *0* | ***0*** |
+| decide nothing on the reference | — | **0** |
+| objections on the start design | 24 | **22** |
+
+### The run, and it terminates on its own criterion
+
+A Sonnet editor, same arbitrary unchecked LLM start design, same stimulus, same
+21-trial budget as the five controls. **Objections 22 → 0 of 87 in 12 trials,
+with nine unspent** — it stopped because the criterion was satisfied.
+
+Passing counts: 65 → 66 → 72 → 77 → 80 → 81 → 84 → **87**. **The ratchet refused
+all three regressions it was offered** (77→77, 84→73, 84→78) and the loop never
+returned to a design it already had. **There is no oscillation in this run** —
+the failure mode §9s and the earlier RTL rounds measured does not appear.
+
+### The grade, re-scored in its own clean directory, all three pins green
+
+| | testpoints differing | cells |
+|---|---|---|
+| the start design | **279 of 348 (80%)** | 4,450 |
+| **after the loop** | **174 of 348 (50%)** | **2,071** |
+
+**`EQUIVALENT` / `NO-DIFF-40` / mutant `DIFFERS` in one process, so the verdict is
+quotable: `DIFFERS`.** All ten declared outputs still differ; **none was repaired
+to never-differing.**
+
+### Against the pre-registered bar: de-duplication is not shown to do anything
+
+Five control draws of the 169-set from this same start design graded at **146,
+192, 192, 207, 220**. This one lands at **174 — inside that spread**, better than
+the median and worse than the best. By the rule fixed before the run, that is the
+outcome that says the lever did nothing, and it is the outcome that was predicted.
+
+### AND IT IS THE STRONGEST NEGATIVE ON THIS PAGE, BECAUSE OF THE AUDIT
+
+§8's rule-B run reached zero objections on a set **7 of whose checks convict the
+reference**, so zero was *arithmetic proof of non-equivalence* — the design scored
+0 where a correct one scores 7. **Here the audit is zero, so reaching zero is
+CONSISTENT with equivalence.** The criterion could have been satisfied by a
+correct design. It was satisfied by one wrong on half the suite.
+
+**And every available explanation is excluded by the run's own properties:**
+
+* **not unsoundness** — audit zero, verified before dispatch;
+* **not redundancy weighting** — this is the de-duplicated set, one opinion one vote;
+* **not thinness** — 86 of the 87 decide on the accepted design;
+* **not an editor stopping early** — nine trials unspent, criterion satisfied;
+* **not a wrong gradient** — objections, testpoints and cells all fell together,
+  279 → 174 and 4,450 → 2,071, the largest correct-direction move this plan has
+  recorded;
+* **not oscillation** — the ratchet refused every regression.
+
+**MAXSOUND reached the same shape and was selected BY the reference, so it was
+labelled a ceiling. This set is selected golden-free** — a partition over the
+population's own traces plus the minority rule, with the audit computed last and
+confirming zero. **So the negative now holds for a set a production pipeline could
+actually build.**
+
+### What it says about blindness, which is what the goal asks
+
+The set is **59.4% blind** on the population the pipeline produces (§9ab), and the
+design it accepted differs on **50% of testpoints**. Those are different
+denominators and the agreement is not a numerical claim — but the direction is the
+whole point: **a criterion that cannot see most of what two spec-derived designs
+disagree about will terminate on a design that is wrong about most of it.**
+Completeness, not soundness and not weighting, is the binding constraint, and
+blindness is the measure of it.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
