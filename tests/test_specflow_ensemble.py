@@ -2619,3 +2619,54 @@ def test_the_disagreement_itself_is_not_written_off():
     flat = " ".join(t.split())
     assert "at most one side of a split can be right" in flat
     assert "It says the COUNTS cannot pick the side" in flat
+
+
+def test_the_sixth_graded_run_lands_in_the_variance_band():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "**146 of 348**" in flat
+    assert "PRE-REGISTERED `121-160` BAND: NO EFFECT DISTINGUISHABLE FROM RUN-TO-RUN VARIANCE" in flat
+
+
+def test_the_named_cells_got_worse_not_better():
+    """The whole point of the arm. If this ever reads as a gain, the finding has
+    been inverted."""
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "**54/60 = 90%** **+1 WORSE**" in flat
+    assert "THE AGGREGATE GAIN IS ENTIRELY OUTSIDE THE REPORT" in flat
+
+
+def test_the_undersized_control_is_not_quoted():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "difference-in-differences is not quoted, as registered" in flat
+    assert "the NAMED group carries it at n = 60" in flat
+
+
+def test_the_editors_reading_is_confirmed_and_its_conclusion_refuted():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "**59 of 60 already matched its design's behaviour" in flat
+    assert "was wrong 90% of the time" in flat
+    assert "**16 trials unspent**" in flat
+
+
+def test_the_shared_misreading_is_not_a_shortage_of_context():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "reproduced the population's wrong answer 7 times in 9" in flat
+    assert "adding the disagreement did not decorrelate it" in flat
+
+
+def test_the_disagreement_is_still_evidence_even_though_the_lever_is_closed():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    flat = " ".join(t.split())
+    assert "What is NOT closed is that the disagreement is evidence" in flat
+    assert "What is refuted is that handing that split to a spec-reading editor resolves it" in flat
+
+
+def test_the_oscillation_is_recorded_with_the_rejected_commits():
+    t = ensemble.the_disagreement_report_did_not_move_the_cells_it_named()
+    assert "**27**" in t and "**rejected**" in t
+    assert "1**           2,840        latched" in t

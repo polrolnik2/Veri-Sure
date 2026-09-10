@@ -658,6 +658,76 @@ is read correctly; the 6% is the population being wrong.
 **What it does not say.** The disagreement is still evidence — at most one side
 can be right, whatever the counts do. What is closed is resolving it *by vote*.
 
+## 9i. The sixth graded run — the disagreement report did not move the cells it named
+
+§9h closed the population's *vote* as an adjudicator. The disagreement itself
+remained: at most one side of a split is right, and no run had ever handed that
+to an editor. This is that arm, and it is the fifth lever aimed at the residue.
+
+**Identical to run 5 in every respect** — same start design `gen/L.v`, same
+Sonnet editor and policy, same 21-trial budget, same 169-check set at audit
+zero, same baseline of 24 objections — **plus one artifact**: 60 cells on 60
+distinct fully-blind testpoints, each giving the port, edge, driven inputs, FSM
+states, and how nine spec-derived designs split. Verified cell by cell against
+the traces, 0 mismatches, no design named.
+
+| trial | objections | consensus cells | ratchet |
+|---|---|---|---|
+| init | 24 | 9,857 | — |
+| 1 | **27** | 3,074 | **rejected** |
+| 2 | 14 | 1,982 | latched |
+| 3 | 6 | 1,999 | latched |
+| 4 | **1** | 2,840 | latched |
+| 5 | 3 | 3,307 | **rejected** |
+
+| | control (run 5) | this arm |
+|---|---|---|
+| objections at rest | 0 of 169 | **1 of 169** |
+| trials spent | 21 of 21 | **5 of 21** |
+| **testpoints differing** | **151 of 348** | **146 of 348** |
+| pins, same process | green | **EQUIVALENT / NO-DIFF-40 / DIFFERS** |
+| grade | `DIFFERS` | **`DIFFERS`** |
+
+**146 is the pre-registered `121-160` band: no effect distinguishable from
+run-to-run variance.**
+
+### And the attribution says the five testpoints are not the report's
+
+Both groups sit in the same run under the same editor, so variance subtracts out:
+
+| group | control | this arm | change |
+|---|---|---|---|
+| **NAMED by the report** | 53 of 60 = 88% | **54 of 60 = 90%** | **+1 — worse** |
+| UNNAMED, fully blind | 7 of 10 = 70% | 7 of 10 = 70% | 0 |
+| **not fully blind** | 91 of 278 = 33% | **85 of 278 = 31%** | **−6** |
+
+**The aggregate gain is entirely outside the report.** The run improved by five
+testpoints; the group the report says nothing about improved by six, and the
+sixty cells it names got one worse. The n = 10 matched control is not quoted —
+registered in advance as too small — because the NAMED group carries the reading
+at n = 60.
+
+### The editor's reading is confirmed and its conclusion refuted
+
+It reported working all sixty cells and finding **59 of 60 already matched its
+design's behaviour under the governing requirement text**. At **54 of those 60
+testpoints the design still differs from the reference**. It read the
+specification at each cell, concluded its design was right, and was wrong 90% of
+the time — with the disagreement in front of it, the design in front of it, and
+16 trials unspent.
+
+**That is the targeted-question result arriving on an editor.** A reader asked
+one question about an underdetermined cell reproduced the population's wrong
+answer 7 times in 9 with no design in view; an editor with the design, the split
+and the budget reproduces it too. The shared misreading is not a shortage of
+context.
+
+**Five levers are now closed by measurement** — selection, authoring at named
+holes, narrowing, the stimulus, and disagreement evidence. What is *not* closed
+is that the disagreement is evidence: at 54 of 60 named cells the design is on
+the wrong side of a split. What is refuted is that handing that split to a
+spec-reading editor resolves it.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

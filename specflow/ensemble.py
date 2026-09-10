@@ -4981,3 +4981,77 @@ def the_population_vote_is_inverted_on_one_port_and_perfect_on_another() -> str:
         "instrument that resolves a blind cell by majority is, on this "
         "corpus's dominant blind port, wrong two times in three."
     )
+
+
+def the_disagreement_report_did_not_move_the_cells_it_named() -> str:
+    """The sixth graded run, and the fifth lever aimed at the blindness residue
+    -- the only one that used the residue's own evidence instead of trying to
+    remove it.
+
+    Pre-registered in `PREREG_DIS.md` and `PREREG_DIS_ATTRIB.md` before the
+    editor ran: EQUIVALENT meets the goal; <= 120 of 348 is a real lever;
+    121-160 is variance; > 160 means the report drives the design away. The
+    attribution split -- 60 NAMED testpoints against the fully-blind ones the
+    report does not name -- was fixed at the same time, together with the
+    warning that its matched control is 10 testpoints and too small to quote.
+    """
+    return (
+        "**THE ARM.** Identical to the fifth graded run in every respect -- same "
+        "start design `gen/L.v`, same Sonnet editor, same policy, same 21-trial "
+        "budget, same 169-check set at audit ZERO, same baseline of **24 "
+        "objections of 169** -- plus one artifact: 60 cells on 60 distinct "
+        "fully-blind testpoints giving the port, the edge, the driven inputs, "
+        "the FSM states, and how nine independently written spec-derived "
+        "designs SPLIT on the value. Golden-free by construction; the artifact "
+        "was verified cell by cell against the traces, 0 mismatches, and names "
+        "no design -- only counts.\n\n"
+        "    trial   objections   consensus cells   ratchet\n"
+        "      init      24            9,857          --\n"
+        "      1       **27**          3,074       **rejected**\n"
+        "      2         14            1,982        latched\n"
+        "      3          6            1,999        latched\n"
+        "      4       **1**           2,840        latched\n"
+        "      5          3            3,307       **rejected**\n\n"
+        "                          control (run 5)     this arm\n"
+        "    objections at rest       0 of 169        **1 of 169**\n"
+        "    trials spent             21 of 21        **5 of 21**\n"
+        "    **testpoints differing** **151 of 348**  **146 of 348**\n"
+        "    grade                     DIFFERS        **DIFFERS**\n\n"
+        "**146 IS THE PRE-REGISTERED `121-160` BAND: NO EFFECT DISTINGUISHABLE "
+        "FROM RUN-TO-RUN VARIANCE.** Five testpoints of 348. All three pins green "
+        "in the same process.\n\n"
+        "**AND THE ATTRIBUTION TEST SAYS THE FIVE ARE NOT THE REPORT'S.** Both "
+        "groups sit in the same run under the same editor, so run variance "
+        "subtracts out:\n\n"
+        "    group                    control      this arm    change\n"
+        "      **NAMED by the report** 53/60 = 88%  **54/60 = 90%**  **+1 WORSE**\n"
+        "      UNNAMED, fully blind     7/10 = 70%    7/10 = 70%       0\n"
+        "      **not fully blind**     91/278 = 33% **85/278 = 31%**  **-6**\n\n"
+        "**THE AGGREGATE GAIN IS ENTIRELY OUTSIDE THE REPORT.** The run improved "
+        "by five testpoints; the group the report says NOTHING about improved by "
+        "six, and the sixty cells it names got one worse. That is the third row "
+        "of the pre-registered table verbatim. The n = 10 control is not needed "
+        "and its difference-in-differences is not quoted, as registered -- the "
+        "NAMED group carries it at n = 60.\n\n"
+        "**THE EDITOR'S OWN ACCOUNT IS THE MECHANISM, AND THE MEASUREMENT "
+        "REFUTES ITS CONCLUSION WHILE CONFIRMING ITS READING.** It reported "
+        "working all sixty cells and finding **59 of 60 already matched its "
+        "design's behaviour under the governing requirement text**. At 54 of "
+        "those 60 testpoints the design still differs from the reference. It "
+        "read the specification at each cell, concluded its design was right, "
+        "and was wrong 90% of the time -- with the disagreement in front of it, "
+        "the design in front of it, and **16 trials unspent**.\n\n"
+        "**THAT IS THE TARGETED-QUESTION FINDING ARRIVING ON AN EDITOR.** A "
+        "reader asked one question about an underdetermined cell reproduced the "
+        "population's wrong answer 7 times in 9 with no design in view; an "
+        "editor with the design, the split and the budget reproduces it too. The "
+        "shared misreading is not a shortage of context -- adding the "
+        "disagreement did not decorrelate it.\n\n"
+        "**FIVE LEVERS ARE NOW CLOSED BY MEASUREMENT**: selection over the "
+        "corpus, authoring at named holes, narrowing the over-strict closers, "
+        "the stimulus, and disagreement evidence. **What is NOT closed is that "
+        "the disagreement is evidence** -- at most one side of a split is right, "
+        "and at 54 of 60 named cells the design is on the wrong side. What is "
+        "refuted is that handing that split to a spec-reading editor resolves "
+        "it."
+    )
