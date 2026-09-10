@@ -3242,3 +3242,55 @@ def test_the_width_inversion_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "set_blindness_is_dominated_by_port_width_and_inverts_there" in flat
     assert "Stratify set blindness by port width, or do not quote it" in flat
+
+
+def test_the_corrected_ranking_keeps_almost_the_same_checks():
+    t = ensemble.the_width_correction_changes_reporting_and_not_selection()
+    flat = " ".join(t.split())
+    assert "+0.613" in flat
+    assert "overlap 59 = 80%" in flat and "overlap 99 = 89%" in flat
+
+
+def test_the_tightest_cut_is_refused_as_tie_dominated():
+    """The 35% overlap reads as the correction being decisive where selection
+    bites. It is sort order inside 38 tied values."""
+    t = ensemble.the_width_correction_changes_reporting_and_not_selection()
+    flat = " ".join(t.split())
+    assert "NOT COMPARABLE" in flat
+    d = ensemble.the_width_correction_changes_reporting_and_not_selection.__doc__
+    dflat = " ".join((d or "").split())
+    assert "which 37 is sort order" in dflat
+    assert "The figure is withdrawn" in dflat
+
+
+def test_the_clean_population_is_smaller_not_larger():
+    t = ensemble.the_width_correction_changes_reporting_and_not_selection()
+    flat = " ".join(t.split())
+    assert "8 = 5 + 3, and all five are mixed-clean" in flat
+    assert "SMALLER than the mixed one, not 4.75x larger" in flat
+
+
+def test_the_vacuity_trap_is_named_in_the_docstring():
+    d = ensemble.the_width_correction_changes_reporting_and_not_selection.__doc__
+    flat = " ".join((d or "").split())
+    assert "scores clean BY CONSTRUCTION" in flat
+    assert "`stage_unexercised`'s own conflation in a new place" in flat
+
+
+def test_the_audit_is_reported_beside_every_blindness_row():
+    t = ensemble.the_width_correction_changes_reporting_and_not_selection()
+    flat = " ".join(t.split())
+    assert "AND THE AUDIT IS ZERO IN EVERY ROW" in flat
+    assert "a blindness figure without its audit is not quotable" in flat
+
+
+def test_the_sweeps_are_explicitly_not_invalidated():
+    t = ensemble.the_width_correction_changes_reporting_and_not_selection()
+    flat = " ".join(t.split())
+    assert "The selection sweeps on this plan are not invalidated by it" in flat
+
+
+def test_the_reach_bound_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_width_correction_changes_reporting_and_not_selection" in flat
+    assert "the selection sweeps here are not invalidated" in flat

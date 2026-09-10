@@ -1432,6 +1432,52 @@ that n and is not offered as significant; the 58% of ordered pairs is the
 assumption-free reading and is barely above chance. What is solid is the inversion
 itself and the arithmetic share of blind cells the wide ports carry.
 
+### And its reach is reporting, not selection — which bounds the correction
+
+The inversion is a defect in the per-**port** reading. Whether it matters for
+anything concluded here depends on the per-**check** reading, because that is what
+every sweep in §8 ranked on.
+
+| | mixed vs one-bit ranking |
+|---|---|
+| Spearman across the 149 live checks | **+0.613** |
+| overlap keeping the least-blind 50% (74) | 59 = **80%** |
+| overlap keeping the least-blind 75% (111) | 99 = **89%** |
+| overlap keeping the least-blind 25% | **not comparable** — see below |
+
+**And the correction identifies not one clean check the mixed reading did not
+already identify:**
+
+| population | n | requirements | *audit* |
+|---|---|---|---|
+| checks reading a real output | 149 | 69 | *0* |
+| …of those, reading a one-bit output | 116 | — | — |
+| …reading only multi-bit outputs | **33** | — | *clean by construction* |
+| mixed-clean (blind on no cell at all) | **8** | 7 | *0* |
+| one-bit-clean, as printed | 38 | 18 | *0* |
+| **one-bit-clean, reading a one-bit port** | **5** | **5** | ***0*** |
+
+**The five are exactly the mixed-clean eight restricted to narrow readers —
+8 = 5 + 3, and all five are mixed-clean.** The other 33 were the vacuity. So the
+corrected clean population is *smaller* than the mixed one, and **the §8 sweeps
+are not invalidated by any of this.**
+
+### Two counting-shaped defects on the way, both mine, both caught before publication
+
+* **The tightest cut is tie-dominated.** The raw run reported the two rankings
+  overlapping on 13 of 37 = 35% at the least-blind 25% cut — which reads as the
+  correction being decisive exactly where selection bites. The corrected
+  instrument leaves **38 checks tied at zero**, so a 37-check cut picks 37 of 38
+  equal values and which 37 is sort order. **Figure withdrawn.**
+* **The clean population is an empty denominator.** The raw run reported clean
+  checks going 8 → 38, a 4.75x gain. A check reading only 32-bit or 4-bit outputs
+  has no one-bit cells to be blind on and scores clean *by construction* — the
+  same conflation `stage_unexercised` names in capitals, in a new place.
+
+Both have the signature the other nine on this plan have: a clean, plausible
+number that flatters the hypothesis under test, invisible in the output, and
+needing a second measurement aimed at the first.
+
 ## 9t. PRE-REGISTERED, and running: is a single graded run a measurement?
 
 *Written and committed before the replicate was dispatched. The outcome is not

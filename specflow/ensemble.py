@@ -263,6 +263,17 @@ design disagrees with the reference". 41% of every blind cell in the set sits on
 the three multi-bit ports. **Stratify set blindness by port width, or do not
 quote it** -- every blindness figure here is over mixed widths.
 `set_blindness_is_dominated_by_port_width_and_inverts_there` carries it.
+
+AND ITS REACH IS REPORTING, NOT SELECTION, WHICH BOUNDS THE CORRECTION. Per CHECK
+the corrected ranking moves by +0.613, keeps 80-89% of the same checks at every
+comparable cut, and identifies NOT ONE clean check the mixed reading did not
+already identify -- the corrected clean population is five, exactly the mixed
+eight restricted to checks that read a one-bit port. So the selection sweeps here
+are not invalidated. Two counting-shaped defects were produced on the way and
+both were caught before publication: a 35% overlap at the tightest cut that is
+sort order inside 38 tied values, and a clean population of 38 that is 33 checks
+with no one-bit port to be blind on.
+`the_width_correction_changes_reporting_and_not_selection` carries both.
 """
 from __future__ import annotations
 
@@ -5828,4 +5839,71 @@ def set_blindness_is_dominated_by_port_width_and_inverts_there() -> str:
         "chance. What is solid is the inversion itself -- the two widest ports "
         "sit at opposite ends of the two rankings -- and the arithmetic share of "
         "blind cells they carry."
+    )
+
+
+def the_width_correction_changes_reporting_and_not_selection() -> str:
+    """HOW FAR THE WIDTH CORRECTION REACHES -- and two counting-shaped defects it
+    produced on the way, both caught before publication.
+
+    The width inversion is a defect in the per-PORT reading. Whether it matters
+    for anything concluded here depends on the per-CHECK reading, because that is
+    what every selection sweep ranked on. Two rankings over the same 169 checks:
+    blind cells over all ten declared outputs (MIXED, what has been quoted), and
+    over the seven one-bit outputs only (ONE-BIT, the population where the
+    golden-free instrument tracks the reference-based one).
+
+    THE FIRST DEFECT, MINE. The raw run reported the two rankings overlapping on
+    13 of 37 = 35% at the least-blind 25% cut, which reads as the correction
+    being decisive exactly where selection bites. It is not: the corrected
+    instrument leaves 38 checks TIED at zero blind cells, so a 37-check cut picks
+    37 of 38 equal values and which 37 is sort order. The figure is withdrawn and
+    the cut is not comparable.
+
+    THE SECOND DEFECT, ALSO MINE. The raw run reported checks blind on NOTHING
+    going 8 to 38 -- a 4.75x larger clean population. A check reading only 32-bit
+    or 4-bit outputs has no one-bit cells to be blind on and scores clean BY
+    CONSTRUCTION, which is `stage_unexercised`'s own conflation in a new place.
+    """
+    return (
+        "**THE RANKING MOVES MODESTLY, AND THE CUTS THAT CAN BE COMPARED KEEP "
+        "ALMOST THE SAME CHECKS.**\n\n"
+        "    Spearman(per-check MIXED blindness, per-check ONE-BIT blindness) = +0.613\n"
+        "      keep the least-blind 50% (74 of 149)   overlap 59 = 80%\n"
+        "      keep the least-blind 75% (111 of 149)  overlap 99 = 89%\n"
+        "      keep the least-blind 25%               NOT COMPARABLE -- the cut\n"
+        "                                             falls inside 38 tied values\n\n"
+        "**AND THE CORRECTION IDENTIFIES NOT ONE CHECK THE MIXED READING DID NOT "
+        "ALREADY IDENTIFY.** With the vacuity exclusion applied the arithmetic is "
+        "exact:\n\n"
+        "    population                                      n   requirements   audit\n"
+        "      checks reading a real output                149        69          0\n"
+        "      ...of those, reading a ONE-BIT output       116         --          --\n"
+        "      ...reading ONLY multi-bit outputs            33   <- clean by construction\n"
+        "      MIXED-clean (blind on no cell at all)         8         7          0\n"
+        "      ONE-BIT-clean, as printed                    38        18          0\n"
+        "      **ONE-BIT-clean, reading a one-bit port**     **5**     **5**      **0**\n\n"
+        "**THE FIVE ARE EXACTLY THE MIXED-CLEAN EIGHT RESTRICTED TO NARROW "
+        "READERS: 8 = 5 + 3, and all five are mixed-clean.** The other 33 of the "
+        "38 were the vacuity. So the corrected clean population is SMALLER than "
+        "the mixed one, not 4.75x larger -- the correction discards the wide-port "
+        "evidence three checks were clean on and adds nothing.\n\n"
+        "**AND THE AUDIT IS ZERO IN EVERY ROW**, so the pair is (blindness, 0) "
+        "throughout and no row is being bought with false rejection. Five checks "
+        "over 5 of 89 requirements is not a set anything can be driven with; it "
+        "is reported because a blindness figure without its audit is not "
+        "quotable.\n\n"
+        "**SO THE CORRECTION'S REACH IS REPORTING, NOT SELECTION.** Per PORT it is "
+        "real and large -- a 26x spread and an inversion on the two widest ports. "
+        "Per CHECK it moves the ranking by +0.613, keeps 80-89% of the same "
+        "checks at every comparable cut, and produces no new clean member. **The "
+        "selection sweeps on this plan are not invalidated by it**, and the "
+        "prescription stays what it was: stratify the per-port figure by width, "
+        "or do not quote it.\n\n"
+        "**THE METHODOLOGICAL NOTE IS THE DURABLE PART.** Both defects have the "
+        "signature the other nine on this plan have -- a clean, plausible number "
+        "that flatters the hypothesis under test. One was ties masquerading as "
+        "disagreement; the other was an empty denominator masquerading as "
+        "cleanliness. Neither was visible in the output; both needed a second "
+        "measurement aimed at the first."
     )
