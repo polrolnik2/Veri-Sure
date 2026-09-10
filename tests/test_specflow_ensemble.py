@@ -3147,3 +3147,50 @@ def test_the_latch_reconstruction_is_pinned_against_the_grader():
     flat = " ".join((d or "").split())
     assert "It reproduces the grader 4 of 4" in flat
     assert "had it not, none of it would be quotable" in flat
+
+
+def test_the_strength_collapse_is_nine_ports_of_ten_going_silent():
+    t = ensemble.the_strength_collapse_is_port_by_port_not_a_uniform_dimming()
+    flat = " ".join(t.split())
+    assert "THE COLLAPSE IS NOT A UNIFORM DIMMING" in flat
+    assert "SILENT ON NINE PORTS OF TEN" in flat
+    assert "zero in 5,283 decisions between them" in flat
+
+
+def test_the_most_watched_port_is_the_blindest():
+    t = ensemble.the_strength_collapse_is_port_by_port_not_a_uniform_dimming()
+    flat = " ".join(t.split())
+    assert "51 CHECKS READ IT" in flat
+    assert "OBJECT ZERO TIMES" in flat
+    assert "most-watched port in the set is the one it cannot see at all" in flat
+
+
+def test_strength_is_a_rate_so_fewer_wrong_ports_does_not_explain_it():
+    t = ensemble.the_strength_collapse_is_port_by_port_not_a_uniform_dimming()
+    flat = " ".join(t.split())
+    assert "Strength is a RATE" in flat
+    assert "not an artifact of the design having fewer wrong ports" in flat
+
+
+def test_the_worst_run_stopped_while_the_checks_were_still_talking():
+    """It ties the per-port reading to the latch finding: run 9's proxy picked a
+    design the checks still objected to on all ten ports."""
+    t = ensemble.the_strength_collapse_is_port_by_port_not_a_uniform_dimming()
+    flat = " ".join(t.split())
+    assert "objections on ALL TEN ports" in flat
+    assert "it picked one the checks were still objecting to" in flat
+
+
+def test_the_port_target_is_not_claimed_as_a_new_lever():
+    """The corpus closure already answers it: 302 bodies object to that design,
+    one is sound, and it is already in the set."""
+    t = ensemble.the_strength_collapse_is_port_by_port_not_a_uniform_dimming()
+    flat = " ".join(t.split())
+    assert "It is not a new lever" in flat
+    assert "640 attempts did not produce" in flat
+
+
+def test_the_port_decomposition_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_strength_collapse_is_port_by_port_not_a_uniform_dimming" in flat
+    assert "COMPLETELY SILENT on nine ports of ten" in flat

@@ -1315,6 +1315,63 @@ here shows it can.
 closure is exact — the counters are on disk. The ordering correlations are n = 4
 and are shape, not significance.
 
+## 9u. Where the check strength went — nine ports of ten, not a uniform dimming
+
+§9p measures strength — objections per exposed decision — collapsing 6.4% → 0.4%
+→ 0.0% as an editor works, and an earlier set's blindness was measured *uniform
+across checks* (36 of 50). It has never been split by **port**, and that split is
+what decides whether a targeted authoring round has anywhere to aim.
+
+Per (check, testpoint, port): a check is **exposed** on port *p* at testpoint *t*
+if it reads *p* and *p* differs from the reference there; it **decides** if
+`decide` returns a verdict and **objects** if that verdict is False. A check
+reading two wrong ports counts for both, because nothing says which one it should
+have caught.
+
+| design | exposed | decided | objected | strength | ports at zero |
+|---|---|---|---|---|---|
+| start design L | 30,906 | 17,656 | 1,013 | 5.7% | 1 of 10 |
+| run 9 (worst) | 29,361 | 17,624 | 550 | 3.1% | 0 of 10 |
+| **run 6 (best)** | 11,300 | 5,927 | **20** | **0.3%** | **9 of 10** |
+
+**THE COLLAPSE IS NOT A UNIFORM DIMMING.** On the best design exactly one port
+still draws an objection — `burst`, at 4.2% — and the other nine draw **zero in
+5,283 decisions between them**. Strength is a rate, so this is not the design
+simply having fewer wrong ports to be exposed on.
+
+### The sharpest cell: the most-watched port is the blindest
+
+| on run 6's design | |
+|---|---|
+| checks reading `biu_read` | **51**, more than any other port |
+| decisions at testpoints where `biu_read` is wrong | **2,383** |
+| objections | **0** |
+| differing cells it carries | **373**, more than any other port |
+
+### And the editor consumes the strength port by port
+
+On the start design `burst` reads **31.9%** — an order of magnitude above every
+other port, and where this set's discriminating power actually lives. The best
+run drove it to 4.2% and silenced the other nine outright. So "the editor
+consumes the strength" is not a set-wide metaphor: the set loses ports one at a
+time until one is left.
+
+### And run 9's design is not one the set had run out on
+
+It stands at 3.1% strength with objections on **all ten ports** and 18 of 169
+checks objecting — a design the checks were still talking about. Its run ended
+there because its latch preferred a state 48 proxy votes better and 5 check votes
+worse (§9s). **The proxy did not merely pick a worse design; it picked one the
+checks were still objecting to.**
+
+### What this does and does not open
+
+It is a sharper target than any authoring round here has had — not *a blind cell*
+but *the port where 51 checks decide 2,383 times and say nothing*. It is **not a
+new lever**, because §9q already answers it: of 640 authored bodies, 302 object
+to that design, exactly one is sound, and that one is already in the set. A check
+for `biu_read` there would have to be one 640 attempts did not produce.
+
 ## 9t. PRE-REGISTERED, and running: is a single graded run a measurement?
 
 *Written and committed before the replicate was dispatched. The outcome is not

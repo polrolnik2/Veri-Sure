@@ -239,6 +239,17 @@ they rejected the state with the fewest check objections -- 5 check votes lost
 against 48 proxy votes gained. A proxy may inform an editor and must not enter
 the criterion that decides which design is kept.
 `the_editor_declines_its_budget_and_stops_past_its_own_best` carries the table.
+
+AND THE CHECK-STRENGTH COLLAPSE HAS A SHAPE, WHICH IT HAS NEVER BEEN GIVEN.
+Split by PORT rather than by check, strength falling 5.7% to 0.3% is not a
+uniform dimming: on the best design the set goes COMPLETELY SILENT on nine ports
+of ten, leaving one still able to object. Its sharpest cell is a port 51 checks
+read, decide 2,383 times where it is wrong, and object zero times -- the
+most-watched port in the set and the one carrying the most divergence. And the
+worst run's design is not one the set had run out on: it stands at 3.1% strength
+with objections on all ten ports, so its latch preferred a state the checks were
+still objecting to.
+`the_strength_collapse_is_port_by_port_not_a_uniform_dimming` carries it.
 """
 from __future__ import annotations
 
@@ -5688,4 +5699,56 @@ def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
         "one check set. The budget closure is exact -- the counters are on disk. "
         "The ordering correlations are n = 4 and are offered as shape, not "
         "significance."
+    )
+
+
+def the_strength_collapse_is_port_by_port_not_a_uniform_dimming() -> str:
+    """WHERE THE CHECK STRENGTH WENT, decomposed by port for the first time.
+
+    Strength -- objections per exposed decision -- is measured collapsing 5.7%
+    to 0.3% as an editor works, and blindness was measured UNIFORM across CHECKS
+    on an earlier set (36 of 50). It has never been split by PORT, and that split
+    decides whether a targeted authoring round has anywhere to aim.
+
+    Per (check, testpoint, port): a check is EXPOSED on port p at testpoint t if
+    it reads p and p differs from the reference there; it DECIDES if `decide`
+    returns a verdict and OBJECTS if that verdict is False. A check reading two
+    wrong ports counts for both, because nothing says which one it should have
+    caught. The exposure population is reference-derived and is the thing being
+    explained; the check-side quantities are not.
+    """
+    return (
+        "    design            exposed   decided   objected   strength   ports at ZERO\n"
+        "      start design L    30,906    17,656     1,013      5.7%        1 of 10\n"
+        "      run 9 (worst)     29,361    17,624       550      3.1%        0 of 10\n"
+        "      run 6 (best)      11,300     5,927        20      **0.3%**    **9 of 10**\n\n"
+        "**THE COLLAPSE IS NOT A UNIFORM DIMMING. IT IS THE SET GOING COMPLETELY "
+        "SILENT ON NINE PORTS OF TEN.** On the best design exactly one port still "
+        "draws an objection -- `burst`, at 4.2% -- and the other nine draw zero "
+        "in 5,283 decisions between them. Strength is a RATE, so the fall is not "
+        "an artifact of the design having fewer wrong ports to be exposed on.\n\n"
+        "**THE SHARPEST SINGLE CELL IS `biu_read` ON THE BEST DESIGN: 51 CHECKS "
+        "READ IT, THEY DECIDE 2,383 TIMES AT TESTPOINTS WHERE IT IS WRONG, AND "
+        "THEY OBJECT ZERO TIMES** -- on the port carrying 373 differing cells, "
+        "more than any other. The most-watched port in the set is the one it "
+        "cannot see at all.\n\n"
+        "**AND THE EDITOR CONSUMES THE STRENGTH PORT BY PORT.** On the start "
+        "design `burst` is at 31.9% -- an order of magnitude above every other "
+        "port, and where this set's discriminating power actually lives. The best "
+        "run drove it to 4.2% and silenced the rest outright. So `the editor "
+        "consumes the strength` is not a metaphor about a set-wide quantity: it "
+        "is the set losing ports one at a time until one is left.\n\n"
+        "**AND RUN 9's DESIGN IS NOT ONE THE SET HAD RUN OUT ON.** It stands at "
+        "3.1% strength with objections on ALL TEN ports and 18 of 169 checks "
+        "objecting -- a design the checks were still talking about. Its run "
+        "stopped there because its latch preferred a state 48 proxy votes better "
+        "and 5 check votes worse. **The proxy did not merely pick a worse design; "
+        "it picked one the checks were still objecting to.**\n\n"
+        "**WHAT THIS DOES AND DOES NOT OPEN.** It is a sharper target than any "
+        "authoring round on this plan has had -- not *a blind cell* but *the port "
+        "where 51 checks decide 2,383 times and say nothing*. It is not a new "
+        "lever, because the corpus closure already answers it: of 640 authored "
+        "bodies, 302 object to that design and exactly one is sound, and that one "
+        "is already in the set. A check for `biu_read` there would have to be one "
+        "640 attempts did not produce."
     )
