@@ -391,6 +391,18 @@ ones a sound set may not contain. Selection is finished: the residue is
 unauthored, not unselected.
 `every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it`
 carries it.
+
+AND THAT CLOSURE IS QUALIFIED ONE LEVEL DOWN, BECAUSE SOUNDNESS THERE IS
+SUITE-WIDE. A check is discarded for convicting the reference ANYWHERE on 348
+testpoints. Asked per OBJECTION instead: 879 of those checks' objections to the
+accepted design land on testpoints where they SPARE the reference, covering 133
+of its 174 wrong testpoints. So the evidence is not disjoint from soundness --
+the per-check aggregation is what makes it look that way, and 76% of the residue
+is already authored and in hand. The golden-free rule that would separate those
+879 plateaus at ~50% precision across its whole range, so the residue is not
+unauthored but UNSEPARABLE.
+`the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which`
+carries it.
 """
 from __future__ import annotations
 
@@ -6588,4 +6600,60 @@ def every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catc
         "Soundness and discrimination are, on this specification and this "
         "population, very nearly disjoint properties, and the finish condition "
         "needs their intersection."
+    )
+
+
+def the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which() -> str:
+    """THE PER-OBJECTION QUESTION, WHICH THE PER-CHECK CLOSURE DOES NOT ANSWER.
+
+    Soundness as this plan measures it is SUITE-WIDE: a check is discarded for
+    convicting the reference anywhere on 348 testpoints. A check convicting it at
+    testpoints {A,B} while catching the accepted design at C is, AT C, making a
+    correct objection -- and the per-check rule throws away the whole check, C
+    included. This plan already recorded one instance of that and never measured
+    it at scale.
+
+    Two legs, BOTH REQUIRED, fixed before any number was read: the phenomenon must
+    exist on at least 20% of the discarded objectors, AND a golden-free rule must
+    separate the legitimate objections at 70% precision. Leg 1 alone is an audit
+    finding with no instrument behind it, which is what this plan refuses to build
+    on.
+    """
+    return (
+        "**LEG 1 PASSES, AND THE PHENOMENON IS MOST OF THE RESIDUE.**\n\n"
+        "    unsound objectors right somewhere    84 of 255 = 33%   (bar 20%)\n"
+        "    objection CELLS locally legitimate  879 of 15,795 = 6%\n"
+        "    distinct testpoints they land on    **133**\n"
+        "    the accepted design is wrong on      174 of 348\n\n"
+        "**So 76% of the design's remaining wrong testpoints already carry an "
+        "objection that is locally correct** -- authored, in the corpus, and "
+        "discarded. That is the opposite of nothing left.\n\n"
+        "**LEG 2 FAILS AT EVERY THRESHOLD.** The rule is the minority rule moved "
+        "down a level -- admit an objection at testpoint T if the check spares at "
+        "least k of the nine AT T -- and it reads no reference:\n\n"
+        "    k      admitted   legit   precision   lift\n"
+        "    4         3,195     730         23%   4.11x\n"
+        "    5         3,019     727         24%   4.33x\n"
+        "    **6**     1,374     720     **52%**  **9.42x**\n"
+        "    7           671     321         48%   8.60x\n"
+        "    8           329     171         52%   9.34x\n"
+        "    9           117      58         50%   8.91x\n\n"
+        "**Precision plateaus at about half and never approaches 70%. The curve is "
+        "FLAT**, so this is not a threshold to retune: tightening from 6 to 9 costs "
+        "92% of the volume and moves precision two points. The LIFT is real and "
+        "large -- up to 9.4x over a 6% base -- and it is still a coin flip on the "
+        "question that matters. A criterion built on it hands the editor one demand "
+        "no correct design can meet for every one it should, which the ordering "
+        "argument names as fatal.\n\n"
+        "**BY THE PRE-REGISTERED RULE THIS IS A NEGATIVE AND IS RECORDED AS ONE** -- "
+        "the thirteenth instrument to fail, and the first aimed at the objection "
+        "rather than the check.\n\n"
+        "**WHAT IT RELOCATES.** The evidence EXISTS, covering 76% of the residue. "
+        "The per-check soundness rule discards it, correctly, since no rule can "
+        "keep a check only where it is right without knowing where that is. And "
+        "the golden-free instrument that would say where is measured at ~50%, flat. "
+        "**So the residue is not unauthored -- it is UNSEPARABLE**, and the only "
+        "instrument that identifies it is the reference. That is the strongest form "
+        "of the case for a decision on the underdetermined cells from outside the "
+        "specification-plus-reader loop."
     )

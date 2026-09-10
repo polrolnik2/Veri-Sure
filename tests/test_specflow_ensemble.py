@@ -3771,3 +3771,53 @@ def test_the_closure_names_what_the_seventh_run_excluded():
 def test_the_closure_is_named_in_the_module_docstring():
     assert ("every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it"
             in ensemble.__doc__)
+
+
+def _local():
+    return ensemble.the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which()
+
+
+def test_the_per_objection_finding_reports_both_legs_and_calls_it_a_negative():
+    """Both legs were required; passing one is not a result, and reporting it as
+    one is the defect the two-leg bar exists to prevent."""
+    t = _local()
+    assert "LEG 1 PASSES" in t
+    assert "LEG 2 FAILS AT EVERY THRESHOLD" in t
+    assert "THIS IS A NEGATIVE AND IS RECORDED AS ONE" in t
+
+
+def test_the_per_objection_finding_gives_the_whole_sweep_not_one_point():
+    """A flat curve and a mis-set threshold look identical from a single row."""
+    t = _local()
+    for k in ("3,195", "1,374", "117", "9.42x", "4.11x"):
+        assert k in t, k
+    assert "FLAT" in t
+    assert "not a threshold to retune" in t
+
+
+def test_the_per_objection_finding_keeps_lift_and_precision_apart():
+    """9.4x lift with 52% precision is a real signal that is still a coin flip;
+    quoting either alone misrepresents it."""
+    t = _local()
+    assert "lift" in t.lower() and "still a coin flip" in t
+    assert "one demand no correct design can meet" in t
+
+
+def test_the_per_objection_finding_sizes_the_residue_it_could_reach():
+    t = _local()
+    assert "133" in t and "174 of 348" in t and "76%" in t
+
+
+def test_the_per_objection_finding_says_unseparable_not_unauthored():
+    """It qualifies the previous closure rather than repeating it."""
+    t = _local()
+    assert "not unauthored" in t
+    assert "UNSEPARABLE" in t
+    d = ensemble.the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which.__doc__
+    assert "SUITE-WIDE" in d
+    assert "BOTH REQUIRED" in d
+
+
+def test_the_per_objection_finding_is_named_in_the_module_docstring():
+    assert ("the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which"
+            in ensemble.__doc__)

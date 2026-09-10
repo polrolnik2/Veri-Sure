@@ -2116,6 +2116,93 @@ soundness and discrimination are, on this specification and this population,
 very nearly disjoint properties, and the finish condition needs their
 intersection.
 
+> **QUALIFIED BY §9ae: that last sentence is true of CHECKS and too strong of
+> OBJECTIONS.** Soundness here is a suite-wide property — a check is discarded for
+> convicting the reference *anywhere* on 348 testpoints. Asked per objection
+> instead, **879 of these checks' objections to the accepted design land on
+> testpoints where they spare the reference**, and they cover 133 of its 174 wrong
+> testpoints. The evidence is not disjoint from soundness; the per-check
+> aggregation is what makes it look that way. §9ae then measures whether any
+> golden-free rule can separate those 879, and none can.
+
+## 9ae. The discarded objections are locally right, and nothing golden-free can tell which
+
+§9ad asked a **per-check** question — *is any check sound?* — and answered zero of
+255. Soundness there is suite-wide: a check is discarded for convicting the
+reference anywhere on 348 testpoints. **The per-OBJECTION question is different,
+and this plan's own record says it can come out the other way:** *"each fired on a
+testpoint where golden PASSES, so each objection was locally legitimate."*
+
+A check convicting the reference at testpoints {A,B} and catching the accepted
+design at C is, **at C**, making a correct objection. The per-check rule throws
+away the whole check, C included. Two legs, **both required**, fixed before any
+number was read.
+
+### Leg 1 — the phenomenon is real, and it is most of the residue
+
+| | |
+|---|---|
+| unsound objectors with ≥1 objection where they spare the reference | **84 of 255 = 33%** *(bar: ≥20%)* |
+| objection **cells** that are locally legitimate | **879 of 15,795 = 6%** |
+| distinct testpoints those 879 land on | **133** |
+| the accepted design is wrong on | 174 of 348 |
+
+**So 76% of the design's remaining wrong testpoints carry an objection that is
+locally correct** — already authored, already in the corpus, and currently
+discarded. That is the opposite of "there is nothing left", and it is why §9ad's
+closing sentence needed the qualifier now attached to it.
+
+### Leg 2 — and no golden-free rule separates them. FAILED, at every threshold
+
+The candidate is the minority rule moved down a level: admit an objection at
+testpoint T if the check spares at least *k* of the nine population designs **at
+T**. It reads no reference.
+
+| k | admitted | legitimate | precision | lift |
+|---|---|---|---|---|
+| 4 | 3,195 | 730 | 23% | 4.11x |
+| 5 | 3,019 | 727 | 24% | 4.33x |
+| **6** | 1,374 | 720 | **52%** | **9.42x** |
+| 7 | 671 | 321 | 48% | 8.60x |
+| 8 | 329 | 171 | 52% | 9.34x |
+| 9 | 117 | 58 | 50% | 8.91x |
+
+**Precision plateaus at about half and never approaches the 70% bar. The curve is
+FLAT, so this is not a threshold to retune** — tightening from 6 to 9 costs 92% of
+the volume and moves precision by two points.
+
+**The lift is real and large — up to 9.4x over a 6% base rate**, among the best
+predictive signals on this page. It is still a coin flip on the question that
+matters: an admitted objection is legitimate about half the time, so a criterion
+built on it hands the editor one demand no correct design can meet for every one
+it should. The ordering argument names that condition as fatal, which is why the
+bar was set at 70% and why 52% fails it.
+
+### What this settles, and it is a sharper closure than §9ad's
+
+**By the pre-registered rule this is a NEGATIVE and is recorded as one.** Both
+legs were required; Leg 2 failed at every threshold. It is the thirteenth
+instrument to fail on this plan and **the first aimed at the objection rather than
+the check.**
+
+But it relocates the obstruction precisely, and the relocation is the result:
+
+* **the evidence EXISTS** — 879 correct objections covering 76% of the residue,
+  already written, sitting in the corpus;
+* **the per-check soundness rule discards it** — correctly, since the checks are
+  unsound suite-wide and no rule can keep a check only where it is right without
+  knowing where that is;
+* **and the golden-free instrument that would tell it where is measured at ~50%**,
+  flat across its whole range.
+
+**So the residue is not unauthored after all — it is unSEPARABLE.** §9ad's
+"unauthored, not unselected" holds for *sound checks*; for *correct objections* the
+truth is that they were authored, they are in hand, and the only instrument that
+identifies them is the reference. That is the same wall the plan has hit twelve
+times, reached for the first time from below the level of the check — and it is
+the strongest form of the case for a decision on the underdetermined cells from
+outside the specification-plus-reader loop.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
