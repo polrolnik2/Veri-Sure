@@ -1091,6 +1091,50 @@ and §9o says accuracy where a criterion acts is what governs.
 whose checks did not already decide everywhere would have a real gap. It
 measures that this set is not one.
 
+## 9q. The set is complete over the corpus — the closure is exhaustive, not inferential
+
+§9p closed on an argument about *authoring*: the residue is check strength, and
+raising strength costs soundness. That left a cheaper question unasked — of every
+check body this session produced, does a **sound** one object to a graded design
+that the 169-set simply does not contain? Selection is far cheaper than
+authoring, and a yes would make the closure wrong.
+
+| design | corpus bodies objecting | of those, **sound** | **missing from the set** |
+|---|---|---|---|
+| the start design L | 331 | 24 | **0** — all 24 already in |
+| run 5 accepted | 305 | **0** | **0** |
+| run 6 accepted (best) | 302 | 1 | **0** — already in |
+
+**Not one sound check in 640 corpus bodies is missing from the set, on any of the
+three designs.** Selection is exhausted — provably, not by inference.
+
+### The corpus knows the designs are wrong and cannot say so soundly
+
+302 of 640 bodies object to the best graded design, which differs from the
+reference on 146 of 348 testpoints. **301 of those 302 buy the catch by also
+convicting the reference.** The corpus can see the design is wrong three hundred
+ways and can say it soundly in exactly one.
+
+### And the sound column collapses as the editor works: 24 → 1 → 0
+
+The start design is caught soundly by 24 checks, run 6's accepted design by one,
+run 5's by none. **The editor consumes the corpus's soundly-expressible
+discriminating power** — the same phenomenon as strength falling 6.4% → 0.4% →
+0.0% in §9p, seen from the corpus's side rather than the set's.
+
+### So the closure is exhaustive on both legs
+
+**Selection:** 0 of 640 sound bodies missing, on three designs. **Authoring:** the
+strength round moved 23 of 34 checks into convicting the reference, both-cell 0
+of 34. The set is **complete with respect to everything this session can
+author**, and its residue is neither selectable nor soundly authorable.
+
+**What it does not say:** not that no sound check exists — the reference
+satisfies the specification, so a check capturing what it does at those cells is
+possible in principle. It says **no author working from this specification
+produced one in 640 attempts**, which is the specification-plus-reader limit
+measured over the corpus rather than over a round.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

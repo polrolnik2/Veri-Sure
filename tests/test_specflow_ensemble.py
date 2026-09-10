@@ -2949,3 +2949,40 @@ def test_the_claim_is_bounded_to_this_set():
     t = ensemble.the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength()
     flat = " ".join(t.split())
     assert "does NOT claim is that stimulus is worthless in general" in flat
+
+
+def test_no_sound_corpus_check_is_missing_from_the_set():
+    t = ensemble.the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit()
+    flat = " ".join(t.split())
+    assert "NOT ONE SOUND CHECK IN 640 CORPUS BODIES IS MISSING FROM THE SET" in flat
+    assert "Selection is exhausted -- provably, not by inference" in flat
+
+
+def test_the_corpus_sees_the_design_but_cannot_say_it_soundly():
+    t = ensemble.the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit()
+    flat = " ".join(t.split())
+    assert "**301 of those 302 buy the catch by also convicting the reference.**" in flat
+    assert "three hundred ways and can say so soundly in exactly one" in flat
+
+
+def test_the_sound_catch_count_collapses_as_the_editor_works():
+    t = ensemble.the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit()
+    flat = " ".join(t.split())
+    assert "THE SOUND COLUMN FALLS AS THE EDITOR WORKS: 24 -> 1 -> 0" in flat
+    assert "consumes the corpus's soundly-expressible discriminating power" in flat
+
+
+def test_both_legs_of_the_closure_are_exhaustive():
+    t = ensemble.the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit()
+    flat = " ".join(t.split())
+    assert "0 of 640 sound bodies missing, on three designs" in flat
+    assert "neither selectable nor soundly authorable" in flat
+
+
+def test_the_closure_does_not_overclaim_impossibility():
+    """The reference satisfies the spec, so a sound check is possible in
+    principle. The claim is about what 640 authored attempts produced."""
+    t = ensemble.the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit()
+    flat = " ".join(t.split())
+    assert "Not that no sound check exists" in flat
+    assert "no author working from this specification produced one in 640 attempts" in flat

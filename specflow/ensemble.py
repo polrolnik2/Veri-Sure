@@ -5438,3 +5438,51 @@ def the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength(
         "general: a set whose checks did not already decide everywhere would "
         "have a real gap, and this measures that this set is not one."
     )
+
+
+def the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit() -> str:
+    """THE EXHAUSTIVE CLOSURE, replacing an inferential one.
+
+    The closure reported after run 9 was an argument about AUTHORING: the residue
+    is check strength, and raising strength costs soundness. That leaves a
+    cheaper question unasked -- of every check body this session produced, does a
+    SOUND one object to a graded design, which the 169-set simply does not
+    contain? Selection is far cheaper than authoring, and if the answer were yes
+    the closure would be wrong.
+
+    SOUND: decides somewhere on the reference and convicts it nowhere. That is
+    the audit, computed last, selecting nothing here.
+    """
+    return (
+        "    design            corpus bodies OBJECTING   of those SOUND   MISSING from the set\n"
+        "      start design L          331                   24                **0**\n"
+        "      run 5 accepted          305                  **0**              **0**\n"
+        "      run 6 accepted (best)   302                    1                **0**\n\n"
+        "**NOT ONE SOUND CHECK IN 640 CORPUS BODIES IS MISSING FROM THE SET, ON "
+        "ANY OF THE THREE DESIGNS.** Every sound check the corpus can produce for "
+        "them is already in the 169. **Selection is exhausted -- provably, not by "
+        "inference.**\n\n"
+        "**AND THE CORPUS KNOWS THE DESIGNS ARE WRONG.** 302 of 640 bodies object "
+        "to the best graded design, which differs from the reference on 146 of "
+        "348 testpoints. **301 of those 302 buy the catch by also convicting the "
+        "reference.** The corpus can see the design is wrong three hundred ways "
+        "and can say so soundly in exactly one.\n\n"
+        "**THE SOUND COLUMN FALLS AS THE EDITOR WORKS: 24 -> 1 -> 0.** The start "
+        "design is caught soundly by 24 checks, run 6's accepted design by one, "
+        "run 5's by none. **The editor consumes the corpus's soundly-expressible "
+        "discriminating power**, which is the same phenomenon as strength "
+        "collapsing 6.4% -> 0.4% -> 0.0%, seen from the corpus's side instead of "
+        "the set's.\n\n"
+        "**SO THE CLOSURE IS NOW EXHAUSTIVE ON BOTH LEGS.** Selection: 0 of 640 "
+        "sound bodies missing, on three designs. Authoring: the strength round "
+        "moved 23 of 34 checks into convicting the reference with a both-cell of "
+        "0 of 34. **The set is COMPLETE with respect to everything this session "
+        "can author, and its residue is neither selectable nor soundly "
+        "authorable.**\n\n"
+        "**WHAT IT DOES NOT SAY.** Not that no sound check exists -- the "
+        "reference satisfies the specification, so a check capturing what it does "
+        "at those cells is possible in principle. It says **no author working "
+        "from this specification produced one in 640 attempts**, which is the "
+        "specification-plus-reader limit measured over the corpus rather than "
+        "over a round."
+    )
