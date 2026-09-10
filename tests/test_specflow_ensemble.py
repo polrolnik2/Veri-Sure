@@ -2422,3 +2422,42 @@ def test_the_floor_is_named_as_a_floor():
     flat = " ".join(t.split())
     assert "76 checks is a cover, not an exhaustive search" in flat
     assert "0.00% is a floor and the gap between it and the truth is unmeasured" in flat
+
+
+def test_narrowing_lands_zero_against_a_fifteen_percent_prior():
+    t = ensemble.narrowing_the_hole_closers_moved_the_conviction_count_by_nothing()
+    flat = " ".join(t.split())
+    assert "**7 of 47 = 15%**" in flat
+    assert "**BOTH -- the pre-registered measure** **0 of 30**" in flat
+    assert "STILL CLOSES its own named cell 29 of 30" in flat
+
+
+def test_the_conviction_count_did_not_move():
+    t = ensemble.narrowing_the_hole_closers_moved_the_conviction_count_by_nothing()
+    flat = " ".join(t.split())
+    assert "28 of 30 went 7-of-7 to **7-of-7**" in flat
+    assert "One went 6-of-7 to 7-of-7 -- *stricter*" in flat
+    assert "OVER-STRICTNESS IS NOT AN ACCRETION OF REMOVABLE EXTRAS" in flat
+
+
+def test_the_rule_and_the_audit_agree_on_ninety_five():
+    t = ensemble.narrowing_the_hole_closers_moved_the_conviction_count_by_nothing()
+    flat = " ".join(t.split())
+    assert "29 OF 30 CONVICT THE REFERENCE" in flat
+    assert "agree on 95 of 95 checks authored at this residue" in flat
+    assert "The rule is not discarding completeness. There is none to discard." in flat
+
+
+def test_the_remaining_reading_is_the_specifications():
+    t = ensemble.narrowing_the_hole_closers_moved_the_conviction_count_by_nothing()
+    flat = " ".join(t.split())
+    assert "violated by all seven independent implementations AND by the reference" in flat
+    assert "the requirement text and the design disagreeing" in flat
+
+
+def test_the_preregistered_band_is_honoured_and_the_route_closed():
+    t = ensemble.narrowing_the_hole_closers_moved_the_conviction_count_by_nothing()
+    flat = " ".join(t.split())
+    assert "`<= 1` BAND: 0.00% IS NOT A FLOOR, IT IS CLOSE TO THE TRUTH" in flat
+    assert "selection, authoring, narrowing -- and all three are now closed" in flat
+    assert "a decision on the underdetermined cells from outside" in flat

@@ -416,6 +416,55 @@ unmeasured — which is what the narrowing round pre-registered in
 `PREREG_NARROW.md` measures. And "closed" means the check objects to one of the
 two designs there — not that it is right about which.
 
+## 9e. Narrowing moved the conviction count by nothing — the route is closed
+
+§9d's zero came with its own limit: 76 checks are a cover, not a search. So the
+30 largest hole-closers were re-authored with the narrowing objection — the one
+lever aimed at this population, measured at 7 of 47 = 15% on its first round
+elsewhere. Pre-registered in `PREREG_NARROW.md`: ≥4 of 30 means the zero is an
+artifact of one attempt per cell; ≤1 means it is close to the truth.
+
+| | |
+|---|---|
+| integrity | 30/30 returned, 30 compile, 0 duplicates, **0 unchanged** |
+| still closes its own named cell | 29 of 30 |
+| passes the minority rule (≤3 of 7) | 1 of 30 |
+| **both — the pre-registered measure** | **0 of 30** |
+| ***audit*, computed last** | ***29 of 30 convict the reference*** |
+
+**The conviction count did not move.** 28 of 30 went 7-of-7 → **7-of-7**; one
+went 6-of-7 → 7-of-7, *stricter*; the single check that passed the minority rule
+went 7-of-7 → 0-of-7 on zero cells — it narrowed into vacuity, this round's known
+failure mode, counted as a loss.
+
+Each author named the demand it deleted: a cycle-alignment rule the sentence
+never stated, a holding time, a converse clause, word-count arithmetic, an
+over-wide scope. **The deletions were real and the checks still convict
+everyone.** Over-strictness here is not an accretion of removable extras — what
+survives narrowing is the *core* reading of the sentence, and the population
+violates that.
+
+### The rule and the audit agree on 95 of 95
+
+With §9d's 65, every check the golden-free minority rule rejects at this residue
+convicts the reference — **95 for 95**. The rule is not discarding completeness;
+there is none to discard.
+
+### Which leaves one reading, and it is the specification's
+
+At these cells the sentence — asserted as its own author reads it *after being
+told to assert less* — is violated by all seven independent implementations and
+by the reference. That is not check over-strictness as measured elsewhere here.
+It is the requirement text and the design disagreeing, at exactly the cells where
+two competent readers of that text disagree with each other.
+
+**Three levers have now been aimed at the blindness residue — selection,
+authoring, narrowing — and all three are closed with a measurement rather than a
+budget running out.** What would change it is not a check or a prompt: it is a
+decision on the underdetermined cells from outside the specification-plus-reader
+loop. The disagreement map localises them exactly, 3,119 cells named by pair and
+testpoint, and it needs no reference to produce.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
