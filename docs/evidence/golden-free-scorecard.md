@@ -344,6 +344,62 @@ addressable at zero audit cost *at a usable rate*.
 check needs 40–180 accepted checks; at an accept rate that fell from 16% to 5%
 between rounds, that is **250 to 3,600 authoring calls**.
 
+## 9d. The residue is closeable, and 0.7% of it soundly — the decisive number
+
+§9c left one thing open: whether the 65 checks the minority rule rejects are
+genuinely over-strict or whether the rule is discarding real completeness at
+exactly the place the residue lives. Audited as a calibration: **0 of 65 spare
+the reference.** The rule's reject side is 65 of 65 precise, at the residue. It
+is discarding nothing, and the hedge placed on §9c is withdrawn.
+
+So the constraint is neither the rule, nor the corpus, nor the targeting. Take
+the 3,119 blind cells and classify each by what kind of authored check closes
+it — a classification that reads only the population's disagreements:
+
+| of the 3,119 blind cells | cells | share |
+|---|---|---|
+| closed by a check the minority rule **keeps** | 1,293 | 41.5% |
+| closed **only** by a check it rejects | 1,826 | 58.5% |
+| **closed by nothing among the 76 authored** | **0** | **0.0%** |
+
+**Every blind cell is closeable.** 76 checks authored at the residue cover 100%
+of it. The author is not failing to reach the cells.
+
+**The calibration, computed last, says what the cover costs:**
+
+| | |
+|---|---|
+| of the 65 rejected checks, sparing the reference | 0 |
+| of the 4 kept checks, sparing the reference | 2 |
+| cells those two object on, between them | **21** |
+| **soundly closeable residue** | **21 of 3,119 = 0.7%** |
+
+**An author asked to close a named blind cell succeeds every time, and 99.3% of
+the time the check it writes convicts a correct design.** That is the
+completeness/soundness trade as a property of the *cells*, and it is why every
+lever on this plan lands in the same place.
+
+### What it gives a golden-free pipeline
+
+The partition needs no reference — it asks *does every check I can author for
+this cell convict a majority of the population*. The calibration says that
+question tracks soundness at 65 of 65 on the reject side. **A pipeline with no
+golden can therefore determine that a cell is irreducibly blind:** author at it,
+read the conviction counts, and if they are all majorities the cell is not
+soundly closeable. What it cannot do is close it anyway.
+
+### And blindness should be reported as a pair
+
+Reporting 55.1% invites the reading that 55.1% is work outstanding. It is not:
+**0.7% is outstanding and 54.4% is the specification's own underdetermination.**
+A set should report *residue, and the share of it any check could soundly close*
+— the second is what further authoring buys, the first is not.
+
+**Limits.** 76 checks is a cover, not an exhaustive search; a 77th could be the
+sound closer for a cell these close only unsoundly, so 0.7% is a floor. And
+"closed" means the check objects to one of the two designs there — not that it
+is right about which.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
