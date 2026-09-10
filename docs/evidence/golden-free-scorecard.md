@@ -296,6 +296,54 @@ the *set*: 55.1% stays 55.1%, and section 9's fifth run shows a design can
 satisfy every check at that blindness and sit 151 testpoints away. The
 instrument is trustworthy and cheap; the number it reports is not good.
 
+## 9c. Authoring at named holes does not escape the trade — the controlled pair
+
+Section 9b's instrument says blindness is cheap and trustworthy to measure.
+This says what it costs to move.
+
+Two arms, 76 authoring calls, the same 3,119 blind cells, same brief, same
+exemplar rule, same accept rule. They differ in one thing: which requirements
+were asked, by *breadth* — how many of the ten hole ports a requirement's
+normalization names.
+
+| arm | calls | accepted | over-strict | vacuous | **cells closed** | ***audit*** |
+|---|---|---|---|---|---|---|
+| BROAD — 11 reqs, breadth 4–10 | 40 | 2 | 32 | 6 | **1,293** | ***2 of 2*** |
+| SPECIFIC — 27 reqs, breadth 1–3 | 36 | 2 | 33 | 1 | **0** | ***0 of 2*** |
+
+**One end buys 1,293 cells at a 100% false-reject rate; the other buys nothing
+at zero.** Both are negatives against rules fixed before either ran. Together:
+**76 calls on the corrected targeting closed zero cells soundly**, against round
+1's 102 from 37 calls on the regex population.
+
+### The mechanism, over all 76 rather than as two anecdotes
+
+Of the 69 checks that object anywhere:
+
+| | n | mean cells closed |
+|---|---|---|
+| kept by the minority rule (≤3 of 7) | 4 | **74** |
+| rejected (>3 of 7) | 65 | **638** |
+
+Spearman(cells objected, designs convicted) = **+0.350** over 76 checks. **The
+checks that would close the residue are exactly the ones the golden-free
+soundness rule rejects** — measured inside the one lever that was supposed to
+sit off that curve. The three biggest closers each shut over a thousand cells
+and each convicts all seven designs.
+
+### This re-reads §9's positive rather than retracting it
+
+Round 1's six accepted closed 102 cells — **17 each**, inside the kept band's
+own mean of 74. That round was never off the anti-correlation; it was the same
+narrow band with six members instead of two. What stands is its narrow claim: a
+sound hole-closer is **writable** where the corpus contains none, at audit zero.
+What is refuted is the reading placed next to it — that the residue is
+addressable at zero audit cost *at a usable rate*.
+
+**Projected from the measured rates:** 3,119 cells at 17–74 cells per accepted
+check needs 40–180 accepted checks; at an accept rate that fell from 16% to 5%
+between rounds, that is **250 to 3,600 authoring calls**.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
@@ -328,15 +376,16 @@ gains. **So "reduce blindness by selecting from this corpus" and "do it
 golden-free" are incompatible instructions**, and that is a property of the
 corpus rather than of a missing instrument.
 
-**AUTHORING IS NOT ON THAT CURVE, AND IT IS GOLDEN-FREE.** A hole is named
-without any reference — it is a cell where two spec-derived designs disagree and
-nothing objects, and at most one of the two can be right. Six checks written at
-named holes moved blindness 56.9% → 55.1% **at an audit of zero**, closed 102
-cells, produced the best-driven design measured here, and two of them convict the
-design the base set itself stopped on. Selection cannot do that at any price. So
-the incompatibility above is real *for selection* and the goal's instruction is
-not, on this evidence, self-defeating: **the lever is authoring at named holes,
-and its measured cost in false rejection so far is nothing.**
+**AUTHORING IS OFF THAT CURVE AND IS NOT A WAY AROUND THE TRADE — §9c.** A
+hole is named without any reference, and six checks written at named holes moved
+blindness 56.9% → 55.1% at an audit of zero, closed 102 cells, produced the
+best-driven design measured here, and two of them convict the design the base set
+itself stopped on. Selection cannot do that at any price, and that claim stands.
+But 76 further calls closed **zero** cells soundly, and across all 76 the checks
+that close hundreds of cells convict the whole population (638 cells against 74,
+Spearman +0.350). **So authoring escapes the corpus, not the anti-correlation** —
+the residue is reachable in principle and expensive in practice, at a projected
+250–3,600 calls with the accept rate falling.
 
 **No run reached equivalence.** Five sets spanning the whole blindness range, one
 held-out design, five `DIFFERS`. The goal's terminal condition is not met. What

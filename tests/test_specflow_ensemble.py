@@ -2323,3 +2323,40 @@ def test_the_broad_arm_is_labelled_as_the_control():
     flat = " ".join(t.split())
     assert "It is the BROAD arm and it was run by accident" in flat
     assert "This round becomes its control" in flat
+
+
+def test_the_two_arms_are_both_negatives():
+    t = ensemble.authoring_at_a_named_hole_does_not_escape_the_soundness_trade()
+    flat = " ".join(t.split())
+    assert "ONE END BUYS 1,293 CELLS AT A 100% FALSE-REJECT RATE; THE OTHER BUYS NOTHING AT ZERO" in flat
+    assert "76 calls on the corrected targeting closed ZERO cells soundly" in flat
+
+
+def test_the_anti_correlation_is_measured_inside_authoring():
+    t = ensemble.authoring_at_a_named_hole_does_not_escape_the_soundness_trade()
+    flat = " ".join(t.split())
+    assert "n= 4 mean 74 cells" in flat and "n=65 mean 638 cells" in flat
+    assert "Spearman(cells objected, designs convicted) = **+0.350**" in flat
+    assert "EXACTLY THE ONES THE GOLDEN-FREE SOUNDNESS RULE REJECTS" in flat
+
+
+def test_the_round_one_positive_is_re_read_not_retracted():
+    t = ensemble.authoring_at_a_named_hole_does_not_escape_the_soundness_trade()
+    flat = " ".join(t.split())
+    assert "**17 each**, inside the kept band's own mean of 74" in flat
+    assert "a sound hole-closer is **writable** where the corpus contains none" in flat
+    assert "What is now refuted is the reading I put next to it" in flat
+
+
+def test_the_projected_cost_is_stated():
+    t = ensemble.authoring_at_a_named_hole_does_not_escape_the_soundness_trade()
+    flat = " ".join(t.split())
+    assert "**250 to 3,600 authoring calls**" in flat
+    assert "the rate fell from 16% to 5% between the rounds" in flat
+
+
+def test_the_rejected_checks_are_not_dismissed_as_wrong():
+    t = ensemble.authoring_at_a_named_hole_does_not_escape_the_soundness_trade()
+    flat = " ".join(t.split())
+    assert "The 65 rejected checks are not obviously wrong" in flat
+    assert "right on average and wrong exactly where the residue is" in flat

@@ -4522,3 +4522,64 @@ def the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection() -
         "round becomes its control: same holes, same brief, same exemplar rule, "
         "opposite end of the breadth distribution."
     )
+
+
+def authoring_at_a_named_hole_does_not_escape_the_soundness_trade() -> str:
+    """The controlled pair, and it closes the lever this session opened.
+
+    `authoring_at_a_named_hole_closes_cells_that_selection_cannot` showed a
+    sound hole-closer is WRITABLE where the corpus contains none. That stands.
+    What it does not establish -- and this measures -- is whether the lever
+    escapes the anti-correlation every other lever here has hit. It does not.
+    """
+    return (
+        "Two arms, 76 authoring calls, the same 3,119 blind cells, the same "
+        "brief, the same exemplar rule and the same accept rule. They differ in "
+        "ONE thing: which requirements were asked. Breadth is how many of the "
+        "ten hole ports a requirement's normalization names -- 3 of the 67 name "
+        "all ten, 40 name at most three.\n\n"
+        "    arm                        calls  accepted  over-strict  vacuous  "
+        "cells closed  *audit*\n"
+        "    BROAD    (11 reqs, 4-10)     40       2         32          6      "
+        "**1,293**      ***2 of 2***\n"
+        "    SPECIFIC (27 reqs, 1-3)      36       2         33          1      "
+        "**0**          ***0 of 2***\n\n"
+        "**ONE END BUYS 1,293 CELLS AT A 100% FALSE-REJECT RATE; THE OTHER BUYS "
+        "NOTHING AT ZERO.** Both are negatives by the rules fixed before either "
+        "ran, and together they say the same thing from two sides: **76 calls on "
+        "the corrected targeting closed ZERO cells soundly**, against round 1's "
+        "102 from 37 calls.\n\n"
+        "**THE MECHANISM, OVER ALL 76 AND NOT AS TWO ANECDOTES.** Of the 69 "
+        "checks that object anywhere:\n\n"
+        "    kept by the minority rule (<=3 of 7)   n= 4   mean   74 cells\n"
+        "    rejected             (>3 of 7)         n=65   mean  638 cells\n"
+        "                                                        **8.6x**\n\n"
+        "    Spearman(cells objected, designs convicted) = **+0.350**\n\n"
+        "**THE CHECKS THAT WOULD CLOSE THE RESIDUE ARE EXACTLY THE ONES THE "
+        "GOLDEN-FREE SOUNDNESS RULE REJECTS** -- measured inside the one lever "
+        "that was supposed to be off that curve. The three biggest closers here "
+        "each shut over a thousand cells and each convicts all seven designs.\n\n"
+        "**AND IT RE-READS THE POSITIVE RATHER THAN RETRACTING IT.** Round 1's "
+        "six accepted closed 102 cells -- **17 each**, inside the kept band's "
+        "own mean of 74. So that round was never off the anti-correlation; it "
+        "was the same narrow band with six members instead of two. What stands "
+        "is the narrow claim it actually made: a sound hole-closer is "
+        "**writable** where the corpus contains none, and its audit is zero. "
+        "What is now refuted is the reading I put next to it -- that the residue "
+        "is 'addressable at zero audit cost' at a usable rate.\n\n"
+        "**THE COST, PROJECTED FROM THE MEASURED RATES.** 3,119 cells at ~17-74 "
+        "cells per accepted check needs 40-180 accepted checks; at the measured "
+        "accept rate of 5-16% that is **250 to 3,600 authoring calls**, and the "
+        "rate fell from 16% to 5% between the rounds. Authoring is not a cheap "
+        "route to a complete set on this corpus.\n\n"
+        "**WHAT WOULD STILL CHANGE IT, and it is not another authoring round.** "
+        "The 65 rejected checks are not obviously wrong -- they are demands most "
+        "of a spec-derived population violates, which the minority rule treats "
+        "as the CHECK's misreading. On a specification whose readers share a "
+        "misreading that inference is false, and the split-cell measurement here "
+        "says 97% of a held-out design's errors live in the 11% of cells the "
+        "population cannot agree on. **So the rule that rejects them is right on "
+        "average and wrong exactly where the residue is**, which is the same "
+        "wall this plan has hit from eleven directions, now reached from the "
+        "twelfth."
+    )
