@@ -4732,3 +4732,66 @@ def narrowing_the_hole_closers_moved_the_conviction_count_by_nothing() -> str:
         "the artifact to put in front of whoever can make that decision. It "
         "needs no reference to produce."
     )
+
+
+def blindness_is_a_property_of_the_stimulus_too_and_it_predicts() -> str:
+    """The first golden-free quantity here that PREDICTS, at testpoint
+    granularity, where an editor-driven design will still be wrong.
+
+    It also corrects an attribution every finding on this plan has made:
+    blindness has been treated as a property of the CHECK SET. It is a property
+    of the (check set, stimulus) pair, and the stimulus half was never measured.
+    """
+    return (
+        "Blindness is holes over disagreements across (pair, **testpoint**) "
+        "cells. Every lever aimed at it moved the numerator by authoring "
+        "checks, and all three -- selection, authoring, narrowing -- are now "
+        "closed by measurement. The denominator is the STIMULUS and it had "
+        "never been looked at. If disagreements were uniformly blind, blindness "
+        "would be a property of the set alone. **They are not, and it is "
+        "not.**\n\n"
+        "    the same 169-check set, per testpoint    tps   disagreements   blind\n"
+        "      no pair disagrees at all                91         0           --\n"
+        "      **every disagreement CAUGHT**           61      1,217      **0.0%**\n"
+        "      partly blind                           126      3,235       59.2%\n"
+        "      **every disagreement BLIND**            70      1,204    **100.0%**\n\n"
+        "**ONE SET IS PERFECTLY COMPLETE ON 61 TESTPOINTS AND PERFECTLY BLIND "
+        "ON 70.** Blindness is a property of the (check set, stimulus) PAIR, and "
+        "every figure on this plan has attributed it to the set alone.\n\n"
+        "**AND THE CLASSIFICATION PREDICTS THE GRADE.** The fifth graded run's "
+        "accepted design -- objections driven to 0 of 169, still differing from "
+        "the reference on 151 of 348 testpoints -- scored against the "
+        "golden-free class of each testpoint. The class reads only the "
+        "population's disagreements and the checks' verdicts; the divergence is "
+        "computed last and is the thing predicted:\n\n"
+        "    class of the testpoint                tps   differ    rate\n"
+        "      no pair disagrees                    91       1     **1%**\n"
+        "      every disagreement CAUGHT            61      15      25%\n"
+        "      partly blind                        126      75      60%\n"
+        "      every disagreement BLIND             70      60     **86%**\n\n"
+        "**MONOTONE ACROSS ALL FOUR CLASSES, 1% TO 86%, AND 3.5x BETWEEN THE "
+        "EXTREMES.** The causal chain is complete and every link is measured: a "
+        "blind testpoint gives the editor no objection, so it makes no edit "
+        "there, so the design still differs there. **135 of the 151 differing "
+        "testpoints -- 89% -- are partly or fully blind.**\n\n"
+        "**AND THE TOP ROW IS AN INDEPENDENT REPRODUCTION.** Where nine "
+        "spec-derived designs all agree, the edited design matches the "
+        "reference on 90 of 91 testpoints. That is the 99.82% consensus "
+        "accuracy measured per CELL, arriving again per TESTPOINT from a "
+        "different direction.\n\n"
+        "**WHAT IT LICENSES AND WHAT IT MUST NOT.** It does NOT license adding "
+        "easy testpoints to move the ratio: blindness would fall while the "
+        "3,119 blind cells stayed exactly where they are, which is metric "
+        "gaming and would be caught by the absolute count. What it licenses is "
+        "the question the goal names and this plan never asked -- **whether a "
+        "DIFFERENT testpoint exercising the same scenario produces its "
+        "disagreements at cells the specification determines**, where a sound "
+        "check exists. The target is now exact: 70 testpoints, 1,204 "
+        "disagreement cells, 100% blind, carrying 86% of the residual "
+        "divergence.\n\n"
+        "**AND IT REFRAMES THE THREE CLOSED LEVERS RATHER THAN REOPENING "
+        "THEM.** No sound check closes those cells -- 95 of 95 attempts convict "
+        "the reference. That stands. This says the cells were never the only "
+        "variable: they are the disagreements THIS stimulus happens to produce, "
+        "and nothing has tested whether another stimulus produces better ones."
+    )

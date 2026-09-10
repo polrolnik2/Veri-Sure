@@ -465,6 +465,62 @@ decision on the underdetermined cells from outside the specification-plus-reader
 loop. The disagreement map localises them exactly, 3,119 cells named by pair and
 testpoint, and it needs no reference to produce.
 
+## 9f. Blindness is a property of the stimulus too — and it predicts the grade
+
+Blindness is holes ÷ disagreements over *(pair, **testpoint**)* cells. Three
+levers moved the numerator by authoring checks and all three are closed. The
+denominator is the **stimulus**, and it had never been looked at.
+
+| the same 169-check set, per testpoint | tps | disagreements | blind |
+|---|---|---|---|
+| no pair disagrees at all | 91 | 0 | — |
+| **every disagreement caught** | 61 | 1,217 | **0.0%** |
+| partly blind | 126 | 3,235 | 59.2% |
+| **every disagreement blind** | 70 | 1,204 | **100.0%** |
+
+**One set is perfectly complete on 61 testpoints and perfectly blind on 70.**
+Blindness is a property of the *(check set, stimulus)* pair, and every figure
+above attributes it to the set alone.
+
+### The classification predicts the grade
+
+§9's fifth run drove objections to 0 of 169 and its design still differs from the
+reference on 151 of 348 testpoints. Scored against each testpoint's golden-free
+class — the class reads only the population's disagreements and the checks'
+verdicts; the divergence is computed last and is what is being predicted:
+
+| class of the testpoint | tps | differ | rate |
+|---|---|---|---|
+| no pair disagrees | 91 | 1 | **1%** |
+| every disagreement caught | 61 | 15 | 25% |
+| partly blind | 126 | 75 | 60% |
+| every disagreement blind | 70 | 60 | **86%** |
+
+**Monotone across all four classes, 1% to 86%, 3.5× between the extremes.** The
+chain is complete and every link measured: a blind testpoint gives the editor no
+objection, so it makes no edit there, so the design still differs there. **135 of
+the 151 differing testpoints — 89% — are partly or fully blind.**
+
+The top row is an independent reproduction: where nine spec-derived designs agree,
+the edited design matches the reference on 90 of 91 testpoints — §5's 99.82%
+per-cell consensus accuracy arriving again per testpoint.
+
+### What it licenses, and what it must not
+
+It does **not** license adding easy testpoints to move the ratio: blindness would
+fall while the 3,119 blind cells stayed exactly where they are. That is metric
+gaming, and the absolute count catches it.
+
+What it licenses is the question the goal names and this plan never asked —
+**whether a different testpoint exercising the same scenario produces its
+disagreements at cells the specification determines.** The target is exact: 70
+testpoints, 1,204 cells, 100% blind, carrying 86% of the residual divergence.
+
+This reframes the three closed levers rather than reopening them. No sound check
+closes those cells — 95 of 95 attempts convict the reference, and that stands.
+What it says is that the cells were never the only variable: they are the
+disagreements *this* stimulus happens to produce.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

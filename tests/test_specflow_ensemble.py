@@ -2461,3 +2461,39 @@ def test_the_preregistered_band_is_honoured_and_the_route_closed():
     assert "`<= 1` BAND: 0.00% IS NOT A FLOOR, IT IS CLOSE TO THE TRUTH" in flat
     assert "selection, authoring, narrowing -- and all three are now closed" in flat
     assert "a decision on the underdetermined cells from outside" in flat
+
+
+def test_one_set_is_complete_on_some_testpoints_and_blind_on_others():
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "PERFECTLY COMPLETE ON 61 TESTPOINTS AND PERFECTLY BLIND ON 70" in flat
+    assert "property of the (check set, stimulus) PAIR" in flat
+    assert "every figure on this plan has attributed it to the set alone" in flat
+
+
+def test_the_golden_free_class_predicts_the_grade():
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "MONOTONE ACROSS ALL FOUR CLASSES, 1% TO 86%, AND 3.5x BETWEEN THE EXTREMES" in flat
+    assert "135 of the 151 differing testpoints -- 89% -- are partly or fully blind" in flat
+
+
+def test_the_consensus_accuracy_reproduces_per_testpoint():
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "matches the reference on 90 of 91 testpoints" in flat
+    assert "arriving again per TESTPOINT from a different direction" in flat
+
+
+def test_the_metric_gaming_route_is_forbidden_explicitly():
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "does NOT license adding easy testpoints to move the ratio" in flat
+    assert "which is metric gaming and would be caught by the absolute count" in flat
+
+
+def test_the_closed_levers_are_reframed_not_reopened():
+    t = ensemble.blindness_is_a_property_of_the_stimulus_too_and_it_predicts()
+    flat = " ".join(t.split())
+    assert "95 of 95 attempts convict the reference. That stands." in flat
+    assert "nothing has tested whether another stimulus produces better ones" in flat
