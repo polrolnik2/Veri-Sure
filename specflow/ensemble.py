@@ -296,6 +296,19 @@ member of the population. So the instrument can say OUTSIDE THE POPULATION and
 cannot reliably say ON THE GOOD SIDE -- which makes it worth computing as a
 trigger for a human look and unfit as a clean bill.
 `the_golden_free_placement_test_and_what_it_cannot_say` carries it.
+
+AND THE MOST IMPORTANT ENTRY HERE IS THE ONE THAT UNDERMINES THE OTHERS. Every
+graded run on this plan is n = 1, and several findings above read four such runs
+as ordered. A pre-registered replicate -- run 6's configuration a second time,
+byte-identical start design and brief, the same 21-trial budget, differing only
+in the session -- landed **61 testpoints away**: 146 against 207. That is the
+worst of the three pre-registered bands, and its consequence is applied rather
+than argued. **The trials-versus-grade correlation of +1.000 is withdrawn**, no
+two graded runs differing by less than about 60 testpoints may be read as
+differing for a reason, and 'the loop beats one-shot generation' becomes 'in one
+of two runs'. What survives is every claim resting on a COUNT over a fixed
+population rather than on a spread between runs.
+`one_graded_run_is_not_a_measurement` carries it.
 """
 from __future__ import annotations
 
@@ -5726,6 +5739,15 @@ def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
         "Run 8's sequence is the plainest: 21, 39, 21, 34, 33, 16, 22, 28, 14, "
         "15, 23, 13, 13, 19 -- six reversals of two or more, and the run ends "
         "above where it stood two trials earlier.\n\n"
+        "**WITHDRAWN BY THE REPLICATE, AND THE WITHDRAWAL IS THE FINDING.** The "
+        "paragraph below stood until a pre-registered second run of run 6's "
+        "configuration landed 61 testpoints away from it. 5 trials gave 146 and 9 "
+        "trials gave 207 with nothing different but the session, so the "
+        "correlation cannot be told from the loop's own variance. "
+        "`one_graded_run_is_not_a_measurement` carries it. Also corrected there: "
+        "4 of 4 runs stopping past their own best becomes **4 of 5**, because the "
+        "replicate's last trial equals its best.\n\n"
+        "*Superseded, kept because the withdrawal is unreadable without it:* "
         "**TRIALS SPENT AND THE FINAL GRADE ARE PERFECTLY RANK-ORDERED: "
         "SPEARMAN +1.000 ON n = 4** -- 5 trials to 146 testpoints, 12 to 214, 14 "
         "to 221, 15 to 271, against a start design at 279. **The confound is "
@@ -5967,6 +5989,15 @@ def the_loops_best_output_beats_every_independent_draw() -> str:
         "wrote from the same specification in one shot.** That is the first "
         "statement here of what the pipeline is FOR that survives its own "
         "measurement.\n\n"
+        "**AND IT DOES NOT REPLICATE, WHICH IS THE FIRST THING TO SAY ABOUT IT.** "
+        "A pre-registered second run of the same configuration on the same start "
+        "design landed at **207 -- inside the population's 151 to 230**, not "
+        "below it. So the loop's output beat every independent draw in **one of "
+        "two** runs and was merely typical in the other. The claim is not "
+        "'the loop beats one-shot generation'; it is **'the loop can beat "
+        "one-shot generation, about half the time in two attempts'**, and the "
+        "difference matters because the first phrasing is what a reader would "
+        "act on. `one_graded_run_is_not_a_measurement` carries the replicate.\n\n"
         "**AND IT IS NOT EQUIVALENCE, WHICH IS THE BAR.** 146 of 348 testpoints "
         "still differ and the miter says `DIFFERS`. A loop that beats one-shot "
         "generation and does not reach equivalence is a useful loop and an "
@@ -6004,11 +6035,12 @@ def the_golden_free_placement_test_and_what_it_cannot_say() -> str:
         "    design    objections of 169   golden-free placement   grade   reference placement\n"
         "      L                24         ABOVE  (pop 13-23)       279     ABOVE  (pop 151-230)   agree\n"
         "      run 6             1         BELOW                    146     BELOW                  agree\n"
+        "      **replicate**     8         BELOW                    207     inside               **disagree**\n"
         "      run 7             5         BELOW                    214     inside               **disagree**\n"
         "      run 8            13         inside                   221     inside                 agree\n"
         "      run 9            18         inside                   271     ABOVE                **disagree**\n\n"
-        "**THE PLACEMENT AGREES WITH THE REFERENCE ON 3 OF 5, AND BOTH ERRORS ARE "
-        "OPTIMISTIC.** On run 7 the checks say *better than any independent "
+        "**THE PLACEMENT AGREES WITH THE REFERENCE ON 3 OF 6, AND ALL THREE "
+        "ERRORS ARE OPTIMISTIC.** On run 7 the checks say *better than any independent "
         "design* and the reference says *typical*. On run 9 the checks say "
         "*typical* and the reference says **worse than every one of the seven**. "
         "Neither error is in the direction that would reject a good design; both "
@@ -6018,6 +6050,10 @@ def the_golden_free_placement_test_and_what_it_cannot_say() -> str:
         "over sixteen designs arriving as a concrete misplacement rather than as "
         "a coefficient, and it is the honest limit of what a reference-free "
         "pipeline can certify about a finished artifact.\n\n"
+        "**AND THE THREE 'BELOW' DESIGNS DO NOT EVEN ORDER WITHIN THEIR OWN "
+        "CLASS:** 1, 5 and 8 objections give 146, 214 and 207 testpoints, "
+        "so the count inverts between the second and third. The instrument "
+        "places, and within a placement it says nothing.\n\n"
         "**AND IT IS STILL WORTH COMPUTING, FOR A NARROW REASON.** A design "
         "scoring 1 against a population scoring 13 to 23 is outside anything the "
         "specification's readers produced, so it is either much better or much "
@@ -6030,8 +6066,65 @@ def the_golden_free_placement_test_and_what_it_cannot_say() -> str:
         "REFERENCE grade. Its golden-free counterpart -- 1 objection against 13 "
         "to 23 -- points the same way, and the table above is exactly why that "
         "agreement cannot be generalised from one design.\n\n"
-        "**WHAT IT DOES NOT CLAIM.** Five designs from one lineage on one "
-        "specification. 3 of 5 is a count, not a rate, and is offered as the "
+        "**WHAT IT DOES NOT CLAIM.** Six designs from one lineage on one "
+        "specification. 3 of 6 is a count, not a rate, and is offered as the "
         "shape of the failure -- optimistic in both directions -- rather than as "
         "a reliability figure."
+    )
+
+
+def one_graded_run_is_not_a_measurement() -> str:
+    """THE PRE-REGISTERED REPLICATE, AND IT LANDS IN THE WORST BAND.
+
+    Every graded run on this plan is n = 1, and several findings here read four
+    such runs as ordered. That reading has never been checked. The check was the
+    run-6 configuration run a second time -- byte-identical start design, the same
+    169 checks with only the checks in the latch, the same disagreement report,
+    the same 21-trial budget, the same driver and suite, and a brief differing
+    only in three path substitutions verified by diff. The fresh loop reported 24
+    objections of 169 at init, exactly where run 6 started. What differed was one
+    thing: a fresh editor session.
+
+    THE BAR WAS FIXED AND COMMITTED BEFORE DISPATCH. Within 20 testpoints of 146
+    and one run resolves to that; 21-50 and adjacent runs are unresolvable; over
+    50 and every one-run comparison here is under-powered and the trials/grade
+    correlation is withdrawn.
+    """
+    return (
+        "    | | run 6 | the replicate |\n"
+        "      trials used              5 of 21        9 of 21\n"
+        "      objections per trial     27 14 6 1 3    27 20 12 11 11 8 16 14 8\n"
+        "      best objections          1              8\n"
+        "      accepted design          1 of 169       8 of 169\n"
+        "      **testpoints differing** **146**        **207**\n"
+        "      differing cells          1,358          3,674\n"
+        "      grade                    DIFFERS        DIFFERS, all three pins green\n\n"
+        "**|207 - 146| = 61, WHICH IS THE > 50 BAND. THE PRE-REGISTERED "
+        "CONSEQUENCE APPLIES AND IS APPLIED: A SINGLE EDITOR SESSION'S GRADE IS "
+        "NOT A MEASUREMENT AT THE RESOLUTION THIS MODULE HAS BEEN REPORTING.**\n\n"
+        "**WHAT IS WITHDRAWN, IMMEDIATELY AND IN FULL.** The trials-versus-grade "
+        "Spearman of +1.000 on four runs is **withdrawn**: 5 trials gave 146 and "
+        "9 trials gave 207 on the identical configuration, which is the same "
+        "direction the correlation asserted and cannot be told from it. Any "
+        "reading that two graded runs differing by less than ~60 testpoints "
+        "differ FOR A REASON is withdrawn with it -- runs 7, 8 and 9 at 214, 221 "
+        "and 271 are not separable from each other, and 214 is not separable from "
+        "the replicate's 207 at all.\n\n"
+        "**WHAT SURVIVES, AND IT IS NOT NOTHING.** 146 against 271 is 125, about "
+        "twice the observed gap, so the extremes are still ordered. And every "
+        "claim resting on a COUNT rather than a spread is untouched: both runs "
+        "stopped voluntarily with 16 and 12 trials unspent, which is the fifth "
+        "and sixth confirmation that the editor declines its budget; both "
+        "oscillate; and the audit, corpus-completeness and per-port readings are "
+        "exhaustive statements over fixed populations, not one-run comparisons.\n\n"
+        "**AND ONE COUNT DOES CHANGE.** Four of four runs had stopped on a trial "
+        "strictly WORSE than their own best. The replicate's last trial equals "
+        "its best, so that becomes **4 of 5**, and the claim weakens from 'always' "
+        "to 'usually'.\n\n"
+        "**THE UNCOMFORTABLE READING, STATED BECAUSE IT IS THE POINT.** The "
+        "replicate spent nearly twice the trials and reached 8 objections where "
+        "run 6 reached 1, and its design is 61 testpoints worse. Nothing "
+        "distinguished the two runs but the session. **The variance of this loop "
+        "is comparable to the entire effect this plan has been measuring**, and "
+        "no amount of care in a single run recovers that."
     )

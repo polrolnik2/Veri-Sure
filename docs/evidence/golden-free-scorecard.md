@@ -1251,7 +1251,9 @@ has** — and that closure costs nothing, because the counters were on disk.
 ### And 4 of 4 stopped on a trial worse than their own best
 
 Run 6 reached 1 objection at trial 4 and stopped at trial 5 with 3. Run 8 reached
-13 at trial 12 and stopped at 19. **Zero of four stopped at their best**, and
+13 at trial 12 and stopped at 19. **Zero of four stopped at their best** — *amended
+by §9t to four of five: the replicate's last trial equals its best, so the claim
+weakens from "always" to "usually"* — and
 nothing in the loop's own reading tells it which trial was its best — so what a
 run *ships* is decided by the latch, not by where it stopped.
 
@@ -1294,8 +1296,13 @@ without converging.
 
 ### Trials spent and the grade are perfectly rank-ordered, and the confound is not separable
 
-**Spearman +1.000 on n = 4**: 5 trials → 146 testpoints, 12 → 214, 14 → 221,
-15 → 271, against a start design at 279. But **the criterion determines how much
+**WITHDRAWN — see §9t.** A pre-registered replicate of run 6's configuration
+spent 9 trials and landed at 207, so 5 → 146 and 9 → 207 on the identical setup
+run the same direction as the correlation and cannot be told from it. The
+paragraph is kept because the withdrawal is unreadable without it.
+
+*Superseded:* **Spearman +1.000 on n = 4**: 5 trials → 146 testpoints, 12 → 214,
+14 → 221, 15 → 271, against a start design at 279. But **the criterion determines how much
 the editor edits**, so trials are an *output* of the criterion rather than an
 independent variable, and the runs carrying more scored proxy evidence are the
 runs that edited more. Read as one mechanism, not two: **more units on a criterion
@@ -1509,6 +1516,14 @@ is better than any of the seven a competent author wrote from the same
 specification in one shot.** That is the first statement here of what the pipeline
 is *for* that survives its own measurement.
 
+**AND IT DOES NOT REPLICATE — §9t.** A pre-registered second run of the same
+configuration on the same start design landed at **207 — inside the population's
+151–230**, not below it. So the loop's output beat every independent draw in **one
+of two** runs and was merely typical in the other. The claim is not *the loop
+beats one-shot generation*; it is ***the loop can beat one-shot generation, about
+half the time in two attempts*** — and the difference matters because the first
+phrasing is what a reader would act on.
+
 **And it is not equivalence, which is the bar.** 146 of 348 testpoints still
 differ and the miter says `DIFFERS`. A loop that beats one-shot generation and
 does not reach equivalence is a useful loop and an unmet goal, and reporting the
@@ -1549,6 +1564,46 @@ fresh editor session.
 | **21 – 50** | adjacent runs are not separable — run 7 at 214 against run 8 at 221 becomes noise — while the extremes are. Every §9 comparison closer than ~50 testpoints must be restated as unresolved |
 | **> 50** | **a single editor session's grade is not a measurement at the resolution this plan reports.** Every one-run comparison in §9, *including §9s's own four-run table*, is under-powered and must carry that caveat, and the trials/grade correlation is withdrawn |
 
+### THE RESULT: 207 of 348. |207 − 146| = 61 — the worst band
+
+| | run 6 | the replicate |
+|---|---|---|
+| trials used | 5 of 21 | 9 of 21 |
+| objections per trial | 27, 14, 6, **1**, 3 | 27, 20, 12, 11, 11, **8**, 16, 14, 8 |
+| accepted design | 1 of 169 | 8 of 169 |
+| **testpoints differing** | **146** | **207** |
+| differing cells | 1,358 | 3,674 |
+| grade | `DIFFERS` | `DIFFERS`, all three pins green |
+
+**The pre-registered consequence applies, and is applied rather than argued.**
+
+* **The trials-versus-grade Spearman of +1.000 (§9s) is WITHDRAWN.** 5 trials gave
+  146 and 9 trials gave 207 on the identical configuration — the same direction
+  the correlation asserted, and indistinguishable from it.
+* **No two graded runs differing by less than ~60 testpoints may be read as
+  differing for a reason.** Runs 7, 8 and 9 at 214, 221 and 271 are not separable
+  from each other, and 214 is not separable from the replicate's 207 at all.
+* **§9w's headline becomes "in one of two runs."** Run 6 at 146 beat all seven
+  independent draws; the replicate at 207 is *inside* their 151–230 range.
+* **§9x's placement drops to 3 of 6**, with the replicate a third disagreement and
+  a third optimistic one.
+* **§9s's "4 of 4 stopped past their own best" becomes 4 of 5** — the replicate's
+  last trial equals its best.
+
+**What survives, and it is not nothing.** 146 against 271 is 125, about twice the
+observed gap, so the extremes remain ordered. Both runs stopped voluntarily with
+16 and 12 trials unspent — the fifth and sixth confirmation that the editor
+declines its budget. And every claim resting on a **count over a fixed
+population** rather than a **spread between runs** is untouched: the audit, the
+corpus-completeness closure (§9q), the per-port strength and blindness tables
+(§9u, §9v), and the requirement-extraction closure (§9r).
+
+**The uncomfortable reading, stated because it is the point.** The replicate spent
+nearly twice the trials and reached 8 objections where run 6 reached 1, and its
+design is 61 testpoints worse. Nothing distinguished the two runs but the session.
+**The variance of this loop is comparable to the entire effect this plan has been
+measuring**, and no amount of care within a single run recovers that.
+
 **Two things it cannot do, stated now.** Two samples give a range, not a
 variance: n = 2 bounds nothing tightly, and a replicate landing at 146 is
 consistent with high variance and a lucky draw. And the reading is about the
@@ -1584,14 +1639,21 @@ designs whose grade is known:
 |---|---|---|---|---|---|
 | L (start) | 24 | ABOVE (pop 13–23) | 279 | ABOVE (pop 151–230) | agree |
 | **run 6** | **1** | **BELOW** | **146** | **BELOW** | agree |
+| **the replicate** | **8** | **BELOW** | **207** | **inside** | **disagree** |
 | run 7 | 5 | BELOW | 214 | inside | **disagree** |
 | run 8 | 13 | inside | 221 | inside | agree |
 | run 9 | 18 | inside | 271 | **ABOVE** | **disagree** |
 
-**The placement agrees on 3 of 5, and both errors are optimistic.** Run 7 the
-checks call *better than any independent design* and the reference calls typical.
-Run 9 the checks call *typical* and the reference calls **worse than every one of
-the seven**. Neither error would reject a good design; both would ship a bad one.
+**The placement agrees on 3 of 6, and all three errors are optimistic.** Run 7 and
+the replicate the checks call *better than any independent design* and the
+reference calls typical. Run 9 the checks call *typical* and the reference calls
+**worse than every one of the seven**. No error would reject a good design; all
+three would ship a bad one.
+
+**And the three "BELOW" designs do not even order within their own class:** 1, 5
+and 8 objections give 146, 214 and 207 testpoints, so the count inverts between
+the second and third. The instrument places, and *within* a placement it says
+nothing.
 
 **So the instrument can say "outside the population" and cannot reliably say "on
 the good side."** That is §8's Spearman −0.223 arriving as a concrete
@@ -1609,7 +1671,7 @@ every member of it**, so "inside the population" is not a clean bill.
 the same way, and the table above is exactly why that agreement cannot be
 generalised from one design.
 
-**Scope.** Five designs from one lineage on one specification. 3 of 5 is a count,
+**Scope.** Six designs from one lineage on one specification. 3 of 6 is a count,
 not a rate, offered as the *shape* of the failure — optimistic in both directions
 — rather than as a reliability figure.
 
@@ -1721,6 +1783,19 @@ of activity — **Spearman +0.857 against the reference's transitions**, and onc
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
 
+**AND ONE GRADED RUN IS NOT A MEASUREMENT, WHICH UNDERCUTS SEVERAL OF THE ABOVE
+— §9t.** Every graded run here is n = 1. A pre-registered replicate of run 6's
+configuration — byte-identical start design and brief, same budget, differing only
+in the session — landed **61 testpoints away**: 146 against 207. That is the worst
+of the three bands fixed in advance, and its consequence is applied rather than
+argued. **The trials-versus-grade correlation of +1.000 is withdrawn**; no two
+graded runs differing by less than ~60 testpoints may be read as differing for a
+reason; §9w's headline becomes *in one of two runs*; §9x's placement drops to 3 of
+6. **What survives is every claim resting on a COUNT over a fixed population
+rather than a SPREAD between runs** — the audit, §9q's corpus closure, §9r's
+extraction closure, and §9u/§9v's per-port tables. The variance of this loop is
+comparable to the entire effect this document has been measuring.
+
 **AND THE PROCEDURE IS WRITTEN DOWN AT LAST, WITH THE THING IT CANNOT DO — §9x.**
 Six steps, each with its measured worth, and a seventh that is the only verdict a
 reference-free pipeline can pass on a finished design: where it sits relative to
@@ -1731,13 +1806,14 @@ typical is worse than every member of the population. So the instrument can say
 *outside the population* and cannot reliably say *on the good side*, which makes
 it a trigger for a human look and never a clean bill.
 
-**AND THE LOOP IS WORTH RUNNING, WHICH IS THE ONE POSITIVE THIS DOCUMENT CAN
-STATE ABOUT ITS OWN PRODUCT — §9w.** Seven designs written from this
+**AND THE LOOP IS WORTH RUNNING ABOUT HALF THE TIME, WHICH IS THE ONE POSITIVE
+THIS DOCUMENT CAN STATE ABOUT ITS OWN PRODUCT — §9w, AS AMENDED BY §9t.** Seven designs written from this
 specification by independent authors span 151 to 230 differing testpoints, mean
 185, sd 23. The start design of every graded run is a bad draw at 279, and the
-best run drove it to **146 — better than all seven**. So the loop beats one-shot
-generation. **It still does not reach equivalence, and both halves have to be said
-together.** The other three graded runs land at 214, 221 and 271, inside or above
+best run drove it to **146 — better than all seven**. **The replicate of that same
+run landed at 207, inside the population's range**, so the loop beats one-shot
+generation in one of two attempts. **It still does not reach equivalence, and all
+three halves have to be said together.** The other three graded runs land at 214, 221 and 271, inside or above
 the population's own range, and did not improve on one-shot generation at all.
 
 **AND THE LOOP DOES NOT WANT MORE ROOM — §9s.** Four graded runs shared a

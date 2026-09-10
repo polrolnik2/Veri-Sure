@@ -3339,10 +3339,12 @@ def test_the_baseline_is_named_in_the_module_docstring():
     assert "**better than all seven**" in flat
 
 
-def test_the_placement_agrees_on_three_of_five_and_errs_optimistically():
+def test_the_placement_agrees_on_three_of_six_and_errs_optimistically():
+    """Was 3 of 5 with both errors optimistic; the replicate adds a sixth design
+    and a third error, and it is optimistic too."""
     t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
     flat = " ".join(t.split())
-    assert "AGREES WITH THE REFERENCE ON 3 OF 5, AND BOTH ERRORS ARE OPTIMISTIC" in flat
+    assert "AGREES WITH THE REFERENCE ON 3 OF 6, AND ALL THREE ERRORS ARE OPTIMISTIC" in flat
     assert "both are in the direction that would ship a bad one" in flat
 
 
@@ -3373,10 +3375,68 @@ def test_the_one_positive_is_marked_as_reference_based():
 def test_the_placement_count_is_not_offered_as_a_rate():
     t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
     flat = " ".join(t.split())
-    assert "3 of 5 is a count, not a rate" in flat
+    assert "3 of 6 is a count, not a rate" in flat
 
 
 def test_the_placement_test_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_golden_free_placement_test_and_what_it_cannot_say" in flat
     assert "both errors are optimistic" in flat
+
+
+def test_the_replicate_lands_in_the_worst_preregistered_band():
+    t = ensemble.one_graded_run_is_not_a_measurement()
+    flat = " ".join(t.split())
+    assert "|207 - 146| = 61" in flat
+    assert "NOT A MEASUREMENT AT THE RESOLUTION THIS MODULE HAS BEEN REPORTING" in flat
+
+
+def test_the_trials_grade_correlation_is_withdrawn_in_full():
+    t = ensemble.one_graded_run_is_not_a_measurement()
+    flat = " ".join(t.split())
+    assert "Spearman of +1.000 on four runs is **withdrawn**" in flat
+    assert "214 is not separable from the replicate's 207 at all" in flat
+
+
+def test_what_survives_the_replicate_is_named():
+    """A claim resting on a count over a fixed population is untouched by
+    between-run variance; a claim resting on a spread is not."""
+    t = ensemble.one_graded_run_is_not_a_measurement()
+    flat = " ".join(t.split())
+    assert "146 against 271 is 125, about twice the observed gap" in flat
+    assert "exhaustive statements over fixed populations, not one-run comparisons" in flat
+
+
+def test_the_stopped_past_best_count_is_corrected_to_four_of_five():
+    t = ensemble.one_graded_run_is_not_a_measurement()
+    flat = " ".join(t.split())
+    assert "becomes **4 of 5**" in flat
+    assert "weakens from 'always' to 'usually'" in flat
+
+
+def test_the_budget_finding_carries_its_withdrawal_in_place():
+    t = ensemble.the_editor_declines_its_budget_and_stops_past_its_own_best()
+    flat = " ".join(t.split())
+    assert "WITHDRAWN BY THE REPLICATE, AND THE WITHDRAWAL IS THE FINDING" in flat
+    assert "Superseded, kept because the withdrawal is unreadable without it" in flat
+
+
+def test_the_generation_claim_is_amended_to_one_of_two():
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "AND IT DOES NOT REPLICATE" in flat
+    assert "in **one of two** runs and was merely typical in the other" in flat
+    assert "the loop can beat one-shot generation, about half the time" in flat
+
+
+def test_the_placement_table_carries_the_replicate():
+    t = ensemble.the_golden_free_placement_test_and_what_it_cannot_say()
+    flat = " ".join(t.split())
+    assert "AGREES WITH THE REFERENCE ON 3 OF 6, AND ALL THREE ERRORS ARE OPTIMISTIC" in flat
+    assert "1, 5 and 8 objections give 146, 214 and 207 testpoints" in flat
+
+
+def test_the_replicate_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "one_graded_run_is_not_a_measurement" in flat
+    assert "landed **61 testpoints away**" in flat
