@@ -5216,3 +5216,62 @@ def unscored_evidence_does_not_move_an_editor() -> str:
         "identifies it as the untested option and closes handing an editor "
         "unscored evidence."
     )
+
+
+def a_criterion_cannot_take_a_design_past_its_own_accuracy() -> str:
+    """The eighth graded run: the de-duplicated disagreement IN THE LATCH.
+
+    `unscored_evidence_does_not_move_an_editor` named putting the disagreement in
+    the latch as the untested option, and refused to claim it would work. It was
+    run. `drive10.py` added 160 units beside the 169 checks -- one per (blind
+    testpoint, declared output) pair carrying a split cell, passing when the
+    design matches the population's DE-DUPLICATED reading there. Golden-free at
+    every step; bands fixed in `PREREG_LATCH.md` before dispatch.
+    """
+    return (
+        "**THE CRITERION WAS DRIVEN TO A PERFECT SCORE AND THE DESIGN IS THE "
+        "WORST OF THE EIGHT RUNS.**\n\n"
+        "                       run 5  run 6  run 7  **run 8**\n"
+        "    checks objecting      0      1      5    **13 of 169**\n"
+        "    **dedup units failing** --   --     --   **0 of 160**\n"
+        "    **testpoints differing** 151  146   214  **221 of 348**\n"
+        "    grade              DIFFERS DIFFERS DIFFERS **DIFFERS**\n\n"
+        "**AND IT GOT WORSE ON EXACTLY THE REGION IT SCORES.** The 70 fully-blind "
+        "testpoints the units cover went **61 -> 66 differing**; `not fully "
+        "blind` went 85 -> 155 of 278. The pre-registered regression-net bar was "
+        "<= 85 and it read 155 -- **worse than the run with no such latch at "
+        "all.**\n\n"
+        "**THE MECHANISM, EXACT.** On the 3,827 blind split cells the units "
+        "score:\n\n"
+        "    the DE-DUPLICATED READING is right   **2,070 = 54%**\n"
+        "    the START design L was right         **2,209 = 58%**\n"
+        "    **the ACCEPTED design is right**     **2,070 = 54%**\n\n"
+        "**The accepted design's accuracy equals the reading's TO THE CELL**, "
+        "because it matches the reading everywhere it is scored and therefore "
+        "inherits its error rate by construction. On the 1,757 cells where the "
+        "reading is WRONG, the start design was right at 174 and the accepted "
+        "design is right at **0**.\n\n"
+        "**A CRITERION CANNOT TAKE A DESIGN PAST ITS OWN ACCURACY, AND THIS "
+        "DESIGN STARTED ABOVE IT** -- 58% to 54%, by satisfying it perfectly. "
+        "That is `zero_objections_can_be_incompatible_with_correctness` on a "
+        "GOLDEN-FREE criterion, and sharper: there a wrong design satisfied an "
+        "over-strict set, here a perfect score is arithmetically a cap.\n\n"
+        "**A DEFECT IN MY OWN REASONING, AND IT IS THE CAUSE.** The arm was "
+        "motivated by the reading measured at **73%** over blind cells and 93% "
+        "over a targeted subset. **Those were measured on TRANSACTIONAL ROWS; the "
+        "latch was built on RAW EDGES, where the same reading is 54%.** Rows "
+        "collapse runs of identical values, so the two denominators weight cells "
+        "differently and are not the same instrument. The coordinate change was "
+        "right -- raw edges survive an edit where row indices do not -- but I did "
+        "not re-measure the accuracy in the new coordinates before building a "
+        "latch on it, and a 54% reading cannot drive a 58% design anywhere good. "
+        "**That was knowable before the run from data already on disk.**\n\n"
+        "**WHAT THIS CLOSES.** Scoring the population's reading is the seventh "
+        "lever aimed at the blindness residue and the last one available from "
+        "this population: selection, authoring at named holes, narrowing, the "
+        "stimulus, unscored disagreement evidence, and now scored disagreement "
+        "evidence. **The population's reading is 54% accurate where the checks "
+        "are blind, so no criterion built from it can certify a design better "
+        "than that** -- which is the ceiling the whole route runs into, stated "
+        "as a number rather than as a failed round."
+    )

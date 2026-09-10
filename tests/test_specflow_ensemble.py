@@ -2791,3 +2791,43 @@ def test_the_untested_option_is_named_without_being_claimed():
     flat = " ".join(t.split())
     assert "putting the de-duplicated disagreement IN THE LATCH" in flat
     assert "This finding does not claim that would work" in flat
+
+
+def test_the_perfect_golden_free_score_produced_the_worst_design():
+    t = ensemble.a_criterion_cannot_take_a_design_past_its_own_accuracy()
+    flat = " ".join(t.split())
+    assert "DRIVEN TO A PERFECT SCORE AND THE DESIGN IS THE WORST OF THE EIGHT RUNS" in flat
+    assert "**221 of 348**" in flat
+
+
+def test_the_scored_region_itself_got_worse():
+    t = ensemble.a_criterion_cannot_take_a_design_past_its_own_accuracy()
+    flat = " ".join(t.split())
+    assert "IT GOT WORSE ON EXACTLY THE REGION IT SCORES" in flat
+    assert "**61 -> 66 differing**" in flat
+    assert "worse than the run with no such latch at all" in flat
+
+
+def test_the_design_inherits_the_readings_error_rate_exactly():
+    t = ensemble.a_criterion_cannot_take_a_design_past_its_own_accuracy()
+    flat = " ".join(t.split())
+    assert "**2,070 = 54%**" in flat and "**2,209 = 58%**" in flat
+    assert "accuracy equals the reading's TO THE CELL" in flat
+    assert "the accepted design is right at **0**" in flat
+
+
+def test_the_coordinate_system_defect_is_owned():
+    """The 73% that motivated the arm was on transactional rows; the latch used
+    raw edges, where the same reading is 54%. If this stops being stated, the
+    run reads as an unlucky negative rather than a predictable one."""
+    t = ensemble.a_criterion_cannot_take_a_design_past_its_own_accuracy()
+    flat = " ".join(t.split())
+    assert "measured on TRANSACTIONAL ROWS; the latch was built on RAW EDGES" in flat
+    assert "knowable before the run from data already on disk" in flat
+
+
+def test_the_population_ceiling_is_stated_as_a_number():
+    t = ensemble.a_criterion_cannot_take_a_design_past_its_own_accuracy()
+    flat = " ".join(t.split())
+    assert "54% accurate where the checks are blind" in flat
+    assert "no criterion built from it can certify a design better than that" in flat

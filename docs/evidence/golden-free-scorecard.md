@@ -880,6 +880,74 @@ de-duplicated disagreement *in the latch*, which is golden-free and has never
 been run. Nothing here claims that would work; it is named as the untested
 option, and what is closed is handing an editor unscored evidence.
 
+## 9m. The eighth graded run — a criterion cannot take a design past its own accuracy
+
+§9l named putting the disagreement *in the latch* as the untested option and
+refused to claim it would work. It was run. `drive10.py` added **160 units**
+beside the 169 checks — one per (blind testpoint, declared output) pair carrying
+a split cell, passing when the design matches the population's de-duplicated
+reading there. Golden-free throughout; bands fixed in `PREREG_LATCH.md`.
+
+| | run 5 | run 6 | run 7 | **run 8** |
+|---|---|---|---|---|
+| checks objecting | 0 | 1 | 5 | 13 of 169 |
+| **dedup units failing** | — | — | — | **0 of 160** |
+| **testpoints differing** | 151 | 146 | 214 | **221 of 348** |
+| grade | `DIFFERS` | `DIFFERS` | `DIFFERS` | **`DIFFERS`** |
+
+**The golden-free criterion was driven to a perfect score and the design is the
+worst of the eight runs.**
+
+| group | n | run 6 | run 7 | run 8 |
+|---|---|---|---|---|
+| **fully blind — the units cover this** | 70 | 61 = 87% | 66 = 94% | **66 = 94%** |
+| not fully blind | 278 | 85 = 31% | 148 = 53% | **155 = 56%** |
+
+Pre-registered question 2 — regression net, bar ≤ 85 on `not fully blind` — read
+**155. Not met**, and worse than the run with no such latch.
+
+### The mechanism, exact
+
+On the 3,827 blind split cells the units score:
+
+| | right |
+|---|---|
+| the de-duplicated **reading** | **2,070 = 54%** |
+| the **start** design L | **2,209 = 58%** |
+| the **accepted** design | **2,070 = 54%** |
+
+**The accepted design's accuracy equals the reading's to the cell** — it matches
+the reading everywhere it is scored and inherits its error rate by construction.
+On the 1,757 cells where the reading is *wrong*, the start design was right at
+174 and the accepted design at **0**.
+
+**A criterion cannot take a design past its own accuracy, and this design
+started above it** — 58% → 54%, by satisfying it perfectly. That is §9's
+zero-objections finding on a *golden-free* criterion, and sharper: there a wrong
+design satisfied an over-strict set; here a perfect score is arithmetically a
+cap.
+
+### A defect in my own reasoning, and it is the cause
+
+The arm was motivated by the reading measured at **73%** over blind cells and
+93% over a targeted subset. **Those were on transactional rows; the latch was
+built on raw edges, where the same reading is 54%.** Rows collapse runs of
+identical values, so the denominators weight cells differently — they are not
+the same instrument. The coordinate change was right (raw edges survive an edit;
+row indices do not), but I did not re-measure accuracy in the new coordinates
+before building a latch on it. **A 54% reading cannot drive a 58% design
+anywhere good, and that was knowable before the run from data already on disk.**
+
+### What this closes
+
+Scoring the population's reading is the **seventh** lever aimed at the blindness
+residue and the last one this population offers: selection, authoring at named
+holes, narrowing, the stimulus, unscored disagreement evidence, and now scored
+disagreement evidence. **The population's reading is 54% accurate where the
+checks are blind, so no criterion built from it can certify a design better than
+that** — the ceiling of the whole route, stated as a number rather than as
+another failed round.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
