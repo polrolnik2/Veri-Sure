@@ -2527,3 +2527,46 @@ def test_the_sizing_does_not_claim_the_experiment():
     assert "does NOT mean a stimulus author can reach the caught kind on demand" in flat
     assert "That is not run here" in flat
     assert "the concentration is a co-occurrence, not a cause".upper() in flat.upper()
+
+
+def test_the_stimulus_round_lands_in_the_closing_band():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert "**fully caught, of the 20 that disagree : 1 = 5%**" in flat
+    assert "`< 15%` BAND: THE STIMULUS LOOP IS CLOSED AS A LEVER ON BLINDNESS" in flat
+
+
+def test_the_new_testpoints_are_blinder_than_the_old_suite():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert "**326 of 386 = 84.5%**" in flat
+    assert "The blindness travels with the scenario, not with the route" in flat
+
+
+def test_no_new_testpoint_was_inert():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert "**INERT: 0 of 20**" in flat
+    assert "was the pre-registered failure mode and did not occur" in flat
+
+
+def test_all_four_levers_are_closed_by_measurement():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert ("selection over the corpus, authoring at named holes, narrowing the "
+            "over-strict closers, and the stimulus") in flat
+    assert "closed by measurement rather than by a budget running out" in flat
+
+
+def test_the_sample_selection_effect_is_stated():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert "chosen deliberately as the WORST scenarios" in flat
+    assert "this does not measure that" in flat
+
+
+def test_the_ratio_was_not_allowed_to_be_the_headline():
+    t = ensemble.a_different_route_to_the_same_scenario_is_blinder_not_clearer()
+    flat = " ".join(t.split())
+    assert "these add 326 more" in flat
+    assert "a suite can always be made to look less blind by adding testpoints it happens to catch" in flat

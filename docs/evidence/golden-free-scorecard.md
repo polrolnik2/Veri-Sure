@@ -560,6 +560,53 @@ The settling experiment is a stimulus round aimed at the 70 fully-blind
 testpoints' scenarios, scored on whether the new testpoints are also fully blind.
 That is not run. And `biu_write`'s concentration is a co-occurrence, not a cause.
 
+## 9g. The stimulus loop, run — a different route is blinder, not clearer
+
+§9f licensed the question; this answers it. The 20 fully-blind testpoints
+carrying the most blind cells (460 of 1,204, disagreeing on `biu_write` 445,
+`first_miss_ack` 418, `biu_read` 160, `tag_we` 80) were handed to four authors,
+who were given only the driven inputs of a testpoint that already runs and which
+outputs two spec-derived designs disagree on there, and asked for a new testpoint
+reaching the same scenario **by a different route**. All nine designs then ran on
+the result. Pre-registered in `PREREG_STIM.md`: ≥40% fully caught means the
+scenario is the lever; <15% closes it.
+
+| the 20 new testpoints | tps | disagreements | blind |
+|---|---|---|---|
+| inert — no pair disagrees | **0** | 0 | 0 |
+| **fully caught** | **1** | 8 | 0 |
+| partly blind | 4 | 111 | 59 |
+| **fully blind** | **15** | 267 | 267 |
+
+| | |
+|---|---|
+| **fully caught, of the 20 that disagree** | **1 = 5%** (bar was 40%) |
+| cell blindness on the new testpoints | **326 of 386 = 84.5%** |
+| the suite they were drawn from | 55.1% |
+
+**Inert is 0 of 20** — the pre-registered failure mode did not occur. The routes
+were genuinely different (zero-latency versus 12-cycle stalled bus; back-to-back
+versus ragged refill pacing; request withdrawn mid-refill; preceded by load hits,
+cache-inhibited accesses, full refills, error-then-retry; three misses back to
+back) and every one reached its scenario.
+
+**5% against a 40% bar — and the new testpoints are blinder than the average old
+one.** That second figure is the stronger half: four independent authors, five
+materially different routes each into the same scenario class, produced
+disagreements the set sees *less* of than the suite average. **The blindness
+travels with the scenario, not with the route.**
+
+**Four levers have now been aimed at the residue — selection over the corpus,
+authoring at named holes, narrowing the over-strict closers, and the stimulus —
+and all four are closed by measurement rather than by a budget running out.**
+
+**Scope.** The sample was deliberately the worst scenarios and inherits their
+difficulty; a round aimed at a random testpoint might do better and this does not
+measure it. What is settled is the case that carries the residue.
+
+**And the ratio was not the headline, as pre-registered.** These 20 lower
+nothing: the old 3,119 blind cells are where they were and these add 326 more.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
