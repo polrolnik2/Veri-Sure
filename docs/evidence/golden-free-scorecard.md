@@ -607,6 +607,57 @@ measure it. What is settled is the case that carries the residue.
 **And the ratio was not the headline, as pre-registered.** These 20 lower
 nothing: the old 3,119 blind cells are where they were and these add 326 more.
 
+## 9h. Can the population's VOTE adjudicate a blind cell? No — it is inverted on the dominant blind port
+
+Four levers aimed at the blindness residue are closed (§9d, §9e, §9g). But a
+blind cell is not evidence-free: the population *disagrees* there, and at most
+one side of a disagreement can be right. So the last untried thing is to hand an
+editor the disagreement itself. Before doing that, the obvious adjudicator —
+**the vote** — was measured on the artifact built to carry it: 60 cells, each
+the earliest cell of a fully-blind testpoint where nine independently written
+spec-derived designs disagree on a declared output.
+
+| on the 60 cells | |
+|---|---|
+| the larger side matches the reference | **20 = 33%** |
+| the reference is on a MINORITY side | **40 = 67%** |
+| *corpus-wide over all split cells* | *53%* |
+
+**The vote does not merely say nothing there — it points the wrong way.**
+
+### And the tidy explanation is confounded, which was checked before it was written down
+
+The selection takes the FIRST split of each testpoint, and first splits separate
+sharply by blindness — 33% against 95%. **That 62-point separation is PORT
+COMPOSITION and is not quotable as a blindness effect.** Blind first splits are
+47 of 70 `biu_read`; the rest are 130 of 187 `burst`, whose majority is right
+130 of 130. Broken out, the effect REVERSES:
+
+| first split, by port | fully blind | other testpoints |
+|---|---|---|
+| `biu_read` | **3 of 47 = 6%** | 34 of 38 = 89% |
+| `biu_write` | **20 of 20 = 100%** | 8 of 13 = 62% |
+| `dcram_we` | 0 of 3 | 4 of 5 = 80% |
+| `burst` | — | 130 of 130 = 100% |
+
+Margin does not rescue it: at a majority of 8 of 9, blind cells read 34% and the
+others 97%.
+
+**So the claim is the narrow one: the population's vote swings from 6% to 100%
+between two ports at the same margin, and no golden-free feature measured here
+tells them apart.** Blindness is not that feature — it is confounded with the
+port. A pipeline that adjudicates a blind cell by majority is, on the port
+carrying two thirds of this residue, wrong two times in three.
+
+**Integrity — not a decode defect on one port**, which is the shape eight
+counting-shaped defects on this plan have had. Where all nine designs agree, the
+reference agrees on `biu_read` **97.63%** of 40,867 unanimous cells, alongside
+`tag_we` at 97.62% and `saved_addr` at 98.27%, against 99.10% overall. The port
+is read correctly; the 6% is the population being wrong.
+
+**What it does not say.** The disagreement is still evidence — at most one side
+can be right, whatever the counts do. What is closed is resolving it *by vote*.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

@@ -4926,3 +4926,58 @@ def a_different_route_to_the_same_scenario_is_blinder_not_clearer() -> str:
         "testpoints beside the absolute count -- because a suite can always be "
         "made to look less blind by adding testpoints it happens to catch."
     )
+
+
+def the_population_vote_is_inverted_on_one_port_and_perfect_on_another() -> str:
+    """Can the population's VOTE adjudicate a cell the check set is blind on?
+
+    Measured on the artifact built to try it: 60 cells, each the earliest cell
+    of a fully-blind testpoint where nine independently written spec-derived
+    designs disagree on a declared output. Blindness, ordinal position and the
+    vote are all golden-free; the reference scores the vote and nothing else,
+    and it selected none of the sixty.
+    """
+    return (
+        "**THE VOTE IS NOT AN ADJUDICATOR, AND THE WAY IT FAILS IS WORSE THAN "
+        "BEING UNINFORMATIVE.** On the sixty cells the larger side matches the "
+        "reference **20 times = 33%**, and the reference sits on a MINORITY "
+        "side on the other 40. Corpus-wide over all split cells that figure is "
+        "53%, so these cells are not merely harder -- the vote there points the "
+        "WRONG WAY.\n\n"
+        "**AND THE TIDY EXPLANATION IS CONFOUNDED, WHICH WAS CHECKED BEFORE IT "
+        "WAS WRITTEN DOWN.** The selection takes the FIRST split of each "
+        "testpoint, and first splits separate sharply by blindness:\n\n"
+        "    first split of a testpoint     cells   majority right\n"
+        "      fully blind                    70        **33%**\n"
+        "      everything else               187        **95%**\n\n"
+        "**That 62-point separation is PORT COMPOSITION and must not be quoted "
+        "as a blindness effect.** Blind first splits are 47 of 70 `biu_read`; "
+        "the rest are 130 of 187 `burst`, whose majority is right 130 of 130. "
+        "Broken out by port, the effect REVERSES:\n\n"
+        "    first split, by port      fully blind      other testpoints\n"
+        "      `biu_read`             **3/47 =  6%**      34/38 = 89%\n"
+        "      `biu_write`           **20/20 = 100%**      8/13 = 62%\n"
+        "      `dcram_we`                0/3                4/5  = 80%\n"
+        "      `burst`                    --             130/130 = 100%\n\n"
+        "Margin does not rescue it either: at a majority of 8 of 9 the blind "
+        "cells read 34% and the others 97%.\n\n"
+        "**SO THE CLAIM IS THE NARROW ONE: THE POPULATION'S VOTE SWINGS FROM 6% "
+        "TO 100% BETWEEN TWO PORTS AT THE SAME MARGIN, AND NO GOLDEN-FREE "
+        "FEATURE MEASURED HERE TELLS THEM APART.** Blindness is not that "
+        "feature -- it is confounded with the port. A pipeline that hands an "
+        "editor the population's vote on a blind cell is handing it something "
+        "whose reliability it cannot estimate, and on the port carrying two "
+        "thirds of this residue the vote is inverted.\n\n"
+        "**INTEGRITY: NOT A DECODE DEFECT ON ONE PORT**, which is the shape "
+        "eight counting-shaped defects on this plan have had. Where all nine "
+        "designs agree, the reference agrees on `biu_read` **97.63%** of "
+        "40,867 unanimous cells -- alongside `tag_we` at 97.62% and "
+        "`saved_addr` at 98.27%, against 99.10% overall. The port is read "
+        "correctly; the 6% is the population being wrong.\n\n"
+        "**WHAT IT DOES NOT SAY.** It does not say the disagreement is useless "
+        "evidence: at most one side of a split can be right, and that is true "
+        "whatever the counts do. It says the COUNTS cannot pick the side, so an "
+        "editor handed them has to adjudicate from the specification -- and any "
+        "instrument that resolves a blind cell by majority is, on this "
+        "corpus's dominant blind port, wrong two times in three."
+    )

@@ -2570,3 +2570,52 @@ def test_the_ratio_was_not_allowed_to_be_the_headline():
     flat = " ".join(t.split())
     assert "these add 326 more" in flat
     assert "a suite can always be made to look less blind by adding testpoints it happens to catch" in flat
+
+
+def test_the_population_vote_points_the_wrong_way_on_the_named_cells():
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "**20 times = 33%**" in flat
+    assert "the vote there points the WRONG WAY" in flat
+
+
+def test_the_blindness_version_of_the_effect_is_refused_as_confounded():
+    """The tidy 33%-against-95% headline is port composition. If this text ever
+    stops saying so, the finding has become the overclaim it was written to
+    avoid."""
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "**That 62-point separation is PORT COMPOSITION and must not be quoted" in flat
+    assert "130 of 187 `burst`, whose majority is right 130 of 130" in flat
+
+
+def test_the_effect_reverses_between_two_ports():
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "**3/47 =  6%**" in " ".join(t.split("\n"))  # table row, spacing kept
+    assert "6%" in flat and "100%" in flat
+    assert "SWINGS FROM 6% TO 100% BETWEEN TWO PORTS AT THE SAME MARGIN" in flat
+    assert "Blindness is not that feature" in flat
+
+
+def test_the_margin_does_not_rescue_the_vote():
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "at a majority of 8 of 9 the blind cells read 34% and the others 97%" in flat
+
+
+def test_the_decode_integrity_check_travels_with_the_six_percent():
+    """A port-specific decode defect produces exactly this shape, so the figure
+    is not quotable without the unanimity check beside it."""
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "NOT A DECODE DEFECT ON ONE PORT" in flat
+    assert "**97.63%**" in flat
+    assert "the 6% is the population being wrong" in flat
+
+
+def test_the_disagreement_itself_is_not_written_off():
+    t = ensemble.the_population_vote_is_inverted_on_one_port_and_perfect_on_another()
+    flat = " ".join(t.split())
+    assert "at most one side of a split can be right" in flat
+    assert "It says the COUNTS cannot pick the side" in flat
