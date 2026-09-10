@@ -2753,3 +2753,41 @@ def test_independently_written_is_priced():
     flat = " ".join(t.split())
     assert "produced five opinions where the checks are blind" in flat
     assert "a bloc of five wearing the authority of nine" in flat
+
+
+def test_the_seventh_run_drove_the_design_away():
+    t = ensemble.unscored_evidence_does_not_move_an_editor()
+    flat = " ".join(t.split())
+    assert "**214 of 348**" in flat
+    assert "PRE-REGISTERED `> 160` BAND: THE RUN DROVE THE DESIGN AWAY" in flat
+
+
+def test_the_editor_did_not_use_the_corrected_report():
+    t = ensemble.unscored_evidence_does_not_move_an_editor()
+    flat = " ".join(t.split())
+    assert "**ADOPTED the leading reading at 1**" in flat
+    assert "**KEPT its own value at 96**" in flat
+    assert "it is the editor's check-driven structural edits, with the report inert" in flat
+
+
+def test_the_over_claim_is_retracted_in_the_finding_itself():
+    """I called 91-of-97 the strongest lever on the plan before running it. If
+    this text ever stops saying that was an over-claim, the retraction is lost."""
+    t = ensemble.unscored_evidence_does_not_move_an_editor()
+    flat = " ".join(t.split())
+    assert "**That was an over-claim.**" in flat
+    assert "an editor cannot change a cell" in flat.lower()
+
+
+def test_the_better_report_was_used_less_not_more():
+    t = ensemble.unscored_evidence_does_not_move_an_editor()
+    flat = " ".join(t.split())
+    assert "the report built to fix run 6's defects was used LESS, not more" in flat
+    assert "An editor optimises what is scored" in flat
+
+
+def test_the_untested_option_is_named_without_being_claimed():
+    t = ensemble.unscored_evidence_does_not_move_an_editor()
+    flat = " ".join(t.split())
+    assert "putting the de-duplicated disagreement IN THE LATCH" in flat
+    assert "This finding does not claim that would work" in flat

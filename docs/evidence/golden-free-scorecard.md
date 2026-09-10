@@ -822,6 +822,64 @@ where the checks are blind. Every majority figure on this page is a bloc of five
 wearing the authority of nine, and every population-widening result should be
 read against that.
 
+## 9l. The seventh graded run — unscored evidence does not move an editor
+
+§9k explained why §9i's arm could not have worked: it named the first split of
+each blind testpoint (where every rule ties at 38%, ceiling included) and
+reported raw nine-design counts over a population holding five readings. This
+arm rebuilt the artifact to remove both defects — 97 cells on 54 fully-blind
+testpoints, chosen because the *start design* disagrees with the reading held by
+the most distinct implementations, readings merged by value, the bloc named as a
+bloc. Selection golden-free throughout; 97 of 97 re-derived from traces, 0
+mismatches. Bands fixed in `PREREG_DIS2.md` before dispatch.
+
+| | run 5 | run 6 | **run 7** |
+|---|---|---|---|
+| objections at rest | 0/169 | 1/169 | **5/169** |
+| trials spent | 21 | 5 | **12 of 21** |
+| **testpoints differing** | 151 | 146 | **214 of 348 (61%)** |
+| grade | `DIFFERS` | `DIFFERS` | **`DIFFERS`** |
+
+**214 is the pre-registered `> 160` band: the run drove the design away.** Pins
+all green in the same process.
+
+| group | n | run 6 | run 7 | change |
+|---|---|---|---|---|
+| **NAMED by the report** | 54 | 48 = 89% | **53 = 98%** | **+5 worse** |
+| unnamed, fully blind | 16 | 13 = 81% | 13 = 81% | 0 |
+| **not fully blind** | 278 | 85 = 31% | **148 = 53%** | **+63 worse** |
+
+### The editor did not use the report
+
+Re-read on the accepted design, the 97 named cells show it **adopted the leading
+reading at 1** and **kept its own value at 96**. So the +63 is not the advice
+going wrong — it is the editor's check-driven structural edits, with the report
+inert. The worst output is `first_hit_ack` at 963 differing cells, a port the
+report never names.
+
+### The calibration was right and my inference from it was wrong
+
+Before the run I measured that changing exactly those cells to the leading
+reading fixes 91 of 97, and called it the strongest lever on this plan. **That
+was an over-claim.** 91-of-97 is a true statement about *cells*, and **an editor
+cannot change a cell** — it changes RTL, and every structural edit moves
+thousands of cells at once. A per-cell counterfactual does not transfer to an
+agent whose only instrument is a structural edit.
+
+### What the two runs show together
+
+Run 6's editor judged 59 of 60 cells already fine; run 7's adopted 1 of 97 — the
+report built to fix run 6's defects was used **less**, not more. The common cause
+is in the brief both carried: *the checks remain the latch and
+`checks_objecting` is the number you drive down; the disagreements are not scored
+and nothing counts them.* **An editor optimises what is scored.** Unscored
+evidence, however accurate and however well aimed, does not move it.
+
+**So the next thing to try is not a better report** — it is putting the
+de-duplicated disagreement *in the latch*, which is golden-free and has never
+been run. Nothing here claims that would work; it is named as the untested
+option, and what is closed is handing an editor unscored evidence.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

@@ -5157,3 +5157,62 @@ def the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote() -> st
         "a bloc of five wearing the authority of nine, and every 'widening the "
         "population' result should be read against that."
     )
+
+
+def unscored_evidence_does_not_move_an_editor() -> str:
+    """The seventh graded run, and a CORRECTION to my own reasoning that
+    preceded it.
+
+    The sixth run's disagreement report failed for two measured reasons: it named
+    the first split of each blind testpoint (where every rule over the population
+    ties at 38%, ceiling included) and it reported raw nine-design counts over a
+    population that holds only five distinct readings. This arm rebuilt the
+    artifact to remove both, and pre-registered the bands in `PREREG_DIS2.md`
+    before dispatch.
+    """
+    return (
+        "**THE CORRECTED ARTIFACT.** 97 cells on 54 fully-blind testpoints, "
+        "chosen because THE START DESIGN disagrees with the reading held by the "
+        "most DISTINCT implementations, with readings merged by value and the "
+        "bloc named as a bloc. Selection golden-free at every step; integrity "
+        "97 of 97 re-derived from traces, 0 mismatches.\n\n"
+        "                        run 5     run 6    **run 7**\n"
+        "    objections at rest   0/169     1/169    **5/169**\n"
+        "    trials spent         21        5        **12 of 21**\n"
+        "    **testpoints differing** 151   146      **214 of 348**\n"
+        "    grade                DIFFERS   DIFFERS  **DIFFERS**\n\n"
+        "**214 IS THE PRE-REGISTERED `> 160` BAND: THE RUN DROVE THE DESIGN "
+        "AWAY.** All three pins green in the same process.\n\n"
+        "    group                  n     run 6        run 7      change\n"
+        "      **NAMED**            54   48 = 89%   **53 = 98%**  **+5 WORSE**\n"
+        "      UNNAMED fully blind  16   13 = 81%     13 = 81%      0\n"
+        "      **not fully blind** 278   85 = 31%  **148 = 53%**  **+63 WORSE**\n\n"
+        "**AND THE EDITOR DID NOT USE THE REPORT.** Re-read on the accepted "
+        "design, the 97 named cells show it **ADOPTED the leading reading at 1**, "
+        "and **KEPT its own value at 96**. So the +63 is not the advice going "
+        "wrong -- it is the editor's check-driven structural edits, with the "
+        "report inert. The worst output is `first_hit_ack` at 963 differing "
+        "cells, a port the report never names.\n\n"
+        "**MY INFERENCE WAS WRONG AND THE CALIBRATION WAS NOT.** Before the run "
+        "I measured that changing exactly those cells to the leading reading "
+        "fixes 91 of 97, and called it *the strongest lever measured on this "
+        "plan*. **That was an over-claim.** 91-of-97 is a true statement about "
+        "CELLS, and **an editor cannot change a cell** -- it changes RTL, and "
+        "every structural edit moves thousands of cells at once. A per-cell "
+        "counterfactual does not transfer to an agent whose only instrument is a "
+        "structural edit.\n\n"
+        "**WHAT TWO RUNS SHOW TOGETHER, AND IT IS THE USABLE PART.** Run 6's "
+        "editor judged 59 of 60 cells already fine; run 7's adopted 1 of 97 -- "
+        "**the report built to fix run 6's defects was used LESS, not more.** The "
+        "common cause is in the brief both carried: *the checks remain the latch "
+        "and `checks_objecting` is the number you drive down; the disagreements "
+        "are not scored and nothing counts them.* **An editor optimises what is "
+        "scored.** Unscored evidence, however accurate and however well aimed, "
+        "does not move it -- which is repE's finding about UNTARGETED advice, "
+        "now measured on advice that was targeted, verified and 93% accurate.\n\n"
+        "**SO THE NEXT THING TO TRY IS NOT A BETTER REPORT.** It is putting the "
+        "de-duplicated disagreement IN THE LATCH, which is golden-free and has "
+        "never been run. This finding does not claim that would work; it "
+        "identifies it as the untested option and closes handing an editor "
+        "unscored evidence."
+    )
