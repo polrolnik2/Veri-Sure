@@ -339,8 +339,22 @@ the one endorsed golden-free selection knob has an accept side dominated by
 silence. What this does NOT say is that the 96 are useless -- three checks that
 caught a held-out design convict none of the thirteen candidates.
 `the_set_holds_far_fewer_opinions_than_checks` carries it, including the
-golden-free authoring target it opens: score a new check on whether its verdict
+golden-free authoring target it opened: score a new check on whether its verdict
 vector is NEW.
+
+AND THAT TARGET IS SHUT BY THE NEXT MEASUREMENT, WHICH IS THE CLOSURE AT THE LEVEL
+BLINDNESS ACTUALLY LIVES AT. Of 640 corpus bodies, 349 hold a vector the set does
+not; 285 of those say something about the population; 19 survive the minority
+rule -- and **all 19 convict the reference**. The contrast is exact because both
+halves are measured on the same corpus and population: the 53 ever-objecting
+opinions already IN the set have an audit of ZERO, the 19 new ones have an audit
+of NINETEEN. **The set already contains every sound opinion this corpus holds**,
+which is strictly stronger than the earlier closure -- not that no sound check is
+missing, but that no sound OPINION is. It also puts a number on the minority
+rule's defect: 97% accept-side precision over the corpus, **0 of 19** once mute
+bodies are excluded.
+`every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference`
+carries it.
 """
 from __future__ import annotations
 
@@ -6299,4 +6313,66 @@ def the_set_holds_far_fewer_opinions_than_checks() -> str:
         "duplicate rate by construction. Whether authoring against that target "
         "produces adequate checks is unmeasured, and this plan's authoring rounds "
         "have a 3-5% base rate that nothing has moved."
+    )
+
+
+def every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference() -> str:
+    """THE CLOSURE AT THE LEVEL OF OPINION, WHICH IS THE LEVEL BLINDNESS LIVES AT
+    -- and it shuts the novelty lever this module opened one finding ago.
+
+    The corpus closure asked whether a SOUND body is missing that CATCHES a graded
+    design: none of 640 is. That does not close selection at the level of OPINION.
+    A body can hold a verdict vector the set does not hold -- a genuinely new thing
+    to say about the population -- without catching the particular designs that
+    closure tested, and blindness is closed by new opinions rather than by catches.
+
+    Three filters, all reference-free, applied in order to every corpus body
+    outside the set: its vector is NOT one of the 77 the set holds; it EVER
+    OBJECTS on the nine (a mute vector closes no cell); and it convicts at most 2
+    of the nine, the minority rule. The audit runs last and selects nothing.
+    """
+    return (
+        "    640 corpus bodies, 169 in the set, 77 vectors held\n"
+        "      outside the set with a NEW vector          349\n"
+        "      of those, EVER OBJECT on the nine          285\n"
+        "      of those, passing the minority rule         19\n"
+        "      *audit: convict the reference*           **19 of 19**\n\n"
+        "**EVERY ONE OF THE NINETEEN CONVICTS THE REFERENCE. NOT ONE IS SOUND.** "
+        "The corpus holds 349 opinions the set does not, 285 of them say something "
+        "about the population, and every single one that survives the golden-free "
+        "soundness filter is over-strict. They span 9 requirements, 5 of them new "
+        "to the set, and adding any would break the audit-zero property that "
+        "`soundness_is_what_makes_the_criterion_work` measures as the whole "
+        "difference between a criterion that discriminates and one that does "
+        "not.\n\n"
+        "**AND THE CONTRAST IS EXACT, BECAUSE BOTH HALVES ARE MEASURED ON THE SAME "
+        "CORPUS AND THE SAME POPULATION.**\n\n"
+        "    ever-objecting opinions        n     audit\n"
+        "      ALREADY IN the set          53     **0**\n"
+        "      NEW, passing the minority   19    **19**\n\n"
+        "**THE SET ALREADY CONTAINS EVERY SOUND OPINION THIS CORPUS HOLDS.** That "
+        "is the vector-level form of the corpus closure and it is strictly "
+        "stronger: not merely that no sound check is missing, but that no sound "
+        "OPINION is missing, and the 349 that do exist are mute, over-strict, or "
+        "both.\n\n"
+        "**IT ALSO KILLS THE LEVER THIS MODULE PROPOSED IMMEDIATELY BEFORE IT.** "
+        "`the_set_holds_far_fewer_opinions_than_checks` ends by proposing that a "
+        "candidate check be scored on whether its verdict vector is NEW -- "
+        "mechanical, reference-free, and rejecting the 48% duplicate rate by "
+        "construction. **Applied to the 640 bodies that already exist, that "
+        "target selects 19 checks and every one of them is unsound.** Novelty is "
+        "a real property and it is not a soundness-preserving one; scoring on it "
+        "would have bought exactly the checks the audit forbids.\n\n"
+        "**AND IT SHARPENS THE MINORITY RULE'S DEFECT FROM 'DOMINATED BY SILENCE' "
+        "TO A NUMBER.** Over the corpus the rule spares the reference 105 times in "
+        "108 -- 97%. Restricted to bodies that actually SAY something and say "
+        "something new, it spares it **0 times in 19**. **The rule's accept-side "
+        "precision is carried entirely by checks that convict nothing**, and "
+        "strip the silence away and it is not 97% but zero.\n\n"
+        "**WHAT REMAINS OPEN, STATED NARROWLY.** This is 640 authored bodies, one "
+        "specification, one nine-design population. A sixteenth design could make "
+        "a currently-mute vector object, and three checks on this plan already did "
+        "exactly that. What is closed is SELECTION over what exists: there is "
+        "nothing sound left in the corpus to select, at the level of catches or of "
+        "opinions."
     )

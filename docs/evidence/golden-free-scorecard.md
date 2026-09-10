@@ -1803,15 +1803,62 @@ sixteenth. What is established is narrower and still large: **the 96 contribute
 nothing to any golden-free instrument built on this population, they inflate every
 span figure here by thirty points, and the endorsed selection rule prefers them.**
 
-### The lever this opens — the first aimed at blindness rather than coverage
+### The lever this opens — and §9aa shuts it
 
 Every authoring round in §9 scored a new check on which requirement it cites, or
 on the sound-and-discriminating pair. **Neither notices that 21 checks can share
 one vector.** Score a candidate on whether its **verdict vector is new** —
 computable over the population with no reference, mechanical, and it rejects the
-48% duplicate rate by construction. Whether authoring against that target produces
-*adequate* checks is unmeasured, and §9's authoring rounds have a 3–5% base rate
-that nothing has moved.
+48% duplicate rate by construction.
+
+**That target was then applied to the 640 bodies that already exist, and it
+selects 19 checks of which all 19 convict the reference — see §9aa.** Novelty is a
+real property and it is not a soundness-preserving one.
+
+## 9aa. Every new opinion the corpus holds is bought by convicting the reference
+
+§9q closed the corpus at the level of *catches*: no sound body is missing that
+objects to a graded design. That does not close it at the level of **opinion** — a
+body can hold a vector the set lacks without catching those particular designs,
+and **blindness is closed by new opinions, not by catches.**
+
+Three reference-free filters, applied in order to every corpus body outside the
+set; the audit runs last and selects nothing.
+
+| 640 corpus bodies, 169 in the set, 77 vectors held | |
+|---|---|
+| outside the set with a **new** vector | 349 |
+| of those, **ever object** on the nine | 285 |
+| of those, passing the **minority rule** | **19** |
+| *audit: convict the reference* | ***19 of 19*** |
+
+**Not one is sound.** They span 9 requirements, 5 new to the set, and adding any
+would break the audit-zero property that §8 measures as the whole difference
+between a criterion that discriminates and one that does not.
+
+### The contrast is exact — same corpus, same population
+
+| ever-objecting opinions | n | *audit* |
+|---|---|---|
+| already **in** the set | 53 | ***0*** |
+| **new**, passing the minority rule | 19 | ***19*** |
+
+**The set already contains every sound opinion this corpus holds.** That is
+strictly stronger than §9q: not merely that no sound *check* is missing, but that
+no sound *opinion* is, and the 349 that exist are mute, over-strict, or both.
+
+### And it puts a number on the minority rule's defect
+
+Over the corpus the rule spares the reference **105 times in 108 — 97%**.
+Restricted to bodies that actually *say* something and say something *new*, it
+spares it **0 times in 19**. **Its accept-side precision is carried entirely by
+checks that convict nothing.** Strip the silence away and it is not 97% but zero.
+
+**What stays open, narrowly.** 640 bodies, one specification, one nine-design
+population. A sixteenth design could make a currently-mute vector object — three
+checks in §9 did exactly that. What is closed is **selection over what exists**:
+there is nothing sound left in this corpus to select, at the level of catches or
+of opinions.
 
 ## 10. The bottom line
 

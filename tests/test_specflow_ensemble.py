@@ -3562,3 +3562,49 @@ def test_the_opinion_count_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_set_holds_far_fewer_opinions_than_checks" in flat
     assert "96 that never object on any of the fifteen" in flat
+
+
+def test_every_new_opinion_in_the_corpus_is_unsound():
+    t = ensemble.every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference()
+    flat = " ".join(t.split())
+    assert "EVERY ONE OF THE NINETEEN CONVICTS THE REFERENCE. NOT ONE IS SOUND." in flat
+    assert "349 opinions the set does not" in flat
+
+
+def test_the_in_set_versus_new_contrast_is_exact():
+    t = ensemble.every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference()
+    flat = " ".join(t.split())
+    assert "ALREADY IN the set 53 **0**" in flat
+    assert "NEW, passing the minority 19 **19**" in flat
+    assert "THE SET ALREADY CONTAINS EVERY SOUND OPINION THIS CORPUS HOLDS" in flat
+
+
+def test_the_novelty_lever_is_killed_by_its_own_successor():
+    """The finding immediately before this one proposed scoring on vector
+    novelty. Applied to the bodies that exist, it selects 19 unsound checks."""
+    t = ensemble.every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference()
+    flat = " ".join(t.split())
+    assert "KILLS THE LEVER THIS MODULE PROPOSED IMMEDIATELY BEFORE IT" in flat
+    assert "selects 19 checks and every one of them is unsound" in flat
+    assert "Novelty is a real property and it is not a soundness-preserving one" in flat
+
+
+def test_the_minority_rule_accept_precision_is_zero_once_silence_is_removed():
+    t = ensemble.every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference()
+    flat = " ".join(t.split())
+    assert "spares the reference 105 times in 108 -- 97%" in flat
+    assert "it spares it **0 times in 19**" in flat
+    assert "carried entirely by checks that convict nothing" in flat
+
+
+def test_the_vector_closure_names_what_stays_open():
+    t = ensemble.every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference()
+    flat = " ".join(t.split())
+    assert "A sixteenth design could make a currently-mute vector object" in flat
+    assert "What is closed is SELECTION over what exists" in flat
+
+
+def test_the_vector_closure_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference" in flat
+    assert "all 19 convict the reference" in flat
