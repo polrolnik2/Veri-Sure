@@ -1843,9 +1843,19 @@ between a criterion that discriminates and one that does not.
 | already **in** the set | 53 | ***0*** |
 | **new**, passing the minority rule | 19 | ***19*** |
 
-**The set already contains every sound opinion this corpus holds.** That is
-strictly stronger than §9q: not merely that no sound *check* is missing, but that
-no sound *opinion* is, and the 349 that exist are mute, over-strict, or both.
+**The set already contains every sound opinion this corpus holds** — *against a
+population of nine designs.* That is strictly stronger than §9q: not merely that
+no sound *check* is missing, but that no sound *opinion* is, and the 349 that
+exist are mute, over-strict, or both.
+
+> **AMENDED BY §9ab, WITHIN THE HOUR, AND THE UNQUALIFIED FORM WAS MINE.** I wrote
+> that sentence without the nine-design qualifier, and §9ab measures it against
+> **29** designs — every one this pipeline has produced. It finds **one** sound
+> opinion the nine could not see. So the claim holds as a statement about this
+> population and is false as a statement about the corpus, which is exactly the
+> caveat the paragraph below names and did not carry up into the headline. The
+> superseded wording is kept because the correction is one check wide and the
+> reading barely moves.
 
 ### And it puts a number on the minority rule's defect
 
@@ -1858,7 +1868,114 @@ checks that convict nothing.** Strip the silence away and it is not 97% but zero
 population. A sixteenth design could make a currently-mute vector object — three
 checks in §9 did exactly that. What is closed is **selection over what exists**:
 there is nothing sound left in this corpus to select, at the level of catches or
-of opinions.
+of opinions. ***§9ab tested exactly this sentence against twenty more designs and
+it is right in shape and wrong in the last clause: one sound opinion is left, and
+it saturates.***
+
+## 9ab. Twenty more designs wake one sound opinion, and reveal four points more blindness
+
+§9aa closed the corpus at the level of opinion and named its own limit: *"A
+sixteenth design could make a currently-mute vector object."* **There are twenty**
+— every editor run this plan drove to its own stopping point, each with a complete
+348-testpoint trace set, none of them in the population that every golden-free
+figure here is measured against. §9b says these are the valuable ones: *"whatever
+a set could see was edited out of them."* Pre-registered in
+`docs/evidence/prereg/wide-population.md` before any number was read.
+
+**The population goes 9 → 29.** Seven written independently, twenty-two accepted
+by this criterion or a variant. All 29 are behaviourally distinct, on outputs and
+on outputs-plus-probes alike — which does **not** contradict §9k's *"five
+opinions, not nine"*, measured **at the 812 blind split cells** where five of them
+agree. Distinct over a whole trace and identical where the checks are blind are
+different facts.
+
+**The minority threshold is deliberately NOT scaled or applied across the 29.**
+Twenty of them are edits of one start design, so a check catching that design's
+defect would convict every descendant and be rejected as over-strict — the rule's
+premise inverted by correlation, discarding exactly the checks worth having. It
+stays at `convicts ≤ 2` over the nine it was calibrated on; the widened population
+supplies only the legs that detect a *new opinion*.
+
+### Q1 — the closure was population-limited, by one check
+
+| | nine designs | **29 designs** |
+|---|---|---|
+| vectors the set holds | 77 | 86 |
+| outside the set with a **new** vector | 349 | 350 |
+| of those, **ever object** | 285 | 287 |
+| of those, passing the **minority rule** | 19 | **21** |
+| *audit: convict the reference* | *19* | *19* |
+| **spare the reference** | **0** | **2** |
+| of those, **sound by silence** — decide **nothing** on the reference | — | **1** |
+| **GENUINELY SOUND** | **0** | **1** |
+
+Both extra survivors are mute on the nine and object only on the twenty, so the
+widening is what found them. **One is real and one is not**, and the one that is
+not reproduces §9aa's own finding one level down: `REQ-0006.off` decides **0 of
+348** testpoints on the reference, so "spares the reference" is silence, not
+soundness. Counting it would be the exact defect §9aa measured.
+
+The survivor that stands is `R2::REQ-0008@saved_addr` — **decides 329 of 348 on
+the reference and objects nowhere on it**, convicts 2 of 29, and **catches a
+graded design** (N2, wrong on 220 of 348). It is a genuine both-cell check for a
+requirement the set does not cover.
+
+**The nine-design legs are PINNED to §9aa — 77 / 349 / 285 / 19, reproduced
+exactly — or the run refuses.** The first version of the script disagreed (85 /
+466) because it omitted `novelvec.py`'s fourth filter: a body reading **no real
+declared output** cannot close a blind cell and must be dropped. 640 bodies became
+502. That is the twelfth counting-shaped defect on this plan and it was caught by
+the disagreement with a prior measurement, not by the headline looking wrong.
+
+### And it saturates at one, which is what closes the lever
+
+Sound survivors against population size, several random subsets per size, the
+audit and the silence check run once over the union of every survivor any subset
+produces:
+
+| designs | 9 | 12 | 15 | 18 | 21 | 24 | 27 | 29 |
+|---|---|---|---|---|---|---|---|---|
+| survivors | 19 | 19.4 | 20.0 | 20.6 | 20.6 | 21 | 21 | 21 |
+| **SOUND survivors** | **0** | 0.2 | 0.5 | 0.8 | 0.6 | **1** | **1** | **1** |
+
+**The union of survivors over every subset is 21 bodies, of which exactly ONE is
+sound.** So this is not a rate that keeps paying — it is a one-off, flat by 24
+designs, in the same shape as §9b's blindness *estimate* saturating at four.
+**Widening the population is not a lever.**
+
+### Q2 — and blindness rises, exactly as §9b's mechanism predicts
+
+Pre-registered direction, and it is confirmed. §9b's unit — the (pair, testpoint)
+cell — **pinned to its published 55.1% or the run refuses**:
+
+| population | mixed | one-bit |
+|---|---|---|
+| the nine (every figure on this page) | **55.1%** *(pin)* | 55.9% |
+| **all 29 the pipeline actually made** | **59.4%** | **61.2%** |
+
+**So 55.1% was optimistic**, because the population held only two loop-accepted
+designs where the pipeline produces them by the dozen. Per-pair spread over the
+29: min 0.0%, median 69.6%, max 100.0%, with **13 of 405 pairs reading zero** —
+the clean-sheet hazard §9b flags, now at scale.
+
+### The two halves move apart, and that is the result
+
+| | |
+|---|---|
+| blindness the wider population **reveals** | 55.1% → 59.4%, **+4.3 points** |
+| blind cells the one sound opinion **closes** | **78 of 41,998 = 0.19%** |
+| the same check, on the nine | **0** — it is mute there |
+
+**The population that finds the residue and the corpus that would close it scale
+apart by a factor of twenty-two.** Every design added shows the set more it cannot
+see and supplies almost nothing sound to see it with. That is the strongest form
+the closure has taken: not that the corpus is exhausted against one population,
+but that **enlarging the population makes the gap wider, not narrower.**
+
+**What this does not do.** It does not raise the graded score — equivalence is
+unmet at **146 of 348** on the best of five draws and nothing here touches that.
+One check that catches the *worst* graded draw and not the best is a correction to
+a closure, not progress toward equivalence.
 
 ## 10. The bottom line
 

@@ -355,6 +355,19 @@ rule's defect: 97% accept-side precision over the corpus, **0 of 19** once mute
 bodies are excluded.
 `every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference`
 carries it.
+
+AND THAT CLOSURE IS AMENDED BY THE NEXT MEASUREMENT, WHICH TESTS ITS OWN NAMED
+CAVEAT. It said a sixteenth design could wake a mute vector; there are twenty --
+every editor run this plan drove to a stopping point, none of them in the
+population. Widening 9 -> 29 takes the survivors 19 -> 21, and of the two extra
+one is sound by silence (it decides NOTHING on the reference) and one is real.
+So the corpus holds exactly ONE sound opinion nine designs could not see, and it
+saturates by 24 designs -- a one-off, not a lever. Meanwhile blindness rises
+55.1% -> 59.4%, and the one sound opinion closes 78 of 41,998 blind cells. THE
+POPULATION THAT FINDS THE RESIDUE AND THE CORPUS THAT WOULD CLOSE IT SCALE APART
+BY A FACTOR OF TWENTY-TWO.
+`widening_the_population_reveals_more_blindness_than_the_corpus_can_close`
+carries it.
 """
 from __future__ import annotations
 
@@ -6375,4 +6388,72 @@ def every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference() -
         "exactly that. What is closed is SELECTION over what exists: there is "
         "nothing sound left in the corpus to select, at the level of catches or of "
         "opinions."
+    )
+
+
+def widening_the_population_reveals_more_blindness_than_the_corpus_can_close() -> str:
+    """THE CLOSURE'S OWN CAVEAT, TESTED -- and it costs one check and buys four
+    points of newly visible blindness.
+
+    `every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference`
+    closed the corpus at the level of opinion against NINE designs, and named its
+    limit in as many words: a sixteenth design could make a currently-mute vector
+    object. Twenty exist -- every editor run driven to its own stopping point,
+    each with a complete trace set, none of them in the population that every
+    golden-free figure is measured against. The blindness finding says these are
+    the valuable ones, because whatever the set could see was edited out of them.
+
+    Pre-registered before any number was read, including the one decision that
+    could have been made to fit the answer: the minority threshold is NOT scaled
+    to the widened population and NOT applied across it. Twenty of the twenty-nine
+    are edits of one start design, so a check catching that design's defect would
+    convict every descendant and read as over-strict -- the rule's premise
+    inverted by correlation. It stays on the nine it was calibrated on.
+    """
+    return (
+        "**THE CLOSURE WAS POPULATION-LIMITED, BY EXACTLY ONE CHECK.**\n\n"
+        "    population                       9        29\n"
+        "      new vector, outside the set  349       350\n"
+        "      of those, ever object        285       287\n"
+        "      of those, minority rule       19    **21**\n"
+        "      *audit: convict reference*    19        19\n"
+        "      **spare the reference**        0     **2**\n"
+        "      of those, SOUND BY SILENCE     -     **1**\n"
+        "      **genuinely sound**            0     **1**\n\n"
+        "Both extra survivors are mute on the nine and object only on the twenty, "
+        "so the widening is what found them -- and **one of the two is not sound, "
+        "it is silent**: it decides 0 of 348 testpoints on the reference, so "
+        "'spares the reference' is silence. Counting it would reproduce, one level "
+        "down, the very defect the previous finding measured. The one that stands "
+        "decides 329 of 348 on the reference, objects nowhere on it, and catches a "
+        "graded design.\n\n"
+        "**AND IT SATURATES, WHICH IS WHAT CLOSES THE LEVER.** Sound survivors "
+        "against population size, over several random subsets per size:\n\n"
+        "    designs    9    12    15    18    21    24    27    29\n"
+        "    sound      0   0.2   0.5   0.8   0.6     1     1     1\n\n"
+        "The union of survivors over EVERY subset is 21 bodies, of which exactly "
+        "one is sound. So this is not a rate that keeps paying as designs are "
+        "added -- it is a one-off, flat by 24, in the same shape as the blindness "
+        "ESTIMATE saturating at four designs. **Widening the population is not a "
+        "lever.**\n\n"
+        "**AND THE BLINDNESS IT REVEALS RISES, WHICH WAS THE PRE-REGISTERED "
+        "DIRECTION.** In the (pair, testpoint) cell, pinned to the published "
+        "nine-design figure or the run refuses:\n\n"
+        "    population                      mixed    one-bit\n"
+        "      the nine                       55.1%      55.9%\n"
+        "      **all 29 the pipeline made**   59.4%      61.2%\n\n"
+        "So 55.1% was optimistic, because that population held two loop-accepted "
+        "designs where the pipeline produces them by the dozen.\n\n"
+        "**THE TWO HALVES MOVE APART, AND THAT IS THE RESULT.** The wider "
+        "population REVEALS 4.3 points more blindness; the one sound opinion the "
+        "corpus holds CLOSES 78 of 41,998 blind cells, 0.19%, and closes zero on "
+        "the nine because it is mute there. **The population that finds the "
+        "residue and the corpus that would close it scale apart by a factor of "
+        "twenty-two.** That is the strongest form the closure has taken: not that "
+        "the corpus is exhausted against one population, but that enlarging the "
+        "population makes the gap WIDER.\n\n"
+        "**WHAT IT DOES NOT DO.** It does not raise the graded score. Equivalence "
+        "is unmet at 146 of 348 on the best of five draws, the one sound check "
+        "catches the WORST of those draws and not the best, and a correction to a "
+        "closure is not progress toward equivalence."
     )

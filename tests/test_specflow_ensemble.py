@@ -3608,3 +3608,65 @@ def test_the_vector_closure_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference" in flat
     assert "all 19 convict the reference" in flat
+
+
+def test_widening_names_the_one_sound_opinion_and_refuses_to_round_it_up():
+    """One of the two survivors is silent, not sound, and the text must say so.
+
+    Reporting "2 sound" would reproduce, one level down, the defect the previous
+    finding measured -- an accept side carried by checks that convict nothing.
+    """
+    t = ensemble.widening_the_population_reveals_more_blindness_than_the_corpus_can_close()
+    assert "SOUND BY SILENCE" in t
+    assert "genuinely sound" in t
+    assert "0 of 348" in t
+    assert "one of the two is not sound, it is silent" in t.replace("**", "")
+
+
+def test_widening_reports_the_saturation_curve_not_a_single_point():
+    """A one-off and a rate are different claims; only the curve separates them."""
+    t = ensemble.widening_the_population_reveals_more_blindness_than_the_corpus_can_close()
+    for k in ("9    12    15    18    21    24    27    29", "0   0.2   0.5"):
+        assert k in t
+    assert "saturat" in t.lower()
+    #: exact, not a disjunction of guesses -- a test that can pass several ways
+    #: pins nothing, which is the lesson this plan records for its own scorers
+    assert "**Widening the population is not a lever.**" in t
+
+
+def test_widening_keeps_the_minority_threshold_off_the_widened_population():
+    """The correlation hazard is the one decision that could have been made to fit
+    the answer, so the finding has to state that it was fixed in advance."""
+    t = ensemble.widening_the_population_reveals_more_blindness_than_the_corpus_can_close.__doc__
+    assert "NOT scaled" in t
+    assert "one start design" in t
+    assert "inverted by correlation" in t
+
+
+def test_widening_reports_blindness_both_ways_and_the_gap_between_them():
+    """Revealed and closed are the pair; either alone is the half-report this
+    plan has retracted headlines for."""
+    t = ensemble.widening_the_population_reveals_more_blindness_than_the_corpus_can_close()
+    assert "55.1%" in t and "59.4%" in t
+    assert "78 of 41,998" in t
+    assert "twenty-two" in t
+    assert "one-bit" in t and "61.2%" in t
+
+
+def test_widening_does_not_claim_progress_toward_equivalence():
+    t = ensemble.widening_the_population_reveals_more_blindness_than_the_corpus_can_close()
+    assert "146 of 348" in t
+    assert "not raise the graded score" in t
+    assert "WORST of those draws and not the best" in t
+
+
+def test_widening_is_named_in_the_module_docstring():
+    assert ("widening_the_population_reveals_more_blindness_than_the_corpus_can_close"
+            in ensemble.__doc__)
+
+
+def test_the_earlier_closure_now_carries_its_population_qualifier():
+    """The unqualified claim is false against 29 designs and had to be amended."""
+    t = ensemble.__doc__
+    assert "exactly ONE sound opinion nine designs could not see" in t
+    assert "one is sound by silence" in t
