@@ -1315,6 +1315,41 @@ here shows it can.
 closure is exact — the counters are on disk. The ordering correlations are n = 4
 and are shape, not significance.
 
+## 9t. PRE-REGISTERED, and running: is a single graded run a measurement?
+
+*Written and committed before the replicate was dispatched. The outcome is not
+known at the time this section is committed.*
+
+Every graded run on this plan is **n = 1**. §9s reads four grades — 146, 214,
+221, 271 of 348 — as ordered by trials spent, and every one-run comparison in §9
+assumes a single editor session's grade is a measurement. **That has never been
+checked.** The check is the run-6 configuration run a second time.
+
+**Identical, and verified rather than assumed:** start design `gen/L.v` (md5
+`34a7fd66…`, and the fresh loop's `dut.v` is byte-equal to it); the same 169
+checks with **only the checks in the latch**; `disagreements.json` copied
+byte-identical; `MAXTRIALS=21`; the same driver, suite and reference; and a brief
+that differs from run 6's only in three path substitutions, asserted by a diff
+that shows zero other lines. The fresh loop reports **24 objections of 169 at
+init**, which is where run 6 started. What differs is the one thing under test: a
+fresh editor session.
+
+| |R − 146| testpoints | reading, fixed in advance |
+|---|---|
+| **≤ 20** | a single graded run resolves to about ±20. §9s's ordering stands, and so does every one-run comparison in §9 at that resolution |
+| **21 – 50** | adjacent runs are not separable — run 7 at 214 against run 8 at 221 becomes noise — while the extremes are. Every §9 comparison closer than ~50 testpoints must be restated as unresolved |
+| **> 50** | **a single editor session's grade is not a measurement at the resolution this plan reports.** Every one-run comparison in §9, *including §9s's own four-run table*, is under-powered and must carry that caveat, and the trials/grade correlation is withdrawn |
+
+**Two things it cannot do, stated now.** Two samples give a range, not a
+variance: n = 2 bounds nothing tightly, and a replicate landing at 146 is
+consistent with high variance and a lucky draw. And the reading is about the
+GRADE, which is golden-derived — it is a fact about how much a one-run comparison
+can support, not a golden-free result, and it selects nothing.
+
+**The goal's own bar is unchanged:** equivalence. `NO-DIFF-40` on the accepted
+design would meet the finish condition; anything else is `DIFFERS` and is not
+partial credit.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
