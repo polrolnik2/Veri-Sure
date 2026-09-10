@@ -1478,6 +1478,52 @@ Both have the signature the other nine on this plan have: a clean, plausible
 number that flatters the hypothesis under test, invisible in the output, and
 needing a second measurement aimed at the first.
 
+## 9w. The baseline nothing here had drawn — the loop beats one-shot generation
+
+Every graded run in §9 is reported against the *start design*. It has never been
+reported against the only baseline that says whether running the loop was worth
+anything: **what a competent author writes from the same specification in one
+shot.** Seven such designs exist — B, C, D, E, F, G, H, each written from the same
+specification and the same brief by an agent forbidden to open any other design.
+
+| design | testpoints differing from the reference |
+|---|---|
+| C | **151** of 348 |
+| B | 176 |
+| E | 182 |
+| D | 184 |
+| G | 185 |
+| H | 190 |
+| F | 230 |
+| **L — the start design of every graded run** | **279** |
+| **run 6's accepted design** | **146 — better than all seven** |
+
+**Seven independent draws span 151 to 230, mean 185, sd 23.** That is what writing
+this module from this specification costs before any loop runs, and it is the
+number every one-run comparison in §9 should have been read against.
+
+**And the loop took the worst start and beat the best draw.** L is a bad draw —
+279, outside the population's range on the wrong side — and the 169-check
+criterion drove it to **146**, past C's 151. **The best design this plan produced
+is better than any of the seven a competent author wrote from the same
+specification in one shot.** That is the first statement here of what the pipeline
+is *for* that survives its own measurement.
+
+**And it is not equivalence, which is the bar.** 146 of 348 testpoints still
+differ and the miter says `DIFFERS`. A loop that beats one-shot generation and
+does not reach equivalence is a useful loop and an unmet goal, and reporting the
+first without the second is the defect this document has retracted headlines for.
+
+**The other three graded runs did not beat one-shot generation at all** — 214, 221
+and 271 sit inside or above the population's own range. That is the sharpest
+reading available of what their added proxy evidence cost (§9s).
+
+**And it sizes §9t's question.** A generation process with sd 23 makes a
+60-testpoint gap between two runs unremarkable and the four-run spread of 125 only
+about five sd — so the pre-registered ±20 band on the replicate is roughly **one
+generation sd**, which is the right order without having been chosen for that
+reason.
+
 ## 9t. PRE-REGISTERED, and running: is a single graded run a measurement?
 
 *Written and committed before the replicate was dispatched. The outcome is not
@@ -1620,6 +1666,15 @@ how ACTIVE it is on the reference, and check count is very nearly a restatement
 of activity — **Spearman +0.857 against the reference's transitions**, and once
 activity is held fixed the check correlation goes negative on four designs of
 five. **Coverage follows difficulty; it does not overcome it.**
+
+**AND THE LOOP IS WORTH RUNNING, WHICH IS THE ONE POSITIVE THIS DOCUMENT CAN
+STATE ABOUT ITS OWN PRODUCT — §9w.** Seven designs written from this
+specification by independent authors span 151 to 230 differing testpoints, mean
+185, sd 23. The start design of every graded run is a bad draw at 279, and the
+best run drove it to **146 — better than all seven**. So the loop beats one-shot
+generation. **It still does not reach equivalence, and both halves have to be said
+together.** The other three graded runs land at 214, 221 and 271, inside or above
+the population's own range, and did not improve on one-shot generation at all.
 
 **AND THE LOOP DOES NOT WANT MORE ROOM — §9s.** Four graded runs shared a
 21-trial budget and none reached it; each stopped voluntarily with 6 to 16 trials

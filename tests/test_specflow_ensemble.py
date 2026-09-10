@@ -3294,3 +3294,46 @@ def test_the_reach_bound_is_named_in_the_module_docstring():
     flat = " ".join((ensemble.__doc__ or "").split())
     assert "the_width_correction_changes_reporting_and_not_selection" in flat
     assert "the selection sweeps here are not invalidated" in flat
+
+
+def test_the_generation_baseline_is_drawn_and_has_a_spread():
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "SEVEN INDEPENDENT DRAWS FROM ONE SPECIFICATION SPAN 151 TO 230" in flat
+    assert "MEAN 185, SD 23" in flat
+
+
+def test_the_loop_took_the_worst_start_and_beat_the_best_draw():
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "THE LOOP TOOK THE WORST START AND BEAT THE BEST DRAW" in flat
+    assert "drove it to 146, past C's 151" in flat
+
+
+def test_the_positive_is_stated_with_the_bar_it_misses():
+    """A loop that beats one-shot generation and does not reach equivalence is a
+    useful loop and an unmet goal, and both halves have to be said together."""
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "AND IT IS NOT EQUIVALENCE, WHICH IS THE BAR" in flat
+    assert "reporting the first without the second is the defect" in flat
+
+
+def test_the_other_three_runs_did_not_beat_one_shot_generation():
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "214, 221 and 271 are inside or above the population's range" in flat
+    assert "did not improve on one-shot generation at all" in flat
+
+
+def test_the_baseline_sizes_the_replicate_question():
+    t = ensemble.the_loops_best_output_beats_every_independent_draw()
+    flat = " ".join(t.split())
+    assert "makes a 60-testpoint gap between two runs unremarkable" in flat
+    assert "roughly ONE generation sd" in flat
+
+
+def test_the_baseline_is_named_in_the_module_docstring():
+    flat = " ".join((ensemble.__doc__ or "").split())
+    assert "the_loops_best_output_beats_every_independent_draw" in flat
+    assert "**better than all seven**" in flat

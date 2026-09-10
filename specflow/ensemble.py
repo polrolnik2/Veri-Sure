@@ -274,6 +274,17 @@ both were caught before publication: a 35% overlap at the tightest cut that is
 sort order inside 38 tied values, and a clean population of 38 that is 33 checks
 with no one-bit port to be blind on.
 `the_width_correction_changes_reporting_and_not_selection` carries both.
+
+AND WHAT THE PIPELINE PRODUCED HAS A BASELINE AT LAST, WHICH NOTHING HERE HAD
+DRAWN. Seven designs written from the same specification by independent authors
+span 151 to 230 differing testpoints, mean 185, sd 23. The start design of every
+graded run is a bad draw at 279, and the best run drove it to 146 -- **better
+than all seven**. So the loop beats one-shot generation, and it still does not
+reach equivalence, and both halves have to be said together. The other three
+graded runs land at 214, 221 and 271, inside or above the population's own range,
+which is the sharpest reading of what their added proxy evidence cost.
+`the_loops_best_output_beats_every_independent_draw` carries it, including why an
+sd of 23 makes a 60-testpoint gap between two runs unremarkable.
 """
 from __future__ import annotations
 
@@ -5906,4 +5917,58 @@ def the_width_correction_changes_reporting_and_not_selection() -> str:
         "disagreement; the other was an empty denominator masquerading as "
         "cleanliness. Neither was visible in the output; both needed a second "
         "measurement aimed at the first."
+    )
+
+
+def the_loops_best_output_beats_every_independent_draw() -> str:
+    """WHAT THE PIPELINE ACTUALLY PRODUCED, against the only fair baseline -- and
+    the generation-side variance that says what a one-draw figure is worth.
+
+    Seven designs were each written from the SAME specification and the SAME
+    brief by an agent forbidden to open any other design. Their spread is author
+    variance at generation, measured off artifacts already on disk. It is not the
+    replicate's question -- a fresh editor on one design is a different sampling
+    unit -- but it is the baseline the loop's output has to beat to have been
+    worth running at all, and nothing on this plan had ever drawn that line.
+
+    The grade is testpoints differing from the reference on a declared output.
+    It is calibration and selects nothing.
+    """
+    return (
+        "    design                       testpoints differing from the reference\n"
+        "      C                                 151 of 348\n"
+        "      B                                 176\n"
+        "      E                                 182\n"
+        "      D                                 184\n"
+        "      G                                 185\n"
+        "      H                                 190\n"
+        "      F                                 230\n"
+        "      **L, the start design**           **279**\n"
+        "      **run 6's accepted design**       **146 -- better than all seven**\n\n"
+        "**SEVEN INDEPENDENT DRAWS FROM ONE SPECIFICATION SPAN 151 TO 230, MEAN "
+        "185, SD 23.** That is what writing this module from this specification "
+        "costs before any loop runs, and it is the number every one-run "
+        "comparison on this plan should have been read against.\n\n"
+        "**AND THE LOOP TOOK THE WORST START AND BEAT THE BEST DRAW.** L is a bad "
+        "draw -- 279, outside the population's range on the wrong side -- and the "
+        "169-check criterion drove it to 146, past C's 151. **The best design "
+        "this plan produced is better than any of the seven a competent author "
+        "wrote from the same specification in one shot.** That is the first "
+        "statement here of what the pipeline is FOR that survives its own "
+        "measurement.\n\n"
+        "**AND IT IS NOT EQUIVALENCE, WHICH IS THE BAR.** 146 of 348 testpoints "
+        "still differ and the miter says `DIFFERS`. A loop that beats one-shot "
+        "generation and does not reach equivalence is a useful loop and an "
+        "unmet goal, and reporting the first without the second is the defect "
+        "this plan has retracted headlines for.\n\n"
+        "**THE FOUR GRADED RUNS AGAINST THAT BASELINE.** 146 is below all seven; "
+        "214, 221 and 271 are inside or above the population's range. So run 6 is "
+        "the outlier in the good direction and the other three did not improve on "
+        "one-shot generation at all -- which is the sharpest reading of what the "
+        "added proxy evidence cost.\n\n"
+        "**AND IT SIZES THE REPLICATE'S QUESTION.** A generation process with an "
+        "sd of 23 makes a 60-testpoint gap between two runs unremarkable and a "
+        "125-testpoint spread across four runs only about five sd -- so the "
+        "pre-registered +/-20 band on the replicate is roughly ONE generation sd, "
+        "which is the right order without having been chosen for that reason."
     )
