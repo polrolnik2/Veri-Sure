@@ -4227,3 +4227,73 @@ def test_the_regime_finding_limits_what_the_narrowing_decay_showed():
 def test_the_regime_finding_is_named_in_the_module_docstring():
     assert ("a_gate_is_a_different_instrument_in_selection_than_in_repair"
             in ensemble.__doc__)
+
+
+def _ladder():
+    return " ".join(
+        ensemble.the_halting_point_exists_but_is_not_reachable_by_monotone_descent().split())
+
+
+def test_the_ladder_reports_one_landing_rung_and_its_audit():
+    t = _ladder()
+    assert "**1 of 16**" in t
+    assert "AUTHORED both-cell check" in t
+
+
+def test_the_ladder_finding_is_about_non_monotonicity_not_the_count():
+    t = _ladder()
+    assert "LANDING RUNG IS AT DEPTH 3" in t
+    assert "RISES from 5 to 7" in t
+    assert "not monotone in narrowing depth" in t.lower() or "NOT MONOTONE IN NARROWING DEPTH" in t
+
+
+def test_the_ladder_finding_rereads_the_decay_without_retracting_it():
+    t = _ladder()
+    assert "15% -> 4% -> 0%" in t
+    assert "not the absence of a target" in t
+
+
+def test_the_ladder_finding_honours_its_pre_registered_band():
+    t = _ladder()
+    assert "rare; record and build nothing" in t
+
+
+def test_the_ladder_finding_is_named_in_the_module_docstring():
+    assert ("the_halting_point_exists_but_is_not_reachable_by_monotone_descent"
+            in ensemble.__doc__)
+
+
+def _conj():
+    return " ".join(
+        ensemble.the_minority_rules_perfect_precision_does_not_transfer().split())
+
+
+def test_the_conjunction_adds_only_unsound_checks():
+    t = _conj()
+    assert "unsound **0 of 25**" in t
+    assert "unsound **13 of 13**" in t
+
+
+def test_the_conjunction_corrects_the_precision_figure_with_its_parameters():
+    """The perfect-precision figure is valid only at its own (t, N, corpus)."""
+    t = _conj()
+    assert "66% PRECISE, NOT ~100%" in t
+    assert "t = 2 of THIRTEEN" in t and "259-body" in t
+    assert "t = 2 of NINE on 502" in t
+    assert "(t, N, corpus)" in t
+
+
+def test_the_conjunction_does_not_claim_which_cause():
+    t = _conj()
+    assert "cannot separate them" in t
+
+
+def test_the_conjunction_answers_the_selection_gating_question():
+    t = _conj()
+    assert "nothing the one-signal selection missed" in t
+    assert "audit 0 against the conjunction's 34%" in t
+
+
+def test_the_conjunction_finding_is_named_in_the_module_docstring():
+    assert ("the_minority_rules_perfect_precision_does_not_transfer"
+            in ensemble.__doc__)

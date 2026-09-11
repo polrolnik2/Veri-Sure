@@ -498,6 +498,29 @@ by feeding a selection-shaped signal as a repair objection is a fact about that
 regime and not about whether checks can be authored into the adequate cell.
 `a_gate_is_a_different_instrument_in_selection_than_in_repair`
 carries it.
+
+AND THE HALTING POINT BETWEEN OVER-STRICT AND VACUOUS EXISTS, BUT IS NOT
+REACHABLE BY MONOTONE DESCENT. Asking sixteen over-strict checks for a LADDER of
+five progressively narrower variants, rather than one blind rewrite, finds one
+landing rung -- and the audit says it is SOUND, the first adequate check this
+project has authored. The count is not the finding: the landing rung sits at
+depth 3 with depths 1, 2, 4 and 5 all failing, one check RISES from 5 to 7
+convictions under narrowing, and another descends 5, 4, 0, 0 then jumps to 9. The
+conviction count is not monotone in narrowing depth, so a one-step round samples
+one point of a bumpy landscape and 0 of 24 is what it should be expected to
+return even where a target exists.
+`the_halting_point_exists_but_is_not_reachable_by_monotone_descent`
+carries it.
+
+AND THE FULL GATE BATTERY AS A SELECTION RULE ADDS ONLY UNSOUND CHECKS. Over all
+502 live bodies the conjunction keeps 38, of which the 25 already in the
+169-check set are sound 25 of 25 and the 13 it ADDS are unsound 13 of 13. So the
+five gates beyond the minority rule contribute nothing to soundness -- and that
+rule reads 66% precise here, against the 59 of 59 and 7 of 7 measured at t=2 of
+THIRTEEN on a 259-body corpus. The perfect-precision figure does not transfer,
+and every quotation of it must carry its (t, N, corpus).
+`the_minority_rules_perfect_precision_does_not_transfer`
+carries it.
 """
 from __future__ import annotations
 
@@ -7166,4 +7189,89 @@ def a_gate_is_a_different_instrument_in_selection_than_in_repair() -> str:
         "rounds. Their 15% -> 4% -> 0% decay is a measurement of that degenerate "
         "regime, and it is **not** evidence that checks cannot be authored into "
         "the adequate cell -- which remains unmeasured rather than closed."
+    )
+
+
+def the_halting_point_exists_but_is_not_reachable_by_monotone_descent() -> str:
+    """A LADDER OF FIVE NARROWING DEPTHS FINDS WHAT ONE BLIND STEP CANNOT.
+
+    Three narrowing rounds each took ONE rewrite per check and landed 7 of 47,
+    1 of 28, 0 of 24 -- read at the time as the conviction count and the
+    objection being coupled with no point between them. Asking sixteen checks for
+    FIVE progressively narrower variants instead finds a landing rung, and it is
+    SOUND: the first adequate check this project has authored, after seven rounds
+    that produced none.
+
+    THE COUNT IS NOT THE FINDING. The shape is: the conviction count is NOT
+    monotone in narrowing depth, so a single blind step samples one point of a
+    bumpy landscape and the landing band is narrow. That re-reads the decay curve
+    rather than retracting it -- the procedure was not built to find a point that
+    demonstrably exists.
+    """
+    return (
+        "    check        h0   rung1  rung2  rung3  rung4  rung5\n"
+        "      REQ-0002    9     9*     9*   **2***   9*     9*   <= LANDS, and it is SOUND\n"
+        "      REQ-0010    7     5x     4x     0x     0x     9*\n"
+        "      REQ-0013    5     7*     7*     7*     5x     0x\n\n"
+        "    `*` still objects to the design under test; `x` vacuous on it -- a LOSS\n\n"
+        "| | |\n|---|---|\n"
+        "| checks with a LANDING rung | **1 of 16** |\n"
+        "| of those, sound on the audit read last | **1 of 1 -- an AUTHORED both-cell check** |\n\n"
+        "**THE LANDING RUNG IS AT DEPTH 3 AND DEPTHS 1, 2, 4 AND 5 ALL FAIL.** "
+        "REQ-0002 runs 9, 9, **2**, 9, 9 -- it passes through the target and comes "
+        "back out. REQ-0010 descends 5, 4, 0, 0 then jumps to 9. REQ-0013 RISES "
+        "from 5 to 7 under narrowing, so removing an obligation made it convict "
+        "MORE implementations.\n\n"
+        "**SO THE CONVICTION COUNT IS NOT MONOTONE IN NARROWING DEPTH**, and a "
+        "one-step round is sampling one point of that landscape. **0 of 24 is "
+        "what such a procedure should be expected to return even where a halting "
+        "point exists** -- and one here demonstrably does.\n\n"
+        "**The other fifteen split into the two known shapes.** Six never move at "
+        "all, `h` identical across every depth with every rung still objecting. "
+        "The rest collapse to zero and go vacuous in the SAME step, which is the "
+        "conviction-and-objection coupling reproduced across five depths instead "
+        "of one.\n\n"
+        "**By the pre-registered band 1 of 16 reads 'rare; record and build "
+        "nothing', and that stands.** What changes is the reading of the decay "
+        "curve: 15% -> 4% -> 0% measures a one-sample-per-check procedure on a "
+        "non-monotone landscape, not the absence of a target."
+    )
+
+
+def the_minority_rules_perfect_precision_does_not_transfer() -> str:
+    """THE FULL GATE BATTERY AS A SELECTION RULE ADDS ONLY UNSOUND CHECKS.
+
+    Selection here had always used ONE signal, the minority rule. Applying the
+    whole conjunction -- compile and fires-on-witness and not-vacuous and
+    h(c) <= 2 and discriminating -- over all 502 live bodies costs no model calls
+    and answers whether the other five gates find anything it missed.
+
+    They do not, and the split is perfect. It also corrects a precision figure
+    quoted throughout this work.
+    """
+    return (
+        "    scanned                                   502\n"
+        "      **kept**                               **38**  over 23 requirements = 26%\n"
+        "      rejected: sound 248, discriminating 137, compile 34, fires 6\n"
+        "      **survivors convicting the reference**  **13 of 38 = 34%**\n\n"
+        "    the 25 survivors already in the 169-check set   unsound **0 of 25**\n"
+        "    **the 13 the conjunction ADDED**                unsound **13 of 13**\n\n"
+        "**EVERY CHECK THE FULLER BATTERY CONTRIBUTED IS UNSOUND, AND EVERY CHECK "
+        "IT KEPT FROM THE EXISTING SELECTION IS SOUND.** The five extra gates add "
+        "nothing to soundness; the only soundness signal in the conjunction is the "
+        "minority rule.\n\n"
+        "**AND ON THIS POPULATION THAT RULE IS 66% PRECISE, NOT ~100%.** The "
+        "perfect figures -- 59 of 59, 7 of 7 -- were measured at **t = 2 of "
+        "THIRTEEN designs on a 259-body corpus**. This is **t = 2 of NINE on 502 "
+        "bodies**. Two candidate causes and this measurement cannot separate them: "
+        "the threshold is looser relative to the population (2 of 9 is 22% where "
+        "2 of 13 is 15%), and the corpus is nearly twice the size with a different "
+        "composition.\n\n"
+        "**The negative is what is established: the perfect-precision figure does "
+        "not transfer, and every quotation of it must carry its (t, N, corpus) or "
+        "not be made.**\n\n"
+        "**What it settles about gating a SELECTION regime:** on this corpus the "
+        "extra gates find nothing the one-signal selection missed. The 169-check "
+        "audit-zero set remains the better artifact -- audit 0 against the "
+        "conjunction's 34%. The gates broke nothing; they had nothing to add."
     )

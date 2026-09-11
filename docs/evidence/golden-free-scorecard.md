@@ -2792,6 +2792,104 @@ saturation conclusion does not depend on the parent — 13 of 13 with a median
 mutation moving 150 testpoints is coarse whatever it is mutating — but a kill rate
 against mutants of the delivered design has not been run.
 
+## 9am. The halting point EXISTS — and narrowing depth does not track the conviction count
+
+Pre-registered in `docs/evidence/prereg/closed-loop-narrowing.md`. Sixteen
+over-strict checks, each asked for a **ladder of five progressively narrower
+variants** instead of one blind rewrite. Integrity: **16 of 16 returned, 80 rungs,
+every rung parses and defines `decide()`, none identical to its original or to a
+sibling, 0 duplicate bodies across checks.** Six originals read a probe and
+**none was de-probed**, so the 12-of-12 hazard did not fire.
+
+| | |
+|---|---|
+| checks with at least one LANDING rung | **1 of 16** |
+| **and the audit, read last** | **SOUND — an AUTHORED both-cell check** |
+
+**THAT IS THE FIRST ADEQUATE CHECK THIS PROJECT HAS AUTHORED.** Seven rounds —
+two-sided authoring, the strength round, three narrowing rounds, two repair
+rounds — produced none. By the pre-registered band 1 of 16 reads *"rare; record
+the rate and build nothing"*, and that is honoured. But the *shape* of the
+sixteen ladders is worth more than the count.
+
+### The landing rung is at depth 3, and depths 1, 2, 4 and 5 all fail
+
+    check        h0   rung 1  rung 2  rung 3  rung 4  rung 5
+      REQ-0002    9     9*      9*    **2***    9*      9*     <= LANDS
+      REQ-0010    7     5x      4x      0x      0x      9*
+      REQ-0013    5     7*      7*      7*      5x      0x
+
+*(`*` = still objects to the delivered design; `x` = vacuous on it, a LOSS.)*
+
+**THE CONVICTION COUNT IS NOT MONOTONE IN NARROWING DEPTH.** REQ-0002 goes
+9, 9, **2**, 9, 9 — it passes through the target and comes back out. REQ-0010
+descends 5, 4, 0, 0 and then jumps to 9. REQ-0013 **rises** from 5 to 7 under
+narrowing, so removing an obligation made it convict *more* implementations.
+
+**This is why one blind step found nothing.** Narrowing rounds 1–3 took a single
+rewrite per check and measured where it landed. If `h` is non-monotone in depth,
+one step samples one point of a bumpy landscape, and the landing band is narrow.
+**0 of 24 is what that procedure should be expected to return even when a halting
+point exists** — and here one demonstrably does.
+
+### The other two shapes, and they are the coupling
+
+Of the fifteen that did not land: **six never moved at all** — `h` identical
+across all five depths, every rung still objecting. The rest **collapse to zero
+and go vacuous in the same step**, which is §9aj's conviction-and-objection-fall-
+together reproduced across five depths instead of one.
+
+**So the narrowing decay of 15% → 4% → 0% is re-read, not retracted.** It
+measures a one-sample-per-check procedure on a non-monotone landscape. The
+landscape has at least one reachable point; the procedure was not built to find
+it.
+
+## 9an. The minority rule's precision does NOT survive the full corpus
+
+The full six-gate conjunction — compile ∧ fires-on-witness ∧ ¬vacuous ∧
+`h(c) ≤ 2` ∧ discriminating — applied as a **selection** rule over all 502 live
+bodies. Zero model calls.
+
+| | |
+|---|---|
+| scanned | 502 |
+| **kept** | **38** over 23 requirements = 26% of the specification |
+| rejected by first failing gate | sound 248, discriminating 137, compile 34, fires 6 |
+| **survivors convicting the reference** | **13 of 38 = 34%** |
+
+**AND THE SPLIT IS PERFECT, WHICH IS WHAT MAKES IT DIAGNOSTIC:**
+
+| | unsound |
+|---|---|
+| the 25 survivors already in the 169-check set | **0 of 25** |
+| **the 13 the conjunction ADDED** | **13 of 13** |
+
+**EVERY CHECK THE FULLER BATTERY CONTRIBUTED IS UNSOUND, AND EVERY CHECK IT KEPT
+FROM THE EXISTING SELECTION IS SOUND.** The five extra gates added nothing to
+soundness; the only soundness signal in the conjunction is the minority rule, and
+on this population it is **66% precise, not ~100%**.
+
+### That corrects a figure quoted throughout this document
+
+This scorecard reports the rule at **59 of 59** and **7 of 7** — perfect
+precision. That was measured at **t = 2 of THIRTEEN designs on a 259-body
+corpus**. Here it is **t = 2 of NINE on 502 bodies**, and it reads 66%.
+
+Two candidate causes, and this measurement cannot separate them: the threshold is
+looser relative to the population (2 of 9 is 22% where 2 of 13 is 15%), and the
+corpus is nearly twice the size with a different composition. **What is
+established is the negative — the perfect-precision figure does not transfer to
+this population, and every use of "~100% precise" in this document should carry
+its `(t, N, corpus)` or not be quoted.**
+
+### What it says about gating the selection regime
+
+It answers the question directly and unfavourably: **on this corpus the extra
+gates do not find checks the minority-rule selection missed.** The 169-check
+audit-zero set remains the better artifact — same span class, audit 0 against the
+conjunction's 34%. The gates did not break anything, they simply had nothing to
+add at selection time.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
