@@ -416,6 +416,17 @@ suppressing every objection's reason landed at 276, worse than 261.
 `vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse`
 carries it -- including the withdrawal of the explanation mechanism I first gave,
 which a pre-registered re-run refuted at 276 against 261.
+
+AND THE AXIS NOBODY HAD TRIED IS THE ONE THAT MOVES: ITERATION. Every graded run
+had been a single loop from one start design. Chaining a second loop onto the
+output of the golden-free one takes the design 279 -> 174 -> 112 of 348, beating
+all seven prior draws, whose best was 146. A criterion reaching zero means the
+CRITERION is exhausted, not the design: loop 1 terminated with nine trials unspent
+and sat 62 testpoints from where loop 2 took it. The prescription is golden-free
+in shape -- loop, re-select, loop -- and the corpus cannot run it, because the 84
+objections that powered loop 2 come from checks of which ZERO are sound.
+`iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard`
+carries it.
 """
 from __future__ import annotations
 
@@ -6735,4 +6746,52 @@ def vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse()
         "one does. The smaller set's advantage was never its soundness, which the "
         "ceiling also has; it was that 22 objections are actionable and 155 are "
         "not."
+    )
+
+
+def iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard() -> str:
+    """THE BEST DESIGN THIS PLAN HAS PRODUCED, AND THE REASON A GOLDEN-FREE
+    PIPELINE CANNOT REPRODUCE IT.
+
+    The second loop's criterion is reference-masked, so its grade IS A CEILING and
+    is not a golden-free score. Pre-registered before dispatch with the bar fixed
+    at under-146 means best ever.
+
+    Every graded run on this plan had been a single loop from one start design --
+    seven draws, three sets, one starting point. Iteration was never tested, and
+    it is the one axis that moves the grade.
+    """
+    return (
+        "    stage                                       testpoints   cells\n"
+        "      the arbitrary unchecked LLM design           279/348   4,450\n"
+        "      **after loop 1** -- 87 checks, GOLDEN-FREE,\n"
+        "        driven to ZERO objections                  **174**   2,071\n"
+        "      **after loop 2** -- 502 vetted, chained       **112**   **813**\n"
+        "    seven prior draws span 146-220; the previous best was 146\n\n"
+        "**112 BEATS EVERY DRAW THIS PLAN HAS GRADED**, by 34 testpoints, with "
+        "differing cells down 82% from the start design. The miter still says "
+        "DIFFERS.\n\n"
+        "**SO A LOOP'S STOPPING POINT IS NOT ITS DESIGN'S FLOOR.** Loop 1 "
+        "terminated on its own criterion -- zero objections of 87, nine trials "
+        "unspent -- and every reading available then said it was finished. It sat "
+        "**62 testpoints** from where a second loop took the same design. **Zero "
+        "objections means the CRITERION is exhausted, not the design**, and that "
+        "is now measured rather than argued.\n\n"
+        "**AND THE GOLDEN-FREE PIPELINE CANNOT RUN THIS.** The obvious "
+        "prescription -- loop, re-select against the design produced, loop again "
+        "-- needs no reference in shape. But all 502 corpus bodies were re-decided "
+        "against that same 174 design: **255 object to it and ZERO of them are "
+        "sound.** The 84 objections that powered loop 2 are drawn from those 255. "
+        "A golden-free re-selection keeps only sound checks, all 154 of which PASS "
+        "this design, so it finds zero objections and the second loop never "
+        "starts -- which is exactly what loop 1's own set reported.\n\n"
+        "**THE TWO HALVES MUST BE QUOTED TOGETHER: the mechanism is worth 62 "
+        "testpoints, and its fuel is precisely what a golden-free soundness rule "
+        "must discard.**\n\n"
+        "**WHAT IT DOES NOT DO** is reach equivalence -- DIFFERS at 112 of 348, "
+        "after eight graded draws. **What it does** is retire 'the loop has "
+        "converged' as a reading of zero objections, and make a reference-free "
+        "way to tell WHICH objections are right the thing worth building: 133 of "
+        "the 174 wrong testpoints carried a locally-correct objection, and this "
+        "run converted part of exactly that into grade."
     )

@@ -3893,3 +3893,51 @@ def test_the_ceiling_is_named_in_the_module_docstring():
             in ensemble.__doc__)
     #: the refuted name must be gone, not merely superseded
     assert "because_the_editor_acts_on_explanations" not in ensemble.__doc__
+
+
+def _iter():
+    return " ".join(
+        ensemble.iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard().split())
+
+
+def test_iteration_reports_the_whole_trajectory_not_just_the_endpoint():
+    t = _iter()
+    for k in ("279/348", "**174**", "**112**", "146-220", "previous best was 146"):
+        assert k in t, k
+
+
+def test_iteration_is_labelled_a_ceiling():
+    """The second loop's criterion is reference-masked, so 112 is not a
+    golden-free score and the finding must say so."""
+    d = " ".join(
+        ensemble.iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard
+        .__doc__.split())
+    assert "IS A CEILING" in d
+    assert "not a golden-free score" in d
+
+
+def test_iteration_retires_zero_objections_as_convergence():
+    t = _iter()
+    assert "stopping point is not its design's floor" in t.lower()
+    assert "62 testpoints" in t
+    assert "CRITERION is exhausted, not the design" in t
+
+
+def test_iteration_carries_the_half_that_blocks_the_golden_free_pipeline():
+    """The mechanism and its unavailability must be quoted together; the first
+    alone reads as a route that exists."""
+    t = _iter()
+    assert "255 object to it and ZERO of them are sound" in t
+    assert "the second loop never starts" in t
+    assert "must be quoted together" in t.lower()
+
+
+def test_iteration_does_not_claim_equivalence():
+    t = _iter()
+    assert "DIFFERS at 112 of 348" in t
+    assert "eight graded draws" in t
+
+
+def test_iteration_is_named_in_the_module_docstring():
+    assert ("iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard"
+            in ensemble.__doc__)

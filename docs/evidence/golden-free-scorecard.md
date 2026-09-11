@@ -2336,6 +2336,77 @@ testpoints**, so the confound runs against DEDUP's advantage rather than
 explaining it. The comparisons stand; the brief was wrong, it was mine, and every
 editor this session acted on it.
 
+## 9ah. ITERATION DESCENDS — 279 to 174 to 112, the best design this plan has produced
+
+**A CEILING for the second loop** — its criterion is reference-masked, so **112 is
+not a golden-free score.** Pre-registered in
+`docs/evidence/prereg/chained-run.md` before dispatch, with the bar fixed at
+**under 146 = best ever**.
+
+Every graded run on this plan had been a **single loop from one start design** —
+seven draws, three sets, one starting point. Iteration was never tested.
+
+| stage | criterion | testpoints differing | cells |
+|---|---|---|---|
+| the arbitrary unchecked LLM design | — | 279 of 348 | 4,450 |
+| **after loop 1** | 87 checks, **golden-free**, driven to 0 objections | **174** | 2,071 |
+| **after loop 2** | 502 checks, vetted, chained onto loop 1's output | **112** | **813** |
+
+*Seven prior draws span 146–220; the previous best was 146.*
+
+**112 BEATS EVERY DRAW THIS PLAN HAS EVER GRADED**, by 34 testpoints, and the
+differing cells are down **82% from the start design** and 61% from where loop 1
+left off. The miter still says `DIFFERS`, three pins green.
+
+### So the stopping point of a loop is not the floor of its design
+
+Loop 1 **terminated on its own criterion** — 0 objections of 87, nine trials
+unspent. Every reading available at that moment said it was done. It was 62
+testpoints from where a second loop took the same design. **A criterion reaching
+zero means the criterion is exhausted, not the design**, and that is now measured
+rather than argued.
+
+What made loop 2 possible is that a *different* criterion had 84 vetted
+objections on a design its own set called finished. The four repairs it landed
+were a missing `biu_read` term for cache-inhibited loads, an off-by-one fetching
+**five words per four-word line**, a `dcqmem_ci_i`/`biudata_valid` race
+oscillating `saved_addr_r`, and — the largest, +11 requirements with zero
+regressions — removing `abort_request` from the refill states, since a
+`dcqmem_cycstb_i` drop during a BIU-owned burst is not a cancellation.
+
+### AND THE GOLDEN-FREE PIPELINE CANNOT DO THIS, WHICH §9ad ALREADY SETTLED
+
+The obvious prescription is golden-free: *loop, re-select checks against the
+design produced, loop again.* **It does not work here, and the reason is
+measured.** §9ad re-decided all 502 live corpus bodies against exactly this 174
+design:
+
+| of the corpus, against loop 1's output | n |
+|---|---|
+| OBJECT to it | 255 |
+| of those, **SOUND** | **0** |
+
+**The 84 objections that powered loop 2 are drawn from those 255, and not one of
+their checks is sound.** A golden-free re-selection keeps only sound checks, all
+154 of which pass this design — so it would find **zero** objections and the
+second loop would never start. That is precisely what loop 1's own set reported.
+
+**So iteration is real, it is worth 62 testpoints, and its fuel is exactly what a
+golden-free soundness rule must discard.** The two halves have to be quoted
+together: the mechanism works and the golden-free pipeline cannot run it.
+
+### What this changes, and what it does not
+
+It **does not** reach equivalence — `DIFFERS` at 112 of 348, and the goal's finish
+condition remains unmet after eight graded draws.
+
+It **does** retire "the loop has converged" as a reading of zero objections, and
+it makes the per-testpoint vetting of §9ae the thing worth an instrument: 133 of
+174 wrong testpoints carried a locally-correct objection, and this run converted a
+chunk of exactly that into 62 testpoints of grade. **The residue is reachable —
+what is missing, still, is a reference-free way to tell which objections are the
+right ones**, measured at ~50% precision in §9ae and flat across its range.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
