@@ -4051,3 +4051,96 @@ def test_narrowing_round_three_reports_its_integrity_pass():
 def test_narrowing_round_three_is_named_in_the_module_docstring():
     assert ("narrowing_cannot_author_the_fuel_because_"
             "conviction_and_objection_fall_together") in ensemble.__doc__
+
+
+def _sel():
+    return " ".join(
+        ensemble
+        .the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus()
+        .split())
+
+
+def test_the_held_out_corpus_is_anti_correlated():
+    t = _sel()
+    assert "**-0.368**" in t
+    assert "**+0.564**" in t
+    assert "picks the second-worst draw" in t
+
+
+def test_the_held_out_failure_is_explained_by_its_spread_not_its_sign():
+    """A set objecting to 72% of everything cannot discriminate whatever its
+    correlation; the spread is the mechanism and must travel with the number."""
+    t = _sel()
+    assert "**72% of everything**" in t
+    assert "**13 checks in 353**" in t
+    assert "**74 testpoints**" in t
+
+
+def test_the_selection_signal_is_attributed_to_the_optimisation():
+    t = _sel()
+    assert "MANUFACTURED BY THE OPTIMISATION, NOT HELD IN THE CORPUS" in t
+    assert "opposite of the usual held-out intuition" in t
+    assert "the criterion that loop was optimising against" in t
+
+
+def test_the_audit_zero_alternative_is_excluded_as_not_independent():
+    """The natural next instrument agrees with the criterion because it IS the
+    criterion -- 86 of 87 shared. Quoting it would count one measurement twice."""
+    d = " ".join(
+        ensemble
+        .the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus
+        .__doc__.split())
+    assert "86 of its 87 checks" in d
+    assert "counting one measurement twice" in d
+
+
+def test_the_selector_finding_is_named_in_the_module_docstring():
+    assert ("the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus"
+            in ensemble.__doc__)
+
+
+def _argmin():
+    return " ".join(
+        ensemble.the_argmin_of_a_sound_criterion_is_not_its_best_design().split())
+
+
+def test_ordering_and_argmin_are_reported_as_different_properties():
+    t = _argmin()
+    assert "+0.564" in t and "**+0.696**" in t
+    assert "RAISED THE CORRELATION BY 0.13 AND COST THE ARGMIN 28 TESTPOINTS" in t
+    assert "ordering and argmin are different properties" in t
+
+
+def test_the_argmin_finding_quotes_the_zero_versus_one_comparison():
+    """The whole point is that fewer objections graded worse, on one criterion
+    from one start design."""
+    t = _argmin()
+    assert "scoring **zero** grades 28 testpoints **worse**" in t
+    assert "scoring **one**" in t
+
+
+def test_the_argmin_finding_carries_the_positive_count_rule():
+    t = _argmin()
+    assert "STRICTLY POSITIVE count" in t
+    assert "reached zero is unselectable, not best" in t
+
+
+def test_the_argmin_finding_reports_its_soundness_and_start_pins():
+    """Both criteria audit zero with every check deciding, and the shared start
+    design was pinned from behaviour, not assumed."""
+    t = _argmin()
+    assert "audit zero with every check deciding" in t
+    assert "neither is sound by silence" in t
+    assert "reads 22 objections on the start design" in t
+
+
+def test_the_argmin_finding_does_not_claim_equivalence():
+    t = _argmin()
+    assert "It does not reach equivalence" in t
+    assert "42% of the suite" in t
+    assert "rather than tightening the distribution" in t
+
+
+def test_the_argmin_finding_is_named_in_the_module_docstring():
+    assert ("the_argmin_of_a_sound_criterion_is_not_its_best_design"
+            in ensemble.__doc__)

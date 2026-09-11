@@ -2552,6 +2552,132 @@ All three routes to a golden-free second loop are now measured and closed:
 112 is structural on this corpus, and it is structural for a reason now stated
 three ways rather than inferred once.**
 
+## 9ak. The only golden-free number that orders a loop's draws is the one the editor descended on — and its argmin is not its best design
+
+Pre-registered in `docs/evidence/prereg/held-out-selector.md`, bands fixed before
+anything was computed.
+
+**The lever.** §9y measured the one pipeline change that improves what is
+delivered: five draws of one configuration span 146 to 220, and selecting among
+them by the golden-free objection count picks the best of the five. **That lever
+has never been applied to the configuration that delivered 174, and it cannot be
+as written** — those five draws never satisfied their criterion, running 1, 4, 8,
+11 and 16 objections at rest, while the audit-0 87-check run **terminated at zero
+with nine trials unspent**. A selector that reads zero for every draw picks
+arbitrarily. So the question is whether an instrument the editor never saw can
+break the tie.
+
+**THE PIN, AND IT IS GREEN.** Before any held-out number was read the scorer had
+to reproduce §9y's in-set counts for the same five designs. It reads **1, 4, 8,
+11, 16** — exact — and the in-set Spearman comes back **+0.564**, also exact. The
+draw-to-directory mapping and the decide path are the ones §9y measured, so what
+follows is about the instrument rather than about the harness.
+
+### The primary result: the corpus outside the criterion is ANTI-correlated
+
+Held-out instrument: the 502 live corpus bodies minus the 169 in the criterion =
+**353 checks, bodies resolved 353 of 353**, never shown to the editor.
+
+| draw | in-set / 169 | **HELD OUT / 353** | grade |
+|---|---|---|---|
+| run 6 | 1 | **254** | **146** |
+| N3 | 4 | 255 | 192 |
+| replicate | 8 | **251** | 207 |
+| N2 | 11 | 254 | 220 |
+| N1 | 16 | 264 | 192 |
+
+| | |
+|---|---|
+| Spearman(in-set, grade) | **+0.564** |
+| **Spearman(HELD OUT, grade)** | **−0.368** |
+| held-out spread | **251 to 264 — a range of 13 in 353** |
+| the held-out rule picks | **replicate → 207**, the second-worst draw |
+
+**By the pre-registered band this is CLOSED: < +0.2.** And the spread says why
+before the correlation does. The held-out corpus objects to about **72% of
+everything** whatever the design, varying by 13 checks across designs that span
+**74 testpoints** of grade. It is the over-strict bulk — §9ai measured that of the
+255 corpus checks objecting to a finished design, *zero* are sound — and a set
+that objects to everything cannot tell designs apart.
+
+**SO THE ORDERING SIGNAL IS MANUFACTURED BY THE OPTIMISATION, NOT HELD IN THE
+CORPUS.** A check the editor descended on carries information about the design
+because the editor moved the design with respect to it. A check it never saw
+carries essentially none. That is the opposite of the usual held-out intuition,
+and it is the reason best-of-N cannot be given an independent referee here.
+
+**AND THE OBVIOUS NEXT IDEA IS EXCLUDED BY ITS OWN ARITHMETIC.** The natural
+response is that the held-out corpus failed for being *unsound* rather than for
+being *held out*, so an audit-zero set should be tried instead. The 87-check
+DEDUP set scores **+0.564 and picks the best draw** — and it overlaps the
+criterion at **86 of its 87 checks**. It is not an independent instrument; it is
+the criterion under another name, and quoting its agreement as corroboration
+would have been counting one measurement twice.
+
+### The secondary finding: ordering improved while selection got worse
+
+*Not pre-registered — it arose from the start-design pin and is reported as the
+exploratory result it is.*
+
+Both criteria are **audit ZERO with every check deciding** — the 169-set 0 of 169,
+the 87-set 0 of 87 — so neither is sound-by-silence. The two arms' start design
+was pinned from behaviour rather than asserted, because no artifact records either
+init command: **the 87-check criterion reads 22 objections on `p4_L`, exactly the
+DEDUP arm's recorded init.** Same start design, so the arms are comparable.
+
+**The 169-check criterion reads ZERO on the design the 87-check loop accepted**,
+which puts all six designs on one instrument:
+
+| design | 169-set | grade | stopped |
+|---|---|---|---|
+| **DEDUP loop** | **0** | **174** | **TERMINATED, 9 trials unspent** |
+| **run 6** | **1** | **146** | budget |
+| N3 | 4 | 192 | budget |
+| replicate | 8 | 207 | budget |
+| N1 | 16 | 192 | budget |
+| N2 | 11 | 220 | budget |
+
+| population | Spearman | argmin picks | best available |
+|---|---|---|---|
+| the five budget-limited draws | +0.564 | run 6 → **146** | run 6 → 146 ✓ |
+| **all six** | **+0.696** | **DEDUP → 174** | run 6 → 146 ✗ **−28** |
+
+**ADDING ONE DESIGN RAISED THE CORRELATION BY 0.13 AND COST THE ARGMIN 28
+TESTPOINTS.** Ordering and selection are different properties of the same rule,
+and a rule can get better at the first while getting worse at the second. The
+pre-registration anticipated the mirror case — *"a selector may order poorly and
+still identify the minimum"* — and this is the other half of it.
+
+**The mechanism is §9ah's zero arriving as a selection rule.** A design at zero
+has exhausted its criterion, not demonstrated that it is the best draw: **the
+design scoring ZERO grades 28 testpoints WORSE than the design scoring ONE**, on
+the same audit-zero set, from the same start design. So the rule that follows is
+one line and it is golden-free:
+
+> **Select the argmin over draws with a STRICTLY POSITIVE count. A draw that
+> reached zero is unselectable, not best.**
+
+On these six that rule recovers 146 where naive argmin loses 28 testpoints.
+
+### What this changes about the deliverable, and what it does not
+
+**Two golden-free deliverables now exist on this corpus, and the better one is not
+the terminating run:**
+
+| | criterion | audit | how it stopped | grade |
+|---|---|---|---|---|
+| single terminating run | 87 checks | 0 | zero objections, 9 trials unspent | **174** |
+| **best-of-5, positive-count argmin** | **169 checks** | **0** | **trial budget** | **146** |
+
+Both read no reference in selection; the grade is calibration computed last. The
+second costs five times the compute and is subject to §9t's variance caveat in
+full — it is *selection over* a noisy distribution, not a tighter distribution.
+
+**What it does not do is reach equivalence, and no part of it reopens anything.**
+146 of 348 is a design differing from the reference on 42% of the suite. The
+three routes to a golden-free second loop stay closed: this measures how to pick
+the best member of one loop's output, not how to run a second one.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

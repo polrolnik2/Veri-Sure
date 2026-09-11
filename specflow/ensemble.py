@@ -449,6 +449,29 @@ fall together, so there is no setting of the edit where one drops and the other
 survives, and the narrowing decay across three rounds is 15% -> 4% -> 0%.
 `narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together`
 carries it.
+
+AND THE ONE LEVER THAT DOES IMPROVE THE DELIVERED DESIGN NEEDS THE CRITERION
+ITSELF AS ITS SELECTOR. Picking among draws of one loop by the golden-free
+objection count picks the best draw -- but that rule is unavailable to a run
+which SATISFIES its criterion, since every such draw scores zero. The corpus
+OUTSIDE the criterion, 353 checks the editor never saw, does not break the tie:
+it is anti-correlated at -0.368 and picks the second-worst draw, because it
+objects to about 72% of everything whatever the design. The ordering signal is
+made by the optimisation, not held in the corpus, so the only golden-free
+instrument that orders a loop's draws is the criterion it descended on.
+`the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus`
+carries it.
+
+AND THAT SELECTOR'S ARGMIN IS NOT ITS BEST DESIGN, WHICH IS THE HALF THAT
+DECIDES WHAT SHIPS. Over six designs on one audit-zero criterion, adding the one
+draw that terminated raises the rank correlation from +0.564 to +0.696 and moves
+the argmin from a design at 146 testpoints to one at 174 -- the design scoring
+ZERO grades 28 testpoints WORSE than the design scoring ONE. Ordering and argmin
+are different properties, and the rule that follows is to take the argmin over
+draws with a strictly positive count: a draw that reached zero has exhausted its
+criterion, not shown itself best.
+`the_argmin_of_a_sound_criterion_is_not_its_best_design`
+carries it.
 """
 from __future__ import annotations
 
@@ -6926,4 +6949,90 @@ def narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_toget
         "measured to move together). **The 62-testpoint gap between the "
         "golden-free pipeline's 174 and the ceiling's 112 is structural on this "
         "corpus, stated three ways rather than inferred once.**"
+    )
+
+
+def the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus() -> str:
+    """BEST-OF-N NEEDS A SELECTOR, AND ONLY THE CRITERION ITSELF IS ONE.
+
+    Selecting among draws of one loop by the golden-free objection count picks
+    the best draw. That rule is unavailable to a run which SATISFIES its
+    criterion, because every such draw scores zero, so the natural move is to
+    break the tie with an instrument the editor never saw -- the corpus outside
+    the criterion. Measured over five draws of one configuration, it is
+    ANTI-correlated and picks the second-worst.
+
+    AND THE AUDIT-ZERO ALTERNATIVE IS NOT AN INDEPENDENT INSTRUMENT. The obvious
+    reading of that failure is that the held-out corpus is unsound rather than
+    held out, so an audit-zero set should be used instead. The audit-zero set
+    here agrees with the criterion -- and overlaps it at 86 of its 87 checks. It
+    is the criterion under another name, and quoting its agreement would be
+    counting one measurement twice.
+    """
+    return (
+        "    draw        in-set/169   HELD OUT/353   grade\n"
+        "      run 6              1            254   **146**\n"
+        "      N3                 4            255     192\n"
+        "      replicate          8          **251**   207\n"
+        "      N2                11            254     220\n"
+        "      N1                16            264     192\n\n"
+        "    Spearman(in-set,   grade)   **+0.564**\n"
+        "    Spearman(HELD OUT, grade)   **-0.368**   picks the second-worst draw\n\n"
+        "**THE SPREAD SAYS WHY BEFORE THE CORRELATION DOES.** The held-out corpus "
+        "objects to about **72% of everything** whatever the design, varying by "
+        "**13 checks in 353** across designs that span **74 testpoints** of "
+        "grade. It is the over-strict bulk, and a set that objects to everything "
+        "cannot tell designs apart.\n\n"
+        "**SO THE ORDERING SIGNAL IS MANUFACTURED BY THE OPTIMISATION, NOT HELD "
+        "IN THE CORPUS.** A check the editor descended on carries information "
+        "about the design because the editor moved the design with respect to it. "
+        "A check it never saw carries essentially none. That is the opposite of "
+        "the usual held-out intuition, and it is why best-of-N cannot be given an "
+        "independent referee: **the only golden-free instrument that orders a "
+        "loop's draws is the criterion that loop was optimising against.**"
+    )
+
+
+def the_argmin_of_a_sound_criterion_is_not_its_best_design() -> str:
+    """ORDERING AND SELECTION ARE DIFFERENT PROPERTIES OF ONE RULE.
+
+    Six designs, one audit-zero criterion, one start design. Adding the sixth --
+    the only one that SATISFIED its criterion -- raises the rank correlation and
+    breaks the argmin. A rule can get better at ordering while getting worse at
+    selecting, and it is selection that decides what ships.
+
+    This is `zero_objections_can_be_incompatible_with_correctness` arriving as a
+    selection rule with a price attached, and it is measured golden-free on the
+    criterion side: the grade is calibration, read last, and selects nothing.
+    """
+    return (
+        "    design         169-set   grade   stopped\n"
+        "      **DEDUP loop**    **0**   **174**   **TERMINATED, 9 trials unspent**\n"
+        "      **run 6**         **1**   **146**   budget\n"
+        "      N3                   4     192    budget\n"
+        "      replicate            8     207    budget\n"
+        "      N2                  11     220    budget\n"
+        "      N1                  16     192    budget\n\n"
+        "    population                  Spearman   argmin picks   best available\n"
+        "      the five budget draws       +0.564   run 6 -> 146   run 6 -> 146  ok\n"
+        "      **all six**               **+0.696** **DEDUP -> 174** run 6 -> 146  **-28**\n\n"
+        "**ADDING ONE DESIGN RAISED THE CORRELATION BY 0.13 AND COST THE ARGMIN "
+        "28 TESTPOINTS.** So a selector's rank correlation is not the number to "
+        "read: ordering and argmin are different properties, and only the second "
+        "decides which design ships.\n\n"
+        "**The mechanism is that a design at zero has exhausted its CRITERION, "
+        "not shown itself the best DRAW.** The design scoring **zero** grades 28 "
+        "testpoints **worse** than the design scoring **one**, on the same "
+        "audit-zero criterion, from the same start design. Both criteria audit "
+        "zero with every check deciding, so neither is sound by silence, and the "
+        "shared start was pinned from behaviour rather than assumed -- the "
+        "87-check set reads 22 objections on the start design, exactly that arm's "
+        "recorded init.\n\n"
+        "**THE RULE, AND IT IS ONE LINE AND GOLDEN-FREE:**\n\n"
+        "> **Select the argmin over draws with a STRICTLY POSITIVE count. A draw "
+        "that reached zero is unselectable, not best.**\n\n"
+        "On these six that recovers the 146 design where naive argmin loses 28 "
+        "testpoints. **It does not reach equivalence** -- 146 of 348 still differs "
+        "on 42% of the suite -- and it picks the best member of a noisy "
+        "distribution rather than tightening the distribution."
     )
