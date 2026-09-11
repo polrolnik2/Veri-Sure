@@ -2249,18 +2249,18 @@ sd 28.
 objections and 38% on divergence. **More correct objections did not convert into a
 better design; the arm with far fewer of them won by 87 testpoints.**
 
-**The mechanism the editor's own report points at: a locally-correct objection
-from a globally-wrong check carries a globally-wrong EXPLANATION.** These 502
-checks are unsound suite-wide — 255 of them convict the reference somewhere — and
-the mask makes their *verdicts* correct where they fire without making their
-*reasoning* correct. The editor does not act on a verdict; it reads the
-requirement sentence and the check's detail and builds a structural theory. Thirteen
-rejected commits is that thrashing, and the editor documented two clusters where
-every fix it tried regressed checks that were already passing.
+~~**The mechanism the editor's own report points at: a locally-correct objection
+from a globally-wrong check carries a globally-wrong EXPLANATION.** The editor
+does not act on a verdict; it reads the requirement sentence and the check's
+detail and builds a structural theory. So vetting the objections is not
+sufficient — the explanations have to be right too.~~
 
-**So vetting the objections is not sufficient — the explanations have to be right
-too**, and nothing in this pipeline vets those. That is a property of the checks
-that no selection rule, golden-free or otherwise, touches.
+> **WITHDRAWN BY §9ag, AND IT WAS MINE.** I inferred that mechanism from one run
+> plus the editor's self-report, pre-registered a test of it, and **the test
+> refutes it**: suppressing the checks' reasoning entirely made the design
+> *worse* (276 against 261), not better. The explanations were not poisoning the
+> run. What survives from this section is the measurement — 7x the vetted
+> objections produced a worse design — and not the reason I gave for it.
 
 ### And it reverses the natural prior about set size
 
@@ -2271,6 +2271,70 @@ editor's budget is spent on *prioritising* objections, and that a large correct
 criterion can exhaust it before a small one does. The DEDUP arm's advantage was
 never its soundness, which the ceiling also has; it was that 22 objections are
 actionable and 155 are not.
+
+## 9ag. The explanation channel is REFUTED — suppressing the reasons made it worse
+
+§9af's mechanism was mine and rested on one run plus an editor's self-report,
+which is the evidence shape this plan has retracted mechanism claims for before.
+So it was pre-registered and tested
+(`docs/evidence/prereg/explanation-channel.md`), with the refutation branch
+written in advance.
+
+**The isolation.** Same ceiling set, same mask, same **155** starting objections,
+same start design, stimulus and budget. One change: each objection's account of
+what is wrong is replaced by the **ports that check reads** — the editor is told
+where to look and not what to conclude.
+
+| arm | objections | testpoints differing | cells |
+|---|---|---|---|
+| the start design | — | 279 of 348 | 4,450 |
+| **DEDUP** — 87 checks, theory shown, **golden-free** | 22 → 0 | **174** | 2,071 |
+| CEILING — 502 checks, theory shown | 155 → 86 | 261 | 2,526 |
+| **ND** — 502 checks, **theory suppressed** | 155 → 122 | **276** | 3,959 |
+
+**THE BAR WAS ≥261 MEANS REFUTED, AND IT LANDED ON 276.** Removing the checks'
+reasoning made the design worse on testpoints (276 vs 261) and much worse on
+cells (3,959 vs 2,526), and left more objections standing (122 vs 86) after three
+*more* trials. **The explanations were not poisoning the run — on this evidence
+they were net helpful.** §9af's mechanism is withdrawn.
+
+### What survives, and what is now the leading candidate
+
+The **measurement** in §9af stands untouched: seven times the vetted objections
+produced a worse design than a golden-free set with a fourteenth of them. Only
+the *reason* is withdrawn.
+
+Of the two mechanisms §9af named, **volume is the one left standing** — both
+155-objection arms land at 261 and 276 while the 22-objection arm lands at 174.
+**It is not isolated either**: the arms differ in set size (502 vs 87) *and* in
+soundness profile, so volume is a candidate and not a finding, and saying more
+than that would repeat the mistake this section exists to correct.
+
+### And the run says something the ceiling did not
+
+Given only *where* to look and no theory at all, the editor still found real
+structural defects: an inverted `~load_r` guard, an off-by-one refill counter
+(`OR1200_DCLS-2` for `-1`), error responses misread as completions, and a
+spurious `IDLE` cycle between back-to-back requests. **Localisation alone is
+enough to diagnose** — which is why suppressing the reasons did not collapse the
+run, only made it modestly worse.
+
+### A defect in my own briefs, found by the editor rather than by me
+
+Every brief this session states that `checks_objecting` *"is the only thing in the
+latch."* **It is not.** `req_results` carries **ten consensus-derived per-output
+units alongside the checks**, and the ratchet counts passing units across both.
+
+| arm | checks | consensus units | consensus share |
+|---|---|---|---|
+| DEDUP | 87 | 10 | **10%** |
+| CEILING / ND | 502 | 10 | **2%** |
+
+The consensus is measured **28.5% right against the checks' 71.4%**, so weight on
+it should hurt — and **DEDUP carried five times more of it and still won by 87
+testpoints**, so the confound runs against DEDUP's advantage rather than
+explaining it. The comparisons stand; the brief was wrong, it was mine, and every
+editor this session acted on it.
 
 ## 10. The bottom line
 

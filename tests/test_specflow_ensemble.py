@@ -3824,13 +3824,13 @@ def test_the_per_objection_finding_is_named_in_the_module_docstring():
 
 
 def _ceil():
-    return ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations()
+    return ensemble.vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse()
 
 
 def test_the_ceiling_is_labelled_a_ceiling_and_not_a_golden_free_score():
     #: whitespace-normalised, so re-wrapping the docstring cannot break the pin
     d = " ".join(
-        ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations
+        ensemble.vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse
         .__doc__.split())
     assert "IT IS A CEILING" in d
     assert "it uses the reference" in d
@@ -3842,7 +3842,7 @@ def test_the_ceiling_disclaims_the_pre_registered_binary_it_did_not_reach():
     what this measured, and saying so afterwards would be the defect the bar
     exists to prevent."""
     d = " ".join(
-        ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations
+        ensemble.vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse
         .__doc__.split())
     assert "DOES NOT APPLY" in d
     assert "never satisfied" in d
@@ -3857,12 +3857,28 @@ def test_the_ceiling_reports_the_comparison_that_makes_it_meaningful():
     assert "155 -> 86" in t
 
 
-def test_the_ceiling_names_the_explanation_mechanism():
-    """Vetted verdicts with unvetted reasoning is the whole finding."""
+def test_the_ceiling_withdraws_the_explanation_mechanism_it_first_gave():
+    """The mechanism was mine, pre-registered, tested and refuted at 276 vs 261.
+    The finding must carry the withdrawal, not quietly drop the claim."""
     t = " ".join(_ceil().split())
-    assert "VERDICTS correct" in t and "REASONING" in t
-    assert "builds a structural theory" in t
-    assert "thirteen rejected commits" in t.lower()
+    assert "MECHANISM I FIRST GAVE FOR THIS WAS WRONG" in t
+    assert "LANDED ON 276" in t
+    assert "mechanism is withdrawn" in t
+    assert "net helpful" in t
+
+
+def test_the_ceiling_does_not_promote_volume_to_a_finding():
+    """Volume is confounded with set size and soundness profile; calling it the
+    cause would repeat the error just withdrawn."""
+    t = " ".join(_ceil().split())
+    assert "not a finding" in t
+    assert "NOT ISOLATED EITHER" in t
+
+
+def test_localisation_alone_is_recorded_as_sufficient_to_diagnose():
+    t = " ".join(_ceil().split())
+    assert "LOCALISATION ALONE IS ENOUGH TO DIAGNOSE" in t
+    assert "off-by-one refill counter" in t
 
 
 def test_the_ceiling_records_that_more_signal_was_worse():
@@ -3873,5 +3889,7 @@ def test_the_ceiling_records_that_more_signal_was_worse():
 
 
 def test_the_ceiling_is_named_in_the_module_docstring():
-    assert ("vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations"
+    assert ("vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse"
             in ensemble.__doc__)
+    #: the refuted name must be gone, not merely superseded
+    assert "because_the_editor_acts_on_explanations" not in ensemble.__doc__

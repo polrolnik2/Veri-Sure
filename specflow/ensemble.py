@@ -410,11 +410,12 @@ reference, so every objection is vetted correct: the editor went 155 -> 86 and
 landed at 261 of 348 testpoints differing, against the golden-free 87-check set's
 174 and worse than all five control draws. Seven times the correct objections, a
 worse design. The criterion was never satisfied so this does not show the checks
-are insufficient -- what it shows is that a locally-correct objection from a
-globally-wrong check carries a globally-wrong EXPLANATION, and the editor acts on
-explanations.
-`vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations`
-carries it.
+are insufficient -- the reason I first gave -- that the checks'
+EXPLANATIONS poison the run -- was pre-registered, tested, and REFUTED:
+suppressing every objection's reason landed at 276, worse than 261.
+`vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse`
+carries it -- including the withdrawal of the explanation mechanism I first gave,
+which a pre-registered re-run refuted at 276 against 261.
 """
 from __future__ import annotations
 
@@ -6671,7 +6672,7 @@ def the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_whi
     )
 
 
-def vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations() -> str:
+def vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse() -> str:
     """THE CEILING, AND IT IS A CEILING -- it uses the reference and no figure
     from it is a golden-free score.
 
@@ -6700,17 +6701,32 @@ def vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations
         "**OBJECTION COUNT AND DESIGN QUALITY CAME APART.** Objections fell 44% "
         "while divergence fell 6%; the DEDUP arm fell 100% on objections and 38% on "
         "divergence. More correct objections did not convert.\n\n"
-        "**THE MECHANISM, AND IT IS THE FINDING.** These 502 checks are unsound "
-        "suite-wide -- 255 convict the reference somewhere -- and the mask makes "
-        "their VERDICTS correct where they fire without making their REASONING "
-        "correct. **An editor does not act on a verdict; it reads the requirement "
-        "sentence and the check's detail and builds a structural theory.** So a "
-        "locally-correct objection from a globally-wrong check carries a "
-        "globally-wrong explanation. Thirteen rejected commits is that thrashing, "
-        "and the editor documented two clusters where every fix it tried regressed "
-        "checks already passing. **Vetting the objections is not sufficient -- the "
-        "explanations have to be right too, and nothing in this pipeline vets "
-        "those.**\n\n"
+        "**THE MECHANISM I FIRST GAVE FOR THIS WAS WRONG, AND THE TEST IS BELOW.** "
+        "I inferred that the checks' EXPLANATIONS were poisoning the run -- these "
+        "502 are unsound suite-wide, so the mask makes their verdicts correct "
+        "where they fire without making their reasoning correct. That was one run "
+        "plus an editor's self-report, so it was pre-registered and tested by "
+        "re-running the identical arm with every objection's reason replaced by "
+        "the ports that check reads:\n\n"
+        "    arm                              objections   testpoints   cells\n"
+        "      CEILING -- theory shown         155 -> 86      261       2,526\n"
+        "      **ND -- theory SUPPRESSED**    155 -> 122    **276**     3,959\n\n"
+        "**THE BAR WAS 261-OR-WORSE MEANS REFUTED, AND IT LANDED ON 276.** "
+        "Suppressing the reasons made the design worse on testpoints, much worse "
+        "on cells, and left more objections standing after three MORE trials. "
+        "**The explanations were not poisoning the run; on this evidence they "
+        "were net helpful, and the mechanism is withdrawn.**\n\n"
+        "**WHAT IS LEFT STANDING IS VOLUME, AND IT IS NOT ISOLATED EITHER.** Both "
+        "155-objection arms land at 261 and 276 while the 22-objection arm lands "
+        "at 174 -- but those arms differ in set SIZE and in soundness profile too, "
+        "so volume is a candidate and not a finding. Saying more would repeat the "
+        "mistake this paragraph exists to correct.\n\n"
+        "**AND LOCALISATION ALONE IS ENOUGH TO DIAGNOSE.** Given only where to "
+        "look and no theory at all, the editor still found an inverted guard, an "
+        "off-by-one refill counter, error responses misread as completions, and a "
+        "spurious idle cycle between back-to-back requests -- which is why "
+        "removing the reasons did not collapse the run, only made it modestly "
+        "worse.\n\n"
         "**AND IT REVERSES THE PRIOR THAT MORE SIGNAL IS BETTER.** Redundancy was "
         "treated as a reporting defect and more designs were chased as an "
         "improvement. Here seven times the objections, every one correct, lost to "
