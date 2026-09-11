@@ -547,6 +547,27 @@ of a check's objections that survive rather than whether one does -- a change to
 what a verdict means, not a tuning knob, and nothing is built on it.
 `a_site_level_mask_is_invisible_to_an_existential_criterion`
 carries it.
+
+AND UNANIMITY LOCALISES A DESIGN'S OWN ERRORS AT 43x, WHICH IS THE FIRST
+GOLDEN-FREE DETECTOR OF BLINDNESS HERE. A cell where the 13 spec-derived designs
+are UNANIMOUS on a port the design drives and the design DEPARTS is a cell where
+the design really differs from the known-good one 80.4% of the time, against a
+1.88% base rate. It is the split-cell finding pointed at a DESIGN rather than at
+a check, and the complement of the disagreement map: that says where the question
+is, this says where the design is wrong. Its ceiling is the same partition seen
+from the other side -- recall is 20.4% of the design's differing cells but 94.5%
+of the differing cells INSIDE the unanimous region, so the lever reaches about a
+fifth of the blindness residue and the rest sits in split cells.
+`unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth`
+carries it.
+
+AND THE FRACTION CRITERION LEFT OPEN BY THE MASK IS UNMEASURABLE HERE RATHER THAN
+REFUTED. Scoring a check by the SHARE of its objections that survive the mask
+needs checks that object and spare the reference, and this corpus has none -- 0
+of 205. Every threshold reads 0% precision, which is a fact about the population
+and not a verdict on the rule, so the driver refuses instead of printing it.
+`the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound`
+carries it.
 """
 from __future__ import annotations
 
@@ -7418,4 +7439,97 @@ def a_site_level_mask_is_invisible_to_an_existential_criterion() -> str:
         "at all. They are admitted and counted apart, and the masked rate is "
         "quoted over both denominators -- a rate over a denominator the "
         "instrument cannot see is the defect the companion finding records."
+    )
+
+
+def unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth() -> str:
+    """THE FIRST GOLDEN-FREE DETECTOR OF BLINDNESS, and its ceiling.
+
+    Blindness is the whole residue now. The stimulus loop is finished -- decide
+    coverage 348 of 348, SILENT 0 of 146 -- so every testpoint the delivered
+    design is wrong on is one the set DECIDES and PASSES, 126 of 146. But every
+    measurement of that reads the reference: "the design is wrong here and the
+    set said nothing" needs a `wrong`.
+
+    The golden-free analogue asks the population instead:
+
+        ANOMALOUS(cell)  the 13 spec-derived designs are UNANIMOUS on a port the
+                         design DRIVES, and the design under test DEPARTS.
+
+    It is the split-cell finding pointed at a design rather than at a check, and
+    it is the complement of the disagreement map: that says WHERE THE QUESTION IS
+    and this says WHERE THE DESIGN IS WRONG.
+    """
+    return (
+        "    cells the population can be read on      475,120\n"
+        "      the design really differs there          8,913  = **1.88% BASE "
+        "RATE**\n"
+        "    of those, population UNANIMOUS           429,161   (90.3%)\n"
+        "      the design really differs there          1,923  = 0.45%\n"
+        "    **ANOMALOUS -- unanimous and design departs**  **2,260**\n"
+        "      the design really differs there          **1,818 = 80.44%**\n\n"
+        "**42.9x OVER THE BASE RATE. The best localisation measured in this "
+        "work by a factor of five** -- the disagreement map is 8.6x, the "
+        "two-sided filter 3.4x, `correspondence` 1.3x. The audit is computed "
+        "last and selects nothing; the detector reads only spec-derived "
+        "designs.\n\n"
+        "**AND ITS CEILING IS EXACTLY THE 97%-IN-11% FINDING, ARRIVING FROM THE "
+        "OTHER SIDE.** Recall is **20.4%** of the design's differing cells -- "
+        "but **94.5%** of the differing cells INSIDE the unanimous region "
+        "(1,818 of 1,923). The detector finds nearly everything findable where "
+        "the population can speak; the population can only speak about 21.6% of "
+        "this design's errors. **So the lever's ceiling is about a fifth of the "
+        "blindness residue and the other four fifths are in split cells, where "
+        "no instrument built from this population can say anything.** Two "
+        "independent measurements now agree on that partition.\n\n"
+        "**PRECISION IS PER-PORT, AND THAT MATTERS FOR HOW IT IS USED.** Of the "
+        "2,260 anomalous cells, 2,213 sit on six ports reading 74.9% to 100%: "
+        "`cnt_nonzero`, `in_lrefill3`, `dc_addr`, `saved_addr`, `in_cload` and "
+        "`hitmiss_eval` at 100%, `biu_read` 79.1%, `in_idle` and `load_flag` "
+        "75.4%, `burst` 74.9%. Two ports read below 16% -- `dcram_we` 2 of 13 "
+        "and `tag_we` 1 of 11 -- and **those n are 13 and 11, so they are not a "
+        "finding**; they are flagged as the place to look if a port-stratified "
+        "version is ever built, and nothing is concluded from them.\n\n"
+        "**THE TESTPOINT-LEVEL READING IS WEAKER AND IT IS THE LOSSY ONE.** "
+        "Rolled up to testpoints, ANOMALOUS predicts DIFFERING at 72.5% "
+        "precision and 29.8% recall, and the silent-and-anomalous set predicts "
+        "BLIND at 62.2% and 21.7%. The loss is structural rather than noise: a "
+        "testpoint counts as differing only if a DECLARED OUTPUT differs, while "
+        "the anomaly quantifies over every driven port including probes -- 9 "
+        "testpoints are anomalous on a probe only, which is internal state "
+        "differing without an output differing, and that is a real difference "
+        "rather than a detector error. **Use the cell, not the testpoint.**"
+    )
+
+
+def the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound() -> str:
+    """The open route left by the per-site mask, tested and REFUSED rather than
+    answered -- the distinction is the point.
+
+    SPLITMASK fails as a mask because it is symmetric per site. The route
+    recorded in its place was the PER-CHECK statistic: score a check by the
+    SHARE of its objections that survive the mask, rather than by whether one
+    does. That is a different quantity and the symmetry does not settle it.
+    """
+    return (
+        "    checks with an instrumented objection on the delivered design   "
+        "205\n"
+        "    **of them SOUND (spare the reference)**                         "
+        "**0**\n\n"
+        "**THE POSITIVE CLASS IS EMPTY, SO NO PREDICTOR OF SOUNDNESS CAN BE "
+        "SCORED HERE.** Every threshold reads 0% precision whatever it selects, "
+        "and the bands printed beside them would be a verdict on the RULE when "
+        "they are a fact about the POPULATION. The driver now refuses and says "
+        "so instead of printing the table.\n\n"
+        "**This reproduces the known '255 objectors, 0 sound' rather than "
+        "discovering anything**, and it is the guard `series.py` needed -- the "
+        "seventeenth counting-shaped defect in this work, met again in a new "
+        "place and caught this time before a number was quoted.\n\n"
+        "**SO THE FRACTION CRITERION IS UNMEASURABLE ON THIS POPULATION, NOT "
+        "REFUTED, and those must not be conflated.** Measuring it needs a "
+        "population containing objectors that spare the reference. This corpus "
+        "contains none, which is itself the central negative of this work "
+        "restated: the both-cell is empty at the whole-check level. Any future "
+        "attempt at the fraction criterion has to solve that first, and solving "
+        "it would make the fraction criterion unnecessary."
     )

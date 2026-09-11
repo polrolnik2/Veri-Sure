@@ -4350,3 +4350,52 @@ def test_both_splitmask_findings_are_named_in_the_module_docstring():
     assert "a_fail_open_mask_reports_its_own_absence_as_a_measurement" in doc
     assert "a_site_level_mask_is_invisible_to_an_existential_criterion" in doc
     assert "41.2% of the reference's" in doc
+
+
+def test_the_anomaly_detector_reports_precision_with_its_base_rate():
+    # A precision without its base rate is not a measurement; the lift is the
+    # claim, and it must be stated against the number it beats.
+    why = ensemble.unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth()
+    assert "1.88% BASE RATE" in why
+    assert "1,818 = 80.44%" in why
+    assert "42.9x" in why
+
+
+def test_the_anomaly_detector_states_its_ceiling_as_the_same_partition():
+    # The recall limit is not a weakness of the detector, it is the 97%-in-11%
+    # finding arriving from the other side, and the two must be reconciled
+    # explicitly or the ceiling reads as a fixable shortfall.
+    why = ensemble.unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth()
+    assert "20.4%" in why and "94.5%" in why
+    assert "a fifth of the blindness residue" in why
+
+
+def test_the_anomaly_detectors_thin_ports_are_refused_as_a_finding():
+    # 2 of 13 and 1 of 11 look like an inverted detector and are noise. Saying
+    # so is what stops the next reader building a port-stratified rule on them.
+    why = ensemble.unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth()
+    assert "13 and 11, so they are not a finding" in why
+
+
+def test_the_anomaly_detector_prefers_the_cell_to_the_testpoint():
+    # The testpoint roll-up is lossy for a structural reason -- probes are
+    # driven but are not declared outputs -- and that is not detector error.
+    why = ensemble.unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth()
+    assert "72.5%" in why
+    assert "Use the cell, not the testpoint" in why
+
+
+def test_the_fraction_criterion_is_refused_not_scored():
+    # An empty positive class makes every threshold read 0%, which is a fact
+    # about the population. Printing the table would be a verdict on the rule.
+    why = ensemble.the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound()
+    assert "**0**" in why
+    assert "UNMEASURABLE ON THIS POPULATION, NOT REFUTED" in why
+    assert "seventeenth counting-shaped defect" in why
+
+
+def test_the_new_blindness_findings_are_named_in_the_module_docstring():
+    doc = ensemble.__doc__ or ""
+    assert "unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth" in doc
+    assert "the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound" in doc
+    assert "43x" in doc

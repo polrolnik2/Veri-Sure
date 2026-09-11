@@ -2991,6 +2991,99 @@ are admitted and counted apart, and the masked rate is quoted over both
 denominators — a rate over a denominator the instrument cannot see is the defect
 this section opens with.
 
+## 9ap. Blindness gets a golden-free detector at 43x — and its ceiling is the split-cell partition, measured from the other side
+
+The stimulus loop is finished: decide coverage **348 of 348**, SILENT **0 of
+146**. So every testpoint the delivered design is wrong on is one the set
+DECIDES and PASSES — 126 of 146, the whole remaining residue. But every
+measurement of that reads the reference, because *"the design is wrong here and
+the set said nothing"* needs a `wrong`, and the goal forbids that as the metric.
+
+The golden-free analogue asks the population instead:
+
+> **ANOMALOUS(cell)** — the 13 spec-derived designs are UNANIMOUS on a port the
+> design DRIVES, and the design under test DEPARTS.
+
+It is the split-cell finding pointed at a DESIGN rather than at a check, and it
+is the **complement of the disagreement map**: that says where the question is,
+this says where the design is wrong.
+
+| | cells | |
+|---|---|---|
+| the population can be read on | 475,120 | |
+| the design really differs there | 8,913 | **1.88% BASE RATE** |
+| population UNANIMOUS | 429,161 | 90.3% |
+| …the design really differs there | 1,923 | 0.45% |
+| **ANOMALOUS — unanimous and the design departs** | **2,260** | |
+| **…the design really differs there** | **1,818** | **80.44%** |
+
+**42.9x OVER THE BASE RATE — the best localisation in this document by a factor
+of five**, against the disagreement map's 8.6x, the two-sided filter's 3.4x and
+`correspondence`'s 1.3x. The detector reads only spec-derived designs; the audit
+is computed last and selects nothing.
+
+### ITS CEILING IS NOT A SHORTFALL, IT IS THE 97%-IN-11% FINDING ARRIVING FROM THE OTHER SIDE
+
+Recall is **20.4%** of the design's differing cells — and **94.5%** of the
+differing cells INSIDE the unanimous region, 1,818 of 1,923. **The detector finds
+nearly everything findable where the population can speak, and the population can
+speak about only 21.6% of this design's errors.**
+
+So the lever's ceiling is about **a fifth of the blindness residue**, and the
+other four fifths sit in split cells where no instrument built from this
+population can say anything. Two independent measurements — the held-out design's
+error distribution, and this — now agree on that partition, which is the
+strongest form the specification-limited finding has taken.
+
+### PRECISION IS PER-PORT, AND TWO PORTS ARE TOO THIN TO READ
+
+2,213 of the 2,260 anomalous cells sit on six ports reading 74.9% to 100%:
+`cnt_nonzero`, `in_lrefill3`, `dc_addr`, `saved_addr`, `in_cload` and
+`hitmiss_eval` at 100%; `biu_read` 79.1%; `in_idle` and `load_flag` 75.4%;
+`burst` 74.9%. Two read below 16% — `dcram_we` 2 of 13, `tag_we` 1 of 11 — and
+**those n are 13 and 11, so they are not a finding.** They are recorded as where
+to look if a port-stratified version is built, and nothing is concluded from
+them.
+
+**And the cell is the unit, not the testpoint.** Rolled up, ANOMALOUS predicts
+DIFFERING at 72.5% precision / 29.8% recall and the silent-and-anomalous set
+predicts BLIND at 62.2% / 21.7%. The loss is structural: a testpoint counts as
+differing only if a DECLARED OUTPUT differs, while the anomaly quantifies over
+every driven port including probes — 9 testpoints are anomalous on a probe only,
+which is internal state differing without an output differing, and that is a real
+difference rather than a detector error.
+
+### WHAT IT BUYS THAT NOTHING ELSE HAS: A CONCRETE, ADMISSIBLE BLINDNESS OBJECTION
+
+Every strength round so far could only hand an author an aggregate — *"you
+decided N times across thirteen designs and objected zero times."* This names a
+**cell**: testpoint, edge, port, the design's value and the population's. A check
+is BLIND AT A CELL when the cell is anomalous, the check READS that port, and the
+check DECIDES at that testpoint and does not object — all three golden-free.
+
+| population for a targeted authoring round | checks | requirements |
+|---|---|---|
+| the frozen 169-check set | 82 of 169 blind at ≥ 1 anomalous cell | **40** |
+| the whole 502-body corpus | 183 of 502 | **69** |
+
+**956 anomalous output-port cells over 42 testpoints.** That is the first time
+this work has had a population and an objection for the blindness direction that
+do not read the reference.
+
+### AND THE OPEN ROUTE FROM §9ao IS UNMEASURABLE HERE, WHICH IS NOT THE SAME AS REFUTED
+
+§9ao recorded the per-check fraction criterion — score a check by the SHARE of
+its objections that survive the mask — as the route left open. Scoring it needs
+checks that object AND spare the reference, and **0 of 205 objecting checks do.**
+Every threshold reads 0% precision, which is a fact about the population and not
+a verdict on the rule, so the driver now refuses rather than printing the table.
+
+That is the empty-positive-class guard `series.py` needed, met again in a new
+place and caught this time before a number was quoted. It also restates the
+central negative: the both-cell is empty at the whole-check level, so measuring
+the fraction criterion requires first solving the problem that would make it
+unnecessary.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
