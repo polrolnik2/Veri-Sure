@@ -4144,3 +4144,48 @@ def test_the_argmin_finding_does_not_claim_equivalence():
 def test_the_argmin_finding_is_named_in_the_module_docstring():
     assert ("the_argmin_of_a_sound_criterion_is_not_its_best_design"
             in ensemble.__doc__)
+
+
+def _mut():
+    return " ".join(
+        ensemble.the_standard_mutation_metric_saturates_and_cannot_rank_a_set().split())
+
+
+def test_the_mutation_metric_reports_a_perfect_score_beside_a_wrong_design():
+    t = _mut()
+    assert "**13 of 13 = 100%**" in t
+    assert "146 OF 348" in t
+
+
+def test_the_mutation_metric_is_disqualified_by_saturation_not_by_a_low_score():
+    """It fails as a proxy because it cannot separate two very different sets,
+    which is a different criticism from scoring badly."""
+    t = _mut()
+    assert "DISQUALIFIED BY SATURATION" in t
+    assert "cannot rank two sets" in t
+    assert "same 100% for a 169-check set and a 502-body corpus" in t
+
+
+def test_the_mutation_metric_explains_saturation_by_the_fault_model():
+    t = _mut()
+    assert "median around 150 of 318" in t
+    assert "far coarser" in t or "coarseness" in t.lower()
+
+
+def test_the_mutation_finding_excludes_equivalent_mutants():
+    """Counting an equivalent mutant as a survivor manufactures blindness."""
+    d = " ".join(
+        ensemble.the_standard_mutation_metric_saturates_and_cannot_rank_a_set.__doc__.split())
+    assert "EQUIVALENT and is excluded" in d
+    assert "manufactures blindness" in d
+
+
+def test_the_mutation_finding_keeps_it_as_a_floor_not_an_adequacy_measure():
+    t = _mut()
+    assert "HYGIENE FLOOR AND NEVER AS AN ADEQUACY MEASURE" in t
+    assert "least informative" in t
+
+
+def test_the_mutation_finding_is_named_in_the_module_docstring():
+    assert ("the_standard_mutation_metric_saturates_and_cannot_rank_a_set"
+            in ensemble.__doc__)

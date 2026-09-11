@@ -2716,6 +2716,82 @@ full — it is *selection over* a noisy distribution, not a tighter distribution
 three routes to a golden-free second loop stay closed: this measures how to pick
 the best member of one loop's output, not how to run a second one.
 
+## 9al. The field's own golden-free completeness metric reads 100% on a set that leaves the design 42% wrong
+
+The one instrument this session had not tried is the one the verification
+literature actually prescribes for this question, and it is **built into this
+repository and unwired**. `specflow/qualify.py` is an mcy mutation-qualification
+gate, and its docstring already states the property every instrument here has
+lacked:
+
+> *"Mutate the candidate, not a golden. ... 'This mutant provably changes
+> observable behaviour AND the suite still passes' convicts the SUITE, whatever
+> the base design's correctness."*
+
+That is **functional qualification** — Certitude's measure, mcy's measure,
+mutation adequacy in the testing literature — and it needs no reference at all.
+It is precisely what this document has been calling blindness residue: a
+surviving live mutant is a concrete perturbation the set cannot see.
+
+**Bands were fixed before the number was read:** ≥80% the set pins behaviour
+tightly; 40–79% a real residue with named witnesses; <40% measurably blind with
+each survivor naming a hole. The live filter is the `m02` lesson — a mutant that
+changes no observable behaviour is EQUIVALENT and excluded, never counted as a
+miss, and liveness is decided against the mutant's own parent with no reference
+involved.
+
+| | |
+|---|---|
+| mutants available | 15 |
+| **EQUIVALENT, excluded** | **2** |
+| live mutants | 13 |
+| **the 169-check audit-zero set kills** | **13 of 13 = 100%** |
+| the whole 502-body corpus kills | 13 of 13 = 100% |
+
+**THE SET SCORES PERFECT ON THE FIELD'S GOLDEN-FREE COMPLETENESS METRIC, AND THE
+DESIGN IT ACCEPTS DIFFERS FROM THE REFERENCE ON 146 OF 348 TESTPOINTS.**
+
+### So mutation score is disqualified as a proxy, and the column that says why is in the table
+
+The goal asks for proxy metrics *"chosen by how well they facilitate the RTL
+Editor succeeding."* **Mutation score fails that test by saturation**: it reads
+100% for both the 169-check set and the 502-body corpus, so it cannot even
+separate those two, let alone rank a set by whether it forces correctness.
+
+The reason is visible in how much each mutation moves: **the live mutants change
+7 to 318 testpoints, median around 150 of 318.** A single-operator mutation of an
+FSM this tightly coupled breaks behaviour across half the suite, so almost any
+check that fires at all catches it. **The fault model is far coarser than the
+residue it is being asked to measure** — the delivered design's remaining errors
+sit in positions where nine independent implementations cannot agree, and no
+operator substitution produces a fault of that shape.
+
+**This reproduces the mutant leg's earlier result from the opposite side.** That
+round measured checks promoted by mutants as 100% sound and 0% discriminating and
+read it as a property of the promoted checks. It is a property of the
+**instrument**: mechanical mutants are easy on both legs, so they neither reject a
+good check nor reward a strong one.
+
+### What follows for the gate, and it is not "wire it up"
+
+`qualify.py` should stay a **hygiene floor, not an adequacy measure**. A set that
+fails mutation qualification is certainly broken; a set that passes it has been
+told nothing about whether its demands are correct. Reporting a 100% mutation
+score beside a design wrong on 42% of the suite would be the most defensible-looking
+number this document could publish and among the least informative.
+
+**And it answers the standing methodological question — can a proxy be validated
+before equivalence is chased — with a worked negative.** Mutation score is
+golden-free, cheap, standard, and measured here to be saturated. Validating it
+first cost one afternoon of compute and would have cost an editor run and a false
+conclusion otherwise.
+
+**Scope.** These are mutants of one spec-derived design, not of the delivered one,
+so this measures the set's sensitivity to perturbations of that parent. The
+saturation conclusion does not depend on the parent — 13 of 13 with a median
+mutation moving 150 testpoints is coarse whatever it is mutating — but a kill rate
+against mutants of the delivered design has not been run.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

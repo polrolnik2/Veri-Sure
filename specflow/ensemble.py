@@ -472,6 +472,18 @@ draws with a strictly positive count: a draw that reached zero has exhausted its
 criterion, not shown itself best.
 `the_argmin_of_a_sound_criterion_is_not_its_best_design`
 carries it.
+
+AND THE FIELD'S OWN GOLDEN-FREE COMPLETENESS METRIC IS DISQUALIFIED BY
+SATURATION. Mutation adequacy -- functional qualification, the measure this
+repository already ships unwired as `specflow/qualify.py` -- needs no known-good
+design: a live mutant the set still passes convicts the set. Measured, both the
+169-check audit-zero set and the whole 502-body corpus kill 13 of 13 live
+mutants, so it cannot separate them, while the design that set accepts is wrong
+on 146 of 348 testpoints. The live mutants each move a median of ~150 testpoints,
+so the fault model is far coarser than the residue it is asked to measure. Keep
+it as a hygiene floor; never read it as adequacy.
+`the_standard_mutation_metric_saturates_and_cannot_rank_a_set`
+carries it.
 """
 from __future__ import annotations
 
@@ -7035,4 +7047,55 @@ def the_argmin_of_a_sound_criterion_is_not_its_best_design() -> str:
         "testpoints. **It does not reach equivalence** -- 146 of 348 still differs "
         "on 42% of the suite -- and it picks the best member of a noisy "
         "distribution rather than tightening the distribution."
+    )
+
+
+def the_standard_mutation_metric_saturates_and_cannot_rank_a_set() -> str:
+    """FUNCTIONAL QUALIFICATION, THE FIELD'S GOLDEN-FREE COMPLETENESS MEASURE,
+    MEASURED AND DISQUALIFIED AS A PROXY HERE.
+
+    Mutation adequacy is what the testing literature prescribes for exactly this
+    question, and it needs no known-good design: mutate the CANDIDATE, and a live
+    mutant the set still passes convicts the SET. This repository ships that gate
+    (`specflow/qualify.py`, mcy) and it is unwired.
+
+    Measured, it is perfect and useless. Both the 169-check audit-zero set and the
+    502-body corpus kill every live mutant, so the metric cannot separate them --
+    and the design the 169-check set accepts is wrong on 146 of 348 testpoints.
+
+    THE LIVE FILTER IS NOT OPTIONAL. A mutant that changes no observable behaviour
+    is EQUIVALENT and is excluded rather than counted as a miss; 2 of 15 here.
+    Counting an equivalent mutant as a survivor manufactures blindness that is not
+    there, which is the mirror of the defect this metric is meant to catch.
+    """
+    return (
+        "    mutants available                       15\n"
+        "      **EQUIVALENT -- excluded**             **2**\n"
+        "      live                                   13\n"
+        "      **169-check audit-zero set kills**  **13 of 13 = 100%**\n"
+        "      the 502-body corpus kills            13 of 13 = 100%\n\n"
+        "**THE SET SCORES PERFECT ON THE FIELD'S GOLDEN-FREE COMPLETENESS METRIC "
+        "AND THE DESIGN IT ACCEPTS DIFFERS FROM THE REFERENCE ON 146 OF 348 "
+        "TESTPOINTS.**\n\n"
+        "**IT IS DISQUALIFIED BY SATURATION, AND THE REASON IS THE FAULT MODEL'S "
+        "COARSENESS.** The live mutants change **7 to 318 testpoints, median "
+        "around 150 of 318** -- a single-operator mutation of a tightly coupled "
+        "FSM breaks behaviour across half the suite, so almost any check that "
+        "fires at all catches it. The metric reads the same 100% for a 169-check "
+        "set and a 502-body corpus, so it cannot rank two sets, let alone say "
+        "whether either forces correctness.\n\n"
+        "**This is the mutant leg's earlier result seen from the other side.** "
+        "That round measured mutant-promoted checks at 100% sound and 0% "
+        "discriminating and read it as a fact about those checks. It is a fact "
+        "about the INSTRUMENT: mechanical mutants are easy on both legs, so they "
+        "neither reject a bad check nor reward a strong one.\n\n"
+        "**SO KEEP IT AS A HYGIENE FLOOR AND NEVER AS AN ADEQUACY MEASURE.** A "
+        "set that fails mutation qualification is certainly broken; a set that "
+        "passes has been told nothing about whether its demands are right. "
+        "Reporting 100% beside a design wrong on 42% of the suite would be the "
+        "most defensible-looking and least informative number available.\n\n"
+        "**And it settles the method question it was run to answer:** a proxy CAN "
+        "be validated before equivalence is chased, and this one fails that "
+        "validation for a cost of no model calls -- against an editor run and a "
+        "false conclusion otherwise."
     )
