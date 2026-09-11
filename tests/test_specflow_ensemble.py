@@ -3821,3 +3821,57 @@ def test_the_per_objection_finding_says_unseparable_not_unauthored():
 def test_the_per_objection_finding_is_named_in_the_module_docstring():
     assert ("the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which"
             in ensemble.__doc__)
+
+
+def _ceil():
+    return ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations()
+
+
+def test_the_ceiling_is_labelled_a_ceiling_and_not_a_golden_free_score():
+    #: whitespace-normalised, so re-wrapping the docstring cannot break the pin
+    d = " ".join(
+        ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations
+        .__doc__.split())
+    assert "IT IS A CEILING" in d
+    assert "it uses the reference" in d
+    assert "no figure from it is a golden-free score" in d
+
+
+def test_the_ceiling_disclaims_the_pre_registered_binary_it_did_not_reach():
+    """The criterion was never satisfied, so 'the checks are insufficient' is NOT
+    what this measured, and saying so afterwards would be the defect the bar
+    exists to prevent."""
+    d = " ".join(
+        ensemble.vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations
+        .__doc__.split())
+    assert "DOES NOT APPLY" in d
+    assert "never satisfied" in d
+    assert "measures the editor, not" in d
+    assert "one draw" in d
+
+
+def test_the_ceiling_reports_the_comparison_that_makes_it_meaningful():
+    t = " ".join(_ceil().split())
+    assert "261" in t and "174" in t and "279/348" in t
+    assert "146, 192, 192, 207, 220" in t
+    assert "155 -> 86" in t
+
+
+def test_the_ceiling_names_the_explanation_mechanism():
+    """Vetted verdicts with unvetted reasoning is the whole finding."""
+    t = " ".join(_ceil().split())
+    assert "VERDICTS correct" in t and "REASONING" in t
+    assert "builds a structural theory" in t
+    assert "thirteen rejected commits" in t.lower()
+
+
+def test_the_ceiling_records_that_more_signal_was_worse():
+    t = " ".join(_ceil().split())
+    assert "CAME APART" in t
+    assert "did not convert" in t
+    assert "actionable and 155 are not" in t
+
+
+def test_the_ceiling_is_named_in_the_module_docstring():
+    assert ("vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations"
+            in ensemble.__doc__)

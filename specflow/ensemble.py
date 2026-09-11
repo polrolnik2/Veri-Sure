@@ -403,6 +403,18 @@ is already authored and in hand. The golden-free rule that would separate those
 unauthored but UNSEPARABLE.
 `the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which`
 carries it.
+
+AND THE CEILING THAT REMOVES THE SEPARATION PROBLEM ENTIRELY MADE THINGS WORSE.
+All 502 bodies, each masked to the testpoints where it does not convict the
+reference, so every objection is vetted correct: the editor went 155 -> 86 and
+landed at 261 of 348 testpoints differing, against the golden-free 87-check set's
+174 and worse than all five control draws. Seven times the correct objections, a
+worse design. The criterion was never satisfied so this does not show the checks
+are insufficient -- what it shows is that a locally-correct objection from a
+globally-wrong check carries a globally-wrong EXPLANATION, and the editor acts on
+explanations.
+`vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations`
+carries it.
 """
 from __future__ import annotations
 
@@ -6656,4 +6668,55 @@ def the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_whi
         "instrument that identifies it is the reference. That is the strongest form "
         "of the case for a decision on the underdetermined cells from outside the "
         "specification-plus-reader loop."
+    )
+
+
+def vetting_the_objections_is_not_enough_because_the_editor_acts_on_explanations() -> str:
+    """THE CEILING, AND IT IS A CEILING -- it uses the reference and no figure
+    from it is a golden-free score.
+
+    Thirteen instruments show no golden-free RULE separates good objections from
+    bad. This removes the separation problem instead of solving it: every live
+    corpus body, masked to the testpoints where it does not convict the reference,
+    so every objection it can raise is one a correct design would not draw. Audit
+    verified zero by re-scoring the reference through the mask.
+
+    The pre-registered binary -- equivalence means the checks suffice, DIFFERS at
+    zero objections means they do not -- DOES NOT APPLY, because the criterion was
+    never satisfied. The editor stopped with six trials unspent and thirteen
+    commits rejected, which the earlier ceiling's pre-registration already fixes
+    the reading of: objections remaining with trials left measures the editor, not
+    the set. This is also one draw against a control spread with sd 28.
+    """
+    return (
+        "    arm                                   objections   testpoints   cells\n"
+        "      the start design                            --     279/348   4,450\n"
+        "      **DEDUP** -- 87 checks, GOLDEN-FREE      22 -> 0     **174**   2,071\n"
+        "      **CEILING** -- 502 checks, all vetted  155 -> 86     **261**   2,526\n"
+        "    five golden-free control draws: 146, 192, 192, 207, 220\n\n"
+        "**THE MAXIMALLY-INFORMED CRITERION PRODUCED A DESIGN WORSE THAN EVERY ONE "
+        "OF THEM** -- 87 testpoints worse than a golden-free set with a fourteenth "
+        "of its objections.\n\n"
+        "**OBJECTION COUNT AND DESIGN QUALITY CAME APART.** Objections fell 44% "
+        "while divergence fell 6%; the DEDUP arm fell 100% on objections and 38% on "
+        "divergence. More correct objections did not convert.\n\n"
+        "**THE MECHANISM, AND IT IS THE FINDING.** These 502 checks are unsound "
+        "suite-wide -- 255 convict the reference somewhere -- and the mask makes "
+        "their VERDICTS correct where they fire without making their REASONING "
+        "correct. **An editor does not act on a verdict; it reads the requirement "
+        "sentence and the check's detail and builds a structural theory.** So a "
+        "locally-correct objection from a globally-wrong check carries a "
+        "globally-wrong explanation. Thirteen rejected commits is that thrashing, "
+        "and the editor documented two clusters where every fix it tried regressed "
+        "checks already passing. **Vetting the objections is not sufficient -- the "
+        "explanations have to be right too, and nothing in this pipeline vets "
+        "those.**\n\n"
+        "**AND IT REVERSES THE PRIOR THAT MORE SIGNAL IS BETTER.** Redundancy was "
+        "treated as a reporting defect and more designs were chased as an "
+        "improvement. Here seven times the objections, every one correct, lost to "
+        "an 87-check set -- which says the editor's budget goes on PRIORITISING "
+        "objections, and a large correct criterion can exhaust it before a small "
+        "one does. The smaller set's advantage was never its soundness, which the "
+        "ceiling also has; it was that 22 objections are actionable and 155 are "
+        "not."
     )

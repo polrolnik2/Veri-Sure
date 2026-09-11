@@ -2203,6 +2203,75 @@ times, reached for the first time from below the level of the check — and it i
 the strongest form of the case for a decision on the underdetermined cells from
 outside the specification-plus-reader loop.
 
+## 9af. The CEILING run: seven times more vetted objections produced a worse design
+
+**A CEILING. It uses the reference and no figure from it is a golden-free score** —
+the same status as MAXSOUND and the reference-derived probes, and the use of the
+reference the goal permits. Pre-registered in
+`docs/evidence/prereg/ceiling-editor-run.md` before dispatch.
+
+§9ae left one question unanswered: thirteen instruments show no golden-free *rule*
+separates good objections from bad, but nothing had tested whether **the checks
+themselves suffice.** The ceiling answers that by removing the separation problem
+entirely: all 502 live corpus bodies, each masked to the testpoints where it does
+**not** convict the reference, so **every objection it can raise is one a correct
+design would not draw.** Audit verified zero by re-scoring the reference through
+the mask, 90.6% of cells admitted, no check left empty.
+
+### The result, graded in its own clean directory with three pins green
+
+| arm | criterion | objections | testpoints differing | cells |
+|---|---|---|---|---|
+| the start design | — | — | 279 of 348 | 4,450 |
+| **DEDUP** — 87 checks, **golden-free** | audit 0 | 22 → **0** | **174** | 2,071 |
+| **CEILING** — 502 checks, **every objection vetted** | audit 0 | 155 → **86** | **261** | 2,526 |
+
+*Five golden-free control draws for scale: 146, 192, 192, 207, 220.*
+
+**THE MAXIMALLY-INFORMED CRITERION PRODUCED A DESIGN WORSE THAN EVERY ONE OF
+THEM**, and 87 testpoints worse than the golden-free set that had a fourteenth of
+its objections.
+
+### What it does NOT settle, stated first
+
+**The criterion was never satisfied**, so the pre-registered binary does not apply.
+The editor stopped at 86 objections with **six trials unspent and thirteen commits
+rejected** — it ran out of theories, not budget. MAXSOUND's own pre-registration
+fixes the reading: *objections remaining with trials left measures the editor, not
+the set.* **So this does not show the checks are insufficient**, and it must not be
+quoted as though it did. It is also **one draw**, against a control spread with
+sd 28.
+
+### What it does show, and it is about proxy metrics rather than about checks
+
+**Objection count and design quality came apart, hard.** Objections fell 44%
+(155 → 86) while divergence fell 6% (279 → 261). The DEDUP arm fell 100% on
+objections and 38% on divergence. **More correct objections did not convert into a
+better design; the arm with far fewer of them won by 87 testpoints.**
+
+**The mechanism the editor's own report points at: a locally-correct objection
+from a globally-wrong check carries a globally-wrong EXPLANATION.** These 502
+checks are unsound suite-wide — 255 of them convict the reference somewhere — and
+the mask makes their *verdicts* correct where they fire without making their
+*reasoning* correct. The editor does not act on a verdict; it reads the
+requirement sentence and the check's detail and builds a structural theory. Thirteen
+rejected commits is that thrashing, and the editor documented two clusters where
+every fix it tried regressed checks that were already passing.
+
+**So vetting the objections is not sufficient — the explanations have to be right
+too**, and nothing in this pipeline vets those. That is a property of the checks
+that no selection rule, golden-free or otherwise, touches.
+
+### And it reverses the natural prior about set size
+
+More signal was assumed better throughout this plan: §9z treated redundancy as a
+reporting defect, and §9ab chased more designs. **Here 7x the objections, every one
+of them correct, made the outcome worse than a 87-check set** — which says the
+editor's budget is spent on *prioritising* objections, and that a large correct
+criterion can exhaust it before a small one does. The DEDUP arm's advantage was
+never its soundness, which the ceiling also has; it was that 22 objections are
+actionable and 155 are not.
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8
