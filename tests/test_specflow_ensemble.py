@@ -4297,3 +4297,56 @@ def test_the_conjunction_answers_the_selection_gating_question():
 def test_the_conjunction_finding_is_named_in_the_module_docstring():
     assert ("the_minority_rules_perfect_precision_does_not_transfer"
             in ensemble.__doc__)
+
+
+def test_the_fail_open_mask_names_the_cause_that_dominated_its_declines():
+    # A filter that admits on every failure path reports its own absence as a
+    # measurement. The histogram is the finding: without it, "100% admitted"
+    # reads as a fact about the world.
+    why = ensemble.a_fail_open_mask_reports_its_own_absence_as_a_measurement()
+    assert "3,972   76.8%" in why
+    assert "461 of them against 312 outputs" in why
+    assert "cannot be audited" in why
+
+
+def test_the_fail_open_was_caught_by_disagreement_not_by_the_headline():
+    # Every counting-shaped defect in this work was caught the same way, and
+    # recording the tell is what makes the next one findable.
+    why = ensemble.a_fail_open_mask_reports_its_own_absence_as_a_measurement()
+    assert "57.4%" in why
+    assert "nineteenth counting-shaped defect" in why
+    assert "rather than by the headline looking wrong" in why
+
+
+def test_the_mask_is_measured_symmetric_between_the_two_designs():
+    # This is the load-bearing half. A site-level filter that removes the same
+    # share from a wrong design and a correct one is not a discriminator, and
+    # the pair must be measured in ONE process or it is a cross-run comparison.
+    why = ensemble.a_site_level_mask_is_invisible_to_an_existential_criterion()
+    assert "41.4%" in why and "41.2%" in why
+    assert "ONE process" in why
+    assert "not a discriminator" in why
+
+
+def test_the_site_level_negative_states_its_band_and_builds_nothing():
+    # The pre-registered reading, and the refusal to build on a partial.
+    why = ensemble.a_site_level_mask_is_invisible_to_an_existential_criterion()
+    assert "125 of 126" in why
+    assert "276 of 502 = 55.0%" in why
+    assert "BUILD NOTHING" in why
+    assert "nothing was built on it" in why
+
+
+def test_the_site_level_negative_carries_its_coverage_limit():
+    # 1,874 sites have no population evidence at all, and a masked rate quoted
+    # over a denominator the instrument cannot see is the companion defect.
+    why = ensemble.a_site_level_mask_is_invisible_to_an_existential_criterion()
+    assert "1,874 sites on 30 testpoints" in why
+    assert "both denominators" in why
+
+
+def test_both_splitmask_findings_are_named_in_the_module_docstring():
+    doc = ensemble.__doc__ or ""
+    assert "a_fail_open_mask_reports_its_own_absence_as_a_measurement" in doc
+    assert "a_site_level_mask_is_invisible_to_an_existential_criterion" in doc
+    assert "41.2% of the reference's" in doc

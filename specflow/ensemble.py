@@ -521,6 +521,32 @@ THIRTEEN on a 259-body corpus. The perfect-precision figure does not transfer,
 and every quotation of it must carry its (t, N, corpus).
 `the_minority_rules_perfect_precision_does_not_transfer`
 carries it.
+
+AND A FILTER WHOSE DECLINES ARE NOT PARTITIONED BY CAUSE CANNOT BE AUDITED. The
+per-site golden-free mask -- admit an objection only where the design departs
+from population consensus on a port the check reads -- reported 100% admitted
+while a smaller diagnostic of the same rule reported 57.4% masked. The cause was
+that a port value it could not resolve reads as *no consensus*, which ADMITS, and
+`ports_read` returns INPUTS while the lookup searched only outputs. Every way of
+failing to decide landed on the admit side, so the instrument's own absence was
+indistinguishable from a finding about the world.
+`a_fail_open_mask_reports_its_own_absence_as_a_measurement`
+carries it, with the decline histogram that names the defect.
+
+AND THE CORRECTED MASK WORKS WHILE BUYING NO DISCRIMINATION. It masks 41.4% of
+the delivered design's objection sites and 41.2% of the reference's -- measured
+in one process -- so it removes the same share from the design that is wrong as
+from the design that is right, and a filter that symmetric cannot move the
+separation between them whatever criterion reads it. The false-reject rate moves
+1.4 points and the yield by one testpoint, and there is a second reason for that
+which is independent: both legs of the criterion are EXISTENTIAL over sites, a
+testpoint counts if ANY objection survives and a body convicts if ANY of its
+objections survives. Clearing a body needs every one of its sites masked, so a
+41% cut is nearly invisible. The open route is a criterion scoring the FRACTION
+of a check's objections that survive rather than whether one does -- a change to
+what a verdict means, not a tuning knob, and nothing is built on it.
+`a_site_level_mask_is_invisible_to_an_existential_criterion`
+carries it.
 """
 from __future__ import annotations
 
@@ -7274,4 +7300,122 @@ def the_minority_rules_perfect_precision_does_not_transfer() -> str:
         "extra gates find nothing the one-signal selection missed. The 169-check "
         "audit-zero set remains the better artifact -- audit 0 against the "
         "conjunction's 34%. The gates broke nothing; they had nothing to add."
+    )
+
+
+def a_fail_open_mask_reports_its_own_absence_as_a_measurement() -> str:
+    """SPLITMASK -- the per-site golden-free rule, and the defect that hid it.
+
+    Every whole-check rule measured here selects or drops a check entire, and no
+    whole check both objects to the delivered design and spares the reference --
+    255 objectors, 0 sound. But over-strictness is LOCAL: the reference-vetted
+    per-site mask takes the chained loop to 112 of 348, so the corpus holds the
+    information and only its localisation is missing. SPLITMASK is that
+    localisation made golden-free:
+
+        Admit check c's objection at (tp, edge) iff the design DIFFERS from the
+        population consensus on some port c reads. Mask it where the design does
+        exactly what 13 independent implementations unanimously do on every such
+        port -- there, at ~998:1000, the CHECK is what is wrong.
+
+    The rule is sound and the first driver of it measured nothing, because every
+    way of failing to decide landed on the same side.
+    """
+    return (
+        "**THE DRIVER REPORTED 100% ADMITTED AND A 60-BODY DIAGNOSTIC REPORTED "
+        "57.4% MASKED, WHICH IS THE ONLY REASON EITHER WAS CHECKED.** The "
+        "headline -- a rule that masks nothing -- reads as a clean negative "
+        "about the world. It was a defect in the instrument.\n\n"
+        "    declines, by first cause, over 5,172 objection sites\n"
+        "      **a port value could not be resolved   3,972   76.8%**\n"
+        "      population not unanimous                 585   11.3%\n"
+        "      no population evidence for that tp       538   10.4%\n"
+        "      edge outside the covering row             55    1.1%\n"
+        "      design departs from consensus -> ADMIT     22    0.4%\n\n"
+        "**THE MASK RESOLVED EVERY PORT FROM `row['outputs']`, AND `ports_read` "
+        "RETURNS INPUTS TOO** -- 461 of them against 312 outputs over 120 bodies. "
+        "A value it could not find reads as *no consensus*, which ADMITS, so a "
+        "check reading a single input could never be masked. Corrected, the "
+        "driver and the diagnostic agree at 57.4% to the decimal.\n\n"
+        "**THE RULE'S QUANTIFIER WAS ALSO WRONG IN PRINCIPLE, NOT ONLY IN "
+        "LOOKUP.** Every design is driven by the same stimulus, so an input is "
+        "unanimous and matching BY CONSTRUCTION and can never distinguish a "
+        "design from the population. The rule quantifies over the ports the "
+        "design DRIVES.\n\n"
+        "    on the full corpus, 502 bodies against the delivered design\n"
+        "      objection sites                     15,936\n"
+        "        no locatable site (admitted)         670\n"
+        "        no population testpoint (admitted) 1,874\n"
+        "        **instrumented**                  **13,392**\n"
+        "      **MASKED**                           **6,603   41.4% of all, "
+        "49.3% of instrumented**\n\n"
+        "**THE GENERAL RULE, AND IT IS THE POINT OF RECORDING THIS.** A filter "
+        "whose declines are not PARTITIONED BY CAUSE cannot be audited, because "
+        "'I found nothing to mask' and 'I could not look it up' are the same "
+        "output. Count every decline by cause and refuse to report when a "
+        "non-substantive cause dominates -- here one cause held 76.8%. This is "
+        "the nineteenth counting-shaped defect in this work and, like all "
+        "eighteen before it, it was caught by disagreement with a prior "
+        "measurement rather than by the headline looking wrong."
+    )
+
+
+def a_site_level_mask_is_invisible_to_an_existential_criterion() -> str:
+    """SPLITMASK works and the criterion cannot use it. The bands were fixed in
+    `docs/evidence/prereg/splitmask.md` before anything was computed.
+
+    This is the result once the fail-open above is corrected, and it is a
+    structural negative rather than a weak number: the instrument does what it
+    was designed to do at the level it operates on, and both legs of the
+    criterion read a quantity that level cannot move.
+    """
+    return (
+        "    yield   blind testpoints acquiring an ADMITTED objection   "
+        "**125 of 126**\n"
+        "    audit   bodies convicting the reference at an admitted site  "
+        "**276 of 502 = 55.0%**\n"
+        "    band    >= 25 with audit > 5%  ->  **PARTIAL: record the pair and "
+        "BUILD NOTHING**\n\n"
+        "**THE MASK REMOVES 41.4% OF OBJECTION SITES AND MOVES THE FALSE-REJECT "
+        "RATE BY 1.4 POINTS**, 56.4% to 55.0% -- seven bodies of 283. The yield "
+        "moves by one testpoint, 126 to 125.\n\n"
+        "**AND THE FIRST REASON IS THAT THE MASK IS SYMMETRIC.** Both designs "
+        "scored in ONE process, so the pair is not a cross-run comparison:\n\n"
+        "                              sites    masked        bodies objecting\n"
+        "      the delivered design   15,936   6,603  **41.4%**   255 -> 252, "
+        "cleared **3 = 1.2%**\n"
+        "      **the reference**      16,461   6,789  **41.2%**   283 -> 276, "
+        "cleared **7 = 2.5%**\n\n"
+        "**41.4% against 41.2%.** The mask removes the same share of a design "
+        "wrong on 146 of 348 testpoints as of the design that is right, so it "
+        "cannot move the separation between them whatever the criterion reads. "
+        "An instrument that filters both arms equally is not a discriminator, "
+        "and that is a property of the RULE rather than of the threshold: "
+        "unanimity-matching is about as common at the reference's objection "
+        "sites as at the design's.\n\n"
+        "**THE SECOND REASON IS STRUCTURAL AND IT GENERALISES TO ANY SITE-LEVEL "
+        "INSTRUMENT.** Both legs are EXISTENTIAL over sites: a blind testpoint "
+        "counts if ANY objection survives, and a body convicts the reference if "
+        "ANY of its objections survives. Clearing a body therefore requires "
+        "masking EVERY site at which it objects, and a body that objects at many "
+        "sites survives a 41% cut almost surely. A site-level instrument is "
+        "nearly invisible to a criterion quantified that way, however well it "
+        "localises.\n\n"
+        "**SO THE CHOICE IS NOT A BETTER MASK, IT IS A DIFFERENT CRITERION** -- "
+        "one that scores a check by the FRACTION of its objections that survive "
+        "rather than by whether one does. That is a change to what a verdict "
+        "means and it is not a tuning knob; it is recorded here as the open "
+        "route and nothing was built on it.\n\n"
+        "**AND THE INSTRUMENT IS BLIND WHERE THE ERRORS ARE, WHICH THE "
+        "PRE-REGISTRATION PREDICTED.** SPLITMASK can only remove over-strictness "
+        "that CONTRADICTS consensus. A demand that is wrong inside a split region "
+        "survives the mask because the population has no opinion there -- and 97% "
+        "of a held-out design's errors live in the 11% of cells the population "
+        "cannot agree on. 11.3% of declines are exactly that: no unanimity.\n\n"
+        "**Coverage limit, stated because it bounds the figures above.** The "
+        "population was scored on a 318-testpoint suite and the graded designs "
+        "carry 348, so 1,874 sites on 30 testpoints hold no population evidence "
+        "at all. They are admitted and counted apart, and the masked rate is "
+        "quoted over both denominators -- a rate over a denominator the "
+        "instrument cannot see is the defect the companion finding records."
     )
