@@ -484,6 +484,20 @@ so the fault model is far coarser than the residue it is asked to measure. Keep
 it as a hygiene floor; never read it as adequacy.
 `the_standard_mutation_metric_saturates_and_cannot_rank_a_set`
 carries it.
+
+AND A GATE IS A DIFFERENT INSTRUMENT IN SELECTION THAN IN REPAIR, WHICH
+RE-READS SEVERAL RESULTS HERE. The minority rule keeps at 59 of 59 and 7 of 7
+as a SELECTOR and lands 7 of 47, then 1 of 28, then 0 of 24 as a REPAIR
+objection -- one signal, two regimes, opposite outcomes. Selection has one
+boundary that matters, the accept side, and can sacrifice recall freely because
+a discarded good check costs one body out of a pool. Repair additionally needs
+a low false-reject rate (a needless rewrite broke 2 of 4 working checks), an
+ACTIONABLE objection rather than a correct one, and gates that are jointly
+satisfiable rather than pulling against each other. So a decay curve measured
+by feeding a selection-shaped signal as a repair objection is a fact about that
+regime and not about whether checks can be authored into the adequate cell.
+`a_gate_is_a_different_instrument_in_selection_than_in_repair`
+carries it.
 """
 from __future__ import annotations
 
@@ -7098,4 +7112,58 @@ def the_standard_mutation_metric_saturates_and_cannot_rank_a_set() -> str:
         "be validated before equivalence is chased, and this one fails that "
         "validation for a cost of no model calls -- against an editor run and a "
         "false conclusion otherwise."
+    )
+
+
+def a_gate_is_a_different_instrument_in_selection_than_in_repair() -> str:
+    """THE SAME SIGNAL CAN BE AN EXCELLENT SELECTOR AND AN UNUSABLE REPAIR DRIVER,
+    AND THIS PROJECT RAN ONE AS THE OTHER.
+
+    A gate has two possible jobs. In SELECTION it is a filter over independently
+    authored bodies: keep the ones that pass, discard the rest. In REPAIR it is a
+    feedback signal: tell the author what is wrong and take a rewrite.
+
+    Those jobs have different, and largely opposite, requirements -- and the
+    minority rule is the worked example, because it was used both ways here and
+    the outcomes are 100% and 0%.
+    """
+    return (
+        "    the SAME rule, two regimes\n"
+        "      as a SELECTOR -- what it keeps spares the reference  "
+        "**59 of 59**, **7 of 7**\n"
+        "      its reject side against the audit                    **95 of 95**\n"
+        "      as a REPAIR OBJECTION -- checks landing on target      "
+        "**7 of 47, then 1 of 28, then 0 of 24**\n"
+        "      and it pushed **12 of 47** past the target into asserting nothing\n\n"
+        "**SELECTION HAS ONE BOUNDARY THAT MATTERS: THE ACCEPT SIDE.** Everything "
+        "kept must be good; recall is nearly free to sacrifice, because a "
+        "discarded good check costs one body out of a large pool and another draw "
+        "may supply an equivalent. A bad check that gets in is not replaceable. So "
+        "there is exactly one number to tune, and the minority rule's terrible "
+        "recall -- it discards precisely the discriminating checks -- is a SUPPLY "
+        "cost, fixable with volume, not a CONTAMINATION cost, which is not "
+        "fixable at all.\n\n"
+        "**REPAIR NEEDS THREE THINGS SELECTION DOES NOT.**\n\n"
+        "1. **False rejects stop being free.** Sending a working check into a "
+        "rewrite destroys it -- telling an author its already-sound check needed "
+        "fixing anyway **broke 2 of 4 working checks**, one into a crash. In "
+        "selection that check would simply have been kept.\n"
+        "2. **The objection must be ACTIONABLE, not merely correct.** Selection "
+        "needs no message at all; a boolean suffices. A gate that says 'the "
+        "oracle passed N variants' without saying what any variant DID is "
+        "starvation, and it sits beside a round that produced **0 of 72**.\n"
+        "3. **The gates must be JOINTLY SATISFIABLE.** Selection intersects, with "
+        "no interaction. Repair oscillates, because moving a check to satisfy one "
+        "gate carries it across another's boundary -- over-strictness and vacuity "
+        "as one defect with two signs. It can be structural between gates: "
+        "`liveness` reads a moving verdict as proof the check is alive, while a "
+        "soundness rule reads the same movement as over-reach. A set where one "
+        "gate demands movement and another forbids it cannot be satisfied at "
+        "all.\n\n"
+        "**SO A RESULT FROM ONE REGIME IS NOT A RESULT ABOUT THE OTHER.** The "
+        "narrowing rounds fed a SELECTION-shaped signal as a REPAIR objection, "
+        "one signal and one rewrite where the stage offers seven gates and five "
+        "rounds. Their 15% -> 4% -> 0% decay is a measurement of that degenerate "
+        "regime, and it is **not** evidence that checks cannot be authored into "
+        "the adequate cell -- which remains unmeasured rather than closed."
     )

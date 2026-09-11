@@ -4189,3 +4189,41 @@ def test_the_mutation_finding_keeps_it_as_a_floor_not_an_adequacy_measure():
 def test_the_mutation_finding_is_named_in_the_module_docstring():
     assert ("the_standard_mutation_metric_saturates_and_cannot_rank_a_set"
             in ensemble.__doc__)
+
+
+def _regimes():
+    return " ".join(
+        ensemble.a_gate_is_a_different_instrument_in_selection_than_in_repair().split())
+
+
+def test_the_same_rule_is_reported_in_both_regimes():
+    t = _regimes()
+    assert "**59 of 59**" in t and "**7 of 7**" in t and "**95 of 95**" in t
+    assert "**7 of 47, then 1 of 28, then 0 of 24**" in t
+
+
+def test_selection_has_one_boundary_and_recall_is_cheap():
+    t = _regimes()
+    assert "ONE BOUNDARY THAT MATTERS: THE ACCEPT SIDE" in t
+    assert "SUPPLY cost" in t and "CONTAMINATION cost" in t
+
+
+def test_repair_needs_three_things_selection_does_not():
+    t = _regimes()
+    assert "broke 2 of 4 working checks" in t
+    assert "ACTIONABLE, not merely correct" in t
+    assert "JOINTLY SATISFIABLE" in t
+    assert "demands movement and another forbids it" in t
+
+
+def test_the_regime_finding_limits_what_the_narrowing_decay_showed():
+    """The decay curve measured a degenerate regime; it must not be quoted as
+    evidence that authoring into the adequate cell is closed."""
+    t = _regimes()
+    assert "15% -> 4% -> 0%" in t
+    assert "unmeasured rather than closed" in t
+
+
+def test_the_regime_finding_is_named_in_the_module_docstring():
+    assert ("a_gate_is_a_different_instrument_in_selection_than_in_repair"
+            in ensemble.__doc__)
