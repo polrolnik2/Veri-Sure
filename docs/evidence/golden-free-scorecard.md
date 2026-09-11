@@ -2552,6 +2552,44 @@ All three routes to a golden-free second loop are now measured and closed:
 112 is structural on this corpus, and it is structural for a reason now stated
 three ways rather than inferred once.**
 
+## 9aj-bis. The stimulus closure, independently reproduced — and the sixteenth counting-shaped defect
+
+§9p closed the stimulus question at zero opportunity. It was re-run from scratch
+this session against the 169-check audit-zero criterion, per-testpoint rather than
+per-check, because the goal names the stimulus loop explicitly and every earlier
+measurement of it used a different unit. **It reproduces exactly.**
+
+| design | differing | CAUGHT | **SILENT** | BLIND |
+|---|---|---|---|---|
+| start design L | 279 | 169 | **0** | 110 |
+| **run 6 — the selected draw** | **146** | 20 | **0** | **126** |
+
+**And the coarse golden-free upper bound is now on record beside it: decide
+coverage is 348 of 348 = 100%, at a median of 67 checks per testpoint.** Not one
+testpoint in the suite is dark, so there is no reach for stimulus to buy — the
+`SILENT` column is zero because it cannot be anything else. The pre-registered
+band was `< 5% → closed`; it is 0.0%.
+
+**The loop spends the class it can see.** CAUGHT falls 169 → 20 while BLIND rises
+110 → 126. The set's discriminating power is a finite resource the editor
+consumes, and what remains is 126 testpoints it decides on and passes.
+
+### THE SIXTEENTH COUNTING-SHAPED DEFECT, AND IT IS MINE
+
+The first run of this scorer read the reference from `run/golden/suite/results` —
+**a 318-testpoint suite** — while every graded design carries **348**. It
+intersected two different suites and reported **124 differing where the published
+grade is 146**, with a clean-looking split beside it.
+
+**The tell was disagreement with a prior measurement, not the headline looking
+wrong** — 124 against 146 — which is the signature all sixteen have shared. The
+scorer now **refuses to print the split** unless divergence reproduces the
+published grades (279 and 146). With the correct reference both pin exactly.
+
+**Two reference trace sets exist on disk with different testpoint counts, and
+nothing in either directory says which is current.** That is the reusable half of
+this defect.
+
 ## 9ak. The only golden-free number that orders a loop's draws is the one the editor descended on — and its argmin is not its best design
 
 Pre-registered in `docs/evidence/prereg/held-out-selector.md`, bands fixed before
