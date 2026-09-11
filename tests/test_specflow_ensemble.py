@@ -4399,3 +4399,27 @@ def test_the_new_blindness_findings_are_named_in_the_module_docstring():
     assert "unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth" in doc
     assert "the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound" in doc
     assert "43x" in doc
+
+
+def test_the_smoke_test_defect_records_both_halves():
+    # The refusal and the vacuous pass are two defects, and the second is the
+    # one that would have let the first through.
+    why = ensemble.an_instrument_must_be_shown_able_to_reach_its_own_predicate()
+    assert "348" in why and "318" in why
+    assert "passed for the wrong reason" in why.lower()
+    assert "cannot reach the thing it is testing passes for free" in why
+
+
+def test_the_fix_is_a_reachability_precondition_not_a_better_assertion():
+    why = ensemble.an_instrument_must_be_shown_able_to_reach_its_own_predicate()
+    assert "REACHABILITY PRECONDITION" in why
+    assert "**cell 19**" in why
+
+
+def test_the_rule_subsumes_the_fail_open_mask():
+    # Two instruments, opposite failure directions, one rule.
+    why = ensemble.an_instrument_must_be_shown_able_to_reach_its_own_predicate()
+    assert "a_fail_open_mask_reports_its_own_absence_as_a_measurement" in why
+    assert "a cause which should be rare holds nearly all the mass" in why
+    doc = ensemble.__doc__ or ""
+    assert "an_instrument_must_be_shown_able_to_reach_its_own_predicate" in doc

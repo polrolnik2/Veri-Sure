@@ -568,6 +568,17 @@ of 205. Every threshold reads 0% precision, which is a fact about the population
 and not a verdict on the rule, so the driver refuses instead of printing it.
 `the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound`
 carries it.
+
+AND AN INSTRUMENT MUST BE SHOWN ABLE TO REACH ITS OWN PREDICATE BEFORE ANY OF ITS
+VERDICTS ARE READ. A gate battery run on bodies that must fail its fourth leg
+instead had every body refused at its second -- oracles declared over 348
+testpoints against a testplan holding 318 -- so the smoke test's assertion held
+vacuously and printed OK while testing nothing. The battery would then have
+reported a clean, fictitious "0 of 20 kept". The fix is a reachability
+precondition on the test, not a better assertion.
+`an_instrument_must_be_shown_able_to_reach_its_own_predicate`
+carries it, and it subsumes the fail-open mask as the same defect from the other
+side.
 """
 from __future__ import annotations
 
@@ -7532,4 +7543,49 @@ def the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound() -> str:
         "restated: the both-cell is empty at the whole-check level. Any future "
         "attempt at the fraction criterion has to solve that first, and solving "
         "it would make the fraction criterion unnecessary."
+    )
+
+
+def an_instrument_must_be_shown_able_to_reach_its_own_predicate() -> str:
+    """Two harness defects from one battery, and the rule that catches both.
+
+    The blindness-targeted round needed a five-leg gate battery. Before any
+    authored answer was scored, the battery was run on the TWENTY UNMODIFIED
+    bodies -- which are blind at their own target cell BY CONSTRUCTION, so leg 4
+    ("does this check object at the cell it was targeted at") must reject all
+    twenty. That smoke test found two defects, and the second is the more
+    instructive because the first one hid inside it.
+    """
+    return (
+        "**DEFECT ONE: EVERY CHECK WAS REFUSED BY `well_formed`, AND IT WAS THE "
+        "HARNESS.** The oracles were declared over the suite's **348** "
+        "testpoints while `testplan.json` holds the original **318** -- the "
+        "stimulus-loop testpoints were minted after the plan was frozen. "
+        "`well_formed` then refuses every check for *names testpoints that are "
+        "not in the testplan*, which reads exactly like a corpus of broken "
+        "bodies. It would have printed a clean **0 of 20 kept** and that number "
+        "would have been fiction. Twentieth counting-shaped defect here, and "
+        "mine.\n\n"
+        "**DEFECT TWO: THE SMOKE TEST PASSED, AND IT PASSED FOR THE WRONG "
+        "REASON.** Its assertion was *no unmodified body objects at its own "
+        "target*. With every body refused at leg 2, none ever reached leg 4 -- "
+        "so the assertion held vacuously and the run printed OK. **A test that "
+        "cannot reach the thing it is testing passes for free.**\n\n"
+        "    first run    well_formed 20   cell  0   -> printed OK\n"
+        "    **corrected**  well_formed  1   **cell 19**  -> genuinely OK\n\n"
+        "The fix is not a better assertion, it is a REACHABILITY PRECONDITION: "
+        "the test now refuses unless at least 60% of the bodies reach leg 4 and "
+        "fail THERE. One body still fails earlier, on a real hygiene defect in "
+        "its own source (`eventually` without `strong`), which is the shipped "
+        "gate doing its job and is reported rather than suppressed.\n\n"
+        "**THE RULE, AND IT SUBSUMES THE FAIL-OPEN MASK TOO.** An instrument "
+        "must be shown CAPABLE OF PRODUCING THE OUTCOME IT EXISTS TO DETECT "
+        "before any of its verdicts are read. The mask in "
+        "`a_fail_open_mask_reports_its_own_absence_as_a_measurement` failed this "
+        "from one side -- every way of failing to decide landed on *admit*. This "
+        "fails it from the other -- the deciding step never ran at all. **Both "
+        "produce a confident number, and in both the tell is that a cause which "
+        "should be rare holds nearly all the mass.** Partition the outcomes by "
+        "cause, and refuse to report when the substantive cause is not among "
+        "them."
     )
