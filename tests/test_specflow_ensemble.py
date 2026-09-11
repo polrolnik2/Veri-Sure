@@ -3941,3 +3941,42 @@ def test_iteration_does_not_claim_equivalence():
 def test_iteration_is_named_in_the_module_docstring():
     assert ("iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard"
             in ensemble.__doc__)
+
+
+def _gf2():
+    return " ".join(
+        ensemble.the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it().split())
+
+
+def test_the_golden_free_second_loop_reports_zero_and_why():
+    t = _gf2()
+    assert "**255**" in t and "**0**" in t
+    assert "STRUCTURAL EXCLUSION, NOT A THRESHOLD TO TUNE" in t
+    assert "FOUR of nine against a threshold of two" in t
+
+
+def test_the_golden_free_second_loop_rules_out_retuning():
+    """A gap between threshold and nearest candidate is what makes this final."""
+    t = _gf2()
+    assert "t=3 still keeps nothing" in t
+    assert "abandoning the rule's rationale" in t
+
+
+def test_the_golden_free_second_loop_credits_the_rule_rather_than_blaming_it():
+    """The rule rejects 255 unsound checks correctly; the emptiness is a
+    consequence of it working, not of it failing."""
+    t = _gf2()
+    assert "RULE IS CORRECT TO REJECT THEM" in t
+    assert "Not one of these 255 is sound" in t
+    assert "making no error" in t
+
+
+def test_the_golden_free_second_loop_locates_the_gap_precisely():
+    t = _gf2()
+    assert "reaches 174 and stops" in t.lower() or "REACHES 174 AND STOPS" in t
+    assert "not a gap in the rule, the prompt, the stimulus or the editor" in t
+
+
+def test_the_golden_free_second_loop_is_named_in_the_module_docstring():
+    assert ("the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it"
+            in ensemble.__doc__)

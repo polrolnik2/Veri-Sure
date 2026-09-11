@@ -2407,6 +2407,77 @@ chunk of exactly that into 62 testpoints of grade. **The residue is reachable �
 what is missing, still, is a reference-free way to tell which objections are the
 right ones**, measured at ~50% precision in §9ae and flat across its range.
 
+## 9ai. The golden-free second loop is EMPTY — and the rule is right, which is why
+
+§9ah's descent is real and its grade is a **ceiling**: the chain's criterion was
+reference-masked, so 112 is not a golden-free score. The goal's standing demand
+is that final scores not depend on the reference, so the question that decides
+whether §9ah means anything for a production pipeline is whether **a golden-free
+rule can assemble the second-loop criterion at all.**
+
+It cannot, and it is not close.
+
+**The golden-free analogue, with no reference anywhere.** A pipeline re-selecting
+against the design its first loop produced cannot ask about soundness. It applies
+what it applies at first selection — the minority rule, whose reject side is
+measured 95 of 95:
+
+    OBJECTS    to the design loop 1 accepted
+    MINORITY   convicts at most 2 of the nine population designs
+
+| | n |
+|---|---|
+| live corpus bodies | 502 |
+| **OBJECT** to loop 1's design | **255** |
+| of those, passing the **minority rule** | **0** |
+
+### It is a structural exclusion, not a threshold that needs tuning
+
+| the check convicts, of nine | checks | minority rule |
+|---|---|---|
+| 4 | 8 | rejects |
+| 5 | 3 | rejects |
+| 6 | 1 | rejects |
+| 7 | 3 | rejects |
+| **9 — all of them** | **240** | rejects |
+
+**The minimum over all 255 is FOUR of nine, against a threshold of two**, and
+**94% convict every single population design.** There is a gap between the
+threshold and the nearest candidate, so no retuning reaches them: t=3 still keeps
+nothing, and t=4 would keep eight checks while abandoning the rule's entire
+rationale — a check convicting nearly half the population is the signature the
+rule exists to reject.
+
+### And the rule is CORRECT to reject them, which is the whole point
+
+§9ad already measured these same 255: **not one is sound.** So the minority rule
+is not making an error here. It is doing exactly its job, correctly identifying
+255 over-strict checks — **and in doing so it removes the entire fuel supply for
+the second loop.**
+
+**THE CHAIN'S 62 TESTPOINTS ARE BOUGHT ENTIRELY WITH CHECKS THAT CONVICT A
+CORRECT DESIGN.** Every one of them. A golden-free pipeline that kept them would
+be accepting a criterion no correct design can satisfy; one that rejects them —
+as it must, and as this one does — finds nothing to say about the design its
+first loop produced and stops there.
+
+### So this is the answer to the goal's last clause, and it is a negative
+
+The goal asks to *"ultimately check how to assure that with a golden-free
+pipeline."* On this corpus the answer is now measured rather than inferred:
+
+* **iteration is the one mechanism that moves the grade** — 174 → 112, better
+  than all seven single-loop draws;
+* **its fuel is 255 checks of which zero are sound and none passes the
+  golden-free rule**, by a margin of two convictions with nothing in between;
+* **so the golden-free pipeline reaches 174 and stops**, which is exactly what
+  loop 1 reported when it terminated at zero objections with nine trials unspent.
+
+**The gap between the golden-free pipeline and the ceiling is therefore 62
+testpoints, and it is not a gap in the rule, the prompt, the stimulus or the
+editor. It is the corpus containing no sound check that objects to a design its
+own criterion has finished with.**
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

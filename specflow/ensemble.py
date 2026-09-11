@@ -427,6 +427,16 @@ in shape -- loop, re-select, loop -- and the corpus cannot run it, because the 8
 objections that powered loop 2 come from checks of which ZERO are sound.
 `iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard`
 carries it.
+
+AND THE GOLDEN-FREE SECOND LOOP IS MEASURED EMPTY, WHICH ANSWERS THE STANDING
+QUESTION. Applying the minority rule to the 255 checks that object to the design
+loop 1 accepted keeps ZERO of them -- not narrowly: the minimum convicts FOUR of
+the nine against a threshold of two, and 240 of 255 convict all nine. No
+retuning reaches them, and the rule is RIGHT to reject them, since none of the
+255 is sound. So the chain's 62 testpoints are bought entirely with checks that
+convict a correct design, and a golden-free pipeline reaches 174 and stops.
+`the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it`
+carries it.
 """
 from __future__ import annotations
 
@@ -6794,4 +6804,49 @@ def iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard() -> s
         "way to tell WHICH objections are right the thing worth building: 133 of "
         "the 174 wrong testpoints carried a locally-correct objection, and this "
         "run converted part of exactly that into grade."
+    )
+
+
+def the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it() -> str:
+    """THE ANSWER TO 'HOW TO ASSURE IT GOLDEN-FREE', AND IT IS A NEGATIVE.
+
+    Iteration is the one mechanism measured to move the grade -- a second loop
+    took the design 174 -> 112, better than all seven single-loop draws. But that
+    loop's criterion was reference-masked, so its grade is a ceiling and not a
+    golden-free score. What decides whether it means anything for a production
+    pipeline is whether a golden-free rule can assemble the second-loop criterion
+    at all.
+
+    The analogue uses no reference: keep a check that OBJECTS to the design the
+    first loop accepted and convicts at most two of the nine population designs --
+    the minority rule, reject side measured 95 of 95.
+    """
+    return (
+        "    live corpus bodies                            502\n"
+        "      **OBJECT** to the design loop 1 accepted    **255**\n"
+        "      of those, passing the **minority rule**       **0**\n\n"
+        "**AND IT IS A STRUCTURAL EXCLUSION, NOT A THRESHOLD TO TUNE.**\n\n"
+        "    convicts, of nine    checks    minority rule\n"
+        "      4                       8    rejects\n"
+        "      5                       3    rejects\n"
+        "      6                       1    rejects\n"
+        "      7                       3    rejects\n"
+        "      **9 -- all of them**  **240**  rejects\n\n"
+        "**The minimum over all 255 is FOUR of nine against a threshold of two**, "
+        "and 94% convict every population design. There is a gap between the "
+        "threshold and the nearest candidate, so t=3 still keeps nothing and t=4 "
+        "would keep eight checks while abandoning the rule's rationale -- "
+        "convicting half the population is the signature the rule exists to "
+        "reject.\n\n"
+        "**AND THE RULE IS CORRECT TO REJECT THEM.** Not one of these 255 is "
+        "sound. The minority rule is making no error: it is identifying 255 "
+        "over-strict checks exactly as designed, **and in doing so it removes the "
+        "entire fuel supply for the second loop.** The chain's 62 testpoints are "
+        "bought entirely with checks that convict a correct design.\n\n"
+        "**SO THE GOLDEN-FREE PIPELINE REACHES 174 AND STOPS** -- which is "
+        "precisely what loop 1 reported when it terminated at zero objections with "
+        "nine trials unspent. The gap to the ceiling is 62 testpoints, and it is "
+        "**not a gap in the rule, the prompt, the stimulus or the editor**. It is "
+        "the corpus containing no sound check that objects to a design its own "
+        "criterion has finished with."
     )
