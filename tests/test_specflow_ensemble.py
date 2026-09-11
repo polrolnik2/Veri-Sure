@@ -3980,3 +3980,74 @@ def test_the_golden_free_second_loop_locates_the_gap_precisely():
 def test_the_golden_free_second_loop_is_named_in_the_module_docstring():
     assert ("the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it"
             in ensemble.__doc__)
+
+
+def _narrow3():
+    return " ".join(
+        ensemble
+        .narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together()
+        .split())
+
+
+def test_narrowing_round_three_reports_zero_of_twenty_four():
+    t = _narrow3()
+    assert "**passing the MINORITY rule** **0**" in t
+    assert "0 of 24 = 0%" in t
+
+
+def test_narrowing_round_three_reports_the_exact_trade():
+    """The zero alone reads as a weak author. The trade is what makes it
+    structural: the conviction count and the objection move together."""
+    t = _narrow3()
+    assert "**9 -- unmoved** **18** yes" in t
+    assert "of the four that fell below nine, **three stopped objecting**" in t
+    assert "convicts **six of nine** -- three times the threshold" in t
+    assert "conviction count and the objection fall together" in t
+    assert "no setting of this edit where one drops and the other survives" in t
+
+
+def test_narrowing_round_three_scores_vacuity_as_a_loss():
+    """A check that stops objecting has lost the property it was kept for;
+    counting it as a soundness gain is #99 booked as a win."""
+    t = _narrow3()
+    assert "**VACUOUS -- object to nothing at all** **2** *(counted as losses)*" in t
+    assert "A CHECK THAT STOPS OBJECTING IS A LOSS, NOT A NEUTRAL OUTCOME" in t
+    assert "would book this as four successes" in t
+
+
+def test_narrowing_round_three_carries_the_three_round_decay():
+    t = _narrow3()
+    for k in ("7 of 47 = **15%**", "1 of 28 = **4%**", "0 of 24 = 0%"):
+        assert k in t, k
+
+
+def test_narrowing_round_three_population_is_golden_free():
+    """The 84 chain objections were vetted BY THE REFERENCE, so naming one to an
+    author is the control leak. The docstring must say why the population is the
+    unvetted 255 instead."""
+    d = " ".join(
+        ensemble
+        .narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together
+        .__doc__.split())
+    assert "vetted BY THE REFERENCE" in d
+    assert "control-leak rule forbids" in d
+    assert "read only spec-derived artifacts" in d
+
+
+def test_narrowing_round_three_closes_all_three_routes_together():
+    t = _narrow3()
+    assert "ALL THREE ROUTES TO A GOLDEN-FREE SECOND LOOP ARE CLOSED" in t
+    assert "selection" in t and "population widening" in t and "authoring by narrowing" in t
+    assert "62-testpoint gap" in t
+
+
+def test_narrowing_round_three_reports_its_integrity_pass():
+    t = _narrow3()
+    assert "24 of 24 returned" in t
+    assert "**0 duplicate bodies**" in t
+    assert "leak check clean" in t
+
+
+def test_narrowing_round_three_is_named_in_the_module_docstring():
+    assert ("narrowing_cannot_author_the_fuel_because_"
+            "conviction_and_objection_fall_together") in ensemble.__doc__

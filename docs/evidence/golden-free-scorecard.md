@@ -2478,6 +2478,80 @@ testpoints, and it is not a gap in the rule, the prompt, the stimulus or the
 editor. It is the corpus containing no sound check that objects to a design its
 own criterion has finished with.**
 
+## 9aj. Narrowing cannot author the second loop's fuel either — 0 of 24, and the trade is exact
+
+The last route the goal leaves open. Every closure this session treated the corpus
+as fixed; the goal does not — *"regenerating oracles up to new standards are fair
+game."* So: can a check with the objection the second loop needs be **written**
+rather than **selected**? Pre-registered in
+`docs/evidence/prereg/narrowing-the-chain-fuel.md`.
+
+**Fully golden-free, and the design had to be changed to keep it so.** The
+informative population is the 84 objections that powered the chain — but those
+were vetted *by the reference*, so naming one to an author would put a
+reference-derived finding into an authoring prompt, which the control-leak rule
+forbids. **The population is therefore the 255**, both of whose legs read only
+spec-derived artifacts: *objects to the design loop 1 accepted*, and *convicts all
+nine independent implementations*. 24 checks, one per requirement.
+
+**Integrity, run before scoring:** 24 of 24 returned, **24 compile, 0 duplicate
+bodies** (the fabricated-response signature), 0 returned unchanged. Leak check
+over every prompt: clean.
+
+| of the 24 narrowed checks | n |
+|---|---|
+| **VACUOUS** — object to nothing at all | **2** *(counted as losses)* |
+| still OBJECT to loop 1's design | 19 |
+| **passing the MINORITY rule** | **0** |
+| *audit: sound* | *0* |
+
+### And the trade is exact, which is the finding rather than the zero
+
+| convicts, of nine | checks | still objects? |
+|---|---|---|
+| **0** | 2 | **no — vacuous** |
+| **5** | 3 | **no** |
+| 6 | 1 | yes |
+| **9 — unmoved** | **18** | yes |
+
+**Eighteen of twenty-four did not move on the population at all**, and of the four
+that fell below nine, **three stopped objecting**. The one that kept its objection
+still convicts **six of nine** — three times the threshold.
+
+**So the conviction count and the objection fall together.** There is no setting
+of this edit where one drops and the other survives: narrow enough to satisfy the
+golden-free soundness rule and the check stops saying the thing that made it
+worth keeping. That is #99 — over-strictness and vacuity as one defect with two
+signs — measured on the one population where the objection was known to be worth
+something.
+
+### The third narrowing round, and the decay is now complete
+
+| round | population | landed |
+|---|---|---|
+| narrowing 1 | over-strict, catches a held-out design | 7 of 47 = **15%** |
+| narrowing 2 | the 28 still over-strict | 1 of 28 = **4%** |
+| **narrowing 3 (this)** | **convicts 9 of 9, objects to loop 1's design** | **0 of 24 = 0%** |
+
+The route was projected to converge near 31% of the specification and it has now
+reached zero on the population that matters most. **By the pre-registered reading:
+narrowing cannot reach a population that convicts nine of nine, and the structural
+reading of the closure stands.**
+
+### What this closes
+
+All three routes to a golden-free second loop are now measured and closed:
+
+* **selection** — 255 objectors, 0 sound, 0 passing the minority rule, minimum 4
+  of 9 against a threshold of 2 (§9ai);
+* **population widening** — saturates at one sound opinion by 24 designs (§9ab);
+* **authoring by narrowing** — 0 of 24, with the conviction count and the
+  objection measured to move together.
+
+**So the 62-testpoint gap between the golden-free pipeline's 174 and the ceiling's
+112 is structural on this corpus, and it is structural for a reason now stated
+three ways rather than inferred once.**
+
 ## 10. The bottom line
 
 **Completeness cannot be assured golden-free on this corpus, and section 8

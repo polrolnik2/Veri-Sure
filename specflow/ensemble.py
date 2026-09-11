@@ -437,6 +437,18 @@ retuning reaches them, and the rule is RIGHT to reject them, since none of the
 convict a correct design, and a golden-free pipeline reaches 174 and stops.
 `the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it`
 carries it.
+
+AND THE CHECK CANNOT BE WRITTEN EITHER, WHICH CLOSES THE LAST ROUTE. If a sound
+check with that objection cannot be SELECTED, it might still be AUTHORED, and the
+goal puts regenerating oracles in scope. Narrowing 24 of the 255 -- one per
+requirement, population chosen golden-free because the reference-vetted subset
+could not be named to an author -- lands 0 of 24 on the minority rule. The trade
+is exact: 18 of 24 did not move on the population at all, and of the four that
+fell below nine, THREE STOPPED OBJECTING. The conviction count and the objection
+fall together, so there is no setting of the edit where one drops and the other
+survives, and the narrowing decay across three rounds is 15% -> 4% -> 0%.
+`narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together`
+carries it.
 """
 from __future__ import annotations
 
@@ -6849,4 +6861,69 @@ def the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it() -> 
         "**not a gap in the rule, the prompt, the stimulus or the editor**. It is "
         "the corpus containing no sound check that objects to a design its own "
         "criterion has finished with."
+    )
+
+
+def narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together() -> str:
+    """THE LAST ROUTE TO A GOLDEN-FREE SECOND LOOP: WRITE THE CHECK INSTEAD OF
+    SELECTING IT. It is closed, and the reason is a measured trade rather than
+    a zero.
+
+    Selection is empty (`the_golden_free_second_loop_is_empty_...`) and widening
+    the population saturates at one sound opinion
+    (`widening_the_population_reveals_more_blindness_than_the_corpus_can_close`).
+    The remaining route is AUTHORING: take a check that objects to the design the
+    first loop accepted and narrow it until it convicts a minority of the
+    population, which is what the golden-free soundness rule demands.
+
+    THE POPULATION HAD TO BE THE UNVETTED 255, NOT THE 84 THAT POWERED THE CHAIN.
+    Those 84 were vetted BY THE REFERENCE, so naming one to an author would put a
+    reference-derived finding into an authoring prompt, which the control-leak
+    rule forbids. Both legs of the population used here read only spec-derived
+    artifacts: objects to loop 1's design, and convicts all nine independent
+    implementations.
+    """
+    return (
+        "**Integrity, run before scoring:** 24 of 24 returned, 24 compile, "
+        "**0 duplicate bodies** (the fabricated-response signature), 0 returned "
+        "unchanged, leak check clean over every prompt.\n\n"
+        "    of the 24 narrowed checks                        n\n"
+        "      **VACUOUS -- object to nothing at all**      **2**  *(counted as losses)*\n"
+        "      still OBJECT to loop 1's design               19\n"
+        "      **passing the MINORITY rule**                 **0**\n"
+        "      *audit: sound*                                 *0*\n\n"
+        "**AND THE TRADE IS EXACT, WHICH IS THE FINDING RATHER THAN THE ZERO.**\n\n"
+        "    convicts, of nine    checks    still objects?\n"
+        "      **0**                    2    **no -- vacuous**\n"
+        "      **5**                    3    **no**\n"
+        "      6                        1    yes\n"
+        "      **9 -- unmoved**      **18**  yes\n\n"
+        "**Eighteen of twenty-four did not move on the population at all**, and "
+        "of the four that fell below nine, **three stopped objecting**. The one "
+        "that kept its objection still convicts **six of nine** -- three times the "
+        "threshold.\n\n"
+        "**So the conviction count and the objection fall together.** There is no "
+        "setting of this edit where one drops and the other survives: narrow "
+        "enough to satisfy the golden-free soundness rule and the check stops "
+        "saying the thing that made it worth keeping. That is #99 -- "
+        "over-strictness and vacuity as one defect with two signs -- measured on "
+        "the one population where the objection was known to be worth "
+        "something.\n\n"
+        "**A CHECK THAT STOPS OBJECTING IS A LOSS, NOT A NEUTRAL OUTCOME**, and "
+        "the two vacuous ones are scored that way. A narrowing round that reports "
+        "only the conviction count falling would book this as four successes.\n\n"
+        "**AND THE DECAY ACROSS THREE ROUNDS IS NOW COMPLETE.**\n\n"
+        "    round             population                                   landed\n"
+        "      narrowing 1     over-strict, catches a held-out design       7 of 47 = **15%**\n"
+        "      narrowing 2     the 28 still over-strict                     1 of 28 = **4%**\n"
+        "      **narrowing 3** **convicts 9 of 9, objects to loop 1's design**  **0 of 24 = 0%**\n\n"
+        "The route was projected to converge near 31% of the specification and it "
+        "reaches **zero** on the population that matters most.\n\n"
+        "**SO ALL THREE ROUTES TO A GOLDEN-FREE SECOND LOOP ARE CLOSED** -- "
+        "selection (255 objectors, 0 sound, minimum 4 of 9 against a threshold of "
+        "2), population widening (one sound opinion by 24 designs), and authoring "
+        "by narrowing (0 of 24, with the conviction count and the objection "
+        "measured to move together). **The 62-testpoint gap between the "
+        "golden-free pipeline's 174 and the ceiling's 112 is structural on this "
+        "corpus, stated three ways rather than inferred once.**"
     )
