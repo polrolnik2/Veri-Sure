@@ -597,3 +597,42 @@ def the_population_majority_is_right_less_than_half_the_time() -> str:
         "population's majority would do better -- the thirteen-design figure "
         "suggests it might, and that is one measurement on one module."
     )
+
+
+def the_packaged_pipeline_reproduces_every_recorded_figure() -> str:
+    """F2's FREE HALF. F2 proper authors a fresh corpus, which costs model
+    calls; everything after authoring is free and had never been run through
+    the packaged path -- every recorded number came from a scratch driver.
+    """
+    return (
+        "Driven over k1's real artifacts -- 464 bodies, 7 designs, 348 "
+        "testpoints -- through `characterise` -> `refuse_unusable_population` "
+        "-> `GateLegs.corpus_path` -> `select` -> `sweep` -> `audit` -> "
+        "`Report`:\n\n"
+        "     t   checks    span   *audit*   blind   spurious\n"
+        "     0      126   63.2%   * 0.0%*   99.9%      33.3%\n"
+        "     1      149   72.4%   * 7.4%*   95.4%      28.7%\n"
+        "     2      167   78.2%   *13.2%*   70.7%      12.5%\n"
+        "     3      171   78.2%   *13.5%*   68.3%      11.3%\n"
+        "     4      179   79.3%   *15.1%*   65.9%      10.4%\n"
+        "     5      188   80.5%   *14.4%*   54.4%       3.7%\n"
+        "     6      201   81.6%   *18.9%*   50.0%      16.0%\n"
+        "     7      464   83.9%   *64.4%*    0.0%       0.0%\n\n"
+        "plus the bucket profile (ends 389, middle 75) and the "
+        "reference-picked sound subset at 163 checks / 77.0% / 0.0% / 56.1%. "
+        "**EVERY TARGET ROW MATCHES.**\n\n"
+        "**AND THE POPULATION GATE REFUSED, WHICH IS THE POINT.** "
+        "`refuse_unusable_population` was written from P1's retraction and it "
+        "declines k1's own population -- G off the majority at 86% of split "
+        "testpoints. A run that sailed through would mean the gate does not "
+        "bind on the population that motivated it. The refusal is recorded and "
+        "then overridden EXPLICITLY, because the discipline is 'report the "
+        "structure beside it or not at all', not 'never report it'. The "
+        "`Report` line carries it inline:\n\n"
+        "    201 checks spanning 71 of 87 = 82%, audit 38 = 18.9%, blind "
+        "50.0%\n    [population 7 designs, effective 3, top dissent G at 86%]\n\n"
+        "**WHAT IS STILL UNEXERCISED.** A1-A3 retain a corpus that no run has "
+        "yet produced, and B1's producer has authored nothing. This shows the "
+        "SELECTION half of F2 agrees with the record; the AUTHORING half is "
+        "untested and is what the paid run would test."
+    )

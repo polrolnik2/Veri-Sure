@@ -134,3 +134,16 @@ def test_the_reconciliation_carries_both_populations_and_the_per_port_split():
     assert "38.1%" in text and "33.1%" in text
     #: and the scope limit -- this bounds the ensemble, not the rule
     assert "not the minority rule" in text
+
+
+def test_the_pipeline_finding_separates_what_ran_from_what_did_not():
+    from specflow.scoring import (
+        the_packaged_pipeline_reproduces_every_recorded_figure as f,
+    )
+    text = f()
+    assert "EVERY TARGET ROW MATCHES" in text
+    #: the gate refusing its own motivating population is the point, not a bug
+    assert "THE POPULATION GATE REFUSED" in text and "86%" in text
+    assert "overridden EXPLICITLY" in text
+    #: and the half that did NOT run is named rather than implied
+    assert "STILL UNEXERCISED" in text and "has authored nothing" in text
