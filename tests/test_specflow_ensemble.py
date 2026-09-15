@@ -4460,3 +4460,58 @@ def test_the_golden_free_approximation_is_priced_at_both_ends():
     assert "recovers **168 of 169**   audit **27.4%**" in why
     doc = ensemble.__doc__ or ""
     assert "the_sets_documented_rule_is_not_the_rule_that_built_it" in doc
+
+
+def test_variants_are_recorded_as_a_faithfulness_not_a_selection_instrument():
+    # The structural reason is the point, not the yield: a variant is an
+    # incorrect design, so it cannot speak to soundness at all.
+    why = ensemble.variants_test_the_under_assertion_half_of_faithfulness()
+    assert "INCORRECT design by construction" in why
+    assert "MONOTONE IN OVER-STRICTNESS" in why
+    assert "REJECTION, NEVER SELECTION" in why
+
+
+def test_the_per_obligation_repair_round_reports_its_cost_beside_its_gain():
+    # 3 landings bought with 8 new false rejects is a NEGATIVE result, and the
+    # round must not be quotable on the landings alone.
+    why = ensemble.variants_test_the_under_assertion_half_of_faithfulness()
+    assert "it landed **3**" in why and "**8** newly convicting" in why
+    assert "net -5" in why
+    assert "10 of 15 GAINED" in why          # the author half worked
+    assert "UNANSWERABLE BY CONSTRUCTION" in why
+
+
+def test_the_population_proxy_retraction_carries_the_numbers_that_refute_it():
+    why = ensemble.population_non_convergence_is_not_specification_silence()
+    assert "UNANIMOUS and NOT the reference" in why
+    assert "0.124%" in why and "0.690%" in why
+    assert "0 of 20" in why
+
+
+def test_the_residue_partition_and_its_trade_are_both_recorded():
+    # Reach without its false-reject rate is the defect this work retracts for.
+    why = ensemble.population_non_convergence_is_not_specification_silence()
+    assert "**0.58 : 1**" in why and "**2.70 : 1**" in why
+    assert "5.8x" in why
+    # and the attribution that does NOT survive must be stated, not dropped
+    assert "the blame is not assigned" in why
+
+
+def test_the_contradiction_screen_is_conditioned_and_says_why():
+    why = ensemble.the_contradiction_screen_must_be_conditioned_on_discrimination()
+    assert "**12 of 12**" in why            # consistency is bought with vacuity
+    assert "**5 of 5 = " in why             # conditioned rate
+    assert "A PAIR, NEVER A NUMBER" in why
+    assert "vacuous checks never contradict" in why
+
+
+def test_the_two_failed_proxies_are_recorded_including_the_backwards_one():
+    why = ensemble.the_contradiction_screen_must_be_conditioned_on_discrimination()
+    assert "one backwards" in why
+    assert "different axes" in why
+    assert "99.1%" in why                   # the clean document leg
+    doc = ensemble.__doc__ or ""
+    for name in ("variants_test_the_under_assertion_half_of_faithfulness",
+                 "population_non_convergence_is_not_specification_silence",
+                 "the_contradiction_screen_must_be_conditioned_on_discrimination"):
+        assert name in doc

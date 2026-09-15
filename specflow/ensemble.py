@@ -589,6 +589,33 @@ figure taken with it is a ceiling rather than a score, and the golden-free
 approximation costs 137 of 169 recovered at a 9.9% audit, or 168 at 27.4%.
 `the_sets_documented_rule_is_not_the_rule_that_built_it`
 carries it.
+
+THE PIPELINE'S VARIANTS ARE A FAITHFULNESS INSTRUMENT AND NOT A SELECTION ONE,
+and that is a property of what a variant IS rather than a yield. A variant is
+authored to break ONE CLAUSE of ONE requirement, so it tests whether a check
+asserts a NAMED obligation of its own sentence -- the under-assertion half of
+faithfulness, which `correspondence` cannot see. It can never test soundness,
+because a variant is by construction an INCORRECT design and soundness is a
+question about correct ones. Three measurements, one negative apiece:
+`variants_test_the_under_assertion_half_of_faithfulness`.
+
+AND A DESIGN POPULATION'S DISAGREEMENT IS NOT THE SPECIFICATION'S SILENCE. This
+module used population non-convergence as a proxy for underdetermination and
+labelled one the other. They come apart in both directions, and this corpus
+refutes the identification outright: the population is unanimous AND WRONG on
+269 of 217,590 cells at 13 designs, 1,557 of 225,544 at 7.
+`population_non_convergence_is_not_specification_silence` carries the
+retraction and what survives it.
+
+FAITHFULNESS IS REFUTABLE AND NOT VERIFIABLE, SO ITS ABSENCE OF EVIDENCE IS NOT
+EVIDENCE OF ABSENCE -- and the naive screen for it rewards a set that says
+nothing. Two independently authored checks for one sentence that contradict
+prove at least one unfaithful: 21 of 27 requirements here. But the complement is
+confounded with vacuity, because agreement is cheapest when neither check
+discriminates -- 12 of 12 consistent pairs sit at a conviction-count extreme
+against 27 of 42 contradicting ones. Conditioned on both checks discriminating,
+the contradiction rate is 5 of 5.
+`the_contradiction_screen_must_be_conditioned_on_discrimination` carries it.
 """
 from __future__ import annotations
 
@@ -7653,4 +7680,179 @@ def the_sets_documented_rule_is_not_the_rule_that_built_it() -> str:
         "trade is the honest statement of what selection without a reference "
         "costs on this corpus, and it is the first time it has been measured "
         "against a set known to be exactly the reference's own answer."
+    )
+
+
+def variants_test_the_under_assertion_half_of_faithfulness() -> str:
+    """THE PIPELINE'S VARIANTS ARE A FAITHFULNESS INSTRUMENT, NOT A SELECTOR.
+
+    `variants.py` states the distinction this finding rests on: mechanical
+    mutants come from a model's SOURCE and test *"does this oracle notice an
+    edit to this implementation"*, while a variant is derived from the
+    REQUIREMENT and tests *"does this oracle notice a design that violates this
+    requirement"*. One variant per clause KIND, so each carries a label naming
+    which obligation of the sentence it breaks. `must_fail` folds that to one
+    bit.
+    """
+    return (
+        "**WHAT THE BIT HIDES.** Over 54 checks, 19 scorable once those "
+        "convicting the conforming witness are excluded (their must-fail "
+        "reading is void, and `variants.py` states that ordering itself):\n\n"
+        "    catches EVERY clause kind of its own requirement   **4**\n"
+        "    catches SOME -- a NAMED missing obligation         **5**\n"
+        "    catches NONE                                      **10**\n\n"
+        "`must_fail` reports 9 sensitive / 10 not, merging the 4 complete with "
+        "the 5 partial. Per kind, a check misses the obligation it names most "
+        "often on TRIGGER -- 12 of 15 = 80% -- against action 47%, order 57%, "
+        "threshold 40%. That is the false-alarm taxonomy's class A, *a held "
+        "input read as a live trigger*, reached by an independent "
+        "instrument.\n\n"
+        "**AS A REPAIR SIGNAL IT MISSES ITS BAR, AND THE DECOMPOSITION IS WHY.** "
+        "15 checks were each told ONE named missing clause and shown the design "
+        "that exploits it. Pre-registered at >= 4 of 15; it landed **3**, and "
+        "bought them with **8** newly convicting the reference -- net -5 on the "
+        "audit, which by the pair discipline is a negative result. But 10 of 15 "
+        "GAINED the obligation. **The author finds the direction and not the "
+        "stopping point**, which is the same wall the strength round hit at 34 "
+        "of 34, now with the author's half shown working.\n\n"
+        "**AND 4 OF THE 15 TARGETS WERE UNANSWERABLE BY CONSTRUCTION** -- the "
+        "clk-rising-edge clause, on a trace whose rows ARE edges, so no check "
+        "can distinguish the variant. That is a defect in the variant "
+        "generator: `variants.py` already drops a variant whose trace is "
+        "identical projected onto the requirement's observable ports, and the "
+        "same guard belongs on CLAUSE observability.\n\n"
+        "**AS A SELECTION SIGNAL IT CANNOT WORK, AND THAT IS STRUCTURAL.** A "
+        "variant is an INCORRECT design by construction, so it carries no "
+        "information about correct ones -- and separating sound from "
+        "over-strict is a question about correct ones. It was already "
+        "quantified before this: `must_fail` sensitivity reads "
+        "P(sensitive | convicts the reference) = 0.95 against "
+        "P(sensitive | sound) = 0.52, so sensitivity is MONOTONE IN "
+        "OVER-STRICTNESS. The per-obligation profile reproduces it -- complete "
+        "profile 2 of 4 convicting the reference, none-profile 0 of 10.\n\n"
+        "**VARIANTS LICENSE REJECTION, NEVER SELECTION.** Rejecting needs one "
+        "leg: a check convicting no variant of its own requirement cannot be "
+        "complete about its sentence. Keeping needs both, and variants supply "
+        "one. That is the control-leak rule's asymmetry reached from the other "
+        "side.\n\n"
+        "**WHERE THEY DO PAY, measured like-for-like on one check population.** "
+        "The dedup step ranks on a verdict signature, and 7 designs resolve 54 "
+        "checks into **13** opinions with 76% exact duplicates and a largest "
+        "group of 23. 264 variants resolve the same 54 into **39**, 28% "
+        "duplicates, largest group 6; together 40. **3x the resolution**, and "
+        "it says why no threshold on the conviction count separates the "
+        "audit-zero set: the signature it ranks on cannot tell 23 checks "
+        "apart."
+    )
+
+
+def population_non_convergence_is_not_specification_silence() -> str:
+    """A RETRACTION, AND WHAT SURVIVES IT.
+
+    This work read a design population's disagreement at a cell as the
+    SPECIFICATION underdetermining that cell, and reported the two as one
+    thing. They are not. The population can diverge because the text is silent
+    OR because it determines the cell and the readers misread it; and it can
+    converge WRONGLY through a shared misreading, which is Knight-Leveson and
+    is measured here rather than supposed.
+    """
+    return (
+        "**THE IDENTIFICATION IS REFUTED BY THIS CORPUS'S OWN NUMBERS.** Cells "
+        "where the population is UNANIMOUS and NOT the reference:\n\n"
+        "    13 designs   269 of 217,590 = 0.124%\n"
+        "     7 designs  1,557 of 225,544 = 0.690%\n\n"
+        "So unanimity does not imply determination. The targeted-question "
+        "round does not rescue it either: **0 of 20** readers declined those "
+        "cells as underdetermined, which is equally consistent with *the text "
+        "says it and they misread* as with *the text is silent*. That "
+        "experiment cannot separate the two, and it was presented as though it "
+        "could.\n\n"
+        "**WHAT SURVIVES IS CHECK-INDEPENDENT AND WORTH MORE THAN WHAT DOES "
+        "NOT.** The delivered design's residue -- 3,356 differing cells, keyed "
+        "by RAW EDGE so compression cannot misalign designs -- partitions:\n\n"
+        "                          7 designs   13 designs\n"
+        "    population SPLITS        66.1%       77.3%\n"
+        "    population UNANIMOUS     33.9%       22.7%\n"
+        "      ...and it is RIGHT     27.0%       21.6%   (905 / 725 cells)\n\n"
+        "Between a fifth and a quarter of what remains sits where the "
+        "population agrees, its agreed value IS the reference's, the design is "
+        "wrong, and nothing objected. **That is not silence of any kind.**\n\n"
+        "**AND THE LOOP BEHAVED AS THE DECOMPOSITION PREDICTS.** Start design "
+        "to delivered, 7-design view: errors at unanimous cells 7,841 -> 1,138 "
+        "(**-85%**), at split cells 4,055 -> 2,218 (-45%). It cleared the "
+        "agreed half nearly twice as effectively and left 1,138 behind.\n\n"
+        "**THE CLOSABILITY TRADE, AND POPULATION SIZE IS THE KNOB.** A check "
+        "demanding the agreed value wherever the population is unanimous:\n\n"
+        "     7 designs   catch 905   false reject 1,557   **0.58 : 1**\n"
+        "    13 designs   catch 725   false reject   269   **2.70 : 1**\n\n"
+        "7 -> 13 costs 20% of the catches and removes **5.8x** of the false "
+        "rejects. This is the first catch-to-false-reject ratio above 1 this "
+        "work has produced at cell granularity, and it refines rather than "
+        "contradicts *consensus ranks the reference 15 of 16* -- that was "
+        "consensus RANKING DESIGNS, this is consensus LOCALISING CELLS. The "
+        "20.4% recall reported for the anomaly detector was diluted by the "
+        "split region where nothing can work; within the unanimous region it "
+        "was already 94.5%.\n\n"
+        "**ONE ATTRIBUTION THAT DOES NOT SURVIVE.** Reading those 725-905 "
+        "cells as a CHECK blind spot assumes the corpus is faithful enough "
+        "that *no check objected* means blindness rather than *no faithful "
+        "check exists there*. At a measured >=78% unfaithful that assumption "
+        "is not available. The divergence is real; the blame is not "
+        "assigned."
+    )
+
+
+def the_contradiction_screen_must_be_conditioned_on_discrimination() -> str:
+    """FAITHFULNESS IS REFUTABLE AND NOT VERIFIABLE, AND THE NAIVE SCREEN
+    REWARDS A SET THAT SAYS NOTHING.
+
+    Two checks authored independently for the SAME sentence are two
+    translations of one meaning. If one returns False where the other returns
+    True on the same trace, at least one does not mean what the sentence means
+    -- proof, with no reference, no rater and no design population. It is
+    ONE-SIDED: it identifies unfaithful and never faithful.
+    """
+    return (
+        "**THE RAW RATE.** 21 of 27 requirements = **78%** carry a check "
+        "proved unfaithful. Only decided-vs-decided disagreements count; one "
+        "check abstaining while the other decides is coverage, not "
+        "contradiction, and folding them together is the None/True conflation "
+        "this module forbids. It converges with the independent bracket -- "
+        "correspondence accepts 41 of 54 = 76% (no MORE than the sentence), "
+        "clause variants find 4 of 19 = 21% complete (no LESS), and their "
+        "intersection is **3 of 19 = 16% faithful by both**.\n\n"
+        "**THE COMPLEMENT IS CONFOUNDED WITH VACUITY, AND THIS WORK READ IT AS "
+        "FAITHFULNESS.** Agreement is cheapest when neither check "
+        "discriminates:\n\n"
+        "    consistent pairs     h(c) at an extreme (0 or 7)  **12 of 12**\n"
+        "    contradicting pairs                                27 of 42\n"
+        "    two-sided Fisher                                   **p = 0.024**\n\n"
+        "So the consistent group is partly two checks jointly saying nothing, "
+        "which is why it shows no soundness benefit (3 of 12 still convict the "
+        "reference against 17 of 42, p = 0.50).\n\n"
+        "**CONDITIONED ON THE PAIR BEING ABLE TO CONTRADICT** -- both checks "
+        "decide and neither is pinned at 0 or N -- the rate is **5 of 5 = "
+        "100%**, against 16 of 22 = 73% where one is pinned. Every pair of "
+        "independently authored checks that both discriminate disagrees about "
+        "what their shared sentence means.\n\n"
+        "**SO A BLIND SCREEN IS A PAIR, NEVER A NUMBER**, and an arbitrary "
+        "compile-gated set would score WELL on the naive one because vacuous "
+        "checks never contradict:\n\n"
+        "    1. what share of requirements yield TWO discriminating checks   "
+        "**19%** here -- this is where a ranking lives\n"
+        "    2. of those, what share contradict                              "
+        "**100%** here -- zero for a faithful set\n\n"
+        "**TWO DISTRIBUTIONAL PROXIES WERE TESTED AND BOTH FAILED**, one "
+        "backwards: h(c) bimodality was predicted to mark unfaithfulness and "
+        "correlates with CONSISTENCY at p = 0.024, because it is a "
+        "discrimination signal and discrimination and faithfulness are "
+        "different axes; and *reads a port its own sentence never names* "
+        "separates 5.08 against 4.57, which is nothing.\n\n"
+        "**AND THE DOCUMENT LEG IS CLEAN, WHICH LOCATES THE PROBLEM.** "
+        "Backward traceability -- every span of the specification claimed by "
+        "some requirement -- is **99.1%** of 12,954 characters with 0 "
+        "unmatched spans and no unclaimed run over 60 characters. Nothing was "
+        "dropped from the text. Text coverage is not behaviour coverage, so "
+        "this argues only that the extraction is complete; the binding leg is "
+        "per-check, which is where optimisation is cheap."
     )
