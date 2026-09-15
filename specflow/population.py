@@ -897,6 +897,75 @@ class TellProfile:
     placement: float
 
 
+#: `author(index, spec, contract) -> design source`. **THE ISOLATION IS THE
+#: SIGNATURE.** An author receives the specification and the contract and
+#: nothing else -- there is no parameter through which another design, a
+#: reference, or a previous member could reach it, which is the same structural
+#: guarantee `select` has against the reference. An author that opens a file is
+#: outside what this type can prevent and inside what `B3` forbids.
+Author = Callable[[int, str, Mapping[str, object]], str]
+
+
+@dataclass(frozen=True)
+class Population:
+    """N independently written designs, and how they were produced."""
+
+    #: name -> source. Names are positional (`d0`, `d1`, ...) because a name
+    #: carrying provenance -- "the good one", "the control" -- is how a
+    #: selection over them stops being blind.
+    designs: Mapping[str, str]
+    #: How many authors were asked, including any whose output was refused.
+    asked: int
+
+    def __post_init__(self) -> None:
+        if len(set(self.designs.values())) != len(self.designs):
+            raise ValueError(
+                f"{len(self.designs)} designs but "
+                f"{len(set(self.designs.values()))} distinct sources: "
+                "identical text is one opinion repeated, and a population of "
+                "clones makes the minority rule a false-reject filter against "
+                "whatever they all are")
+
+
+def produce_population(author: Author, *, spec: str,
+                       contract: Mapping[str, object],
+                       size: int = MIN_POPULATION) -> Population:
+    """**B1: ASK `size` AUTHORS, INDEPENDENTLY, AND REFUSE A PILE OF CLONES.**
+
+    The producer that did not exist. `MIN_POPULATION` has been in this module
+    the whole time and the pipeline's generator is single-design with no flag
+    asking for more, so the rule this module implements had nothing to read.
+
+    **WHAT THIS DOES AND DOES NOT GUARANTEE.** It guarantees the authors cannot
+    see each other THROUGH THIS FUNCTION -- each call gets the index, the spec
+    and the contract, and the accumulating designs are never passed on. It does
+    not guarantee independence: authors served by one model from one prompt are
+    correlated however carefully they are isolated, which is exactly why the
+    population's structure has to be MEASURED afterwards by `characterise`
+    rather than assumed here. On k1 that measurement found one design off the
+    majority at 86% of split testpoints and seven designs collapsing to three
+    opinions.
+
+    **THE TRACE HALF IS NOT HERE.** Selection reads conviction profiles, which
+    need each design suite-run. That is the existing runner's job and it needs
+    a simulator, so this function returns SOURCES and the caller runs them.
+    """
+    if size < 2:
+        raise ValueError(
+            f"size {size}; a population needs at least two designs for "
+            "'where do they disagree' to have an answer")
+    designs: dict[str, str] = {}
+    for i in range(size):
+        source = author(i, spec, dict(contract))
+        if not (source or "").strip():
+            raise ValueError(
+                f"author {i} returned nothing; a population silently short of "
+                "its size is how a headcount stops matching the rate computed "
+                "from it")
+        designs[f"d{i}"] = source
+    return Population(designs=designs, asked=size)
+
+
 def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
                  outputs: Sequence[str], *,
                  clone_distance: float = 0.25) -> PopulationShape:

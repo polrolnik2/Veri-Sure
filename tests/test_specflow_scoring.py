@@ -117,3 +117,20 @@ def test_the_scoring_module_is_the_only_side_that_names_the_reference():
         Path(S.__file__).parent / "population.py").read_text())
     assert not any("scoring" in (n.module or "") for n in ast.walk(pop)
                    if isinstance(n, ast.ImportFrom))
+
+
+def test_the_reconciliation_carries_both_populations_and_the_per_port_split():
+    from specflow.scoring import (
+        the_population_majority_is_right_less_than_half_the_time as f,
+    )
+    text = f()
+    #: both figures, each with its population size
+    assert "48.5%" in text and "60.9%" in text
+    assert "seven designs" in text and "THIRTEEN" in text
+    assert "NOT A CONTRADICTION" in text
+    #: the unadjudicable cells are separated rather than folded in
+    assert "no reference value to adjudicate" in text and "139" in text
+    #: the per-port breakdown, which is what makes it a finding
+    assert "38.1%" in text and "33.1%" in text
+    #: and the scope limit -- this bounds the ensemble, not the rule
+    assert "not the minority rule" in text

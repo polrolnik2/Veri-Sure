@@ -551,3 +551,49 @@ def claim_kinds_transfer_where_lint_patterns_did_not() -> str:
         "lint patterns and does not solve the precision problem, which is where "
         "the remaining work is."
     )
+
+
+def the_population_majority_is_right_less_than_half_the_time() -> str:
+    """The figure the plan flagged as needing reconciliation, reconciled -- and
+    it is a stronger version of a warning already in `population`.
+
+    Two numbers were on the board: the reference off the population majority at
+    49.6% of split cells over SEVEN designs, against a recorded "majority right
+    on 2,353 of 3,863 = 60.9%" over THIRTEEN.
+    """
+    return (
+        "**NOT A CONTRADICTION -- TWO POPULATIONS.** Recomputed over k1's seven "
+        "designs, 348 testpoints and 10 scored outputs:\n\n"
+        "    split cells (design, testpoint, row, port)      4,085\n"
+        "    the majority MATCHES the reference              1,981 = 48.5%\n"
+        "    the reference is OFF the majority               1,965 = 48.1%\n"
+        "    no reference value to adjudicate                  139 =  3.4%\n\n"
+        "which is the 49.6% figure, recomputed with the unadjudicable cells "
+        "separated out rather than folded in. The 60.9% was measured over "
+        "THIRTEEN designs on 3,863 cells. Both stand; neither may be quoted "
+        "without its population size, which is the same discipline "
+        "`Selection.summary` applies to a threshold.\n\n"
+        "**AND THE RECONCILIATION IS THE FINDING.** On seven designs the "
+        "population's majority is right LESS THAN HALF THE TIME. `population` "
+        "already forbids using the agreed value as an expected value, on the "
+        "argument that the population's errors correlate through the ambiguity "
+        "of the specification they were all written from. This is that "
+        "argument with a number on it, and the per-port breakdown shows where "
+        "it bites:\n\n"
+        "    port              split cells   majority right\n"
+        "    dc_addr                   837            38.1%\n"
+        "    saved_addr                714            33.1%\n"
+        "    first_miss_ack            385            33.5%\n"
+        "    biu_read                  493            53.5%\n"
+        "    biu_write                 448            56.2%\n"
+        "    burst                     334            77.2%\n\n"
+        "**The three ports carrying most of the disagreement are the three the "
+        "majority is most often WRONG about** -- two thirds wrong on the two "
+        "address ports. A consensus value taken from this population as an "
+        "expected value would be an oracle that is wrong where it speaks most.\n\n"
+        "**WHAT THIS DOES NOT TOUCH.** The selection rule does not use the "
+        "agreed value; it counts convictions. This bounds the ENSEMBLE idea, "
+        "not the minority rule, and it says nothing about whether a bigger "
+        "population's majority would do better -- the thirteen-design figure "
+        "suggests it might, and that is one measurement on one module."
+    )

@@ -350,3 +350,57 @@ def test_the_corpus_path_drops_correspondence_and_keeps_liveness():
     #: not a weakening of what ships
     assert P.GateLegs.shipping_path() == P.GateLegs()
     assert P.GateLegs.shipping_path().correspondence is True
+
+
+# ------------------------------------------------------- B1: the producer
+
+def test_the_producer_asks_each_author_in_isolation():
+    """**THE ISOLATION IS THE SIGNATURE.** An author receives the index, the
+    spec and the contract; there is no parameter through which another design
+    could reach it. A producer that passed the accumulating population to each
+    author would make every member after the first a reaction to the ones
+    before, and the rule's premise is that they are independent readings.
+    """
+    seen = []
+
+    def author(i, spec, contract):
+        seen.append((i, spec, sorted(contract)))
+        return f"module m; // {i}\nendmodule"
+
+    got = P.produce_population(author, spec="the spec", contract={"io": []},
+                               size=5)
+    assert len(got.designs) == 5 and got.asked == 5
+    assert [i for i, _, _ in seen] == [0, 1, 2, 3, 4]
+    #: every call saw the SAME inputs -- nothing accumulated between them
+    assert {(s, tuple(c)) for _, s, c in seen} == {("the spec", ("io",))}
+    #: and the signature cannot carry a design or a reference
+    params = set(inspect.signature(P.produce_population).parameters)
+    assert params == {"author", "spec", "contract", "size"}
+
+
+def test_the_producer_refuses_a_pile_of_identical_designs():
+    with pytest.raises(ValueError, match="one opinion repeated"):
+        P.produce_population(lambda i, s, c: "module m; endmodule",
+                             spec="s", contract={"io": []}, size=5)
+
+
+def test_an_author_returning_nothing_is_refused_not_skipped():
+    """A population silently short of its size is how a headcount stops
+    matching the rate computed from it."""
+    def flaky(i, spec, contract):
+        return "" if i == 2 else f"module m; // {i}\nendmodule"
+
+    with pytest.raises(ValueError, match="author 2 returned nothing"):
+        P.produce_population(flaky, spec="s", contract={"io": []}, size=5)
+
+
+def test_the_producer_does_not_claim_independence_only_isolation():
+    """Authors served by one model from one prompt are correlated however
+    carefully they are isolated. The docstring has to say so, because the
+    measured consequence -- one design off the majority at 86% of split
+    testpoints -- is what retracted this module's headline result."""
+    doc = P.produce_population.__doc__ or ""
+    assert "It does\n    not guarantee independence" in doc or "not guarantee independence" in doc
+    assert "86%" in doc
+    #: and it says where the trace half is, rather than implying it is here
+    assert "TRACE HALF IS NOT HERE" in doc
