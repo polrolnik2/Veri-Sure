@@ -1,4 +1,12 @@
-"""Tests for the golden-free selection ruleset.
+"""Tests for the golden-free selection ruleset, and for the scoring instruments
+that must stay out of it.
+
+`specflow/selection.py` NO LONGER EXISTS. It built this rule a second time
+beside `specflow/population.py` and put the audit in the same file; the rule is
+merged back into `specflow.population` and the reference-derived instruments
+live in `specflow.scoring`, which imports from it and is imported by nothing in
+it. This file therefore imports from both, and which module a name comes from is
+the statement of what it is allowed to see.
 
 Each test pins a property the RESULT depends on, not merely a code path. Where
 a rule claims to distinguish two things, it is shown returning both verdicts on
@@ -9,23 +17,19 @@ import inspect
 
 import pytest
 
-from specflow.selection import (
-    Blindness,
+from specflow.population import (
     Bucket,
     GateLegs,
-    Report,
-    Ruleset,
     PopulationShape,
+    Ruleset,
     Selection,
     TellProfile,
     Verdict,
-    audit,
     buckets,
     convictions,
     pipeline_gates,
     refutable,
     select,
-    set_blindness,
     soundness_and_blindness_are_one_knob,
     sweep,
     tells,
@@ -33,8 +37,12 @@ from specflow.selection import (
     the_gates_and_the_rule_reject_different_checks,
     two_tells_were_pre_registered_backwards,
 )
-from specflow.selection import (
+from specflow.scoring import (
+    Blindness,
+    Report,
+    audit,
     objection_placement_buys_closure_more_cheaply_than_the_count,
+    set_blindness,
 )
 
 
@@ -42,8 +50,11 @@ def rows(*vals):
     return [{"outputs": {"a": v}, "inputs": {}} for v in vals]
 
 
-#: Four designs. `convicts(n)` builds a check objecting to the first n of them.
-POP = [rows(0), rows(1), rows(2), rows(3)]
+#: FIVE designs, because `MIN_POPULATION` is 5 and `select` now refuses a
+#: smaller one. The fixture used four and the refusal had been dropped along
+#: with the rest of the first implementation's guards.
+#: `convicts(n)` builds a check objecting to the first n of them.
+POP = [rows(0), rows(1), rows(2), rows(3), rows(4)]
 
 
 def convicts(n):
@@ -56,6 +67,14 @@ def convicts(n):
 def silent(r):
     """Never decides. Sound by silence, which is not soundness."""
     return None
+
+
+#: **THE CLONE GUARD NEEDS THE FIXTURE TO EXERCISE THE RULE.** `select` refuses
+#: a corpus in which every check convicts 0 or N, because that is what N copies
+#: of one design look like from inside. A test whose corpus is one all-or-
+#: nothing check is exactly that shape, so those corpora carry this companion:
+#: a check that convicts SOME of the population and not the rest.
+SPLITS = {"splits": convicts(2)}
 
 
 # --------------------------------------------------------------------------
@@ -83,6 +102,7 @@ def test_select_has_no_parameter_that_could_carry_a_reference():
 def test_the_ruleset_has_no_reference_field():
     """Every leg reads spec-derived designs or the check's own text."""
     assert set(Ruleset.__dataclass_fields__) == {
+        "min_population", "allow_vacuous_threshold",
         "max_convictions", "min_decides", "use_gates"}
 
 
@@ -110,12 +130,13 @@ def test_a_check_that_never_decides_is_dropped_not_kept():
     count -- a body deciding 0 testpoints on the reference and 1 on a held-out
     design, scored sound by silence.
     """
-    corpus = {"good": convicts(0), "silent": silent}
+    corpus = {"good": convicts(0), "silent": silent, **SPLITS}
     kept = select(corpus, POP).kept
     assert kept == ("good",)
     #: And it must be the DECIDES leg doing it, not the threshold: a silent
     #: check convicts zero, so the threshold alone would keep it.
-    hits, decided = convictions(silent, POP)
+    hits, decided, broke = convictions(silent, POP)
+    assert broke == 0   # silent is not the same fact as broken
     assert (hits, decided) == (0, 0)
     loose = select(corpus, POP, ruleset=Ruleset(min_decides=0))
     assert set(loose.kept) == {"good", "silent"}
@@ -136,7 +157,7 @@ def test_select_keeps_a_check_that_refutes_nothing():
     """The population may simply be RIGHT, and dropping such a check discarded
     21% of the entire measured yield when it was tried as a selection leg.
     """
-    corpus = {"spares_all": convicts(0)}
+    corpus = {"spares_all": convicts(0), **SPLITS}
     assert select(corpus, POP).kept == ("spares_all",)
     #: The same check, asked the refutable question with no mutant to catch,
     #: fails it -- so the leg WOULD have dropped it and `select` does not.
@@ -150,7 +171,7 @@ def test_refutable_separates_a_dead_check_from_a_sparing_one():
     assert refutable(convicts(0), POP, [mutant]) is False
     #: And a check convicting the population is refused whatever it does to a
     #: mutant -- the first leg is "spares every candidate".
-    assert refutable(convicts(4), POP, [mutant]) is False
+    assert refutable(convicts(5), POP, [mutant]) is False
 
 
 # --------------------------------------------------------------------------
@@ -298,7 +319,7 @@ def test_a_missing_body_is_dropped_and_never_read_as_a_pass():
 
 
 def test_a_gate_rejection_is_attributed_to_the_gate_leg():
-    corpus = {"bad": convicts(0), "good": convicts(0)}
+    corpus = {"bad": convicts(0), "good": convicts(0), **SPLITS}
     chosen = select(corpus, POP, gate=lambda k: "malformed: no source"
                     if k == "bad" else None)
     assert chosen.kept == ("good",)
@@ -316,12 +337,12 @@ def test_the_gate_runs_before_the_population_is_replayed():
         seen.append(r)
         return False
 
-    select({"bad": counting}, POP, gate=lambda k: "malformed: no source")
+    select({"bad": counting, **SPLITS}, POP, gate=lambda k: "malformed: no source")
     assert seen == []
 
 
 def test_gates_can_be_switched_off_for_a_priced_comparison():
-    chosen = select({"bad": convicts(0)}, POP,
+    chosen = select({"bad": convicts(0), **SPLITS}, POP,
                     ruleset=Ruleset(use_gates=False),
                     gate=lambda k: "malformed: no source")
     assert chosen.kept == ("bad",)
@@ -456,13 +477,21 @@ def test_a_gate_leg_with_nothing_to_run_on_is_skipped_not_failed():
 
 
 def test_select_composes_with_the_shipped_gate_end_to_end():
-    corpus = {"good": convicts(0), "broken": convicts(0)}
-    oracles = {"good": _oracle(GOOD), "broken": _oracle("not python at all(")}
+    #: `SPLITS` needs an oracle of its own or the gate rejects it, and a gated
+    #: check is not evidence that the population split -- which is the whole
+    #: point of excluding gated verdicts from that guard.
+    corpus = {"good": convicts(0), "broken": convicts(0), **SPLITS}
+    oracles = {"good": _oracle(GOOD), "broken": _oracle("not python at all("),
+               "splits": _oracle(GOOD)}
     gate = pipeline_gates(oracles, CONTRACT, TESTPLAN,
                           legs=GateLegs(correspondence=False, vacuity=False))
     chosen = select(corpus, POP, gate=gate)
-    assert chosen.kept == ("good",)
-    assert chosen.dropped[0].reason == "gate"
+    assert set(chosen.kept) == {"good"}
+    by_key = {v.key: v for v in chosen.dropped}
+    assert by_key["broken"].reason == "gate"
+    #: and `splits` reached the population and was dropped by the RULE, which
+    #: is what makes it evidence that the population is not a set of clones
+    assert by_key["splits"].reason == "over_strict"
 
 
 # --------------------------------------------------------------------------
@@ -481,21 +510,21 @@ def test_the_weakest_leg_keeps_a_check_that_saw_one_design():
     """`min_decides = 1` is the default because it is what the measured rule
     had, NOT because it is the right threshold.
     """
-    chosen = select({"thin": thin}, POP)
+    chosen = select({"thin": thin, **SPLITS}, POP)
     assert chosen.kept == ("thin",)
     assert chosen.verdicts[0].decided == 1
 
 
 def test_raising_the_leg_removes_a_check_that_spares_by_silence():
-    chosen = select({"thin": thin}, POP, ruleset=Ruleset(min_decides=4))
+    chosen = select({"thin": thin, **SPLITS}, POP, ruleset=Ruleset(min_decides=5))
     assert chosen.kept == ()
     dropped = chosen.dropped[0]
     assert dropped.reason == "silent"
-    assert "1 of 4" in dropped.detail and "below the 4" in dropped.detail
+    assert "1 of 5" in dropped.detail and "below the 5" in dropped.detail
 
 
 def test_zero_turns_the_leg_off_entirely():
-    chosen = select({"silent": silent}, POP, ruleset=Ruleset(min_decides=0))
+    chosen = select({"silent": silent, **SPLITS}, POP, ruleset=Ruleset(min_decides=0))
     assert chosen.kept == ("silent",)
 
 
@@ -505,7 +534,7 @@ def test_a_negative_decide_floor_is_refused():
 
 
 def test_the_compiled_out_finding_states_the_null_and_the_residue():
-    from specflow.selection import a_compiled_out_state_reads_as_sound_for_free
+    from specflow.population import a_compiled_out_state_reads_as_sound_for_free
     text = a_compiled_out_state_reads_as_sound_for_free()
     # The leg removed nothing here, and saying so is half the result.
     assert "INERT ON THIS CORPUS" in text
@@ -518,7 +547,7 @@ def test_the_compiled_out_finding_states_the_null_and_the_residue():
 
 
 def test_the_reproduction_finding_states_its_own_scope():
-    from specflow.selection import the_packaged_rule_reproduces_the_measured_sweep
+    from specflow.population import the_packaged_rule_reproduces_the_measured_sweep
     text = the_packaged_rule_reproduces_the_measured_sweep()
     assert "EVERY CELL MATCHES" in text
     # The limit is the part that keeps it honest: the decides were cached, so a
@@ -528,7 +557,7 @@ def test_the_reproduction_finding_states_its_own_scope():
 
 
 def test_the_polarity_finding_carries_the_split_and_the_price():
-    from specflow.selection import blindness_credits_objecting_to_the_correct_design
+    from specflow.scoring import blindness_credits_objecting_to_the_correct_design
     text = blindness_credits_objecting_to_the_correct_design()
     # The defect, stated as the mechanism rather than as a caveat.
     assert "WITHOUT ASKING WHICH ONE WAS WRONG" in text
