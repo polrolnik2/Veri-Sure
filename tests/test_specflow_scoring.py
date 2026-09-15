@@ -154,14 +154,17 @@ def test_the_v1_finding_reports_the_bar_it_cleared_AND_why_that_is_not_a_win():
         elicited_alternative_readings_produce_strength_not_difference as f,
     )
     text = f()
+    #: the controlled comparison is the headline: author fixed, prompt changed
+    assert "HOLDING THE AUTHOR FIXED" in text
+    assert "18.9%" in text and "75.0%" in text
+    #: both arms, so the effect is not one model's
+    assert "gpt-5.6-terra" in text and "gpt-5.6-luna" in text
+    assert "0.319" in text and "0.401" in text
     #: the bar, and that it was cleared
     assert "+2,826" in text and "new set-level cells > 0" in text
     #: and immediately, why clearing it proves nothing
     assert "METRIC BREAKING, NOT THE EXPERIMENT SUCCEEDING" in text
-    assert "0.319" in text and "0.024" in text
-    #: the triple, which is what actually adjudicates it
-    assert "45.0%" in text and "21.3%" in text
-    #: declines are reported as answers, not failures
-    assert "6 declined" in text
-    #: the author confound
-    assert "gpt-5.6-luna" in text and "gpt-5.6-terra" in text
+    #: declines are reported as answers, not failures, for both arms
+    assert "declined as single-reading" in text
+    #: and the reason the second arm exists is named as my error
+    assert "ms[:10]" in text and "index 10" in text
