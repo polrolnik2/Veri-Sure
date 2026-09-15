@@ -2223,10 +2223,10 @@ the mask, 90.6% of cells admitted, no check left empty.
 | arm | criterion | objections | testpoints differing | cells |
 |---|---|---|---|---|
 | the start design | — | — | 279 of 348 | 4,450 |
-| **DEDUP** — 87 checks, **golden-free** | audit 0 | 22 → **0** | **174** | 2,071 |
+| **DEDUP** — 87 checks, *reference-selected* | audit 0 | 22 → **0** | **174** | 2,071 |
 | **CEILING** — 502 checks, **every objection vetted** | audit 0 | 155 → **86** | **261** | 2,526 |
 
-*Five golden-free control draws for scale: 146, 192, 192, 207, 220.*
+*Five control draws for scale: 146, 192, 192, 207, 220 — all on the reference-selected 169, so all ceilings.*
 
 **THE MAXIMALLY-INFORMED CRITERION PRODUCED A DESIGN WORSE THAN EVERY ONE OF
 THEM**, and 87 testpoints worse than the golden-free set that had a fourteenth of
@@ -2288,7 +2288,7 @@ where to look and not what to conclude.
 | arm | objections | testpoints differing | cells |
 |---|---|---|---|
 | the start design | — | 279 of 348 | 4,450 |
-| **DEDUP** — 87 checks, theory shown, **golden-free** | 22 → 0 | **174** | 2,071 |
+| **DEDUP** — 87 checks, theory shown, *reference-selected* | 22 → 0 | **174** | 2,071 |
 | CEILING — 502 checks, theory shown | 155 → 86 | 261 | 2,526 |
 | **ND** — 502 checks, **theory suppressed** | 155 → 122 | **276** | 3,959 |
 
@@ -2349,7 +2349,7 @@ seven draws, three sets, one starting point. Iteration was never tested.
 | stage | criterion | testpoints differing | cells |
 |---|---|---|---|
 | the arbitrary unchecked LLM design | — | 279 of 348 | 4,450 |
-| **after loop 1** | 87 checks, **golden-free**, driven to 0 objections | **174** | 2,071 |
+| **after loop 1** | 87 checks, *reference-selected*, driven to 0 objections | **174** | 2,071 |
 | **after loop 2** | 502 checks, vetted, chained onto loop 1's output | **112** | **813** |
 
 *Seven prior draws span 146–220; the previous best was 146.*

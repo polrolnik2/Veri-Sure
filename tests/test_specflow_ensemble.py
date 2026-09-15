@@ -4442,6 +4442,16 @@ def test_the_documented_rule_is_shown_not_to_reproduce_the_set():
     assert "never zero" in why
 
 
+def test_the_dedup_set_is_recorded_as_inheriting_the_provenance():
+    # The second graded run used an 87-check set built FROM the 169. A
+    # de-duplication step of its own does not make the result golden-free, and
+    # the overlap count is what makes that checkable rather than asserted.
+    why = ensemble.the_sets_documented_rule_is_not_the_rule_that_built_it()
+    assert "86 of its 87 members" in why
+    assert "cannot launder the provenance" in why
+    assert "EITHER SET IS A CEILING" in why
+
+
 def test_the_golden_free_approximation_is_priced_at_both_ends():
     # A recall figure without its false-reject rate is the defect this work has
     # retracted headlines for; both thresholds carry both numbers.
