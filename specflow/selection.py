@@ -244,25 +244,48 @@ def select(
 # repair loop achieves rather than describing the set it was computed from.
 # --------------------------------------------------------------------------
 
-#: `differ(a, b) -> bool` -- do these two designs differ at this testpoint?
+#: `differ(rows_a, rows_b) -> bool` -- do these two designs differ at this
+#: testpoint? A fact about rows, so it takes rows.
 Differ = Callable[[Rows, Rows], bool]
+#: `wrong(a, b, testpoint) -> set[str]` -- which of the two design NAMES
+#: actually differs from the REFERENCE there. A fact about designs, so it takes
+#: names. At a cell where they disagree at least one of them must be in it.
+Wrong = Callable[[str, str, str], "set[str]"]
 
 
 @dataclass(frozen=True)
 class Blindness:
-    """How much of what the population disagrees about the set cannot see."""
+    """How much of what the population disagrees about the set cannot see.
+
+    `spurious` is the cells the set objected at and got WRONG -- it objected to
+    the design that was correct there. Those count as BLIND, because objecting
+    to a correct design is a false rejection and not coverage.
+    """
 
     blind: int
     disagreements: int
+    spurious: int = 0
 
     @property
     def rate(self) -> float:
-        """0.0 when the set objects somewhere in every disagreement cell."""
+        """0.0 when the set truly objects somewhere in every disagreement cell."""
         return self.blind / self.disagreements if self.disagreements else 0.0
+
+    @property
+    def apparent(self) -> int:
+        """Cells the set objected at, right or wrong -- what the uncorrected
+        metric reported as closure."""
+        return self.disagreements - self.blind + self.spurious
+
+    @property
+    def spurious_rate(self) -> float:
+        return self.spurious / self.apparent if self.apparent else 0.0
 
     def __str__(self) -> str:
         return (f"{self.blind} of {self.disagreements} disagreement cells "
-                f"unseen = {self.rate:.1%} blind")
+                f"unseen = {self.rate:.1%} blind, of which "
+                f"{self.spurious} were objected to on the wrong side "
+                f"({self.spurious_rate:.1%} of apparent closure)")
 
 
 def set_blindness(
@@ -270,39 +293,37 @@ def set_blindness(
     by_design: Mapping[str, Mapping[str, Rows]],
     *,
     differ: Differ,
+    wrong: Wrong,
 ) -> Blindness:
-    """Of the cells where two spec-derived designs disagree, how many does NO
-    check in the set object to.
+    """Of the cells where two spec-derived designs disagree, how many does the
+    set fail to object to ON THE SIDE THAT IS ACTUALLY WRONG.
 
     A cell is a (design pair, testpoint). `by_design` is
     `{design: {testpoint: rows}}`; `differ` decides whether the pair disagrees
-    there, so this module needs to know nothing about ports or encodings.
+    there; `wrong` says which of them the REFERENCE contradicts.
 
-    **THIS IS THE PROXY THE GOAL ASKS FOR, AND IT IS THE ONE NUMBER HERE
-    VALIDATED AGAINST WHAT A LOOP ACHIEVES.** On a matched pair -- same starting
-    design, same model, same brief and budget, differing only in which set drove
-    the editor:
+    **`wrong` IS REQUIRED, WHICH MAKES THIS A SCORING INSTRUMENT AND NOT A
+    SELECTION ONE.** It reads a reference, so it may never feed `select` -- and
+    a caller without a reference gets a TypeError rather than a flattering
+    number, which is the point. See
+    `blindness_credits_objecting_to_the_correct_design` for what the version
+    without it reported and why that number must not be used.
 
-        set                      blindness   objections     testpoints differing
-        163 checks, ref-selected   56.9%     22 -> 5 (-77%)   279 -> 190 (-32%)
-        126 checks, golden-free    99.8%     11 -> 1 (-91%)   279 -> 271 ( -3%)
+    **A SPURIOUSLY CAUGHT CELL COUNTS AS BLIND.** The set objected there and
+    objected to the design that was right; that is a false rejection wearing
+    coverage's clothes, and counting it as closure is what made the uncorrected
+    metric a rebadged objection count.
 
-    The golden-free set spent 91% of its objections and moved the design 3%.
-    Blindness says IN ADVANCE how much of a design's divergence a loop driven by
-    that set will close, and the prediction was written down before the second
-    run was dispatched.
-
-    **SCOPE: TWO RUNS.** One design, one starting point, two sets. Two points do
-    not establish a slope. What they establish is that the number is not inert.
-
-    **AND THE TRIAL COUNTS ARE AN OUTPUT, NOT A CONFOUND.** The blind run used
-    10 of 21 trials and the other 19 of 21; neither stopped for budget, each
-    stopped when its criterion ran out of things to say. A blinder set stops
-    giving feedback sooner, so unequal effort is part of what blindness CAUSES.
+    **ONE DEFECT REMAINS AND IT IS NOT FIXED HERE.** The objection is recorded
+    per TESTPOINT, so it still need not land at the disagreeing row or on the
+    disagreeing port -- a check objecting elsewhere in the same testpoint is
+    credited. That inflates closure, so every figure from this function is still
+    OPTIMISTIC. Fixing it means carrying the objection's edge and port, which
+    the recorded verdict maps do not.
     """
     checks = list(deciders)
     names = sorted(by_design)
-    blind = cells = 0
+    blind = spurious = cells = 0
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             shared = sorted(set(by_design[a]) & set(by_design[b]))
@@ -311,14 +332,19 @@ def set_blindness(
                 if not differ(ra, rb):
                     continue
                 cells += 1
-                if not any(d(ra) or d(rb) for d in checks):
+                hit_a = any(d(ra) for d in checks)
+                hit_b = any(d(rb) for d in checks)
+                if not hit_a and not hit_b:
                     blind += 1
-    return Blindness(blind, cells)
+                    continue
+                bad = wrong(a, b, tp)
+                if (hit_a and a in bad) or (hit_b and b in bad):
+                    continue                      # objected on the wrong side
+                blind += 1
+                spurious += 1
+    return Blindness(blind, cells, spurious)
 
 
-# --------------------------------------------------------------------------
-# THE SWEEP. The knob end to end, because two points were argued from before
-# the curve was measured and the curve corrected them.
 # --------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -732,4 +758,57 @@ def the_packaged_rule_reproduces_the_measured_sweep() -> str:
         "un-decided one are the same empty set. That leg was measured "
         "separately by re-deciding from traces -- see "
         "`a_compiled_out_state_reads_as_sound_for_free`."
+    )
+
+
+def blindness_credits_objecting_to_the_correct_design() -> str:
+    """The defect the polarity check removes, and what it did to every figure
+    this metric produced before it.
+
+    Found by a reader asking why blindness tracked audit failure so strongly.
+    The answer was not three mechanisms. It was mostly one artefact.
+    """
+    return (
+        "**THE METRIC CREDITED A CELL WHEN SOME CHECK OBJECTED TO EITHER "
+        "DESIGN, WITHOUT ASKING WHICH ONE WAS WRONG THERE.** At a cell where A "
+        "and B disagree at least one of them differs from the reference -- but "
+        "objecting to the one that is CORRECT scored identically to objecting "
+        "to the one that is wrong. So a check that objects to everything "
+        "achieved maximum apparent coverage and maximum false rejection at "
+        "once, and the metric recorded only the first.\n\n"
+        "**WHICH IS MOST OF WHY BLINDNESS TRACKED THE AUDIT.** 'Closes more "
+        "cells' and 'convicts more designs' were near-synonyms under that "
+        "condition, and convicting more designs is how a check convicts the "
+        "reference.\n\n"
+        "**MEASURED, on 5,656 disagreeing cells over nine designs:**\n\n"
+        "    set                       apparent   TRUE   blindness       spurious\n"
+        "    t=6, all 201 checks          3,370  2,830   40.4 -> 50.0%   540 = 16.0%\n"
+        "    t=6, the 163 SOUND ones      2,552  2,484   54.9 -> 56.1%    68 =  2.7%\n"
+        "    t=6, the 38 audit failures   1,868  1,231   67.0 -> 78.2%   637 = 34.1%\n\n"
+        "**SPURIOUS CLOSURE IS 12.6x MORE CONCENTRATED IN THE CHECKS THAT "
+        "CONVICT THE REFERENCE: 34.1% against 2.7%.** A third of what they "
+        "appeared to contribute was them objecting to the correct design.\n\n"
+        "**AND IT HALVES THE PRICE OF A CLEAN SET, WHICH IS THE ACTIONABLE "
+        "HALF.** Dropping the 38 looked like a 14.5-point sacrifice (40.4 -> "
+        "54.9). Measured on the side that is actually wrong it is **6.1 points "
+        "(50.0 -> 56.1)**, and the clean set keeps **87.8% of real closure at a "
+        "zero audit.** The unique true payload of the 38 is 346 cells, not the "
+        "818 the uncorrected count reported.\n\n"
+        "**WHAT IT COSTS THE METRIC IS ITS ADMISSIBILITY.** Deciding which side "
+        "is wrong needs the reference, so this is a SCORING instrument and can "
+        "never feed a selection rule. Blindness is therefore not the "
+        "golden-free completeness number it was reported as. The matched-pair "
+        "editor result survives only in a weaker form -- a set that objects "
+        "more drives a design further -- which is consistent with the "
+        "uncorrected metric having been a rebadged objection count.\n\n"
+        "**AND ONE GOLDEN-FREE SIGNAL FALLS OUT OF THE CORRECTION AND IS STILL "
+        "NOT ENOUGH.** INDISCRIMINACY -- of the disagreeing cells a check "
+        "closes, how often it objects to BOTH designs rather than picking a "
+        "side -- needs no reference and predicts audit failure at **3.35x "
+        "lift, 63% precision**, the best here by a wide margin. Used as a "
+        "FILTER it is dominated: it reaches 11.1% audit at 65.0% true "
+        "blindness, while dropping exactly the 38 reaches 0% at 56.1%. About "
+        "one point of audit per two points of blindness, against the "
+        "reference's six points of audit per two. **A good predictor and a bad "
+        "optimiser**, which is the fifth instrument here to be both."
     )

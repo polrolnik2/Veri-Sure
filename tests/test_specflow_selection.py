@@ -149,14 +149,49 @@ def test_refutable_separates_a_dead_check_from_a_sparing_one():
 # COMPLETENESS.
 # --------------------------------------------------------------------------
 
+#: A disagrees with B; A is the one the reference contradicts.
+BY_DESIGN = {"A": {"tp": rows(0)}, "B": {"tp": rows(1)}}
+DIFFER = lambda a, b: a[0]["outputs"]["a"] != b[0]["outputs"]["a"]  # noqa: E731
+A_IS_WRONG = lambda a, b, tp: {"A"}  # noqa: E731
+B_IS_WRONG = lambda a, b, tp: {"B"}  # noqa: E731
+
+
 def test_set_blindness_reads_zero_and_one_on_the_two_extremes():
-    by_design = {"A": {"tp": rows(0)}, "B": {"tp": rows(1)}}
-    differ = lambda a, b: a[0]["outputs"]["a"] != b[0]["outputs"]["a"]  # noqa: E731
-    blind_to_all = set_blindness([convicts(0)], by_design, differ=differ)
+    blind_to_all = set_blindness([convicts(0)], BY_DESIGN,
+                                 differ=DIFFER, wrong=A_IS_WRONG)
     assert (blind_to_all.blind, blind_to_all.disagreements) == (1, 1)
     assert blind_to_all.rate == 1.0
-    sees_it = set_blindness([convicts(1)], by_design, differ=differ)
-    assert (sees_it.blind, sees_it.rate) == (0, 0.0)
+    #: `convicts(1)` objects to A only, and A is the wrong one -> a TRUE catch.
+    sees_it = set_blindness([convicts(1)], BY_DESIGN,
+                            differ=DIFFER, wrong=A_IS_WRONG)
+    assert (sees_it.blind, sees_it.rate, sees_it.spurious) == (0, 0.0, 0)
+
+
+def test_objecting_to_the_CORRECT_design_is_not_coverage():
+    """The defect the polarity check removes. The same check, the same cell,
+    the same objection -- only which design the reference contradicts differs.
+    """
+    #: `convicts(1)` objects to A. When B is the wrong one, that objection is a
+    #: FALSE REJECTION, and the cell stays blind.
+    got = set_blindness([convicts(1)], BY_DESIGN, differ=DIFFER, wrong=B_IS_WRONG)
+    assert got.blind == 1, "objecting to the correct design is not coverage"
+    assert got.spurious == 1
+    assert got.rate == 1.0
+    #: It is still reported as apparent closure, so the two can be compared.
+    assert got.apparent == 1
+    assert got.spurious_rate == 1.0
+
+
+def test_the_reference_is_required_so_the_flattering_number_cannot_be_taken():
+    """A caller without a reference gets a TypeError, not a number.
+
+    Blindness without the polarity check is a rebadged objection count. Offering
+    it as a default is the defect; refusing is the fix.
+    """
+    with pytest.raises(TypeError):
+        set_blindness([convicts(1)], BY_DESIGN, differ=DIFFER)
+    names = inspect.signature(set_blindness).parameters
+    assert names["wrong"].default is inspect.Parameter.empty
 
 
 def test_blindness_counts_only_cells_where_the_designs_disagree():
@@ -164,8 +199,8 @@ def test_blindness_counts_only_cells_where_the_designs_disagree():
     see, so counting it would make an agreeing population look like a blind set.
     """
     by_design = {"A": {"tp": rows(0)}, "B": {"tp": rows(0)}}
-    differ = lambda a, b: a[0]["outputs"]["a"] != b[0]["outputs"]["a"]  # noqa: E731
-    got = set_blindness([convicts(0)], by_design, differ=differ)
+    got = set_blindness([convicts(0)], by_design,
+                        differ=DIFFER, wrong=A_IS_WRONG)
     assert got.disagreements == 0
     assert got.rate == 0.0  # no cells is not "blind to everything"
 
@@ -177,10 +212,8 @@ def test_the_selected_set_at_zero_is_blind_by_construction():
     """
     corpus = {f"c{n}": convicts(n) for n in range(5)}
     chosen = select(corpus, POP, ruleset=Ruleset(max_convictions=0))
-    by_design = {"A": {"tp": rows(0)}, "B": {"tp": rows(1)}}
-    differ = lambda a, b: a[0]["outputs"]["a"] != b[0]["outputs"]["a"]  # noqa: E731
-    got = set_blindness([corpus[k] for k in chosen.kept], by_design,
-                        differ=differ)
+    got = set_blindness([corpus[k] for k in chosen.kept], BY_DESIGN,
+                        differ=DIFFER, wrong=A_IS_WRONG)
     assert got.rate == 1.0, "a set convicting none of the population sees none of it"
 
 
@@ -238,7 +271,7 @@ def test_audit_is_computed_over_an_already_built_selection():
 
 def test_the_report_string_always_carries_both_halves():
     line = str(Report(checks=126, requirements=55, of_requirements=87,
-                      convicts_reference=0, blindness=Blindness(5646, 5656)))
+                      convicts_reference=0, blindness=Blindness(5646, 5656, 12)))
     assert "126 checks" in line and "63%" in line
     assert "audit" in line and "0.0%" in line
     assert "99.8% blind" in line
@@ -477,3 +510,38 @@ def test_the_reproduction_finding_states_its_own_scope():
     # defect in `decide` would reproduce faithfully.
     assert "does NOT re-derive the decides" in text
     assert "nobody reads it as an end-to-end validation" in text
+
+
+def test_the_polarity_finding_carries_the_split_and_the_price():
+    from specflow.selection import blindness_credits_objecting_to_the_correct_design
+    text = blindness_credits_objecting_to_the_correct_design()
+    # The defect, stated as the mechanism rather than as a caveat.
+    assert "WITHOUT ASKING WHICH ONE WAS WRONG" in text
+    # The number that makes it a finding rather than a worry.
+    assert "12.6x" in text and "34.1% against 2.7%" in text
+    # The actionable half: a clean set costs half what it appeared to.
+    assert "6.1 points" in text and "87.8%" in text
+    # And what the correction costs the metric itself.
+    assert "SCORING instrument" in text
+    assert "never feed a selection rule" in text
+    # The golden-free signal it surfaced, with its own negative attached.
+    assert "3.35x" in text
+    assert "good predictor and a bad optimiser" in text.lower() or \
+           "GOOD PREDICTOR AND A BAD OPTIMISER" in text
+
+
+def test_a_spurious_catch_counts_toward_blindness_not_against_it():
+    """`apparent - spurious == disagreements - blind` is an ALGEBRAIC IDENTITY
+    given how `apparent` is derived, so asserting it pins nothing -- the first
+    version of this test did exactly that and passed against a mutant that
+    stopped counting spurious catches as blind. Assert the values instead.
+    """
+    spur = set_blindness([convicts(1)], BY_DESIGN, differ=DIFFER, wrong=B_IS_WRONG)
+    true = set_blindness([convicts(1)], BY_DESIGN, differ=DIFFER, wrong=A_IS_WRONG)
+    #: Same check, same cell, same objection. Only the side differs.
+    assert (spur.blind, spur.spurious, spur.apparent) == (1, 1, 1)
+    assert (true.blind, true.spurious, true.apparent) == (0, 0, 1)
+    #: Apparent closure is IDENTICAL and real closure is not -- which is the
+    #: whole finding in two numbers.
+    assert spur.apparent == true.apparent
+    assert spur.rate == 1.0 and true.rate == 0.0
