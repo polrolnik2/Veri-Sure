@@ -636,3 +636,55 @@ def the_packaged_pipeline_reproduces_every_recorded_figure() -> str:
         "SELECTION half of F2 agrees with the record; the AUTHORING half is "
         "untested and is what the paid run would test."
     )
+
+
+def elicited_alternative_readings_produce_strength_not_difference() -> str:
+    """V1, live, paid. Show the author its own prior body and ask for a check
+    that DISAGREES with it about scope or demand.
+
+    It cleared its pre-registered bar by three orders of magnitude, and the bar
+    turned out to be gameable by exactly the thing the experiment was meant to
+    rule out.
+    """
+    return (
+        "30 requirements asked; **24 authored, 6 declined** -- the prompt "
+        "allowed 'this requirement admits only one reading' as an answer and "
+        "six took it, which is a real answer and better than an invented "
+        "disagreement. 20 survive the corpus-path gate; 4 decide nowhere.\n\n"
+        "**THE BAR: new set-level cells > 0. MEASURED: +2,826 over `t = 6` and "
+        "+3,172 over the sound subset.** The blindness round scored exactly "
+        "zero on this metric with a stronger targeting signal. This is not a "
+        "near miss in the other direction -- it is the whole denominator.\n\n"
+        "**AND THAT IS THE METRIC BREAKING, NOT THE EXPERIMENT SUCCEEDING.** At "
+        "every disagreement cell at least one of the two designs IS wrong, so a "
+        "check objecting to BOTH designs everywhere closes 100% of cells while "
+        "picking no side at all. The new bodies are that check:\n\n"
+        "                          mean indiscriminacy   mean objection mass\n"
+        "    V1's 20 bodies                    0.319                  0.080\n"
+        "    a t=6 sample of 60                0.024                  0.005\n\n"
+        "**13x more indiscriminate and 16x the footprint.** 8 of the 20 convict "
+        "ALL SEVEN designs. The audit reads **9 of 20 = 45%** against `t = 6`'s "
+        "18.9% base rate.\n\n"
+        "    set                               checks    span   *audit*   blind\n"
+        "    t = 6                                201   81.6%   *18.9%*   50.0%\n"
+        "    sound subset (REFERENCE-picked)      163   77.0%   * 0.0%*   56.1%\n"
+        "    t = 6 + V1                           221   81.6%   *21.3%*    0.0%\n"
+        "    V1 alone                              20   23.0%   *45.0%*    0.0%\n\n"
+        "**THE FINDING IS THE SAME ONE V0 FOUND, NOW FOR A TARGETED PROMPT.** "
+        "Resampling produces strength rather than semantics; so does asking "
+        "explicitly for a disagreeing reading. The author moves along the "
+        "strictness axis because that is the axis the request is easiest to "
+        "satisfy on -- a wider activation and a harsher demand IS a disagreement "
+        "about scope and demand, and it is not a second reading of the "
+        "sentence.\n\n"
+        "**WHAT MUST CHANGE IS D1's BAR.** 'New disagreement cells the SET "
+        "reaches' cannot distinguish a complementary check from a blunderbuss, "
+        "and the pre-registration should have read *an undominated point on the "
+        "TRIPLE*. The correction is the one already on the board everywhere "
+        "else in this work: report span, audit and blindness together or report "
+        "nothing.\n\n"
+        "**CONFOUND, STATED:** the recorded 464-body corpus was authored by "
+        "`gpt-5.6-luna`, which the gateway no longer serves; these bodies come "
+        "from `gpt-5.6-terra`. Some of the strictness gap may be the author "
+        "rather than the prompt, and this run cannot separate them."
+    )

@@ -147,3 +147,21 @@ def test_the_pipeline_finding_separates_what_ran_from_what_did_not():
     assert "overridden EXPLICITLY" in text
     #: and the half that did NOT run is named rather than implied
     assert "STILL UNEXERCISED" in text and "has authored nothing" in text
+
+
+def test_the_v1_finding_reports_the_bar_it_cleared_AND_why_that_is_not_a_win():
+    from specflow.scoring import (
+        elicited_alternative_readings_produce_strength_not_difference as f,
+    )
+    text = f()
+    #: the bar, and that it was cleared
+    assert "+2,826" in text and "new set-level cells > 0" in text
+    #: and immediately, why clearing it proves nothing
+    assert "METRIC BREAKING, NOT THE EXPERIMENT SUCCEEDING" in text
+    assert "0.319" in text and "0.024" in text
+    #: the triple, which is what actually adjudicates it
+    assert "45.0%" in text and "21.3%" in text
+    #: declines are reported as answers, not failures
+    assert "6 declined" in text
+    #: the author confound
+    assert "gpt-5.6-luna" in text and "gpt-5.6-terra" in text
