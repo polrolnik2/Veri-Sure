@@ -82,6 +82,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from math import log as _log
 
 Rows = Sequence[Mapping[str, object]]
 #: `decide_on(rows) -> bool | None` -- True when the check CONVICTS those rows,
@@ -832,4 +833,310 @@ def blindness_credits_objecting_to_the_correct_design() -> str:
         "one point of audit per two points of blindness, against the "
         "reference's six points of audit per two. **A good predictor and a bad "
         "optimiser**, which is the fifth instrument here to be both."
+    )
+
+
+# --------------------------------------------------------------------------
+# THE OTHER TELLS IN THE CONVICTION MATRIX. All golden-free by construction --
+# every one reads the check's own verdicts on spec-derived designs and the
+# population's own agreement pattern, and `tells` has no parameter that could
+# carry a reference, the same structural guarantee `select` has.
+#
+# MEASURED, AND THE ANSWER IS ONE SIGNAL RATHER THAN NINE. See
+# `the_conviction_matrix_carries_one_signal_not_nine`. They are kept because
+# one of them buys closure two and a half times more cheaply than the rule
+# does -- as a COMPLETENESS instrument, which is not what its name suggests
+# and not what the others were being tried for.
+# --------------------------------------------------------------------------
+
+#: `objections[design] -> the testpoints this check objected at on that design`.
+#: An empty set is a design the check SPARED or never decided on; the two are
+#: indistinguishable here, which is why `min_decides` is a leg of `select` and
+#: not a tell.
+ObjectionMap = Mapping[str, "frozenset[str] | set[str]"]
+
+
+@dataclass(frozen=True)
+class PopulationShape:
+    """What the population looks like BEFORE any check is scored.
+
+    Built once per population and passed to every check. `B2` requires this to
+    be computed and reported whatever the selection result is: k1's precision at
+    `t = 0` moves from 126-for-126 to 6.2% when one design leaves, so a
+    conviction count without the shape beside it is not interpretable.
+    """
+
+    designs: tuple[str, ...]
+    testpoints: tuple[str, ...]
+    #: testpoints where the designs do NOT all agree
+    split: frozenset[str]
+    #: design -> share of `split` where it sits off the majority
+    dissent: Mapping[str, float]
+    #: design -> cluster id, so behavioural clones collapse to one opinion
+    cluster: Mapping[str, int]
+    #: testpoint -> the design pairs that disagree there
+    pairs: Mapping[str, tuple[tuple[str, str], ...]]
+
+    def __post_init__(self) -> None:
+        missing = [d for d in self.designs
+                   if d not in self.dissent or d not in self.cluster]
+        if missing:
+            raise ValueError(
+                f"{len(missing)} designs have no dissent rate or cluster: "
+                f"{missing[:3]}; a tell weighted by a structure that does not "
+                "cover the population would silently weight them at zero"
+            )
+        if not self.split:
+            #: NO DISAGREEMENT, NO TELLS. Every tell here is a statement about
+            #: where a check speaks relative to where the population differs.
+            #: With nothing to differ about they all collapse to constants, and
+            #: a constant reads as a clean result. This is `population.select`'s
+            #: clone guard arriving one layer up.
+            raise ValueError(
+                f"no testpoint splits the population of {len(self.designs)}: "
+                "these designs are behaviourally indistinguishable here, so "
+                "every tell below is a constant and none of them measured "
+                "anything"
+            )
+
+    @property
+    def agreed(self) -> frozenset[str]:
+        return frozenset(self.testpoints) - self.split
+
+    def effective_size(self) -> int:
+        """Distinct opinions, not headcount. `MIN_POPULATION` should gate on
+        this: five near-clones are one opinion five times, and four designs one
+        per cluster reached 1.5% where seven reached 0%."""
+        return len(set(self.cluster.values()))
+
+
+@dataclass(frozen=True)
+class TellProfile:
+    """Eight readings of one check's conviction matrix. Carries no reference."""
+
+    #: how many designs it convicted -- THE SHIPPED RULE, here for comparison
+    count: int
+    #: (design, testpoint) objections as a share of the whole matrix
+    mass: float
+    #: share of its objections landing where the population is UNANIMOUS.
+    #: Structurally zero inside any `t < len(designs)` set: objecting where all
+    #: designs agree convicts all of them, so such a check has `count = N` and
+    #: the threshold has already removed it. 198 of t=6's 201 read exactly 0.
+    split_purity: float
+    #: of the disagreeing pair cells it closes, the share where it objects to
+    #: BOTH sides rather than picking one
+    indiscriminacy: float
+    #: `count` with each design weighted by 1 - its own dissent rate, so a
+    #: conviction of the population's outlier costs less than one of its centre
+    dissent_weighted: float
+    #: `count` with behavioural clones collapsed
+    cluster_count: int
+    #: 1 - normalised entropy of the mass across designs. **CONFOUNDED WITH
+    #: SILENCE**: a check that objects to nothing has no mass, hence no
+    #: entropy, hence concentration 0, so selecting the LOW side selects the
+    #: silent checks and reads a perfect audit for the worst possible reason.
+    concentration: float
+    #: how much more often it speaks where the population DISAGREES than where
+    #: it agrees. Measured under the name `targeting_diff`; renamed because it
+    #: turned out to measure objection PLACEMENT, and to be a completeness
+    #: instrument rather than a soundness one.
+    placement: float
+
+
+def tells(objections: ObjectionMap, shape: PopulationShape) -> TellProfile:
+    """Every tell the conviction matrix carries, for one check.
+
+    **THERE IS NO REFERENCE PARAMETER AND THERE MUST NEVER BE ONE.** These are
+    selection-side instruments; the audit is computed afterwards from a set that
+    is already built.
+    """
+    hit = {d: set(objections.get(d, ())) for d in shape.designs}
+    convicted = [d for d in shape.designs if hit[d]]
+    mass = sum(len(hit[d]) for d in shape.designs)
+    cells = len(shape.designs) * len(shape.testpoints)
+
+    agreed = shape.agreed
+    at_agreed = sum(1 for d in shape.designs for tp in hit[d] if tp in agreed)
+
+    one = both = 0
+    for tp, prs in shape.pairs.items():
+        for a, b in prs:
+            ha, hb = tp in hit.get(a, ()), tp in hit.get(b, ())
+            if ha and hb:
+                both += 1
+            elif ha or hb:
+                one += 1
+
+    if mass:
+        shares = [len(hit[d]) / mass for d in convicted]
+        entropy = -sum(p * _log(p) for p in shares if p > 0)
+        ceiling = _log(len(shape.designs))
+        concentration = 1.0 - entropy / ceiling if ceiling else 1.0
+    else:
+        concentration = 0.0
+
+    spoke = {tp for d in shape.designs for tp in hit[d]}
+    n_split = len(shape.split) or 1
+    n_agreed = len(agreed) or 1
+    placement = (len(spoke & shape.split) / n_split
+                 - len(spoke - shape.split) / n_agreed)
+
+    return TellProfile(
+        count=len(convicted),
+        mass=mass / cells if cells else 0.0,
+        split_purity=at_agreed / mass if mass else 0.0,
+        indiscriminacy=both / (one + both) if (one + both) else 0.0,
+        dissent_weighted=sum(1.0 - shape.dissent[d] for d in convicted),
+        cluster_count=len({shape.cluster[d] for d in convicted}),
+        concentration=concentration,
+        placement=placement,
+    )
+
+
+def the_conviction_matrix_carries_one_signal_not_nine() -> str:
+    """P3/P4/P5, run over 464 bodies, 7 designs and 5,656 disagreement cells.
+
+    Nine tells were enumerated, three had numbers, six had never been computed.
+    The question was whether the matrix holds several independent readings. It
+    does not.
+    """
+    return (
+        "**EVERY TELL THAT PREDICTS CONVICTING THE REFERENCE IS THE CONVICTION "
+        "COUNT WEARING A DIFFERENT NAME, AND THE TWO THAT ARE GENUINELY "
+        "INDEPENDENT OF IT CARRY NO SIGNAL AT ALL.**\n\n"
+        "Spearman against the count, on t=6's 201 checks:\n\n"
+        "    dissent_weighted  +0.997      split_purity    +0.124\n"
+        "    cluster_count     +0.988      port_targeting  +0.045\n"
+        "    mass              +0.977\n"
+        "    placement         +0.934\n"
+        "    concentration     +0.870\n"
+        "    indiscriminacy    +0.779\n\n"
+        "and the two on the right -- the only two under 0.2 -- flag 5 of 38 and "
+        "11 of 38 reference-convicting checks where chance is 7.2.\n\n"
+        "**THE DECIDING TEST IS WITHIN A STRATUM, NOT ACROSS ONE.** Between "
+        "conviction counts every tell tracks the count, because a check that "
+        "objects more objects more. Holding the count fixed and asking each "
+        "tell to sort that stratum's reference-convicting checks into its "
+        "suspicious half: pooled over the strata with at least 12 members "
+        "(count 0, 1, 2 and 6), every tell lands **14 to 19 of 33 where chance "
+        "is 16.5.** Nothing separates.\n\n"
+        "**THE TWO RE-WEIGHTINGS DESIGNED TO CORRECT FOR THE OUTLIER DO NOT.** "
+        "`dissent_weighted` and `cluster_count` exist because k1's population "
+        "is dominated by one design at 78% dissent. At matched size they score "
+        "16 of 38 and 20 of 38 against the plain count's 18; McNemar on the "
+        "discordant picks gives p = 0.727. Counting the outlier less does not "
+        "buy precision.\n\n"
+        "**COMPOSITION (P4) AND A MODEL (P5) BOTH FAIL THEIR PRE-REGISTERED "
+        "BARS.** Best pairwise composition, with a floor of 10 flagged checks, "
+        "is 3.82x (indiscriminacy AND placement, 13 of 18) against a best "
+        "single of 3.48x -- an improvement inside the noise of an 18-check "
+        "sample. A leave-one-REQUIREMENT-out logistic over all nine features "
+        "reaches **3.06x (22 of 38), permutation p = 0.005 against 200 "
+        "relabellings** -- real signal, below the 3.35x bar it had to beat, and "
+        "beaten by a single feature. At N = 13 it scores 8 where the bare "
+        "count scores 11.\n\n"
+        "**WHAT THIS DOES NOT ESTABLISH.** The stratum test has 33 positives "
+        "spread over three usable strata; it can refute a large second signal "
+        "and cannot exclude a modest one. And every figure is one module's "
+        "population -- F3 is what would tell a rule from an accident."
+    )
+
+
+def two_tells_were_pre_registered_backwards() -> str:
+    """Three defects in the P3 instrument, each caught by a number that was
+    impossible rather than merely disappointing.
+
+    Recorded because all three produce a clean-looking result, and two of them
+    produce a result in the RIGHT direction for the thing being argued.
+    """
+    return (
+        "**DEFECT ONE: A ZERO THAT WAS THE INSTRUMENT, NOT THE TELL.** "
+        "`concentration` and `placement` were pre-registered with their "
+        "suspicious side on the LOW end and both scored **0 of 38** where "
+        "chance is 7.2 -- a binomial p of 0.0003 in the wrong tail, which is "
+        "signal pointing the other way rather than no signal. Reversed they "
+        "score 18 and 25 of 38. For `concentration` the reason is a confound "
+        "worth keeping in the docstring: a check objecting to nothing has no "
+        "mass, hence no entropy, hence concentration zero, so the low side "
+        "selects the SILENT checks, which are sound by silence and audit "
+        "perfectly for the worst available reason.\n\n"
+        "**DEFECT TWO: THE RANKS WERE NOT DETERMINISTIC.** "
+        "`sorted(set_of_keys, key=...)` breaks ties in set-iteration order, "
+        "which Python randomises per process. The conviction count is an "
+        "integer 0..6 over 201 checks, so a matched-size cut at N = 38 lands "
+        "inside a tie block -- **4 of 18 checks tied at count 2, and 33 of 42 "
+        "tied for `cluster_count`** -- and the same data gave 19 hits in one "
+        "run and 20 in the next. Every rank now carries the key as a second "
+        "sort term and every tie block straddling the cut is printed.\n\n"
+        "**DEFECT THREE: A COMPOSITION RANKING WITH NO SIZE FLOOR.** Ranking "
+        "pairs by the better of union and intersection precision promoted "
+        "intersections of **2 to 4 checks reading 1.00 precision, printed as "
+        "5.29x** -- the same illusion as the recorded 2.64x on 2 of 2. A floor "
+        "of 10 removes 18 of them and the best honest composition is 3.82x.\n\n"
+        "**AND ONE TELL IS STRUCTURALLY ZERO WHERE IT WAS BEING MEASURED.** "
+        "`split_purity` asks whether a check objects where the population is "
+        "unanimous -- but objecting where all seven agree convicts all seven, "
+        "so such a check has count 7 and every `t < 7` set has already "
+        "excluded it. **198 of t=6's 201 read exactly 0.** It is not a weak "
+        "tell inside a threshold set; it is not a tell there at all.\n\n"
+        "**AND A FOURTH DEFECT IN THE INSTRUMENT THAT CHECKS THE INSTRUMENTS.** "
+        "The mutation harness reported the `placement` sign mutant as "
+        "SURVIVING. It had not: that mutation reorders two terms and is "
+        "therefore **byte-identical in length**, CPython invalidates a cached "
+        "`.pyc` on (mtime, size), and a restore-then-mutate cycle completing "
+        "inside one second matches both. The stale bytecode ran and the test "
+        "passed. Run directly the same test fails in 0.04s. The harness now "
+        "clears `__pycache__` and runs with bytecode off -- and the episode is "
+        "recorded because a mutation harness that silently reuses the "
+        "unmutated code reports every test as worthless in exactly the cases "
+        "where the mutation was smallest."
+    )
+
+
+def objection_placement_buys_closure_more_cheaply_than_the_count() -> str:
+    """The one tell worth keeping, and it is not doing the job the others were
+    tried for.
+
+    `placement` -- how much more often a check speaks where the population
+    disagrees than where it agrees -- does not find sound checks among unsound
+    ones. It finds, among checks that convict everything, the ones whose
+    objections land where the designs actually differ.
+    """
+    return (
+        "**IT IS A COMPLETENESS INSTRUMENT, NOT A SOUNDNESS ONE, AND THE SET "
+        "IT BUILDS MAKES THAT UNAMBIGUOUS.** `placement < 0.0017` keeps 151 "
+        "checks: **all 126 of t = 0, exactly 1 of the 75 between, and 24 of "
+        "the 263 that convict all seven.** The audit is 24 -- so **24 of the "
+        "25 checks it adds to t = 0, or 96%, convict the reference.** It is "
+        "not selecting for soundness. It is choosing WHICH false rejections to "
+        "accept.\n\n"
+        "**AND ON THAT JOB IT BEATS THE RULE BY TWO AND A HALF TIMES.** The "
+        "triple, with blindness polarity-corrected, beside every set on the "
+        "board:\n\n"
+        "    set                         checks   span    *audit*   blind   spurious   TRUE cells\n"
+        "                                                                              per reject\n"
+        "    t = 0 golden-free              126   63.2%   * 0.0%*   99.9%     33.3%          --\n"
+        "    t = 6 golden-free              201   81.6%   *18.9%*   50.0%     16.0%          74\n"
+        "    sound subset, REFERENCE-picked 163   77.0%   * 0.0%*   56.1%      2.7%          --\n"
+        "    **placement < 0.0017**         151   69.0%   *15.9%*   20.8%      9.8%         186\n\n"
+        "**It beats t = 6 on audit, on blindness and on spurious closure at "
+        "once**, for 11 requirements of span -- 60 of 87 against 71. The 25 it "
+        "adds close **4,471 true cells the t = 0 set cannot reach**, over 10 "
+        "requirements.\n\n"
+        "**IT IS A PLATEAU, NOT A FITTED EDGE.** Every threshold from 0.0005 "
+        "to 0.003 gives the same 151-or-149-check set at 20.8% blind and 9.8% "
+        "spurious; the curve then degrades monotonically -- 0.02 reaches 24.9% "
+        "audit for 20.3% blind, and 0.08 reaches 0.0% blind at 42.5% audit, "
+        "which is the whole corpus arriving.\n\n"
+        "**THE HONESTY CONDITIONS, ALL THREE.** The tell is golden-free -- it "
+        "reads only the check's own verdicts and which testpoints split the "
+        "population. **The THRESHOLD was picked by reading a frontier that "
+        "contains the audit**, so this point is a calibration exactly as "
+        "`t = 0` is, and belongs in the calibrated column. The closure is "
+        "concentrated to the point of fragility: **one check carries 766 of "
+        "the 4,471 cells** and ten requirements carry all of them. And the "
+        "blindness granularity defect is untouched -- an objection is recorded "
+        "per testpoint, so it need not land at the disagreeing row or port, "
+        "and every figure in the table above is optimistic in the same "
+        "direction."
     )

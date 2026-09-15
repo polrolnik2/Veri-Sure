@@ -15,7 +15,9 @@ from specflow.selection import (
     GateLegs,
     Report,
     Ruleset,
+    PopulationShape,
     Selection,
+    TellProfile,
     Verdict,
     audit,
     buckets,
@@ -26,7 +28,13 @@ from specflow.selection import (
     set_blindness,
     soundness_and_blindness_are_one_knob,
     sweep,
+    tells,
+    the_conviction_matrix_carries_one_signal_not_nine,
     the_gates_and_the_rule_reject_different_checks,
+    two_tells_were_pre_registered_backwards,
+)
+from specflow.selection import (
+    objection_placement_buys_closure_more_cheaply_than_the_count,
 )
 
 
@@ -552,3 +560,157 @@ def test_a_spurious_catch_counts_toward_blindness_not_against_it():
     #: whole finding in two numbers.
     assert spur.apparent == true.apparent
     assert spur.rate == 1.0 and true.rate == 0.0
+
+
+# --------------------------------------------------------------------------
+# THE OTHER TELLS IN THE CONVICTION MATRIX
+# --------------------------------------------------------------------------
+
+def shape(**over):
+    """Three designs over four testpoints. A and B are clones; C is the
+    outlier. t1 and t2 split the population, t3 and t4 are agreed."""
+    base = dict(
+        designs=("A", "B", "C"),
+        testpoints=("t1", "t2", "t3", "t4"),
+        split=frozenset({"t1", "t2"}),
+        dissent={"A": 0.0, "B": 0.0, "C": 0.9},
+        cluster={"A": 0, "B": 0, "C": 1},
+        pairs={"t1": (("A", "C"), ("B", "C")), "t2": (("A", "C"),)},
+    )
+    base.update(over)
+    return PopulationShape(**base)
+
+
+def test_a_population_that_never_splits_is_refused():
+    """The clone guard, one layer up from `population.select`. With nothing to
+    disagree about every tell is a constant, and a constant reads as a result."""
+    with pytest.raises(ValueError, match="behaviourally indistinguishable"):
+        shape(split=frozenset())
+
+
+def test_a_design_with_no_dissent_rate_is_refused():
+    """A structure that does not cover the population would weight the missing
+    designs at zero rather than raise, and `dissent_weighted` would read low
+    for a check convicting exactly them."""
+    with pytest.raises(ValueError, match="no dissent rate or cluster"):
+        shape(dissent={"A": 0.0, "B": 0.0})
+
+
+def test_effective_size_collapses_clones_and_headcount_does_not():
+    s = shape()
+    assert len(s.designs) == 3
+    assert s.effective_size() == 2
+
+
+def test_the_count_and_the_mass_separate_breadth_from_footprint():
+    """Two checks convicting the SAME number of designs, one at four times the
+    footprint. The shipped rule cannot tell them apart; `mass` can."""
+    narrow = tells({"A": {"t1"}}, shape())
+    wide = tells({"A": {"t1", "t2", "t3", "t4"}}, shape())
+    assert narrow.count == wide.count == 1
+    assert wide.mass == pytest.approx(4 * narrow.mass)
+    #: and it is a SHARE of the matrix, not a raw tally -- three designs over
+    #: four testpoints is twelve cells, so one objection is one twelfth. A raw
+    #: count cannot be compared between populations of different sizes.
+    assert narrow.mass == pytest.approx(1 / 12)
+
+
+def test_split_purity_counts_only_objections_where_the_population_agrees():
+    at_split = tells({"A": {"t1", "t2"}}, shape())
+    at_agreed = tells({"A": {"t3", "t4"}}, shape())
+    assert at_split.split_purity == 0.0
+    assert at_agreed.split_purity == 1.0
+
+
+def test_indiscriminacy_separates_picking_a_side_from_objecting_to_both():
+    """t1 carries the pair (A, C). A check objecting to A alone has picked a
+    side; one objecting to both has not, and at a cell where they disagree
+    objecting to both is a false rejection unless both are wrong."""
+    one_side = tells({"A": {"t1"}}, shape())
+    both_sides = tells({"A": {"t1"}, "C": {"t1"}}, shape())
+    assert one_side.indiscriminacy == 0.0
+    assert both_sides.indiscriminacy > 0.0
+
+
+def test_convicting_the_outlier_costs_less_than_convicting_the_centre():
+    """The whole point of the re-weighting: k1's rule reads 126-for-126 partly
+    because one design absorbs over-strict checks."""
+    centre = tells({"A": {"t1"}}, shape())
+    outlier = tells({"C": {"t1"}}, shape())
+    assert centre.count == outlier.count == 1
+    assert outlier.dissent_weighted < centre.dissent_weighted
+    assert outlier.dissent_weighted == pytest.approx(0.1)
+
+
+def test_two_clones_convicted_count_as_one_opinion():
+    clones = tells({"A": {"t1"}, "B": {"t1"}}, shape())
+    across = tells({"A": {"t1"}, "C": {"t1"}}, shape())
+    assert clones.count == across.count == 2
+    assert clones.cluster_count == 1
+    assert across.cluster_count == 2
+
+
+def test_concentration_reads_zero_for_a_silent_check_and_for_a_spread_one():
+    """**THE CONFOUND, PINNED SO IT CANNOT BE QUIETLY REMOVED.** Selecting the
+    LOW side of concentration selects the silent checks, which are sound by
+    silence; that is why the pre-registered direction scored 0 of 38 against a
+    chance of 7.2 and had to be reversed."""
+    silent = tells({}, shape())
+    spread = tells({"A": {"t1"}, "B": {"t1"}, "C": {"t1"}}, shape())
+    focused = tells({"A": {"t1"}}, shape())
+    assert silent.concentration == 0.0
+    assert spread.concentration < focused.concentration
+    assert focused.concentration == 1.0
+
+
+def test_placement_is_signed_by_where_the_check_speaks():
+    """Positive when it speaks only where the designs differ, negative when
+    only where they agree, and near zero for a check that speaks everywhere."""
+    targeted = tells({"A": {"t1", "t2"}}, shape())
+    misplaced = tells({"A": {"t3", "t4"}}, shape())
+    everywhere = tells({"A": {"t1", "t2", "t3", "t4"}}, shape())
+    assert targeted.placement == pytest.approx(1.0)
+    assert misplaced.placement == pytest.approx(-1.0)
+    assert everywhere.placement == pytest.approx(0.0)
+
+
+def test_tells_has_no_parameter_that_could_carry_a_reference():
+    """The same structural guarantee `select` has. A tell is a selection-side
+    instrument; the audit is computed afterwards from a set already built."""
+    params = set(inspect.signature(tells).parameters)
+    assert params == {"objections", "shape"}
+    assert not any("ref" in f or "golden" in f or "audit" in f
+                   for f in TellProfile.__dataclass_fields__)
+
+
+def test_the_one_signal_finding_states_the_null_and_its_power():
+    text = the_conviction_matrix_carries_one_signal_not_nine()
+    assert "+0.997" in text and "+0.045" in text
+    assert "14 to 19 of 33" in text and "16.5" in text
+    assert "p = 0.727" in text
+    #: the model's own result is reported WITH the bar it failed
+    assert "3.06x" in text and "3.35x" in text
+    #: and the power limit, or the null reads stronger than it is
+    assert "cannot exclude a modest one" in text
+
+
+def test_the_backwards_finding_names_all_three_defects():
+    text = two_tells_were_pre_registered_backwards()
+    assert "0 of 38" in text and "0.0003" in text
+    assert "randomises per process" in text and "19 hits" in text
+    assert "5.29x" in text
+    assert "198 of t=6's 201" in text
+    #: the harness defect, which is the one that invalidates the others
+    assert "byte-identical in length" in text and "mtime, size" in text
+
+
+def test_the_placement_finding_reports_the_triple_and_the_calibration():
+    text = objection_placement_buys_closure_more_cheaply_than_the_count()
+    #: the whole triple, never one number alone
+    assert "69.0%" in text and "15.9%" in text and "20.8%" in text
+    #: the mechanism, stated so it is not read as a soundness filter
+    assert "96%" in text and "COMPLETENESS INSTRUMENT" in text
+    #: the threshold was chosen against a frontier containing the audit
+    assert "belongs in the calibrated column" in text
+    #: and the fragility
+    assert "766" in text
