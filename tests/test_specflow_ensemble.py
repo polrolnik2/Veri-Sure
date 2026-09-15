@@ -4423,3 +4423,30 @@ def test_the_rule_subsumes_the_fail_open_mask():
     assert "a cause which should be rare holds nearly all the mass" in why
     doc = ensemble.__doc__ or ""
     assert "an_instrument_must_be_shown_able_to_reach_its_own_predicate" in doc
+
+
+def test_the_headline_set_is_recorded_as_reference_selected():
+    # The correction that matters: four graded runs used this set and its
+    # figures were quoted as golden-free. Exact set identity in both directions
+    # is what settles it, so both halves must appear.
+    why = ensemble.the_sets_documented_rule_is_not_the_rule_that_built_it()
+    assert "set minus audit-zero = 0, audit-zero minus set = 0" in why
+    assert "`golden_check` applied to the corpus" in why
+    assert "ceiling, not a" in why.lower().replace("golden-free score", "")
+
+
+def test_the_documented_rule_is_shown_not_to_reproduce_the_set():
+    why = ensemble.the_sets_documented_rule_is_not_the_rule_that_built_it()
+    assert "keeps **234**" in why and "**169**" in why
+    assert "64 = 27.4%" in why
+    assert "never zero" in why
+
+
+def test_the_golden_free_approximation_is_priced_at_both_ends():
+    # A recall figure without its false-reject rate is the defect this work has
+    # retracted headlines for; both thresholds carry both numbers.
+    why = ensemble.the_sets_documented_rule_is_not_the_rule_that_built_it()
+    assert "recovers **137 of 169**   audit **9.9%**" in why
+    assert "recovers **168 of 169**   audit **27.4%**" in why
+    doc = ensemble.__doc__ or ""
+    assert "the_sets_documented_rule_is_not_the_rule_that_built_it" in doc

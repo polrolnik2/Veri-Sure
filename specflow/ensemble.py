@@ -579,6 +579,16 @@ precondition on the test, not a better assertion.
 `an_instrument_must_be_shown_able_to_reach_its_own_predicate`
 carries it, and it subsumes the fail-open mask as the same defect from the other
 side.
+
+AND THE SET BEHIND THIS WORK'S BEST RESULT IS REFERENCE-SELECTED, THOUGH ITS OWN
+HEADER CALLS THE SELECTION GOLDEN-FREE. Reproducing the documented rule keeps 234
+of 600 bodies at a 27.4% audit; the set is 169 at an audit of zero, and it is
+EXACTLY the subset that decides on the reference and convicts it nowhere --
+identical in both directions. So it is `golden_check` over the corpus, every
+figure taken with it is a ceiling rather than a score, and the golden-free
+approximation costs 137 of 169 recovered at a 9.9% audit, or 168 at 27.4%.
+`the_sets_documented_rule_is_not_the_rule_that_built_it`
+carries it.
 """
 from __future__ import annotations
 
@@ -7588,4 +7598,51 @@ def an_instrument_must_be_shown_able_to_reach_its_own_predicate() -> str:
         "should be rare holds nearly all the mass.** Partition the outcomes by "
         "cause, and refuse to report when the substantive cause is not among "
         "them."
+    )
+
+
+def the_sets_documented_rule_is_not_the_rule_that_built_it() -> str:
+    """THE SESSION'S HEADLINE SET IS REFERENCE-SELECTED, AND ITS OWN HEADER SAYS
+    OTHERWISE.
+
+    Four graded runs used one check set. Its launcher describes the selection as
+    golden-free -- *"decides on some spec-derived design AND convicts at most 6
+    of the 7 independent implementations"* -- and every figure taken with it has
+    been quoted as a golden-free result. Reproducing that rule from the corpus
+    settles it, and the answer is that the rule did not build the set.
+    """
+    return (
+        "    the stated rule over 600 bodies      keeps **234**\n"
+        "      of them convicting the reference     **64 = 27.4%**\n"
+        "    the actual set                       **169**\n"
+        "      of them convicting the reference     **0**\n\n"
+        "**THE RULE RECOVERS 168 OF THE 169 AND ADDS 66 MORE, OF WHICH 64 ARE "
+        "UNSOUND.** So it is an outer filter that over-generates almost purely "
+        "over-strict checks, and one set member violates it outright at h = 7 "
+        "of 7. No threshold rescues it: swept from t = 0 to t = 6 the audit "
+        "runs 9.9%, 17.0%, 19.6%, 20.2%, 21.4%, 22.0%, 27.4% -- **never zero** "
+        "-- and the set's own conviction profile spans the whole range, "
+        "`{0:137, 1:9, 2:6, 3:2, 4:4, 5:7, 6:3, 7:1}`. A threshold rule cannot "
+        "produce a set shaped like that.\n\n"
+        "**WHAT DID BUILD IT, CONFIRMED BY EXACT SET IDENTITY IN BOTH "
+        "DIRECTIONS.** Of the 600 bodies, **169** decide on the reference and "
+        "convict it nowhere. The set is those 169: set minus audit-zero = 0, "
+        "audit-zero minus set = 0. **It is `golden_check` applied to the "
+        "corpus.**\n\n"
+        "**SO EVERY FIGURE TAKEN WITH THAT SET IS A CEILING, NOT A "
+        "GOLDEN-FREE SCORE** -- including the best design this work has "
+        "produced. That is the same status `MAXSOUND` carries and is labelled "
+        "with (*'selected by golden and is a ceiling, not a score'*); this set "
+        "is the same construction at larger scale, 169 checks over 74 "
+        "requirements against MAXSOUND's 68 over 45, and it was **not** "
+        "labelled. The label is the correction.\n\n"
+        "**AND IT PRICES THE GOLDEN-FREE APPROXIMATION, WHICH IS THE USABLE "
+        "HALF.** The minority rule is what a pipeline can actually run, and "
+        "against the reference-selected set it reads:\n\n"
+        "    t = 0   keeps 152   recovers **137 of 169**   audit **9.9%**\n"
+        "    t = 6   keeps 234   recovers **168 of 169**   audit **27.4%**\n\n"
+        "Recall and false-reject move together, and neither end is free. That "
+        "trade is the honest statement of what selection without a reference "
+        "costs on this corpus, and it is the first time it has been measured "
+        "against a set known to be exactly the reference's own answer."
     )
