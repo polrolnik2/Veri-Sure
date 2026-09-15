@@ -319,12 +319,13 @@ def test_gates_can_be_switched_off_for_a_priced_comparison():
     assert chosen.kept == ("bad",)
 
 
-def test_liveness_is_off_by_default_because_it_pulls_against_the_rule():
-    """`liveness` reads verdict movement as proof a check is alive; the rule
-    reads conviction of the population as proof it over-reaches. The maximally
-    live check is the maximally over-strict one.
+def test_liveness_is_on_because_dead_oracle_is_a_floor_not_a_gradient():
+    """It was defaulted OFF here on the argument that it pulls against the rule.
+    That describes a gradient; `DEAD_ORACLE` fires only when NO legal value of
+    any port the check reads moves its verdict anywhere -- a constant function,
+    which is the class this rule selects for hardest.
     """
-    assert GateLegs().liveness is False
+    assert GateLegs().liveness is True
     assert GateLegs().well_formed is True
     assert GateLegs().vacuity is True
 
@@ -360,9 +361,15 @@ def test_the_knob_finding_states_both_directions_and_the_off_curve_set():
 def test_the_gate_finding_states_why_the_gates_run_first():
     text = the_gates_and_the_rule_reject_different_checks()
     assert "dead body is the cheapest way to convict nobody" in text
-    assert "pulls the other way" in text.lower()
     # And that composing them is not what makes the set golden-free.
     assert "DOES NOT BUY IS ADMISSIBILITY" in text
+    # The liveness correction: a FLOOR, not a gradient, and it says it was
+    # previously recorded backwards rather than quietly changing the default.
+    assert "GOT BACKWARDS" in text
+    assert "FLOOR" in text
+    # And that `must_fail` is the one left genuinely open.
+    assert "ACTUALLY DEBATABLE" in text
+    assert "0.95" in text and "0.52" in text
 
 
 def test_a_verdict_records_the_count_that_decided_it():

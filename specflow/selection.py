@@ -559,16 +559,27 @@ class GateLegs:
     correspondence: bool = True
     #: The check catches a mutant of the witness, so it CAN fail.
     vacuity: bool = True
-    #: **OFF BY DEFAULT, AND THE REASON IS NOT CAUTION.** `liveness` perturbs
-    #: the outputs a check reads and treats the verdict MOVING as proof the
-    #: check is alive; the selection rule treats the check convicting the
-    #: population as proof it over-reaches. A maximally live check is a check
-    #: that moves on every perturbation, which is the maximally over-strict
-    #: one. The two legs pull against each other by construction -- the same
-    #: over-strictness/vacuity defect appearing BETWEEN two gates rather than
-    #: inside one -- so turning this on is a deliberate act whose cost must be
-    #: measured, not a default.
-    liveness: bool = False
+    #: ON, and a previous version of this file had it off for a reason that
+    #: does not survive reading `liveness.py`. **`DEAD_ORACLE` IS A FLOOR, NOT
+    #: A GRADIENT.** It is the last branch after `LIVE` (a near perturbation
+    #: moves it, or it is already failing), `DEAD_STIMULUS` (only a far one
+    #: does -- explicitly NOT a rejection, the check demonstrably can fail) and
+    #: `UNKNOWN` (it never decided, which is the stimulus's business). What is
+    #: left means *no legal value of any port it reads changes its verdict
+    #: anywhere* -- a constant function, which is not a check.
+    #:
+    #: So it is on the same side as `well_formed`, not opposite it: a constant
+    #: body convicts nobody, so the threshold rule at low `max_convictions`
+    #: keeps it PREFERENTIALLY. Liveness catches that class, and catches bodies
+    #: `well_formed` cannot see because they are syntactically fine and
+    #: semantically constant. It costs no model call.
+    #:
+    #: The misattribution worth worrying about is already handled upstream: the
+    #: `UNKNOWN` branch exists so a never-triggered check does not land here,
+    #: added after z-i2c measured all 11 `DEAD_ORACLE` verdicts to be checks
+    #: returning None everywhere, nine re-asked and nine returned unchanged,
+    #: NONE of them the author's.
+    liveness: bool = True
 
 
 def pipeline_gates(
@@ -670,14 +681,24 @@ def the_gates_and_the_rule_reject_different_checks() -> str:
         "gates reads a reference and neither does the rule, before or after. "
         "The set is golden-free either way; composing them changes which checks "
         "are in it, not what may be said about it.\n\n"
-        "**AND ONE LEG IS LEFT OFF BY DEFAULT BECAUSE IT PULLS THE OTHER WAY.** "
-        "`liveness` reads verdict movement under perturbation as proof a check "
-        "is alive; the rule reads conviction of the population as proof it "
-        "over-reaches. The maximally live check is the maximally over-strict "
-        "one. That is the over-strictness/vacuity defect appearing BETWEEN two "
-        "gates, and a gate set where one member demands what another forbids "
-        "cannot be satisfied. `GateLegs.liveness` defaults False; turning it on "
-        "is an experiment, and its cost is the number to report."
+        "**AND `liveness` IS ON THE SAME SIDE, WHICH A PREVIOUS VERSION OF "
+        "THIS TEXT GOT BACKWARDS.** It was defaulted off here on the argument "
+        "that it reads verdict movement as proof a check is alive while the "
+        "rule reads conviction as proof it over-reaches, so the maximally live "
+        "check is the maximally over-strict one. That describes a gradient, and "
+        "`DEAD_ORACLE` is a FLOOR: it fires only when no legal value of any "
+        "port the check reads changes its verdict anywhere, after `LIVE`, "
+        "`DEAD_STIMULUS` and `UNKNOWN` have each taken the cases they own. What "
+        "it rejects is a constant function, which is the same class "
+        "`require_decides` and `well_formed` exist for and the class this rule "
+        "selects for hardest. It costs no model call and it is on by default.\n\n"
+        "**`must_fail` IS THE ONE THAT IS ACTUALLY DEBATABLE**, and it is left "
+        "on pending measurement rather than settled. It demands the check "
+        "convict a MUTANT of one witness -- stronger than a verdict moving "
+        "under legal values, measured confounded with over-strictness "
+        "(sensitivity 0.95 among checks that convict the reference against 0.52 "
+        "among sound ones), and its mutant supply saturates at about twelve "
+        "parents. That shape is a gradient toward strictness, not a floor."
     )
 
 
