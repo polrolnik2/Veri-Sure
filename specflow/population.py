@@ -64,6 +64,9 @@ class Conviction:
     req_uid: str
     #: decided True or False on at least one design. NOT "failed to convict".
     decides: bool
+    #: raised everywhere and decided nowhere -- a defect in the CHECK, which is
+    #: a different fact from a check that ran and found no occasion to speak.
+    broken: bool
     #: h(c) -- how many designs it objected to.
     convicts: int
     #: N, carried so no conviction count can be read without its denominator.
@@ -72,7 +75,13 @@ class Conviction:
 
 @dataclass(frozen=True)
 class Selection:
-    """The kept set, its parameters, and why every rejection happened."""
+    """The kept set, its parameters, and why every rejection happened.
+
+    `kept` and `rejected` PARTITION the corpus, and `select` refuses rather than
+    returning a Selection that would break it -- duplicate keys made a rejection
+    vanish, put one key in both halves, and left the "first reason" comment
+    below false, all while `summary()` still read plausibly.
+    """
 
     threshold: int
     population: int
@@ -80,6 +89,14 @@ class Selection:
     kept: tuple[str, ...]
     #: key -> the FIRST clause that rejected it, so the reasons partition.
     rejected: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        if len(self.kept) + len(self.rejected) != self.corpus:
+            raise ValueError(
+                f"{len(self.kept)} kept + {len(self.rejected)} rejected != "
+                f"{self.corpus} scored; the halves do not partition the corpus "
+                "and every count derived from them would be wrong"
+            )
 
     def summary(self) -> str:
         """The only rendering, and it cannot omit the parameters."""
@@ -105,6 +122,7 @@ def conviction(
 ) -> Conviction:
     """Decide one check against every design. Reads no known-good design."""
     decides = False
+    broke = False
     convicts = 0
     for source in designs.values():
         objected = False
@@ -114,6 +132,10 @@ def conviction(
                 continue
             verdict = decide(oracle, rows)
             if verdict.broken:
+                #: A CHECK THAT RAISES IS NOT A CHECK THAT WAS SILENT. Folding
+                #: the two loses the distinction this project names in capitals
+                #: one stage earlier, so it is carried and reported separately.
+                broke = True
                 continue
             if verdict.ok is not None:
                 decides = True
@@ -124,6 +146,7 @@ def conviction(
     return Conviction(
         req_uid=oracle.req_uid,
         decides=decides,
+        broken=broke and not decides,
         convicts=convicts,
         population=len(designs),
     )
@@ -160,17 +183,45 @@ def select(
 
     kept: list[str] = []
     rejected: dict[str, str] = {}
+    seen: set[str] = set()
+    counts: list[int] = []
+    decided_any = False
     corpus = 0
     for key, oracle in oracles:
+        if key in seen:
+            raise ValueError(
+                f"duplicate key {key!r}; keys must be unique or a rejection is "
+                "silently overwritten and the kept/rejected halves stop "
+                "partitioning the corpus"
+            )
+        seen.add(key)
         corpus += 1
         got = conviction(oracle, designs, testpoints)
-        if not got.decides:
+        counts.append(got.convicts)
+        decided_any = decided_any or got.decides
+        if got.broken:
+            rejected[key] = "broken on every design"
+        elif not got.decides:
             #: SILENT, not sound. A check that never decides has shown nothing.
             rejected[key] = "decides nowhere"
         elif got.convicts > threshold:
             rejected[key] = f"convicts {got.convicts} of {n}"
         else:
             kept.append(key)
+    if not corpus:
+        raise ValueError("no oracles; '0 of 0 kept' is not a selection")
+    if decided_any and not any(0 < h < n for h in counts):
+        #: THE POPULATION NEVER SPLIT, so the rule's premise -- that most
+        #: independent authors agree -- was never exercised. Every check
+        #: convicted all of them or none, which is what N copies of ONE design
+        #: look like from in here. The module cannot know WHICH design a caller
+        #: passed; it can know the population carried no disagreement, and that
+        #: is the shape a cloned reference would take.
+        raise ValueError(
+            f"no check split the population of {n}: every conviction count is "
+            "0 or N, so these designs are behaviourally indistinguishable on "
+            "this corpus and the minority rule measured nothing"
+        )
     return Selection(
         threshold=threshold,
         population=n,
