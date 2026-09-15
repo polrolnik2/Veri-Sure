@@ -28,7 +28,12 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
-from specflow.population import DecideOn, Rows, Selection
+from specflow.population import (
+    DecideOn,
+    PopulationShape,
+    Rows,
+    Selection,
+)
 
 
 # --------------------------------------------------------------------------
@@ -153,7 +158,16 @@ class Report:
     #: How many kept checks convict a design that satisfies the specification.
     #: **Computed LAST and fed back into nothing.**
     convicts_reference: int
-    blindness: Blindness | None = None
+    #: **THE THIRD LEG, AND IT IS NOT OPTIONAL.** Span and audit alone describe
+    #: what a set refuses; blindness describes what it cannot see, and the set
+    #: that optimises the first two is the one that says nothing.
+    blindness: Blindness
+    #: **THE POPULATION'S OWN STRUCTURE, ATTACHED.** k1's rule reads 126-for-126
+    #: with one design present and 6.2% without it, and every subset of the
+    #: seven that audits at exactly zero contains that design. A conviction
+    #: count is not interpretable without knowing what it counted, so a Report
+    #: cannot be built without saying.
+    population: PopulationShape
 
     @property
     def span(self) -> float:
@@ -164,18 +178,29 @@ class Report:
     def false_reject(self) -> float:
         return self.convicts_reference / self.checks if self.checks else 0.0
 
+    @property
+    def triple(self) -> tuple[float, float, float]:
+        """span, audit, TRUE blindness -- and there is no accessor for one."""
+        return self.span, self.false_reject, self.blindness.rate
+
     def __str__(self) -> str:
-        blind = f", {self.blindness}" if self.blindness else ""
+        shape = self.population
+        worst = max(shape.dissent, key=lambda d: shape.dissent[d])
         return (f"{self.checks} checks spanning {self.requirements} of "
                 f"{self.of_requirements} = {self.span:.0%}, audit "
-                f"{self.convicts_reference} = {self.false_reject:.1%}{blind}")
+                f"{self.convicts_reference} = {self.false_reject:.1%}, "
+                f"blind {self.blindness.rate:.1%} "
+                f"[population {len(shape.designs)} designs, effective "
+                f"{shape.effective_size()}, top dissent {worst} at "
+                f"{shape.dissent[worst]:.0%}]")
 
 
 def audit(selection: Selection,
           convicts_reference: Callable[[str], bool],
           *, requirement_of: Callable[[str], str],
           of_requirements: int,
-          blindness: Blindness | None = None) -> Report:
+          blindness: Blindness,
+          population: PopulationShape) -> Report:
     """Score a set that is ALREADY BUILT against the reference. Computed last.
 
     Separate from `select` on purpose: the reference reaches this function and
@@ -198,6 +223,7 @@ def audit(selection: Selection,
         of_requirements=of_requirements,
         convicts_reference=sum(1 for k in kept if convicts_reference(k)),
         blindness=blindness,
+        population=population,
     )
 
 
@@ -301,4 +327,227 @@ def objection_placement_buys_closure_more_cheaply_than_the_count() -> str:
         "per testpoint, so it need not land at the disagreeing row or port, "
         "and every figure in the table above is optimistic in the same "
         "direction."
+    )
+
+
+# --------------------------------------------------------------------------
+# THE EXPERIMENTS. Every one reads the reference, so every one lives here.
+# P1, P2 and F0 sweep the population and the corpus; V0 and V2a ask what a
+# retained corpus would actually contain; F1 asks whether a text-side
+# instrument transfers off its home module.
+# --------------------------------------------------------------------------
+
+def the_zero_audit_belongs_to_one_design() -> str:
+    """P1, pre-registered, and it fires the retraction.
+
+    Every subset of k1's seven designs, swept at `t = 0`, with the audit
+    computed over all 464 bodies and the blindness denominator held fixed at
+    all 5,656 cells so a smaller population cannot look less blind for free.
+    """
+    return (
+        "**THE 126-FOR-126 IS A PROPERTY OF ONE DESIGN AND IS RETRACTED AS A "
+        "PROPERTY OF THE RULE.**\n\n"
+        "120 subsets of size 2 or more produce a non-empty `t = 0` set. "
+        "**32 of them audit at exactly 0%. All 32 contain G. Zero of the 57 "
+        "G-free subsets reach it.**\n\n"
+        "    population size   with G: mean t=0 audit   without G\n"
+        "    2                 2.2%  (6 subsets)         11.4%  (15)\n"
+        "    3                 1.2%  (15)                10.1%  (20)\n"
+        "    4                 0.8%  (20)                 8.8%  (15)\n"
+        "    5                 0.5%  (15)                 7.5%  (6)\n"
+        "    6                 0.3%  (6)                  6.2%  (1)\n"
+        "    7                 0.0%  (1)                  --\n\n"
+        "and the five worst `t = 0` audits are DH, BDH, BH, BD and CD at "
+        "13.3-13.8% -- **every one of them G-free.**\n\n"
+        "**THE MECHANISM, STATED PLAINLY.** G is off the population majority at "
+        "78% of split cells. 'Objects to nobody, including G' is therefore "
+        "close to 'objects to almost nothing', so G is a SINK that absorbs "
+        "over-strict checks before the rule has to judge them. The rule's "
+        "stated rationale is that a requirement most competent independent "
+        "implementations violate is more likely one the CHECK misread; G is not "
+        "a typical competent implementation, and the operative rule is nearer "
+        "**'do not object to the weirdest design'**.\n\n"
+        "**WHAT SURVIVES.** The rule still works -- 6.2% false rejection at "
+        "`t = 0` without G is far better than the 64.4% base rate over the "
+        "whole corpus. What does not survive is the exactness, and exactness "
+        "was the whole argument for preferring it to every gate measured at "
+        "1.1x-1.6x lift. `B2`'s characterisation is a GATE, not a reporting "
+        "convenience: a population whose dissent is dominated by one member "
+        "cannot support a precision claim about the rule."
+    )
+
+
+def weighting_the_population_is_decoration() -> str:
+    """P2. Two ways of not counting every design as one opinion, and neither
+    moves the frontier."""
+    return (
+        "Weighting each design by its mean distance from the rest, normalised "
+        "to sum to N:\n\n"
+        "    B 0.80   C 0.93   D 0.77   E 0.76   F 1.25   G 1.64   H 0.85\n\n"
+        "**NOTE WHICH WAY THIS PUSHES.** The most independent design is the "
+        "OUTLIER, so independence-weighting weights G UP -- the exact opposite "
+        "of what `dissent_weighted` does. Both are on the board and neither was "
+        "chosen by looking at the answer.\n\n"
+        "    rule                     t    checks    span   audit   blind\n"
+        "    unweighted               5       188   80.5%   14.4%   54.4%\n"
+        "    unweighted               6       201   81.6%   18.9%   50.0%\n"
+        "    independence-weighted    6       197   81.6%   17.3%   51.0%\n\n"
+        "Interpolating the unweighted curve to the weighted point's audit of "
+        "17.3% gives about 51.7% blindness against the weighted 51.0% -- "
+        "**0.7 points, inside the resolution of a 464-body corpus.** At the "
+        "tight end it is worse on two axes of three: `t = 1` weighted reads "
+        "65.5% span / 1.5% audit / 98.9% blind against unweighted's 72.4% / "
+        "7.4% / 95.4%.\n\n"
+        "**PRE-REGISTERED BAR: beat unweighted on the frontier at matched "
+        "audit, or weighting is decoration. It does not, so it is.** Taken with "
+        "`dissent_weighted` losing to the plain count at every matched size, "
+        "the finding is that re-weighting the population -- in either "
+        "direction -- is not where the signal is."
+    )
+
+
+def corpus_size_buys_span_and_saturates_on_blindness() -> str:
+    """F0, pre-registered: flat refutes volume before anything is built,
+    monotone makes A1 most of the plan. It is monotone, and the two axes
+    separate."""
+    return (
+        "Subsampling the 464-body corpus, five draws per size, full triple at "
+        "every threshold; `t = 6` shown:\n\n"
+        "    corpus   checks    span   audit   blind\n"
+        "       100       45   37.2%   21.6%   73.5%\n"
+        "       200       88   57.7%   19.5%   60.5%\n"
+        "       300      130   67.6%   19.8%   52.7%\n"
+        "       464      201   81.6%   18.9%   50.0%\n\n"
+        "**MONOTONE, SO A1 IS LOAD-BEARING -- AND THE TWO AXES SEPARATE, WHICH "
+        "THE PRE-REGISTRATION DID NOT ANTICIPATE.** Audit is FLAT across a 4.6x "
+        "range of corpus size (21.6% to 18.9%), so volume neither helps nor "
+        "hurts soundness. Span climbs the whole way and is still climbing at "
+        "464. Blindness climbs and then **saturates**: the first 100 bodies buy "
+        "26 points, the last 164 buy 2.7.\n\n"
+        "**AND THE SPAN COLUMN IS PARTLY TAUTOLOGICAL.** A random subsample of "
+        "bodies also subsamples REQUIREMENTS, so some of that climb is just "
+        "coverage arriving rather than selection improving. The "
+        "non-tautological result is the blindness curve, and it says volume "
+        "reaches a ceiling well inside the corpus this pipeline could already "
+        "produce.\n\n"
+        "**THE CEILING ABOVE ALL OF IT: the 464 bodies answer 73 of k1's 87 "
+        "requirements, so no selection over this corpus can span more than "
+        "83.9%** -- and `t = 6` is at 81.6%. Nearly all the span left on the "
+        "table is requirements with no body at all, which is an AUTHORING "
+        "problem, not a selection one."
+    )
+
+
+def resampling_one_prompt_produces_copies_and_blunderbusses() -> str:
+    """V0, the experiment that should have preceded the capability axes.
+
+    For every pair of bodies answering the same requirement, how differently do
+    they behave against the seven designs, grouped by what differs between them.
+    """
+    return (
+        "**THE HEADLINE NUMBER IS 46% AND THE HONEST ONE IS 4%.**\n\n"
+        "Over 2,693 draw-vs-draw pairs -- the same prompt resampled -- 46% are "
+        "COMPLEMENTARY: each reaches polarity-corrected disagreement cells the "
+        "other does not. Conditioned on soundness that collapses:\n\n"
+        "    draw-vs-draw pairs            pairs   identical   complementary   mean gain\n"
+        "    **both SOUND**                   93       **69%**        **4%**        52\n"
+        "    one sound, one not              715          4%           19%        857\n"
+        "    both convict the reference    1,885         91%           58%      1,031\n\n"
+        "**Among bodies that are both sound, resampling produces a copy 69% of "
+        "the time and a complementary body 4% of the time.** The variance is "
+        "STRENGTH, not semantics: one draw is a blunderbuss and the other is "
+        "not. **A1 retains copies plus blunderbusses**, so the variety track is "
+        "load-bearing rather than optional.\n\n"
+        "**AND THE BOTTOM ROW IS A STRUCTURAL FINDING ABOUT THE RULE ITSELF.** "
+        "Those pairs are 91% identical in their seven-bit conviction vector and "
+        "58% complementary in which cells they close. **The rule's view cannot "
+        "see the difference that matters for closure** -- which is exactly why "
+        "`placement`, which reads WHERE a check objects, buys closure the "
+        "conviction count cannot.\n\n"
+        "**ONE GROUP READ 0.00 ON EVERY METRIC AND IT IS A CACHE ARTIFACT.** "
+        "The volume round's 8 pairs scored Hamming 0, Jaccard 0, zero new "
+        "cells, 100% identical. **8 of 8 are byte-identical bodies.** The "
+        "recording key is `{stage}_r{round}` and the resume port returns the "
+        "FIRST response for a matching key, so N draws under one stage name are "
+        "one response replayed N times. The documented failure mode is live in "
+        "the data, and the volume round is not evidence about resampling."
+    )
+
+
+def obligation_decomposition_is_untested_on_most_of_its_target() -> str:
+    """V2a, and the pre-registered verdict fires only where the test applies.
+
+    Selection drops a whole body for one over-strict clause, so separable
+    obligations are the only mechanism on the board that could raise span and
+    lower audit at once. The free ceiling test asks how many of the 38 checks
+    convicting the reference at `t = 6` contain a sound proper subset.
+    """
+    return (
+        "**1 of 38 -- AND THE TEST ONLY APPLIES TO 6 OF THEM.** Reporting the "
+        "first number alone would be the instrument's coverage published as the "
+        "corpus's property.\n\n"
+        "    what the body's structure actually is                        count\n"
+        "    ONE TEMPORAL EXPRESSION -- the idiom does not apply, UNTESTED    20\n"
+        "    one guard -- a single obligation, indivisible                     8\n"
+        "    two or more droppable guards -- TESTED                            6\n"
+        "    computed verdict variable -- no droppable guard                   3\n"
+        "    if/else verdict -- my visitor never scanned `orelse`               1\n\n"
+        "A subset counted only if it SPARED the reference **and still convicted "
+        "at least one of the seven** -- deleting every guard makes a check that "
+        "convicts nobody, which is soundness by silence.\n\n"
+        "**THE GUARD IDIOM IS DROPPED: 1 of 6.** The axis as a whole is NOT "
+        "refuted. Over half the reference-convicting checks state their whole "
+        "obligation as a single temporal expression, which has no guards to "
+        "drop; decomposing those means weakening an activation, a closing "
+        "condition or an expectation, and that is a different experiment that "
+        "has not been run.\n\n"
+        "**AND ONE ROW IS MY OWN PARSER.** The visitor scanned an `if` node's "
+        "body and not its `orelse`, so a `return (False, ...)` in an else "
+        "branch read as no obligation at all. One check of 38, and it does not "
+        "move the count of divisible ones -- an if/else is a single obligation "
+        "either way -- but the miss is recorded because a structural classifier "
+        "that under-counts produces exactly this shape of clean negative."
+    )
+
+
+def claim_kinds_transfer_where_lint_patterns_did_not() -> str:
+    """F1. With correspondence dropped this is the ONLY remaining faithfulness
+    instrument, so it is scored on both questions it has to answer."""
+    return (
+        "A licence rule names a CLAIM KIND -- a cycle count, a bit-slice, a "
+        "value equality, a state name, a boundary word, an ordering -- and asks "
+        "whether the requirement's own span licenses a claim of that kind. "
+        "Kinds are module-independent by construction where signal names are "
+        "not.\n\n"
+        "**THE TRANSFER TEST PASSES, AND IT IS THE FIRST TEXT-SIDE INSTRUMENT "
+        "HERE THAT HAS.** Derived on k1, scored on 316 frozen i2c bodies across "
+        "five runs:\n\n"
+        "    claim kind        makes it   FIRES   fire rate\n"
+        "    cycle_count             28       6         21%\n"
+        "    bit_slice                4       4        100%\n"
+        "    value_equality          20      12         60%\n"
+        "    state_name               6       3         50%\n"
+        "    boundary                33      18         55%\n"
+        "    ordering               228      51         22%\n\n"
+        "**Zero of six fire zero times.** Three of four earlier text predicates "
+        "fired zero times outside their home population; that is the lint "
+        "failure and this is not it.\n\n"
+        "**THE PRECISION TEST FAILS.** On k1, where there IS a reference:\n\n"
+        "    set                          checks    span   audit   blind\n"
+        "    t = 6, all                      201   81.6%   18.9%   50.0%\n"
+        "    t = 6 minus the LIBRARY         155   72.4%   16.1%   50.8%\n"
+        "    t = 6 minus the 38 (reference)  163   77.0%    0.0%   56.1%\n\n"
+        "The library refuses 46 checks: **13 convict the reference and 33 are "
+        "sound checks thrown away.** Union lift **1.40x, below the shipped "
+        "licence rule's 1.64x**, and the two kinds with high lift fire twice "
+        "each -- `bit_slice` reads 4.95x on 2 checks, which is the sample-size "
+        "illusion, not a result. `ordering` carries 42 of the 46 fires at "
+        "1.18x, so the library's yield is mostly its weakest rule.\n\n"
+        "**AND FIRING IS NOT BEING RIGHT.** i2c has no population and no "
+        "reference here, so the held-out column measures APPLICABILITY and "
+        "nothing else. Held-out precision is unmeasured and stays unmeasured "
+        "until F3 has a population. The split result is the useful one: the "
+        "claim-kind formulation solves the transfer problem that killed the "
+        "lint patterns and does not solve the precision problem, which is where "
+        "the remaining work is."
     )

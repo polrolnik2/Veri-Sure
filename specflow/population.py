@@ -344,10 +344,21 @@ def select(
             continue
         out.append(Verdict(key, True, hits, decided))
     #: **A GATED CHECK NEVER CONSULTED THE POPULATION**, so it is not evidence
-    #: about whether the population split. Counting it made a corpus whose every
-    #: member the gate rejected read as a cloned population.
-    seen = [v for v in out if v.reason != "gate"]
-    if any(v.decided for v in seen) and not any(0 < v.convicts < n for v in seen):
+    #: about whether the population split -- and it does not need filtering out,
+    #: because the gate leg `continue`s BEFORE `convictions` runs and a gate
+    #: verdict therefore carries `decided = 0` and `convicts = 0`. Neither term
+    #: below can be moved by one.
+    #:
+    #: A filter was added here for that reason and was DEAD: the whole suite
+    #: passed with it removed, and the mutation that neutralised it survived.
+    #: It is written as an invariant instead, so that moving the gate AFTER the
+    #: population replay -- which would give gate verdicts real conviction
+    #: counts -- breaks here rather than silently re-arming the guard.
+    assert all(v.decided == 0 and v.convicts == 0
+               for v in out if v.reason == "gate"), (
+        "a gated verdict carries conviction evidence; the clone guard below "
+        "now counts checks that never consulted the population")
+    if any(v.decided for v in out) and not any(0 < v.convicts < n for v in out):
         #: THE POPULATION NEVER SPLIT, so the rule's premise -- that most
         #: independent authors agree -- was never exercised. Every check
         #: convicted all of them or none, which is what N copies of ONE design

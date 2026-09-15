@@ -190,9 +190,22 @@ def test_it_refuses_a_population_that_never_splits():
         P.select({"k": convicts(1)}, clones)
 
 
-def test_a_gated_check_is_not_evidence_that_the_population_split():
-    #: A gated check never consulted the population, so counting it made a
-    #: corpus whose every member the gate rejected read as a cloned population.
+def test_a_gated_verdict_carries_no_conviction_evidence():
+    #: **THE INVARIANT THAT MAKES THE CLONE GUARD SAFE**, pinned directly
+    #: because the filter written to enforce it was dead code -- the gate leg
+    #: `continue`s before `convictions` runs, so a gated verdict can never move
+    #: either term. A filter for it survived its own mutation, which is how the
+    #: deadness was found.
+    got = P.select({"k": convicts(0), "g": convicts(3), **SPLITS}, POP,
+                   gate=lambda key: "malformed" if key == "g" else None)
+    gated = [v for v in got.dropped if v.key == "g"][0]
+    assert gated.reason == "gate"
+    assert (gated.decided, gated.convicts) == (0, 0)
+
+
+def test_a_population_whose_only_splitter_is_gated_is_refused():
+    #: With the splitter gated, nothing that reached the population split it,
+    #: so the corpus cannot tell a real population from N copies of one design.
     with pytest.raises(ValueError, match="never split|indistinguishable"):
         P.select({"k": convicts(0), "g": convicts(3)}, POP,
                  gate=lambda key: "malformed" if key == "g" else None)

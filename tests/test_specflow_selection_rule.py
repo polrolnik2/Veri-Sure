@@ -276,6 +276,16 @@ def test_buckets_decompose_where_the_cumulative_table_cannot():
 # REPORTING. A span and its audit are one result.
 # --------------------------------------------------------------------------
 
+#: The population any Report must carry: five designs, one of them the outlier
+#: the P1 sweep showed the rule's precision actually belongs to.
+SHAPE = PopulationShape(
+    designs=("A", "B", "C", "D", "G"), testpoints=("t1", "t2"),
+    split=frozenset({"t1"}),
+    dissent={"A": 0.05, "B": 0.05, "C": 0.1, "D": 0.05, "G": 0.86},
+    cluster={"A": 0, "B": 0, "C": 0, "D": 0, "G": 1},
+    pairs={"t1": (("A", "G"),)})
+
+
 def test_a_report_cannot_be_built_without_its_audit():
     """Nine headlines on this work were retracted for quoting reach without the
     false-reject rate. The type is where that is stopped.
@@ -284,12 +294,26 @@ def test_a_report_cannot_be_built_without_its_audit():
         Report(checks=10, requirements=8, of_requirements=20)  # no audit
 
 
+def test_a_report_cannot_be_built_without_blindness_or_the_population():
+    """The other two thirds. A set optimising span and audit alone is the set
+    that says nothing, and a conviction count is uninterpretable without what
+    it counted -- 126-for-126 with one design present, 6.2% without it.
+    """
+    with pytest.raises(TypeError):
+        Report(checks=10, requirements=8, of_requirements=20,
+               convicts_reference=0, population=SHAPE)      # no blindness
+    with pytest.raises(TypeError):
+        Report(checks=10, requirements=8, of_requirements=20,
+               convicts_reference=0, blindness=Blindness(1, 2))   # no population
+
+
 def test_audit_is_computed_over_an_already_built_selection():
     corpus = {"a": convicts(0), "b": convicts(1)}
     chosen = select(corpus, POP, ruleset=Ruleset(max_convictions=1))
     report = audit(
         chosen, lambda k: k == "b",
-        requirement_of=lambda k: f"REQ-{k}", of_requirements=4)
+        requirement_of=lambda k: f"REQ-{k}", of_requirements=4,
+        blindness=Blindness(1, 4), population=SHAPE)
     assert (report.checks, report.requirements) == (2, 2)
     assert report.convicts_reference == 1
     assert report.false_reject == 0.5
@@ -298,12 +322,24 @@ def test_audit_is_computed_over_an_already_built_selection():
     assert chosen.kept == ("a", "b")
 
 
-def test_the_report_string_always_carries_both_halves():
+def test_the_report_string_always_carries_the_triple_and_the_population():
     line = str(Report(checks=126, requirements=55, of_requirements=87,
-                      convicts_reference=0, blindness=Blindness(5646, 5656, 12)))
+                      convicts_reference=0,
+                      blindness=Blindness(5648, 5656, 12), population=SHAPE))
     assert "126 checks" in line and "63%" in line
     assert "audit" in line and "0.0%" in line
-    assert "99.8% blind" in line
+    assert "blind 99.9%" in line
+    #: and the structure, or the audit column is not interpretable
+    assert "5 designs" in line and "effective 2" in line
+    assert "top dissent G at 86%" in line
+
+
+def test_the_triple_is_the_only_way_to_get_all_three():
+    report = Report(checks=126, requirements=55, of_requirements=87,
+                    convicts_reference=0,
+                    blindness=Blindness(5648, 5656, 12), population=SHAPE)
+    span, false_reject, blind = report.triple
+    assert (round(span, 3), false_reject, round(blind, 3)) == (0.632, 0.0, 0.999)
 
 
 # --------------------------------------------------------------------------
