@@ -75,7 +75,7 @@ def test_select_has_no_parameter_that_could_carry_a_reference():
 def test_the_ruleset_has_no_reference_field():
     """Every leg reads spec-derived designs or the check's own text."""
     assert set(Ruleset.__dataclass_fields__) == {
-        "max_convictions", "require_decides", "use_gates"}
+        "max_convictions", "min_decides", "use_gates"}
 
 
 # --------------------------------------------------------------------------
@@ -109,7 +109,7 @@ def test_a_check_that_never_decides_is_dropped_not_kept():
     #: check convicts zero, so the threshold alone would keep it.
     hits, decided = convictions(silent, POP)
     assert (hits, decided) == (0, 0)
-    loose = select(corpus, POP, ruleset=Ruleset(require_decides=False))
+    loose = select(corpus, POP, ruleset=Ruleset(min_decides=0))
     assert set(loose.kept) == {"good", "silent"}
 
 
@@ -415,3 +415,65 @@ def test_select_composes_with_the_shipped_gate_end_to_end():
     chosen = select(corpus, POP, gate=gate)
     assert chosen.kept == ("good",)
     assert chosen.dropped[0].reason == "gate"
+
+
+# --------------------------------------------------------------------------
+# `min_decides` AS A COUNT. The boolean form could not express the case the
+# reproduction found: a check sparing six designs by silence and one by
+# evidence, which the rule scores exactly as it scores a check that watched
+# all seven and objected nowhere.
+# --------------------------------------------------------------------------
+
+def thin(r):
+    """Decides on exactly one design and spares it. Sound on six by silence."""
+    return False if r[0]["outputs"]["a"] == 0 else None
+
+
+def test_the_weakest_leg_keeps_a_check_that_saw_one_design():
+    """`min_decides = 1` is the default because it is what the measured rule
+    had, NOT because it is the right threshold.
+    """
+    chosen = select({"thin": thin}, POP)
+    assert chosen.kept == ("thin",)
+    assert chosen.verdicts[0].decided == 1
+
+
+def test_raising_the_leg_removes_a_check_that_spares_by_silence():
+    chosen = select({"thin": thin}, POP, ruleset=Ruleset(min_decides=4))
+    assert chosen.kept == ()
+    dropped = chosen.dropped[0]
+    assert dropped.reason == "silent"
+    assert "1 of 4" in dropped.detail and "below the 4" in dropped.detail
+
+
+def test_zero_turns_the_leg_off_entirely():
+    chosen = select({"silent": silent}, POP, ruleset=Ruleset(min_decides=0))
+    assert chosen.kept == ("silent",)
+
+
+def test_a_negative_decide_floor_is_refused():
+    with pytest.raises(ValueError, match="min_decides"):
+        Ruleset(min_decides=-1)
+
+
+def test_the_compiled_out_finding_states_the_null_and_the_residue():
+    from specflow.selection import a_compiled_out_state_reads_as_sound_for_free
+    text = a_compiled_out_state_reads_as_sound_for_free()
+    # The leg removed nothing here, and saying so is half the result.
+    assert "INERT ON THIS CORPUS" in text
+    assert "ZERO" in text
+    # And what it still lets through.
+    assert "COMPILES OUT" in text
+    assert "sound for free" in text
+    # The threshold is not endorsed, only defaulted.
+    assert "NOT been scored" in text
+
+
+def test_the_reproduction_finding_states_its_own_scope():
+    from specflow.selection import the_packaged_rule_reproduces_the_measured_sweep
+    text = the_packaged_rule_reproduces_the_measured_sweep()
+    assert "EVERY CELL MATCHES" in text
+    # The limit is the part that keeps it honest: the decides were cached, so a
+    # defect in `decide` would reproduce faithfully.
+    assert "does NOT re-derive the decides" in text
+    assert "nobody reads it as an end-to-end validation" in text

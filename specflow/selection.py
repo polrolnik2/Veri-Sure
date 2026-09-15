@@ -106,10 +106,18 @@ class Ruleset:
 
     #: Keep a check convicting at most this many of the population.
     max_convictions: int = ZERO
-    #: Require the check to DECIDE somewhere in the population. Leaving this off
-    #: admits sound-by-silence, which is the conflation the module docstring
-    #: names; it exists so the sweep can measure what it costs, not to be used.
-    require_decides: bool = True
+    #: How many population members the check must DECIDE on. **0 turns the leg
+    #: off and admits sound-by-silence**, which is the conflation the module
+    #: docstring names; it exists so a sweep can measure what the leg costs.
+    #:
+    #: 1 is the weakest form that is not off, and it is the default because it
+    #: is what the measured rule had. It is NOT free of the conflation it
+    #: guards: a check deciding on one of seven spares the other six by
+    #: silence. Measured on the set this module reproduces, exactly two of 126
+    #: are in that position and both are checks on a state `build_config`
+    #: compiles out -- see `a_compiled_out_state_reads_as_sound_for_free`.
+    #: Raising this to a majority removes them and has not been scored.
+    min_decides: int = 1
     #: Run the caller's gate before the population is consulted. The gates are
     #: text-and-replay instruments the pipeline already ships and none reads a
     #: reference, so composing them changes nothing about admissibility.
@@ -118,6 +126,8 @@ class Ruleset:
     def __post_init__(self) -> None:
         if self.max_convictions < 0:
             raise ValueError("max_convictions cannot be negative")
+        if self.min_decides < 0:
+            raise ValueError("min_decides cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -212,11 +222,12 @@ def select(
                 out.append(Verdict(key, False, reason="gate", detail=why))
                 continue
         hits, decided = convictions(decide_on, population)
-        if rules.require_decides and not decided:
+        if decided < rules.min_decides:
             out.append(Verdict(
                 key, False, hits, decided, "silent",
-                "decides on no member of the population, so sparing it is "
-                "silence rather than evidence"))
+                f"decides on {decided} of {len(population)} population "
+                f"members, below the {rules.min_decides} required, so sparing "
+                f"the rest is silence rather than evidence"))
             continue
         if hits > rules.max_convictions:
             out.append(Verdict(
@@ -641,4 +652,84 @@ def the_gates_and_the_rule_reject_different_checks() -> str:
         "gates, and a gate set where one member demands what another forbids "
         "cannot be satisfied. `GateLegs.liveness` defaults False; turning it on "
         "is an experiment, and its cost is the number to report."
+    )
+
+
+def a_compiled_out_state_reads_as_sound_for_free() -> str:
+    """What `min_decides = 1` still lets through, measured on the set this
+    module reproduces rather than supposed.
+
+    Found by re-deciding the selected set against the population from traces --
+    a question the cached artifact could not answer, because it stores objecting
+    testpoints only and so cannot tell "spared it" from "never ran on it".
+    """
+    return (
+        "**THE LEG IS INERT ON THIS CORPUS AND THAT IS THE FIRST HALF OF THE "
+        "RESULT.** Of the 126 checks the rule keeps at t = 0 -- the set audited "
+        "at zero false rejects, 126 of 126 sparing the reference -- **ZERO "
+        "decide on none of the seven.** So the headline is not contaminated by "
+        "sound-by-silence: those checks spare the population by evidence. The "
+        "leg guards a conflation that is real elsewhere (one adequacy headline "
+        "counted a check deciding 0 testpoints on the reference and 1 on a "
+        "held-out design) and it removes nothing here.\n\n"
+        "**AND THE PROFILE IS NOT UNIFORM, WHICH IS THE SECOND HALF:**\n\n"
+        "    decides on 7 of 7   124 checks\n"
+        "    decides on 1 of 7     2 checks\n\n"
+        "**BOTH OF THE TWO ARE CHECKS ON A STATE `build_config` COMPILES OUT.** "
+        "They spare six of seven designs by silence and convict none of the "
+        "seventh, so the rule scores them exactly as it scores a check that "
+        "watched every design and objected nowhere. A check on an unreachable "
+        "state is sound for free, and the golden-free rule cannot see the "
+        "difference -- it has no access to whether the state exists.\n\n"
+        "**SO `min_decides = 1` IS THE WEAKEST FORM THAT IS NOT OFF, AND IT IS "
+        "THE DEFAULT BECAUSE IT IS WHAT THE MEASURED RULE HAD, NOT BECAUSE IT "
+        "IS THE RIGHT ONE.** Raising it to a majority removes these two and has "
+        "NOT been scored: it would also remove any check whose requirement is "
+        "genuinely reachable on only some of the population, and nothing here "
+        "says how many of those there are. Sweep it before adopting it.\n\n"
+        "**AND THE AUDIT DOES NOT CATCH THEM EITHER**, which is why this needed "
+        "measuring rather than reasoning about. Both spare the reference, so "
+        "they sit inside a set whose false-reject rate is a measured zero while "
+        "contributing nothing any design could ever fail."
+    )
+
+
+def the_packaged_rule_reproduces_the_measured_sweep() -> str:
+    """The refactor's own pin: the module and the scripts agree everywhere.
+
+    Recorded because a rule moved from two lines of inline set arithmetic into a
+    package is exactly where a threshold goes off by one or a corpus drifts, and
+    this project has made that class of error eight times. It always looks like
+    a result first, so the reproduction is run before anything is claimed.
+    """
+    return (
+        "Driven over the ORIGINAL artifacts -- the cached per (check, design) "
+        "objection map and the check list the scripts selected over, not a "
+        "re-globbed corpus, which is the drift `load_corpus` exists to stop:\n\n"
+        "    t   checks   requirements   set blindness   *audit*\n"
+        "    0     126      55            5644 = 99.8%   *  0 =  0.0%*\n"
+        "    1     149      63            5287 = 93.5%   * 11 =  7.4%*\n"
+        "    2     167      68            3764 = 66.5%   * 22 = 13.2%*\n"
+        "    3     171      68            3632 = 64.2%   * 23 = 13.5%*\n"
+        "    4     179      69            3503 = 61.9%   * 27 = 15.1%*\n"
+        "    5     188      70            2978 = 52.7%   * 27 = 14.4%*\n"
+        "    6     201      71            2286 = 40.4%   * 38 = 18.9%*\n"
+        "    7     464      73               0 =  0.0%   *299 = 64.4%*\n\n"
+        "**EVERY CELL MATCHES**, plus the per-bucket decomposition (126 / 75 / "
+        "263), the 5,656-cell blindness denominator recomputed from traces over "
+        "nine designs and 348 testpoints, and the per-threshold audit "
+        "alignment.\n\n"
+        "**WHAT IT DOES AND DOES NOT ESTABLISH.** It establishes that the "
+        "packaged rule, sweep, bucket profile and blindness computation are the "
+        "ones that were measured. It does NOT re-derive the decides: the "
+        "objection map was cached by the original run, so a defect in `decide` "
+        "itself would reproduce faithfully here. That is the right scope -- "
+        "this refactor moved the SELECTION, not the replay -- and it is stated "
+        "so nobody reads it as an end-to-end validation.\n\n"
+        "**AND ONE LEG COULD NOT BE REPRODUCED BECAUSE IT IS NEW.** The "
+        "original rule had no `min_decides`, and the cache cannot supply it: it "
+        "stores objecting testpoints only, so a spared design and an "
+        "un-decided one are the same empty set. That leg was measured "
+        "separately by re-deciding from traces -- see "
+        "`a_compiled_out_state_reads_as_sound_for_free`."
     )
