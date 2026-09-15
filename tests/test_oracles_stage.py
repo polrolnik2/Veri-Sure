@@ -1396,3 +1396,123 @@ def test_an_idle_note_ALONE_is_unchanged():
 
     only = _witness_note("REQ-0070", {"idle_match": "judged at edge 0"})
     assert [i.path.rsplit(".", 1)[-1] for i in only] == ["judged_at_idle"]
+
+
+# --------------------------------------------------------------------------
+# A1/A2: THE CORPUS. A run authors three to six bodies per requirement and
+# keeps ONE; every other body is discarded at the moment it is superseded,
+# which is exactly the population a selection rule needs.
+# --------------------------------------------------------------------------
+
+def _body(n: int) -> str:
+    return (f"def decide(trace):\n"
+            f"    return (trace[0]['outputs']['y'] == {n}, 0, 'v{n}')\n")
+
+
+def _corpus_oracle(uid: str, n: int) -> RequirementOracle:
+    return RequirementOracle(req_uid=uid, clause="", source=_body(n),
+                             tp_uids=["TP-0000"])
+
+
+def test_a_superseded_body_is_retained_with_the_objection_it_answered():
+    corpus: dict[str, list[O.CorpusBody]] = {}
+    O._retain(corpus, _corpus_oracle("REQ-0001", 0), arm="repair", round_=0)
+    O._retain(corpus, _corpus_oracle("REQ-0001", 1), arm="repair", round_=1,
+              answered="narrowed 'each command' to cmd==1")
+    members = corpus["REQ-0001"]
+    assert len(members) == 2
+    assert [m.round_ for m in members] == [0, 1]
+    assert members[1].answered.startswith("narrowed")
+    #: and the predecessor's TEXT survives, which is the whole point
+    assert members[0].source != members[1].source
+
+
+def test_retention_de_duplicates_by_CONTENT_not_by_round():
+    """The recording key is `{stage}_r{round}` and the resume port returns the
+    FIRST response for a matching key, so N draws under one stage name are one
+    response replayed N times. k1's volume round retained 8 byte-identical
+    pairs exactly that way -- retaining by round would record a corpus of N
+    where the authoring produced 1.
+    """
+    corpus: dict[str, list[O.CorpusBody]] = {}
+    for r in range(4):
+        O._retain(corpus, _corpus_oracle("REQ-0001", 0), arm="draw", round_=r)
+    assert len(corpus["REQ-0001"]) == 1
+
+
+def test_the_corpus_survives_a_freeze_and_reload():
+    """THE LOSSY-LOAD TRAP. `load` already dropped `repairs`, `abandoned` and
+    `tools`; a corpus field added without extending it would vanish on every
+    `--reuse`, and surviving the run that built it is the corpus's entire job.
+    """
+    import tempfile
+
+    from specflow.refmodel import freeze as freeze_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp)
+        (run / "specflow").mkdir(parents=True)
+        oracle = _corpus_oracle("REQ-0001", 0)
+        freeze_mod.freeze(
+            [oracle], run / "specflow" / O.ARTIFACT,
+            extra={
+                "dispositions": {"REQ-0001": "TRUSTED"},
+                "repairs": {"REQ-0001": ["round 0 objected"]},
+                "abandoned": {"REQ-0002": "no observation route found"},
+                "tools": {"correspondence": False, "max_repairs": 3},
+                "corpus": {"REQ-0001": [
+                    {"source": _body(0), "arm": "repair", "round": 0,
+                     "answered": "", "frozen": True},
+                    {"source": _body(1), "arm": "repair", "round": 1,
+                     "answered": "narrowed the trigger", "frozen": False},
+                ]},
+            })
+        back = O.load(run)
+
+    assert back is not None
+    members = back.corpus["REQ-0001"]
+    assert [m.round_ for m in members] == [0, 1]
+    assert [m.frozen for m in members] == [True, False]
+    assert members[1].answered == "narrowed the trigger"
+    #: and the three fields that were ALREADY being lost
+    assert back.repairs == {"REQ-0001": ["round 0 objected"]}
+    assert back.abandoned == {"REQ-0002": "no observation route found"}
+    assert back.tools["max_repairs"] == 3
+
+
+def test_an_unretained_run_reads_as_not_retained_and_not_as_one_body():
+    """Empty is the honest value. A corpus defaulting to the trusted set would
+    make every historical run look like it authored exactly one body per
+    requirement, which is the claim the retention exists to stop being true."""
+    assert O.OracleSet(trusted=[_corpus_oracle("REQ-0001", 0)]).corpus == {}
+
+
+def test_the_stage_hands_out_a_corpus_of_what_it_actually_authored(
+        tmp_path, monkeypatch):
+    """**A2 AT THE CALL SITE, not at the helper.** The retention test above
+    calls `_retain` directly and therefore cannot see whether the repair loop
+    calls it -- a mutation disabling the wiring survived that test. This one
+    drives the stage and reads the corpus off the set it returns.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    _with_variants(monkeypatch)
+    #: VACUOUS is rejected by the vacuity gate, GOOD replaces it -- the same
+    #: fixture the repair-loop tests above use, chosen because the first
+    #: version of this test used a body that was never rejected, so no repair
+    #: ran and the mutation disabling the repair-path retention survived.
+    got = _run(_Port([_reply(VACUOUS), _reply(GOOD)]), workdir=tmp_path,
+               want_variants=True)
+    assert got.repairs["REQ-0001"], "no repair ran; the wiring is untested"
+
+    members = got.corpus["REQ-0001"]
+    #: **BOTH bodies are present**, not just the survivor
+    assert len(members) == 2, [m.arm for m in members]
+    assert {m.arm for m in members} == {"generate", "repair"}
+    assert [m.round_ for m in members] == [0, 1]
+    #: the superseded body's TEXT survives, which is the whole point
+    assert members[0].source != members[1].source
+    #: the objection it answered travels with the replacement
+    assert members[1].answered.startswith("vacuous:")
+    #: exactly one survivor, and its text is the one in `trusted`
+    assert [m.frozen for m in members] == [False, True]
+    assert members[1].source == got.trusted[0].source

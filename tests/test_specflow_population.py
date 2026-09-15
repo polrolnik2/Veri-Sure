@@ -15,6 +15,7 @@ the "no bare rate" test consulted a hardcoded blocklist of attribute names.
 
 import ast
 import inspect
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -268,3 +269,84 @@ def test_the_summary_cannot_omit_its_parameters():
     assert len(got.verdicts) == 2 and len(got.kept) == 1   # cannot be confused
     assert "1 of 2 kept" in got.summary()
     assert "convicts <= 3 of 7" in got.summary()
+
+
+# --------------------------------------------------------- B2: characterise
+
+def _pair(a_vals, b_vals, *names):
+    """designs -> testpoint -> rows, from per-design output sequences."""
+    return {n: {f"t{i}": [{"outputs": {"a": v}, "inputs": {}}]
+                for i, v in enumerate(vals)}
+            for n, vals in zip(names, (a_vals, b_vals))}
+
+
+def test_characterise_finds_the_split_and_the_dissent():
+    #: E is off the majority at t1; everyone agrees at t0.
+    pop = {d: {"t0": [{"outputs": {"a": 0}}], "t1": [{"outputs": {"a": 0}}]}
+           for d in "ABCD"}
+    pop["E"] = {"t0": [{"outputs": {"a": 0}}], "t1": [{"outputs": {"a": 9}}]}
+    shape = P.characterise(pop, ["a"])
+    assert shape.split == frozenset({"t1"})
+    assert shape.dissent["E"] == 1.0
+    assert all(shape.dissent[d] == 0.0 for d in "ABCD")
+
+
+def test_characterise_collapses_clones_into_one_opinion():
+    pop = {d: {"t0": [{"outputs": {"a": 0}}], "t1": [{"outputs": {"a": 0}}]}
+           for d in "ABCD"}
+    pop["E"] = {"t0": [{"outputs": {"a": 0}}], "t1": [{"outputs": {"a": 9}}]}
+    shape = P.characterise(pop, ["a"])
+    assert len(shape.designs) == 5
+    #: A-D behave identically, so they are one opinion, not four
+    assert shape.effective_size() == 2
+    assert len({shape.cluster[d] for d in "ABCD"}) == 1
+
+
+def test_characterise_refuses_a_population_that_never_disagrees():
+    pop = {d: {"t0": [{"outputs": {"a": 0}}]} for d in "ABCDE"}
+    with pytest.raises(ValueError, match="behaviourally indistinguishable"):
+        P.characterise(pop, ["a"])
+
+
+def test_the_b2_gate_refuses_a_population_one_design_dominates():
+    #: k1's shape: one design off the majority almost everywhere. The rule's
+    #: precision there is that design, and every subset auditing at exactly
+    #: zero contained it.
+    shape = P.PopulationShape(
+        designs=tuple("ABCDG"), testpoints=("t0", "t1"),
+        split=frozenset({"t0", "t1"}),
+        dissent={"A": 0.1, "B": 0.1, "C": 0.1, "D": 0.1, "G": 0.86},
+        cluster={"A": 0, "B": 1, "C": 2, "D": 3, "G": 4},
+        pairs={"t0": (("A", "G"),)})
+    with pytest.raises(ValueError, match="off the population majority"):
+        P.refuse_unusable_population(shape)
+    #: and it accepts the same population once the outlier is not dominant
+    ok = replace(shape, dissent={**shape.dissent, "G": 0.2})
+    P.refuse_unusable_population(ok)
+
+
+def test_the_b2_gate_puts_the_floor_on_EFFECTIVE_size_not_headcount():
+    #: Five designs, one opinion four times over. MIN_POPULATION counts
+    #: designs; four one-per-cluster reached 1.5% where seven reached 0%.
+    shape = P.PopulationShape(
+        designs=tuple("ABCDE"), testpoints=("t0",), split=frozenset({"t0"}),
+        dissent=dict.fromkeys("ABCDE", 0.1),
+        cluster={"A": 0, "B": 0, "C": 0, "D": 0, "E": 1},
+        pairs={"t0": (("A", "E"),)})
+    assert len(shape.designs) == 5
+    with pytest.raises(ValueError, match="distinct opinion"):
+        P.refuse_unusable_population(shape)
+
+
+# ------------------------------------------------- A3: the corpus gate set
+
+def test_the_corpus_path_drops_correspondence_and_keeps_liveness():
+    legs = P.GateLegs.corpus_path()
+    #: the expensive judge that produced 147 of 149 ORACLE_INVALID
+    assert legs.correspondence is False
+    #: the free floors, both of which the threshold rule needs
+    assert legs.well_formed is True and legs.liveness is True
+    #: and the shipping path is unchanged -- this is a corpus configuration,
+    #: not a weakening of what ships
+    assert P.GateLegs.shipping_path() == P.GateLegs()
+    assert P.GateLegs.shipping_path().correspondence is True

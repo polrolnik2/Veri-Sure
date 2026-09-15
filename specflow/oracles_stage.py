@@ -37,6 +37,7 @@ lets them run once and stay decided.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -109,10 +110,77 @@ STAGING_BUDGET_CAP = 400
 
 
 @dataclass(frozen=True)
+class CorpusBody:
+    """ONE BODY THE STAGE AUTHORED, kept whether or not it was the survivor.
+
+    A run authors three to six bodies per requirement and keeps ONE. Every other
+    body is discarded at the moment it is superseded -- which is exactly the
+    population a selection rule needs, thrown away to make room for the rule
+    that replaced it. The narrowing round's "12 of 47 became vacuous" was a LOSS
+    under replace-in-place and is just corpus under selection.
+
+    Provenance travels with the body because the retained set is only useful if
+    a later analysis can ask what differs between two members. Measured on k1:
+    resampling one prompt produces a body identical to the selection rule 69% of
+    the time among sound pairs, so "what differs" is the whole question.
+    """
+
+    req_uid: str
+    source: str
+    #: Which authoring configuration produced it -- "control", "shipping", a
+    #: repair round, a staging attempt.
+    arm: str = ""
+    #: Repair round it was authored in; 0 is the first draft.
+    round_: int = 0
+    #: The objection this body was written to answer, "" for a first draft.
+    answered: str = ""
+    #: Did this body end up in `trusted`? Exactly one member per requirement
+    #: should carry True, and a set where none does is a requirement the stage
+    #: authored for and then dropped.
+    frozen: bool = False
+
+    def digest(self) -> str:
+        """Content identity. Two bodies with the same text are ONE member --
+        the recording key `{stage}_r{round}` returns the first response for a
+        matching key, so N draws under one stage name are one response replayed
+        N times, and k1's volume round retained 8 byte-identical pairs that way.
+        """
+        return hashlib.sha256(self.source.encode("utf-8")).hexdigest()[:16]
+
+
+def _retain(corpus: dict[str, list[CorpusBody]],
+            oracle: RequirementOracle, *, arm: str = "", round_: int = 0,
+            answered: str = "", frozen: bool = False) -> None:
+    """Add a body to the corpus, de-duplicated by CONTENT.
+
+    De-duplicating by content rather than by round is not tidiness. The
+    recording key is `{stage}_r{round}`, and the resume port returns the FIRST
+    response for a matching key -- so N draws under one stage name are one
+    response replayed N times, and retaining them by round would record a corpus
+    of N where the authoring produced 1. k1's volume round did exactly that: 8
+    of 8 retained pairs are byte-identical.
+    """
+    body = CorpusBody(req_uid=oracle.req_uid, source=oracle.source, arm=arm,
+                      round_=round_, answered=answered, frozen=frozen)
+    members = corpus.setdefault(oracle.req_uid, [])
+    seen = {m.digest() for m in members}
+    if body.digest() in seen:
+        return
+    members.append(body)
+
+
+@dataclass(frozen=True)
 class OracleSet:
     """What the stage decided, for every requirement it was given."""
 
     trusted: list[RequirementOracle] = field(default_factory=list)
+    #: `req_uid -> every body authored for it`, survivors and superseded alike.
+    #: **THIS IS THE CORPUS A SELECTION RULE READS.** It is not `trusted`: the
+    #: whole point is that the stage's own choice of survivor is what selection
+    #: replaces, so a corpus containing only survivors has nothing to select
+    #: over. Empty on a run that did not retain, which reads as "not retained"
+    #: rather than "authored one body".
+    corpus: dict[str, list[CorpusBody]] = field(default_factory=dict)
     #: `req_uid -> TRUSTED` or the verdict that rejected it. Total over the
     #: requirements: a requirement missing from here would be a silent subset.
     dispositions: dict[str, str] = field(default_factory=dict)
@@ -1067,6 +1135,15 @@ def run_oracle_stage(
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
 
+    #: **A1: THE CORPUS STARTS AT GENERATION, NOT AT REPAIR.** Retaining only
+    #: superseded bodies records nothing at all for a run that never repairs --
+    #: which is most requirements -- so the first draft is a member too. This
+    #: was a real defect: the first wiring hooked only the repair-accept path
+    #: and a stage-level test found the corpus empty.
+    corpus: dict[str, list[CorpusBody]] = {}
+    for _first in oracles:
+        _retain(corpus, _first, arm="generate", round_=0)
+
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
     #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`. These
@@ -1545,6 +1622,20 @@ def run_oracle_stage(
             # two guards above stay: they reject a replacement that VERIFIES
             # worse, or that stopped deciding -- both measurable losses, both
             # recorded.
+            # **A2: REPAIR ADDS, IT DOES NOT REPLACE.** The predecessor is
+            # already a corpus member -- retained at generation on round 0, or
+            # by this same line on the round that accepted it -- so retaining
+            # it again here is a no-op the content de-duplication swallows. A
+            # branch doing exactly that was written, and removing it left every
+            # test green; the honest form is to retain the REPLACEMENT and let
+            # the predecessor stand where it was already recorded.
+            #
+            # `trusted` keeps its meaning: one survivor per uid. What changes
+            # is that the superseded body stops being unrecoverable, which is
+            # what made the narrowing round's "12 of 47 became vacuous" a loss
+            # rather than a corpus.
+            _retain(corpus, o, arm="repair", round_=rounds,
+                    answered="; ".join(repairs.get(o.req_uid, ())[-1:]))
             held[o.req_uid] = o
 
     # EVERY UNEXERCISED ORACLE GETS STAGING ATTEMPTS, before anything is frozen
@@ -1766,6 +1857,31 @@ def run_oracle_stage(
                    "correspondence_checked": want_correspondence,
                    "over_strictness_bounded_by": witness_kind,
                    "repairs": repairs,
+                   # `tools` was in the set and not in the artifact, so `load`
+                   # could only ever restore an empty one -- and the whole
+                   # argument for carrying it is that a later round inherits
+                   # the instruments instead of re-deriving them from a call
+                   # site's keyword arguments.
+                   "tools": {"correspondence": want_correspondence,
+                             "variants": want_variants,
+                             "staging": want_staging,
+                             "max_repairs": max_repairs,
+                             "repair_attempts": repair_attempts},
+                   # **A1 PERSISTENCE.** The corpus travels in the artifact
+                   # rather than beside it, so a `--reuse` that restores the
+                   # set restores what it was selected from. `load` below
+                   # reads it back; a field added here without extending
+                   # `load` vanishes on every reuse, which is already true of
+                   # `repairs`, `abandoned` and `tools`.
+                   "corpus": {
+                       uid: [
+                           {"source": m.source, "arm": m.arm,
+                            "round": m.round_, "answered": m.answered,
+                            "frozen": m.frozen, "digest": m.digest()}
+                           for m in members
+                       ]
+                       for uid, members in corpus.items()
+                   },
                    # What the designs said without being allowed to decide.
                    "instrument_notes": disagreements,
                    "unsatisfiable_by_the_control": sorted(
@@ -1804,8 +1920,25 @@ def run_oracle_stage(
     else:
         trusted = freeze.stamp(trusted, normalized)
 
-    logger.info("oracles: %s (bound: %s)", _summary(dispositions), witness_kind)
+    #: MARK THE SURVIVORS. Exactly one member per requirement should carry
+    #: `frozen`, and a requirement whose corpus has none is one the stage
+    #: authored for and then dropped -- a fact the artifact could not previously
+    #: express, because the dropped bodies were gone.
+    _survivors = {o.req_uid: o.source for o in trusted}
+    corpus = {
+        uid: [
+            CorpusBody(req_uid=m.req_uid, source=m.source, arm=m.arm,
+                       round_=m.round_, answered=m.answered,
+                       frozen=_survivors.get(uid) == m.source)
+            for m in members
+        ]
+        for uid, members in corpus.items()
+    }
+    logger.info("oracles: %s (bound: %s); corpus retained %d bodies over %d "
+                "requirements", _summary(dispositions), witness_kind,
+                sum(len(v) for v in corpus.values()), len(corpus))
     return OracleSet(trusted=trusted, dispositions=dispositions,
+                     corpus=corpus,
                      abandoned=abandoned,
                      tools={"correspondence": want_correspondence,
                             "variants": want_variants,
@@ -2993,4 +3126,26 @@ def load(run_dir: Path) -> OracleSet | None:
         witness_notes={str(u): str(n.get("witness") or "")
                        for u, n in (blob.get("instrument_notes") or {}).items()
                        if isinstance(n, dict) and n.get("witness")},
+        # **THE LOSSY-LOAD TRAP, CLOSED FOR THE FIELDS THAT MATTER TO
+        # SELECTION.** This function already dropped `repairs`, `abandoned` and
+        # `tools`, so a reused set answered "what did the gate catch?" and "what
+        # left the system?" with silence. A `corpus` added without being read
+        # back here would vanish on every `--reuse` -- and the corpus is the
+        # ONE field whose whole purpose is to survive the run that built it.
+        corpus={
+            str(uid): [
+                CorpusBody(req_uid=str(uid), source=str(m.get("source") or ""),
+                           arm=str(m.get("arm") or ""),
+                           round_=int(m.get("round") or 0),
+                           answered=str(m.get("answered") or ""),
+                           frozen=bool(m.get("frozen")))
+                for m in (members or []) if isinstance(m, dict)
+            ]
+            for uid, members in (blob.get("corpus") or {}).items()
+        },
+        repairs={str(u): [str(x) for x in (v or [])]
+                 for u, v in (blob.get("repairs") or {}).items()},
+        abandoned={str(u): str(v)
+                   for u, v in (blob.get("abandoned") or {}).items()},
+        tools=dict(blob.get("tools") or {}),
     )

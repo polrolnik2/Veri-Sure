@@ -552,6 +552,43 @@ class GateLegs:
     #: NONE of them the author's.
     liveness: bool = True
 
+    @classmethod
+    def corpus_path(cls) -> "GateLegs":
+        """**A3: THE GATES THAT RUN WHILE A CORPUS IS BEING BUILT.**
+
+        Every rejecting gate shrinks the corpus and SELECTION IS MEANT TO BE
+        THE FILTER, so only the free structural floors run here:
+
+            well_formed   static, no model call. Removes 5 of the 126-check
+                          set at ZERO span cost -- 9 of 464 overall.
+            liveness      a FLOOR, not a gradient: a constant function, which
+                          the threshold rule at low `max_convictions` keeps
+                          preferentially. No model call.
+
+        **`correspondence` IS DROPPED, and it is the expensive one.** 147 of
+        149 `ORACLE_INVALID` dispositions across six runs are correspondence
+        off-target, spanning 1 to 51 requirements per run (1% to 46%), Spearman
+        -0.771 against the TRUSTED rate -- most of the 3.3x run-to-run spread,
+        from a judge measured at 1.3x lift that went 0-for-6 on timing and once
+        prescribed the defect idiom to a working check. One model call per body
+        to shrink the corpus by an amount that correlates with getting worse.
+
+        **`vacuity` is dropped for cost, not for merit**: it needs mutants of
+        the witness, and the corpus path is meant to be free. `must_fail` is
+        open and measured in F2.
+
+        BOTH STILL RUN ON THE SHIPPING PATH. This is the corpus-building
+        configuration, not a weakening of what ships.
+        """
+        return cls(well_formed=True, correspondence=False,
+                   vacuity=False, liveness=True)
+
+    @classmethod
+    def shipping_path(cls) -> "GateLegs":
+        """Everything on -- what a run that keeps ONE body per requirement
+        needs, because nothing downstream will filter for it."""
+        return cls()
+
 
 def pipeline_gates(
     oracles: Mapping[str, object],
@@ -858,6 +895,143 @@ class TellProfile:
     #: turned out to measure objection PLACEMENT, and to be a completeness
     #: instrument rather than a soundness one.
     placement: float
+
+
+def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
+                 outputs: Sequence[str], *,
+                 clone_distance: float = 0.25) -> PopulationShape:
+    """**B2: CHARACTERISE BEFORE SELECTING.** Build the shape from traces.
+
+    A population is not a bag of N designs, and k1 is the worked example: the
+    five largest pair distances all involve one design, B/D/E sit 6% from each
+    other, and every subset of the seven that audits at exactly zero contains
+    the outlier. A conviction count without this beside it is not
+    interpretable, so this is the step that has to run FIRST.
+
+    `clone_distance` is the single-link threshold at which two designs collapse
+    into one opinion. 0.25 is what k1's structure supports -- B/D/E/H at
+    6.3-16% merge, C and F and G stand alone -- and it is a parameter rather
+    than a constant because the right value is a property of the population,
+    not of the rule.
+
+    Reads only spec-derived designs. No reference, and no parameter for one.
+    """
+    designs = tuple(sorted(rows_by_design))
+    if len(designs) < 2:
+        raise ValueError(
+            f"{len(designs)} design(s); a population needs at least two for "
+            "'where do they disagree' to have an answer")
+    testpoints = tuple(sorted(
+        {tp for rows in rows_by_design.values() for tp in rows}))
+
+    def value(rows: Rows | None, i: int, port: str) -> object:
+        if rows is None or i >= len(rows):
+            return None
+        return str((rows[i].get("outputs") or {}).get(port))
+
+    split: set[str] = set()
+    off_majority: dict[str, set[str]] = {d: set() for d in designs}
+    for tp in testpoints:
+        have = [d for d in designs if rows_by_design[d].get(tp) is not None]
+        if len(have) < 2:
+            continue
+        width = min(len(rows_by_design[d][tp]) for d in have)
+        for i in range(width):
+            for port in outputs:
+                seen: dict[object, list[str]] = {}
+                for d in have:
+                    seen.setdefault(value(rows_by_design[d][tp], i, port),
+                                    []).append(d)
+                if len(seen) < 2:
+                    continue
+                split.add(tp)
+                top = max(seen.values(), key=len)
+                for d in have:
+                    if d not in top:
+                        off_majority[d].add(tp)
+    if not split:
+        raise ValueError(
+            f"no testpoint splits the population of {len(designs)}: these "
+            "designs are behaviourally indistinguishable on this suite, so "
+            "nothing computed from them measures a population")
+
+    dissent = {d: len(off_majority[d]) / len(split) for d in designs}
+
+    #: single-link clustering on the off-majority signature, so behavioural
+    #: clones collapse to one opinion and `effective_size` stops being a
+    #: headcount. FOUR designs one-per-cluster reached 1.5% where seven
+    #: reached 0%: spread buys precision, headcount does not.
+    groups = [{d} for d in designs]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(groups)):
+            for j in range(i + 1, len(groups)):
+                close = any(
+                    len(off_majority[a] ^ off_majority[b]) / len(testpoints)
+                    < clone_distance
+                    for a in groups[i] for b in groups[j])
+                if close:
+                    groups[i] |= groups[j]
+                    del groups[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    cluster = {d: i for i, g in enumerate(groups) for d in g}
+
+    pairs: dict[str, tuple[tuple[str, str], ...]] = {}
+    for tp in sorted(split):
+        found = []
+        have = [d for d in designs if rows_by_design[d].get(tp) is not None]
+        for x, a in enumerate(have):
+            for b in have[x + 1:]:
+                ra, rb = rows_by_design[a][tp], rows_by_design[b][tp]
+                width = min(len(ra), len(rb))
+                if any(value(ra, i, p) != value(rb, i, p)
+                       for i in range(width) for p in outputs):
+                    found.append((a, b))
+        if found:
+            pairs[tp] = tuple(found)
+
+    return PopulationShape(
+        designs=designs, testpoints=testpoints, split=frozenset(split),
+        dissent=dissent, cluster=cluster, pairs=pairs)
+
+
+def refuse_unusable_population(shape: PopulationShape, *,
+                               max_dissent_share: float = 0.5,
+                               min_effective: int = MIN_POPULATION) -> None:
+    """**B2's GATE, not its report.** Refuse to select over a population whose
+    structure invalidates the rule.
+
+    Two conditions, both measured rather than supposed:
+
+    **ONE DESIGN'S DISSENT DOMINATES.** k1's G is off-majority at 78% of split
+    cells, and every subset auditing at exactly zero contains it -- so the
+    rule's precision there is that design rather than the population's
+    agreement. Above `max_dissent_share` the conviction count is measuring the
+    outlier.
+
+    **THE EFFECTIVE SIZE IS BELOW THE FLOOR.** `MIN_POPULATION` counts designs;
+    five near-clones are one opinion five times. The floor belongs on the
+    cluster-collapsed count, which is what this checks.
+    """
+    worst = max(shape.dissent, key=lambda d: shape.dissent[d])
+    if shape.dissent[worst] > max_dissent_share:
+        raise ValueError(
+            f"design {worst} is off the population majority at "
+            f"{shape.dissent[worst]:.0%} of split testpoints, above "
+            f"{max_dissent_share:.0%}: a conviction count over this population "
+            "measures that design rather than the population's agreement, and "
+            "on k1 exactly this shape produced a 126-for-126 that fell to 6.2% "
+            "when the outlier left")
+    effective = shape.effective_size()
+    if effective < min_effective:
+        raise ValueError(
+            f"{len(shape.designs)} designs collapse to {effective} distinct "
+            f"opinion(s), below {min_effective}: headcount is not what buys "
+            "precision, spread is")
 
 
 def tells(objections: ObjectionMap, shape: PopulationShape) -> TellProfile:
