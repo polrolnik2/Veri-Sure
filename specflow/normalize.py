@@ -1952,6 +1952,31 @@ def run_normalize_fanout(
         # round -- r0 through r3, the whole budget -- and still failed, so they
         # are not near-misses that one more round would rescue. Raising
         # `max_repairs` is not the fix and was measured before this landed.
+        #
+        # THE 39% = 39% ABOVE DOES NOT LICENSE PUTTING THESE 15 BACK, and it
+        # reads as though it does, which is why this is written here rather
+        # than anywhere else. Anyone hunting span will find this line, see an
+        # identical refutation rate, and conclude the drop costs 12.3% of the
+        # requirements for nothing. Two things are wrong with that:
+        #
+        #   - WRONG LEG OF THE TRIPLE. Refutation by the known-good control is
+        #     an AUDIT rate: how often a check convicts a design that is right.
+        #     The recorded defect in these 15 is "observable at [...] but no
+        #     route given" or a `shows` naming one case, which hands the author
+        #     a port it may assert ANYTHING about -- and REQ-0094 did exactly
+        #     that. A check that asserts anything cannot convict a design that
+        #     is WRONG. That is BLINDNESS, and an audit rate cannot see it. The
+        #     one measurement taken is of the leg the defect does not live on.
+        #   - n = 15. At that size 39% and 60% are indistinguishable, so even
+        #     on its own leg the comparison rules nothing out. The docstring is
+        #     right to refuse a quality claim; the refusal is not evidence of
+        #     safety, it is absence of evidence, and those get confused here.
+        #
+        # SO THE PRE-REGISTRATION FOR ANY RECOVERY OF THESE IS THE TRIPLE, NOT
+        # THE AUDIT RATE -- span, audit and blindness together, with blindness
+        # read on the one-case-`shows` population specifically, because that is
+        # where the defect is. `malformed()` already names the population and
+        # its issues, so the measurement needs no new plumbing; it needs a run.
         if not result.ok:
             continue
         for norm in result.output.normalized[:1]:

@@ -1659,6 +1659,38 @@ def run_oracle_stage(
         if "observed_via" not in shape:
             continue
         if not (shape.get("observable") or []) and not shape.get("observed_via"):
+            # AND A CONCEDED ROUTE HAS ALREADY BEEN CHASED BY THE TIME IT GETS
+            # HERE, which is worth stating because this line looks like the
+            # place to chase it and is not.
+            #
+            # The tempting reading: normalisation records that 44% of
+            # unobservable requirements CONCEDE a route in their own
+            # `unobservable_reason` -- naming the port and the mechanism while
+            # claiming nothing shows it -- so this site should refuse the
+            # concession and send the requirement back for a route. Every step
+            # of that is wrong, and each one is already measured:
+            #
+            #   - THE DETECTOR IS GONE ON PURPOSE. `concedes_a_route` was
+            #     removed after two false negatives in one session: a negation
+            #     window any nearby "not" disarmed -- structurally wrong in a
+            #     pass that teaches that an ABSENCE is an observation, so
+            #     correct reasons increasingly contain "not" -- and reading a
+            #     field the prompt tells the model to leave alone. See
+            #     `route_shows_issue`; what survives at `normalize.py:1303` is
+            #     the epitaph, not the function.
+            #   - THE CONCESSION IS A DEFERRAL, NOT A DODGE. `unobservable` is
+            #     literally the ticket into `blind`, which is the indirect
+            #     pass's input. Refusing it here forces a worse route out of a
+            #     pass with less information AND drops the requirement from
+            #     `blind`, so it never gets the better-informed look at all.
+            #   - IT ALREADY WORKS. Of 18 conceding direct-pass answers on
+            #     h2-i2c the indirect pass recovered 15 (83%) with a real port
+            #     AND route, and `resolve_indirect` writes those ports into
+            #     `observable` and clears the reason -- so a recovered
+            #     requirement is no longer blind here or in `_dispositions`.
+            #
+            # What reaches this line is therefore the residue: asked twice and
+            # routed by neither. ABANDONED is the honest verdict for it.
             abandoned.setdefault(uid, "no observation route found")
             continue
         # A REQUIREMENT NOTHING COULD CONTRADICT, caught where it is cheapest.
