@@ -168,6 +168,10 @@ def test_the_v1_finding_reports_the_bar_it_cleared_AND_why_that_is_not_a_win():
     assert "declined as single-reading" in text
     #: and the reason the second arm exists is named as my error
     assert "ms[:10]" in text and "index 10" in text
+    #: and the OTHER error: neither arm is the recorded corpus's author, so the
+    #: two arms compare two gateway models and neither to what V1 is scored on
+    assert "NAMED THE WRONG MODEL ENTIRELY" in text
+    assert "written by Claude subagents" in text
 
 def test_the_f2_finding_attributes_the_negative_to_inertness_not_to_the_rule():
     from specflow.scoring import (
@@ -187,3 +191,69 @@ def test_the_f2_finding_attributes_the_negative_to_inertness_not_to_the_rule():
     assert "0.0% duplicate rate" in text
     #: and the artifact that would have misread the bar
     assert "audit ceiling" in text.lower() and "31.0% / 89.8%" in text
+    #: THE CORRECTION the user's question forced: the two rates I compared had
+    #: different denominators, and the like-for-like figure is stated
+    assert "53 of 102 = 52.0%" in text
+    #: and the domination verdict is explicitly NOT the thing that moves
+    assert "does not move under the correction" in text
+
+
+def test_the_f2_finding_carries_the_matched_author_comparison():
+    from specflow.scoring import (
+        a_one_pass_corpus_is_inert_and_selection_cannot_rescue_it as f,
+    )
+    text = f()
+    #: all three authors on the SAME 34 prompts, with authored as the denominator
+    assert "44.1%" in text and "52.0%" in text and "40.4%" in text
+    #: terra beats the recorded author -- the original finding said the opposite
+    assert "terra beats the recorded author" in text
+    #: and what survives the correction is named
+    assert "42% against 24%" in text
+
+
+def test_the_corpus_provenance_finding_names_both_errors():
+    from specflow.scoring import (
+        the_recorded_corpus_is_subagent_authored_and_half_survivor_pool as f,
+    )
+    text = f()
+    #: the evidence for "no gateway call ever touched it", not the conclusion alone
+    assert "zero `*_meta.json`" in text
+    assert "`model_io`" in text and "`openai`" in text
+    assert "CLAUDE SUBAGENT" in text
+    #: the two pools, with the failure pool's own rate
+    assert "83.0%" in text and "350" in text and "114" in text
+    #: 64.4% named as a blend rather than a base rate
+    assert "64.4% is a blend" in text
+    #: the survivor artifact, with the number that replaces the zero
+    assert "0 of 17" in text and "15 of 34 = 44.1%" in text
+    #: and the scope of the invalidation, in both directions
+    assert "so they stand" in text
+    assert "used 64.4% as an external baseline" in text
+
+
+def test_no_finding_renders_a_literal_backslash_n():
+    """A finding double-escaped at authoring time renders as ONE line.
+
+    Caught on `a_one_pass_corpus_is_inert_and_selection_cannot_rescue_it`,
+    which carried 36 of them and was the only finding of nineteen that did --
+    so the table in it, the whole point of the finding, was unreadable. The
+    guard is cheap and the failure mode is invisible without it.
+    """
+    import specflow.population as population
+    import specflow.scoring as scoring
+
+    bad = []
+    for mod in (scoring, population):
+        for name in dir(mod):
+            fn = getattr(mod, name)
+            if not callable(fn) or name.startswith("_"):
+                continue
+            if getattr(fn, "__module__", "") != mod.__name__:
+                continue
+            try:
+                text = fn()
+            except Exception:
+                continue
+            if isinstance(text, str) and "\\n" in text:
+                bad.append(f"{mod.__name__}.{name}")
+    assert not bad, f"findings rendering a literal backslash-n: {bad}"
