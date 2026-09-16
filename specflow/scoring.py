@@ -701,3 +701,51 @@ def elicited_alternative_readings_produce_strength_not_difference() -> str:
         "a control arm, and the control is what makes the 18.9% -> 75.0% "
         "comparison mean anything."
     )
+
+def a_one_pass_corpus_is_inert_and_selection_cannot_rescue_it() -> str:
+    """F2's authoring half, live, on both authors. A fresh corpus built ON
+    PURPOSE, gated only by the free structural floors, then selected.
+
+    Pre-registered: the golden-free frontier must reach a point NOT DOMINATED by
+    the reference-picked sound subset at 77.0% / 0.0% / 56.1%.
+    """
+    return (
+        "**BOTH ARMS ARE A NEGATIVE AND THE AUTHOR OF THE RECORDED CORPUS IS "
+        "THE WORSE OF THE TWO.**\\n\\n"
+        "34 requirements, 3 draws each, distinct stage labels per draw:\\n\\n"
+        "                                gpt-5.6-terra   gpt-5.6-luna\\n"
+        "    authored                         99 of 102     102 of 102\\n"
+        "    DISTINCT bodies                         99            102\\n"
+        "    duplicate rate                        0.0%           0.0%\\n"
+        "    **decide nowhere**              **35 = 35%**   **43 = 42%**\\n"
+        "    survive the corpus-path gate            64             59\\n"
+        "    whole corpus span                    27.6%          31.0%\\n"
+        "    whole corpus *audit*               *62.5%*        *89.8%*\\n\\n"
+        "**EVERY THRESHOLD IS DOMINATED.** Luna's `t = 0` is four checks at 50% "
+        "audit; terra's is twelve at 33%. The recorded corpus -- also luna, but "
+        "through the full shipping pipeline -- has 126 checks at `t = 0` "
+        "auditing at **zero**.\\n\\n"
+        "**THE CAUSE IS INERTNESS, AND IT IS NOT THE SELECTION RULE'S TO "
+        "FIX.** Two fifths of a freshly authored corpus decides nothing on any "
+        "of seven designs. A check that never decides convicts nobody, so the "
+        "rule at low `t` KEEPS it preferentially -- which is why `t = 0` "
+        "collapses to four checks rather than filling up with them: the "
+        "DECIDES leg drops them first, and what is left is too small to span "
+        "anything.\\n\\n"
+        "**WHAT THIS EXPERIMENT ACTUALLY TESTED, STATED NARROWLY.** One pass "
+        "per prompt, three draws, **no repair rounds and no staging loop**. A3 "
+        "is about which GATES run on the corpus path and says nothing about the "
+        "loops, and I ran without them. So this is not evidence that dropping "
+        "`correspondence` is wrong; it is evidence that **A1's retention is "
+        "necessary and nowhere near sufficient** -- a corpus needs the staging "
+        "loop that makes checks decide before there is anything for selection "
+        "to select over. The 0.0% duplicate rate across both arms does "
+        "independently confirm that per-draw stage labels defeat the "
+        "`{stage}_r{round}` collapse.\\n\\n"
+        "**AND THE F2 BAR WOULD HAVE BEEN MISREAD WITHOUT THE AUDIT CEILING.** "
+        "The first verdict this driver printed called `t = 7` 'not dominated' "
+        "at 31.0% / 89.8% / 1.0% -- undominated only because a corpus objecting "
+        "to nearly everything is barely blind. The same 0%-blindness artifact "
+        "that broke V1's bar, caught here by refusing any point whose audit "
+        "exceeds `t = 6`'s 18.9%."
+    )

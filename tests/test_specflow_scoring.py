@@ -168,3 +168,22 @@ def test_the_v1_finding_reports_the_bar_it_cleared_AND_why_that_is_not_a_win():
     assert "declined as single-reading" in text
     #: and the reason the second arm exists is named as my error
     assert "ms[:10]" in text and "index 10" in text
+
+def test_the_f2_finding_attributes_the_negative_to_inertness_not_to_the_rule():
+    from specflow.scoring import (
+        a_one_pass_corpus_is_inert_and_selection_cannot_rescue_it as f,
+    )
+    text = f()
+    #: both arms, and the corpus's own author is the worse one
+    assert "gpt-5.6-terra" in text and "gpt-5.6-luna" in text
+    assert "62.5%" in text and "89.8%" in text
+    #: the cause, and that it is not the rule's to fix
+    assert "decide nowhere" in text and "42%" in text
+    assert "not the selection rule's to fix" in text.lower()
+    #: the scope limit -- no repair, no staging, so this does not indict A3
+    assert "no repair rounds and no staging loop" in text
+    assert "nowhere near sufficient" in text
+    #: the cache-collapse fix confirmed independently
+    assert "0.0% duplicate rate" in text
+    #: and the artifact that would have misread the bar
+    assert "audit ceiling" in text.lower() and "31.0% / 89.8%" in text
