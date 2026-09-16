@@ -305,7 +305,58 @@ class OracleSet:
         # anything", which reads in a report exactly like "they all do".
         if not self.tools.get("correspondence"):
             out["NOT_ASSERTABLE"] = out.get("NOT_ASSERTABLE")
+        # SURVIVING IS NOT DECIDING, beside the number that says it did. See
+        # `trusted_liveness`: `trusted` counts checks that passed every gate,
+        # and on the two runs where both were counted it overstated what
+        # executed by 17% and 30%.
+        out.update(self.trusted_liveness())
         return out
+
+    def trusted_liveness(self) -> dict[str, int | None]:
+        """What the liveness instrument said about the checks that SHIPPED.
+
+        `trusted` is the headline number and it means "survived every gate".
+        That is not the same claim as "decides anything", and the gap has been
+        measured twice: k1-dcfsm froze 36 TRUSTED of which 30 executed, c1-i2c
+        froze 110 of which 77 did -- a 17% and a 30% overstatement of the thing
+        a reader takes the number for. Nothing in `rates` said so, while
+        `liveness` had run every round and was sitting in the same artifact.
+
+        WHY SURVIVING AND DECIDING COME APART HERE, in one line each. The round
+        loop rejects only `DEAD_ORACLE` -- a check nothing moves. `DEAD_STIMULUS`
+        is deliberately not rejected, because a scenario not being staged is the
+        testplan's business and not the author's, and `UNKNOWN` covers a check
+        with no replayable testpoint or no declared output. Both ship TRUSTED
+        and neither decided anything on this run.
+
+        AND `live` IS THE INSTRUMENT'S VERDICT, NOT THE TRUTH. Its false-live
+        rate is measured and is not small -- 12.5% on k1, 28.7% on i2c -- so
+        `trusted_live` is an upper bound on what decides, never a count of it.
+        It is reported because the alternative on offer is `trusted` alone,
+        which is a looser upper bound presented as an exact number.
+
+        `None` throughout when liveness did not run, following the rule this
+        class already keeps for `VACUOUS` and `NOT_ASSERTABLE`: a zero here
+        would read as "nothing inert shipped", which is what "nobody looked"
+        looks like in a report.
+        """
+        uids = {o.req_uid for o in self.trusted}
+        if not self.liveness:
+            return {"trusted_live": None, "trusted_inert": None,
+                    "trusted_liveness_unknown": None}
+        seen = {u: self.liveness.get(u, _L.UNKNOWN) for u in uids}
+        return {
+            "trusted_live": sum(1 for v in seen.values() if v == _L.LIVE),
+            # `DEAD_ORACLE` should be empty -- the round loop rejects it -- but
+            # a set frozen before that gate existed and restored with `--reuse`
+            # can still carry one, and silently folding it into "unknown" would
+            # hide exactly the checks that gate was added to catch.
+            "trusted_inert": sum(
+                1 for v in seen.values()
+                if v in (_L.DEAD_STIMULUS, _L.DEAD_ORACLE)),
+            "trusted_liveness_unknown": sum(
+                1 for v in seen.values() if v == _L.UNKNOWN),
+        }
 
     def decides_nothing(self) -> int:
         """How much of the suite proves nothing. Never silent, never zero by

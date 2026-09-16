@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from specflow import oracles_stage as O
+from specflow.refmodel import liveness as _L
 from specflow.refmodel.oracles import RequirementOracle
 from specflow.refmodel import variants as variants_mod
 from specflow.refmodel.variants import Variant
@@ -1620,3 +1621,66 @@ def test_a_set_frozen_before_this_measurement_reloads_EMPTY_not_wrong():
 
     assert back is not None
     assert back.correspondence_rounds == []
+
+
+# --------------------------------------------------------------------------
+# SURVIVING IS NOT DECIDING. `trusted` means "passed every gate"; on the two
+# runs where both were counted it overstated what executed by 17% and 30%.
+# --------------------------------------------------------------------------
+
+
+def _set_with(liveness: dict[str, str], uids=("REQ-0001", "REQ-0002")):
+    return O.OracleSet(
+        trusted=[_corpus_oracle(u, 0) for u in uids],
+        dispositions={u: "TRUSTED" for u in uids},
+        liveness=liveness)
+
+
+def test_an_inert_check_that_SHIPPED_is_counted_apart_from_a_live_one():
+    """The round loop rejects `dead-oracle` and deliberately does not reject
+    `dead-stimulus` -- an unstaged scenario is the testplan's business, not the
+    author's -- and `unknown` covers a check with no replayable testpoint. All
+    three ship TRUSTED and none of them decided anything on this run.
+    """
+    rates = _set_with(
+        {"REQ-0001": _L.LIVE, "REQ-0002": _L.DEAD_STIMULUS},
+    ).rates()
+
+    assert rates["trusted"] == 2, "the headline is unchanged"
+    assert rates["trusted_live"] == 1
+    assert rates["trusted_inert"] == 1
+    assert rates["trusted_liveness_unknown"] == 0
+
+
+def test_a_trusted_check_liveness_never_reached_is_UNKNOWN_not_live():
+    """Absent from the map is not a verdict. Defaulting it to live is how
+    "nobody looked" turns into a count of working checks."""
+    rates = _set_with({"REQ-0001": _L.LIVE}).rates()
+
+    assert rates["trusted_live"] == 1
+    assert rates["trusted_liveness_unknown"] == 1, (
+        "REQ-0002 has no verdict and must not be credited with one")
+
+
+def test_a_dead_oracle_restored_by_reuse_is_not_folded_into_unknown():
+    """It should be empty -- the round loop rejects `dead-oracle`. But a set
+    frozen before that gate existed can carry one through `--reuse`, and
+    folding it into "unknown" would hide precisely the checks the gate was
+    added to catch."""
+    rates = _set_with({"REQ-0001": _L.DEAD_ORACLE,
+                       "REQ-0002": _L.DEAD_STIMULUS}).rates()
+
+    assert rates["trusted_inert"] == 2
+    assert rates["trusted_liveness_unknown"] == 0
+
+
+def test_liveness_that_never_ran_reports_None_and_never_zero():
+    """The rule this class already keeps for VACUOUS and NOT_ASSERTABLE. A
+    zero would read as "nothing inert shipped", which is what "nobody looked"
+    looks like in a report."""
+    rates = _set_with({}).rates()
+
+    assert rates["trusted"] == 2
+    assert rates["trusted_live"] is None
+    assert rates["trusted_inert"] is None
+    assert rates["trusted_liveness_unknown"] is None
