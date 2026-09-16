@@ -1676,7 +1676,7 @@ def run_oracle_stage(
         # enough, because routes are alternatives and a single sufficient one
         # makes the requirement checkable.
         routes = shape.get("observed_via") or []
-        if routes and all(_declines(r.get("shows", "")) for r in routes):
+        if routes and all(_route_declines(r) for r in routes):
             abandoned.setdefault(uid, "no discrimination stated")
 
     # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
@@ -2925,6 +2925,37 @@ def _decides_nothing(testplan: list[dict],
     """
     named = {tp for o in oracles for tp in o.tp_uids}
     return sorted({str(e.get("uid")) for e in testplan if e.get("uid")} - named)
+
+
+def _route_declines(route: dict) -> bool:
+    """Did this route take the escape hatch, read from the slot that owns it?
+
+    **THIS USED TO READ `shows` AND THE SCHEMA PUTS THE HATCH IN `otherwise`.**
+    `Route` carries two slots -- `shows` is what the port does when the
+    requirement HOLDS, `otherwise` what it does when it does not -- and
+    `route_shows_issue` tells an author with a genuine tautology to put
+    `NO_DISCRIMINATION` in `otherwise`. Reading `shows` inverted both paths, and
+    `route_shows_issue`'s own docstring describes the inversion as a defect it
+    already fixed on its side:
+
+        "writing the opt-out into `shows` skipped the check while writing the
+         real second case into `shows` was refused. The lenient path and the
+         strict path were the wrong way round."
+
+    It was fixed in `normalize` and left standing in this consumer, so it cut
+    both ways at once:
+
+      * an author FOLLOWING the schema put the hatch in `otherwise`, this read
+        `shows`, saw no decline -- and the tautology was never recorded as a
+        finding. It went to an author and became a check that cannot fail,
+        which is precisely what the hatch exists to prevent;
+      * an author whose `shows` prose happened to contain the phrase was
+        ABANDONED, losing the requirement its check and the run its span.
+
+    The predicate itself stays lenient, because on `otherwise` it is asking a
+    short slot whose whole job is the second case -- not scanning free prose.
+    """
+    return _declines(str(route.get("otherwise", "") or ""))
 
 
 def _declines(shows: str) -> bool:

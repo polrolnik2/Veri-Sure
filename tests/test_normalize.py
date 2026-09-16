@@ -857,3 +857,65 @@ def test_the_direct_pass_ACCEPTS_a_reason_that_concedes_a_route():
 
 
 
+
+
+def test_the_escape_hatch_is_read_from_the_slot_the_schema_puts_it_in():
+    """`Route` has two slots and the hatch lives in `otherwise`.
+
+    `oracles_stage` used to read `shows`, which inverted both paths at once: an
+    author following the schema was NOT abandoned, so a genuine tautology became
+    a check that cannot fail, and an author whose `shows` prose merely contained
+    the phrase WAS abandoned, costing the requirement its check. This test fails
+    against the `shows` version in both directions.
+    """
+    from specflow.normalize import NO_DISCRIMINATION
+    from specflow.oracles_stage import _route_declines
+
+    #: the schema-following tautology -- REQ-0005's shape, where the port is its
+    #: own antecedent. It must be recorded as a finding rather than authored.
+    assert _route_declines(
+        {"shows": "scl_o is tied low", "otherwise": NO_DISCRIMINATION})
+
+    #: prose that MENTIONS the phrase while stating a real second case. Reading
+    #: `shows` abandoned this; it must survive.
+    assert not _route_declines({
+        "shows": "busy shows no discrimination until ena rises, where it reads 1",
+        "otherwise": "busy stays 0 throughout"})
+
+    #: and an ordinary two-case route is untouched
+    assert not _route_declines(
+        {"shows": "busy rises", "otherwise": "busy stays 0"})
+
+    #: a missing slot is not a decline -- absence is not an opt-in
+    assert not _route_declines({"shows": NO_DISCRIMINATION})
+
+
+def test_the_abandonment_call_site_reads_the_route_not_the_shows_slot():
+    """A predicate test alone does not hold this fix in place.
+
+    `_route_declines` can be correct while `run_oracle_stage` still calls
+    `_declines(r.get("shows"))` directly -- reverting the call site passes every
+    behavioural test, because the abandonment block sits inside a function no
+    unit test reaches. So the call site is pinned at the source level, and the
+    defect CLASS is pinned with it: nothing in this module may decide a
+    discrimination by reading `shows`.
+    """
+    import re
+    from pathlib import Path
+
+    import specflow.oracles_stage as oracles_stage
+
+    #: resolved from the module, not the cwd -- a relative path would make this
+    #: pin silently pass from the wrong directory.
+    src = Path(oracles_stage.__file__).read_text(encoding="utf-8")
+
+    #: the abandonment decision goes through the route-aware helper
+    assert re.search(r"all\(\s*_route_declines\(r\)\s*for r in routes\s*\)", src), (
+        "the 'no discrimination stated' call site must pass the whole route to "
+        "_route_declines, not a single slot")
+
+    #: and no caller anywhere decides a decline from `shows`
+    offenders = re.findall(r"_declines\(\s*[^)]*[\"']shows[\"']", src)
+    assert not offenders, (
+        f"a decline is being read from `shows`, which is the inverted path: "
+        f"{offenders}")
