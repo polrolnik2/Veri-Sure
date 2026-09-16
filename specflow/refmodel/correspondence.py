@@ -54,6 +54,17 @@ both answers to the question a different gate asks. So 3 is what this gate finds
 when it is asked its own question, and the recalibration made it accurate rather
 than turning it off.
 
+**BOTH OF THOSE ARE ONE-DRAW RATES AND A RUN DOES NOT APPLY THEM ONCE.**
+`oracles_stage` calls `review` from INSIDE its verify-round loop, over the whole
+surviving set rather than the repaired subset, with `rejected` cleared each
+round and `round_` in the resumption key -- so an unchanged oracle that passed
+in round 1 is re-asked from scratch in rounds 2 and 3. At `repair_attempts = 2`
+that is three independent draws, and 4.3% and 5% compound to 12.3% and 14.3%
+with the reviewer behaving exactly as calibrated. Quoting 3-in-70 as what a run
+sees is a category error about this file, not about the gate. Nothing here is
+evidence that the extra rejections are wrong -- see the call site for what would
+and would not settle that.
+
 **What it therefore does NOT catch, by construction.** An oracle that decides
 the right requirement and cannot fail is ON TARGET and this gate passes it --
 it passed 21 of the 23 that `liveness` shows cannot be moved by any legal

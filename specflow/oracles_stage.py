@@ -1322,6 +1322,52 @@ def run_oracle_stage(
             # what abandoning it means.
             abandoned.update(gone)
 
+        # THE CORRESPONDENCE GATE IS QUOTED AS A ONE-DRAW RATE AND APPLIED AS
+        # UP TO THREE, and the two numbers are not the same number.
+        #
+        # `correspondence`'s yield paragraph reads "over 70 frozen oracles it
+        # rejects 3" (4.3%) and "live on a second run, 2 of the first 40" (5%).
+        # Both are ONE review per oracle. This line is inside the round loop,
+        # `rejected` is cleared at the top of every round, and the argument is
+        # `held.values()` -- the WHOLE surviving set, not the repaired subset.
+        # `round_` reaches `port.complete` as part of the resumption key, so
+        # `correspond_REQ-0007_r0` and `_r1` are different stages and neither is
+        # a cache hit on the other. With `repair_attempts = 2`, `verifications`
+        # is 3, so an unchanged oracle that passed in round 1 is re-asked from
+        # scratch in rounds 2 and 3.
+        #
+        # At the calibrated one-draw rate, applied the way this loop applies it:
+        #   1 - (1 - 0.043)^3 = 12.3%      1 - (1 - 0.050)^3 = 14.3%
+        # roughly three times the quoted yield, with the gate behaving exactly
+        # as calibrated. The compounding is arithmetic on this loop, not a claim
+        # that the reviewer is wrong.
+        #
+        # AND THE DRAW COUNT IS NOT A PROPERTY OF THE ORACLE. The loop advances
+        # only while `ask` is non-empty, so how many times THIS check is judged
+        # depends on whether OTHER requirements had something repairable. One
+        # repairable neighbour re-draws the gate over every survivor.
+        #
+        # WHAT THIS IS NOT: it is not a span loss, and calling it one would be
+        # the error this file keeps paying for. A rejection costs span only if
+        # the rejected check would have DECIDED and decided well, and this tree
+        # has measured the opposite relationship twice -- correspondence passed
+        # 21 of the 23 checks `liveness` shows cannot be moved by any legal
+        # value, and checks from gate-REJECTED normalized forms were refuted by
+        # the control at the same 39% as checks from clean ones. Faithfulness
+        # and check success are near-orthogonal on every axis anyone has
+        # measured here, so the success rate of what this gate removes is
+        # UNKNOWN and may not be imputed from the run's baseline in either
+        # direction. What is established is only that the gate's published rate
+        # and its applied rate differ by about 3x, and that no artifact
+        # currently reports the applied one.
+        #
+        # PRE-REGISTERED, unrun: record reviews and rejections PER ROUND, then
+        # read the triple over the requirements rejected on a round > 1 only.
+        # If those checks are no worse on audit and blindness than the run's
+        # survivors, the extra draws are removing checks at random and the
+        # compounding is a defect; if they are worse, the repetition is finding
+        # something a single draw missed and the calibration is the stale
+        # number. Both outcomes are publishable and neither is assumed.
         reviews = (
             correspondence.review(
                 list(held.values()), by_uid, port=port, normalized=normalized,
@@ -1683,11 +1729,17 @@ def run_oracle_stage(
             #     pass's input. Refusing it here forces a worse route out of a
             #     pass with less information AND drops the requirement from
             #     `blind`, so it never gets the better-informed look at all.
-            #   - IT ALREADY WORKS. Of 18 conceding direct-pass answers on
-            #     h2-i2c the indirect pass recovered 15 (83%) with a real port
-            #     AND route, and `resolve_indirect` writes those ports into
-            #     `observable` and clears the reason -- so a recovered
+            #   - THE MECHANISM ALREADY FIRES. Of 18 conceding direct-pass
+            #     answers on h2-i2c the indirect pass returned 15 (83%) with a
+            #     real port AND route, and `resolve_indirect` writes those
+            #     ports into `observable` and clears the reason -- so a routed
             #     requirement is no longer blind here or in `_dispositions`.
+            #     FIRES, NOT WORKS: 83% is a ROUTE-recovery rate, and whether
+            #     those routes become checks that decide is not measured
+            #     anywhere. Reading it as 83% recovered span would be assuming
+            #     the thing this tree twice measured to be false -- that a
+            #     faithful artefact is a successful one. It is the plan's own
+            #     caveat, and it binds here too: span on paper is not span.
             #
             # What reaches this line is therefore the residue: asked twice and
             # routed by neither. ABANDONED is the honest verdict for it.
