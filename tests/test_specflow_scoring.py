@@ -296,3 +296,21 @@ def test_the_clustering_finding_names_the_metric_that_was_substituted():
     assert "A second module is the only thing that could separate them" in text
     #: and that the existing suite was blind to it
     assert "Thirty-seven population tests passed against both metrics" in text
+
+
+def test_the_control_label_finding_corrects_the_plans_honesty_condition():
+    from specflow.scoring import (
+        the_control_is_not_a_proxy_for_the_grade_it_is_the_grade as f,
+    )
+    text = f()
+    #: all three runs, so this is a replication and not one module's number
+    assert "a2-i2c" in text and "d1-i2c" in text and "c1-i2c" in text
+    assert "96.6%" in text and "100.0%" in text and "87.5%" in text
+    #: the correction, stated as a correction
+    assert "TOO WEAK" in text
+    assert "IS the grade wearing" in text
+    #: the held-out grade must be the module with no control
+    assert "which is k1 alone" in text
+    #: and the cost of the pipeline's own (correct) refusal is priced
+    assert "61 of the 71" in text
+    assert "92% " in text and "precision, 86% recall" in text

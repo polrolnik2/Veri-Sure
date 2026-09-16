@@ -709,6 +709,51 @@ def elicited_alternative_readings_produce_strength_not_difference() -> str:
     )
 
 
+def the_control_is_not_a_proxy_for_the_grade_it_is_the_grade() -> str:
+    """STEP 2, part 1. Before fitting anything to the control's verdict, check
+    that it agrees with the grade it stands in for.
+
+    Scored on all three runs that carry a control, each against golden traces
+    driven by ITS OWN stimulus, at each check's own `tp_uids`, over checks live
+    on the golden.
+    """
+    return (
+        "**THE CONTROL PREDICTS THE GOLDEN ALMOST EXACTLY, AND THAT IS A "
+        "PROBLEM FOR THE PLAN THAT WANTED TO FIT TO IT.**\n\n"
+        "    run       live   flagged convict   unflagged convict     lift      z\n"
+        "    a2-i2c      74     28 of 29  96.6%    2 of 45   4.4%    21.72x   7.88\n"
+        "    d1-i2c      25      5 of  5 100.0%    0 of 20   0.0%       inf   5.00\n"
+        "    c1-i2c      72     28 of 32  87.5%    8 of 40  20.0%     4.38x   5.69\n\n"
+        "On d1 the flagged set is EXACTLY the golden-convicting set. Across the "
+        "three runs the flag finds **61 of the 71** checks the golden falsifies "
+        "-- missing 10 -- and flags **5** the golden does not: 66 flags, 92% "
+        "precision, 86% recall.\n\n"
+        "**SO THE HONESTY CONDITION I WROTE WAS TOO WEAK, AND THIS CORRECTS "
+        "IT.** The plan said fitting to the control is 'weaker contamination "
+        "than fitting to the audit, not zero'. It is not weaker. A model "
+        "recorded in the pipeline's own docstring as scoring 181/181 against "
+        "golden RTL is not a proxy for the grade, it IS the grade wearing "
+        "another name, and a rule fitted to it is reference-calibrated outright "
+        "-- the same class as choosing `t = 0` by reading the audit.\n\n"
+        "**TWO CONSEQUENCES, BOTH BINDING.** The held-out grade must be a module "
+        "with NO control, which is k1 alone "
+        "(`over_strictness_bounded_by = 'witness'`, flagged list empty); and "
+        "every figure fitted this way is reported in the CALIBRATED column and "
+        "never as a golden-free frontier point.\n\n"
+        "**WHAT IT IS STILL GOOD FOR.** It turns 'can any golden-free feature "
+        "family predict soundness at all' from a question with one module's "
+        "labels into one with ~190 near-ground-truth labels over three runs. A "
+        "comprehensive negative there closes the selection line, and nothing "
+        "else on the board can close it.\n\n"
+        "**AND IT PRICES THE PIPELINE'S OWN CHOICE EXACTLY.** The stage computes "
+        "this flag every run and declines to act on it -- 'reported only: the "
+        "control may not select which oracles survive' -- because gating on it "
+        "tunes the reference model toward the grade transitively. That is the "
+        "right call, and the cost of it is now measured: 61 checks the golden "
+        "falsifies, known at authoring time, shipped TRUSTED."
+    )
+
+
 def the_rule_does_not_transfer_and_the_second_population_also_has_an_outlier() -> str:
     """F3, live and complete: five i2c designs authored from the specification,
     elaborated, suite-run against c1-i2c's own stimulus, and swept.
