@@ -246,6 +246,24 @@ class OracleSet:
     #: makes "the same tools" a property of the data rather than of five
     #: keyword arguments staying in step.
     tools: dict = field(default_factory=dict)
+    #: One entry per verify round the correspondence reviewer actually ran:
+    #: `{"round": n, "reviewed": k, "off_target": [uid...],
+    #:   "not_assertable": [uid...]}`.
+    #:
+    #: WHY A PER-ROUND RECORD AND NOT A TOTAL. The gate is published as a
+    #: one-draw rate -- "over 70 frozen oracles it rejects 3" -- and this stage
+    #: applies it once per round over the WHOLE surviving set, with `rejected`
+    #: cleared each round and `round_` in the resumption key. So the rate a run
+    #: experiences is the compounded one, and no artifact reported it: `repairs`
+    #: carries the reasons but not the round, so "rejected on a round > 1" --
+    #: the population that separates a gate finding something new from a gate
+    #: re-rolling the same dice -- could not be recovered from a finished run.
+    #:
+    #: IT ANSWERS A QUESTION, IT DOES NOT SETTLE ONE. A round-2 rejection is
+    #: not evidence the check was bad, and the count is not a span loss. What
+    #: this makes possible is reading the triple over that population; nothing
+    #: here licenses reading the count on its own.
+    correspondence_rounds: list[dict] = field(default_factory=list)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -1146,6 +1164,9 @@ def run_oracle_stage(
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}
+    #: Per-round correspondence outcomes -- see `OracleSet.correspondence_rounds`
+    #: for why the round index is the field that matters.
+    correspondence_rounds: list[dict] = []
     #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`. These
     #: leave the frozen set entirely -- see the exclusion below. Populated only
     #: by a stage that RAN a bounded attempt and exhausted it; empty here means
@@ -1373,6 +1394,16 @@ def run_oracle_stage(
                 list(held.values()), by_uid, port=port, normalized=normalized,
                 spec=spec, contract=contract, round_=rounds - 1, fanout=fanout)
             if want_correspondence else {})
+        # Recorded from the REVIEWS, not from `rejected`, and the difference is
+        # the point. `verify_one` reports one reason per oracle and
+        # correspondence is checked before the variants leg, so a check that is
+        # both off-target and vacuous appears in `rejected` as off-target while
+        # one that failed the witness first never reaches the reviewer's verdict
+        # at all. Reading the gate's own answer keeps this a record of what THIS
+        # instrument said, which is the only thing its published rate can be
+        # compared against.
+        if want_correspondence:
+            correspondence_rounds.append(_correspondence_round(rounds, reviews))
         for uid, oracle in held.items():
             why, may_quote, notes = verify_one(
                 oracle, contract=contract, testplan=testplan,
@@ -1939,6 +1970,11 @@ def run_oracle_stage(
                    # tell a check that found nothing from one that never ran.
                    "vacuity_checked": bool(variants),
                    "correspondence_checked": want_correspondence,
+                   # Read back in `load` -- see the LOSSY-LOAD TRAP there. A
+                   # field written here and not read there is absent from every
+                   # `--reuse`, which for a per-round record means it would
+                   # exist only on runs nobody reused.
+                   "correspondence_rounds": correspondence_rounds,
                    "over_strictness_bounded_by": witness_kind,
                    "repairs": repairs,
                    # `tools` was in the set and not in the artifact, so `load`
@@ -3011,6 +3047,34 @@ def _decides_nothing(testplan: list[dict],
     return sorted({str(e.get("uid")) for e in testplan if e.get("uid")} - named)
 
 
+def _correspondence_round(round_: int,
+                          reviews: dict[str, correspondence.Review]) -> dict:
+    """One round's correspondence outcome, split by which leg refused.
+
+    BUILT FROM THE REVIEWER'S OWN VERDICTS, NOT FROM `rejected`, and the
+    difference is the point. `verify_one` reports ONE reason per oracle and
+    checks correspondence before the variants leg, so `rejected` shows a check
+    that is both off-target and vacuous as off-target, and shows nothing at all
+    for one the witness stopped first. Counting rejections there would measure
+    the stage's precedence order. Counting them here measures the instrument,
+    which is the only thing its published rate can be compared against.
+
+    A parse error is not a rejection -- `rejects` already returns "" for one --
+    so a call that failed is absent from both lists and still counted in
+    `reviewed`. That is deliberate: it keeps `reviewed` the number of oracles
+    PUT to the gate rather than the number it managed to answer, and the two
+    diverging is itself worth seeing.
+    """
+    legs: dict[str, list[str]] = {"off_target": [], "not_assertable": []}
+    for uid, review in sorted(reviews.items()):
+        why = correspondence.rejects(review)
+        if why.startswith("not-assertable:"):
+            legs["not_assertable"].append(uid)
+        elif why:
+            legs["off_target"].append(uid)
+    return {"round": round_, "reviewed": len(reviews), **legs}
+
+
 def _route_declines(route: dict) -> bool:
     """Did this route take the escape hatch, read from the slot that owns it?
 
@@ -3247,6 +3311,17 @@ def load(run_dir: Path) -> OracleSet | None:
         # left the system?" with silence. A `corpus` added without being read
         # back here would vanish on every `--reuse` -- and the corpus is the
         # ONE field whose whole purpose is to survive the run that built it.
+        #: Same trap, same close. Rebuilt field by field rather than passed
+        #: through, so a blob written by a different version cannot put an
+        #: arbitrary shape into the set.
+        correspondence_rounds=[
+            {"round": int(r.get("round") or 0),
+             "reviewed": int(r.get("reviewed") or 0),
+             "off_target": [str(u) for u in (r.get("off_target") or [])],
+             "not_assertable": [str(u) for u in (r.get("not_assertable") or [])]}
+            for r in (blob.get("correspondence_rounds") or [])
+            if isinstance(r, dict)
+        ],
         corpus={
             str(uid): [
                 CorpusBody(req_uid=str(uid), source=str(m.get("source") or ""),

@@ -1516,3 +1516,107 @@ def test_the_stage_hands_out_a_corpus_of_what_it_actually_authored(
     #: exactly one survivor, and its text is the one in `trusted`
     assert [m.frozen for m in members] == [False, True]
     assert members[1].source == got.trusted[0].source
+
+
+# --------------------------------------------------------------------------
+# THE APPLIED CORRESPONDENCE RATE. The gate is published at one draw per
+# oracle and this stage spends up to `repair_attempts + 1` of them over the
+# whole surviving set. `repairs` carries the reasons but not the round, so the
+# population that tells the two apart was not recoverable from a finished run.
+# --------------------------------------------------------------------------
+
+
+def _review(*, obligation: bool = True, tests: bool = True,
+            missing: str = "", reasoning: str = ""):
+    from specflow.refmodel.correspondence import Review
+
+    return Review(states_an_obligation=obligation, tests_the_requirement=tests,
+                  what_is_missing=missing, reasoning=reasoning)
+
+
+def test_the_round_record_splits_the_two_legs_and_counts_what_was_ASKED():
+    """`not-assertable` accuses the specification, `off-target` accuses the
+    check, and they route to different owners -- so one count over both would
+    be the routing error `rejects` exists to prevent. And `reviewed` counts
+    oracles PUT to the gate, not answers received: a parse error is not a
+    rejection, so it belongs in neither list and still in the denominator.
+    """
+    from specflow.refmodel.correspondence import PARSE_ERROR
+
+    record = O._correspondence_round(2, {
+        "REQ-0001": _review(),
+        "REQ-0002": _review(tests=False, missing="decides the prescaler"),
+        "REQ-0003": _review(obligation=False, missing="forbids nothing"),
+        #: both legs false -- the prior question wins, exactly as `rejects` says
+        "REQ-0004": _review(obligation=False, tests=False, missing="no effect"),
+        #: an unreachable model. Asked, unanswered, convicted of nothing.
+        "REQ-0005": _review(reasoning=f"{PARSE_ERROR}TimeoutError()"),
+    })
+
+    assert record["round"] == 2
+    assert record["reviewed"] == 5, "a parse error is still an oracle asked"
+    assert record["off_target"] == ["REQ-0002"]
+    assert record["not_assertable"] == ["REQ-0003", "REQ-0004"]
+
+
+def test_the_applied_rate_is_recoverable_per_round_after_a_freeze_and_reload():
+    """THE LOSSY-LOAD TRAP, and the reason this field exists at all.
+
+    Without the round index a run cannot be asked the one question that
+    separates a gate finding something new from a gate re-rolling the same
+    dice: what does the triple look like over the checks rejected on a round
+    > 1 only? This pins that the index survives to the artifact and back.
+
+    It records a QUESTION being answerable. A round-2 rejection is not evidence
+    the check was bad and the count is not a span loss -- see the call site.
+    """
+    import tempfile
+
+    from specflow.refmodel import freeze as freeze_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp)
+        (run / "specflow").mkdir(parents=True)
+        freeze_mod.freeze(
+            [_corpus_oracle("REQ-0001", 0)], run / "specflow" / O.ARTIFACT,
+            extra={
+                "dispositions": {"REQ-0001": "TRUSTED"},
+                "correspondence_rounds": [
+                    {"round": 1, "reviewed": 40, "off_target": ["REQ-0009"],
+                     "not_assertable": []},
+                    {"round": 2, "reviewed": 39, "off_target": ["REQ-0021"],
+                     "not_assertable": ["REQ-0033"]},
+                ],
+            })
+        back = O.load(run)
+
+    assert back is not None
+    rounds = back.correspondence_rounds
+    assert [r["round"] for r in rounds] == [1, 2]
+    assert [r["reviewed"] for r in rounds] == [40, 39]
+    #: THE POPULATION THE PRE-REGISTRATION NAMES: rejected on a round > 1.
+    later = [u for r in rounds if r["round"] > 1 for u in r["off_target"]]
+    assert later == ["REQ-0021"]
+    #: and the legs stay apart across the round trip
+    assert rounds[1]["not_assertable"] == ["REQ-0033"]
+
+
+def test_a_set_frozen_before_this_measurement_reloads_EMPTY_not_wrong():
+    """Missing is "not measured", never "the gate rejected nobody" -- the same
+    distinction `load` already keeps for `oracle_liveness`. A zero here would
+    read as a clean run and put a 0% applied rate into a comparison.
+    """
+    import tempfile
+
+    from specflow.refmodel import freeze as freeze_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp)
+        (run / "specflow").mkdir(parents=True)
+        freeze_mod.freeze([_corpus_oracle("REQ-0001", 0)],
+                          run / "specflow" / O.ARTIFACT,
+                          extra={"dispositions": {"REQ-0001": "TRUSTED"}})
+        back = O.load(run)
+
+    assert back is not None
+    assert back.correspondence_rounds == []

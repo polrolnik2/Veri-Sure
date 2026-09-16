@@ -815,3 +815,63 @@ def test_an_internal_signal_the_contract_never_declared_is_still_absent() -> Non
     prompt = _judge_prompt(PLAIN_CONTRACT)
     assert "is NEVER a valid rejection" in prompt
     assert "a counter, a state\n  variable, an internal flag" in prompt
+
+
+# ------------------------- the applied rate, which is not the published one
+
+
+def test_the_gate_is_recorded_PER_ROUND_because_it_runs_once_per_round(
+        tmp_path, monkeypatch):
+    """The published yield is "over 70 frozen oracles it rejects 3". That is
+    ONE draw per oracle, and this stage spends up to `repair_attempts + 1` of
+    them: `rejected` is cleared each round, the argument is the whole surviving
+    set, and `round_` is in the resumption key, so no round is a cache hit on
+    the one before. At the calibrated 4.3% applied three times the run sees
+    12.3% with the reviewer behaving exactly as calibrated.
+
+    This drives two rounds with a reviewer that answers differently on each --
+    which is the thing a one-draw rate cannot express -- and pins that the
+    artifact can tell them apart. `repairs` cannot: it carries the reason and
+    not the round, so "rejected on a round > 1" was unrecoverable.
+
+    IT PINS A QUESTION BEING ASKABLE, NOT AN ANSWER. A round-2 rejection is not
+    evidence the check was bad, and the count is not a span loss -- whether the
+    extra draws remove checks worth keeping is the triple's business and needs
+    a run. See the call site.
+    """
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    #: THE SAME ORACLE, TWO DRAWS, TWO ANSWERS.
+    seen: list[int] = []
+
+    def _drawn(*_a, **kw):
+        seen.append(int(kw.get("round_", 0)))
+        return {"REQ-0001": C.Review(
+            tests_the_requirement=len(seen) > 1,
+            what_is_missing="" if len(seen) > 1 else "it never reads y")}
+
+    monkeypatch.setattr(C, "review", _drawn)
+
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_GenPort([_gen_reply(GOOD), _gen_reply(GOOD)]), workdir=tmp_path,
+        base="step", fanout=False, max_repairs=0, repair_attempts=1,
+        run_dir=tmp_path, want_correspondence=True)
+
+    #: distinct `round_` per draw, so neither resumes the other's response
+    assert seen == [0, 1], f"the gate was not re-drawn per round: {seen}"
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    rounds = blob["correspondence_rounds"]
+    assert [r["round"] for r in rounds] == [1, 2], rounds
+    assert rounds[0]["off_target"] == ["REQ-0001"]
+    assert rounds[1]["off_target"] == [], "the second draw acquitted it"
+    #: and it survives back into the set, so a `--reuse` can still be asked
+    back = O.load(tmp_path)
+    assert back is not None
+    assert [r["round"] for r in back.correspondence_rounds] == [1, 2]
