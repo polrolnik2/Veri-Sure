@@ -1084,43 +1084,59 @@ def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
         dissent=dissent, cluster=cluster, pairs=pairs)
 
 
-def the_dead_checks_are_author_defects_and_staging_is_the_wrong_owner() -> str:
-    """STEP 1a. Split the dead checks by whether the evidence they need was
-    ever there, so the two classes go to the owners that can fix them.
+def the_dead_checks_do_not_run_at_all_and_a_shipped_gate_already_rejects_them() -> str:
+    """STEP 1a, CORRECTED. The first version of this finding said the dead
+    checks were silent; they crash.
 
-    Probe-free by necessity: the staging loop's own rise test is scoped to
-    probes, and every run contract on disk declares none.
+    I classified them by whether the ports they read ever move, concluded they
+    were authoring-logic defects for the repair round, and committed that. Then
+    I asked the question I should have asked first -- do they ABSTAIN or do they
+    RAISE -- and the answer changes the owner entirely.
     """
     return (
-        "**41 OF 42 DEAD CHECKS HAVE MOVING EVIDENCE AT THE VERY TESTPOINTS "
-        "THEY NAME, AND STAY SILENT ANYWAY.**\n\n"
-        "    module      dead   ports MOVE (author defect)   ports CONSTANT (gap)\n"
-        "    k1-dcfsm       6            6 = **100%**                  0\n"
-        "    c1-i2c        36           35 =  **97%**                  1\n\n"
-        "Identical whether the ports are checked across the whole population or "
-        "only at the check's OWN `tp_uids`, so the split is not an artifact of "
-        "scoping.\n\n"
-        "**THIS INVERTS THE PIPELINE'S MODEL OF THE PROBLEM.** An abstention's "
-        "only response is the staging loop, which MINTS STIMULUS to reach a "
-        "scenario. That is the remedy for a check whose evidence never occurs -- "
-        "and on these two modules that class is ONE CHECK OF FORTY-TWO. The "
-        "other 41 were shown moving values on their own ports and did not take "
-        "them, which is an authoring defect and belongs to the repair round.\n\n"
-        "It also explains staging's measured yield without appealing to bad "
-        "luck: 30 of its 37 attempts on c1 ended 'the check still abstained', "
-        "because a stimulus remedy was being applied to a check-side fault.\n\n"
-        "**AND THE EXISTING RISE TEST CANNOT MAKE THIS DISTINCTION.** "
-        "`oracles_stage.py:2814-2834` computes `reached_states` and nothing "
-        "reads it -- but consuming it would gain nothing either, because "
-        "`reachability.waiting_on` opens `want = set(probes or ()); if not "
-        "want: return []` and **every run contract on disk declares zero "
-        "probes**, k1's included. The rise test is dead twice over. The "
-        "probe-free analogue above is what replaces it.\n\n"
-        "**WHAT IT SAYS ABOUT THE BAR.** If every author defect were fixable, "
-        "the dead fraction floor is 0.0% on k1 and 0.9% on i2c, both under the "
-        "10% bar. That is an upper bound on what re-authoring could reach, not "
-        "a prediction: it assumes a check that ignored moving evidence can be "
-        "rewritten to use it, and nothing here has shown that yet."
+        "**39 OF 42 DEAD CHECKS NEVER EXECUTE, AND ONE MISSING KEYWORD ACCOUNTS "
+        "FOR ALL OF THEM.**\n\n"
+        "    module      dead   raise on every trace   abstain\n"
+        "    k1-dcfsm       6              6              0\n"
+        "    c1-i2c        36             28              8\n\n"
+        "Every raiser on i2c carries one message:\n\n"
+        "    TypeError: sequence() missing 1 required keyword-only argument: 'strong'\n\n"
+        "and on k1 the same defect in `eventually`. This is the failure the "
+        "package already has on record -- 'h2-i2c is on record with 22 of 96 "
+        "frozen oracles dying that way', and '26 of a reported 31% convicts "
+        "golden rate was checks that never executed'.\n\n"
+        "**AND THE GATE THAT CATCHES IT ALREADY SHIPS -- IT JUST POSTDATES EVERY "
+        "RECORDED RUN.** `c124dde`, '`strong` is required outright, and the "
+        "omission is caught before replay', landed 2026-09-07; a2-i2c, c1-i2c, "
+        "d1-i2c and k1-dcfsm were frozen 2026-08-27 to 09-03. So this is a "
+        "STALE-ARTIFACT finding, not a live pipeline defect: no run since has "
+        "been able to freeze one of these. Re-running the frozen "
+        "sets through TODAY's `well_formed`:\n\n"
+        "    module      TRUSTED   rejected now   of which dead   live checks lost\n"
+        "    k1-dcfsm         36          6            6 of  6          **0**\n"
+        "    c1-i2c          110         33           33 of 36          **0**\n\n"
+        "It rejects 39 of the 42 dead and **not one check that decides**. So "
+        "Step 1's bar -- dead fraction under 10% on both modules -- is cleared "
+        "by a static gate that exists, with no model call, no new blocking leg "
+        "and no repair round: i2c 32.7% -> 2.7%, k1 16.7% -> 0%.\n\n"
+        "**WHAT THE FIRST VERSION GOT RIGHT AND WRONG.** Right: staging is the "
+        "wrong owner, and more so than argued -- it mints STIMULUS for a check "
+        "that cannot run. Right: the rise test at "
+        "`oracles_stage.py:2814-2834` is unusable, because "
+        "`reachability.waiting_on` returns `[]` without probes and every run "
+        "contract declares none. **Wrong: 'they have moving evidence and stay "
+        "silent anyway, an author defect for the repair round.'** They do have "
+        "moving evidence and it is irrelevant, because they never look at it. "
+        "The owner is a static gate, not an authoring round.\n\n"
+        "**THE REAL RESIDUE IS SMALL AND IS THE HONEST TARGET.** After "
+        "`well_formed`, 3 checks on i2c and 0 on k1 decide nothing. That -- not "
+        "a third of the corpus -- is what a decides-nowhere leg would be for.\n\n"
+        "**AND IT RE-READS EVERY FROZEN FIGURE.** c1-i2c's '110 TRUSTED' is 77 "
+        "checks the current static gate would admit; 30% of a frozen set is "
+        "rejected by the pipeline's own screen. Audit figures are unaffected -- "
+        "every audit here already skips `broken` verdicts -- but span and "
+        "corpus-size figures over these sets are counting checks that do not "
+        "run."
     )
 
 

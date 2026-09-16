@@ -455,20 +455,37 @@ def test_the_liveness_finding_reports_both_modules_and_names_the_cause():
     assert "DEAD_ORACLE" in text and "UNKNOWN" in text
 
 
-def test_the_dead_check_triage_names_the_owner_and_the_bound():
+def test_the_dead_check_finding_says_they_crash_and_names_the_shipped_gate():
+    """The first version of this finding said the dead checks were silent and
+    belonged to the repair round. They crash, and a static gate already rejects
+    them. The test pins the corrected claim and the correction itself."""
     from specflow.population import (
-        the_dead_checks_are_author_defects_and_staging_is_the_wrong_owner as f,
+        the_dead_checks_do_not_run_at_all_and_a_shipped_gate_already_rejects_them as f,
     )
     text = f()
-    #: both modules, and the class that dominates
-    assert "6 = **100%**" in text and "35 =  **97%**" in text
-    #: robust to scoping, which is why the split can be acted on
-    assert "not an artifact of" in text
-    #: the reframing: staging mints stimulus and owns one check of forty-two
-    assert "ONE CHECK OF FORTY-TWO" in text
-    assert "belongs to the repair round" in text
-    #: the rise test cannot be reused, with the reason
-    assert "want = set(probes or ())" in text
-    assert "every run contract on disk declares zero" in text
-    #: and the floor is stated as an upper bound, not a prediction
-    assert "upper bound on what re-authoring could reach, not" in text
+    #: the corrected diagnosis, with the one error behind all of them
+    assert "39 OF 42 DEAD CHECKS NEVER EXECUTE" in text
+    assert "missing 1 required keyword-only argument: 'strong'" in text
+    #: the gate already ships, and costs nothing that decides
+    assert "33 of 36" in text and "6 of  6" in text
+    assert "not one check that decides" in text
+    assert "32.7% -> 2.7%" in text and "16.7% -> 0%" in text
+    #: the correction is stated as one, not quietly swapped
+    assert "Wrong: 'they have moving evidence and stay" in text
+    #: and the residue that IS a decides-nowhere problem is sized honestly
+    assert "3 checks on i2c and 0 on k1" in text
+    #: the knock-on for frozen figures
+    assert "'110 TRUSTED' is 77" in text
+
+
+def test_the_dead_check_finding_dates_the_gate_against_the_runs():
+    """"Already ships" is only meaningful with the dates beside it: the guard
+    postdates every recorded run, which is what makes this a stale-artifact
+    finding rather than a live defect."""
+    from specflow.population import (
+        the_dead_checks_do_not_run_at_all_and_a_shipped_gate_already_rejects_them as f,
+    )
+    text = f()
+    assert "c124dde" in text and "2026-09-07" in text
+    assert "2026-08-27 to 09-03" in text
+    assert "STALE-ARTIFACT finding, not a live pipeline defect" in text
