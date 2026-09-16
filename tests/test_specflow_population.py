@@ -453,3 +453,22 @@ def test_the_liveness_finding_reports_both_modules_and_names_the_cause():
     #: and the structural half: the blocking leg cannot see the class
     assert "structurally outside" in text
     assert "DEAD_ORACLE" in text and "UNKNOWN" in text
+
+
+def test_the_dead_check_triage_names_the_owner_and_the_bound():
+    from specflow.population import (
+        the_dead_checks_are_author_defects_and_staging_is_the_wrong_owner as f,
+    )
+    text = f()
+    #: both modules, and the class that dominates
+    assert "6 = **100%**" in text and "35 =  **97%**" in text
+    #: robust to scoping, which is why the split can be acted on
+    assert "not an artifact of" in text
+    #: the reframing: staging mints stimulus and owns one check of forty-two
+    assert "ONE CHECK OF FORTY-TWO" in text
+    assert "belongs to the repair round" in text
+    #: the rise test cannot be reused, with the reason
+    assert "want = set(probes or ())" in text
+    assert "every run contract on disk declares zero" in text
+    #: and the floor is stated as an upper bound, not a prediction
+    assert "upper bound on what re-authoring could reach, not" in text

@@ -1084,6 +1084,46 @@ def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
         dissent=dissent, cluster=cluster, pairs=pairs)
 
 
+def the_dead_checks_are_author_defects_and_staging_is_the_wrong_owner() -> str:
+    """STEP 1a. Split the dead checks by whether the evidence they need was
+    ever there, so the two classes go to the owners that can fix them.
+
+    Probe-free by necessity: the staging loop's own rise test is scoped to
+    probes, and every run contract on disk declares none.
+    """
+    return (
+        "**41 OF 42 DEAD CHECKS HAVE MOVING EVIDENCE AT THE VERY TESTPOINTS "
+        "THEY NAME, AND STAY SILENT ANYWAY.**\n\n"
+        "    module      dead   ports MOVE (author defect)   ports CONSTANT (gap)\n"
+        "    k1-dcfsm       6            6 = **100%**                  0\n"
+        "    c1-i2c        36           35 =  **97%**                  1\n\n"
+        "Identical whether the ports are checked across the whole population or "
+        "only at the check's OWN `tp_uids`, so the split is not an artifact of "
+        "scoping.\n\n"
+        "**THIS INVERTS THE PIPELINE'S MODEL OF THE PROBLEM.** An abstention's "
+        "only response is the staging loop, which MINTS STIMULUS to reach a "
+        "scenario. That is the remedy for a check whose evidence never occurs -- "
+        "and on these two modules that class is ONE CHECK OF FORTY-TWO. The "
+        "other 41 were shown moving values on their own ports and did not take "
+        "them, which is an authoring defect and belongs to the repair round.\n\n"
+        "It also explains staging's measured yield without appealing to bad "
+        "luck: 30 of its 37 attempts on c1 ended 'the check still abstained', "
+        "because a stimulus remedy was being applied to a check-side fault.\n\n"
+        "**AND THE EXISTING RISE TEST CANNOT MAKE THIS DISTINCTION.** "
+        "`oracles_stage.py:2814-2834` computes `reached_states` and nothing "
+        "reads it -- but consuming it would gain nothing either, because "
+        "`reachability.waiting_on` opens `want = set(probes or ()); if not "
+        "want: return []` and **every run contract on disk declares zero "
+        "probes**, k1's included. The rise test is dead twice over. The "
+        "probe-free analogue above is what replaces it.\n\n"
+        "**WHAT IT SAYS ABOUT THE BAR.** If every author defect were fixable, "
+        "the dead fraction floor is 0.0% on k1 and 0.9% on i2c, both under the "
+        "10% bar. That is an upper bound on what re-authoring could reach, not "
+        "a prediction: it assumes a check that ignored moving evidence can be "
+        "rewritten to use it, and nothing here has shown that yet."
+    )
+
+
 def liveness_is_measured_against_the_witness_and_is_wrong_on_both_modules() -> str:
     """STEP 0. Recompute liveness from the POPULATION's traces and cross-tab it
     against the verdict each run actually shipped.
