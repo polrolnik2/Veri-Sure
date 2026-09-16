@@ -709,6 +709,71 @@ def elicited_alternative_readings_produce_strength_not_difference() -> str:
     )
 
 
+def a_golden_free_rule_transfers_across_modules_and_is_still_one_knob() -> str:
+    """STEP 2b, complete. Fit a golden-free rule to the CONTROL label on three
+    i2c runs, transfer it to k1 -- the only module with no control -- and grade
+    it on k1's golden audit.
+
+    Pre-registered: >= 3x in training, >= 2x on the held-out run with no refit,
+    AND an undominated triple. Two of three clauses clear.
+    """
+    return (
+        "**THE LIFT BARS CLEAR AND THE TRIPLE BAR FAILS, SO STEP 2b IS A "
+        "NEGATIVE -- BUT THE FIRST TWO CLAUSES ARE THE BEST RESULT THIS "
+        "QUESTION HAS HAD.**\n\n"
+        "**Nine golden-free features rank the control label the same way on all "
+        "three runs.** AUC per run (0.50 = nothing):\n\n"
+        "    feature            a2      d1      c1    mean\n"
+        "    mass             0.802   0.933   0.803   0.846\n"
+        "    placement        0.766   0.924   0.747   0.812\n"
+        "    dissent_weighted 0.771   0.876   0.724   0.790\n"
+        "    count            0.771   0.871   0.723   0.788\n"
+        "    n_lines          0.704   0.886   0.634   0.741\n\n"
+        "**Leave-one-run-out, one feature and one threshold transfers.**\n\n"
+        "    held out    train    HELD OUT       z   rule\n"
+        "    a2-i2c      4.67x       3.53x    4.14   mass > 0.0426\n"
+        "    d1-i2c      4.64x      10.86x    2.98   mass > 0.01964\n"
+        "    c1-i2c      6.83x       3.30x    3.71   mass > 0.02118\n\n"
+        "The same feature is chosen in every fold and the thresholds sit in a "
+        "narrow band. **A depth-2 tree transfers WORSE** (6.11x, 7.56x, 1.84x -- "
+        "one fold below the bar), which is P4's composition negative again: a "
+        "composition that cannot beat its best component is reported as a "
+        "negative and the component is used alone.\n\n"
+        "**AND `count` -- THE STATISTIC THE SHIPPED RULE ALREADY USES -- DOES AS "
+        "WELL OR BETTER** on every fold: 3.77x / inf / 9.96x against mass's "
+        "3.53x / 10.86x / 3.30x. So this is not a new rule; it is the shipped "
+        "one validated against a near-ground-truth label on three independent "
+        "oracle sets.\n\n"
+        "**THE HELD-OUT MODULE CLEARS TOO.** `mass > 0.0207`, fitted entirely on "
+        "the i2c runs and never shown k1, on k1's golden audit: **6 of 11 "
+        "convict against 1 of 18 -- 9.82x, z = 2.99.** That is the first "
+        "cross-module transfer in this investigation; P5's model was 3.06x and "
+        "per-module.\n\n"
+        "**THEN THE TRIPLE KILLS IT.** On k1's 2,836 disagreement cells:\n\n"
+        "    set                                n    span*   *audit*   blind\n"
+        "    all 29 live (the frozen set)      29    33.3%    *24.1%*   37.8%\n"
+        "    mass <= 0.0207 (fitted on i2c)    18    20.7%     *5.6%*   90.6%\n"
+        "    count == 0 (t = 0, shipped)        8     9.2%     *0.0%*  100.0%\n\n"
+        "Audit 24.1% -> 5.6% costs **53 points of blindness**. That is "
+        "`soundness_and_blindness_are_one_knob` exactly: the rule sits ON the "
+        "selection frontier, not off it. Contrast the control flag, which bought "
+        "48.6% -> 19.0% for **0.7** points -- the control is a different knob "
+        "and `mass` is not.\n\n"
+        "*span is over k1's 87 requirements and a 30-check frozen set caps at "
+        "34.5%, so it is NOT comparable to the 77.0% target row; no domination "
+        "claim is made on that axis. Audit and blindness are comparable, and on "
+        "those the set is dominated.*\n\n"
+        "**A METHOD DEFECT WORTH KEEPING.** The first threshold search maximised "
+        "LIFT with a floor of five rows a side. It reported INFINITE training "
+        "lift on every fold and transferred at 0.00x, 'inf' (z = 0.72) and "
+        "2.74x (z = 1.37) -- and I nearly recorded that as the negative. "
+        "Maximising lift is degenerate: it isolates two flagged checks and calls "
+        "it a rule. Youden's J with a floor that is a FRACTION of the fold "
+        "cannot be gamed that way, and it is what produced the table above. The "
+        "AUC read is what exposed it, because it needs no threshold at all."
+    )
+
+
 def the_control_is_not_a_proxy_for_the_grade_it_is_the_grade() -> str:
     """STEP 2, part 1. Before fitting anything to the control's verdict, check
     that it agrees with the grade it stands in for.

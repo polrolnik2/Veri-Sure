@@ -314,3 +314,36 @@ def test_the_control_label_finding_corrects_the_plans_honesty_condition():
     #: and the cost of the pipeline's own (correct) refusal is priced
     assert "61 of the 71" in text
     assert "92% " in text and "precision, 86% recall" in text
+
+
+def test_step2b_reports_both_the_transfer_and_the_domination():
+    from specflow.scoring import (
+        a_golden_free_rule_transfers_across_modules_and_is_still_one_knob as f,
+    )
+    text = f()
+    #: the transfer, on the module that has no control at all
+    assert "6 of 11 " in text and "1 of 18 -- 9.82x, z = 2.99" in text
+    assert "first" in text and "cross-module transfer" in text
+    #: and the clause that fails, with the price named
+    assert "53 points of blindness" in text
+    assert "sits ON the " in text and "selection frontier, not off it" in text
+    #: the control is the contrast that makes "one knob" meaningful
+    assert "48.6% -> 19.0% for **0.7**" in text
+    #: composition loses to its best component, again
+    assert "one fold below the bar" in text
+    #: and the shipped statistic is as good, so this is not a new rule
+    assert "DOES AS " in text and "WELL OR BETTER" in text
+
+
+def test_step2b_keeps_the_threshold_search_defect_on_the_record():
+    """Maximising lift with a fixed small floor reported infinite training lift
+    and near-zero transfer. The finding has to carry that, because the corrected
+    numbers are only trustworthy if the wrong procedure is named."""
+    from specflow.scoring import (
+        a_golden_free_rule_transfers_across_modules_and_is_still_one_knob as f,
+    )
+    text = f()
+    assert "INFINITE training lift" in text
+    assert "Maximising lift is degenerate" in text
+    assert "Youden's J" in text and "FRACTION of the fold" in text
+    assert "AUC read is what exposed it" in text
