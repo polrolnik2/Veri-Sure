@@ -437,3 +437,19 @@ def test_clustering_separates_designs_that_dissent_together_but_differ():
     assert shape.effective_size() == 3, (
         "X and Y share an off-majority signature but disagree with each other "
         "at every testpoint; merging them is the defect F3 surfaced")
+
+
+def test_the_liveness_finding_reports_both_modules_and_names_the_cause():
+    from specflow.population import (
+        liveness_is_measured_against_the_witness_and_is_wrong_on_both_modules as f,
+    )
+    text = f()
+    #: BOTH modules, so the pre-registration is decided rather than illustrated
+    assert "12.5%" in text and "28.7%" in text
+    assert "k1-dcfsm" in text and "c1-i2c" in text
+    #: the cause is the evidence the instrument reads, not its threshold
+    assert "replays the WITNESS" in text
+    assert "THE CAUSE IS THE EVIDENCE, NOT THE THRESHOLD" in text
+    #: and the structural half: the blocking leg cannot see the class
+    assert "structurally outside" in text
+    assert "DEAD_ORACLE" in text and "UNKNOWN" in text

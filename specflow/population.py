@@ -1084,6 +1084,42 @@ def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
         dissent=dissent, cluster=cluster, pairs=pairs)
 
 
+def liveness_is_measured_against_the_witness_and_is_wrong_on_both_modules() -> str:
+    """STEP 0. Recompute liveness from the POPULATION's traces and cross-tab it
+    against the verdict each run actually shipped.
+
+    Pre-registered before either module was scored: if the two agree within a
+    few points on BOTH modules, i2c's false-live rate is a module artifact and
+    the dead-check work is unnecessary. They do not agree on either.
+    """
+    return (
+        "**A THIRD OF A TRUSTED SET DECIDES NOTHING, AND THE INSTRUMENT THAT "
+        "SHOULD CATCH IT IS WRONG ON BOTH MODULES.**\n\n"
+        "    module      said LIVE   false-live   dead on pop   its recall\n"
+        "    k1-dcfsm         32        *12.5%*        16.7%         33.3%\n"
+        "    c1-i2c          101        *28.7%*        32.7%         19.4%\n\n"
+        "*false-live* is the share of checks the run called LIVE that decide "
+        "nothing on ANY design of an independently written population; *recall* "
+        "is the share of the genuinely dead the run caught.\n\n"
+        "**THE CAUSE IS THE EVIDENCE, NOT THE THRESHOLD.** `liveness_of` "
+        "replays the WITNESS -- a second reading of the same requirements by "
+        "the same author -- and perturbs its recorded rows. A check can be "
+        "moved there and be unmovable on every real design, and nothing in the "
+        "stack ever looks at a second design: variants are the witness with one "
+        "method swapped, and liveness perturbs the witness's own trace.\n\n"
+        "**AND THE ONLY BLOCKING LEG CANNOT SEE THIS CLASS AT ALL.** "
+        "`liveness.py:300-326` routes 'never decided anywhere' to `UNKNOWN` "
+        "deliberately -- calling it a scenario finding rather than a defect -- "
+        "while `oracles_stage.py:1406-1411` blocks on `DEAD_ORACLE` only. The "
+        "dead-weight class is not mis-thresholded; it is structurally outside "
+        "the gate.\n\n"
+        "**THE POPULATION IS WHAT MAKES THIS MEASURABLE, AND IT IS FREE.** The "
+        "same N traces that selection needs also give liveness a real answer, "
+        "so a population is one artifact with two uses and this one does not "
+        "depend on the selection rule working."
+    )
+
+
 def effective_size_measured_clone_distance_not_shared_dissent() -> str:
     """F3 found this LIVE, on the module it was meant to replicate onto.
 
