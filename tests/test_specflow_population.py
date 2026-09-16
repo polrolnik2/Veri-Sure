@@ -404,3 +404,36 @@ def test_the_producer_does_not_claim_independence_only_isolation():
     assert "86%" in doc
     #: and it says where the trace half is, rather than implying it is here
     assert "TRACE HALF IS NOT HERE" in doc
+
+
+def test_clustering_separates_designs_that_dissent_together_but_differ():
+    """Off-majority TOGETHER is not the same design. F3 found this live.
+
+    `characterise` used to cluster on the off-majority signature -- the set of
+    testpoints where a design sits off the population majority -- while its own
+    rationale quoted PAIR DISTANCES. On k1 the two agreed and the substitution
+    was invisible. On i2c's five designs they diverge completely: d0 and d2 are
+    off the majority at largely the same testpoints while disagreeing with each
+    other on 65.6% of them, and single-link chaining collapsed all five into one
+    cluster -- `effective_size` 1 for a population that differs everywhere.
+
+    Here X and Y are off the majority at EVERY testpoint, so their signatures
+    are identical, and they disagree with each other at every testpoint too. A
+    signature metric merges them; a pair-distance metric must not.
+    """
+    from specflow.population import characterise
+
+    tps = [f"TP-{i:04d}" for i in range(8)]
+
+    def rows(value):
+        return {tp: [{"outputs": {"o": value}, "inputs": {}}] for tp in tps}
+
+    shape = characterise(
+        {"P": rows(0), "Q": rows(0), "X": rows(1), "Y": rows(2)}, ["o"])
+    #: P and Q are genuine clones and collapse; X and Y are two opinions
+    assert shape.cluster["P"] == shape.cluster["Q"]
+    assert shape.cluster["X"] != shape.cluster["Y"]
+    assert shape.cluster["X"] != shape.cluster["P"]
+    assert shape.effective_size() == 3, (
+        "X and Y share an off-majority signature but disagree with each other "
+        "at every testpoint; merging them is the defect F3 surfaced")

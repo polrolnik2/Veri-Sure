@@ -709,6 +709,71 @@ def elicited_alternative_readings_produce_strength_not_difference() -> str:
     )
 
 
+def the_rule_does_not_transfer_and_the_second_population_also_has_an_outlier() -> str:
+    """F3, live and complete: five i2c designs authored from the specification,
+    elaborated, suite-run against c1-i2c's own stimulus, and swept.
+
+    Pre-registered: same direction, similar shape, and the population
+    characterised FIRST. If i2c has no dominant dissenter and the precision
+    collapses there, the rule is k1's outlier. If i2c ALSO has one, that is a
+    fact about how these populations are generated and not a vindication.
+    """
+    return (
+        "**BOTH HALVES OF THE PRE-REGISTRATION FIRED, AND NEITHER FAVOURS THE "
+        "RULE.**\n\n"
+        "**i2c'S POPULATION ALSO HAS A G.** Five designs written independently "
+        "from the same specification by the same author, 331 testpoints, 226 of "
+        "them split:\n\n"
+        "    pair distance            per-design dissent\n"
+        "      d0-d2  65.6%             d0   **80.1%**\n"
+        "      d0-d1  58.6%             d2     59.7%\n"
+        "      d0-d3  58.6%             d4     46.0%\n"
+        "      ...                      d1     35.0%\n"
+        "      d1-d3   6.0%             d3     34.1%\n\n"
+        "    effective size 4 of 5   clusters {d0} {d1,d3} {d2} {d4}\n\n"
+        "The shape is k1's, reproduced on a different module: one design far off "
+        "the majority (d0 at 80.1%, k1's G at 78.1%), the largest pair distances "
+        "all involving it, and one near-clone pair 6% apart (d1-d3, k1's B/D/E at "
+        "6.3-6.6%). `refuse_unusable_population` REFUSES this population, exactly "
+        "as it refuses k1's. **Two populations, two outliers: that is a property "
+        "of how independent authoring produces designs, not a vindication of a "
+        "rule whose precision depends on one.**\n\n"
+        "**AND THE PRECISION DOES NOT TRANSFER EVEN SO.** 110 checks, 36 of them "
+        "(33%) deciding nowhere on the population, none broken; 53 of 110 = "
+        "48.2% convict the reference.\n\n"
+        "     t  checks    span   *audit*   blind   spurious\n"
+        "     0      18   16.4%   *11.1%*  100.0%      0.0%\n"
+        "     1      21   19.1%   *14.3%*   97.3%      0.0%\n"
+        "     2      22   20.0%   *18.2%*   97.0%      0.0%\n"
+        "     3      23   20.9%   *17.4%*   93.1%      0.0%\n"
+        "     4      28   25.5%   *32.1%*   72.6%      0.0%\n"
+        "     5      74   67.3%   *71.6%*    1.2%      1.2%\n\n"
+        "**`t = 0` audits at 11.1%, not 0%.** On k1 the same threshold over the "
+        "same rule gave 126 checks for 126 with a zero. Here it is 2 of 18 -- "
+        "with a dominant dissenter present to absorb over-strict checks, which "
+        "is the condition the k1 zero was attributed to. So the outlier does not "
+        "even explain it: the exactness is k1's, and it is not reproduced on a "
+        "second module under the same population shape.\n\n"
+        "**EVERY ROW IS DOMINATED** by the reference-picked subset at 77.0% / "
+        "0.0% / 56.1%: worse span, worse audit and worse blindness at once. F3 "
+        "is a NEGATIVE and is reported as one.\n\n"
+        "**WHAT IS NOT A RESULT ABOUT THE RULE, STATED SEPARATELY.** Two of the "
+        "five authored designs did not ELABORATE -- d0 assigned ANSI `output` "
+        "wires procedurally, d1 re-declared them as `reg`, the same Verilog-2001 "
+        "trap in mirror image. Each was given one repair round with ONLY its own "
+        "source and its own simulator output, and both then elaborated. That is "
+        "plumbing, and it is reported as plumbing: the population is five "
+        "designs because a syntax repair made it five, not because five were "
+        "written correctly.\n\n"
+        "**AND F3 PAID FOR ITSELF IN A DIFFERENT CURRENCY.** Replicating onto a "
+        "second population is what exposed `effective_size` measuring shared "
+        "dissent rather than clone distance -- see "
+        "`population.effective_size_measured_clone_distance_not_shared_dissent`. "
+        "A rule validated on one population validates its instruments on one "
+        "population too."
+    )
+
+
 def the_recorded_corpus_is_subagent_authored_and_half_survivor_pool() -> str:
     """WHAT THE 464 BODIES ACTUALLY ARE. Every audit figure in this module has
     that corpus underneath it, and until the user asked why F2 came out so bad

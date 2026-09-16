@@ -257,3 +257,42 @@ def test_no_finding_renders_a_literal_backslash_n():
             if isinstance(text, str) and "\\n" in text:
                 bad.append(f"{mod.__name__}.{name}")
     assert not bad, f"findings rendering a literal backslash-n: {bad}"
+
+
+def test_the_f3_finding_reports_both_halves_of_its_pre_registration():
+    from specflow.scoring import (
+        the_rule_does_not_transfer_and_the_second_population_also_has_an_outlier as f,
+    )
+    text = f()
+    #: i2c's own structure, and that it is k1's shape on a different module
+    assert "80.1%" in text and "78.1%" in text
+    assert "effective size 4 of 5" in text
+    #: the gate refuses this population too, which is why the triple is
+    #: reported with the structure and not instead of it
+    assert "REFUSES this population" in text
+    #: the transfer result: t=0 is NOT zero on the second module
+    assert "audits at 11.1%, not 0%" in text
+    assert "126 checks for 126" in text
+    #: and the pre-registered verdict, stated as a negative
+    assert "EVERY ROW IS DOMINATED" in text
+    assert "77.0% / 0.0% / 56.1%" in text
+    #: plumbing reported as plumbing, not as a result about the rule
+    assert "reported as plumbing" in text
+    assert "did not ELABORATE" in text
+
+
+def test_the_clustering_finding_names_the_metric_that_was_substituted():
+    from specflow.population import (
+        effective_size_measured_clone_distance_not_shared_dissent as f,
+    )
+    text = f()
+    #: the symptom, with the number that is obviously wrong
+    assert "REPORTED 1 FOR FIVE DESIGNS" in text
+    #: the two metrics, named and distinguished
+    assert "off_majority[a] ^ off_majority[b]" in text
+    assert "PAIR distances" in text
+    #: why k1 could never have shown it, and that the fix reproduces k1
+    assert "{B, D, E, H} / {C} / {F} / {G}" in text
+    assert "A second module is the only thing that could separate them" in text
+    #: and that the existing suite was blind to it
+    assert "Thirty-seven population tests passed against both metrics" in text

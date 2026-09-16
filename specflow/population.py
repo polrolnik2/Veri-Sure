@@ -1026,30 +1026,8 @@ def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
 
     dissent = {d: len(off_majority[d]) / len(split) for d in designs}
 
-    #: single-link clustering on the off-majority signature, so behavioural
-    #: clones collapse to one opinion and `effective_size` stops being a
-    #: headcount. FOUR designs one-per-cluster reached 1.5% where seven
-    #: reached 0%: spread buys precision, headcount does not.
-    groups = [{d} for d in designs]
-    merged = True
-    while merged:
-        merged = False
-        for i in range(len(groups)):
-            for j in range(i + 1, len(groups)):
-                close = any(
-                    len(off_majority[a] ^ off_majority[b]) / len(testpoints)
-                    < clone_distance
-                    for a in groups[i] for b in groups[j])
-                if close:
-                    groups[i] |= groups[j]
-                    del groups[j]
-                    merged = True
-                    break
-            if merged:
-                break
-    cluster = {d: i for i, g in enumerate(groups) for d in g}
-
     pairs: dict[str, tuple[tuple[str, str], ...]] = {}
+    apart: dict[tuple[str, str], int] = {}
     for tp in sorted(split):
         found = []
         have = [d for d in designs if rows_by_design[d].get(tp) is not None]
@@ -1060,12 +1038,91 @@ def characterise(rows_by_design: Mapping[str, Mapping[str, Rows]],
                 if any(value(ra, i, p) != value(rb, i, p)
                        for i in range(width) for p in outputs):
                     found.append((a, b))
+                    apart[(a, b)] = apart.get((a, b), 0) + 1
         if found:
             pairs[tp] = tuple(found)
+
+    #: single-link clustering on PAIR DISTANCE -- the share of testpoints on
+    #: which two designs disagree WITH EACH OTHER -- so behavioural clones
+    #: collapse to one opinion and `effective_size` stops being a headcount.
+    #: FOUR designs one-per-cluster reached 1.5% where seven reached 0%: spread
+    #: buys precision, headcount does not.
+    #:
+    #: **THIS USED TO CLUSTER ON THE OFF-MAJORITY SIGNATURE and that was a
+    #: different metric wearing this one's rationale.** The k1 numbers quoted
+    #: here -- B/D/E/H merging at 6.3-16% -- are pair distances, and on k1 the
+    #: two metrics happened to agree, so the substitution was invisible. On
+    #: i2c's five designs they disagree completely: d0 and d2 are off the
+    #: majority at largely the SAME testpoints, which makes their signatures
+    #: near-identical while they disagree with each other on 65.6% of
+    #: testpoints, and single-link chaining then collapsed all five into ONE
+    #: cluster -- `effective_size` 1 for a population whose members differ
+    #: everywhere. Being off the majority together is not being the same
+    #: design, and only the pair distance answers "is this a second opinion".
+    def distance(a: str, b: str) -> float:
+        key = (a, b) if (a, b) in apart or a < b else (b, a)
+        return apart.get(key, 0) / len(testpoints)
+
+    groups = [{d} for d in designs]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(groups)):
+            for j in range(i + 1, len(groups)):
+                if any(distance(a, b) < clone_distance
+                       for a in groups[i] for b in groups[j]):
+                    groups[i] |= groups[j]
+                    del groups[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    cluster = {d: i for i, g in enumerate(groups) for d in g}
 
     return PopulationShape(
         designs=designs, testpoints=testpoints, split=frozenset(split),
         dissent=dissent, cluster=cluster, pairs=pairs)
+
+
+def effective_size_measured_clone_distance_not_shared_dissent() -> str:
+    """F3 found this LIVE, on the module it was meant to replicate onto.
+
+    `characterise` clustered on the off-majority SIGNATURE while its own
+    rationale quoted PAIR DISTANCES. On k1 the two agree, so the substitution
+    was invisible for as long as k1 was the only population.
+    """
+    return (
+        "**`effective_size` REPORTED 1 FOR FIVE DESIGNS THAT DISAGREE WITH EACH "
+        "OTHER EVERYWHERE.** i2c's population, authored independently from the "
+        "specification, has these pair distances:\n\n"
+        "    d0-d2  65.6%     d2-d3  44.4%\n"
+        "    d0-d1  58.6%     d1-d4  37.2%\n"
+        "    d0-d3  58.6%     d3-d4  37.2%\n"
+        "    d2-d4  48.9%     d0-d4  36.6%\n"
+        "    d1-d2  46.5%     d1-d3   6.0%\n\n"
+        "Only `d1-d3` is under the 25% clone threshold, so the answer is four "
+        "clusters. The committed code returned **one**.\n\n"
+        "**THE CAUSE: TWO DIFFERENT METRICS, ONE RATIONALE.** The clustering "
+        "distance was `len(off_majority[a] ^ off_majority[b]) / testpoints` -- "
+        "how differently two designs dissent FROM THE MAJORITY -- while the "
+        "comment beside it cited k1's B/D/E/H merging at 6.3-16%, which are "
+        "PAIR distances from the population survey. Being off the majority at "
+        "the same testpoints is not being the same design: d0 and d2 dissent "
+        "at largely the same places and disagree with each other on 65.6% of "
+        "them, their signatures nearly coincide, and single-link chaining then "
+        "swallowed all five.\n\n"
+        "**WHY k1 DID NOT SHOW IT.** On k1 the two metrics agree, and the fixed "
+        "code reproduces k1's recorded structure exactly -- effective size 4, "
+        "clusters {B, D, E, H} / {C} / {F} / {G}, which is the one-per-cluster "
+        "set the survey recorded. A second module is the only thing that could "
+        "separate them, which is precisely what F3 was for.\n\n"
+        "**AND THE GUARD THAT SHOULD HAVE CAUGHT IT DID NOT EXIST.** Thirty-"
+        "seven population tests passed against both metrics, because every one "
+        "of them used a population where the two coincide. The test that "
+        "separates them is four designs where two share an off-majority "
+        "signature and differ from each other at every testpoint; it fails "
+        "against the old metric and passes against the new."
+    )
 
 
 def refuse_unusable_population(shape: PopulationShape, *,
