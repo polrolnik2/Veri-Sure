@@ -1572,3 +1572,61 @@ def s2_ran_off_the_end_of_the_requirement_list() -> str:
         "upstream of everything measured, which is exactly the class of defect "
         "a driver cannot see."
     )
+
+
+def the_full_pipeline_on_the_plans_own_metrics() -> str:
+    """A complete run -- S1 through the reference model -- with the demotion,
+    an in-run population and cell authoring all configured. Scored against the
+    standing nine designs and the control, both of which the run never saw.
+
+    Driver `e5_full_pipeline.py`, report `e5_report.py`.
+    """
+    return (
+        "**BUILD ok=True. 151 requirements.**\n\n"
+        "    TRUSTED 102   ABANDONED 31   ORACLE_INVALID 12   VACUOUS 6\n"
+        "    SPAN         102 of 151 = 67.5%\n"
+        "    CORPUS       285 bodies / 151 reqs, median 2, max 11\n"
+        "                 generate 151, repair 122, cell 12\n"
+        "    DECIDE        51 of 102 on >=1 design\n"
+        "    EFFECTIVE     16 distinct verdict vectors\n"
+        "    AUDIT         15 of 51 = 29.4% convict the control\n"
+        "    BLINDNESS      5 of 445 = 1.1%\n"
+        "    CONSTRICTION  accepts 0 of 9 designs\n\n"
+        "**BLINDNESS IS ESSENTIALLY SOLVED AND THAT IS THE RESULT.** 1.1% "
+        "against the 15.5% of the best driver-built set and the 50-56% the "
+        "plan's ladder stalls at. Five cells of 445 are unadjudicated. The "
+        "polarity correction is on, so a check convicting both sides closes "
+        "nothing -- these are real separations.\n\n"
+        "**AND THE SET STILL ACCEPTS NOTHING, WHICH IS THE FAILURE.** The "
+        "plan's headline is one equivalence class containing the correct "
+        "design; this is zero classes. So over-strictness, not blindness, is "
+        "now the binding constraint -- an inversion of the premise every "
+        "earlier stage was built on.\n\n"
+        "**THE REFUTATION LEG SCALES WITH THE POPULATION, MEASURED.** The run "
+        "refuted 12 checks against its OWN three designs. Against the standing "
+        "nine a further 9 are refuted, and **9 of 9 convict the control** -- "
+        "21 of 21 across both populations, precision still perfect and still "
+        "reading no reference.\n\n"
+        "    as frozen (102)            audit 29.4%  blind 1.1%  accepts 0\n"
+        "    minus 9-design refuted     audit 14.3%  blind 1.1%  accepts 0\n"
+        "    ceiling, reference-picked  audit  0.0%  blind 5.8%  accepts 3\n\n"
+        "Audit halves at no blindness cost, again. But it cannot reach 0: six "
+        "control-convicting checks survive because they do not convict ALL "
+        "nine. And even the barred ceiling accepts 3 designs -- `h, q, s` -- so "
+        "one class is not reachable on this board by dropping checks at all.\n\n"
+        "**CELL AUTHORING RAN AND THIS RUN CANNOT SCORE IT.** 12 targets, 12 "
+        "bodies, 25 calls -- and **0 survived to the frozen set**, closing 0 "
+        "cells. That is not E4's pre-registered null. E4 asks whether authoring "
+        "at a disagreement can reach a blindness RESIDUE, and this set reached "
+        "1.1% blind without any cell check: there was no residue to attack. "
+        "The adoption rule is also too strict -- a cell check enters `held` "
+        "only where the requirement's draft decides nothing -- so all 12 went "
+        "to the corpus by construction. **Report as inconclusive, not as a "
+        "negative.**\n\n"
+        "**WHERE THE LOSS MOVED.** 27 of 31 abandonments are now 'never "
+        "reached in N attempts' -- the stimulus loop -- and 3 are 'no "
+        "observation route found', against 52 of 115 before `resolve_indirect` "
+        "was in the loop. Normalization observability is closed; stimulus "
+        "reachability is the new binding constraint. Also 216 of 625 "
+        "testpoints are named by no oracle and 140 move nothing at all."
+    )

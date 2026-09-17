@@ -1,0 +1,25 @@
+{
+  "requirements": 151,
+  "span": 102,
+  "dispositions": {
+    "ABANDONED": 31,
+    "TRUSTED": 102,
+    "VACUOUS": 6,
+    "ORACLE_INVALID": 12
+  },
+  "corpus_bodies": 285,
+  "corpus_median": 2,
+  "provenance": {
+    "generate": 151,
+    "cell": 12,
+    "repair": 122
+  },
+  "decide": 51,
+  "effective_size": 16,
+  "audit": 15,
+  "blind": 5,
+  "cells": 445,
+  "accepted": [],
+  "classes": 0,
+  "diameter": 0.0
+}
