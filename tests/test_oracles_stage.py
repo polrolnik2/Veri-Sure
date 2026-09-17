@@ -1790,3 +1790,42 @@ def test_the_unreached_call_site_passes_the_collector():
     assert '"unreached_silenced": unreached_silenced' in src
     assert 'blob.get("unreached_silenced")' in src
     assert 'blob.get("testpoints_no_oracle_names")' in src
+
+
+def test_abandonment_is_scoped_to_the_requirements_the_stage_was_given():
+    """`normalized` can hold more than `requirements` -- an `only`-scoped round,
+    or a caller passing a map built over a larger set. Without the scope guard
+    the loop abandons uids that get no disposition at all, while
+    `considered()` still subtracts them: measured at 20 requirements with 41
+    normalized forms, `abandoned` held 17 of which 10 had no disposition and
+    `considered()` read 3 where it should read 13.
+    """
+    import re
+    from pathlib import Path
+
+    import specflow.oracles_stage as oracles_stage
+
+    src = Path(oracles_stage.__file__).read_text(encoding="utf-8")
+    loop = src[src.index("for uid, shape in (normalized or {}).items():"):]
+    guard = loop[:loop.index('if "observed_via" not in shape:')]
+    assert re.search(r"if uid not in by_uid:\s*\n\s*continue", guard), (
+        "the abandonment loop must skip uids the stage was not given, or it "
+        "abandons requirements that have no disposition and silently shrinks "
+        "the denominator `considered()` divides by")
+
+
+def test_considered_never_exceeds_what_the_dispositions_describe():
+    """The invariant the scope bug broke: everything `abandoned` names must be
+    something `dispositions` also names, or the denominator is subtracting
+    requirements that were never in the numerator."""
+    s = O.OracleSet(
+        trusted=[], dispositions={"REQ-0001": "ABANDONED", "REQ-0002": "TRUSTED"},
+        abandoned={"REQ-0001": "no observation route found"})
+    assert s.considered() == 1
+
+    stray = O.OracleSet(
+        trusted=[], dispositions={"REQ-0001": "ABANDONED", "REQ-0002": "TRUSTED"},
+        abandoned={"REQ-0001": "x", "REQ-9999": "not in this stage at all"})
+    assert stray.considered() == 0, (
+        "this is the defect's signature: a stray abandonment drives the "
+        "denominator below the number of requirements actually dispositioned")

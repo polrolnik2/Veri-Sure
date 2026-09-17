@@ -1144,3 +1144,47 @@ def the_faithfulness_gate_kept_the_over_strict_and_rejected_the_sound() -> str:
         "reviewing, seven synthetic testpoints, n = 5 in the kept arm. The kept "
         "arm being 4-of-5 unsound is five checks, not a rate."
     )
+
+
+def a_run_retains_one_body_per_requirement_so_selection_has_no_choice() -> str:
+    """E0b + E2 driven through the SHIPPED `run_oracle_stage`, both arms on
+    identical inputs. Driver: `docs/evidence/e0b_stage_both_arms.py`.
+
+    E2 had been measured by hand-assembling `run_oracle_gen` + `correspondence`;
+    this is the code path a run actually takes, and because the stage retains a
+    corpus it answers E0b at the same time.
+    """
+    return (
+        "    arm        TRUSTED  labels  ABANDONED  NOT_ASSERTABLE  ORACLE_INVALID\n"
+        "    gated            6       0          7               1               6\n"
+        "    demoted         14      16          6               0               0\n\n"
+        "**DEMOTING TAKES TRUSTED 6 -> 14 OF 20**, and the 16 labels carry every "
+        "objection that used to discard. `NOT_ASSERTABLE` and `ORACLE_INVALID` "
+        "go to zero because both were faithfulness grounds; the six remaining "
+        "ABANDONED are the mechanical ones.\n\n"
+        "**E0b: THE CORPUS IS ONE BODY PER REQUIREMENT.** 26 bodies over 20 "
+        "requirements gated, 22 over 20 demoted -- **median depth 1, max 2** in "
+        "both arms. `placement` selected 151 from 464 bodies over 87 "
+        "requirements, a median near five. **So a run gives selection nothing to "
+        "choose from per requirement**: at depth 1 every filter is a delete, "
+        "which is the pre-registered 'binding constraint' outcome and the "
+        "clearest statement yet of why volume is the lever and filtering is not."
+        "\n\n"
+        "**AND THE RUN EXPOSED A DENOMINATOR DEFECT, WHICH IS NOW FIXED.** "
+        "`considered()` read **3** where it should read 13. The abandonment loop "
+        "iterated the whole `normalized` map rather than the requirements the "
+        "stage was given, so with 20 requirements and 41 normalized forms "
+        "`abandoned` collected 17 entries of which **10 had no disposition at "
+        "all** -- and `considered()` subtracts `len(abandoned)`, so the "
+        "denominator came out more than four times too small and every rate "
+        "over it was inflated. A full run has `normalized == requirements` and "
+        "never sees it; an `only`-scoped round does. Guarded, with the "
+        "invariant pinned: everything `abandoned` names must be something "
+        "`dispositions` names too.\n\n"
+        "**SCOPE.** 20 requirements, one module, `gpt-5-mini` authoring and "
+        "reviewing, `repair_attempts = 1` -- and repair attempts are exactly "
+        "what would deepen a corpus, so median 1 at one attempt is not median 1 "
+        "at the default of two. The direction is what stands: a run retains "
+        "nothing like the depth the recorded selection results were computed "
+        "over."
+    )

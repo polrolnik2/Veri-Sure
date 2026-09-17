@@ -1876,6 +1876,20 @@ def run_oracle_stage(
     # `observed_via` key at all, and treating its absence as a failed attempt
     # would abandon requirements nothing ever asked about.
     for uid, shape in (normalized or {}).items():
+        # **ONLY REQUIREMENTS THIS STAGE WAS ASKED ABOUT.** `normalized` can
+        # hold more than `requirements` -- an `only`-scoped round, or a caller
+        # passing a normalized map built over a larger set -- and without this
+        # the loop abandons uids that are not in `by_uid` at all. They then have
+        # NO disposition, while `considered()` still subtracts them from the
+        # denominator, so every rate computed against it is inflated.
+        #
+        # Measured when it fired: 20 requirements with 41 normalized forms gave
+        # `abandoned` 17 entries of which **10 had no disposition**, and
+        # `considered()` read 3 where it should read 13 -- a denominator more
+        # than four times too small. A full run has `normalized == requirements`
+        # and never sees it, which is why it survived.
+        if uid not in by_uid:
+            continue
         if "observed_via" not in shape:
             continue
         if not (shape.get("observable") or []) and not shape.get("observed_via"):
