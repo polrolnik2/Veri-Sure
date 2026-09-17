@@ -297,6 +297,17 @@ class OracleSet:
     #: discriminating is 26% against a 75% base rate and 52 convict nothing.
     #: Recorded so the distribution can be read before any threshold is chosen.
     narrowing: dict[str, list[dict]] = field(default_factory=dict)
+    #: `req_uid -> what the known-good control could not satisfy`, for the
+    #: checks that SHIPPED. The bar stays -- the control may not select which
+    #: oracles survive, because gating on it tunes the model toward the held-out
+    #: grade transitively -- but the cost of keeping the bar is a number, and it
+    #: was only ever available by reconstructing it after the fact.
+    #:
+    #: Measured, that cost: the flag finds 61 of the 71 checks golden falsifies
+    #: at 92% precision and 86% recall, and "61 checks the golden falsifies,
+    #: known at authoring time, shipped TRUSTED". Naming it every run is not
+    #: gating on it.
+    control_notes: dict[str, str] = field(default_factory=dict)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -344,6 +355,15 @@ class OracleSet:
         # so unlike `VACUOUS` this needs no `None`: `tools["demote_faithfulness"]`
         # says which run this was.
         out["admitted_over_an_objection"] = len(self.labels)
+        # THE PRICE OF THE CONTROL BAR, beside the rates rather than
+        # reconstructed afterwards. `None` when no control was supplied,
+        # because 0 there means "nobody looked" -- the exact ambiguity that
+        # misread a whole run when `over_strict: 0` was taken as "no oracle is
+        # over-strict" and 22 of 54 trusted oracles turned out to be failed by
+        # a known-good model.
+        out["trusted_the_control_fails"] = (
+            len(self.control_notes) if self.witness_kind != NO_BOUND
+            or self.control_notes else None)
         # SURVIVING IS NOT DECIDING, beside the number that says it did. See
         # `trusted_liveness`: `trusted` counts checks that passed every gate,
         # and on the two runs where both were counted it overstated what
@@ -2310,6 +2330,9 @@ def run_oracle_stage(
                      narrowing={u: list(v) for u, v in narrowing.items()},
                      liveness={u: r.get("verdict", _L.UNKNOWN)
                                for u, r in report.items()},
+                     control_notes={u: n["control"]
+                                    for u, n in disagreements.items()
+                                    if "control" in n},
                      witness_notes={u: n["witness"]
                                     for u, n in disagreements.items()
                                     if "witness" in n})
@@ -3540,6 +3563,9 @@ def load(run_dir: Path) -> OracleSet | None:
         witness_kind=str(blob.get("witness") or NO_BOUND),
         rounds=int(blob.get("rounds") or 0),
         liveness={str(u): str(v) for u, v in live.items()},
+        control_notes={str(u): str(n.get("control") or "")
+                       for u, n in (blob.get("instrument_notes") or {}).items()
+                       if isinstance(n, dict) and n.get("control")},
         witness_notes={str(u): str(n.get("witness") or "")
                        for u, n in (blob.get("instrument_notes") or {}).items()
                        if isinstance(n, dict) and n.get("witness")},

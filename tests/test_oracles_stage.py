@@ -1875,3 +1875,28 @@ def test_the_slope_is_recorded_on_any_change_not_only_a_total_loss():
         "the slope must be recorded whenever the count CHANGES; recording it "
         "only when the check stops deciding measures the cliff twice and the "
         "slope never")
+
+
+def test_the_control_bar_is_priced_beside_the_rates_and_never_gated_on():
+    """The bar stays -- the control may not select which oracles survive,
+    because gating on it tunes the model toward the held-out grade. But the
+    COST of keeping it was only ever recoverable by reconstruction: "61 checks
+    the golden falsifies, known at authoring time, shipped TRUSTED"."""
+    s = O.OracleSet(
+        trusted=[_corpus_oracle("REQ-0001", 0), _corpus_oracle("REQ-0002", 1)],
+        dispositions={"REQ-0001": "TRUSTED", "REQ-0002": "TRUSTED"},
+        witness_kind="witness+control",
+        control_notes={"REQ-0001": "fails it at edge 12"})
+    assert s.rates()["trusted_the_control_fails"] == 1
+    #: and it changes no disposition -- the check is still TRUSTED
+    assert s.dispositions["REQ-0001"] == "TRUSTED"
+    assert "REQ-0001" in [o.req_uid for o in s.trusted]
+
+
+def test_no_control_reports_None_and_never_zero():
+    """0 would read as "no oracle is over-strict". That exact ambiguity misread
+    a whole run: `over_strict: 0` meant "no control was supplied", and 22 of 54
+    trusted oracles turned out to be failed by a known-good model."""
+    s = O.OracleSet(trusted=[], dispositions={"REQ-0001": "TRUSTED"},
+                    witness_kind=O.NO_BOUND)
+    assert s.rates()["trusted_the_control_fails"] is None
