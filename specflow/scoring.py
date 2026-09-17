@@ -1098,3 +1098,49 @@ def placement_selected_a_blunderbuss_set_and_the_blindness_number_was_polarity_u
         "other. **Re-scoring that set under polarity correction is the "
         "experiment that would settle it, and it needs the corpus back.**"
     )
+
+
+def the_faithfulness_gate_kept_the_over_strict_and_rejected_the_sound() -> str:
+    """E2, run live on E3's requirements. Driver: `docs/evidence/e2_admission.py`.
+
+    E0 established this could not be priced from the surviving artifacts --
+    liveness exists for 15/15 and 24/24 KEPT checks and 0/8 and 0/19 DISCARDED
+    ones, and only TRUSTED bodies are stored -- so the rejected checks were
+    generated fresh and scored against the nine spec-derived designs, with the
+    control supplying the audit column last and feeding nothing.
+    """
+    return (
+        "Correspondence rejected **20 of 25** authored oracles.\n\n"
+        "    arm         checks   convict the control   blind\n"
+        "    KEPT             5          80.0% (4/5)    23.1%\n"
+        "    ADMITTED        20          15.0% (3/20)   87.6%\n"
+        "    UNION           25          28.0% (7/25)   23.1%\n\n"
+        "**THE GATE KEPT 1 OF THE 18 SOUND CHECKS AND 4 OF THE 7 UNSOUND "
+        "ONES.** Not neutral with respect to soundness -- anti-selective. The "
+        "pre-registered branch was 'audit no worse on the admitted set => the "
+        "gate was discarding at random'; the measured answer is stronger and in "
+        "the same direction.\n\n"
+        "**AND THE ADMITTED CHECKS ADD NO DISCRIMINATION, WHICH IS THE OTHER "
+        "PRE-REGISTERED BRANCH ARRIVING AT THE SAME TIME.** The union is 23.1% "
+        "blind and kept-only is 23.1% blind: the twenty admitted checks close "
+        "**not one additional cell**. They are 87.6% blind on their own. They "
+        "are sound BY SILENCE, so the span they buy is real and the "
+        "constriction they buy is nothing.\n\n"
+        "**THE UNION'S 28% IS A DENOMINATOR, NOT AN IMPROVEMENT, and must not "
+        "be read as one.** Rejections union, so a suite containing the four "
+        "over-strict kept checks rejects the control whatever else is admitted. "
+        "Admission dilutes the RATE and removes none of them. The only way that "
+        "28% becomes a real gain is if the four are dropped, and dropping them "
+        "needs the control -- which is barred.\n\n"
+        "**A RED FLAG ON THE GATE ITSELF: 80% REJECTION AGAINST A CALIBRATION "
+        "OF 4.3%.** `correspondence` records 'over 70 frozen oracles it rejects "
+        "3' and '2 of the first 40' live. Twenty of twenty-five is nearly twenty "
+        "times that. Something about this run is outside its calibration -- the "
+        "hand-written contract, `gpt-5-mini` doing both the authoring and the "
+        "reviewing, or the window defect E3 measured at 65.9%, which makes point "
+        "checks that a reviewer would rightly call off-target. **The direction "
+        "of the finding does not depend on which, but the magnitude does.**\n\n"
+        "**SCOPE.** 25 requirements, one module, one model authoring and "
+        "reviewing, seven synthetic testpoints, n = 5 in the kept arm. The kept "
+        "arm being 4-of-5 unsound is five checks, not a rate."
+    )
