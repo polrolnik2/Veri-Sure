@@ -1530,3 +1530,45 @@ def every_requirement_gets_one_body_and_only_repair_adds_more() -> str:
         "sets frozen, comparing bodies; run 2's freeze failed on drift and its "
         "bodies were lost, which is the only reason it has not been done."
     )
+
+
+def s2_ran_off_the_end_of_the_requirement_list() -> str:
+    """The first full-pipeline run with all three levers on never reached them:
+    it failed at S2, two stages upstream of the oracle stage.
+
+    Recorded because a lever that is never reached is indistinguishable from a
+    lever that does not work, and because the failure is in a stage none of
+    this session's changes touched.
+    """
+    return (
+        "**BUILD ok=False, stage=S2, 32 issue(s). `oracles.json` MISSING.**\n\n"
+        "    S1 minted        148 requirements   REQ-0000 .. REQ-0147\n"
+        "                     113 behavioural, 19 scaffolding, 16 interface\n"
+        "    S2 produced      412 testpoints\n"
+        "    of which          32 cover REQ-0148 .. REQ-0159, which DO NOT "
+        "EXIST\n\n"
+        "S2 ran off the end of the requirement list and kept numbering. The "
+        "gate caught it correctly -- a nonexistent uid presents as 'does not "
+        "declare needs=testplan', because every one of the 148 real "
+        "requirements declares it. The tail is contiguous (TP-0380..TP-0411) "
+        "and the invented uids are sequential, so this is a continuation past "
+        "the end rather than scattered corruption.\n\n"
+        "**NOT CAUSED BY THIS SESSION'S CHANGES**, which touch `oracles_stage`, "
+        "`oracle_gen` and parameter plumbing in `integration`. S1 and S2 are "
+        "untouched. **BUT THE CONFIGURATION WAS MINE**: the driver passed "
+        "`max_repairs=2` to save calls where the pipeline default is 5, so S2 "
+        "got two rounds to fix a 32-issue tail and did not converge. Re-run at "
+        "the default before reading this as an S2 defect rather than a budget "
+        "one.\n\n"
+        "**AND 17 PROBES WERE NAMED BY NO ACTIVATION OR EFFECT** -- `in_idle`, "
+        "`start_detected`, `filter_cnt_expired`, `scl_sync_active` and 13 more. "
+        "Either normalize did not use a declared probe or `[P]` over-nominated. "
+        "Worth recording next to this because probes are the lever proposed for "
+        "state-dependent activations -- 78 of 115 forms carry no `inputs` "
+        "predicate -- and here a third of them went unused.\n\n"
+        "**THE GENERAL POINT.** Every measurement in this directory before this "
+        "run drove `run_oracle_stage` directly, which skips S1, S2, S3 and the "
+        "stimulus loop. The first attempt to run the whole thing failed "
+        "upstream of everything measured, which is exactly the class of defect "
+        "a driver cannot see."
+    )
