@@ -875,3 +875,91 @@ def test_the_gate_is_recorded_PER_ROUND_because_it_runs_once_per_round(
     back = O.load(tmp_path)
     assert back is not None
     assert [r["round"] for r in back.correspondence_rounds] == [1, 2]
+
+
+# ---------------------------- E2: the faithfulness gate becomes a label
+
+
+def test_off_target_blocks_by_default_and_labels_under_the_flag(tmp_path, monkeypatch):
+    """BOTH ARMS, because the question is a measurement. The protocol runs one
+    module twice on identical inputs and compares the admitted checks against
+    the already-trusted ones; a one-way change would delete the control arm.
+    """
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    def run(demote):
+        monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+        monkeypatch.setattr(C, "review", lambda *a, **k: {
+            "REQ-0001": C.Review(tests_the_requirement=False,
+                                 what_is_missing="it never reads y")})
+        return O.run_oracle_stage(
+            requirements=REQS, contract_json=json.dumps(CONTRACT),
+            contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+            port=_GenPort([_gen_reply(GOOD)]), workdir=tmp_path / str(demote),
+            base="step", fanout=False, max_repairs=0, repair_attempts=0,
+            want_correspondence=True, demote_faithfulness=demote)
+
+    blocking = run(False)
+    assert blocking.dispositions["REQ-0001"] == "ORACLE_INVALID"
+    assert blocking.labels == {}
+    assert blocking.rates()["admitted_over_an_objection"] == 0
+
+    admitted = run(True)
+    assert admitted.dispositions["REQ-0001"] == "TRUSTED", (
+        "the check ran and was structurally sound; only the reviewer objected")
+    assert "never reads y" in admitted.labels["REQ-0001"], (
+        "the objection must survive as a label, not be suppressed")
+    assert admitted.rates()["admitted_over_an_objection"] == 1
+    assert [o.req_uid for o in admitted.trusted] == ["REQ-0001"]
+
+
+def test_the_mechanical_grounds_still_block_under_the_flag(tmp_path, monkeypatch):
+    """Demotion is scoped to FAITHFULNESS. A check that does not run, or that
+    no legal value can move, is refused on grounds that never asked whether it
+    was right -- and those must survive, or the flag is just 'accept
+    everything'."""
+    from tests.test_oracles_stage import (
+        CONTRACT, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(C, "review", lambda *a, **k: {})
+    broken = "def decide(trace):\n    return 1 / 0\n"
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_GenPort([_gen_reply(broken)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, repair_attempts=0,
+        want_correspondence=True, demote_faithfulness=True)
+
+    assert got.dispositions["REQ-0001"] != "TRUSTED", got.dispositions
+    assert got.labels == {}, "a structural refusal is not a faithfulness label"
+
+
+def test_the_demotion_is_recorded_in_tools_so_a_run_says_which_arm_it_was(
+        tmp_path, monkeypatch):
+    """`admitted_over_an_objection: 0` is ambiguous between "no ground fired"
+    and "the gates were left blocking". `tools` disambiguates, and it is read
+    back by `load` so a reused set keeps the answer."""
+    from tests.test_oracles_stage import (
+        CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
+        _reply as _gen_reply,
+    )
+
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    monkeypatch.setattr(C, "review", lambda *a, **k: {})
+    O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=_GenPort([_gen_reply(GOOD)]), workdir=tmp_path, base="step",
+        fanout=False, max_repairs=0, repair_attempts=0, run_dir=tmp_path,
+        want_correspondence=True, demote_faithfulness=True)
+
+    blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
+    assert blob["tools"]["demote_faithfulness"] is True
+    back = O.load(tmp_path)
+    assert back is not None and back.tools["demote_faithfulness"] is True

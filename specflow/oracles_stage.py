@@ -277,6 +277,17 @@ class OracleSet:
     #: to `logger.debug`; this is the same string, kept where a finished run can
     #: still be asked about it.
     unreached_silenced: dict[str, str] = field(default_factory=dict)
+    #: `req_uid -> a faithfulness ground that was RECORDED rather than acted on`
+    #: (`demote_faithfulness`). These checks are in `trusted`; the label says a
+    #: reviewer or a lexical screen objected and was overruled by policy, so a
+    #: consumer can weight them without anything having been discarded.
+    #:
+    #: Silence is free to keep and conviction is not: a blind check never
+    #: mis-steers a repair loop, while an over-strict one sends it after
+    #: nothing -- the debug loop once drove VIOLATES 9 -> 5 and spent its last
+    #: three turns on five a known-good control also fails. That asymmetry is
+    #: why this is a label a consumer reads, not merely a suppressed discard.
+    labels: dict[str, str] = field(default_factory=dict)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -318,6 +329,12 @@ class OracleSet:
         # anything", which reads in a report exactly like "they all do".
         if not self.tools.get("correspondence"):
             out["NOT_ASSERTABLE"] = out.get("NOT_ASSERTABLE")
+        # ADMITTED OVER AN OBJECTION, counted where the rates are read. Zero
+        # and absent are the same here -- no faithfulness ground was recorded,
+        # either because none fired or because the gates were left blocking --
+        # so unlike `VACUOUS` this needs no `None`: `tools["demote_faithfulness"]`
+        # says which run this was.
+        out["admitted_over_an_objection"] = len(self.labels)
         # SURVIVING IS NOT DECIDING, beside the number that says it did. See
         # `trusted_liveness`: `trusted` counts checks that passed every gate,
         # and on the two runs where both were counted it overstated what
@@ -397,6 +414,9 @@ def verify_one(
     #: block for a reason no design supplies: whether the oracle decides the
     #: requirement it names at all.
     review=None,
+    #: Demote the correspondence verdict from a rejection to a `notes` label.
+    #: The control arm of the admission experiment -- see the block below.
+    demote_faithfulness: bool = False,
 ) -> tuple[str, bool, dict[str, str]]:
     """`(why, quotable, notes)`.
 
@@ -501,7 +521,33 @@ def verify_one(
         # so it cannot be contaminated by a design, which is exactly why it may
         # decide where the designs may not. Authority follows independence here,
         # not strength.
+        #
+        # **AND `demote_faithfulness` MAKES IT A LABEL INSTEAD, BEHIND A FLAG.**
+        # The flag exists because the question is a measurement, not a taste:
+        # the protocol runs one module twice on identical inputs, gates on and
+        # gates demoted, and compares the admitted checks against the already-
+        # trusted ones. A one-way change would delete the control arm.
+        #
+        # WHY THE QUESTION IS OPEN AT ALL. This gate asks whether a check is
+        # FAITHFUL to its requirement, and faithfulness does not predict
+        # usefulness here: it passed 21 of the 23 checks `liveness` shows cannot
+        # be moved by any legal value, and of k1-dcfsm's 24 live discards 16 are
+        # this gate. Measured on the two frozen sets that survived the data
+        # loss, it accounts for the ENTIRE oracle-stage loss -- 8 of 8 and 19 of
+        # 19 discards, with 63 repair rounds already spent on them. Its dominant
+        # objection is the trigger (29 of 33 on d1-i2c) and the only move
+        # against that is to narrow until the check stops firing, which is the
+        # route 9 checks took from deciding to abstaining.
+        #
+        # The default stays BLOCKING. Nothing here is evidence that admitting
+        # them is better; it is the reason to measure rather than assume.
         off = correspondence.rejects(review)
+        if off and demote_faithfulness:
+            # A LABEL, NOT A VERDICT. It rides in `notes` exactly as the witness
+            # observation does, so the disposition still records it and the
+            # debug loop can weight it, while nothing is discarded on it.
+            notes = {**notes, "faithfulness": off}
+            off = ""
         if off:
             # `may_quote` is what buys a repair round, and a requirement that
             # states no obligation must not get one: the author cannot add an
@@ -1079,6 +1125,16 @@ def run_oracle_stage(
     #: this cannot be guarded -- only reported, via `over_strict_after_repair`,
     #: which is why that field has to be read beside any gain claimed here.
     repair_attempts: int = 2,
+    #: **THE ADMISSION ARM.** Demote every FAITHFULNESS ground from a discard to
+    #: a label: correspondence's verdict, the prose "no discrimination stated"
+    #: abandonment, and the "normalization produced no form" abandonment. What
+    #: still blocks is mechanical and asks only whether the check RUNS --
+    #: `well_formed`, a replay break, and `DEAD_ORACLE` -> `vacuous:`.
+    #:
+    #: Default False, so nothing changes until the experiment says it should.
+    #: Measured on the two surviving frozen sets, this is 8 of 8 and 19 of 19
+    #: discards: TRUSTED 15 -> 23 and 24 -> 43 with nothing left blocked.
+    demote_faithfulness: bool = False,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -1238,6 +1294,10 @@ def run_oracle_stage(
     #: check re-examined each round should be attributed to the guard that
     #: silenced it on the round whose verdict actually shipped.
     unreached_silenced: dict[str, str] = {}
+    #: `req_uid -> the faithfulness ground that no longer discards it`. Recorded
+    #: so the disposition still carries the observation and the debug loop can
+    #: weight it; never consulted by anything that decides.
+    labels: dict[str, str] = {}
     #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`. These
     #: leave the frozen set entirely -- see the exclusion below. Populated only
     #: by a stage that RAN a bounded attempt and exhausted it; empty here means
@@ -1272,7 +1332,12 @@ def run_oracle_stage(
     # better than it is.
     if normalized is not None:
         for _uid in sorted(by_uid):
-            if _uid and _uid not in normalized:
+            if _uid and _uid not in normalized and demote_faithfulness:
+                # The form failed a FAITHFULNESS gate. Whether the check that
+                # was authored anyway can run is a separate question, and the
+                # structural gate below already asks it.
+                labels[_uid] = "malformed: normalization produced no form"
+            elif _uid and _uid not in normalized:
                 rejected[_uid] = abandoned[_uid] = (
                     "malformed: normalization produced no form for this "
                     "requirement -- it failed its own gate and exhausted its "
@@ -1480,7 +1545,8 @@ def run_oracle_stage(
                 oracle, contract=contract, testplan=testplan,
                 stimulus_by_tp=stimulus_by_tp, witness=witness,
                 control=control, variants=variants, base=base,
-                transactional=transactional, review=reviews.get(uid))
+                transactional=transactional, review=reviews.get(uid),
+                demote_faithfulness=demote_faithfulness)
             if not why:
                 # THE STAGING ROUTE HAS BEEN TRIED AND FAILED, so an abstention
                 # is no longer ambiguous between a bad check and an unstaged
@@ -1494,6 +1560,11 @@ def run_oracle_stage(
                 may_quote = bool(why)
             if notes:
                 disagreements[uid] = notes
+                # The demoted faithfulness verdict travels in `notes` from
+                # `verify_one`; lift it out so the SET carries it as a label
+                # rather than leaving it buried among instrument observations.
+                if notes.get("faithfulness"):
+                    labels[uid] = notes["faithfulness"]
             if why:
                 rejected[uid] = why
                 if may_quote:
@@ -1864,7 +1935,15 @@ def run_oracle_stage(
         # makes the requirement checkable.
         routes = shape.get("observed_via") or []
         if routes and all(_route_declines(r) for r in routes):
-            abandoned.setdefault(uid, "no discrimination stated")
+            # A LEXICAL MATCH ON PROSE, and under `demote_faithfulness` it stops
+            # deciding. `normalize` keeps this screen only because "that is
+            # reporting, which is the right use of a lexical screen" -- while
+            # ABANDONED outranks every other disposition and leaves the
+            # requirement out of the numerator AND the denominator.
+            if demote_faithfulness:
+                labels[uid] = "no discrimination stated"
+            else:
+                abandoned.setdefault(uid, "no discrimination stated")
 
     # ABANDONED REQUIREMENTS LEAVE THE SYSTEM HERE, and this is the only place
     # that can be true. Excluding them from `trusted` is what stops the debug
@@ -2054,7 +2133,8 @@ def run_oracle_stage(
                    # argument for carrying it is that a later round inherits
                    # the instruments instead of re-deriving them from a call
                    # site's keyword arguments.
-                   "tools": {"correspondence": want_correspondence,
+                   "tools": {"demote_faithfulness": demote_faithfulness,
+                             "correspondence": want_correspondence,
                              "variants": want_variants,
                              "staging": want_staging,
                              "max_repairs": max_repairs,
@@ -2105,6 +2185,7 @@ def run_oracle_stage(
                    # Read back in `load`, like every field below it. See the
                    # LOSSY-LOAD TRAP note there.
                    "unreached_silenced": unreached_silenced,
+                   "faithfulness_labels": labels,
                    "stimulus_liveness": live,
                    "oracle_liveness": dead})
         for uid, what in sorted(drift.items()):
@@ -2146,6 +2227,7 @@ def run_oracle_stage(
                              else rounds),
                      testpoints_no_oracle_names=idle,
                      unreached_silenced=dict(unreached_silenced),
+                     labels=dict(labels),
                      liveness={u: r.get("verdict", _L.UNKNOWN)
                                for u, r in report.items()},
                      witness_notes={u: n["witness"]
@@ -3425,4 +3507,6 @@ def load(run_dir: Path) -> OracleSet | None:
         unreached_silenced={
             str(u): str(g)
             for u, g in (blob.get("unreached_silenced") or {}).items()},
+        labels={str(u): str(g)
+                for u, g in (blob.get("faithfulness_labels") or {}).items()},
     )
