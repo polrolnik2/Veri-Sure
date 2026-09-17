@@ -161,7 +161,42 @@ def blind(population_cells: Sequence[Cell],
         if not any(speaks(c, v) for v in verdicts.values()))
 
 
-def ranked(blind_cells: Sequence[Cell]) -> tuple[tuple[str, int], ...]:
+def constricting(blind_cells: Sequence[Cell],
+                 accepted: Sequence[str], *,
+                 both: bool = False) -> tuple[Cell, ...]:
+    """The blind cells whose closure could change the ACCEPTED set.
+
+    **MEASURED, AND IT IS WHY RANKING BY MASS IS THE WRONG TARGET.** The E4
+    pilot closed 96 of 249 blind cells soundly -- blindness 56.0% -> 14.6% from
+    two checks -- and moved the accepted set by nothing: 3 designs, 3 classes,
+    diameter 0.015, all unchanged. The cells it closed lay between designs the
+    set had ALREADY rejected, so separating them adjudicated a difference that
+    changed no verdict.
+
+    A cell can only move the accepted set if one of its designs is still in it:
+    closing the cell convicts exactly one of the pair, and convicting an
+    already-rejected design changes nothing.
+
+    **`both=True` IS THE GUARANTEED-CONSTRICTING SUBSET, AND IT IS SMALL.** Of
+    the pilot's 249 blind cells, **169 touch an accepted design but only 23 have
+    BOTH accepted** -- 12 on `sda_oen`, 9 on `scl_oen`, 2 on `busy`, over the
+    pairs (h,q) 11, (q,s) 10, (h,s) 2. Those 23 are the only cells where a check
+    that closes them MUST reject a design that is currently surviving, because
+    whichever side it convicts was accepted a moment ago.
+
+    Touching one accepted design is necessary and not sufficient, and the pilot
+    is the demonstration: its checks convicted `d, r, y` and `y`, every one
+    already rejected. That is how 96 cells closed and nothing moved.
+    """
+    keep = set(accepted)
+    if both:
+        return tuple(c for c in blind_cells
+                     if c.left in keep and c.right in keep)
+    return tuple(c for c in blind_cells if c.left in keep or c.right in keep)
+
+
+def ranked(blind_cells: Sequence[Cell],
+           accepted: Sequence[str] | None = None) -> tuple[tuple[str, int], ...]:
     """Blind cells collapsed to `(port, count)`, heaviest first.
 
     Authoring targets are ports, not individual cells: the same output blind on
@@ -169,10 +204,23 @@ def ranked(blind_cells: Sequence[Cell]) -> tuple[tuple[str, int], ...]:
     near-copies of one check -- the failure mode this module exists to avoid.
     Measured on the store write-through path, blindness collects at 5x on four
     ports, so the mass is concentrated enough for this to matter.
+
+    **PASS `accepted` AND THE RANKING BECOMES A CONSTRICTION RANKING.** Mass
+    alone ranked the port that closed 66 cells and narrowed the design space by
+    nothing. With `accepted` supplied, a cell counts double when BOTH its
+    designs are still accepted -- closing it must shrink the set -- once when
+    one is, and not at all when neither is, because that cell cannot change a
+    verdict whatever a check says about it.
     """
+    keep = set(accepted) if accepted is not None else None
     tally: dict[str, int] = {}
     for c in blind_cells:
-        tally[c.port] = tally.get(c.port, 0) + 1
+        if keep is None:
+            weight = 1
+        else:
+            weight = (c.left in keep) + (c.right in keep)
+        if weight:
+            tally[c.port] = tally.get(c.port, 0) + weight
     return tuple(sorted(tally.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
@@ -504,4 +552,55 @@ def authoring_at_cells_closes_blindness_soundly_and_does_not_constrict() -> str:
         "synthetic testpoints; trace equivalence, not a miter; the audit is one "
         "control on those testpoints, so 'does not convict the control' is much "
         "weaker than a run's audit column. The 38.6% is a pilot, not a rate."
+    )
+
+
+def the_cells_that_would_constrict_are_the_ones_no_author_can_decide() -> str:
+    """Three live pilots, nine model calls total. Drivers at
+    `docs/evidence/e4_pilot.py` and `e4_pilot_constricting.py`.
+
+    Pilot 1 ranked blind cells by MASS. Pilots 2 and 3 ranked by
+    `constricting(..., both=True)` -- the 23 cells where both surviving designs
+    disagree, so a check closing one must shrink the accepted set.
+    """
+    return (
+        "    pilot  target            authored  declined  closes  constricts\n"
+        "      1    by cell mass           2/3       1/3      96        NONE\n"
+        "      2    must-shrink, cmd=4     0/3       3/3       0        NONE\n"
+        "      3    must-shrink, cmd named 2/3       1/3       0        NONE\n\n"
+        "**PILOT 1 IS THE POSITIVE AND IT IS REAL:** 96 of 249 cells closed at "
+        "audit 0, blindness **56.0% -> 14.6%** from two checks -- the same "
+        "blindness the six control-convicting checks reached, bought without "
+        "the over-strictness.\n\n"
+        "**AND IT CONSTRICTED NOTHING.** Its checks convicted `d, r, y` and "
+        "`y`, every one already rejected. Accepted designs 3 -> 3, classes "
+        "3 -> 3, diameter 0.015 unchanged.\n\n"
+        "**PILOT 2 WAS MY DEFECT, NOT THE SPEC'S, AND PILOT 3 PROVES IT.** All "
+        "three declines cited the numeric `cmd` value -- the specification names "
+        "commands and never gives an encoding, so the author was asked to decode "
+        "something the spec does not state. Naming the command took authoring "
+        "from 0 of 3 to 2 of 3. **A decline cannot be read as a specification "
+        "finding until the brief has been ruled out**, and here it was the brief "
+        "twice.\n\n"
+        "**PILOT 3 IS THE RESULT.** Given a correct brief at the cells where the "
+        "surviving designs actually disagree, the author writes checks that "
+        "**convict nobody** -- vacuous, blindness unchanged at 56.0% -- or "
+        "declines, as `busy` did: 'the requirement only defines busy in terms of "
+        "START and STOP detection'. Not one discriminating check in three "
+        "attempts.\n\n"
+        "**SO THE CONTRAST IS THE FINDING.** The cells between designs the set "
+        "has ALREADY rejected are authorable and close in bulk. The 23 cells "
+        "that would actually narrow the design space produce declines and "
+        "vacuities. **The easy blindness is reachable by generation and the "
+        "constricting blindness is not**, and that is the pre-registered kill "
+        "condition arriving in its most informative form: the three surviving "
+        "equivalence classes look specification-admissible, which is the finding "
+        "this project exists to surface rather than a failure of the lever.\n\n"
+        "**WHAT WOULD OVERTURN IT, and none of it has been tried.** One small "
+        "model (`gpt-5-mini`), one attempt per port, no repair round; the whole "
+        "15KB specification passed as the requirement instead of a normalized "
+        "one with a real activation; seven synthetic testpoints; and the "
+        "must-shrink set is 23 cells over three pairs, which is small enough "
+        "that three attempts is not a rate. **A decline here means this author "
+        "could not find it, not that it is not there.**"
     )

@@ -311,3 +311,59 @@ def test_the_pass_is_judged_on_cells_closed_not_checks_returned():
     assert len(closed["new1"]) == 2
     assert closed["new2"] == (), "a blunderbuss closes nothing"
     assert closed["new3"] == ()
+
+
+# ------------------------------------ ranking by constriction, not by mass
+
+
+CELLS_MIXED = [
+    V.Cell("TP-0", "wide", "acc1", "acc2"),    # both accepted: closing MUST shrink
+    V.Cell("TP-1", "half", "acc1", "rej1"),    # one accepted
+    V.Cell("TP-2", "dead", "rej1", "rej2"),    # neither: cannot change a verdict
+    V.Cell("TP-3", "dead", "rej1", "rej2"),
+    V.Cell("TP-4", "dead", "rej1", "rej2"),
+]
+
+
+def test_cells_between_already_rejected_designs_cannot_move_the_set():
+    """The E4 pilot closed 96 of 249 cells soundly and moved the accepted set by
+    nothing, because the cells lay between designs already rejected. Closing a
+    cell convicts exactly one of its pair; convicting an already-rejected design
+    changes no verdict."""
+    got = V.constricting(CELLS_MIXED, accepted=["acc1", "acc2"])
+    assert {c.port for c in got} == {"wide", "half"}
+    assert all(c.port != "dead" for c in got)
+
+
+def test_mass_ranking_and_constriction_ranking_disagree_and_that_is_the_point():
+    """`dead` carries the most cells and is worth nothing. Ranking by mass sent
+    the pilot at exactly that kind of port."""
+    by_mass = V.ranked(CELLS_MIXED)
+    assert by_mass[0] == ("dead", 3), "mass puts the useless port first"
+
+    by_constriction = V.ranked(CELLS_MIXED, accepted=["acc1", "acc2"])
+    assert dict(by_constriction) == {"wide": 2, "half": 1}
+    assert "dead" not in dict(by_constriction)
+    assert by_constriction[0][0] == "wide", (
+        "both-accepted outranks one-accepted: closing it must shrink the set "
+        "whichever side the new check convicts")
+
+
+def test_an_empty_accepted_set_ranks_nothing_rather_than_everything():
+    """Over-constricted already: no cell can change a verdict, and the honest
+    answer is that authoring has no constriction target here -- not that every
+    port is equally good."""
+    assert V.ranked(CELLS_MIXED, accepted=[]) == ()
+    assert V.constricting(CELLS_MIXED, accepted=[]) == ()
+
+
+def test_both_accepted_is_the_only_guaranteed_constricting_target():
+    """Touching ONE accepted design is necessary and not sufficient. The pilot's
+    checks convicted `d, r, y` and `y` -- every one already rejected -- which is
+    how 96 cells closed and the accepted set did not move. A cell with both
+    designs accepted has no such escape: whichever side a closing check
+    convicts, the set shrinks."""
+    got = V.constricting(CELLS_MIXED, accepted=["acc1", "acc2"], both=True)
+    assert [c.port for c in got] == ["wide"]
+    assert len(V.constricting(CELLS_MIXED, accepted=["acc1", "acc2"])) == 2, (
+        "the weaker predicate still admits the one-accepted cell")
