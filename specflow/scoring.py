@@ -1188,3 +1188,42 @@ def a_run_retains_one_body_per_requirement_so_selection_has_no_choice() -> str:
         "nothing like the depth the recorded selection results were computed "
         "over."
     )
+
+
+def my_own_driver_skipped_the_indirect_pass_and_lost_half_the_sample() -> str:
+    """A defect in the MEASUREMENT, not the pipeline, caught by reading the
+    abandonment reasons E1's instrumentation had just made visible.
+
+    `integration.py` normalizes in TWO passes -- `run_normalize_fanout` then
+    `resolve_indirect`. The E3 and E2 drivers called only the first.
+    """
+    return (
+        "**19 OF 20 ABANDONMENTS IN THE GATED ARM WERE 'no observation route "
+        "found'**, which fires when a requirement has neither an observable "
+        "port nor an indirect route. 52 of the 115 normalized forms (45%) have "
+        "no observable port, and the pass that gives those a route is exactly "
+        "the one I did not call. The `_unreached` guard agreed: 18 of 18 "
+        "silenced requirements reported 'nothing was attempted', because there "
+        "was no route to stage.\n\n"
+        "**SO HALF THE SAMPLE WAS LOST TO A MISSING PASS, NOT TO THE "
+        "PIPELINE.** The indirect pass is recorded recovering 15 of 18 "
+        "conceding requirements (83%) with a real port AND route, and "
+        "`resolve_indirect` writes those ports into `observable`, so those 19 "
+        "would mostly not have been blind at all.\n\n"
+        "**WHAT IT DOES AND DOES NOT INVALIDATE.** Both arms of E2 ran the same "
+        "omission, so the gated-vs-demoted COMPARISON survives -- the defect is "
+        "common-mode. What falls is every ABSOLUTE span figure from these runs: "
+        "13 of 40 gated is not the module's span, it is the span of a run "
+        "missing its second normalization pass. E0b's corpus-depth median is "
+        "unaffected (it counts bodies per requirement among those that reached "
+        "authoring at all), and E3's window residual is unaffected because "
+        "`resolve_indirect` writes `observable`, `observed_via`, "
+        "`unobservable_reason` and `activated_via` and never touches "
+        "`activation.windowed`.\n\n"
+        "**HOW IT WAS CAUGHT, which is the part worth keeping.** Not by "
+        "reviewing the driver -- by reading the abandonment reasons, which only "
+        "became readable when E1 threaded `unreached_silenced` and the "
+        "abandonment breakdown into the artifact earlier the same session. The "
+        "instrumentation found a defect in the experiment that was built to use "
+        "it."
+    )

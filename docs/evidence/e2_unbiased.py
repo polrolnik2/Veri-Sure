@@ -30,7 +30,8 @@ sys.path.insert(0, "/home/user/Veri-Sure")
 exec(open("docs/evidence/e4b_constriction.py").read().split("# ---- the ladder")[0])
 from specflow import oracles_stage as O
 from specflow.model_io import PortSettings, make_port
-from specflow.normalize import _names_a_window, run_normalize_fanout
+from specflow.normalize import (_names_a_window, resolve_indirect,
+                                run_normalize_fanout)
 
 E3 = Path("docs/evidence/e3")
 SC = Path(sys.argv[1])
@@ -49,6 +50,25 @@ port = make_port("api", SC / "norm_rest", None, PortSettings())
 more, _ = run_normalize_fanout(requirements=rest, contract_json=CJ,
                                contract=CONTRACT, port=port, max_repairs=2)
 have.update({n.req_uid: json.loads(n.model_dump_json()) for n in more})
+
+#: **THE SECOND PASS, WHICH THE FIRST VERSION OF THIS DRIVER OMITTED.**
+#: `integration.py` runs `run_normalize_fanout` AND `resolve_indirect`; I ran
+#: only the first, so every requirement the direct pass left blind stayed blind
+#: and was abandoned as "no observation route found". That was 19 of 40 in the
+#: gated arm -- half the sample lost to a pass I did not call. The indirect pass
+#: is recorded recovering 15 of 18 conceding requirements (83%) with a real port
+#: AND route, and `resolve_indirect` writes those ports into `observable`.
+from specflow.normalize import NormalizedRequirement  # noqa: E402
+shapes = [NormalizedRequirement(**have[r["uid"]]) for r in reqs
+          if r["uid"] in have]
+blind_before = sum(1 for n in shapes if not n.observable)
+shapes, _ = resolve_indirect(
+    normalized=shapes, requirements=reqs, contract_json=CJ, contract=CONTRACT,
+    port=make_port("api", SC / "indirect", None, PortSettings()), max_repairs=2)
+have = {n.req_uid: json.loads(n.model_dump_json()) for n in shapes}
+blind_after = sum(1 for n in shapes if not n.observable)
+print(f"  indirect pass: blind {blind_before} -> {blind_after} "
+      f"(recovered {blind_before - blind_after})")
 (E3 / "normalized-all.json").write_text(json.dumps(have, indent=2))
 print(f"  normalized now covers {len(have)} of {len(reqs)} requirements")
 
