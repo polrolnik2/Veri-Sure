@@ -218,3 +218,35 @@ while True:
         break
     chosen.append(best)
     remaining.discard(best)
+
+# ---- where the residue sits, and whether the stall is an artifact ---------
+import random  # noqa: E402
+
+sound = {c for c in verdicts if c not in audit}
+resid = V.blind(cells, {c: verdicts[c] for c in sound})
+print(f"\nRESIDUE AT AUDIT 0: {len(resid)} of {len(cells)} cells = "
+      f"{100*len(resid)/len(cells):.1f}%")
+print("  blind cells by port -- the authoring targets:")
+for port_name, n in V.ranked(resid):
+    tot = sum(1 for c in cells if c.port == port_name)
+    print(f"    {port_name:9} {n:4} of {tot:4} blind ({100*n/tot:5.1f}%)")
+
+# Greedy could be the binding constraint rather than the supply of sound
+# checks. 200 random orderings say whether it is.
+best = 1.0
+for _ in range(200):
+    chosen = []
+    for c in random.sample(sorted(sound), len(sound)):
+        b = V.blind(cells, {k: verdicts[k] for k in chosen})
+        if any(V.separates(x, verdicts[c]) for x in b):
+            chosen.append(c)
+    best = min(best, len(V.blind(cells, {k: verdicts[k] for k in chosen}))
+               / len(cells))
+print(f"\n  best reachable by ANY of 200 orderings: {100*best:.1f}% "
+      f"-- ordering is not the binding constraint")
+
+allb = V.blind(cells, {c: verdicts[c] for c in verdicts})
+print(f"\n  all {len(verdicts)} checks incl. the {len(audit)} convicting the "
+      f"control: {100*len(allb)/len(cells):.1f}% blind")
+print(f"  so the {len(audit)} UNSOUND checks are worth "
+      f"{100*(len(resid)-len(allb))/len(cells):.1f} points of blindness")
