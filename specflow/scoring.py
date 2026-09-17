@@ -1290,3 +1290,80 @@ def the_indirect_pass_recovers_91_percent_and_the_residue_is_not_a_gate() -> str
         "never yield a check and no authoring or selection lever beats it. "
         "Report it as a known floor; do not subtract it."
     )
+
+
+def normalization_repeats_its_decisions_and_not_its_prose() -> str:
+    """Two runs of the E2 driver over the same 115 requirements, same contract,
+    same direct-pass inputs. Nothing had ever measured how much of normalization
+    repeats, so nothing knew whether a difference between two runs was a result
+    or a draw. Replayed by `e3c_normalize_reproducibility.py` from two kept
+    samples; zero model calls.
+    """
+    return (
+        "**THE TEXT MOVES AND THE DECISION DOES NOT.**\n\n"
+        "    forms differing in activation/expectation/observable/observed_via\n"
+        "                                     88 of 115   77%\n"
+        "      observed_via                   84          73%\n"
+        "      activation                     64          56%\n"
+        "      expectation                    59          51%\n"
+        "      observable                     18          16%\n"
+        "    the UNROUTABLE set                1 of 115    0.9%  (REQ-0005)\n"
+        "    indirect pass recovered          48, then 47 of 53\n\n"
+        "**SO THE SPLIT IS THE FINDING.** A restatement that rewords the "
+        "activation and keeps the port is a different PROMPT and the same "
+        "DECISION. `observable` and the unroutable set are what anything "
+        "downstream branches on, and they are the two that barely move -- one "
+        "requirement in 115. The prose an author reads is different three times "
+        "in four.\n\n"
+        "**WHAT IT LICENSES AND WHAT IT DOES NOT.** It licenses treating the "
+        "abandonment census as stable: 'no observation route found' is a "
+        "reproducible verdict, so the 52 -> 5 recovery is a property of the "
+        "pipeline and not of a draw. It does NOT license reading small "
+        "differences in span, audit or blindness between two runs as effects, "
+        "because the authoring prompt differs on 77% of requirements and no "
+        "run-to-run interval has ever been computed for those figures. Every "
+        "triple in this directory is ONE SAMPLE.\n\n"
+        "**AND IT IS NOT A CALL-LEVEL RETEST.** Both passes re-ran, so this is "
+        "compound variance over `run_normalize_fanout` and `resolve_indirect` "
+        "together, which is the right quantity for 'does re-running the "
+        "pipeline give the same forms' and the wrong one for 'is one call "
+        "deterministic'. An earlier attempt of mine to read round-1 vs round-2 "
+        "correspondence verdicts as a retest was withdrawn for exactly this "
+        "reason: the normalized form fed to round 2 had itself changed, so the "
+        "input was not held fixed and the flip rate measured nothing."
+    )
+
+
+def correspondence_costs_half_the_stage_and_its_label_predicts_nothing() -> str:
+    """E2 runs correspondence in BOTH arms so the arms differ only in whether
+    its verdict blocks. That keeps the comparison clean and it keeps the bill.
+    Measured on the direct-only unbiased run.
+    """
+    return (
+        "**THE COST IS IDENTICAL IN BOTH ARMS AND IT IS ABOUT HALF THE "
+        "STAGE.**\n\n"
+        "    gated    80 correspondence calls   94 oracle calls   46%\n"
+        "    demoted  80 correspondence calls   66 oracle calls   55%\n\n"
+        "**AND IN THE DEMOTED ARM IT BUYS ALMOST NOTHING.** Repair is driven by "
+        "`rejected`, so demoting the verdict to a label also removes the repair "
+        "it used to force: 21 requirements repaired and 35 repair entries in "
+        "the gated arm, against **2 requirements and 4 entries** demoted. The "
+        "29 labels block nothing and rewrite almost nothing.\n\n"
+        "**THE LABEL DOES NOT PREDICT CONVICTING THE CONTROL.**\n\n"
+        "    labelled by correspondence   4 of 9 deciding convict   44%\n"
+        "    unlabelled                   3 of 6 deciding convict   50%\n\n"
+        "No signal, and what there is points the wrong way. **n IS 15 DECIDING "
+        "CHECKS**, so this cannot separate 44% from 50% and is not offered as "
+        "an effect -- it is offered as the absence of a large one, which is all "
+        "that is needed to say the label is not earning 55% of a budget.\n\n"
+        "**THE ARM THE EXPERIMENT IS MISSING.** Gated and demoted both RUN "
+        "correspondence. The configuration that tests whether it is worth "
+        "running -- correspondence OFF, `want_correspondence=False` -- was "
+        "never run, so E2 measures what the gate costs and not what the "
+        "instrument costs. It should have been a third arm.\n\n"
+        "**AND THE TWO ARMS DIFFER IN MORE THAN GATING, which weakens the "
+        "clean reading.** 21 repairs against 2 means the gated arm's checks "
+        "have been rewritten far more, so 'same checks, gate on and off' is not "
+        "what was compared. The span difference is between a heavily repaired "
+        "set and a barely repaired one."
+    )
