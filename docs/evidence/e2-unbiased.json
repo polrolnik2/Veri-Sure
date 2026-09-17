@@ -1,0 +1,29 @@
+{
+  "gated": {
+    "trusted": 13,
+    "considered": 20,
+    "labels": 0,
+    "sample": 40,
+    "dispositions": {
+      "ABANDONED": 20,
+      "ORACLE_INVALID": 7,
+      "VACUOUS": null
+    },
+    "corpus_bodies": 54,
+    "corpus_reqs": 40,
+    "median_depth": 1
+  },
+  "demoted": {
+    "trusted": 21,
+    "considered": 21,
+    "labels": 29,
+    "sample": 40,
+    "dispositions": {
+      "ABANDONED": 19,
+      "VACUOUS": null
+    },
+    "corpus_bodies": 41,
+    "corpus_reqs": 40,
+    "median_depth": 1
+  }
+}

@@ -695,3 +695,123 @@ def the_constriction_ranking_was_gating_on_unverified_artifacts() -> str:
         "one, and the null is a null about a set chosen by a possibly-bad "
         "check rather than about authoring."
     )
+
+
+def holds_over(inputs: Mapping[str, object], rows: Rows) -> int:
+    """The longest run of consecutive rows the activation holds on. 0 if never.
+
+    **THE MECHANICAL VERSION OF THE QUESTION `_names_a_window` ASKS LEXICALLY.**
+    That screen compares the requirement TEXT against the normalized FORM and
+    warns when they disagree about a span. It is a faithfulness instrument, it
+    is 45% precise by its own calibration, and its docstring says the
+    distinction it wants "depends on whether the activation outlasts its own
+    trigger -- not on the word. No lexical split separates them."
+
+    No lexical split does. A REPLAY does: run the activation's own `inputs`
+    predicate along a trace and see how many consecutive rows satisfy it. One
+    row is an instant and the form is right to carry no close condition. Several
+    is a span, and a form with an empty `until` over it has flattened something
+    real -- which is the defect, rather than the warning that gestures at it.
+
+    Reads only spec-derived designs, like everything else here. A value is
+    matched against the row's outputs first and its inputs second, which is the
+    lookup order the authored checks use.
+    """
+    best = run = 0
+    for row in rows:
+        out = row.get("outputs") or {}
+        ins = row.get("inputs") or {}
+        if all(str(out.get(k, ins.get(k))) == str(v) for k, v in inputs.items()):
+            run += 1
+            best = max(best, run)
+        else:
+            run = 0
+    return best
+
+
+def flattened_a_span(activation: Mapping[str, object],
+                     rows_by_design: Mapping[str, Mapping[str, Rows]],
+                     *, at_least: int = 2) -> bool:
+    """Did this form drop a span the designs actually exhibit?
+
+    True when the activation carries no close condition AND its own predicate
+    holds over `at_least` consecutive rows somewhere in the population. The
+    check built from such a form reads one row where the behaviour occupies
+    several -- "fails every design or passes every design depending only on
+    which way the port sat at that instant", whose two symptoms are
+    over-strictness and vacuity.
+
+    An activation with no `inputs` is not judged: there is no predicate to run,
+    so absence of evidence is reported as no finding rather than as a pass.
+    """
+    if activation.get("windowed") or activation.get("until"):
+        return False
+    inputs = activation.get("inputs") or {}
+    if not inputs:
+        return False
+    return any(holds_over(inputs, rows) >= at_least
+               for design in rows_by_design.values()
+               for rows in design.values())
+
+
+
+def the_window_screen_is_precise_where_it_can_be_checked_and_blind_elsewhere() -> str:
+    """Measured against the mechanical test: 79% agreement, and a coverage gap.
+
+    `_names_a_window` does not gate -- `has_errors` counts only
+    `severity == "error"` and `run_stage` repairs only on `has_errors`, so the
+    warning ships and blocks nothing. It is still a FAITHFULNESS instrument: it
+    asks whether the normalized form is faithful to the requirement's PROSE and
+    answers by matching words. `flattened_a_span` asks whether the form is
+    faithful to what the DESIGNS DO and answers by replay. Running both over the
+    same forms is the first time either has been checked against anything.
+    """
+    return (
+        "**115 NORMALIZED FORMS OF `i2c_master_bit_ctrl`, 9 SPEC-DERIVED "
+        "DESIGNS, ZERO MODEL CALLS.**\n\n"
+        "    LEXICAL    warns                     62 of 115   53.9%\n"
+        "    MECHANICAL can judge at all          37 of 115   32.2%\n"
+        "               flattened a real span     26 of 37    70.3%\n\n"
+        "    agree (warned AND flattened)         19\n"
+        "    warned but NOT flattened             43   -- of which 38 are\n"
+        "                                              not judgeable at all\n"
+        "    flattened but NOT warned              7\n\n"
+        "**ON THE 24 FORMS BOTH INSTRUMENTS CAN JUDGE, THEY AGREE ON 19 = "
+        "79%.** That is the number that says something about the screen, and it "
+        "is far better than the figure I had been quoting it at. The screen is "
+        "not noise; where there is a predicate to run against it, it is right "
+        "about four times in five.\n\n"
+        "**THE 45% IS PRECISION AGAINST A DIFFERENT TARGET, AND I MISREAD IT.** "
+        "`_WINDOW_WORDS` records `sequential + co-extensive  fires 73/105  "
+        "recall 80%  precision 45%` -- calibrated against *a2-i2c's 41 "
+        "known-bad CHECKS*, over-strict plus vacuous. That is precision at "
+        "predicting a bad OUTCOME. `flattened_a_span` asks about the FORM: did "
+        "this activation drop a span the designs exhibit. A form can flatten a "
+        "span and still yield a check that happens to pass, and a bad check has "
+        "many other ways to be bad. So the two numbers are not the same "
+        "quantity, and **deflating E3's form-level count by a check-level "
+        "precision, as I did, is a category error** -- it multiplied a count of "
+        "forms by the hit rate of a different question.\n\n"
+        "**THE REAL GAP IS COVERAGE, AND IT BELONGS TO `inputs`.** The "
+        "mechanical test is silent on 78 of 115 forms because their activation "
+        "carries no `inputs` predicate to run -- including **38 of the 62 the "
+        "screen warns about**, so on the majority of its own warnings there is "
+        "nothing to check it against. `Activation.inputs` is present 'only when "
+        "the condition can be stated as input values', and a state-dependent "
+        "activation legitimately has none. That is not a defect in either "
+        "instrument; it is the measurement saying that two thirds of this "
+        "module's forms cannot be audited against the designs at all from the "
+        "activation alone.\n\n"
+        "**AND THE SCREEN HAS FALSE NEGATIVES, WHICH NOTHING PREVIOUSLY "
+        "MEASURED.** 7 forms flattened a span the designs exhibit while naming "
+        "no window word. Its recorded recall of 80% is against the same "
+        "known-bad-check target; against span-flattening on the judgeable "
+        "subset it is 19 of 26 = 73%.\n\n"
+        "**NEITHER GATES, AND THE MECHANICAL ONE MUST NOT START.** It reads "
+        "spec-derived designs, so it says where the specification is "
+        "under-determined by the form -- not which form is correct. Its use is "
+        "to RANK forms for re-normalization and to size the residual, which is "
+        "the use the lexical screen is kept for, under the same rule: reporting "
+        "is the right use of a screen, and blocking on one is how a "
+        "faithfulness gate gets built by accident."
+    )

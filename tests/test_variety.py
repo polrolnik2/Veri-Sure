@@ -386,3 +386,50 @@ def test_the_accepted_weighting_is_documented_as_a_diagnostic_not_a_target():
     assert "NOT AN AUTHORING TARGET" in (V.ranked.__doc__ or "").upper(), (
         "`ranked(accepted=...)` must say it is a diagnostic; the mass ranking "
         "is what reads only the designs and is safe to target with")
+
+
+# ------------------- the mechanical replacement for a lexical faithfulness screen
+
+
+def _trace(*vals):
+    return [{"outputs": {"scl": v}, "inputs": {"ena": 1}} for v in vals]
+
+
+def test_holds_over_counts_the_longest_consecutive_run():
+    """One row is an instant; several is a span. That is the distinction
+    `_names_a_window` wants and cannot make, because it "depends on whether the
+    activation outlasts its own trigger -- not on the word"."""
+    rows = _trace(0, 1, 1, 1, 0, 1, 1)
+    assert V.holds_over({"scl": 1}, rows) == 3
+    assert V.holds_over({"scl": 0}, rows) == 1
+    assert V.holds_over({"scl": 9}, rows) == 0, "never holding is 0, not 1"
+    #: a value is matched against outputs first and inputs second, which is the
+    #: lookup order the authored checks use
+    assert V.holds_over({"ena": 1}, rows) == len(rows)
+
+
+def test_a_form_with_a_close_condition_is_never_flagged():
+    """The defect is a span DROPPED, so a form that carries `until` or is marked
+    windowed has nothing to answer for however long its activation holds."""
+    pop = {"A": {"TP-0": _trace(1, 1, 1, 1)}}
+    assert V.flattened_a_span({"inputs": {"scl": 1}}, pop)
+    assert not V.flattened_a_span({"inputs": {"scl": 1}, "until": [{"scl": 0}]}, pop)
+    assert not V.flattened_a_span({"inputs": {"scl": 1}, "windowed": True}, pop)
+
+
+def test_an_activation_with_no_predicate_is_not_judged():
+    """No `inputs` means no predicate to run. Absence of evidence is reported as
+    no finding rather than as a pass -- the distinction `rates()` keeps with
+    `None` everywhere else in this project."""
+    pop = {"A": {"TP-0": _trace(1, 1, 1)}}
+    assert not V.flattened_a_span({"inputs": {}}, pop)
+    assert not V.flattened_a_span({}, pop)
+
+
+def test_an_instant_is_not_a_flattened_span():
+    """The whole point: an activation that holds on exactly one row is CORRECTLY
+    normalised with no close condition, and flagging it is the false-alarm mode
+    that makes the lexical screen 26% precise against this test."""
+    pop = {"A": {"TP-0": _trace(0, 1, 0, 0)}}
+    assert not V.flattened_a_span({"inputs": {"scl": 1}}, pop)
+    assert V.flattened_a_span({"inputs": {"scl": 0}}, pop), "0 holds for two rows"
