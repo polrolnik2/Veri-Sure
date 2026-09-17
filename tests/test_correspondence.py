@@ -820,24 +820,18 @@ def test_an_internal_signal_the_contract_never_declared_is_still_absent() -> Non
 # ------------------------- the applied rate, which is not the published one
 
 
-def test_the_gate_is_recorded_PER_ROUND_because_it_runs_once_per_round(
+def test_the_gate_is_drawn_ONCE_PER_DISTINCT_CHECK_not_once_per_round(
         tmp_path, monkeypatch):
-    """The published yield is "over 70 frozen oracles it rejects 3". That is
-    ONE draw per oracle, and this stage spends up to `repair_attempts + 1` of
-    them: `rejected` is cleared each round, the argument is the whole surviving
-    set, and `round_` is in the resumption key, so no round is a cache hit on
-    the one before. At the calibrated 4.3% applied three times the run sees
-    12.3% with the reviewer behaving exactly as calibrated.
+    """`build_prompt` takes no `round_`, so re-reviewing an UNCHANGED oracle
+    sends a byte-identical prompt and samples the reviewer again. The only thing
+    a second draw on identical input can add is variance, and it compounded: the
+    gate is published at one draw per oracle -- "over 70 frozen oracles it
+    rejects 3" -- while the loop spent up to `repair_attempts + 1` of them,
+    taking 4.3% to 1-(1-0.043)^3 = 12.3%.
 
-    This drives two rounds with a reviewer that answers differently on each --
-    which is the thing a one-draw rate cannot express -- and pins that the
-    artifact can tell them apart. `repairs` cannot: it carries the reason and
-    not the round, so "rejected on a round > 1" was unrecoverable.
-
-    IT PINS A QUESTION BEING ASKABLE, NOT AN ANSWER. A round-2 rejection is not
-    evidence the check was bad, and the count is not a span loss -- whether the
-    extra draws remove checks worth keeping is the triple's business and needs
-    a run. See the call site.
+    The verdict is now carried forward and only changed oracles are re-put, so
+    the gate is what its calibration describes. A repaired oracle is a different
+    check and IS reviewed again.
     """
     from tests.test_oracles_stage import (
         CONTRACT, GOOD, REQS, STIM, TESTPLAN, WITNESS, _Port as _GenPort,
@@ -845,14 +839,12 @@ def test_the_gate_is_recorded_PER_ROUND_because_it_runs_once_per_round(
     )
 
     monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
-    #: THE SAME ORACLE, TWO DRAWS, TWO ANSWERS.
     seen: list[int] = []
 
-    def _drawn(*_a, **kw):
+    def _drawn(oracles, *_a, **kw):
         seen.append(int(kw.get("round_", 0)))
-        return {"REQ-0001": C.Review(
-            tests_the_requirement=len(seen) > 1,
-            what_is_missing="" if len(seen) > 1 else "it never reads y")}
+        return {o.req_uid: C.Review(tests_the_requirement=True)
+                for o in oracles}
 
     monkeypatch.setattr(C, "review", _drawn)
 
@@ -863,18 +855,16 @@ def test_the_gate_is_recorded_PER_ROUND_because_it_runs_once_per_round(
         base="step", fanout=False, max_repairs=0, repair_attempts=1,
         run_dir=tmp_path, want_correspondence=True)
 
-    #: distinct `round_` per draw, so neither resumes the other's response
-    assert seen == [0, 1], f"the gate was not re-drawn per round: {seen}"
+    assert seen == [0], (
+        f"the unchanged oracle was put to the gate {len(seen)} times; a "
+        f"byte-identical prompt re-sampled is variance, not evidence")
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
     rounds = blob["correspondence_rounds"]
-    assert [r["round"] for r in rounds] == [1, 2], rounds
-    assert rounds[0]["off_target"] == ["REQ-0001"]
-    assert rounds[1]["off_target"] == [], "the second draw acquitted it"
-    #: and it survives back into the set, so a `--reuse` can still be asked
-    back = O.load(tmp_path)
-    assert back is not None
-    assert [r["round"] for r in back.correspondence_rounds] == [1, 2]
+    assert rounds[0]["reviewed"] == 1
+    assert all(r["reviewed"] == 0 for r in rounds[1:]), (
+        "a carried-forward verdict was not put to the gate, and counting it "
+        "would report a draw that did not happen")
 
 
 # ---------------------------- E2: the faithfulness gate becomes a label
@@ -963,3 +953,21 @@ def test_the_demotion_is_recorded_in_tools_so_a_run_says_which_arm_it_was(
     assert blob["tools"]["demote_faithfulness"] is True
     back = O.load(tmp_path)
     assert back is not None and back.tools["demote_faithfulness"] is True
+
+
+def test_a_REPAIRED_oracle_is_reviewed_again_because_it_is_a_different_check():
+    """The carry-forward must key on the BODY, not the uid. Keying on the uid
+    would let a repaired check inherit the verdict its predecessor earned, which
+    is the opposite defect: a gate that never sees the thing it is gating."""
+    import re
+    from pathlib import Path
+
+    import specflow.oracles_stage as oracles_stage
+
+    src = Path(oracles_stage.__file__).read_text(encoding="utf-8")
+    assert re.search(
+        r"_reviewed\.get\(o\.req_uid\)\s*!=\s*\(o\.hash or o\.source\)", src), (
+        "the freshness test must compare the oracle BODY against what was last "
+        "reviewed; comparing uids alone would carry a verdict across a repair")
+    assert re.search(r"_reviewed\[o\.req_uid\]\s*=\s*\(?o\.hash or o\.source\)?",
+                     src), "and it must record the body it just reviewed"

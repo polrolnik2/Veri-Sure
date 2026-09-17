@@ -1294,6 +1294,11 @@ def run_oracle_stage(
     #: check re-examined each round should be attributed to the guard that
     #: silenced it on the round whose verdict actually shipped.
     unreached_silenced: dict[str, str] = {}
+    #: `req_uid -> the oracle body last put to correspondence`, and the verdicts
+    #: it returned. Together they make the gate one draw per DISTINCT check
+    #: rather than one per round -- see the review call site.
+    _reviewed: dict[str, str] = {}
+    _carried: dict[str, object] = {}
     #: `req_uid -> the faithfulness ground that no longer discards it`. Recorded
     #: so the disposition still carries the observation and the debug loop can
     #: weight it; never consulted by anything that decides.
@@ -1525,11 +1530,37 @@ def run_oracle_stage(
         # compounding is a defect; if they are worse, the repetition is finding
         # something a single draw missed and the calibration is the stale
         # number. Both outcomes are publishable and neither is assumed.
-        reviews = (
-            correspondence.review(
-                list(held.values()), by_uid, port=port, normalized=normalized,
-                spec=spec, contract=contract, round_=rounds - 1, fanout=fanout)
-            if want_correspondence else {})
+        # **ONLY THE ORACLES THAT CHANGED.** `build_prompt` takes no `round_`,
+        # so re-reviewing an unchanged oracle sends a BYTE-IDENTICAL prompt and
+        # samples the reviewer again. The only thing a second draw on identical
+        # input can add is variance, and it compounds: the gate is published at
+        # "over 70 frozen oracles it rejects 3" (4.3%) and "2 of the first 40"
+        # (5%), both ONE draw per oracle, while this loop spent up to
+        # `repair_attempts + 1` of them over the whole surviving set --
+        # 1-(1-0.043)^3 = 12.3%, roughly three times the quoted yield, with the
+        # reviewer behaving exactly as calibrated.
+        #
+        # Worse, the draw count was not a property of the oracle: the loop
+        # advances only while `ask` is non-empty, so how many times a check was
+        # judged depended on whether OTHER requirements had something
+        # repairable.
+        #
+        # Carrying the prior verdict forward makes the gate what its calibration
+        # describes -- one draw per DISTINCT check -- and a repaired oracle is a
+        # different check, so it is reviewed again. This removes no information
+        # and roughly two thirds of the correspondence calls.
+        fresh = [o for o in held.values()
+                 if _reviewed.get(o.req_uid) != (o.hash or o.source)]
+        reviews = dict(_carried)
+        if want_correspondence and fresh:
+            reviews.update(correspondence.review(
+                fresh, by_uid, port=port, normalized=normalized,
+                spec=spec, contract=contract, round_=rounds - 1, fanout=fanout))
+            for o in fresh:
+                _reviewed[o.req_uid] = o.hash or o.source
+            _carried = dict(reviews)
+        elif not want_correspondence:
+            reviews = {}
         # Recorded from the REVIEWS, not from `rejected`, and the difference is
         # the point. `verify_one` reports one reason per oracle and
         # correspondence is checked before the variants leg, so a check that is
@@ -1539,7 +1570,13 @@ def run_oracle_stage(
         # instrument said, which is the only thing its published rate can be
         # compared against.
         if want_correspondence:
-            correspondence_rounds.append(_correspondence_round(rounds, reviews))
+            # FROM THE FRESH DRAWS ONLY. `reviewed` means "put to the gate this
+            # round", and a carried-forward verdict was not put to anything --
+            # counting it would report a draw that did not happen and re-create
+            # on paper the compounding the carry-forward removes.
+            correspondence_rounds.append(_correspondence_round(
+                rounds, {o.req_uid: reviews[o.req_uid]
+                         for o in fresh if o.req_uid in reviews}))
         for uid, oracle in held.items():
             why, may_quote, notes = verify_one(
                 oracle, contract=contract, testplan=testplan,
