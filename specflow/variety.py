@@ -451,3 +451,57 @@ def closed_by(authored_verdicts: Mapping[str, Mapping[str, bool | None]],
     """
     return {cid: tuple(c for c in was_blind if separates(c, v))
             for cid, v in authored_verdicts.items()}
+
+
+def authoring_at_cells_closes_blindness_soundly_and_does_not_constrict() -> str:
+    """E4, piloted live at THREE model calls. Driver: `docs/evidence/e4_pilot.py`,
+    replies at `docs/evidence/e4-pilot-authored.json`.
+
+    Pre-registered before the calls: <=15% of the residue closed ends the line;
+    the stimulus round's comparable bar was 5%; the nearest prior -- re-authoring
+    WITH a witness in the prompt -- reached 0 cells newly reached.
+    """
+    return (
+        "Three blind ports, one call each, briefed with a LOCATION and the "
+        "specification. No design, no observed values, no claim that either "
+        "reading is right.\n\n"
+        "    port       outcome                       closes   of   convicts control\n"
+        "    sda_oen    DECLINED                          --   96                 --\n"
+        "    scl_oen    authored                          66   85              FALSE\n"
+        "    cmd_ack    authored                          30   60              FALSE\n\n"
+        "**96 of 249 = 38.6% OF THE RESIDUE, AT AUDIT 0**, against a kill "
+        "threshold of 15% and a nearest prior of 0. At SET level, with the nine "
+        "sound checks already applied: **blindness 56.0% -> 14.6% from two "
+        "checks**, 41.3 points.\n\n"
+        "**AND 14.6% IS EXACTLY WHAT THE SIX CONTROL-CONVICTING CHECKS REACHED.** "
+        "The same discrimination, bought without the over-strictness. That is "
+        "the first thing on this project to get off "
+        "`soundness_and_blindness_are_one_knob` rather than move along it, and "
+        "it is the plan's thesis: the checks were not in the corpus, and no "
+        "filter over the corpus could have found them.\n\n"
+        "**THE DECLINE IS A RESULT, NOT A MISS.** `sda_oen` came back with no "
+        "check and a reason -- the specification does not constrain that port in "
+        "that scenario, because the driven command is not one the spec "
+        "documents. That is a SPECIFICATION finding, and the brief exists to "
+        "make it cheap: a model asked for something impossible complies rather "
+        "than refuses, and an invented check would have been scored as closure "
+        "here.\n\n"
+        "**AND THE HALF THAT DID NOT WORK, WHICH MATTERS MORE THAN THE HALF THAT "
+        "DID.** The constriction columns did not move at all: accepted designs "
+        "3 -> 3, classes 3 -> 3, diameter 0.015 -> 0.015. **Blindness fell 41 "
+        "points and the design space did not narrow by one design.** The cells "
+        "the new checks closed lie between designs the set had ALREADY "
+        "rejected, so separating them adjudicates a difference that changes no "
+        "verdict. This is E4b's second pre-registered outcome arriving on the "
+        "generation side: **blindness reduction and constriction are not the "
+        "same quantity, and a blindness figure alone would have reported this "
+        "round as a large success.**\n\n"
+        "So the lever works on the leg it was aimed at and the leg it was aimed "
+        "at is not sufficient. The next target is cells that separate designs "
+        "still ACCEPTED -- rank the residue by whether closing it would change "
+        "the accepted set, not by cell mass, which is what `ranked` does today.\n\n"
+        "**SCOPE.** Two authored checks; nine designs of one module; seven "
+        "synthetic testpoints; trace equivalence, not a miter; the audit is one "
+        "control on those testpoints, so 'does not convict the control' is much "
+        "weaker than a run's audit column. The 38.6% is a pilot, not a rate."
+    )
