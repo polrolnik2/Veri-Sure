@@ -1022,7 +1022,14 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     suite's own verdicts, and it is non-monotone -- removing a bad check
     re-values cells it had zeroed. Mass is a fact about the population.
     """
-    outputs = [str(p.get("name") or p) for p in (contract.get("outputs") or [])]
+    #: THE CONTRACT KEYS ITS PORTS UNDER `io`, WITH A `dir`. An earlier
+    #: version of this line read `contract["outputs"]`, which no contract has,
+    #: so `outputs` was always empty and the whole lever returned [] on every
+    #: run without saying anything -- the silent form of building a lever and
+    #: not connecting it. `normalize`, `s3_coverage` and `testcase_agent` all
+    #: use the filter below; this is the fourth copy and matches them.
+    outputs = [str(p.get("name")) for p in (contract.get("io") or [])
+               if p.get("dir") == "output" and p.get("name")]
     if not outputs or len(population) < 2:
         return []
     rows_by_design = _population_rows(

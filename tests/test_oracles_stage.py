@@ -2134,13 +2134,52 @@ def test_cell_authoring_is_off_without_a_population(monkeypatch):
                         lambda *a, **k: replays.append(1) or {})
     kw = dict(held={}, stimulus_by_tp={}, testplan=[], by_uid={},
               normalized=None, budget=5, base="", transactional=True)
+    #: **THE REAL CONTRACT SHAPE.** Ports live under `io` with a `dir`. The
+    #: first version of this test invented `{"outputs": [...]}`, which no
+    #: contract has -- so it agreed with the bug it was meant to catch and the
+    #: lever returned [] on a full pipeline run without a word.
+    real = {"io": [{"name": "p", "dir": "output", "width": 1},
+                   {"name": "clk", "dir": "input", "width": 1}]}
     #: One design is not a population.
-    assert O._cell_targets(population=("only one",),
-                           contract={"outputs": [{"name": "p"}]}, **kw) == []
-    #: No declared outputs means no port a cell could sit on.
-    assert O._cell_targets(population=("a", "b"),
-                           contract={"outputs": []}, **kw) == []
+    assert O._cell_targets(population=("only one",), contract=real, **kw) == []
+    #: No declared OUTPUT means no port a cell could sit on -- inputs do not
+    #: count, which is the half `dir` filtering carries.
+    assert O._cell_targets(
+        population=("a", "b"),
+        contract={"io": [{"name": "clk", "dir": "input"}]}, **kw) == []
     assert replays == [], "the leg replayed the population before checking it"
+
+
+def test_cell_targets_reads_the_contract_the_pipeline_actually_writes():
+    """Pinned against a REAL contract from a run, not one this test invented.
+
+    The lever spent a full pipeline run doing nothing because it read
+    `contract["outputs"]`; every other reader in the tree filters `io` on
+    `dir == "output"`. A shape-invented test cannot catch that, so this one
+    loads an artifact.
+    """
+    import json
+    from pathlib import Path as P
+
+    from specflow import oracles_stage as O
+
+    contract = json.loads(
+        P("docs/evidence/e3_contract.json").read_text(encoding="utf-8"))
+    assert "outputs" not in contract, (
+        "if a contract ever grows an `outputs` key, revisit the accessor")
+    ports = [str(p.get("name")) for p in contract["io"]
+             if p.get("dir") == "output" and p.get("name")]
+    assert len(ports) >= 4, ports
+    #: With real ports and a real population the leg gets as far as replaying,
+    #: which is the step the empty-outputs bug skipped entirely.
+    reached = []
+    import unittest.mock as mock
+    with mock.patch.object(O, "_population_rows",
+                           side_effect=lambda *a, **k: reached.append(1) or {}):
+        O._cell_targets(population=("a", "b"), held={}, contract=contract,
+                        stimulus_by_tp={}, testplan=[], by_uid={},
+                        normalized=None, budget=5, base="", transactional=True)
+    assert reached == [1], "the leg gave up before replaying a real contract"
 
 
 def test_the_cell_budget_reaches_the_stage_from_the_pipeline():
