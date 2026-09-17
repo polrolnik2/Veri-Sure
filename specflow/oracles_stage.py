@@ -288,6 +288,15 @@ class OracleSet:
     #: three turns on five a known-good control also fails. That asymmetry is
     #: why this is a label a consumer reads, not merely a suppressed discard.
     labels: dict[str, str] = field(default_factory=dict)
+    #: `req_uid -> [{round, was, now}]`. Every accepted repair that changed how
+    #: many of its own testpoints the check decides on.
+    #:
+    #: The stage blocks a repair that stops deciding ENTIRELY. It does not see a
+    #: replacement that goes from ten testpoints to one, and that is the gradual
+    #: road into the population where, among k1's 68 sound checks, the chance of
+    #: discriminating is 26% against a 75% base rate and 52 convict nothing.
+    #: Recorded so the distribution can be read before any threshold is chosen.
+    narrowing: dict[str, list[dict]] = field(default_factory=dict)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -1297,6 +1306,9 @@ def run_oracle_stage(
     #: `req_uid -> the oracle body last put to correspondence`, and the verdicts
     #: it returned. Together they make the gate one draw per DISTINCT check
     #: rather than one per round -- see the review call site.
+    #: `req_uid -> [{round, was, now}]` for every accepted repair that changed
+    #: how many testpoints the check decides on. See the accept site.
+    narrowing: dict[str, list[dict]] = {}
     _reviewed: dict[str, str] = {}
     _carried: dict[str, object] = {}
     #: `req_uid -> the faithfulness ground that no longer discards it`. Recorded
@@ -1839,6 +1851,21 @@ def run_oracle_stage(
                                base=base, transactional=transactional)
                 now = _decides(o, witness, contract, stimulus_by_tp,
                                base=base, transactional=transactional)
+                # **THE SLOPE, RECORDED BECAUSE THE GUARD BELOW ONLY SEES THE
+                # CLIFF.** `if was and not now` blocks a TOTAL loss of
+                # deciding. A replacement that goes from ten testpoints to one
+                # passes silently, and that is the gradual road into the
+                # sound-and-blind population: measured on k1, among 68 SOUND
+                # checks the chance of discriminating is 26% against a 75% base
+                # rate, and 52 of the 68 convict nothing at all.
+                #
+                # REPORTED, NOT GATED. The cliff is measured at nine checks on
+                # d1-i2c; the slope is unmeasured, and a threshold picked before
+                # its distribution is seen is the error this branch keeps
+                # paying for. This is what makes the distribution visible.
+                if was != now:
+                    narrowing.setdefault(o.req_uid, []).append(
+                        {"round": rounds, "was": was, "now": now})
                 if was and not now:
                     logger.info("oracles: %s: the replacement decides nothing on "
                                 "any of its %d testpoint(s) where the previous "
@@ -2237,6 +2264,7 @@ def run_oracle_stage(
                    # LOSSY-LOAD TRAP note there.
                    "unreached_silenced": unreached_silenced,
                    "faithfulness_labels": labels,
+                   "repair_narrowing": narrowing,
                    "stimulus_liveness": live,
                    "oracle_liveness": dead})
         for uid, what in sorted(drift.items()):
@@ -2279,6 +2307,7 @@ def run_oracle_stage(
                      testpoints_no_oracle_names=idle,
                      unreached_silenced=dict(unreached_silenced),
                      labels=dict(labels),
+                     narrowing={u: list(v) for u, v in narrowing.items()},
                      liveness={u: r.get("verdict", _L.UNKNOWN)
                                for u, r in report.items()},
                      witness_notes={u: n["witness"]
@@ -3560,4 +3589,9 @@ def load(run_dir: Path) -> OracleSet | None:
             for u, g in (blob.get("unreached_silenced") or {}).items()},
         labels={str(u): str(g)
                 for u, g in (blob.get("faithfulness_labels") or {}).items()},
+        narrowing={
+            str(u): [{"round": int(e.get("round") or 0),
+                      "was": int(e.get("was") or 0), "now": int(e.get("now") or 0)}
+                     for e in (v or []) if isinstance(e, dict)]
+            for u, v in (blob.get("repair_narrowing") or {}).items()},
     )

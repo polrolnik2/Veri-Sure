@@ -1829,3 +1829,49 @@ def test_considered_never_exceeds_what_the_dispositions_describe():
     assert stray.considered() == 0, (
         "this is the defect's signature: a stray abandonment drives the "
         "denominator below the number of requirements actually dispositioned")
+
+
+def test_the_repair_slope_is_recorded_and_survives_a_reload():
+    """The stage blocks a repair that stops deciding ENTIRELY (`was and not
+    now`). It does not see one that goes from ten testpoints to one, and that
+    is the gradual road into the sound-and-blind population -- among k1's 68
+    sound checks the chance of discriminating is 26% against a 75% base rate.
+
+    Recorded so the distribution can be read BEFORE a threshold is picked; the
+    cliff is measured at nine checks and the slope at none.
+    """
+    import tempfile
+
+    from specflow.refmodel import freeze as freeze_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp)
+        (run / "specflow").mkdir(parents=True)
+        freeze_mod.freeze(
+            [_corpus_oracle("REQ-0001", 0)], run / "specflow" / O.ARTIFACT,
+            extra={"dispositions": {"REQ-0001": "TRUSTED"},
+                   "repair_narrowing": {
+                       "REQ-0001": [{"round": 1, "was": 10, "now": 1}],
+                       "REQ-0002": [{"round": 1, "was": 2, "now": 5}]}})
+        back = O.load(run)
+
+    assert back is not None
+    assert back.narrowing["REQ-0001"] == [{"round": 1, "was": 10, "now": 1}]
+    #: a repair that WIDENS is recorded too -- the field is the slope, not a
+    #: one-sided complaint, and a widening is the outcome a repair wants
+    assert back.narrowing["REQ-0002"][0]["now"] == 5
+
+
+def test_the_slope_is_recorded_on_any_change_not_only_a_total_loss():
+    """`if was and not now` is the CLIFF. Recording only that would leave the
+    slope exactly as unmeasured as it was, which is the thing this is for."""
+    import re
+    from pathlib import Path
+
+    import specflow.oracles_stage as oracles_stage
+
+    src = Path(oracles_stage.__file__).read_text(encoding="utf-8")
+    assert re.search(r"if was != now:\s*\n\s*narrowing\.setdefault", src), (
+        "the slope must be recorded whenever the count CHANGES; recording it "
+        "only when the check stops deciding measures the cliff twice and the "
+        "slope never")
