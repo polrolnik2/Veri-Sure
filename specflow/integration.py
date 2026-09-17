@@ -412,6 +412,19 @@ def build_artifacts(
     #: reference and no grade; the argument is that a check rejecting every
     #: admissible reading has rejected the correct one.
     population_sources: Sequence[str] = (),
+    #: BUILD the population in-run instead of being handed one: k calls to the
+    #: generator that already writes the witness, held on disk beside it.
+    #:
+    #: The ordering guarantee is intact. What it forbids is an oracle written by
+    #: something that could have read THE SHIPPED DESIGN, which `run_refmodel`
+    #: produces after the oracle stage; these are throwaway readings of the
+    #: requirements, exactly as the witness is, and they are never shown to an
+    #: author -- `variety.brief` has no parameter one could arrive through.
+    #:
+    #: Off at 0 because it costs k conforming-implementation calls. 2 is the
+    #: minimum that means anything; seven independent readings fell into seven
+    #: equivalence classes, so more designs expose more of the space.
+    population_size: int = 0,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -854,6 +867,7 @@ def build_artifacts(
             want_variants=variants, want_correspondence=correspondence,
             demote_faithfulness=demote_faithfulness,
             population=population_sources,
+            population_size=population_size,
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement

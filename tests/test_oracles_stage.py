@@ -1972,3 +1972,95 @@ def test_the_control_is_not_the_population():
     sig = inspect.signature(O.run_oracle_stage)
     assert "control_source" in sig.parameters and "population" in sig.parameters
     assert sig.parameters["population"].default == ()
+
+
+def test_the_stage_can_build_its_own_population(tmp_path, monkeypatch):
+    """`population_size` asks the witness generator for k readings instead of
+    one, and below two it is not a population.
+
+    **THE GENERATOR HAS TO SUCCEED FOR THE GUARDS TO MEAN ANYTHING.** A first
+    version of this test passed `port=None`, so every generation failed and
+    the function returned `()` for the wrong reason -- both size guards
+    survived mutation. The stub is what makes the assertions load-bearing.
+    """
+    import inspect
+
+    from specflow import oracles_stage as O
+    from specflow.refmodel import conform
+
+    calls = []
+
+    def _gen(*, requirements, contract_json, port, workdir):
+        calls.append(workdir)
+        return f"# design {len(calls)}\n", []
+
+    monkeypatch.setattr(conform, "conforming_implementation", _gen)
+    monkeypatch.setattr(O, "_ports_agree", lambda *_a, **_k: True)
+
+    sig = inspect.signature(O.run_oracle_stage)
+    assert sig.parameters["population_size"].default == 0
+
+    kw = dict(requirements=[{"uid": "REQ-1", "text": "x"}],
+              contract_json="{}", port=object(), run_dir=None)
+    #: ONE READING IS NOT A POPULATION even when it is produced successfully --
+    #: a single design contradicting a check is an ordinary disagreement.
+    assert O._population(size=1, workdir=tmp_path / "a", **kw) == ()
+    assert O._population(size=0, workdir=tmp_path / "b", **kw) == ()
+    #: AND IT COSTS NOTHING TO SAY SO. The late "fewer than two produced" guard
+    #: returns `()` for these sizes anyway, so the only thing the early guard
+    #: buys is not paying for a generation whose result is discarded -- which
+    #: is invisible unless the call count is what gets asserted.
+    assert calls == [], "a sub-population size still bought model calls"
+    #: Two is the minimum that means anything, and each member gets its own
+    #: workdir so the cache returns independent readings.
+    got = O._population(size=3, workdir=tmp_path / "c", **kw)
+    assert len(got) == 3 and len(set(got)) == 3
+    assert len({str(w) for w in calls[-3:]}) == 3
+
+
+def test_a_partly_built_population_is_not_used(tmp_path, monkeypatch):
+    """Three asked for, one produced: the leg goes off rather than refuting on
+    a population of one.
+    """
+    from specflow import oracles_stage as O
+    from specflow.refmodel import conform
+
+    n = {"i": 0}
+
+    def _flaky(*, requirements, contract_json, port, workdir):
+        n["i"] += 1
+        return ("# only the first\n", []) if n["i"] == 1 else ("", [])
+
+    monkeypatch.setattr(conform, "conforming_implementation", _flaky)
+    monkeypatch.setattr(O, "_ports_agree", lambda *_a, **_k: True)
+    assert O._population(
+        size=3, requirements=[{"uid": "REQ-1", "text": "x"}],
+        contract_json="{}", port=object(), workdir=tmp_path,
+        run_dir=None) == ()
+
+
+def test_a_population_that_cannot_be_built_leaves_the_leg_off():
+    """Never raises. A missing population weakens the stage exactly as a
+    missing witness does -- it does not fail the run.
+    """
+    from specflow import oracles_stage as O
+
+    #: `port=None` makes every generation attempt fail; two are requested and
+    #: none arrives, so the leg reports off rather than propagating.
+    assert O._population(
+        size=3, requirements=[{"uid": "REQ-1", "text": "x"}],
+        contract_json="{}", port=None, workdir=Path("/tmp"),
+        run_dir=None) == ()
+
+
+def test_the_population_size_reaches_the_stage_from_the_pipeline():
+    import inspect
+    import re
+    from pathlib import Path as P
+
+    from specflow import integration as I
+
+    assert "population_size" in inspect.signature(I.build_artifacts).parameters
+    src = P(I.__file__).read_text()
+    call = re.search(r"run_oracle_stage\((.{0,2200}?)\n        \)", src, re.DOTALL)
+    assert call and "population_size=population_size" in call.group(1)

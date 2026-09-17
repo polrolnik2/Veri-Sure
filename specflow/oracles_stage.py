@@ -1248,6 +1248,19 @@ def run_oracle_stage(
     #: Fewer than two is not a population -- one design convicting a check is
     #: an ordinary disagreement -- so the leg stays off below that.
     population: Sequence[str] = (),
+    #: GENERATE the population here instead of being handed one. k calls to the
+    #: same generator that writes the witness, each in its own workdir so the
+    #: cache returns independent readings rather than one reading k times.
+    #:
+    #: **THIS DOES NOT BREAK THE ORDERING GUARANTEE.** What that guarantee
+    #: forbids is an oracle written by something that could have read THE
+    #: SHIPPED DESIGN, which `run_refmodel` produces after this stage. These are
+    #: throwaway readings of the requirements, like the witness, and the shipped
+    #: model is still written later and independently.
+    #:
+    #: Off at 0. Costs k conforming-implementation calls, paid once and held on
+    #: disk. Ignored when `population` is supplied directly.
+    population_size: int = 0,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -1327,6 +1340,17 @@ def run_oracle_stage(
     control = control_source or ""
     if control:
         witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
+
+    # THE POPULATION, ALONGSIDE THE WITNESS AND FOR THE SAME REASONS. Both are
+    # spec-derived readings written from the requirements alone, both are held
+    # on disk so they hold still across rounds, and neither is ever shown to an
+    # oracle author. They differ in what they are ALLOWED to do: a witness may
+    # repair, a population may only refute.
+    if not population and population_size:
+        population = _population(
+            size=population_size, requirements=requirements,
+            contract_json=contract_json, port=port, workdir=workdir,
+            run_dir=run_dir)
 
     # GENERATED ONCE, FROM THE WITNESS, AND THEN NEVER AGAIN.
     #
@@ -2688,6 +2712,78 @@ def _witness(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source, encoding="utf-8")
     return source, WITNESS
+
+
+
+def _population(
+    *, size: int, requirements: list[dict], contract_json: str, port: ModelPort,
+    workdir: Path, run_dir: Path | None,
+) -> tuple[str, ...]:
+    """`size` independently written spec-derived designs, for the refutation leg.
+
+    **THE SAME GENERATOR AS THE WITNESS, ASKED MORE THAN ONCE.** A witness is
+    already a spec-derived design written from the requirements alone; a
+    population is k of them. Each gets its own workdir so the cache returns a
+    distinct sample rather than the same one k times -- the point is
+    independent readings, and seven such readings fell into seven equivalence
+    classes.
+
+    **HELD ON DISK, FOR THE WITNESS'S REASON.** "The thing doing the measuring
+    has to hold still." A strengthening round re-enters this stage, and a
+    freshly drawn population would refute a different set of checks for no
+    reason anyone could name. Normalization was measured varying on 77% of
+    forms between two runs of the same inputs; a redrawn population would carry
+    that variance straight into which checks get rejected.
+
+    **IT IS NEVER SHOWN TO AN AUTHOR.** It reaches `_population_verdicts` and
+    `variety`, both of which take verdicts and cells rather than sources.
+    `brief` has no parameter a design could arrive through. That is what keeps
+    this from becoming the witness pathology -- "it does not make the check
+    more correct, it makes the check agree with the witness".
+
+    Never raises: a population that cannot be built leaves the leg off, exactly
+    as a missing witness leaves over-strictness unbounded rather than failing
+    the run.
+    """
+    from .refmodel.conform import conforming_implementation
+
+    if size < 2:
+        #: One design contradicting a check is an ordinary disagreement. The
+        #: refutation argument needs a population to be refuted BY.
+        return ()
+    root = (Path(run_dir) / "specflow" / "population"
+            if run_dir is not None else Path(workdir) / "population")
+    out: list[str] = []
+    for i in range(size):
+        held_path = root / f"{i}.py"
+        if held_path.is_file():
+            held = held_path.read_text(encoding="utf-8")
+            #: THE WITNESS'S STALE-CONTRACT LESSON APPLIES HERE TOO. A design
+            #: written against an interface that no longer exists makes every
+            #: check reading the missing port abstain, and the cost is charged
+            #: to the stimulus loop rather than to this.
+            if held.strip() and _ports_agree(held, contract_json):
+                out.append(held)
+                continue
+        try:
+            source, _issues = conforming_implementation(
+                requirements=requirements, contract_json=contract_json,
+                port=port, workdir=root / f"_gen{i}")
+        except Exception as exc:  # noqa: BLE001
+            logger.info("population member %d not produced (%r)", i, exc)
+            continue
+        if not source:
+            continue
+        held_path.parent.mkdir(parents=True, exist_ok=True)
+        held_path.write_text(source, encoding="utf-8")
+        out.append(source)
+    if len(out) < 2:
+        logger.warning(
+            "oracles: population of %d requested, %d produced -- the "
+            "refutation leg stays OFF", size, len(out))
+        return ()
+    logger.info("oracles: population of %d spec-derived design(s)", len(out))
+    return tuple(out)
 
 
 
