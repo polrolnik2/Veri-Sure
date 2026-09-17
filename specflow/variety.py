@@ -1,0 +1,208 @@
+"""Authoring INTO the design space: the generation-stage variety lever.
+
+**THE PROBLEM THIS EXISTS FOR.** Selection is a filter, so it can only lose
+span, and the corpus subsampling says where its offset has to come from: over
+100 -> 464 bodies span climbs 37.2% -> 81.6% and is still climbing, while
+blindness saturates (the first 100 bodies buy 26 points, the last 164 buy 2.7)
+and audit is flat (21.6% -> 18.9%). **Volume buys span; selection buys
+blindness.** So a set that is both broad and sharp needs more DISTINCT bodies
+per requirement, and the two ways tried so far do not produce them:
+
+  resampling one prompt   among pairs where both bodies are SOUND, 69% are
+                          identical and 4% complementary. Resampling samples one
+                          interpretation; it does not produce another.
+  a different STIMULUS    pre-registered at >=40% = lever, <15% = closed.
+  route to a scenario     Delivered 1 of 20 = 5% fully caught, with 15 of 20 new
+                          testpoints fully blind. Reaching the scenario was
+                          never the problem.
+
+**THE COORDINATE SYSTEM IS THE DESIGN POPULATION, NOT THE TEXT.** Seven
+independently written spec-derived designs fall into seven equivalence classes,
+all 21 pairs `DIFFERS` under a bounded reset-constrained miter that reads no
+known-good design. So "two checks are different" means *some spec-admissible
+design tells them apart*, and blindness is the disagreement cells nothing
+adjudicates -- measured, the same 169-check set is 0% blind on 61 testpoints and
+100% blind on 70, with 8 of 10 ports carrying disagreements in both classes.
+
+**THE POPULATION IS A POINTER, NOT AN ORACLE, AND THAT IS THE WHOLE DESIGN.**
+`brief` is handed a LOCATION -- the requirement, the driven inputs, the port and
+the testpoint the current set adjudicates nothing on. It is not handed the
+designs' source, it is not handed the values they produced, and it is never told
+that either of them is correct. There is no parameter through which any of that
+could arrive, which is the same structural enforcement `variants.build_prompt`
+uses.
+
+WHY, MEASURED. Presenting two behaviours and asking which the spec means makes
+them the answer set, when the spec may imply a third value or may not constrain
+that port at all -- and it reproduces the pathology the witness gate was deleted
+for: "it has no authority to say the oracle is wrong... telling an author 'an
+independent implementation fails your check' does not make the check more
+correct, **it makes the check agree with the witness**. Measured on h-i2c:
+over-strictness 27 -> 15, convictions 2 -> 16." A disagreement says only WHERE
+the spec is under-determined by the current set. What belongs there comes from
+the spec.
+
+**THE NULL IT HAS TO BEAT.** A round of re-authoring checks -- 39 calls, WITH a
+witness in the prompt -- reached 0 cells newly reached, "the rewrites' objections
+were a strict subset of what the set already caught". That round handed the
+author a design to agree with; this hands it a location and no design, and that
+distinction is the entire hypothesis. It is also a 0.69% sample of a
+5,656-disagreement residue belonging to a set that was 99.8% blind BY
+CONSTRUCTION, so it does not transfer as a flat zero -- but it is the nearest
+prior and the bar is the stimulus round's 5%, not 0.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+
+Rows = Sequence[Mapping[str, object]]
+
+
+@dataclass(frozen=True)
+class Cell:
+    """One place two spec-admissible designs behave differently.
+
+    `(testpoint, port, left, right)` -- deliberately NOT the two values. A cell
+    is a coordinate, and everything downstream that touches an author takes a
+    cell, so the values have nowhere to travel.
+    """
+
+    testpoint: str
+    port: str
+    left: str
+    right: str
+
+    @property
+    def pair(self) -> tuple[str, str]:
+        return (self.left, self.right)
+
+
+def cells(rows_by_design: Mapping[str, Mapping[str, Rows]],
+          outputs: Sequence[str]) -> tuple[Cell, ...]:
+    """Every `(testpoint, port, pair)` the population disagrees on.
+
+    Port granularity, not testpoint granularity, because that is the resolution
+    blindness is defined at and the resolution an author can be pointed to. A
+    testpoint where two designs differ says "somewhere in here"; a port says
+    where to look.
+
+    A design missing a testpoint contributes no cell for it: absence is not
+    disagreement, and counting it as one would manufacture cells out of a
+    replay that never ran -- the same conflation `must_fail` had to remove when
+    never-triggered replays were counted as evidence.
+    """
+    designs = tuple(sorted(rows_by_design))
+    found: list[Cell] = []
+    for tp in sorted({tp for rows in rows_by_design.values() for tp in rows}):
+        present = [d for d in designs if rows_by_design[d].get(tp)]
+        for port in outputs:
+            seen: dict[str, str] = {}
+            for d in present:
+                rows = rows_by_design[d][tp]
+                seen[d] = "|".join(
+                    str((r.get("outputs") or {}).get(port)) for r in rows)
+            for i, a in enumerate(present):
+                for b in present[i + 1:]:
+                    if seen[a] != seen[b]:
+                        found.append(Cell(testpoint=tp, port=port,
+                                          left=a, right=b))
+    return tuple(found)
+
+
+def separates(cell: Cell, verdict: Mapping[str, bool | None]) -> bool:
+    """Does this check tell the cell's two designs APART?
+
+    **POLARITY-CORRECTED, AND THAT IS NOT THE SAME AS THE RECORDED BLINDNESS
+    NUMBER.** The scorecard defines set blindness as the share of disagreement
+    cells where no check "objects to either", which a check convicting BOTH
+    designs satisfies while separating nothing -- and objecting to both sides is
+    exactly how a blindness score was gamed once before. Constriction needs
+    separation: different verdicts, not merely an objection.
+
+    An abstention on either side is not a separation. `decide` returns None
+    exactly when the clause's scenario never occurred, and silence from a check
+    that was shown nothing says nothing about the design.
+    """
+    left, right = verdict.get(cell.left), verdict.get(cell.right)
+    if left is None or right is None:
+        return False
+    return left != right
+
+
+def objects_to_either(cell: Cell, verdict: Mapping[str, bool | None]) -> bool:
+    """The RECORDED blindness predicate, kept so numbers stay comparable.
+
+    Weaker than `separates` on purpose: this is the definition behind every
+    published blindness figure in this project (t = 0 at 99.8%, t = 6 at 40.4%,
+    CEIL2 at 56.9%), and a new predicate would silently make them
+    incomparable. Report both; never quote one as the other.
+    """
+    return verdict.get(cell.left) is False or verdict.get(cell.right) is False
+
+
+def blind(population_cells: Sequence[Cell],
+          verdicts: Mapping[str, Mapping[str, bool | None]],
+          *, polarity_corrected: bool = True) -> tuple[Cell, ...]:
+    """The cells no check in the set adjudicates -- the authoring targets.
+
+    `verdicts` is `check_id -> design -> verdict`. Set blindness COMPOSES:
+    adding a check can only close holes, which is why it is scored over the set
+    and not per check. Scoring it per check produced the defect that motivated
+    the set-level definition: "adding 17 checks each measured less blind than
+    its parent took the blind-check count from 121 to 136 -- because a set gains
+    a blind check whenever it gains a check. Rejection is a union, so a metric
+    that worsens when you add a check is measuring the denominator."
+    """
+    speaks = separates if polarity_corrected else objects_to_either
+    return tuple(
+        c for c in population_cells
+        if not any(speaks(c, v) for v in verdicts.values()))
+
+
+def ranked(blind_cells: Sequence[Cell]) -> tuple[tuple[str, int], ...]:
+    """Blind cells collapsed to `(port, count)`, heaviest first.
+
+    Authoring targets are ports, not individual cells: the same output blind on
+    forty cells is one question to an author, and forty briefs would buy forty
+    near-copies of one check -- the failure mode this module exists to avoid.
+    Measured on the store write-through path, blindness collects at 5x on four
+    ports, so the mass is concentrated enough for this to matter.
+    """
+    tally: dict[str, int] = {}
+    for c in blind_cells:
+        tally[c.port] = tally.get(c.port, 0) + 1
+    return tuple(sorted(tally.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def brief(cell: Cell, *, requirement: str, activation: str,
+          driven: Mapping[str, object]) -> str:
+    """What the author is told. A LOCATION AND A REQUIREMENT. Nothing else.
+
+    **THE PARAMETERS ARE THE ENFORCEMENT.** There is no argument here through
+    which a design's source, a design's observed values, or a claim that either
+    design is right could arrive -- the same structural guarantee
+    `variants.build_prompt` relies on rather than an instruction not to look.
+    `cell` carries a port and two design NAMES; the names are never rendered.
+
+    The author is told that the requirement applies here and that nothing in the
+    suite currently decides this port in this scenario. What the port should do
+    is for the specification to say.
+    """
+    driven_text = ", ".join(f"{k}={v}" for k, v in sorted(driven.items()))
+    return (
+        f"REQUIREMENT\n{requirement.strip()}\n\n"
+        f"WHEN IT APPLIES\n{activation.strip()}\n\n"
+        f"THE GAP\nIn the scenario driven by {driven_text or '(no inputs)'}, "
+        f"nothing in the current suite decides the output port `{cell.port}` at "
+        f"testpoint {cell.testpoint}. Readings of this specification that are "
+        f"each defensible come apart there, which means the specification's "
+        f"answer for `{cell.port}` is not being checked.\n\n"
+        f"WRITE THE CHECK that decides `{cell.port}` in this scenario, FROM THE "
+        f"REQUIREMENT ABOVE. You are not being asked to choose between two "
+        f"behaviours and you are not being shown any implementation: if the "
+        f"requirement does not constrain `{cell.port}` here, say so in "
+        f"`reasoning` and write no check. A check invented to fill this gap is "
+        f"worse than an honest report that the specification is silent."
+    )
