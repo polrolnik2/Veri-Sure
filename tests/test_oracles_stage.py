@@ -1900,3 +1900,75 @@ def test_no_control_reports_None_and_never_zero():
     s = O.OracleSet(trusted=[], dispositions={"REQ-0001": "TRUSTED"},
                     witness_kind=O.NO_BOUND)
     assert s.rates()["trusted_the_control_fails"] is None
+
+
+def test_a_check_the_whole_population_convicts_is_rejected():
+    """The dual of `_cannot_fail`, exercised through the helper that decides
+    it. `_population_verdicts` feeds `variety.refuted_by_the_population`, and
+    the stage rejects what comes back.
+    """
+    from specflow import oracles_stage as O
+    from specflow import variety
+
+    #: Convicts every design -- the specification admits several behaviours
+    #: here and this rejects all of them, so it rejects the correct one.
+    everywhere = {"0": False, "1": False, "2": False}
+    #: Spares one. That is a separation, which is what the suite is for.
+    discriminates = {"0": False, "1": False, "2": True}
+    refuted = variety.refuted_by_the_population(
+        {"blunderbuss": everywhere, "useful": discriminates})
+    assert refuted == ("blunderbuss",)
+    why = O._refuted_everywhere(3)
+    #: `over-strict:` because `_repair_issue` already routes that prefix to the
+    #: relax-it instruction, which is the right ask for this defect.
+    assert why.startswith("over-strict:")
+    assert O._repair_issue("REQ-1", why).path.endswith(".over_strict")
+
+
+def test_the_population_leg_is_off_below_two_designs():
+    """One design convicting a check is an ordinary disagreement, not the
+    population contradicting it. The guard is in the stage, so this pins the
+    source: a behavioural test cannot reach the round loop without a run.
+    """
+    import re
+    from pathlib import Path
+
+    from specflow import oracles_stage as O
+
+    src = Path(O.__file__).read_text()
+    assert re.search(r"if len\(population\) >= 2:", src), (
+        "the population leg lost its minimum-size guard")
+    body = src[src.index("if len(population) >= 2:"):][:900]
+    assert "variety.refuted_by_the_population" in body
+    assert "rejected[uid] = quotable[uid] = why" in body, (
+        "the refutation no longer rejects anything")
+
+
+def test_the_population_reaches_the_stage_from_the_pipeline():
+    """`build_artifacts` must forward it, or the filter is another lever built
+    and not connected -- which is what happened to `demote_faithfulness`.
+    """
+    import inspect
+    import re
+    from pathlib import Path
+
+    from specflow import integration as I
+
+    assert "population_sources" in inspect.signature(I.build_artifacts).parameters
+    src = Path(I.__file__).read_text()
+    call = re.search(r"run_oracle_stage\((.{0,2000}?)\n        \)", src, re.DOTALL)
+    assert call and "population=population_sources" in call.group(1), (
+        "build_artifacts accepts a population and does not forward it")
+
+
+def test_the_control_is_not_the_population():
+    """`control_source` is a separate parameter and must stay separate: the
+    filter's whole claim is that it reads no reference and no grade.
+    """
+    import inspect
+
+    from specflow import oracles_stage as O
+
+    sig = inspect.signature(O.run_oracle_stage)
+    assert "control_source" in sig.parameters and "population" in sig.parameters
+    assert sig.parameters["population"].default == ()

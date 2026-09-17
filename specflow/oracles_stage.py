@@ -42,10 +42,11 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import reachability
+from . import reachability, variety
 from .model_io import ModelPort
 from .refmodel import correspondence, freeze
 from .refmodel import liveness as _L
@@ -945,6 +946,71 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
     )
 
 
+def _population_verdicts(held: dict, population: Sequence[str], contract: dict,
+                         stimulus_by_tp: dict, *, base: str,
+                         transactional: bool) -> dict:
+    """`req_uid -> design index -> verdict` over spec-derived designs.
+
+    Same replay `_decides` uses, against each member instead of the witness.
+    Never raises: a measurement that cannot be taken must not take the stage
+    down, which is the rule every other instrument here follows.
+    """
+    out: dict[str, dict[str, bool | None]] = {}
+    for uid, oracle in held.items():
+        per: dict[str, bool | None] = {}
+        for i, src in enumerate(population):
+            vals = []
+            for tp in oracle.tp_uids:
+                steps = stimulus_by_tp.get(tp)
+                if not steps:
+                    continue
+                try:
+                    rep = replay(src, contract, steps, base=base)
+                    rows = (transactional_view(rep.rows) if transactional
+                            else rep.rows)
+                    r = decide(oracle, rows)
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("population replay failed (%r)", exc)
+                    continue
+                if not r.broken and r.ok is not None:
+                    vals.append(r.ok)
+            per[str(i)] = (False if any(v is False for v in vals)
+                           else (True if vals else None))
+        out[uid] = per
+    return out
+
+
+def _refuted_everywhere(n: int) -> str:
+    """The rejection for a check the whole admissible population contradicts.
+
+    **THE DUAL OF `_cannot_fail`, AND THE STAGE BLOCKED ONLY ONE SIGN.** A
+    check nothing can move is `DEAD_ORACLE`. A check that convicts every
+    spec-derived design is the same defect with the other sign -- the tree's
+    own "over-strictness and vacuity as one defect with two signs" -- and
+    nothing stopped it.
+
+    Mechanical, and golden-free: the population is spec-derived designs, the
+    control is never among them, and the argument is not statistical. The
+    specification admits at least seven equivalence classes; a check rejecting
+    all of them has rejected the class the correct design is in, unless the
+    specification is unsatisfiable.
+
+    `over-strict:` because `_repair_issue` already routes that prefix to the
+    relax-it instruction, which is exactly the right ask here.
+    """
+    return (
+        f"over-strict: this check convicts every one of the {n} independently "
+        f"written spec-derived designs it was replayed against. They are not "
+        f"all wrong in the same way -- the specification admits several "
+        f"behaviours here and this rejects all of them, so it has rejected the "
+        f"correct one too. No reference was read to determine this.\n\n"
+        f"Relax it to what the requirement actually says. If it pins a detail "
+        f"the specification leaves open -- which edge a response lands on, an "
+        f"exact count the text does not state, an ordering it does not fix -- "
+        f"that detail is where the over-strictness is."
+    )
+
+
 def _cannot_fail(detail: str) -> str:
     """The rejection reason for a check no legal value can move.
 
@@ -1164,6 +1230,24 @@ def run_oracle_stage(
     #: Measured on the two surviving frozen sets, this is 8 of 8 and 19 of 19
     #: discards: TRUSTED 15 -> 23 and 24 -> 43 with nothing left blocked.
     demote_faithfulness: bool = False,
+    #: INDEPENDENTLY WRITTEN SPEC-DERIVED DESIGNS, as rendered sources. A check
+    #: convicting every one of them is rejected -- see `_refuted_everywhere`.
+    #:
+    #: **WHY IT IS AN INPUT AND NOT SOMETHING THIS STAGE BUILDS.** The pipeline
+    #: runs oracles BEFORE `run_refmodel`, on purpose: "an oracle written after
+    #: the model exists is written by something that could have read it." So at
+    #: authoring time a run has ZERO designs, and a population can only come
+    #: from runs that already finished -- which is exactly the provenance of
+    #: the nine `*-i2c.ref_model.py` designs the evidence drivers use. Passing
+    #: them in keeps that ordering guarantee intact.
+    #:
+    #: **NOT THE CONTROL, AND STRUCTURALLY SO.** `control_source` is a separate
+    #: parameter and is never added here. These are spec-derived; the rule
+    #: reads no reference and no grade.
+    #:
+    #: Fewer than two is not a population -- one design convicting a check is
+    #: an ordinary disagreement -- so the leg stays off below that.
+    population: Sequence[str] = (),
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -1698,6 +1782,30 @@ def run_oracle_stage(
             why = _cannot_fail(detail)
             rejected[uid] = quotable[uid] = why
             repairs.setdefault(uid, []).append(why)
+        # AND THE OTHER SIGN OF THE SAME DEFECT. `dead_now` rejects a check
+        # nothing can move; this rejects one that convicts every spec-derived
+        # design there is. The stage has always blocked the first and never the
+        # second, while its own note calls them "over-strictness and vacuity as
+        # one defect with two signs".
+        #
+        # Free rather than a trade, and structurally: a check convicting both
+        # sides of a pair SEPARATES neither, so removing it cannot open a cell
+        # that was closed. Measured on the unbiased run's frozen sets -- audit
+        # 25% -> 0% gated and 50% -> 22% demoted, blindness unmoved on both,
+        # and the accepted set going from 0 designs of 9 to 5.
+        #
+        # OFF UNLESS A POPULATION WAS PASSED IN, because this stage runs before
+        # any design of this run exists and must not acquire one of its own.
+        if len(population) >= 2:
+            pop_verdicts = _population_verdicts(
+                held, population, contract, stimulus_by_tp,
+                base=base, transactional=transactional)
+            for uid in variety.refuted_by_the_population(pop_verdicts):
+                if uid in rejected:
+                    continue
+                why = _refuted_everywhere(len(population))
+                rejected[uid] = quotable[uid] = why
+                repairs.setdefault(uid, []).append(why)
         # Gate 1 earns an attempt -- "try to make it pass" -- but only one, and
         # only where nothing else is already re-asking. It stays advisory: it is
         # a disagreement between two same-author readings, so declining it is a

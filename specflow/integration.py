@@ -398,6 +398,20 @@ def build_artifacts(
     #: requirement with no alternative for any of them. See
     #: `every_requirement_gets_one_body_and_only_repair_adds_more`.
     demote_faithfulness: bool = True,
+    #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
+    #: sources. A check convicting every one of them is rejected before freeze.
+    #:
+    #: **EMPTY BY DEFAULT BECAUSE A FIRST RUN HAS NOWHERE TO GET ONE.** Oracles
+    #: are authored before `run_refmodel`, so this run has no design yet and
+    #: must not acquire one -- that ordering is what stops a check being
+    #: written against the thing it checks. A population therefore comes from
+    #: OUTSIDE, exactly as `refmodel_control` does, and the operator supplies
+    #: ref models from earlier runs of the same specification.
+    #:
+    #: These are not the control and never include it. The filter reads no
+    #: reference and no grade; the argument is that a check rejecting every
+    #: admissible reading has rejected the correct one.
+    population_sources: Sequence[str] = (),
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -839,6 +853,7 @@ def build_artifacts(
             control_source=refmodel_control,
             want_variants=variants, want_correspondence=correspondence,
             demote_faithfulness=demote_faithfulness,
+            population=population_sources,
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement
