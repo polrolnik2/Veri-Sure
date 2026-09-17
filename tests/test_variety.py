@@ -143,3 +143,80 @@ def test_no_parameter_could_carry_a_design_or_its_values():
     for leaky in ("design", "designs", "source", "rows", "trace", "values",
                   "observed", "population", "witness", "reference"):
         assert leaky not in params, leaky
+
+
+# ------------------------------------------------ the constriction report
+
+
+def _verdicts(**by_check):
+    return by_check
+
+
+def test_a_design_is_accepted_when_nothing_convicts_it_and_rejections_union():
+    """"A design is rejected when ANY of 114 members objects" -- so adding
+    checks constricts monotonically and the risk is always over-constriction."""
+    cs = V.cells(POP, ["busy"])
+    one = V.constrict(cs, _verdicts(c1={"A": True, "B": False, "C": True}),
+                      POP, ["busy"])
+    assert one.accepted == ("A", "C")
+
+    two = V.constrict(
+        cs, _verdicts(c1={"A": True, "B": False, "C": True},
+                      c2={"A": False, "B": True, "C": False}), POP, ["busy"])
+    assert two.accepted == (), "a second objector can only shrink the set"
+
+
+def test_classes_collapse_behavioural_clones_and_diameter_grades_the_gap():
+    """A and C are identical traces, so accepting both is ONE class, not two --
+    the cardinality and the class count are different questions. Diameter is
+    the graded version: how far from equivalence, not merely how many."""
+    cs = V.cells(POP, ["busy"])
+    got = V.constrict(cs, _verdicts(), POP, ["busy"])
+    assert got.accepted == ("A", "B", "C")
+    assert got.classes == 2, "A and C are trace-identical"
+    assert got.diameter > 0.0, "B differs from both"
+
+    clones_only = {k: POP[k] for k in ("A", "C")}
+    tight = V.constrict(cs, _verdicts(), clones_only, ["busy"])
+    assert tight.classes == 1 and tight.diameter == 0.0
+
+
+def test_one_class_is_a_success_ONLY_if_the_control_is_still_admitted():
+    """The sharpest threshold in the plan. E4b reproduced the failure: dropping
+    the audit constraint took classes 8 -> 1 and diameter to 0.000 while the
+    first check added convicted the control, so the surviving class excluded
+    the known-good design."""
+    cs = V.cells(POP, ["busy"])
+    #: a set that convicts B, leaving the A/C class alone
+    only_ac = _verdicts(c1={"A": True, "B": False, "C": True})
+
+    kept = V.constrict(cs, only_ac, POP, ["busy"],
+                       control={"c1": True})
+    assert kept.classes == 1 and kept.admits_the_control is True
+
+    lost = V.constrict(cs, only_ac, POP, ["busy"],
+                       control={"c1": False})
+    assert lost.classes == 1, "the same single class"
+    assert lost.admits_the_control is False, (
+        "one class that excludes the correct design is over-constriction, not "
+        "success -- the number alone cannot tell them apart")
+
+    unknown = V.constrict(cs, only_ac, POP, ["busy"])
+    assert unknown.admits_the_control is None, "no control, no claim"
+
+
+def test_the_reusable_report_reproduces_the_e4b_driver():
+    """The driver computed accepted/classes/diameter inline. If the packaged
+    function disagrees with it, one of them is wrong and the recorded 56.0%
+    result is not reproducible."""
+    cs = V.cells(POP, ["busy"])
+    empty = V.constrict(cs, _verdicts(), POP, ["busy"])
+    assert empty.blind == 1.0, "no checks means every cell is blind"
+    assert set(empty.accepted) == set(POP)
+
+    closes = _verdicts(c1={"A": True, "B": False, "C": True})
+    after = V.constrict(cs, closes, POP, ["busy"])
+    assert after.blind < empty.blind
+    assert len(after.accepted) < len(empty.accepted)
+    assert after.diameter <= empty.diameter, (
+        "constriction must not widen the accepted set's spread")

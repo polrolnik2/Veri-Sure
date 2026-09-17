@@ -267,3 +267,85 @@ def blindness_constricts_but_stalls_far_from_equivalence() -> str:
         "of many. The monotone direction is robust to all of that. The exact "
         "56.0% is not."
     )
+
+
+@dataclass(frozen=True)
+class Constriction:
+    """What a check set does to the design space. The headline, not the triple.
+
+    **SPAN / AUDIT / BLINDNESS ARE PROXIES FOR THIS.** Sufficiency is directly
+    measurable without a reference -- if two designs both satisfy the set and
+    are not equivalent to each other, the set does not force equivalence -- and
+    both familiar failures are one quantity read at two ends: the screened
+    114-check set accepts 1 of 7 at audit 10, the unanimous 89-check set accepts
+    7 of 7 at audit 0.
+
+    `admits_the_control` is the half that makes the rest meaningful and is
+    `None` when no control was supplied. **Accepting exactly one class is a
+    success only if the correct design is in it** -- otherwise it is the
+    screened set's failure wearing a good number, which is exactly what E4b
+    reproduced: dropping the audit constraint took classes 8 -> 1 and diameter
+    to 0.000 while the first check added convicted the control.
+    """
+
+    accepted: tuple[str, ...]
+    classes: int
+    #: max pairwise disagreement fraction within the accepted set: how far from
+    #: equivalence, graded, where the class count is only a cardinality
+    diameter: float
+    blind: float
+    admits_the_control: bool | None
+
+
+def constrict(population_cells: Sequence[Cell],
+              verdicts: Mapping[str, Mapping[str, bool | None]],
+              rows_by_design: Mapping[str, Mapping[str, Rows]],
+              outputs: Sequence[str],
+              *, control: Mapping[str, bool | None] | None = None,
+              ) -> Constriction:
+    """Read a check set as a constriction of the design space.
+
+    A design is ACCEPTED when no check in the set convicts it. Rejections union
+    -- "a design is rejected when ANY of 114 members objects" -- so adding
+    checks constricts monotonically and the risk being measured is always
+    over-constriction, never under.
+
+    Equivalence here is TRACE equivalence over the testpoints supplied, which is
+    a bounded approximation of the miter and says so: two designs identical on
+    this stimulus may still differ elsewhere, so `classes` is a LOWER bound on
+    how many the set really admits.
+    """
+    accepted = tuple(sorted(
+        d for d in rows_by_design
+        if not any(v.get(d) is False for v in verdicts.values())))
+
+    def signature(design: str) -> tuple:
+        rows = rows_by_design[design]
+        return tuple(
+            (tp, tuple(str((r.get("outputs") or {}).get(p))
+                       for r in rows.get(tp, ()) for p in outputs))
+            for tp in sorted(rows))
+
+    worst = 0.0
+    for i, a in enumerate(accepted):
+        for b in accepted[i + 1:]:
+            diff = total = 0
+            for tp in sorted(set(rows_by_design[a]) & set(rows_by_design[b])):
+                for ra, rb in zip(rows_by_design[a][tp], rows_by_design[b][tp]):
+                    for p in outputs:
+                        total += 1
+                        if ((ra.get("outputs") or {}).get(p)
+                                != (rb.get("outputs") or {}).get(p)):
+                            diff += 1
+            worst = max(worst, diff / total if total else 0.0)
+
+    holes = blind(population_cells, verdicts)
+    return Constriction(
+        accepted=accepted,
+        classes=len({signature(d) for d in accepted}),
+        diameter=worst,
+        blind=len(holes) / len(population_cells) if population_cells else 0.0,
+        admits_the_control=(
+            None if control is None
+            else not any(control.get(c) is False for c in verdicts)),
+    )
