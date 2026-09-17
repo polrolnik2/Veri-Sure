@@ -349,3 +349,83 @@ def constrict(population_cells: Sequence[Cell],
             None if control is None
             else not any(control.get(c) is False for c in verdicts)),
     )
+
+
+#: The stage name calls are recorded under. One per PORT, not per cell: forty
+#: briefs for one blind port buys forty near-copies, which is what `ranked`
+#: exists to prevent.
+STAGE = "variety"
+
+PARSE_ERROR = "Parse Error: "
+
+
+@dataclass(frozen=True)
+class Authored:
+    """One reply. `source` empty means the author declined, which is a RESULT.
+
+    **DECLINING HAS TO BE CHEAP OR THE GAP GETS FILLED WITH AN INVENTION.** The
+    brief says so and this records it: a requirement that does not constrain the
+    port is a finding about the SPECIFICATION, and the measured alternative is a
+    model asked for something impossible complying rather than refusing -- the
+    same reason `declines_discrimination` exists at all, and the reason
+    `route_shows_issue` stopped demanding a discrimination in prose.
+    """
+
+    port: str
+    source: str
+    reasoning: str = ""
+
+    @property
+    def declined(self) -> bool:
+        return not self.source.strip()
+
+
+def author_at(targets: Sequence[tuple[str, Cell]],
+              *, requirement_of, activation_of, driven_of, port,
+              parse, round_: int = 0) -> tuple[Authored, ...]:
+    """Ask for one check per blind PORT. Never raises.
+
+    `targets` is `(req_uid, cell)` -- the requirement whose check is missing and
+    the coordinate it is missing at. Everything the author sees goes through
+    `brief`, which has no parameter for a design, its values, or a claim that
+    either is right.
+
+    A call that fails is a fact about the call, not about the specification: it
+    comes back declined with the error in `reasoning`, exactly as
+    `correspondence.review_one` treats an unreachable model, so a gateway
+    outage cannot read as "the spec is silent here".
+    """
+    out: list[Authored] = []
+    for uid, cell in targets:
+        text = brief(cell, requirement=requirement_of(uid),
+                     activation=activation_of(uid), driven=driven_of(cell))
+        try:
+            reply = port.complete(stage=f"{STAGE}_{cell.port}", round_=round_,
+                                  prompt=text)
+        except Exception as exc:  # noqa: BLE001
+            out.append(Authored(port=cell.port, source="",
+                                reasoning=f"{PARSE_ERROR}{exc!r}"))
+            continue
+        try:
+            source, reasoning = parse(reply)
+        except Exception as exc:  # noqa: BLE001
+            out.append(Authored(port=cell.port, source="",
+                                reasoning=f"{PARSE_ERROR}{exc!r}"))
+            continue
+        out.append(Authored(port=cell.port, source=source, reasoning=reasoning))
+    return tuple(out)
+
+
+def closed_by(authored_verdicts: Mapping[str, Mapping[str, bool | None]],
+              was_blind: Sequence[Cell]) -> dict[str, tuple[Cell, ...]]:
+    """Which of the previously-blind cells each new check actually closes.
+
+    **THE ONLY NUMBER THIS PASS MAY BE JUDGED ON.** Not how many checks came
+    back, not how many ran: how many cells that nothing adjudicated are now
+    adjudicated, polarity-corrected. The prior round to beat re-authored with a
+    witness in the prompt and reached "0 cells newly reached -- the rewrites'
+    objections were a strict subset of what the set already caught", so a
+    subset is the null however the count looks.
+    """
+    return {cid: tuple(c for c in was_blind if separates(c, v))
+            for cid, v in authored_verdicts.items()}

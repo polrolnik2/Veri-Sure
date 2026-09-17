@@ -220,3 +220,94 @@ def test_the_reusable_report_reproduces_the_e4b_driver():
     assert len(after.accepted) < len(empty.accepted)
     assert after.diameter <= empty.diameter, (
         "constriction must not widen the accepted set's spread")
+
+
+# ------------------------------------------------------- the authoring pass
+
+
+class _Port:
+    """Records what it was shown, so a test can assert on the prompt."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.prompts: list[str] = []
+        self.stages: list[str] = []
+
+    def complete(self, *, stage, round_, prompt):
+        self.prompts.append(prompt)
+        self.stages.append(stage)
+        if not self.replies:
+            raise AssertionError("no reply queued")
+        r = self.replies.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def _parse(reply):
+    return (reply.get("source", ""), reply.get("reasoning", ""))
+
+
+TARGETS = [("REQ-0001", V.Cell("TP-0", "busy", "zulufox", "quebecvane"))]
+CTX = dict(requirement_of=lambda u: "busy rises on START",
+           activation_of=lambda u: "a START is presented",
+           driven_of=lambda c: {"a": 1}, parse=_parse)
+
+
+def test_an_authored_check_comes_back_with_its_port():
+    port = _Port([{"source": "def decide(trace): return True, 0, ''"}])
+    got = V.author_at(TARGETS, port=port, **CTX)
+    assert len(got) == 1 and got[0].port == "busy"
+    assert not got[0].declined
+    assert port.stages == ["variety_busy"], "one call per PORT, not per cell"
+
+
+def test_declining_is_a_result_and_not_a_failure():
+    """A requirement that does not constrain the port is a finding about the
+    SPECIFICATION. If declining is not cheap the gap gets filled with an
+    invention -- a model asked for something impossible complies rather than
+    refuses, which is why `declines_discrimination` exists at all."""
+    port = _Port([{"source": "", "reasoning": "the spec says nothing about busy here"}])
+    got = V.author_at(TARGETS, port=port, **CTX)
+    assert got[0].declined
+    assert "says nothing" in got[0].reasoning
+
+
+def test_a_failed_call_is_not_recorded_as_the_spec_being_silent():
+    """A gateway outage is a fact about the call. Reading it as a decline would
+    turn a network error into a specification finding."""
+    port = _Port([TimeoutError("gateway")])
+    got = V.author_at(TARGETS, port=port, **CTX)
+    assert got[0].declined and got[0].reasoning.startswith(V.PARSE_ERROR)
+    assert "TimeoutError" in got[0].reasoning
+
+    bad = _Port([{"source": None}])           # parse blows up
+    got = V.author_at(TARGETS, port=bad,
+                      **{**CTX, "parse": lambda r: 1 / 0})
+    assert got[0].reasoning.startswith(V.PARSE_ERROR)
+
+
+def test_the_author_is_never_shown_a_design_or_its_values():
+    """The pass is only as honest as what reaches the prompt, so this asserts on
+    what the port actually received rather than on `brief` in isolation."""
+    port = _Port([{"source": "x"}])
+    V.author_at(TARGETS, port=port, **CTX)
+    shown = port.prompts[0]
+    assert "zulufox" not in shown and "quebecvane" not in shown
+    assert "busy rises on START" in shown and "`busy`" in shown
+
+
+def test_the_pass_is_judged_on_cells_closed_not_checks_returned():
+    """The null to beat re-authored with a witness and reached "0 cells newly
+    reached -- the rewrites' objections were a strict subset of what the set
+    already caught". A subset is the null however many checks came back."""
+    was_blind = [V.Cell("TP-0", "busy", "A", "B"),
+                 V.Cell("TP-1", "busy", "A", "B")]
+    closed = V.closed_by(
+        {"new1": {"A": True, "B": False},        # separates
+         "new2": {"A": False, "B": False},       # convicts both: separates none
+         "new3": {"A": None, "B": None}},        # abstains
+        was_blind)
+    assert len(closed["new1"]) == 2
+    assert closed["new2"] == (), "a blunderbuss closes nothing"
+    assert closed["new3"] == ()
