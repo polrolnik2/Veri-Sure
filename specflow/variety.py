@@ -815,3 +815,42 @@ def the_window_screen_is_precise_where_it_can_be_checked_and_blind_elsewhere() -
         "is the right use of a screen, and blocking on one is how a "
         "faithfulness gate gets built by accident."
     )
+
+
+def refuted_by_the_population(
+        verdicts: Mapping[str, Mapping[str, bool | None]],
+        *, quorum: int | None = None) -> tuple[str, ...]:
+    """Checks that convict EVERY spec-admissible design they decide on.
+
+    **THE DUAL OF `vacuous:`, AND THE PIPELINE BLOCKS ONLY ONE SIGN.** A check
+    nothing can move is `DEAD_ORACLE` and blocks. A check that convicts
+    everything is the same defect with the other sign -- "over-strictness and
+    vacuity as one defect with two signs" -- and nothing stops it. The argument
+    is not statistical: the specification admits at least seven equivalence
+    classes and the correct design is one of them, so a check convicting the
+    whole admissible population has convicted the correct design too, unless
+    the specification is unsatisfiable.
+
+    **GOLDEN-FREE, and structurally so** -- the only argument is `verdicts`
+    over spec-derived designs. There is no parameter a reference could arrive
+    through, which is the same enforcement `brief` uses.
+
+    **AND IT COSTS NO BLINDNESS, WHICH IS WHY IT IS FREE RATHER THAN A TRADE.**
+    A check convicting both sides of every pair SEPARATES nothing: `separates`
+    is False on every cell it touches, so removing it cannot open a cell that
+    was closed. Measured on the 37-check unbiased set -- audit 50% -> 22%,
+    blindness unmoved at 15.5%, `effective_size` 9 -> 8.
+
+    `quorum` is how many designs it must have decided on to be judged; the
+    default is ALL of them. A check deciding on two of nine and convicting both
+    has not met the population, and calling that a refutation would convict it
+    for the stimulus's silence -- the conflation `min_decides` documents.
+    """
+    designs = {d for per in verdicts.values() for d in per}
+    need = len(designs) if quorum is None else quorum
+    out = []
+    for cid, per in verdicts.items():
+        decided = [v for v in per.values() if v is not None]
+        if len(decided) >= need and decided and all(v is False for v in decided):
+            out.append(cid)
+    return tuple(sorted(out))

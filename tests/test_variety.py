@@ -433,3 +433,57 @@ def test_an_instant_is_not_a_flattened_span():
     pop = {"A": {"TP-0": _trace(0, 1, 0, 0)}}
     assert not V.flattened_a_span({"inputs": {"scl": 1}}, pop)
     assert V.flattened_a_span({"inputs": {"scl": 0}}, pop), "0 holds for two rows"
+
+
+def test_a_check_convicting_every_design_is_refuted():
+    """The whole admissible population cannot be wrong at once."""
+    v = {"everywhere": {"zulufox": False, "quebecvane": False, "romeo": False},
+         "somewhere": {"zulufox": False, "quebecvane": True, "romeo": True}}
+    assert V.refuted_by_the_population(v) == ("everywhere",)
+
+
+def test_a_check_that_spares_one_design_is_not_refuted():
+    """One survivor is a separation, which is the thing the suite is for."""
+    v = {"spares_one": {"zulufox": False, "quebecvane": False, "romeo": True}}
+    assert V.refuted_by_the_population(v) == ()
+
+
+def test_silence_on_most_of_the_population_is_not_a_refutation():
+    """Deciding on two of three and convicting both is the stimulus's silence,
+    not the population's verdict -- the `min_decides` conflation."""
+    v = {"shy": {"zulufox": False, "quebecvane": False, "romeo": None}}
+    assert V.refuted_by_the_population(v) == ()
+    #: ...unless the caller lowers the bar on purpose, which is what `quorum`
+    #: is for and why it is not the default.
+    assert V.refuted_by_the_population(v, quorum=2) == ("shy",)
+
+
+def test_a_check_deciding_nothing_is_not_refuted():
+    """Inert is `vacuous:`'s business, and convicting nobody is not convicting
+    everybody -- `all()` over an empty list would say otherwise."""
+    v = {"inert": {"zulufox": None, "quebecvane": None, "romeo": None}}
+    assert V.refuted_by_the_population(v) == ()
+
+
+def test_refutation_removes_no_separation():
+    """The reason it is free rather than a trade: a check convicting both sides
+    of a pair separates neither, so dropping it cannot open a closed cell."""
+    rows = {"zulufox": {"TP": [{"inputs": {}, "outputs": {"p": 1}}]},
+            "quebecvane": {"TP": [{"inputs": {}, "outputs": {"p": 0}}]}}
+    cs = V.cells(rows, ["p"])
+    assert cs
+    v = {"everywhere": {"zulufox": False, "quebecvane": False},
+         "real": {"zulufox": False, "quebecvane": True}}
+    refuted = V.refuted_by_the_population(v)
+    assert refuted == ("everywhere",)
+    kept = {k: p for k, p in v.items() if k not in refuted}
+    assert V.blind(cs, kept) == V.blind(cs, v)
+
+
+def test_quorum_zero_still_refuses_to_refute_a_check_that_decided_nothing():
+    """`all()` over an empty list is True, so the empty guard is the only thing
+    standing between "decided nothing" and "convicted everything" once a caller
+    turns the quorum off -- the same trap `min_decides: 0` documents.
+    """
+    v = {"inert": {"zulufox": None, "quebecvane": None}}
+    assert V.refuted_by_the_population(v, quorum=0) == ()
