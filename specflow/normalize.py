@@ -2396,3 +2396,51 @@ def write_artifacts(
         encoding="utf-8",
     )
     return path
+
+
+def the_window_field_landed_and_the_defect_is_still_live() -> str:
+    """E3, run live on `i2c_master_bit_ctrl`. Driver:
+    `docs/evidence/e3_window_residual.py`.
+
+    The motivating measurement: 63% of a2-i2c's 105 requirements name a span in
+    their own text and EVERY ONE was normalised to the instant its activation
+    began, making every check over one a point check -- "fails every design or
+    passes every design depending only on which way the port sat at that
+    instant". Over-strict 79% and vacuous 83% carry that shape against 58% of
+    the rest.
+
+    `until` landed 2026-08-27 14:02-15:31; a2-i2c ran 2026-08-28 07:07, AFTER.
+    So the figures above are the argument FOR the field and no recorded number
+    said whether adding it worked. Pre-registered before this run: fires on a
+    small minority => the defect is closed and this plan's premise is retired;
+    still fires broadly => it is the first thing to fix.
+    """
+    return (
+        "**IT IS STILL LIVE.**\n\n"
+        "    S1                                   115 requirements\n"
+        "    naming a span in their own text       42 = 36.5%\n"
+        "    of the 41 that normalized:\n"
+        "      carry NO close condition          **27 = 65.9%**\n"
+        "      closed the window                   14 = 34.1%\n\n"
+        "The field exists, `SYSTEM` teaches it in 17 places so it is not a dark "
+        "field like `sustains` was, and **two thirds of the requirements that "
+        "name a span still normalize to the instant their activation begins**. "
+        "The gate at `:1888` warns and ships.\n\n"
+        "**SO EVERY CHECK BUILT FROM THOSE 27 IS A POINT CHECK**, and that is "
+        "the shape whose two symptoms are over-strictness and vacuity -- which "
+        "is what the live pilots kept producing at the cells that matter: "
+        "vacuous checks from the small model, an over-strict one from the big "
+        "model. Nothing downstream is fully interpretable while this holds.\n\n"
+        "**WHAT IS NOT COMPARABLE, AND IT IS THE DENOMINATOR.** 36.5% of 115 "
+        "here against 63% of 105 on a2-i2c: different divide and classify "
+        "passes, a hand-written contract rather than an architect-generated "
+        "one, and a small model doing the classification. The DENOMINATOR moved "
+        "and no conclusion should rest on it. **The 65.9% is the number this "
+        "run adds**, and it is measured post-fix, which is exactly what was "
+        "missing.\n\n"
+        "**SCOPE.** One module, one run, `gpt-5-mini` throughout, `max_repairs` "
+        "at 2. A stronger normalizer might close more windows -- that is the "
+        "untried variable, and the record says a stronger author helped on "
+        "REPAIR rather than generation, so it is not a safe assumption either "
+        "way."
+    )
