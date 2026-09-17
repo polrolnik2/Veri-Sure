@@ -1010,3 +1010,40 @@ def a_one_pass_corpus_is_inert_and_selection_cannot_rescue_it() -> str:
         "that broke V1's bar, caught here by refusing any point whose audit "
         "exceeds `t = 6`'s 18.9%."
     )
+
+
+def the_whole_oracle_stage_loss_on_two_frozen_sets_is_the_faithfulness_gate() -> str:
+    """E0, run offline on the two frozen sets that survived the data loss.
+
+    Step 2 of the protocol was to reproduce the recorded verdicts through the
+    real `_dispositions` rather than re-derive them arithmetically, so the
+    counts below come out of the shipped code path.
+    """
+    return (
+        "**EVERY DISCARD IN BOTH SETS IS CORRESPONDENCE.** Not one "
+        "`malformed:`, not one `vacuous:`, not one `unreached:`.\n\n"
+        "    set            considered  TRUSTED  discarded  reasons\n"
+        "    affected23             23       15          8  7 off-target, 1 not-assertable\n"
+        "    reauthor43             43       24         19  19 off-target\n\n"
+        "Both reproduce through `_dispositions` exactly -- **23 of 23 and 43 of "
+        "43** -- so this is the code's own verdict, not arithmetic on a table. "
+        "Under the plan's rule, where a faithfulness reason becomes a label and "
+        "only `well_formed`, a replay break and `DEAD_ORACLE` still block, "
+        "**TRUSTED goes 15 -> 23 and 24 -> 43, and NOTHING remains blocked**.\n\n"
+        "**AND 63 REPAIR ROUNDS WERE SPENT ON THE CHECKS IT THEN DISCARDED** -- "
+        "18 on affected23 (median 3, max 4) and 45 on reauthor43 (median 2, max "
+        "5). That is paid authoring work, gated out after the fact by a "
+        "reviewer reading two texts.\n\n"
+        "**WHAT E0 CANNOT SAY, AND THE LIMIT IS THE FINDING.** Liveness "
+        "verdicts are recorded for **15 of 15** and **24 of 24 kept** checks and "
+        "**0 of 8 and 0 of 19 discarded** ones; `oracles` holds only the TRUSTED "
+        "bodies; neither set carries a control or variants. So the admission "
+        "**cannot be priced from these artifacts at all** -- not its audit, not "
+        "its blindness, not even whether the admitted checks would have run. "
+        "**The artifact retains survivors only, at exactly the point a decision "
+        "about discarding needs the discarded.** `_retain`/`CorpusBody` was "
+        "built to close this and both sets predate it.\n\n"
+        "**SCOPE.** Two sets, one module family, no control on either. It "
+        "establishes what the gate removed and what the artifact kept. It "
+        "establishes nothing about whether removing it was right."
+    )

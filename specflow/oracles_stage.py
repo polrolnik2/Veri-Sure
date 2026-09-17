@@ -264,6 +264,19 @@ class OracleSet:
     #: this makes possible is reading the triple over that population; nothing
     #: here licenses reading the count on its own.
     correspondence_rounds: list[dict] = field(default_factory=list)
+    #: `req_uid -> which `_unreached` guard silenced it`. A requirement that
+    #: leaves through one of those guards produces NO rejection and NO
+    #: disposition of its own, so it is invisible in every rate this class
+    #: reports -- and the five guards route to five different owners.
+    #:
+    #: Measured on k1-dcfsm: **19 of 25 ABANDONED requirements never reached a
+    #: repair round and only 7 carried an `unreached:` objection, so 18 were
+    #: silenced there** -- and which guard did it could not be recovered from
+    #: the artifact, because the record keeps the staging attempts and not the
+    #: verdict `_unreached` reached on them. The guards already name themselves
+    #: to `logger.debug`; this is the same string, kept where a finished run can
+    #: still be asked about it.
+    unreached_silenced: dict[str, str] = field(default_factory=dict)
 
     def considered(self) -> int:
         """Requirements still in the system: the denominator for every rate.
@@ -782,7 +795,8 @@ def _decides(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
 
 
 def _unreached(oracle, record: dict | None, witness: str, contract: dict,
-               stimulus_by_tp: dict, *, base: str, transactional: bool) -> str:
+               stimulus_by_tp: dict, *, base: str, transactional: bool,
+               silenced: dict[str, str] | None = None) -> str:
     """The check decides nothing AND the stimulus loop already failed to reach it.
 
     WHY THIS MAY GATE, WHEN "UNEXERCISED IS NOT A FINDING" IS THE MODULE'S OWN
@@ -818,6 +832,8 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
     def _silent(guard: str) -> str:
         logger.debug("oracles: %s not routed as unreached (%s)",
                      oracle.req_uid, guard)
+        if silenced is not None:
+            silenced[oracle.req_uid] = guard
         return ""
 
     if not record:
@@ -1218,6 +1234,10 @@ def run_oracle_stage(
     #: Per-round correspondence outcomes -- see `OracleSet.correspondence_rounds`
     #: for why the round index is the field that matters.
     correspondence_rounds: list[dict] = []
+    #: `req_uid -> which `_unreached` guard silenced it`. Last write wins: a
+    #: check re-examined each round should be attributed to the guard that
+    #: silenced it on the round whose verdict actually shipped.
+    unreached_silenced: dict[str, str] = {}
     #: `req_uid -> why we gave up`, one of `verdict.ABANDONED_REASONS`. These
     #: leave the frozen set entirely -- see the exclusion below. Populated only
     #: by a stage that RAN a bounded attempt and exhausted it; empty here means
@@ -1469,7 +1489,8 @@ def run_oracle_stage(
                 # mechanical defect is reported as that rather than as silence.
                 why = _unreached(oracle, staging.get(uid), witness, contract,
                                  stimulus_by_tp, base=base,
-                                 transactional=transactional)
+                                 transactional=transactional,
+                                 silenced=unreached_silenced)
                 may_quote = bool(why)
             if notes:
                 disagreements[uid] = notes
@@ -2081,6 +2102,9 @@ def run_oracle_stage(
                    "abandoned_count": len(abandoned),
                    "considered": len(dispositions) - len(abandoned),
                    "testpoints_no_oracle_names": idle,
+                   # Read back in `load`, like every field below it. See the
+                   # LOSSY-LOAD TRAP note there.
+                   "unreached_silenced": unreached_silenced,
                    "stimulus_liveness": live,
                    "oracle_liveness": dead})
         for uid, what in sorted(drift.items()):
@@ -2121,6 +2145,7 @@ def run_oracle_stage(
                      rounds=(previous.rounds + 1 if only and previous
                              else rounds),
                      testpoints_no_oracle_names=idle,
+                     unreached_silenced=dict(unreached_silenced),
                      liveness={u: r.get("verdict", _L.UNKNOWN)
                                for u, r in report.items()},
                      witness_notes={u: n["witness"]
@@ -3389,4 +3414,15 @@ def load(run_dir: Path) -> OracleSet | None:
         abandoned={str(u): str(v)
                    for u, v in (blob.get("abandoned") or {}).items()},
         tools=dict(blob.get("tools") or {}),
+        #: **AND `testpoints_no_oracle_names` WAS ALSO BEING DROPPED.** It is
+        #: the input to `decides_nothing()`, whose own docstring says "an empty
+        #: list and an unmeasured one read the same in a report and mean
+        #: opposite things" -- and on every `--reuse` this constructor made it
+        #: empty, so the method returned 0 and said exactly the thing it was
+        #: written to prevent.
+        testpoints_no_oracle_names=[
+            str(t) for t in (blob.get("testpoints_no_oracle_names") or [])],
+        unreached_silenced={
+            str(u): str(g)
+            for u, g in (blob.get("unreached_silenced") or {}).items()},
     )

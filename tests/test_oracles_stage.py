@@ -1684,3 +1684,109 @@ def test_liveness_that_never_ran_reports_None_and_never_zero():
     assert rates["trusted_live"] is None
     assert rates["trusted_inert"] is None
     assert rates["trusted_liveness_unknown"] is None
+
+
+# --------------------------------------------------------------------------
+# E1: A REQUIREMENT THAT LEAVES THROUGH A SILENT GUARD IS INVISIBLE IN EVERY
+# RATE. `_unreached` has five of them; 18 of k1-dcfsm's 25 ABANDONED were
+# silenced there and which guard did it was unrecoverable from the artifact.
+# --------------------------------------------------------------------------
+
+
+def test_each_unreached_guard_names_itself_into_the_record():
+    """Five `return ""`s are indistinguishable in the artifact, and the five
+    route to five different owners: a testplan defect, a normalisation defect
+    and an author defect are not the same finding. This pins that each guard
+    that fires says which one it was."""
+    silenced: dict[str, str] = {}
+    oracle = _oracle(GOOD)
+
+    #: nothing was attempted -- a discard must be EARNED by an attempt that ran
+    assert O._unreached(oracle, None, WITNESS, CONTRACT, STIM, base="step",
+                        transactional=True, silenced=silenced) == ""
+    assert "nothing was attempted" in silenced["REQ-0001"]
+
+    #: attempted == 0 is a different guard and must not read as the first
+    silenced.clear()
+    assert O._unreached(oracle, {"attempted": 0}, WITNESS, CONTRACT, STIM,
+                        base="step", transactional=True,
+                        silenced=silenced) == ""
+    assert "attempted == 0" in silenced["REQ-0001"]
+
+    #: the scenario WAS reached -- not a silence at all
+    silenced.clear()
+    assert O._unreached(oracle, {"attempted": 2, "reached_at_attempt": 1},
+                        WITNESS, CONTRACT, STIM, base="step",
+                        transactional=True, silenced=silenced) == ""
+    assert "WAS reached" in silenced["REQ-0001"]
+
+    #: no stimulus on any testpoint it names -- the TESTPLAN's, not the author's
+    silenced.clear()
+    assert O._unreached(oracle, {"attempted": 2}, WITNESS, CONTRACT, {},
+                        base="step", transactional=True,
+                        silenced=silenced) == ""
+    assert "no stimulus" in silenced["REQ-0001"]
+
+    #: and the collector is optional -- a caller that passes none still works
+    assert O._unreached(oracle, None, WITNESS, CONTRACT, STIM, base="step",
+                        transactional=True) == ""
+
+
+def test_a_real_unreached_rejection_is_not_recorded_as_silenced():
+    """The record is of requirements that left WITHOUT a disposition. One that
+    gets a real `unreached:` objection is visible already and must not be
+    double-counted as invisible."""
+    silenced: dict[str, str] = {}
+    why = O._unreached(
+        _oracle(UNEXERCISED), {"attempted": 3, "attempts": []}, WITNESS,
+        CONTRACT, STIM, base="step", transactional=True, silenced=silenced)
+    assert why.startswith("unreached:"), why
+    assert silenced == {}, silenced
+
+
+def test_the_two_dropped_fields_survive_a_freeze_and_reload():
+    """`testpoints_no_oracle_names` was being dropped by `load`, so
+    `decides_nothing()` read 0 on every `--reuse` -- which its own docstring
+    says must never happen: "an empty list and an unmeasured one read the same
+    in a report and mean opposite things"."""
+    import tempfile
+
+    from specflow.refmodel import freeze as freeze_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run = Path(tmp)
+        (run / "specflow").mkdir(parents=True)
+        freeze_mod.freeze(
+            [_corpus_oracle("REQ-0001", 0)], run / "specflow" / O.ARTIFACT,
+            extra={
+                "dispositions": {"REQ-0001": "TRUSTED"},
+                "testpoints_no_oracle_names": ["TP-0007", "TP-0009"],
+                "unreached_silenced": {"REQ-0002": "attempted == 0"},
+            })
+        back = O.load(run)
+
+    assert back is not None
+    assert back.testpoints_no_oracle_names == ["TP-0007", "TP-0009"]
+    assert back.decides_nothing() == 2, "it read 0 on every --reuse before this"
+    assert back.unreached_silenced == {"REQ-0002": "attempted == 0"}
+
+
+def test_the_unreached_call_site_passes_the_collector():
+    """Third time on this branch that a call site inside `run_oracle_stage`
+    survived every behavioural test when deleted. The function is correct and
+    unreachable from any unit test, so the wiring is pinned at the source."""
+    import re
+    from pathlib import Path
+
+    import specflow.oracles_stage as oracles_stage
+
+    src = Path(oracles_stage.__file__).read_text(encoding="utf-8")
+
+    assert re.search(r"_unreached\(.{0,300}?silenced=unreached_silenced",
+                     src, re.DOTALL), (
+        "run_oracle_stage must pass its collector to _unreached, or the guard "
+        "attribution is computed and thrown away")
+    #: and it has to reach the artifact and come back
+    assert '"unreached_silenced": unreached_silenced' in src
+    assert 'blob.get("unreached_silenced")' in src
+    assert 'blob.get("testpoints_no_oracle_names")' in src
