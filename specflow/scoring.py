@@ -1233,3 +1233,60 @@ def my_own_driver_skipped_the_indirect_pass_and_lost_half_the_sample() -> str:
         "instrumentation found a defect in the experiment that was built to use "
         "it."
     )
+
+
+def the_indirect_pass_recovers_91_percent_and_the_residue_is_not_a_gate() -> str:
+    """Two questions that look like one: is the abandonment recoverable, and is
+    it a faithfulness judgment? Measured, the answer differs for each part.
+
+    `no observation route found` fires when a normalized form has neither an
+    observable port nor an indirect route -- normalization was asked which port
+    shows this requirement and answered "none". That is a model reading prose,
+    so the suspicion that it is a faithfulness gate is the right suspicion.
+    Both normalizations are on disk (`normalized-direct-only.json` and
+    `normalized-all.json`) and `e2_why_abandoned.py` replays both.
+    """
+    return (
+        "**THE INDIRECT PASS RECOVERS 48 OF 53 = 91%**, from the rerun's own "
+        "log: `indirect pass: blind 53 -> 5 (recovered 48)`. That is above the "
+        "83% route-recovery already on record. Over the whole module the "
+        "abandonment grounds go\n\n"
+        "    direct pass only      52 no route  +  3 no discrimination  = 55\n"
+        "    after resolve_indirect  5 no route  +  2 no discrimination  =  7\n\n"
+        "and on the seeded 40-requirement sample, 20 -> 3.\n\n"
+        "**FOR THE 48 THAT RECOVERED, IT WAS A FAITHFULNESS ERROR IN THE FULL "
+        "SENSE.** A model judged 'nothing observes this', the judgment "
+        "terminally abandoned the requirement out of numerator AND denominator, "
+        "and it was overturned nine times in ten by asking again with more "
+        "information. A blocking claim refuted at that rate is the "
+        "miscalibration this tree has paid for twice. The saving grace is that "
+        "the pipeline already carries its own refutation -- `resolve_indirect` "
+        "is part of `integration.py` and MY DRIVER DID NOT CALL IT. The defect "
+        "was in the measurement, and the gate it appeared to expose is a gate "
+        "the pipeline does not actually run unrefuted.\n\n"
+        "**FOR THE RESIDUAL 5, IT IS NOT.** Four say in their OWN restated text "
+        "that they impose no requirement -- 'Implementation details:' and "
+        "'Processing Flow:' are headings, '6.' and '11.' are bare list-item "
+        "markers -- and the fifth is the module's input port declaration list. "
+        "There is nothing to observe because they assert nothing. Probes do not "
+        "help them either: probes name internal STATE so a state-dependent "
+        "activation becomes expressible, and these have no behaviour to be "
+        "stateful about.\n\n"
+        "**AND THE OBVIOUS DENOMINATOR FIX IS ONE THE CODEBASE ALREADY "
+        "REFUTED, which is why it is recorded here.** S1's `unit_kind` "
+        "separates them perfectly -- 4 of 4 scaffolding, 0 of 96 behavioural -- "
+        "so using it to shrink the span denominator is the tempting move. "
+        "`s1_classify` forbids it on measured grounds: `unit_kind` is 'ADVISORY "
+        "AND NEVER A FILTER... A heading classified scaffolding still becomes a "
+        "requirement and still goes downstream -- it will fail to yield an "
+        "oracle, and that is where the fact belongs. The previous design "
+        "dropped it here instead, silently: 49 of n3-i2c's 168 units produced "
+        "nothing.' It is also MODEL-ASSIGNED, so filtering on it would put a "
+        "faithfulness judgment in the denominator, which is the worst place "
+        "for one. The oracle-stage abandonment IS the intended destination.\n\n"
+        "**WHAT SURVIVES IS A FLOOR, NOT A FIX.** Of the 40 sampled, 4 are "
+        "non-behavioural by S1's advisory read (3 interface, 1 scaffolding) and "
+        "2 are residually unroutable. So roughly 5% of the span denominator can "
+        "never yield a check and no authoring or selection lever beats it. "
+        "Report it as a known floor; do not subtract it."
+    )
