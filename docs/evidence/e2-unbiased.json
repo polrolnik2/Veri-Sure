@@ -1,25 +1,26 @@
 {
   "gated": {
     "trusted": 13,
-    "considered": 20,
+    "considered": 37,
     "labels": 0,
     "sample": 40,
     "dispositions": {
-      "ABANDONED": 20,
-      "ORACLE_INVALID": 7,
+      "ABANDONED": 3,
+      "NOT_ASSERTABLE": 8,
+      "ORACLE_INVALID": 12,
       "VACUOUS": null
     },
-    "corpus_bodies": 54,
+    "corpus_bodies": 62,
     "corpus_reqs": 40,
-    "median_depth": 1
+    "median_depth": 2
   },
   "demoted": {
     "trusted": 21,
-    "considered": 21,
-    "labels": 29,
+    "considered": 38,
+    "labels": 32,
     "sample": 40,
     "dispositions": {
-      "ABANDONED": 19,
+      "ABANDONED": 2,
       "VACUOUS": null
     },
     "corpus_bodies": 41,
