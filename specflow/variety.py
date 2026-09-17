@@ -177,6 +177,27 @@ def constricting(blind_cells: Sequence[Cell],
     closing the cell convicts exactly one of the pair, and convicting an
     already-rejected design changes nothing.
 
+    **REPORT WITH THIS. DO NOT TARGET WITH IT.** "Already rejected" is the
+    SUITE'S opinion about an UNVERIFIED design, and using it to choose what to
+    author filters evidence about the suite by the suite's own verdicts -- the
+    same circularity as the faithfulness gates this module exists to replace,
+    arrived at through arithmetic instead of prose. None of these designs is
+    known correct; a disagreement is just a disagreement.
+
+    **AND IT IS FRAGILE AND NON-MONOTONE, WHICH IS THE DISQUALIFYING PART.**
+    Measured on the pilot's own set: of eight rejections, **one check
+    (`reauthor43:REQ-0101`) carries five**, and dropping it alone takes the
+    accepted set from `h, q, s` to `h, n, p, q, s, y`. So the ranking is a
+    function of one unverified check whose whole claim to soundness is sparing
+    one control on seven testpoints. Removing a bad check makes previously
+    "worthless" cells valuable again -- the triage depends on DEFECTS in the
+    artifact it is triaging evidence about.
+
+    What it is legitimately for: explaining an outcome after the fact. It is
+    what showed that pilot 1 closed 96 cells and moved nothing, because its
+    checks convicted only designs other checks had already convicted. That is a
+    true statement about the set as it stands, and it survives.
+
     **`both=True` IS THE GUARANTEED-CONSTRICTING SUBSET, AND IT IS SMALL.** Of
     the pilot's 249 blind cells, **169 touch an accepted design but only 23 have
     BOTH accepted** -- 12 on `sda_oen`, 9 on `scl_oen`, 2 on `busy`, over the
@@ -205,12 +226,14 @@ def ranked(blind_cells: Sequence[Cell],
     Measured on the store write-through path, blindness collects at 5x on four
     ports, so the mass is concentrated enough for this to matter.
 
-    **PASS `accepted` AND THE RANKING BECOMES A CONSTRICTION RANKING.** Mass
-    alone ranked the port that closed 66 cells and narrowed the design space by
-    nothing. With `accepted` supplied, a cell counts double when BOTH its
-    designs are still accepted -- closing it must shrink the set -- once when
-    one is, and not at all when neither is, because that cell cannot change a
-    verdict whatever a check says about it.
+    **`accepted` IS A DIAGNOSTIC WEIGHTING, NOT AN AUTHORING TARGET.** It counts
+    a cell twice when both its designs are still accepted, once when one is, and
+    not at all when neither is. That is useful for explaining why a round of
+    authoring did or did not move the accepted set. It is NOT a way to choose
+    cells to author at: see `constricting` for why -- the weighting reads the
+    suite's verdicts about unverified designs, one check carries five of eight
+    rejections in the measured case, and removing a bad check re-values cells it
+    had zeroed. Rank authoring targets by mass, which reads only the designs.
     """
     keep = set(accepted) if accepted is not None else None
     tally: dict[str, int] = {}
@@ -624,4 +647,51 @@ def the_cells_that_would_constrict_are_the_ones_no_author_can_decide() -> str:
         "**A decline still means these authors could not find it, not that it "
         "is not there** -- but it is now two authors, and the big one refused "
         "by quoting the specification back."
+    )
+
+
+def the_constriction_ranking_was_gating_on_unverified_artifacts() -> str:
+    """A RETRACTION of this module's own targeting refinement, caught by the
+    user asking why a rejected design's disagreements should count for less.
+
+    After the E4 pilot closed 96 cells and moved the accepted set by nothing,
+    `constricting` and `ranked(accepted=...)` were added to aim authoring at
+    cells whose closure would shrink that set. That ranking is circular and the
+    measurement below shows it is fragile as well.
+    """
+    return (
+        "**IT FILTERS EVIDENCE ABOUT THE SUITE USING THE SUITE'S OWN "
+        "VERDICTS.** 'Already rejected' is not a fact about a design; it is the "
+        "opinion of checks that are themselves under test, about designs none "
+        "of which is verified. A disagreement between two spec-derived designs "
+        "is a place the specification admits two behaviours and the suite "
+        "adjudicates nothing, whatever the suite currently thinks of either "
+        "design. This is the same circularity as the faithfulness gates this "
+        "module was built to replace, reached through arithmetic instead of "
+        "prose.\n\n"
+        "**AND IT RESTS ON ONE CHECK.** Of the eight rejections that produced "
+        "the accepted set `h, q, s`:\n\n"
+        "    reauthor43:REQ-0101   carries 5\n"
+        "    reauthor43:REQ-0075   carries 2\n"
+        "    reauthor43:REQ-0073   carries 1\n\n"
+        "Dropping REQ-0101 alone takes the accepted set to **`h, n, p, q, s, "
+        "y`** -- three designs change status on one check's verdict, and that "
+        "check's entire claim to soundness is sparing one control over seven "
+        "testpoints written for the experiment.\n\n"
+        "**WHICH MAKES THE RANKING NON-MONOTONE, and that is the disqualifying "
+        "property.** Removing a BAD check re-values cells the ranking had "
+        "zeroed. A target ranking that improves when the artifact under test "
+        "gets worse is measuring the artifact, not the gap.\n\n"
+        "**WHAT SURVIVES.** The arithmetic as an EXPLANATION: pilot 1's checks "
+        "convicted `d, r, y` and `y`, all of which other checks already "
+        "convicted, so 96 cells closed and the accepted set did not move. That "
+        "is a true statement about the set as it stands and it stands. What is "
+        "withdrawn is using it to choose what to author. **Rank targets by "
+        "disagreement mass**, which reads only the designs.\n\n"
+        "**AND IT PUTS THE E4 NULL BACK IN DOUBT, WHICH IS THE REAL COST.** "
+        "Pilots 2-4 aimed at the 23 'must-shrink' cells and found no sound "
+        "discriminating check in six attempts. Those 23 were selected by this "
+        "ranking. If REQ-0101 is over-strict then the population was the wrong "
+        "one, and the null is a null about a set chosen by a possibly-bad "
+        "check rather than about authoring."
     )

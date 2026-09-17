@@ -367,3 +367,22 @@ def test_both_accepted_is_the_only_guaranteed_constricting_target():
     assert [c.port for c in got] == ["wide"]
     assert len(V.constricting(CELLS_MIXED, accepted=["acc1", "acc2"])) == 2, (
         "the weaker predicate still admits the one-accepted cell")
+
+
+def test_the_accepted_weighting_is_documented_as_a_diagnostic_not_a_target():
+    """`accepted` reads the SUITE'S verdicts about UNVERIFIED designs, so using
+    it to choose authoring targets filters evidence about the suite by the
+    suite's own opinion -- the circularity this module exists to avoid, reached
+    through arithmetic rather than prose.
+
+    It is also fragile and non-monotone: measured, ONE check carries five of
+    eight rejections, and dropping it returns three designs to the accepted set
+    -- so removing a bad check re-values cells the weighting had zeroed.
+    """
+    for fn in (V.constricting, V.ranked):
+        doc = fn.__doc__ or ""
+        assert "NOT" in doc or "not" in doc
+    assert "DO NOT TARGET WITH IT" in (V.constricting.__doc__ or "")
+    assert "NOT AN AUTHORING TARGET" in (V.ranked.__doc__ or "").upper(), (
+        "`ranked(accepted=...)` must say it is a diagnostic; the mass ranking "
+        "is what reads only the designs and is safe to target with")
