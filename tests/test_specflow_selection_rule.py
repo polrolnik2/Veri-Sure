@@ -92,7 +92,14 @@ def test_select_has_no_parameter_that_could_carry_a_reference():
     """
     names = set(inspect.signature(select).parameters)
     assert not {"reference", "golden", "audit", "convicts_reference"} & names
-    assert names == {"corpus", "population", "ruleset", "gate"}
+    #: `shape` and `objections` were added for the placement leg and are
+    #: admissible for the same reason `population` is: `characterise` "reads
+    #: only spec-derived designs, no reference and no parameter for one", and
+    #: an objection map is the check's own verdicts over that population. The
+    #: EXACT-SET form is kept deliberately -- a new slot has to be argued for
+    #: here, in this test, rather than appearing quietly.
+    assert names == {"corpus", "population", "ruleset", "gate",
+                     "shape", "objections"}
     # And the built object carries no reference information either, so nothing
     # downstream can recover one from it.
     fields = set(Selection.__dataclass_fields__)
@@ -103,7 +110,12 @@ def test_the_ruleset_has_no_reference_field():
     """Every leg reads spec-derived designs or the check's own text."""
     assert set(Ruleset.__dataclass_fields__) == {
         "min_population", "allow_vacuous_threshold",
-        "max_convictions", "min_decides", "use_gates"}
+        "max_convictions", "min_decides", "use_gates",
+        #: WHERE a check speaks relative to where the population splits. The
+        #: tell reads only the check's own verdicts and the split set; the
+        #: recorded THRESHOLD was calibrated against a frontier containing the
+        #: audit, which is why this ships with no default.
+        "min_placement"}
 
 
 # --------------------------------------------------------------------------

@@ -489,3 +489,70 @@ def test_the_dead_check_finding_dates_the_gate_against_the_runs():
     assert "c124dde" in text and "2026-09-07" in text
     assert "2026-08-27 to 09-03" in text
     assert "STALE-ARTIFACT finding, not a live pipeline defect" in text
+
+
+# --------------------------------------------------------------------------
+# THE PLACEMENT LEG. The best measured rule on the board -- span 69.0%, audit
+# 15.9%, blind 20.8% -- and it was not expressible in `Ruleset` until now.
+# --------------------------------------------------------------------------
+
+
+def _shape_for_placement():
+    """Two designs, four testpoints, two of which split the population."""
+    rows = {
+        "A": {"TP-0": [{"outputs": {"y": 0}}], "TP-1": [{"outputs": {"y": 0}}],
+              "TP-2": [{"outputs": {"y": 1}}], "TP-3": [{"outputs": {"y": 0}}]},
+        "B": {"TP-0": [{"outputs": {"y": 1}}], "TP-1": [{"outputs": {"y": 1}}],
+              "TP-2": [{"outputs": {"y": 1}}], "TP-3": [{"outputs": {"y": 0}}]},
+    }
+    return P.characterise(rows, ["y"])
+
+
+def test_placement_drops_a_check_that_speaks_where_the_population_agrees():
+    """The leg is about WHERE a check objects, not how often. One objecting on
+    the split testpoints is kept; one objecting on the agreed ones is not --
+    its objections cannot adjudicate a difference that is not there."""
+    shape = _shape_for_placement()
+    assert shape.split == {"TP-0", "TP-1"}, shape.split
+
+    #: each convicts exactly ONE design, or the clone guard refuses the corpus
+    corpus = {"on_split": lambda rows: rows[0]["outputs"]["y"] != 1,
+              "on_agreed": lambda rows: rows[0]["outputs"]["y"] != 1}
+    population = [[{"outputs": {"y": 0}}], [{"outputs": {"y": 1}}]]
+    objections = {
+        "on_split": {"A": {"TP-0", "TP-1"}, "B": set()},
+        "on_agreed": {"A": {"TP-2", "TP-3"}, "B": set()},
+    }
+    got = P.select(
+        corpus, population,
+        ruleset=P.Ruleset(max_convictions=7, min_decides=0, min_population=2,
+                          allow_vacuous_threshold=True, min_placement=0.5),
+        shape=shape, objections=objections)
+
+    assert "on_split" in got.kept, [v.detail for v in got.dropped]
+    assert "on_agreed" not in got.kept
+    assert [v.reason for v in got.dropped if v.key == "on_agreed"] == ["placement"]
+
+
+def test_the_leg_refuses_to_run_without_its_inputs_rather_than_skipping():
+    """A placement bound that silently does nothing because the caller forgot
+    the shape would report a `placement < t` set that never applied the rule --
+    the same defect as `over_strict: 0`, where a leg that had NOT RUN read as a
+    leg that found nothing."""
+    import pytest
+
+    with pytest.raises(ValueError, match="min_placement is set"):
+        P.select({"k": lambda rows: True}, [[{"outputs": {"y": 0}}]],
+                 ruleset=P.Ruleset(min_placement=0.01))
+
+
+def test_the_leg_is_off_by_default_because_its_threshold_is_calibrated():
+    """The TELL is golden-free -- it reads only the check's verdicts and which
+    testpoints split. The THRESHOLD was picked by reading a frontier that
+    contains the audit, so a run that sets it owes the calibrated column."""
+    assert P.Ruleset().min_placement is None
+    #: and with the leg off, the inputs are not required
+    got = P.select({"k": lambda rows: rows[0]["outputs"]["y"] != 1},
+                   [[{"outputs": {"y": 0}}], [{"outputs": {"y": 1}}]],
+                   ruleset=P.Ruleset(max_convictions=1, min_population=2))
+    assert got.kept == ("k",)

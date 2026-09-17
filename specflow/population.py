@@ -172,6 +172,29 @@ class Ruleset:
     #: setting this outside a sweep has turned the over-strictness leg off and
     #: is running the DECIDES clause under a second name.
     allow_vacuous_threshold: bool = False
+    #: **KEEP A CHECK WHOSE OBJECTIONS LAND WHERE THE POPULATION SPLITS.**
+    #: `placement` is `(share of SPLIT testpoints it speaks on) - (share of
+    #: AGREED testpoints it speaks on)`, so it runs +1 for a check that objects
+    #: only where the designs differ, -1 for one that objects only where they
+    #: agree, and **0 for a check that objects everywhere OR nowhere**. This is
+    #: a MINIMUM: a completeness leg wants the high end.
+    #:
+    #: **AND THAT IS THE OPPOSITE SIGN TO THE RECORDED RULE, WHICH IS A
+    #: RETRACTION -- see `placement_selected_a_blunderbuss_set_and_the_blindness_
+    #: number_was_polarity_uncorrected` in `scoring`.** The recorded
+    #: `placement < 0.0017` at 20.8% blindness is the best triple on that board
+    #: and it does not survive polarity correction: it keeps the 126 `t = 0`
+    #: checks, which score 0 by objecting to nothing, plus 25 of which **24
+    #: convict all seven designs**, which score ~0 by objecting to everything. A
+    #: check convicting both sides of a pair SEPARATES NEITHER -- it closes the
+    #: cell only under the recorded predicate "no check objects to either".
+    #:
+    #: The TELL is golden-free either way -- it reads only the check's own
+    #: verdicts and which testpoints split. `None` leaves the leg off, which is
+    #: the default, because no threshold for this direction has been measured:
+    #: the recorded plateau (0.0005-0.003) belongs to the other sign and does
+    #: not transfer.
+    min_placement: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_convictions < 0:
@@ -193,6 +216,7 @@ class Verdict:
     convicts: int = 0
     decided: int = 0
     #: The leg that dropped it: "gate", "broken", "silent", "over_strict",
+    #: "placement",
     #: or "" if kept.
     reason: str = ""
     detail: str = ""
@@ -278,6 +302,13 @@ def select(
     *,
     ruleset: Ruleset | None = None,
     gate: Gate | None = None,
+    #: Required when `Ruleset.max_placement` is set, and meaningless otherwise.
+    #: `placement` is a statement about WHERE a check speaks relative to where
+    #: the population splits, so it cannot be computed from the flat rows the
+    #: other legs use -- it needs the shape and the per-check objection map.
+    #: Both are golden-free; passing them adds no reference to this signature.
+    shape: "PopulationShape | None" = None,
+    objections: Mapping[str, "ObjectionMap"] | None = None,
 ) -> Selection:
     """Keep the checks the rule keeps. Reads only spec-derived designs.
 
@@ -297,6 +328,15 @@ def select(
     shown. Report `set_blindness` beside the span or the number is half a result.
     """
     rules = ruleset or Ruleset()
+    #: **THE LEG REFUSES TO RUN WITHOUT ITS INPUTS RATHER THAN SKIPPING.** A
+    #: placement bound that silently does nothing because the caller forgot the
+    #: shape would report a `placement < t` set that never applied the rule --
+    #: the exact shape of defect `over_strict: 0` was, where a leg that had not
+    #: run read as a leg that found nothing.
+    if rules.min_placement is not None and (shape is None or objections is None):
+        raise ValueError(
+            "min_placement is set but `shape` and `objections` were not given, "
+            "so the leg cannot be computed; pass both or leave the leg off")
     n = len(population)
     #: THE REFUSALS THE SECOND IMPLEMENTATION DROPPED. Each answers "can this
     #: instrument support a number at all", and each was in the first one.
@@ -342,6 +382,18 @@ def select(
                 f"convicts {hits} of {len(population)} independently written "
                 f"designs, above the threshold of {rules.max_convictions}"))
             continue
+        if rules.min_placement is not None:
+            assert shape is not None and objections is not None
+            spoke = tells(objections.get(key, {}), shape).placement
+            if spoke < rules.min_placement:
+                out.append(Verdict(
+                    key, False, hits, decided, "placement",
+                    f"placement {spoke:+.4f} is below {rules.min_placement}: it "
+                    f"does not speak preferentially where the population "
+                    f"SPLITS, so its objections do not land on the differences "
+                    f"this set exists to adjudicate. A check objecting "
+                    f"everywhere scores ~0 here and separates no pair"))
+                continue
         out.append(Verdict(key, True, hits, decided))
     #: **A GATED CHECK NEVER CONSULTED THE POPULATION**, so it is not evidence
     #: about whether the population split -- and it does not need filtering out,

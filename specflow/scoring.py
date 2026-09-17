@@ -1047,3 +1047,54 @@ def the_whole_oracle_stage_loss_on_two_frozen_sets_is_the_faithfulness_gate() ->
         "establishes what the gate removed and what the artifact kept. It "
         "establishes nothing about whether removing it was right."
     )
+
+
+def placement_selected_a_blunderbuss_set_and_the_blindness_number_was_polarity_uncorrected() -> str:
+    """A RETRACTION of the best triple on this board, derived from the recorded
+    description rather than re-measured -- the 464-body corpus is gone.
+
+    `objection_placement_buys_closure_more_cheaply_than_the_count` reports
+    `placement < 0.0017` at span 69.0% / audit 15.9% / **blind 20.8%**, against
+    `t = 6`'s 50.0% and the reference-picked subset's 56.1%. It was cited in the
+    plan as the reason selection is the endpoint.
+    """
+    return (
+        "**THE SIGN IS THE OPPOSITE OF THE RULE.** The shipped tell is\n\n"
+        "    placement = share of SPLIT testpoints spoken on\n"
+        "              - share of AGREED testpoints spoken on\n\n"
+        "so it runs **+1** for a check objecting only where the designs differ, "
+        "**-1** for one objecting only where they agree, and **0 for a check "
+        "objecting EVERYWHERE or NOWHERE**. Verified directly on a two-design "
+        "shape: +1.0000, -1.0000, 0.0000. A completeness leg wants the HIGH "
+        "end, and `placement < 0.0017` keeps the low end.\n\n"
+        "**WHAT THAT SET IS MADE OF, FROM ITS OWN DESCRIPTION.** 151 checks = "
+        "**all 126 of `t = 0`**, which convict nobody and therefore score 0 by "
+        "objecting to nothing, plus 25 of which **24 convict all seven "
+        "designs** and therefore score ~0 by objecting to everything. The "
+        "threshold is not selecting for landing on disagreements; it is "
+        "selecting for **symmetric** placement, which silence and a "
+        "blunderbuss both have.\n\n"
+        "**AND THAT IS WHY THE 20.8% DOES NOT SURVIVE POLARITY CORRECTION.** "
+        "Set blindness there is scored as 'the share of disagreement cells "
+        "where NO check objects to EITHER design'. A check convicting BOTH "
+        "sides of a pair satisfies that and **separates neither** -- it closes "
+        "the cell on paper and adjudicates nothing. `t = 0` alone is 99.9% "
+        "blind; the 24 blunderbusses separate no pair; so under "
+        "`variety.separates` the set closes essentially nothing `t = 0` did "
+        "not. **The 20.8% is the un-corrected predicate, and objecting to both "
+        "sides is exactly how a blindness score was gamed once before on this "
+        "project.**\n\n"
+        "**CONSEQUENCES.** `Ruleset.min_placement` ships with the sign the tell "
+        "actually has and no default threshold, because the recorded plateau "
+        "(0.0005-0.003) belongs to the other direction and does not transfer. "
+        "The claim that selection is the endpoint rested on this row and now "
+        "rests on nothing measured: `t = 6` at 40.4% blind is the best "
+        "SURVIVING golden-free point, and it costs 18.9% audit.\n\n"
+        "**SCOPE, and it is the weak part.** This is an inference from the "
+        "recorded composition of the set -- 126 + 24 convicting all seven -- "
+        "not a re-measurement, because the corpus it was computed over did not "
+        "survive. What is directly verified is the tell's sign and that a "
+        "both-sides conviction closes a cell under one predicate and not the "
+        "other. **Re-scoring that set under polarity correction is the "
+        "experiment that would settle it, and it needs the corpus back.**"
+    )
