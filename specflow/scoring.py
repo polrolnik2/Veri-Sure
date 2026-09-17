@@ -1367,3 +1367,59 @@ def correspondence_costs_half_the_stage_and_its_label_predicts_nothing() -> str:
         "what was compared. The span difference is between a heavily repaired "
         "set and a barely repaired one."
     )
+
+
+def span_went_to_92_percent_and_the_set_constricted_no_harder() -> str:
+    """Two things at once: a replicate that dwarfs the effect it was measuring,
+    and a quantity that did not move when span nearly doubled.
+
+    Runs 2 and 3 are IDENTICAL configurations -- same driver, same seed, same
+    115 requirements, both calling `resolve_indirect`. Run 1 is the direct-only
+    driver and is not a replicate of either.
+    """
+    return (
+        "**THE REPLICATE. Same code, same seed, same inputs, two runs:**\n\n"
+        "                  run 2      run 3\n"
+        "    gated         13 of 40   20 of 40\n"
+        "    demoted       21 of 40   37 of 40\n"
+        "    demotion gain +8         +17\n\n"
+        "The BASELINE moved 7 requirements and the TREATMENT moved 16, on "
+        "nothing but a re-run. The demotion effect is positive both times and "
+        "**its magnitude is not estimable from two samples** -- so `+8 of 40` "
+        "as I first reported it, and `+17` as it would be tempting to report "
+        "now, are both single draws. This is the same variance "
+        "`normalization_repeats_its_decisions_and_not_its_prose` measured "
+        "upstream: 77% of the forms an author reads differ between these two "
+        "runs.\n\n"
+        "**AND SPAN REACHED 92.5% WITHOUT BUYING CONSTRICTION.** The triple on "
+        "the frozen sets, 9 spec-derived designs, the control, 445 cells:\n\n"
+        "                     span     decide  eff  audit   blind   accepts\n"
+        "    run 1 kept       32.5%     9       7   55.6%   21.6%   0 of 9\n"
+        "    run 1 union      52.5%    15       9   46.7%   11.5%   0 of 9\n"
+        "    run 3 kept       50.0%     7       6   28.6%   31.9%   0 of 9\n"
+        "    run 3 union      92.5%    14       9   50.0%   15.5%   0 of 9\n\n"
+        "**`effective_size` IS 9 IN BOTH UNIONS.** The raw set went from 21 "
+        "checks to 37 -- a 76% increase -- and the number of DISTINCT verdict "
+        "vectors did not move. `decide` barely moved either, 15 to 14. So of 37 "
+        "TRUSTED checks, 14 decide anything on this population and they collapse "
+        "to 9 behaviours. The plan's rule that a check count may never stand in "
+        "for `effective_size` is what makes this visible, and this is the case "
+        "it was written for: **span can be pushed from 32% to 92% with the "
+        "constriction power of the set unchanged.**\n\n"
+        "**EVERY SET STILL ACCEPTS 0 OF 9 DESIGNS**, at audit 28.6% to 71.4%. "
+        "That is over-constriction throughout, so none of these blindness "
+        "numbers describe constriction TOWARD a class -- E4b measured that "
+        "stall directly and it has not been escaped.\n\n"
+        "**WHAT CANNOT BE CONCLUDED, and I concluded it once already.** From "
+        "run 1 I reported 'audit on the admitted set is BETTER, not worse' "
+        "(33.3% against 55.6%). Run 3 reverses it exactly: admitted 71.4% "
+        "against kept 28.6%. With 7 deciding checks per group neither sample "
+        "separates anything, and the two disagree in direction. **E2's "
+        "pre-registered audit branch is therefore unresolved, not answered.** "
+        "Runs 1 and 3 also differ in normalization correctness as well as in "
+        "draw, so the triple comparison is confounded; only the span replicate "
+        "(runs 2 and 3) is clean.\n\n"
+        "**WHAT THE EXPERIMENT NEEDS IS REPLICATES, NOT ANOTHER LEVER.** No "
+        "figure in this directory carries an interval, and the spread here is "
+        "larger than most effects claimed against it."
+    )
