@@ -425,6 +425,16 @@ def build_artifacts(
     #: minimum that means anything; seven independent readings fell into seven
     #: equivalence classes, so more designs expose more of the space.
     population_size: int = 0,
+    #: AUTHOR A CHECK AT THIS MANY DISAGREEMENT CELLS, after the
+    #: per-requirement pass. The generation-stage variety lever: the author is
+    #: handed a location the suite is silent on rather than a requirement it
+    #: already has a check for, so the anchor differs per call instead of
+    #: resampling one prompt -- which returns 69% identical bodies among sound
+    #: pairs.
+    #:
+    #: Needs a population, so it is inert without `population_sources` or
+    #: `population_size`. Costs one call per cell.
+    cell_budget: int = 0,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -868,6 +878,7 @@ def build_artifacts(
             demote_faithfulness=demote_faithfulness,
             population=population_sources,
             population_size=population_size,
+            cell_budget=cell_budget,
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement

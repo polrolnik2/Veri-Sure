@@ -55,9 +55,10 @@ def test_the_prompt_cannot_carry_an_implementation():
     params = set(inspect.signature(build_prompt).parameters)
     assert params == {"requirement", "contract_json", "contract",
                       "normalized", "spec", "siblings", "issues", "previous",
-                      "rows"}
+                      "rows", "gap"}
     assert not (params & {"source", "model", "trace", "behaviour",
-                          "stimulus_by_tp", "testpoints", "verdict"})
+                          "stimulus_by_tp", "testpoints", "verdict",
+                          "population", "designs", "cell"})
 
 
 def test_rows_carry_the_witness_and_the_type_is_what_refuses_golden():
@@ -82,6 +83,42 @@ def test_rows_carry_the_witness_and_the_type_is_what_refuses_golden():
     for forbidden in ("golden", "dut", "rtl", ""):
         with pytest.raises(ValueError):
             WitnessRows(by_tp={}, origin=forbidden)
+
+
+def test_the_gap_carries_a_LOCATION_and_the_type_is_what_refuses_a_behaviour():
+    """The fourth parameter added after this guard, and the second that is typed.
+
+    `gap` points the author at a disagreement CELL -- a testpoint, a port, and
+    two design names -- so it is the shape most able to break I1 after `rows`.
+    It therefore follows `WitnessRows`: a `CellBrief` can only be built through
+    `CellBrief.at`, which renders `variety.brief`, whose parameters are a cell,
+    a requirement, an activation and the driven inputs. There is no argument
+    anywhere on that path through which a design's SOURCE or its OBSERVED
+    VALUES could arrive.
+
+    **AND THE DESIGN NAMES ARE NOT RENDERED EITHER**, which is a stronger rule
+    than I1 needs and is the point of authoring at cells. Showing the author
+    two behaviours and asking which the specification means makes them the
+    answer set, when the specification may imply a third or may not constrain
+    the port at all. That is the pathology the witness gate was deleted for --
+    "it does not make the check more correct, it makes the check agree with the
+    witness", h-i2c over-strictness 27 -> 15, convictions 2 -> 16.
+
+    A failure means an author can be handed a behaviour to agree with, and the
+    cell lever becomes the witness gate under a new name.
+    """
+    from specflow.refmodel.oracle_gen import CellBrief
+    from specflow.variety import Cell
+
+    cell = Cell(testpoint="TP-0007", port="busy", left="alpha", right="bravo")
+    ok = CellBrief.at(cell, requirement="busy falls on completion",
+                      activation="a WRITE completes", driven={"ena": 1})
+    assert ok.origin == "cell"
+    assert "TP-0007" in ok.text and "busy" in ok.text
+    assert "alpha" not in ok.text and "bravo" not in ok.text
+    for forbidden in ("golden", "witness", "dut", ""):
+        with pytest.raises(ValueError):
+            CellBrief(text="x", origin=forbidden)
 
 
 def test_spec_and_siblings_are_upstream_and_cannot_carry_a_design():

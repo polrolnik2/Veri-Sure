@@ -1078,6 +1078,46 @@ class WitnessRows:
                 f"is the control leak `oracles_stage` holds out as the grade")
 
 
+@dataclass(frozen=True)
+class CellBrief:
+    """A LOCATION THE SUITE IS SILENT ON. Never a behaviour, never a design.
+
+    Typed for the reason `WitnessRows` is typed. `build_prompt` refuses the
+    design under test by SIGNATURE, and a bare `str` parameter would give that
+    back -- any caller could put anything in it. This can only be built by
+    `at`, which takes a `variety.Cell` and renders it through `variety.brief`,
+    and `brief`'s own parameters are `cell, requirement, activation, driven`:
+    there is nowhere a design's source, a design's observed values, or a claim
+    that either design is correct could enter.
+
+    **THAT IS THE WHOLE POINT OF AUTHORING AT CELLS.** Presenting two observed
+    behaviours and asking which the specification means makes them the answer
+    set, when the specification may imply a third or may not constrain the port
+    at all -- and it reproduces the pathology the witness gate was deleted for:
+    "it does not make the check more correct, it makes the check agree with the
+    witness", measured on h-i2c as over-strictness 27 -> 15 and convictions
+    2 -> 16. A cell says only WHERE the specification is under-determined by
+    the current suite. What belongs there comes from the specification.
+    """
+
+    text: str
+    origin: str = "cell"
+
+    def __post_init__(self) -> None:
+        if self.origin != "cell":
+            raise ValueError(
+                f"a gap shown to the author must be a disagreement CELL, not "
+                f"{self.origin!r}: anything else is a behaviour to agree with")
+
+    @classmethod
+    def at(cls, cell, *, requirement: str, activation: str,
+           driven: dict) -> "CellBrief":
+        """The only constructor. Renders through `variety.brief`."""
+        from ..variety import brief
+        return cls(brief(cell, requirement=requirement,
+                         activation=activation, driven=driven))
+
+
 def _first_activity(rows: list[dict]) -> int:
     """The first row whose outputs differ from the trace's own first row.
 
@@ -1149,6 +1189,10 @@ def build_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
     rows: WitnessRows | None = None,
+    #: A disagreement CELL to author at. Typed, for the reason `rows` is: a
+    #: `str` here would undo the signature-level refusal of the design under
+    #: test. See `CellBrief`.
+    gap: "CellBrief | None" = None,
 ) -> str:
     """Compose the prompt. No parameter can carry the DESIGN UNDER TEST.
 
@@ -1190,6 +1234,11 @@ def build_prompt(
     #: and whether or not this is a repair.
     if rows is not None and rows.by_tp:
         parts.append(witness_rows_block(rows))
+    #: AFTER the rows, because the gap is the ASK and everything above it is
+    #: context. A brief placed before the requirement would read as the subject
+    #: of the call rather than as where to point the check.
+    if gap is not None:
+        parts.append(gap.text)
     return compose(
         shared_prefix(contract_json, contract, spec),
         "\n\n".join(parts),
@@ -1411,3 +1460,85 @@ def run_oracle_gen(
             source=result.output.source,
         ))
     return oracles, by_uid
+
+
+def run_cell_gen(
+    *,
+    targets: list[dict],
+    contract_json: str,
+    contract: dict,
+    port: ModelPort,
+    testplan: list[dict],
+    normalized: dict | None = None,
+    spec: str = "",
+    siblings: dict | None = None,
+    conforming_source: str = "",
+    stimulus_by_tp: dict | None = None,
+    base: str = "",
+    max_repairs: int = 1,
+    fanout: bool = True,
+    label: str = "",
+) -> list[RequirementOracle]:
+    """One check per DISAGREEMENT CELL, authored from the requirement alone.
+
+    `run_oracle_gen` asks "write the check for this requirement". This asks
+    "write the check that decides THIS PORT in THIS SCENARIO, from this
+    requirement" -- the same author, the same gate, a different anchor. The
+    anchor is the whole hypothesis: resampling one prompt returns 69% identical
+    bodies among sound pairs because it samples one interpretation rather than
+    producing another, and a cell differs per target.
+
+    **THE AUTHOR IS NOT SHOWN THE DESIGNS.** Each target carries a `CellBrief`,
+    which can only be built through `variety.brief`, whose parameters are a
+    cell, a requirement, an activation and the driven inputs. A cell holds two
+    design NAMES and no values, and the names are never rendered. So the author
+    learns WHERE the suite is silent and never what any implementation did
+    there -- which is what separates this from the re-authoring round that
+    reached 0 new cells with a witness in the prompt.
+
+    Each target is `{cell, brief, requirement, tp_uids}`. Same shape out as
+    `run_oracle_gen`: every check with a source is returned, gate failures
+    included, because deciding what a gate-failing check IS belongs to the
+    stage that can record it.
+    """
+    def one(t: dict) -> StageResult[OracleOutput]:
+        req = t["requirement"]
+        uid = str(req.get("uid") or "")
+        tps = list(t["tp_uids"])
+        cell = t["cell"]
+        return run_stage(
+            #: NAMED BY CELL, NOT BY REQUIREMENT. Several cells can belong to
+            #: one requirement, and `run_stage` keys its prompt/response record
+            #: by stage name -- so reusing the uid would have each target
+            #: silently overwrite the last one's evidence, which is the defect
+            #: `label` was added to `run_oracle_gen` to fix.
+            stage=f"{STAGE}_cell_{uid}_{cell.testpoint}_{cell.port}{label}",
+            port=port,
+            build_prompt=lambda issues, previous: build_prompt(
+                requirement=req, contract_json=contract_json, contract=contract,
+                normalized=(normalized or {}).get(uid),
+                spec=spec, siblings=siblings or {},
+                issues=issues, previous=previous,
+                gap=t["brief"],
+            ),
+            parse=parse_response,
+            gate=lambda out: gate_one(
+                out, req_uid=uid, tp_uids=tps, contract=contract,
+                testplan=testplan, conforming_source=conforming_source,
+                stimulus_by_tp=stimulus_by_tp or {}, base=base,
+                requirement=req),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(targets, one) if fanout else [one(t) for t in targets]
+    out: list[RequirementOracle] = []
+    for t, result in zip(targets, results):
+        if not (result.output.source or "").strip():
+            continue
+        out.append(RequirementOracle(
+            req_uid=str(t["requirement"].get("uid") or ""),
+            tp_uids=list(t["tp_uids"]),
+            clause=result.output.clause,
+            source=result.output.source,
+        ))
+    return out

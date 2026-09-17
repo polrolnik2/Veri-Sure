@@ -53,7 +53,8 @@ from .refmodel import liveness as _L
 from .refmodel import trust
 from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
-from .refmodel.oracle_gen import run_oracle_gen
+from .refmodel import oracle_gen
+from .refmodel.oracle_gen import run_cell_gen, run_oracle_gen
 from .refmodel.oracles import (RequirementOracle, decide, replay,
                                transactional_view, well_formed)
 from .schema import Issue
@@ -980,6 +981,106 @@ def _population_verdicts(held: dict, population: Sequence[str], contract: dict,
     return out
 
 
+def _population_rows(population: Sequence[str], contract: dict,
+                     stimulus_by_tp: dict, *, base: str,
+                     transactional: bool) -> dict:
+    """`design -> testpoint -> rows`, the input `variety.cells` takes."""
+    out: dict[str, dict[str, list]] = {}
+    for i, src in enumerate(population):
+        per: dict[str, list] = {}
+        for tp, steps in (stimulus_by_tp or {}).items():
+            if not steps:
+                continue
+            try:
+                rep = replay(src, contract, steps, base=base)
+                per[tp] = list(transactional_view(rep.rows) if transactional
+                               else rep.rows)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("population replay failed at %s (%r)", tp, exc)
+        if per:
+            out[str(i)] = per
+    return out
+
+
+def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
+                  stimulus_by_tp: dict, testplan: list[dict],
+                  by_uid: dict, normalized: dict | None, budget: int,
+                  base: str, transactional: bool) -> list[dict]:
+    """The blind cells worth authoring at, heaviest port first.
+
+    A CELL IS A LOCATION. `(testpoint, port, two design names)` where readings
+    of the specification come apart and no held check separates them --
+    `variety.blind` with the polarity correction on, so a check convicting BOTH
+    sides does not count as closing anything. That correction is the whole
+    difference between this and the recorded `placement` rule, which kept 24
+    checks convicting all seven designs because they scored ~0 by objecting to
+    everything.
+
+    **RANKED BY DISAGREEMENT MASS, WHICH READS ONLY THE DESIGNS.** An earlier
+    ranking scored cells by whether closing them could change the ACCEPTED set,
+    and that was withdrawn: it filters evidence about the suite using the
+    suite's own verdicts, and it is non-monotone -- removing a bad check
+    re-values cells it had zeroed. Mass is a fact about the population.
+    """
+    outputs = [str(p.get("name") or p) for p in (contract.get("outputs") or [])]
+    if not outputs or len(population) < 2:
+        return []
+    rows_by_design = _population_rows(
+        population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    if len(rows_by_design) < 2:
+        return []
+    all_cells = variety.cells(rows_by_design, outputs)
+    verdicts = _population_verdicts(
+        held, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    blind = variety.blind(all_cells, verdicts)
+    if not blind:
+        return []
+    weight = dict(variety.ranked(blind))
+    #: WHICH REQUIREMENT OWNS A TESTPOINT. `covers` is the testplan's own
+    #: attachment and the only non-model route from a testpoint back to a
+    #: requirement -- the same source `run_oracle_gen` takes `tp_uids` from.
+    covers: dict[str, list[str]] = {}
+    for tp in testplan or []:
+        uid = str(tp.get("uid") or "")
+        for c in (tp.get("covers") or []):
+            covers.setdefault(uid, []).append(str(c).split("@")[0])
+
+    seen: set[tuple[str, str]] = set()
+    targets: list[dict] = []
+    for cell in sorted(blind, key=lambda c: (-weight.get(c.port, 0),
+                                             c.testpoint, c.port)):
+        key = (cell.testpoint, cell.port)
+        #: ONE TARGET PER (testpoint, port). A cell exists per design PAIR, so
+        #: nine designs make up to 36 cells at one location -- authoring once
+        #: per pair would buy 36 near-identical checks and call it variety.
+        if key in seen:
+            continue
+        for uid in covers.get(cell.testpoint, []):
+            req = by_uid.get(uid)
+            if not req:
+                continue
+            shape = (normalized or {}).get(uid) or {}
+            act = (shape.get("activation") or {})
+            targets.append({
+                "cell": cell,
+                "requirement": req,
+                "tp_uids": [cell.testpoint],
+                "brief": oracle_gen.CellBrief.at(
+                    cell,
+                    requirement=str(req.get("text") or ""),
+                    activation=str(act.get("text") or "")
+                    or "whenever the requirement's condition holds",
+                    driven=dict(act.get("inputs") or {})),
+            })
+            seen.add(key)
+            break
+        if len(targets) >= budget:
+            break
+    return targets
+
+
 def _refuted_everywhere(n: int) -> str:
     """The rejection for a check the whole admissible population contradicts.
 
@@ -1261,6 +1362,21 @@ def run_oracle_stage(
     #: Off at 0. Costs k conforming-implementation calls, paid once and held on
     #: disk. Ignored when `population` is supplied directly.
     population_size: int = 0,
+    #: HOW MANY DISAGREEMENT CELLS TO AUTHOR A CHECK AT, after the per
+    #: requirement pass. This is the generation-stage variety lever: the author
+    #: is handed a LOCATION the suite is silent on rather than a requirement it
+    #: already has a check for, so the anchor differs per call.
+    #:
+    #: Needs a population -- a cell is a place two spec-derived designs come
+    #: apart -- so 0 unless `population`/`population_size` gives it one.
+    #:
+    #: **PRE-REGISTERED, AND IT CAN CLOSE THIS LINE.** Varying the stimulus
+    #: ROUTE to a scenario was pre-registered at >=40% = lever, <15% = closed,
+    #: and delivered 1 of 20 = 5% fully caught. This varies the check that
+    #: ADJUDICATES one, which is the untried half. If it also returns <=15%,
+    #: generation cannot reach the residual blindness and the honest output is
+    #: the irreducible equivalence classes as a specification finding.
+    cell_budget: int = 0,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -1413,6 +1529,48 @@ def run_oracle_stage(
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
 
+    # AUTHORING AT DISAGREEMENT CELLS -- the generation-stage variety lever,
+    # in the same place as the per-requirement pass because it is the same
+    # author and the same gate with a different ANCHOR.
+    #
+    # Resampling one prompt returns 69% identical bodies among sound pairs: it
+    # samples one interpretation rather than producing another. A cell differs
+    # per target, which is the untried half of the variety question.
+    #
+    # ADDITIVE, NOT A REPLACEMENT. A cell check is keyed by the requirement it
+    # comes from, so it can only supersede that requirement's draft when the
+    # draft decided nothing -- otherwise the per-requirement pass would be
+    # silently overwritten by a check written for one port.
+    cell_authored: list[str] = []
+    cell_bodies: list[RequirementOracle] = []
+    if cell_budget and len(population) >= 2:
+        targets = _cell_targets(
+            population=population, held=held, contract=contract,
+            stimulus_by_tp=stimulus_by_tp, testplan=testplan, by_uid=by_uid,
+            normalized=normalized, budget=cell_budget, base=base,
+            transactional=transactional)
+        logger.info("oracles: %d blind cell(s) to author at", len(targets))
+        for extra in run_cell_gen(
+                targets=targets, contract_json=contract_json, contract=contract,
+                port=port, testplan=testplan, normalized=normalized, spec=spec,
+                siblings=by_uid, conforming_source=witness,
+                stimulus_by_tp=stimulus_by_tp, base=base,
+                max_repairs=max_repairs, fanout=fanout, label=f"{label}_cell"):
+            standing_body = held.get(extra.req_uid)
+            if standing_body is not None and _decides(
+                    standing_body, witness, contract, stimulus_by_tp,
+                    base=base, transactional=transactional):
+                #: The requirement already has a check that decides something.
+                #: Keeping the cell check would cost that one its place, so it
+                #: goes to the corpus for selection and not to `held`.
+                cell_bodies.append(extra)
+                continue
+            held[extra.req_uid] = extra
+            cell_bodies.append(extra)
+            cell_authored.append(extra.req_uid)
+        logger.info("oracles: %d cell check(s) adopted of %d authored",
+                    len(cell_authored), len(cell_bodies))
+
     #: **A1: THE CORPUS STARTS AT GENERATION, NOT AT REPAIR.** Retaining only
     #: superseded bodies records nothing at all for a run that never repairs --
     #: which is most requirements -- so the first draft is a member too. This
@@ -1421,6 +1579,12 @@ def run_oracle_stage(
     corpus: dict[str, list[CorpusBody]] = {}
     for _first in oracles:
         _retain(corpus, _first, arm="generate", round_=0)
+    #: CELL BODIES ARE CORPUS MEMBERS WHETHER OR NOT THEY WERE ADOPTED. One
+    #: that lost its place to a deciding draft is exactly what selection exists
+    #: to choose between, and dropping it here would make the lever look like
+    #: it produced nothing. `arm` says where it came from.
+    for _extra in cell_bodies:
+        _retain(corpus, _extra, arm="cell", round_=0)
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}

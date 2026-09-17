@@ -2064,3 +2064,93 @@ def test_the_population_size_reaches_the_stage_from_the_pipeline():
     src = P(I.__file__).read_text()
     call = re.search(r"run_oracle_stage\((.{0,2200}?)\n        \)", src, re.DOTALL)
     assert call and "population_size=population_size" in call.group(1)
+
+
+def test_a_cell_brief_cannot_carry_a_design():
+    """The structural guarantee, not an instruction not to look.
+
+    `build_prompt` refuses the design under test by SIGNATURE. A `str` gap
+    parameter would have given that back, so the gap is typed and can only be
+    built from a `variety.Cell` through `variety.brief` -- whose parameters are
+    a cell, a requirement, an activation and the driven inputs.
+    """
+    import pytest
+
+    from specflow.refmodel.oracle_gen import CellBrief
+    from specflow.variety import Cell
+
+    cell = Cell(testpoint="TP-1", port="busy", left="zulufox", right="quebecvane")
+    b = CellBrief.at(cell, requirement="busy falls on completion",
+                     activation="a WRITE completes", driven={"ena": 1})
+    assert "busy" in b.text and "TP-1" in b.text
+    #: THE DESIGN NAMES ARE NEVER RENDERED, so the author cannot even tell
+    #: which readings came apart, let alone what either of them did.
+    assert "zulufox" not in b.text and "quebecvane" not in b.text
+    #: And nothing else may pose as a gap.
+    with pytest.raises(ValueError, match="disagreement CELL"):
+        CellBrief(text="the reference returns 0 here", origin="golden")
+
+
+def test_the_gap_reaches_the_authoring_prompt():
+    """A brief that is built and not rendered is the whole lever doing
+    nothing, which is exactly how `demote_faithfulness` sat unused.
+    """
+    from specflow.refmodel.oracle_gen import CellBrief, build_prompt
+    from specflow.variety import Cell
+
+    cell = Cell(testpoint="TP-9", port="scl_oen", left="a", right="b")
+    gap = CellBrief.at(cell, requirement="hold scl low",
+                       activation="during a transfer", driven={})
+    req = {"uid": "REQ-1", "text": "hold scl low"}
+    with_gap = build_prompt(requirement=req, contract_json="{}", contract={},
+                            gap=gap)
+    without = build_prompt(requirement=req, contract_json="{}", contract={})
+    assert "scl_oen" in with_gap and "TP-9" in with_gap
+    #: DISCRIMINATE ON THE TESTPOINT, not the port: the system prompt carries
+    #: `scl_oen` in a worked example of its own, so a port name proves nothing
+    #: about whether the gap was rendered.
+    assert "TP-9" not in without
+    assert gap.text in with_gap
+
+
+def test_cell_authoring_is_off_without_a_population(monkeypatch):
+    """A cell is a place two spec-derived designs come apart. One design, or
+    none, has no cells -- and the leg must not do the REPLAY WORK finding that
+    out, which is the only thing the early guard buys.
+
+    Downstream guards return `[]` for these inputs anyway, so asserting on the
+    return value alone leaves the early one untested -- the same trap the
+    population size guard had.
+    """
+    import inspect
+
+    from specflow import oracles_stage as O
+
+    assert inspect.signature(
+        O.run_oracle_stage).parameters["cell_budget"].default == 0
+
+    replays = []
+    monkeypatch.setattr(O, "_population_rows",
+                        lambda *a, **k: replays.append(1) or {})
+    kw = dict(held={}, stimulus_by_tp={}, testplan=[], by_uid={},
+              normalized=None, budget=5, base="", transactional=True)
+    #: One design is not a population.
+    assert O._cell_targets(population=("only one",),
+                           contract={"outputs": [{"name": "p"}]}, **kw) == []
+    #: No declared outputs means no port a cell could sit on.
+    assert O._cell_targets(population=("a", "b"),
+                           contract={"outputs": []}, **kw) == []
+    assert replays == [], "the leg replayed the population before checking it"
+
+
+def test_the_cell_budget_reaches_the_stage_from_the_pipeline():
+    import inspect
+    import re
+    from pathlib import Path as P
+
+    from specflow import integration as I
+
+    assert "cell_budget" in inspect.signature(I.build_artifacts).parameters
+    src = P(I.__file__).read_text()
+    call = re.search(r"run_oracle_stage\((.{0,2400}?)\n        \)", src, re.DOTALL)
+    assert call and "cell_budget=cell_budget" in call.group(1)
