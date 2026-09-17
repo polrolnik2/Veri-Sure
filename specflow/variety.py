@@ -206,3 +206,64 @@ def brief(cell: Cell, *, requirement: str, activation: str,
         f"`reasoning` and write no check. A check invented to fill this gap is "
         f"worse than an honest report that the specification is silent."
     )
+
+
+def blindness_constricts_but_stalls_far_from_equivalence() -> str:
+    """E4b, run on the nine spec-derived designs that survived the data loss.
+
+    The plan asserted that reducing blindness constricts the design space toward
+    equivalence and nothing measured it: the one set that reached a single design
+    of seven at audit 0 was selected BY the reference, so it said nothing about
+    what blindness optimisation does. This measures it directly.
+
+    Driver: `docs/evidence/e4b_constriction.py`. Zero model calls -- replays and
+    set arithmetic. Checks are added greedily by blind cells closed, so blindness
+    falls monotonically by construction and the question is what the other three
+    columns do.
+    """
+    return (
+        "Nine designs, 445 disagreement cells over eight declared outputs, 15 of "
+        "39 surviving checks deciding on at least one design, and the known-good "
+        "control for the audit column only.\n\n"
+        "**AT CONTROLLED AUDIT = 0** -- only the 9 of 15 checks that spare the "
+        "control:\n\n"
+        "    checks   blind%   accepts   classes   diameter\n"
+        "         0   100.0%         9         8      0.108\n"
+        "         1    58.2%         7         6      0.092\n"
+        "         2  **56.0%**       6         5      0.085\n\n"
+        "**ALL THREE FALL MONOTONICALLY, SO THE ASSUMPTION HOLDS IN DIRECTION.** "
+        "Cardinality, equivalence-class count and diameter all drop as blindness "
+        "drops, and classes fall 8 -> 5, so it is separating classes rather than "
+        "merely shedding duplicates within one.\n\n"
+        "**AND THEN IT STALLS, WHICH IS THE RESULT.** 249 of the 445 cells stay "
+        "blind and **no sound check in this corpus closes any of them** -- 7 "
+        "sound checks left unused. Five equivalence classes are still accepted. "
+        "Blindness reduction at audit 0 does not reach equivalence here; it runs "
+        "out of sound material at just over half the cells.\n\n"
+        "**IT STALLS AT 56.0% AND CEIL2 STALLS AT 56.9%.** CEIL2 was selected BY "
+        "the reference, on a different module, a different corpus and a "
+        "different stimulus. Two procedures landing within a point of each other "
+        "says ~56% is the **sound-check ceiling on this kind of corpus**, not an "
+        "artifact of how CEIL2 was picked. It is also `no_sound_subset_of_this_"
+        "corpus_forces_equivalence` arriving from the other direction.\n\n"
+        "**DROP THE AUDIT CONSTRAINT AND IT CONSTRICTS ALL THE WAY -- PAST THE "
+        "RIGHT ANSWER.** Allowing every deciding check: blindness 100% -> 14.6%, "
+        "accepts 9 -> 1, classes 8 -> 1, diameter 0.108 -> **0.000**. One "
+        "equivalence class, exactly the target -- except the FIRST check added "
+        "convicts the control, so the surviving class **excludes the known-good "
+        "design**. That is the screened set's failure reproduced: over-strictness "
+        "and vacuity as one defect with two signs, at set level.\n\n"
+        "**WHAT IT MEANS FOR THE PLAN.** Blindness is a real constriction lever "
+        "and the risk was worth quantifying: it works, and it is bounded by the "
+        "supply of SOUND discriminating checks, which this corpus exhausts at "
+        "56%. So the lever that matters is not a better filter over these checks "
+        "-- selection is already at its ceiling -- but more sound checks that "
+        "speak at the 249 cells nothing currently adjudicates. That is E4's "
+        "target, and this is the measurement that justifies aiming there.\n\n"
+        "**SCOPE, and it is narrow.** Nine designs of one module family; seven "
+        "synthetic testpoints written for this experiment rather than a run's "
+        "testplan; equivalence is TRACE equivalence over those testpoints, not a "
+        "miter; 15 deciding checks is a small corpus and the greedy order is one "
+        "of many. The monotone direction is robust to all of that. The exact "
+        "56.0% is not."
+    )
