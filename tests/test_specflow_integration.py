@@ -402,3 +402,45 @@ def test_a_supplied_child_does_not_make_a_wrong_design_pass(tmp_path):
     assert detail["build_ok"]
     assert verdict.outcome == "REPAIR_RTL", "a wrong child must still fail"
     assert verdict.failing, "the mismatch must be attributed to testpoints"
+
+
+def test_the_pipeline_can_reach_the_faithfulness_demotion():
+    """**THE LEVER HAS TO BE CONNECTED TO THE MACHINE.**
+
+    `run_oracle_stage` carried `demote_faithfulness` for the whole of E2 and
+    `build_artifacts` never passed it, so the plan's central change was
+    reachable only from a driver calling the stage directly -- measured in
+    three experiment runs and unavailable in every real one.
+    """
+    import inspect
+
+    from specflow import integration as I
+
+    sig = inspect.signature(I.build_artifacts)
+    assert "demote_faithfulness" in sig.parameters, (
+        "build_artifacts cannot turn the demotion on")
+    #: DEFAULT ON. Blocking is three mechanical grounds; faithfulness is a
+    #: label. A change of default is a change of architecture and belongs in a
+    #: test, not in a diff nobody reads.
+    assert sig.parameters["demote_faithfulness"].default is True
+
+
+def test_the_demotion_flag_reaches_the_oracle_stage():
+    """A SOURCE-LEVEL PIN, because the call site is unreachable from here.
+
+    `build_artifacts` needs a full run to execute, so deleting the keyword at
+    the `run_oracle_stage` call passes every behavioural test in this suite --
+    which has happened three times on this branch to other call sites. This
+    reads the source instead.
+    """
+    import re
+    from pathlib import Path
+
+    from specflow import integration as I
+
+    src = Path(I.__file__).read_text()
+    call = re.search(r"run_oracle_stage\((.{0,2000}?)\n        \)", src,
+                     re.DOTALL)
+    assert call, "could not locate the run_oracle_stage call"
+    assert "demote_faithfulness=demote_faithfulness" in call.group(1), (
+        "build_artifacts accepts the flag and does not forward it")

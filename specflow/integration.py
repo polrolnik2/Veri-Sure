@@ -370,7 +370,34 @@ def build_artifacts(
     #: Ask a reviewer, per oracle, whether it decides the requirement it names.
     #: One call each -- 77 on i2c. The only check of any kind that connects an
     #: oracle to ITS requirement rather than judging it as a check in general.
+    #:
+    #: **PRICED, AND THE PRICE IS HALF THE STAGE.** Measured on the unbiased
+    #: run: 80 correspondence calls against 94 oracle calls gated and 66
+    #: demoted -- 46% and 55% of the arm. See
+    #: `correspondence_costs_half_the_stage_and_its_label_predicts_nothing`.
     correspondence: bool = False,
+    #: **THE PLAN'S CENTRAL CHANGE, AND IT WAS UNREACHABLE FROM A REAL RUN
+    #: UNTIL THIS PARAMETER EXISTED.** `run_oracle_stage` has carried
+    #: `demote_faithfulness` since E2; nothing passed it, so only a driver
+    #: calling the stage directly could turn it on and the pipeline itself
+    #: could not. Building the lever and not connecting it is the defect this
+    #: line fixes.
+    #:
+    #: ON, the faithfulness grounds -- `off-target:`, `not-assertable:`, "no
+    #: discrimination stated", "malformed: no normalized form" -- become
+    #: LABELS. Blocking is then three mechanical grounds only: `well_formed`,
+    #: a replay break, and `DEAD_ORACLE` -> `vacuous:`.
+    #:
+    #: **DEFAULT True, AND WHAT THAT COSTS IS KNOWN.** Span rose +8 then +17 of
+    #: 40 across two replicates -- positive both times, magnitude not
+    #: estimable. The audit branch is UNRESOLVED: one run put the admitted set
+    #: at 33.3% against kept-only's 55.6%, the replicate reversed it to 71.4%
+    #: against 28.6%, and 7 deciding checks per group separates nothing. And it
+    #: COSTS CORPUS DEPTH: repair is driven by `rejected`, so demotion repairs
+    #: 1 requirement instead of 18 and the corpus falls to one body per
+    #: requirement with no alternative for any of them. See
+    #: `every_requirement_gets_one_body_and_only_repair_adds_more`.
+    demote_faithfulness: bool = True,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -811,6 +838,7 @@ def build_artifacts(
             spec=spec,
             control_source=refmodel_control,
             want_variants=variants, want_correspondence=correspondence,
+            demote_faithfulness=demote_faithfulness,
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement
