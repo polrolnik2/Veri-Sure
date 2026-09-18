@@ -2091,6 +2091,14 @@ def test_the_author_is_told_its_check_runs_on_every_testpoint():
     for field in ("aborts_on", "until", "sustains"):
         assert field in SYSTEM, field
 
+    #: **AND THE OTHER SIGN, OR THE PARAGRAPH ABOVE IS AN INSTRUCTION TO GO
+    #: INERT.** The run written to the scope paragraph alone came back with
+    #: 86.1% of its (check, testpoint) decisions passing all seven designs and
+    #: 76 of 104 checks never telling any two apart anywhere.
+    assert "86.1%" in SYSTEM
+    assert "the same answer whatever the design did" in SYSTEM
+    assert "would this check\nreturn False?" in SYSTEM
+
 
 def test_the_set_level_repair_budget_reaches_the_stage_from_the_pipeline():
     """`run_oracle_stage` has taken `repair_attempts` since it was written and

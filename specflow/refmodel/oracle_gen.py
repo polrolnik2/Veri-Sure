@@ -312,6 +312,39 @@ produces a check that cannot fail, which is discarded as vacuous. Keep the
 assertion exactly as strong as the obligation states, and make the window
 exactly as narrow as the situation is.
 
+AND THE OTHER SIGN OF THE SAME DEFECT, WHICH IS THE ONE THAT ACTUALLY HAPPENED
+WHEN THE PARAGRAPH ABOVE WAS FIRST ADDED.
+
+Narrow the window far enough and the check stops being wrong by never saying
+anything. Measured on a run written to the paragraph above: 104 checks replayed
+against seven independently written spec-derived designs gave 13,019
+(check, testpoint) decisions, and **86.1% of them decided all seven designs and
+convicted none**. Only 3.1% were mixed. **76 of the 104 checks never told any
+two of the seven apart, anywhere.** The designs differ enormously -- there were
+22,315 places where two of them produce different traces on a declared output --
+and the suite could not see any of it.
+
+A check that returns the same answer whatever the design did is not deciding its
+requirement, it is surviving it. It also passes every gate here, which is why
+this paragraph exists: nothing downstream can tell a correct check from an empty
+one by looking at its verdicts.
+
+SO BOTH AT ONCE, AND THEY ARE NOT IN TENSION -- they are the same instruction
+read from two sides:
+
+  the WINDOW    exactly as narrow as the situation the obligation names.
+                Return None the moment the situation is not yours.
+  the ASSERTION exactly as strong as the obligation states, INSIDE that window.
+                If the obligation says a port is released, require it released
+                and fail when it is not. Do not soften a comparison, do not
+                accept "any of these values", and do not guard an assertion
+                behind a condition the obligation did not state.
+
+The question to ask yourself before you finish: *if a design got this
+requirement wrong, in the ordinary way someone gets it wrong, would this check
+return False?* If you cannot name such a design, the check asserts nothing, and
+a narrower window will not fix that.
+
 Rules, each for a reason:
 
   - Read only DECLARED PORTS out of `outputs` and `inputs`. Internal signals are
