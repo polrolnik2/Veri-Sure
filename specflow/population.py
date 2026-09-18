@@ -385,6 +385,30 @@ def select(
         if rules.min_placement is not None:
             assert shape is not None and objections is not None
             spoke = tells(objections.get(key, {}), shape).placement
+            #: **THE FLOOR APPLIES TO OBJECTORS ONLY, BECAUSE PLACEMENT IS NOT
+            #: DEFINED WITHOUT AN OBJECTION.** `placement` is the share of
+            #: SPLIT testpoints a check speaks on minus the share of AGREED
+            #: ones, so a check that objects NOWHERE scores exactly 0 -- the
+            #: same score as one that objects EVERYWHERE, which this leg's own
+            #: message names as the thing it is here to reject. A flat floor
+            #: cannot tell them apart and discards both.
+            #:
+            #: MEASURED, on the full-pipeline set at `max_convictions = 4`:
+            #: a flat floor of 0.143 kept 6 checks and spanned 4.0% of
+            #: requirements; the same floor applied to objectors only kept 33
+            #: and spanned 21.9%, at IDENTICAL audit (0) and blindness (5.8%),
+            #: with the same accepted designs and the control still admitted.
+            #: 27 of the 51 deciding checks object to nothing, and none of them
+            #: convicts the control -- they were being discarded for a score
+            #: that says nothing about them.
+            #:
+            #: A silent check is not thereby endorsed: `max_convictions` has
+            #: already passed it, `min_decides` still governs whether deciding
+            #: nowhere is admissible, and it contributes no separation. This
+            #: says only that PLACEMENT has no opinion about it.
+            if not any(objections.get(key, {}).values()):
+                out.append(Verdict(key, True, hits, decided))
+                continue
             if spoke < rules.min_placement:
                 out.append(Verdict(
                     key, False, hits, decided, "placement",

@@ -556,3 +556,38 @@ def test_the_leg_is_off_by_default_because_its_threshold_is_calibrated():
                    [[{"outputs": {"y": 0}}], [{"outputs": {"y": 1}}]],
                    ruleset=P.Ruleset(max_convictions=1, min_population=2))
     assert got.kept == ("k",)
+
+
+def test_the_placement_floor_does_not_judge_a_check_that_objects_to_nothing():
+    """`placement` scores 0 for "objects everywhere" AND "objects nowhere".
+
+    The leg exists to reject the first; a flat floor discarded the second with
+    it. Measured on the full-pipeline set: a 0.143 floor kept 6 checks and
+    spanned 4.0% of requirements, against 33 and 21.9% when the floor applies
+    to objectors only -- at identical audit (0) and blindness (5.8%), with the
+    same accepted designs and the control still admitted.
+    """
+    #: Two testpoints the designs SPLIT on, one they AGREE on.
+    pop = {"d0": {"TP-s1": rows(0), "TP-s2": rows(0), "TP-a": rows(9)},
+           "d1": {"TP-s1": rows(1), "TP-s2": rows(1), "TP-a": rows(9)},
+           "d2": {"TP-s1": rows(2), "TP-s2": rows(2), "TP-a": rows(9)}}
+    shape = P.characterise(pop, ["a"])
+    assert shape.split == {"TP-s1", "TP-s2"} and shape.agreed == {"TP-a"}
+
+    quiet = {d: frozenset() for d in shape.designs}
+    #: Objects only where the designs AGREE -- a negative placement, and a
+    #: reading the leg must still act on.
+    misplaced = {d: frozenset({"TP-a"}) for d in shape.designs}
+    assert P.tells(quiet, shape).placement == 0.0
+    assert P.tells(misplaced, shape).placement < 0.0
+
+    got = P.select(
+        {"quiet": lambda r: True, "misplaced": lambda r: True, **SPLITS},
+        POP,
+        ruleset=P.Ruleset(min_placement=0.1, max_convictions=len(POP),
+                          allow_vacuous_threshold=True),
+        shape=shape,
+        objections={"quiet": quiet, "misplaced": misplaced})
+    kept = set(got.kept)
+    assert "quiet" in kept, "a check objecting to nothing was judged on placement"
+    assert "misplaced" not in kept, "the leg stopped rejecting misplaced objections"
