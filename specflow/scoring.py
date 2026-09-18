@@ -1632,57 +1632,65 @@ def the_full_pipeline_on_the_plans_own_metrics() -> str:
     )
 
 
-def no_selection_rule_beats_not_selecting_on_the_full_pipeline_set() -> str:
-    """The first time `population.select` was run on anything reported here.
+def a_rejection_rule_is_selection_and_mine_was_a_point_on_the_sweep() -> str:
+    """**THIS RETRACTS `no_selection_rule_beats_not_selecting_on_the_full_
+    pipeline_set`, WHICH WAS WRONG.** That finding reported the `t` sweep as
+    dominated by not selecting at every threshold. It was an artifact of mixing
+    two scorings: the kept sets came from `population.select`, which hands a
+    check the population member's testpoints CONCATENATED into one trace, and
+    the columns were per-testpoint verdicts. Scored one way throughout, the
+    sweep says close to the opposite. Driver `e5_selection.py`.
 
-    Every figure given from the full pipeline run used NO selection rule. "As
-    frozen" is the pipeline's own output; the only filter applied on top was
-    `variety.refuted_by_the_population`, which is a rejection rule and not
-    selection; and the reference-picked line is barred. `placement`,
-    `max_convictions` and the `t` sweep -- the machinery the plan calls its
-    endpoint -- had never touched any of it. Driver `e5_selection.py`.
+    It also retracts the framing that `refuted_by_the_population` is "a
+    rejection rule, not selection". A rejection rule IS selection -- both take
+    a check set and return a subset from the checks' verdicts against the
+    population -- and this one is not merely of the same kind, it is a POINT ON
+    THE SWEEP.
     """
     return (
-        "**THE `t` SWEEP, 51 deciding checks over 9 designs and 445 cells:**\n\n"
-        "    max_convictions   kept  eff  audit    blind    accepts\n"
-        "    0                   16    8  62.5%    13.5%    0\n"
-        "    1                   17    9  58.8%    13.5%    0\n"
-        "    3                   19   11  52.6%    13.5%    0\n"
-        "    5                   26   13  46.2%     5.8%    0\n"
-        "    8                   28   13  42.9%     5.8%    0\n"
-        "    9                        REFUSED -- 'rejects nothing for\n"
-        "                             over-strictness, so the rule would be\n"
-        "                             the DECIDES clause wearing a second name'\n\n"
-        "    no selection        51   16  29.4%     1.1%    0\n"
-        "    refuted dropped     42   15  14.3%     1.1%    0\n"
-        "    reference-picked    36   10   0.0%     5.8%    3\n\n"
-        "**EVERY THRESHOLD IS DOMINATED BY NOT SELECTING, ON BOTH AXES.** t=0 "
-        "keeps 16 checks at audit 62.5% and blindness 13.5%; the unselected 51 "
-        "sit at 29.4% and 1.1%. Selection does not trade here -- it loses "
-        "twice.\n\n"
-        "**AND THE DIRECTION IS THE INFORMATIVE PART.** `max_convictions` keeps "
-        "checks that convict FEW designs, and on this set those are "
-        "disproportionately the ones that convict the CONTROL: audit rises "
-        "monotonically as the threshold tightens, 42.9% at t=8 to 62.5% at "
-        "t=0. Selecting for apparent soundness selects for over-strictness, "
-        "which is the anti-correlation this tree already recorded -- sound and "
-        "refutable at 26% against a 75% base rate -- arriving through the "
-        "selector instead of through the tells.\n\n"
-        "**THE REFUTATION RULE BEATS EVERY THRESHOLD ON BOTH AXES.** audit "
-        "14.3% and blindness 1.1%, against the best t's 42.9% and 5.8%. It is "
-        "also the opposite kind of rule: `max_convictions` asks how MANY "
-        "designs a check convicts and keeps the low end, while refutation asks "
-        "whether it convicts ALL of them and drops only those. One is a "
-        "threshold on a count, the other a logical impossibility.\n\n"
-        "**WHAT THIS DOES NOT SAY.** `placement` was not swept -- it needs "
-        "`shape` and `objections`, and its sign is retracted in `population` "
-        "pending a measurement that has not been taken. And `select` scores a "
-        "check against each design's testpoints CONCATENATED into one trace, "
-        "while the columns here are per-testpoint verdicts, so a check can "
-        "decide differently in the two. The `kept` sets are the selector's; the "
-        "scoring is not, and the two must not be read as one measurement.\n\n"
-        "**NOTHING ACCEPTS A DESIGN EXCEPT THE BARRED LINE.** Every "
-        "golden-free configuration on this board accepts 0 of 9. The plan's "
-        "headline -- one class containing the correct design -- is not reached "
-        "by any selection rule available here."
+        "**`refuted_by_the_population` IS `max_convictions = N-1`.** Verified "
+        "on the full-pipeline set: both drop the same 9 checks -- REQ-0020, "
+        "0024, 0027, 0081, 0092, 0120, 0124, 0134, 0149 -- for identical kept "
+        "counts, audit, blindness and accepted designs. 'Convicts every design' "
+        "and 'convicts more than N-1' are the same predicate. So it is not a "
+        "new instrument beside selection; it is the weakest non-trivial "
+        "threshold of the rule the plan already had.\n\n"
+        "**THE SWEEP, ONE SCORING, per-testpoint verdicts throughout:**\n\n"
+        "    t   kept eff  audit   blind   accepts  classes  set rejects\n"
+        "                                                     the control\n"
+        "    0    27   5   0.0%  100.0%      9        8        no\n"
+        "    2    27   5   0.0%  100.0%      9        8        no\n"
+        "    3    34   8   2.9%   13.5%      4        4        YES\n"
+        "    4    37  10   2.7%    5.8%      3        3        YES\n"
+        "    5    39  12   7.7%    1.1%      0        0        YES\n"
+        "    8    42  15  14.3%    1.1%      0        0        YES\n"
+        "    9    51  16  29.4%    1.1%      0        0        YES\n"
+        "    reference-picked (BARRED): 36 kept, 5.8% blind, accepts h,q,s\n\n"
+        "**t=4 REPRODUCES THE BARRED CEILING GOLDEN-FREE.** Same accepted set "
+        "`h, q, s`, same 5.8% blindness, 37 checks against 36 -- reached by "
+        "counting convictions over spec-derived designs and reading no "
+        "reference. That is a real result and the previous finding denied it.\n\n"
+        "**AND THE PLAN'S HEADLINE STILL FAILS, ON ITS SECOND HALF.** 'One "
+        "class containing the correct design' -- at every t from 3 up the SET "
+        "REJECTS THE CONTROL, so the correct design is not among the accepted "
+        "however few classes remain. t=3 and t=4 are the screened set's failure "
+        "wearing a good number, which the plan named in advance: 'accepting "
+        "exactly one class is a success only if the correct design is in it'. "
+        "Below t=3 nothing is rejected at all -- 9 designs, 8 classes, 100% "
+        "blind -- so the accepted-set column is vacuous there rather than "
+        "good.\n\n"
+        "**ONE CHECK IS DOING IT.** At t=3 and t=4 exactly one surviving member "
+        "convicts the control. The distance between this board and the plan's "
+        "target is a single over-strict check that convicts at most four "
+        "designs, which no conviction-count threshold can separate from a "
+        "sound one.\n\n"
+        "**AND `select`'s OWN SCORING IS NOT THIS SCORING, which is worth more "
+        "than the retraction.** Concatenating a design's testpoints into one "
+        "trace changes verdicts wholesale:\n\n"
+        "    t=0   select keeps 16, per-testpoint keeps 27, agreeing on  1\n"
+        "    t=4   select keeps 20, per-testpoint keeps 37, agreeing on 10\n"
+        "    t=8   select keeps 28, per-testpoint keeps 42, agreeing on 19\n\n"
+        "At t=0 the two procedures agree on ONE check. Any figure quoted from "
+        "`select` is about a trace shape the checks were not authored against, "
+        "and cannot be compared with a per-testpoint number without saying so."
     )
