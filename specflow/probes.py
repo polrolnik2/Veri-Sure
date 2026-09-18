@@ -334,6 +334,33 @@ def gate(out: ProbeOutput, *, contract: dict, spec: str,
                 f"cross-constraint names {outside}, which are not declared "
                 f"ports -- the point of one is that it ties a probe to signals "
                 f"a design cannot lie about"))
+        #: **THE SPAN IS CHECKED HERE BECAUSE A CROSS-CONSTRAINT IS A
+        #: REQUIREMENT, WHICH IS MORE POWER THAN A PROBE, NOT LESS.**
+        #: `probe_issues` verifies every PROBE's spans verbatim against the
+        #: specification -- "that is what stops the stage that proposes probes
+        #: from inventing one" -- and a cross-constraint had no such check at
+        #: all. A probe only adds a NAME; a cross-constraint adds an
+        #: OBLIGATION that checks are written against and designs are convicted
+        #: by, and it is the only requirement in the system minted outside S1.
+        #: An invented one convicts correct designs, which is audit, paid for
+        #: at the far end where it looks like an over-strict check.
+        #:
+        #: Whitespace-insensitive for the reason the linter gives: line
+        #: wrapping is not drift.
+        quoted = " ".join(str(cc.span or "").split())
+        if not quoted:
+            issues.append(Issue(
+                "error", f"cross_constraints[{idx}].span",
+                f"cross-constraint {cc.text[:60]!r} quotes no specification "
+                f"text; the span is what separates an obligation the "
+                f"specification states from one this stage invented, and a "
+                f"requirement is written against it"))
+        elif quoted not in " ".join((spec or "").split()):
+            issues.append(Issue(
+                "error", f"cross_constraints[{idx}].span",
+                f"the span for {cc.text[:60]!r} is not in the specification "
+                f"verbatim. Copy the sentence out and check it back; a "
+                f"paraphrase licenses nothing"))
     return issues
 
 
