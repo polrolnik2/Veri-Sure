@@ -441,6 +441,45 @@ def a_check_is_replayed_where_the_stimulus_goes() -> str:
     )
 
 
+def a_blind_set_is_usually_a_set_with_no_teeth() -> str:
+    """Why a suite that reaches everywhere still separates nothing.
+
+    Driver: `docs/evidence/e4d_why_the_set_is_blind.py`. Zero model calls --
+    104 frozen checks replayed against seven spec-derived designs over 366
+    testpoints, from the run's own artifacts.
+    """
+    return (
+        "**BLINDNESS WAS 55.1% AND NOT ONE BLIND CELL SAT WHERE NO CHECK "
+        "REACHED.** Every testpoint carrying a cell had a median of 39 checks "
+        "deciding on it and a maximum of 77; the median check decided on 76 "
+        "testpoints of 366. The set spoke everywhere. It agreed everywhere.\n\n"
+        "13,019 (check, testpoint) decisions:\n\n"
+        "    decided   convicted    count    share\n"
+        "          7           0    11204    86.1%\n"
+        "          6           0      593     4.6%\n"
+        "          7           1      197     1.5%   <- mixed\n"
+        "          7           2      105     0.8%   <- mixed\n\n"
+        "**MIXED DECISIONS: 404 OF 13,019 = 3.1%, AND ONLY A MIXED DECISION "
+        "SEPARATES ANYTHING.** Passing all seven separates nothing; convicting "
+        "all seven separates nothing. **76 of the 104 checks never told any "
+        "two of the seven apart, anywhere** -- against 22,315 places where two "
+        "of them produce different traces on a declared output.\n\n"
+        "**SO BLINDNESS IS NOT A REACH PROBLEM AND MORE CHECKS DO NOT FIX IT.** "
+        "It was read as one twice: first as `tp_uids` being too narrow, which "
+        "was real and took blindness 97% -> 12.8%, and then as needing more "
+        "bodies, which it does not. The residue is a sensitivity problem, and "
+        "the only moves that touch it are a stronger assertion inside the same "
+        "window and a check authored AT a cell.\n\n"
+        "**IT IS ALSO WHAT ONE HALF OF AN INSTRUCTION BUYS.** The set above "
+        "was written by authors told that the failure mode is 'fires in the "
+        "wrong place' and to make the window exactly as narrow as the "
+        "situation is. They complied: audit went to 0 of 17 judgeable and the "
+        "suite went inert. Over-strictness and vacuity, one defect with two "
+        "signs, at set level -- and the stage had a blocking instrument for "
+        "one sign and nothing at all for the other."
+    )
+
+
 def blindness_constricts_but_stalls_far_from_equivalence() -> str:
     """E4b, run on the nine spec-derived designs that survived the data loss.
 
