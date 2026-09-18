@@ -19,9 +19,22 @@ The control is loaded for the scorecard's audit column only. It is not passed as
 """
 import collections
 import json
+import logging
 import shutil
 import sys
 from pathlib import Path
+
+#: **THE STAGE'S OWN PROGRESS, ON STDOUT.** `run_oracle_stage` reports what it
+#: is doing through `logger.info` and the drivers here never configured
+#: logging, so a run of it was a silent hour -- which is how a cell-authoring
+#: leg came to produce nothing with the only two lines that would have said so
+#: going nowhere. Filtered to the pipeline's own loggers: the OpenAI client is
+#: chatty at INFO and drowns them.
+logging.basicConfig(level=logging.WARNING, format="%(message)s",
+                    stream=sys.stdout)
+for _name in ("specflow.oracles_stage", "specflow.scorecard",
+              "specflow.refmodel.liveness"):
+    logging.getLogger(_name).setLevel(logging.INFO)
 
 sys.path.insert(0, "/home/user/Veri-Sure")
 from specflow import scorecard as SC  # noqa: E402
