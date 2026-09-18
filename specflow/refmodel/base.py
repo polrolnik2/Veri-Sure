@@ -120,14 +120,41 @@ def probe_values(ref: object, names: list[str] | tuple[str, ...]) -> dict:
     `replay` already imports the testbench's own step decoder rather than
     reimplementing it.
 
-    A missing attribute samples as 0, not None. `None` in a row is what a check
-    reads when it silently never fires, and a probe that is absent is far more
-    likely to mean "this model is not in that state" than to mean anything a
-    check should reason about. `validate`'s check 3c is what catches an absent
-    probe LOUDLY, at generation, so nothing has to be inferred from it here.
+    A missing attribute on a model that DECLARES the probe samples as 0, not
+    None. `None` in a row is what a check reads when it silently never fires,
+    and an absent attribute on a model that claims the probe is far more likely
+    to mean "this model is not in that state" than to mean anything a check
+    should reason about. `validate`'s check 3c catches that case LOUDLY, at
+    generation, so nothing has to be inferred from it here.
+
+    **A PROBE THE MODEL DOES NOT DECLARE IS UNAVAILABLE, AND UNAVAILABLE IS NOT
+    FALSE.** That distinction is the whole of this function's second half, and
+    omitting it put a number on the board that measured nothing. The i2c
+    control declares no `PROBE_PORTS` -- it predates probes, as do the nine
+    standing yardstick designs and every benchmark RTL -- so all sixteen of a
+    run's probes sampled 0 against it: never idle, never in a start sequence,
+    never holding an active command. Of 19 checks that convicted the control,
+    **18 read a probe**; of the 14 that read none, **1** convicted. The audit
+    column was reporting "this design predates this run's probe table".
+
+    `_ports_agree` already refuses to reuse a witness whose `PROBE_PORTS`
+    disagree with the contract, for exactly this reason: "a witness reused
+    across a contract change in its probe set would decide against a different
+    row list than the one its checks were authored against, silently." This is
+    that rule applied where the disagreement cannot be repaired by regenerating
+    -- a foreign design is not the pipeline's to rewrite.
+
+    A model declaring no probes at all is the common case of the same rule, not
+    a separate one: it declares none of them, so none of them is available.
     """
+    declared = set(getattr(ref, "PROBE_PORTS", None) or ())
     out: dict = {}
     for name in names or ():
+        if str(name) not in declared:
+            #: Unavailable. `decide` turns a check that READS one of these into
+            #: an abstention, so the check is not judged against a fiction.
+            out[str(name)] = None
+            continue
         value = getattr(ref, name, None)
         out[str(name)] = 1 if value else 0
     return out

@@ -158,3 +158,65 @@ def test_the_prompt_names_every_probe_and_its_meaning() -> None:
     assert "Do NOT return them from `step`" in block
 
     assert probe_block(CONTROL, "step") == ""
+
+
+def test_a_probe_the_model_does_not_declare_is_UNAVAILABLE_not_false():
+    """`probe_values` read a missing attribute as 0 on every model.
+
+    On a model that DECLARES the probe that is right -- `validate`'s check 3c
+    catches an absent attribute loudly at generation, so absence there means
+    "not in that state". On a model that declares no probes at all it is a
+    fiction: the i2c control predates probes, so all sixteen of a run's probes
+    sampled 0 against it -- never idle, never in a start sequence, never holding
+    an active command.
+
+    Measured on the first probe-bearing run: of 19 checks that convicted the
+    control, 18 read a probe. Of the 14 that read none, 1 did. The audit column
+    was reporting "this design predates this run's probe table".
+    """
+    from specflow.refmodel.base import probe_values
+
+    class Declares:
+        PROBE_PORTS = ["in_idle", "busy_phase"]
+        in_idle = True
+        #: declared and absent -> 0, which check 3c is what catches loudly.
+
+    class DeclaresNone:
+        in_idle = True  # an attribute that happens to collide with a probe name
+
+    assert probe_values(Declares(), ["in_idle", "busy_phase"]) == {
+        "in_idle": 1, "busy_phase": 0}
+    #: NOT {"in_idle": 1}: a model with no probe vocabulary declares none of
+    #: them, so a name that happens to collide is not the probe.
+    assert probe_values(DeclaresNone(), ["in_idle", "busy_phase"]) == {
+        "in_idle": None, "busy_phase": None}
+
+
+def test_a_check_naming_an_unavailable_probe_abstains_instead_of_convicting():
+    """None alone does not stop a check firing, which is why `decide` needs the
+    other half: `not row["outputs"]["in_idle"]` is TRUE on None, so an
+    inverse-polarity activation opens everywhere and convicts a design whose
+    only fault is predating the probe table."""
+    from specflow.refmodel.oracle_gen import RequirementOracle
+    from specflow.refmodel.oracles import decide
+
+    body = (
+        "def decide(trace):\n"
+        "    for row in trace:\n"
+        "        if not row['outputs'].get('in_idle'):\n"
+        "            return (False, row['edge'], 'not idle')\n"
+        "    return (True, None, 'idle throughout')\n")
+    oracle = RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                               clause="c", source=body)
+    trace = [{"edge": 0, "inputs": {}, "outputs": {"busy": 0, "in_idle": None}}]
+
+    convicts = decide(oracle, trace)
+    assert convicts.ok is False, "without the guard this design is convicted"
+
+    spared = decide(oracle, trace, unavailable=("in_idle",))
+    assert spared.ok is None, spared
+    assert "does not expose in_idle" in (spared.detail or "")
+    assert not spared.broken, "unjudgeable is not the same as broken"
+
+    #: A probe the check does not name costs it nothing.
+    assert decide(oracle, trace, unavailable=("some_other_probe",)).ok is False

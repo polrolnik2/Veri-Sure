@@ -2322,7 +2322,7 @@ def test_the_per_testpoint_table_keeps_one_column_per_replay():
         def __init__(self, ok):
             self.ok, self.broken = ok, False
 
-    def fake_decide(oracle, rows):
+    def fake_decide(oracle, rows, **_kw):
         seen.append(rows)
         #: design "0" says True, design "1" abstains.
         return _R(True if rows == ["0"] else None)
@@ -2331,7 +2331,7 @@ def test_the_per_testpoint_table_keeps_one_column_per_replay():
     O_replay = O.replay
     try:
         O.replay = lambda src, contract, steps, base="": type(
-            "Rep", (), {"rows": monkeypatch_rows[src]})()
+            "Rep", (), {"rows": monkeypatch_rows[src], "unavailable": ()})()
         O_decide = O.decide
         O.decide = fake_decide
         held = {"REQ-1": RequirementOracle(

@@ -871,7 +871,7 @@ def _decides(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
             continue
         rep = replay(witness, contract, steps, base=base)
         rows = transactional_view(rep.rows) if transactional else rep.rows
-        result = decide(oracle, rows)
+        result = decide(oracle, rows, unavailable=rep.unavailable)
         if not result.broken and result.ok is not None:
             n += 1
     return n
@@ -975,7 +975,8 @@ def _population_verdicts(held: dict, population: Sequence[str], contract: dict,
                     rep = replay(src, contract, steps, base=base)
                     rows = (transactional_view(rep.rows) if transactional
                             else rep.rows)
-                    r = decide(oracle, rows)
+                    r = decide(oracle, rows,
+                               unavailable=rep.unavailable)
                 except Exception as exc:  # noqa: BLE001
                     logger.info("population replay failed (%r)", exc)
                     continue
@@ -1019,7 +1020,8 @@ def _population_verdicts_by_tp(held: dict, population: Sequence[str],
                     rep = replay(src, contract, steps, base=base)
                     rows = (transactional_view(rep.rows) if transactional
                             else rep.rows)
-                    r = decide(oracle, rows)
+                    r = decide(oracle, rows,
+                               unavailable=rep.unavailable)
                 except Exception as exc:  # noqa: BLE001
                     logger.info("population replay failed (%r)", exc)
                     continue
@@ -1189,7 +1191,8 @@ def _population_objections(held: dict, population: Sequence[str], contract: dict
                     rep = replay(src, contract, steps, base=base)
                     rows = (transactional_view(rep.rows) if transactional
                             else rep.rows)
-                    r = decide(oracle, rows)
+                    r = decide(oracle, rows,
+                               unavailable=rep.unavailable)
                 except Exception as exc:  # noqa: BLE001
                     logger.info("population replay failed (%r)", exc)
                     continue
@@ -3787,7 +3790,9 @@ def stage_unexercised(
                         rep_s = replay(witness, contract,
                                        stimulus_by_tp.get(shared_tp) or [],
                                        base=base)
-                        res_s = None if rep_s.error else decide(oracle, rep_s.rows)
+                        res_s = (None if rep_s.error else decide(
+                            oracle, rep_s.rows,
+                            unavailable=rep_s.unavailable))
                         if res_s is not None and res_s.ok is not None:
                             reached = attempt
                             tries.append({
@@ -3832,7 +3837,8 @@ def stage_unexercised(
                 oracle.tp_uids.append(tp_uid)
 
             rep = replay(witness, contract, steps, base=base)
-            result = None if rep.error else decide(oracle, rep.rows)
+            result = (None if rep.error else decide(
+                oracle, rep.rows, unavailable=rep.unavailable))
 
             # DID THE STATE RISE? Read from the row, mechanically, and recorded
             # separately from whether the check decided.

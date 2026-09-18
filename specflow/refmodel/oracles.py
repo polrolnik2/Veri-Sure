@@ -29,6 +29,7 @@ from __future__ import annotations
 from .temporal import strong_not_stated
 
 import ast
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -120,6 +121,12 @@ class Replay:
     rows: list[dict]
     notes: list[str] = field(default_factory=list)
     error: str = ""
+    #: Probes the contract declares and THIS design does not -- see
+    #: `base.probe_values`. Not a defect of the design: a control, a standing
+    #: yardstick design and every benchmark RTL predate a run's probe table.
+    #: `decide` reads it so a check naming one of these abstains instead of
+    #: being judged against sixteen permanently-false state terms.
+    unavailable: tuple[str, ...] = ()
 
 
 def _load(source: str, base: str):
@@ -179,6 +186,10 @@ def replay(
     # passing check used a probe.
     probes = probe_names(contract)
     ref = getattr(fn, "__self__", None)
+    #: Probes this contract declares and this design does not -- computed once,
+    #: from the model's own `PROBE_PORTS`, because it cannot change mid-replay.
+    absent = tuple(p for p in probes
+                   if p not in set(getattr(ref, "PROBE_PORTS", None) or ()))
 
     idle_resets = dict(pinned_inputs(contract))
     active_resets = asserted_resets(contract)
@@ -317,7 +328,7 @@ def replay(
                 merged.update(probe_values(ref, probes))
             rows.append({"edge": len(rows), "inputs": dict(state),
                          "outputs": merged})
-    return Replay(rows, notes, "")
+    return Replay(rows, notes, "", absent)
 
 
 def transactional_view(rows: list[dict]) -> list[dict]:
@@ -377,7 +388,8 @@ def transactional_view(rows: list[dict]) -> list[dict]:
     return out
 
 
-def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
+def decide(oracle: RequirementOracle, trace: list[dict], *,
+           unavailable: Sequence[str] = ()) -> OracleResult:
     """Run one oracle over one trace. Never raises.
 
     `ok` is True, False, or **None -- the clause's scenario never occurred**.
@@ -418,6 +430,32 @@ def decide(oracle: RequirementOracle, trace: list[dict]) -> OracleResult:
     #
     # The MODEL crashing keeps ok=False: that IS a defect of the artifact under
     # test, and `model_broke` marks it.
+    #: **A CHECK NAMING A PROBE THIS DESIGN DOES NOT HAVE CANNOT BE JUDGED BY
+    #: IT, AND THAT IS NOT THE DESIGN'S FAULT.** `base.probe_values` reads an
+    #: undeclared probe as None rather than 0; this is the other half, because
+    #: None alone does not stop a check firing -- `not row["outputs"]["in_idle"]`
+    #: is TRUE on None, so an inverse-polarity activation opens everywhere and
+    #: convicts. Measured on the i2c control, which predates probes: of 19
+    #: checks that convicted it, 18 read a probe; of the 14 that read none, 1
+    #: did. Abstaining here is the same discipline the rest of this docstring
+    #: describes -- a check that cannot see must never report a verdict it has
+    #: not earned -- applied to the case where what it cannot see is the state
+    #: term it was written around.
+    #:
+    #: A substring test on the source, deliberately: it over-approximates
+    #: (a probe named in a comment counts) and never under-approximates, and
+    #: over-approximating costs an abstention while under-approximating costs a
+    #: false conviction of a correct design. `unavailable` is empty for every
+    #: design written against the contract in force, so this costs nothing on
+    #: the path that matters.
+    blind_to = [n for n in (unavailable or ()) if n and n in (oracle.source or "")]
+    if blind_to:
+        return OracleResult(
+            oracle.req_uid, ok=None, rows=trace,
+            detail=("this design does not expose "
+                    + ", ".join(sorted(blind_to))
+                    + " -- the check names state it cannot see, so this replay "
+                      "is evidence about neither"))
     fn, err = _oracle_fn(oracle)
     if err:
         return OracleResult(oracle.req_uid, ok=None, broken=err, rows=trace)
@@ -534,7 +572,8 @@ def decide_all(
             rows = transactional_view(rep.rows) if transactional else rep.rows
             # Stamped by the harness, never by `decide`: the oracle is handed
             # rows and has no idea which testpoint they came from.
-            results.append(replace(decide(oracle, rows), tp_uid=tp))
+            results.append(replace(
+                decide(oracle, rows, unavailable=rep.unavailable), tp_uid=tp))
         out.append(_worst(oracle.req_uid, results))
     return out
 
