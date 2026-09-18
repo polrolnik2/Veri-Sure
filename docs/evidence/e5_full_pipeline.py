@@ -29,10 +29,16 @@ POP = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 CELLS = int(sys.argv[3]) if len(sys.argv) > 3 else 12
 
 spec = (TASK / "description.txt").read_text(encoding="utf-8")
-#: THE CONTRACT FROM A PRIOR RUN, reused so the interface holds still across
-#: this run and the frozen sets it is compared against. It is a pipeline
-#: artifact, not a reference -- the architect writes it from the spec.
-contract_json = Path("docs/evidence/e3_contract.json").read_text(encoding="utf-8")
+#: **A REAL CONTRACT, AND THE FIRST RUNS DID NOT USE ONE.** They reused
+#: `docs/evidence/e3_contract.json`, which carries only `module_name` and
+#: `io`. A contract the architect writes carries eight more keys, and two
+#: of them are load-bearing: `clocking.is_sequential` decides
+#: `choose_base`, so without it a sequential i2c bit controller was
+#: modelled COMBINATIONALLY; and `functional_summary`, `corner_cases`,
+#: `test_plan` and `guidance` were absent from every prompt in the run.
+contract_json = Path(
+    "benchmarks/baselines/i2c_master_bit_ctrl/arm_a/contract.json"
+).read_text(encoding="utf-8")
 
 print(f"spec {len(spec)} bytes; population {POP}; cell budget {CELLS}")
 print(f"out {OUT}\n", flush=True)

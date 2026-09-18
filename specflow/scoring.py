@@ -1746,3 +1746,47 @@ def placement_takes_the_audit_to_zero_and_six_checks_do_the_work() -> str:
         "give: how many of the 31 silent-here checks object on the run's own "
         "testpoints, which is the measurement to take next."
     )
+
+
+def the_full_pipeline_runs_were_given_a_truncated_contract() -> str:
+    """Why only half the frozen checks decided, followed to its root. The
+    answer is not the yardstick -- that was the first layer -- it is that every
+    full-pipeline run so far was configured with a contract missing the key
+    that decides whether the module is sequential.
+    """
+    return (
+        "**LAYER ONE: THE YARDSTICK NAMED NONE OF THE RUN'S TESTPOINTS.** The "
+        "102 frozen checks name 409 testpoints of the run's own; the scoring "
+        "harness used seven synthetic ones from `e4b_constriction.py` and "
+        "OVERRODE each check's `tp_uids` with them. The overlap is **zero**, so "
+        "every check was replayed against traces it never named and the 51 "
+        "that decided did so incidentally. Scored on the testpoints they name, "
+        "**94 of 102 decide** -- nearly double.\n\n"
+        "**LAYER TWO, AND IT IS WORSE.** The runs were given "
+        "`docs/evidence/e3_contract.json`, which has exactly two keys: "
+        "`module_name` and `io`. A contract the architect writes has ten:\n\n"
+        "    dropped: source_of_truth, parameters, clocking, timing,\n"
+        "             functional_summary, corner_cases, test_plan, guidance\n\n"
+        "`choose_base` reads `clocking.is_sequential`. Absent, it returns "
+        "`evaluate`. So **a sequential i2c bit controller was modelled "
+        "combinationally** for the whole run -- population, witness and "
+        "reference model alike -- and `functional_summary`, `corner_cases`, "
+        "`test_plan` and `guidance` were absent from every prompt. "
+        "`choose_base` on the real contract returns `step`.\n\n"
+        "**THAT ALSO EXPLAINS THE MISSING AUDIT COLUMN.** The control and the "
+        "nine standing designs implement `step`; the run's population "
+        "implements `evaluate`. They cannot be replayed through one another, "
+        "so the run has no control to score against and the nine designs "
+        "replay 0 of 625 of its testpoints.\n\n"
+        "**WHAT IT INVALIDATES.** Every figure quoted from the full-pipeline "
+        "run: span, the 1.1% blindness, the 8633 cells, the selection sweeps "
+        "and the placement result. Two incompatible bases were being mixed -- "
+        "nine `step` designs and a control scored by a hand-rolled harness on "
+        "seven synthetic testpoints, against checks authored by an `evaluate` "
+        "run over 625 real ones. The comparisons between configurations within "
+        "one basis still hold; nothing that crosses the two does.\n\n"
+        "**AND THE PIPELINE IS NOT AT FAULT.** Every contract under "
+        "`benchmarks/baselines/` carries `clocking.is_sequential: true`. The "
+        "truncated one was my experiment setup, reused from an E3 driver that "
+        "only needed port names."
+    )
