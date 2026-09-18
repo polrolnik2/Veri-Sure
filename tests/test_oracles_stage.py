@@ -2191,6 +2191,86 @@ def test_an_extra_draft_goes_to_the_CORPUS_and_never_to_held(tmp_path,
     assert labels, port.stages
 
 
+def test_a_cell_check_is_taken_when_it_SEPARATES_MORE(monkeypatch):
+    """The old rule took one only when the standing body decided NOTHING --
+    a rule about liveness in a leg whose entire subject is separation.
+
+    Measured on the first run where the leg fired: 12 targets, 12 bodies
+    authored, **6 adopted**, and the six were the requirements with no deciding
+    body, so the leg could not touch the blindness it was aimed at. That run
+    also says why it matters: every testpoint carrying a cell had a median of
+    39 checks deciding on it and NOT ONE blind cell sat where no check decided.
+    The set spoke everywhere and agreed everywhere.
+    """
+    from specflow import oracles_stage as O
+    from specflow import variety as V
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    cells = (V.Cell(testpoint="TP-1", port="p", left="0", right="1"),
+             V.Cell(testpoint="TP-2", port="p", left="0", right="1"))
+
+    #: The standing body decides on both testpoints and separates neither;
+    #: the cell body separates TP-2.
+    tables = {
+        "REQ-1": {"TP-1": {"0": True, "1": True},
+                  "TP-2": {"0": True, "1": True}},
+        "REQ-1#cell": {"TP-2": {"0": True, "1": False}},
+        "REQ-2": {"TP-1": {"0": True, "1": False}},
+        "REQ-2#cell": {"TP-1": {"0": True, "1": True}},
+    }
+
+    def fake(flat, *a, **k):
+        by_tp = {key: tables.get(key, {}) for key in flat}
+        folded = {key: {d: (False if any(
+            c.get(d) is False for c in t.values()) else True)
+            for d in ("0", "1")} for key, t in by_tp.items()}
+        return folded, by_tp, {}
+
+    monkeypatch.setattr(O, "_population_tables", fake)
+
+    def body(uid):
+        return RequirementOracle(req_uid=uid, tp_uids=[], clause="c",
+                                 source=f"# {uid}")
+
+    held = {"REQ-1": body("REQ-1"), "REQ-2": body("REQ-2")}
+    taken = O._adopt_cell_bodies(
+        [body("REQ-1"), body("REQ-2")], held=held, population=("a", "b"),
+        contract={}, stimulus_by_tp={}, cells=cells, base="",
+        transactional=False)
+    #: REQ-1's standing check separates nothing and the cell check separates
+    #: one, so it is taken. REQ-2's separates one already and the cell check
+    #: separates none, so it is not.
+    assert taken == ["REQ-1"], taken
+    assert held["REQ-1"].source == "# REQ-1"
+    #: Span is untouched: one check before, one after, for both requirements.
+    assert set(held) == {"REQ-1", "REQ-2"}
+
+
+def test_a_refuted_cell_check_is_never_taken(monkeypatch):
+    """Otherwise this leg becomes a way to buy blindness with over-strictness,
+    which is how a blindness score was gamed here once before: a check
+    convicting BOTH sides separates neither, and one convicting every reading
+    has rejected the correct one too."""
+    from specflow import oracles_stage as O
+    from specflow import variety as V
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    cells = (V.Cell(testpoint="TP-1", port="p", left="0", right="1"),)
+    #: It separates TP-1 -- and convicts every design somewhere, so it is
+    #: refuted and must not be taken however much it separates.
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": False, "1": False} for k2 in flat},
+        {k2: {"TP-1": {"0": True, "1": False}} for k2 in flat}, {}))
+
+    held = {}
+    taken = O._adopt_cell_bodies(
+        [RequirementOracle(req_uid="REQ-1", tp_uids=[], clause="c", source="x")],
+        held=held, population=("a", "b"), contract={}, stimulus_by_tp={},
+        cells=cells, base="", transactional=False)
+    assert taken == [], taken
+    assert held == {}
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the
@@ -2407,12 +2487,12 @@ def test_cell_authoring_is_off_without_a_population(monkeypatch):
     real = {"io": [{"name": "p", "dir": "output", "width": 1},
                    {"name": "clk", "dir": "input", "width": 1}]}
     #: One design is not a population.
-    assert O._cell_targets(population=("only one",), contract=real, **kw) == []
+    assert O._cell_targets(population=("only one",), contract=real, **kw)[0] == []
     #: No declared OUTPUT means no port a cell could sit on -- inputs do not
     #: count, which is the half `dir` filtering carries.
     assert O._cell_targets(
         population=("a", "b"),
-        contract={"io": [{"name": "clk", "dir": "input"}]}, **kw) == []
+        contract={"io": [{"name": "clk", "dir": "input"}]}, **kw)[0] == []
     assert replays == [], "the leg replayed the population before checking it"
 
 
@@ -2489,7 +2569,7 @@ def test_one_cell_target_per_requirement(monkeypatch):
     #: BOTH testpoints cover the SAME requirement.
     testplan = [{"uid": "TP-1", "covers": ["REQ-1@1"]},
                 {"uid": "TP-2", "covers": ["REQ-1@1"]}]
-    got = O._cell_targets(
+    got, _cells = O._cell_targets(
         population=("a", "b"), held={}, contract=contract,
         stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
         by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"}}, normalized=None,
@@ -2515,7 +2595,7 @@ def test_the_cell_budget_spreads_across_ports(monkeypatch):
                        {"name": "q", "dir": "output"}]}
     testplan = [{"uid": f"TP-{i}", "covers": [f"REQ-{i}@1"]} for i in range(1, 5)]
     by_uid = {f"REQ-{i}": {"uid": f"REQ-{i}", "text": "t"} for i in range(1, 5)}
-    got = O._cell_targets(
+    got, _cells = O._cell_targets(
         population=("a", "b"), held={}, contract=contract,
         stimulus_by_tp={f"TP-{i}": [{}] for i in range(1, 5)},
         testplan=testplan, by_uid=by_uid, normalized=None,
@@ -2553,7 +2633,7 @@ def test_a_cell_is_blind_until_a_check_separates_it_AT_THAT_TESTPOINT(monkeypatc
     contract = {"io": [{"name": "p", "dir": "output"}]}
     testplan = [{"uid": "TP-1", "covers": ["REQ-1@1"]},
                 {"uid": "TP-2", "covers": ["REQ-2@1"]}]
-    got = O._cell_targets(
+    got, _cells = O._cell_targets(
         population=("a", "b"), held={}, contract=contract,
         stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
         by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"},

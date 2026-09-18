@@ -155,15 +155,19 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
     outputs = [str(p.get("name")) for p in (contract.get("io") or [])
                if p.get("dir") == "output" and p.get("name")]
 
-    rows_by_design: dict[str, dict] = {}
-    absent_by_design: dict[str, tuple[str, ...]] = {}
-    for i, src in enumerate(population or []):
-        r, a = _rows_for(src, contract, stimulus_by_tp, base=base,
-                         transactional=transactional)
-        if r:
-            rows_by_design[str(i)] = r
-            absent_by_design[str(i)] = a
+    #: **THE STAGE'S OWN INSTRUMENT, NOT A SECOND ONE.** This built its own
+    #: replay table and disagreed with the screen that produced the set: the
+    #: two differ on a testpoint whose replay reports an error, which this
+    #: skipped and `_population_rows` keeps the partial rows of. Measured on
+    #: the same artifact: 29,496 cells and 49.1% blind here against 22,315 and
+    #: 55.1% there. A scorecard that cannot reproduce the number its own stage
+    #: screened against is the defect this module exists to remove, one level
+    #: up.
+    from .oracles_stage import _population_rows, _population_tables
 
+    rows_by_design = _population_rows(
+        list(population or []), contract, stimulus_by_tp, base=base,
+        transactional=transactional)
     cells = V.cells(rows_by_design, outputs) if len(rows_by_design) >= 2 else ()
     if len(rows_by_design) < 2:
         notes.append(
@@ -171,11 +175,9 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
             f"population, so there are no disagreement cells and blindness is "
             f"reported as absent rather than as 0%")
 
-    by_tp: dict[str, dict[str, dict[str, bool]]] = {}
-    for name, rows in rows_by_design.items():
-        for uid, per in _verdicts(held, rows, absent_by_design[name]).items():
-            for tp, ok in per.items():
-                by_tp.setdefault(uid, {}).setdefault(tp, {})[name] = ok
+    _v, by_tp, _obj = _population_tables(
+        held, list(population or []), contract, stimulus_by_tp, base=base,
+        transactional=transactional)
     blind = V.blind_at(cells, by_tp) if cells else ()
 
     #: Distinct VERDICT VECTORS, never a count of checks: "admitting or

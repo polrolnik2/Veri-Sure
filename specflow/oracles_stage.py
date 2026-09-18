@@ -1133,7 +1133,7 @@ def _population_rows(population: Sequence[str], contract: dict,
 def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                   stimulus_by_tp: dict, testplan: list[dict],
                   by_uid: dict, normalized: dict | None, budget: int,
-                  base: str, transactional: bool) -> list[dict]:
+                  base: str, transactional: bool) -> tuple[list[dict], tuple]:
     """The blind cells worth authoring at, heaviest port first.
 
     A CELL IS A LOCATION. `(testpoint, port, two design names)` where readings
@@ -1159,12 +1159,12 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     outputs = [str(p.get("name")) for p in (contract.get("io") or [])
                if p.get("dir") == "output" and p.get("name")]
     if not outputs or len(population) < 2:
-        return []
+        return [], ()
     rows_by_design = _population_rows(
         population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
     if len(rows_by_design) < 2:
-        return []
+        return [], ()
     all_cells = variety.cells(rows_by_design, outputs)
     #: **AT `(TESTPOINT, PAIR)`, NOT AT `PAIR`.** See `variety.separates_at`:
     #: the collapsed table this used to read let one separation anywhere close
@@ -1176,7 +1176,7 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
         transactional=transactional)
     blind = variety.blind_at(all_cells, verdicts)
     if not blind:
-        return []
+        return [], all_cells
     weight = dict(variety.ranked(blind))
     #: WHICH REQUIREMENT OWNS A TESTPOINT. `covers` is the testplan's own
     #: attachment and the only non-model route from a testpoint back to a
@@ -1240,7 +1240,74 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                 claimed.add(uid)
                 break
         depth += 1
-    return targets
+    return targets, all_cells
+
+
+def _adopt_cell_bodies(bodies: list, *, held: dict, population: Sequence[str],
+                       contract: dict, stimulus_by_tp: dict, cells,
+                       base: str, transactional: bool) -> list[str]:
+    """Take a cell check when it SEPARATES MORE than the body it would replace.
+
+    **THE OLD RULE TOOK ONE ONLY WHEN THE STANDING BODY DECIDED NOTHING**, and
+    that is a rule about liveness in a leg whose entire subject is separation.
+    Measured on the first run where the leg fired: 12 targets, 12 bodies
+    authored, **6 adopted** -- and the six were the requirements with no
+    deciding body, so the leg could not touch the blindness it was aimed at.
+
+    The rest of that run says why it matters. Every testpoint carrying a cell
+    has a median of 39 checks deciding on it and NOT ONE blind cell sits where
+    no check decides: the set speaks everywhere and agrees everywhere. Blindness
+    there is not a reach problem, it is a sensitivity problem, and swapping a
+    check that decides-and-agrees for one that decides-and-separates is the only
+    move that touches it.
+
+    TWO CONDITIONS, AND THE SECOND IS NOT OPTIONAL. The cell body must separate
+    strictly more cells than the standing one, and it must not be refuted by
+    the whole population -- otherwise this leg becomes a way to buy blindness
+    with over-strictness, which is how a blindness score was gamed here once
+    before: "a check convicting BOTH sides SEPARATES neither".
+
+    Span is untouched either way: a requirement holds one check before and one
+    after, so this trades WHICH check it is and never HOW MANY requirements
+    have one.
+    """
+    if not bodies or not cells:
+        return []
+
+    def separates(table: dict) -> int:
+        """How many of `cells` one check tells apart. `blind_at` is the set
+        predicate; this is it read for a single member."""
+        return len(cells) - len(variety.blind_at(cells, {"one": table or {}}))
+
+    #: One table for the standing bodies and one for the candidates, rather
+    #: than one per candidate: at the wide replay scope each is
+    #: len(population) x len(stimulus) replays.
+    cand = {f"{b.req_uid}#cell": RequirementOracle(
+        req_uid=f"{b.req_uid}#cell", tp_uids=list(b.tp_uids), clause=b.clause,
+        source=b.source) for b in bodies}
+    standing = {uid: held[uid] for uid in {b.req_uid for b in bodies}
+                if uid in held}
+    _h, have_tp, _o = _population_tables(
+        standing, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    want, want_tp, _o2 = _population_tables(
+        cand, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    refuted = set(variety.refuted_by_the_population(want))
+
+    taken: list[str] = []
+    for body in bodies:
+        key, uid = f"{body.req_uid}#cell", body.req_uid
+        if key in refuted:
+            continue
+        #: -1 for a requirement holding nothing, so any candidate that
+        #: separates zero still beats holding no check at all.
+        keep = separates(have_tp.get(uid)) if uid in standing else -1
+        if separates(want_tp.get(key)) <= keep:
+            continue
+        held[uid] = body
+        taken.append(uid)
+    return taken
 
 
 def _population_objections(held: dict, population: Sequence[str], contract: dict,
@@ -2040,31 +2107,23 @@ def run_oracle_stage(
         "adopted": None,
     }
     if cell_budget and len(population) >= 2:
-        targets = _cell_targets(
+        targets, all_cells = _cell_targets(
             population=population, held=held, contract=contract,
             stimulus_by_tp=stimulus_by_tp, testplan=testplan, by_uid=by_uid,
             normalized=normalized, budget=cell_budget, base=base,
             transactional=transactional)
         cell_report["targets"] = len(targets)
         logger.info("oracles: %d blind cell(s) to author at", len(targets))
-        for extra in run_cell_gen(
-                targets=targets, contract_json=contract_json, contract=contract,
-                port=port, testplan=testplan, normalized=normalized, spec=spec,
-                siblings=by_uid, conforming_source=witness,
-                stimulus_by_tp=stimulus_by_tp, base=base,
-                max_repairs=max_repairs, fanout=fanout, label=f"{label}_cell"):
-            standing_body = held.get(extra.req_uid)
-            if standing_body is not None and _decides(
-                    standing_body, witness, contract, stimulus_by_tp,
-                    base=base, transactional=transactional):
-                #: The requirement already has a check that decides something.
-                #: Keeping the cell check would cost that one its place, so it
-                #: goes to the corpus for selection and not to `held`.
-                cell_bodies.append(extra)
-                continue
-            held[extra.req_uid] = extra
-            cell_bodies.append(extra)
-            cell_authored.append(extra.req_uid)
+        cell_bodies = list(run_cell_gen(
+            targets=targets, contract_json=contract_json, contract=contract,
+            port=port, testplan=testplan, normalized=normalized, spec=spec,
+            siblings=by_uid, conforming_source=witness,
+            stimulus_by_tp=stimulus_by_tp, base=base,
+            max_repairs=max_repairs, fanout=fanout, label=f"{label}_cell"))
+        cell_authored = _adopt_cell_bodies(
+            cell_bodies, held=held, population=population, contract=contract,
+            stimulus_by_tp=stimulus_by_tp, cells=all_cells, base=base,
+            transactional=transactional)
         cell_report["authored"] = len(cell_bodies)
         cell_report["adopted"] = len(cell_authored)
         logger.info("oracles: %d cell check(s) adopted of %d authored",
