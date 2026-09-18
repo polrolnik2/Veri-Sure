@@ -1054,37 +1054,59 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
         for c in (tp.get("covers") or []):
             covers.setdefault(uid, []).append(str(c).split("@")[0])
 
-    seen: set[tuple[str, str]] = set()
+    #: **ONE TARGET PER REQUIREMENT, AND THAT IS FORCED BY THE DATA MODEL.**
+    #: A `RequirementOracle` is keyed by `req_uid`, so two checks authored for
+    #: one requirement cannot both be held -- the second overwrites the first.
+    #: Deduping per `(testpoint, port)` instead spent a whole budget on three
+    #: requirements, nine targets of twelve landing on REQ-0002 alone, and at
+    #: most one of those nine could survive. Twelve calls, near-zero possible
+    #: yield, by construction.
+    #:
+    #: **AND THE BUDGET IS SPREAD ACROSS PORTS, NOT POURED INTO THE HEAVIEST.**
+    #: `ranked` collapses cells to `(port, count)`, so sorting by that weight
+    #: alone put all twelve targets on `sda_oen` -- one port, which is the
+    #: opposite of a variety lever. Ports are visited round-robin in weight
+    #: order, so the first pass takes the heaviest cell of each port before any
+    #: port gets a second.
+    by_port: dict[str, list] = {}
+    for cell in blind:
+        by_port.setdefault(cell.port, []).append(cell)
+    for port in by_port:
+        by_port[port].sort(key=lambda c: (c.testpoint, c.left, c.right))
+    order = sorted(by_port, key=lambda p: (-weight.get(p, 0), p))
+
+    claimed: set[str] = set()
     targets: list[dict] = []
-    for cell in sorted(blind, key=lambda c: (-weight.get(c.port, 0),
-                                             c.testpoint, c.port)):
-        key = (cell.testpoint, cell.port)
-        #: ONE TARGET PER (testpoint, port). A cell exists per design PAIR, so
-        #: nine designs make up to 36 cells at one location -- authoring once
-        #: per pair would buy 36 near-identical checks and call it variety.
-        if key in seen:
-            continue
-        for uid in covers.get(cell.testpoint, []):
-            req = by_uid.get(uid)
-            if not req:
+    depth = 0
+    while len(targets) < budget and any(len(by_port[p]) > depth for p in order):
+        for port in order:
+            if len(targets) >= budget:
+                break
+            if len(by_port[port]) <= depth:
                 continue
-            shape = (normalized or {}).get(uid) or {}
-            act = (shape.get("activation") or {})
-            targets.append({
-                "cell": cell,
-                "requirement": req,
-                "tp_uids": [cell.testpoint],
-                "brief": oracle_gen.CellBrief.at(
-                    cell,
-                    requirement=str(req.get("text") or ""),
-                    activation=str(act.get("text") or "")
-                    or "whenever the requirement's condition holds",
-                    driven=dict(act.get("inputs") or {})),
-            })
-            seen.add(key)
-            break
-        if len(targets) >= budget:
-            break
+            cell = by_port[port][depth]
+            for uid in covers.get(cell.testpoint, []):
+                if uid in claimed:
+                    continue
+                req = by_uid.get(uid)
+                if not req:
+                    continue
+                shape = (normalized or {}).get(uid) or {}
+                act = (shape.get("activation") or {})
+                targets.append({
+                    "cell": cell,
+                    "requirement": req,
+                    "tp_uids": [cell.testpoint],
+                    "brief": oracle_gen.CellBrief.at(
+                        cell,
+                        requirement=str(req.get("text") or ""),
+                        activation=str(act.get("text") or "")
+                        or "whenever the requirement's condition holds",
+                        driven=dict(act.get("inputs") or {})),
+                })
+                claimed.add(uid)
+                break
+        depth += 1
     return targets
 
 

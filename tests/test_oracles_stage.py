@@ -2193,3 +2193,67 @@ def test_the_cell_budget_reaches_the_stage_from_the_pipeline():
     src = P(I.__file__).read_text()
     call = re.search(r"run_oracle_stage\((.{0,2400}?)\n        \)", src, re.DOTALL)
     assert call and "cell_budget=cell_budget" in call.group(1)
+
+
+def _cellrows(port_vals):
+    """Two designs disagreeing on the named ports at the named testpoints."""
+    a, b = {}, {}
+    for tp, ports in port_vals.items():
+        a[tp] = [{"inputs": {}, "outputs": {p: 0 for p in ports}}]
+        b[tp] = [{"inputs": {}, "outputs": {p: 1 for p in ports}}]
+    return {"alpha": a, "bravo": b}
+
+
+def test_one_cell_target_per_requirement(monkeypatch):
+    """A `RequirementOracle` is keyed by `req_uid`, so two checks authored for
+    one requirement cannot both be held -- the second overwrites the first.
+
+    Measured before this held: twelve targets landed on three requirements,
+    nine of them on one, and at most one of those nine could survive. Twelve
+    calls for a yield that was near zero by construction.
+    """
+    from specflow import oracles_stage as O
+
+    rows = _cellrows({"TP-1": ["p", "q"], "TP-2": ["p", "q"]})
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    monkeypatch.setattr(O, "_population_verdicts", lambda *a, **k: {})
+    contract = {"io": [{"name": "p", "dir": "output"},
+                       {"name": "q", "dir": "output"}]}
+    #: BOTH testpoints cover the SAME requirement.
+    testplan = [{"uid": "TP-1", "covers": ["REQ-1@1"]},
+                {"uid": "TP-2", "covers": ["REQ-1@1"]}]
+    got = O._cell_targets(
+        population=("a", "b"), held={}, contract=contract,
+        stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
+        by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"}}, normalized=None,
+        budget=8, base="", transactional=True)
+    assert len(got) == 1, [t["cell"] for t in got]
+    assert got[0]["requirement"]["uid"] == "REQ-1"
+
+
+def test_the_cell_budget_spreads_across_ports(monkeypatch):
+    """`ranked` collapses cells to `(port, count)`, so ranking by that weight
+    alone poured a whole budget into one port -- `sda_oen`, twelve of twelve --
+    which is the opposite of a variety lever.
+    """
+    from specflow import oracles_stage as O
+
+    #: `p` disagrees at three testpoints, `q` at one. Weight says p first.
+    rows = _cellrows({"TP-1": ["p"], "TP-2": ["p"], "TP-3": ["p"],
+                      "TP-4": ["q"]})
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    monkeypatch.setattr(O, "_population_verdicts", lambda *a, **k: {})
+    contract = {"io": [{"name": "p", "dir": "output"},
+                       {"name": "q", "dir": "output"}]}
+    testplan = [{"uid": f"TP-{i}", "covers": [f"REQ-{i}@1"]} for i in range(1, 5)]
+    by_uid = {f"REQ-{i}": {"uid": f"REQ-{i}", "text": "t"} for i in range(1, 5)}
+    got = O._cell_targets(
+        population=("a", "b"), held={}, contract=contract,
+        stimulus_by_tp={f"TP-{i}": [{}] for i in range(1, 5)},
+        testplan=testplan, by_uid=by_uid, normalized=None,
+        budget=2, base="", transactional=True)
+    ports = [t["cell"].port for t in got]
+    assert len(got) == 2
+    #: THE LIGHTER PORT IS REACHED BEFORE THE HEAVIER ONE IS EXHAUSTED. A
+    #: budget of two with `p` carrying three cells must not be two `p`s.
+    assert set(ports) == {"p", "q"}, ports
