@@ -951,21 +951,68 @@ def shared_prefix(contract_json: str, contract: dict, *,
         for p in (contract.get("io") or [])
         if p.get("dir") == "output" and p.get("name")
     ]
+    #: **THE PROBES BELONG IN THIS LIST, BECAUSE THE GATE ALREADY ADMITS
+    #: THEM.** `gate_one` computes `observable_here = {**outputs, **probes}`
+    #: and its rejection says "not a declared output port OR PROBE" -- the
+    #: scope rule was deliberately widened, because "the requirements most in
+    #: need of probes state their obligation ABOUT the state, and under an
+    #: absolute rule they could only be checked through the proxy this exists
+    #: to remove". The prompt was never widened with it and kept saying these
+    #: are the ONLY names `observable` may contain.
+    #:
+    #: So the model obeyed the prompt and named no probe, which is exactly the
+    #: failure the docstring above predicts for a list the gate does not share:
+    #: measured on a full run, 22 probes declared, 14 cross-constraints, and
+    #: **0 of 165 normalized forms naming a single probe anywhere** -- not in
+    #: `observable`, not in `opens_on`, not in `observed_via`. Every probe
+    #: orphaned, and the requirements that needed one took `observable: []`
+    #: and were abandoned as having no observation route.
+    probes = [
+        {"name": p.get("name"), "width": p.get("width", 1)}
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "probe" and p.get("name")
+    ]
     inputs = [
         {"name": p.get("name"), "width": p.get("width", 1)}
         for p in (contract.get("io") or [])
         if p.get("dir") == "input" and p.get("name")
     ]
+    #: A DEFAULT, NOT A PROHIBITION -- the gate's own words. Arm C measured the
+    #: unrestricted form doubling vacuity, so the preference for a declared
+    #: output is stated and the override is made to cost a quotation.
+    probe_note = ("" if not probes else
+                  "\n\nDECLARED PROBES -- internal state [P] named, and they "
+                  "are admissible in `observable` and `activation.opens_on` "
+                  "too:\n" + json.dumps(probes, indent=2) + "\n\n"
+                  "PREFER A DECLARED OUTPUT. Reach for a probe only when the "
+                  "requirement states its obligation ABOUT the state rather "
+                  "than about what the state makes a port do, and when you do, "
+                  "quote the requirement's own words in `reasoning`. A probe "
+                  "used as a shortcut to a port checks the design against its "
+                  "own private vocabulary.")
     return shared_block(
         ("system", system or SYSTEM),
         ("contract_json", contract_json),
+        #: **THE PROHIBITION STAYS WHERE THERE ARE NO PROBES.** "ONLY" is not
+        #: phrasing: Arm C measured the unrestricted form DOUBLING vacuity, so
+        #: a run with no probe table must keep the absolute rule it was
+        #: measured under. It softens only when a probe actually exists to name
+        #: -- otherwise the sentence would invite a name the gate will reject.
         ("output_ports", json.dumps(outputs, indent=2) + "\n\n" + (
             note or
-            "These are the ONLY names `observable` may contain. Anything else "
-            "named in the requirement is internal to the design; if the "
-            "requirement is about one of those, `observable` is empty.")),
+            ("These are the ONLY names `observable` may contain. Anything else "
+             "named in the requirement is internal to the design; if the "
+             "requirement is about one of those, `observable` is empty."
+             if not probes else
+             "These are the names `observable` should normally contain. "
+             "Anything else named in the requirement is internal to the "
+             "design; if the requirement is about one of those, use a declared "
+             "probe below if one names it, and otherwise give an empty "
+             "`observable` with an `unobservable_reason`.")) + probe_note),
         ("input_ports", json.dumps(inputs, indent=2)
-         + "\n\nThese are the only names `activation.inputs` may contain."),
+         + "\n\nThese are the only names `activation.inputs` may contain. "
+           "A probe is not an input: a condition on one goes in "
+           "`activation.opens_on`."),
     )
 
 

@@ -146,9 +146,26 @@ def test_the_prompt_shows_the_port_lists_the_gate_validates_against():
     a list the model was never shown cost 12 repair rounds in 41 testpoints."""
     prefix = shared_prefix("{}", CONTRACT)
     assert "cmd_ack" in prefix and "busy" in prefix
+    # WITH NO PROBE TABLE THE PROHIBITION IS ABSOLUTE, and stays that way: Arm
+    # C measured the unrestricted form doubling vacuity, so a contract with no
+    # probes keeps the rule it was measured under.
     assert "ONLY names `observable` may contain" in prefix
+    assert "DECLARED PROBES" not in prefix
     # Inputs listed too, because `activation.inputs` is gated the same way.
     assert "activation.inputs" in prefix
+
+    # WITH ONE, IT SOFTENS TO A PREFERENCE -- because `gate_one` computes
+    # `observable_here = {**outputs, **probes}` and a prompt saying ONLY
+    # forbids exactly what the gate was widened to admit. Measured before this:
+    # 22 probes declared and 0 of 165 normalized forms naming one.
+    import json as _json
+
+    probed = {"io": list(CONTRACT.get("io") or [])
+              + [{"name": "in_idle", "dir": "probe", "width": 1}]}
+    with_probe = shared_prefix(_json.dumps(probed), probed)
+    assert "ONLY names `observable` may contain" not in with_probe
+    assert "DECLARED PROBES" in with_probe
+    assert "in_idle" in with_probe[with_probe.index("DECLARED PROBES"):]
 
 
 def test_the_prompt_separates_the_mechanism_from_the_effect():
