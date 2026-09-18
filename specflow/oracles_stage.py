@@ -864,8 +864,15 @@ def _decides(oracle, witness: str, contract: dict, stimulus_by_tp: dict,
     replacement only at the TOP OF THE NEXT ROUND, which on the last round
     never comes.
     """
+    #: **WHEREVER THE STIMULUS GOES, for the same reason everything else that
+    #: asks a question about a check does.** This counts testpoints a check
+    #: DECIDES on -- a liveness question -- and answering it over `tp_uids`
+    #: alone, median 2 of 499, reports a check as deciding nothing whenever its
+    #: two attached testpoints happen not to trigger it. That costs span in the
+    #: one direction the stage cannot recover from: a check called dead is not
+    #: re-asked about, it is discarded.
     n = 0
-    for tp in oracle.tp_uids:
+    for tp in _population_scope(stimulus_by_tp, oracle):
         steps = stimulus_by_tp.get(tp)
         if not steps:
             continue
