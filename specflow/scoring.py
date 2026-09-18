@@ -1630,3 +1630,59 @@ def the_full_pipeline_on_the_plans_own_metrics() -> str:
         "reachability is the new binding constraint. Also 216 of 625 "
         "testpoints are named by no oracle and 140 move nothing at all."
     )
+
+
+def no_selection_rule_beats_not_selecting_on_the_full_pipeline_set() -> str:
+    """The first time `population.select` was run on anything reported here.
+
+    Every figure given from the full pipeline run used NO selection rule. "As
+    frozen" is the pipeline's own output; the only filter applied on top was
+    `variety.refuted_by_the_population`, which is a rejection rule and not
+    selection; and the reference-picked line is barred. `placement`,
+    `max_convictions` and the `t` sweep -- the machinery the plan calls its
+    endpoint -- had never touched any of it. Driver `e5_selection.py`.
+    """
+    return (
+        "**THE `t` SWEEP, 51 deciding checks over 9 designs and 445 cells:**\n\n"
+        "    max_convictions   kept  eff  audit    blind    accepts\n"
+        "    0                   16    8  62.5%    13.5%    0\n"
+        "    1                   17    9  58.8%    13.5%    0\n"
+        "    3                   19   11  52.6%    13.5%    0\n"
+        "    5                   26   13  46.2%     5.8%    0\n"
+        "    8                   28   13  42.9%     5.8%    0\n"
+        "    9                        REFUSED -- 'rejects nothing for\n"
+        "                             over-strictness, so the rule would be\n"
+        "                             the DECIDES clause wearing a second name'\n\n"
+        "    no selection        51   16  29.4%     1.1%    0\n"
+        "    refuted dropped     42   15  14.3%     1.1%    0\n"
+        "    reference-picked    36   10   0.0%     5.8%    3\n\n"
+        "**EVERY THRESHOLD IS DOMINATED BY NOT SELECTING, ON BOTH AXES.** t=0 "
+        "keeps 16 checks at audit 62.5% and blindness 13.5%; the unselected 51 "
+        "sit at 29.4% and 1.1%. Selection does not trade here -- it loses "
+        "twice.\n\n"
+        "**AND THE DIRECTION IS THE INFORMATIVE PART.** `max_convictions` keeps "
+        "checks that convict FEW designs, and on this set those are "
+        "disproportionately the ones that convict the CONTROL: audit rises "
+        "monotonically as the threshold tightens, 42.9% at t=8 to 62.5% at "
+        "t=0. Selecting for apparent soundness selects for over-strictness, "
+        "which is the anti-correlation this tree already recorded -- sound and "
+        "refutable at 26% against a 75% base rate -- arriving through the "
+        "selector instead of through the tells.\n\n"
+        "**THE REFUTATION RULE BEATS EVERY THRESHOLD ON BOTH AXES.** audit "
+        "14.3% and blindness 1.1%, against the best t's 42.9% and 5.8%. It is "
+        "also the opposite kind of rule: `max_convictions` asks how MANY "
+        "designs a check convicts and keeps the low end, while refutation asks "
+        "whether it convicts ALL of them and drops only those. One is a "
+        "threshold on a count, the other a logical impossibility.\n\n"
+        "**WHAT THIS DOES NOT SAY.** `placement` was not swept -- it needs "
+        "`shape` and `objections`, and its sign is retracted in `population` "
+        "pending a measurement that has not been taken. And `select` scores a "
+        "check against each design's testpoints CONCATENATED into one trace, "
+        "while the columns here are per-testpoint verdicts, so a check can "
+        "decide differently in the two. The `kept` sets are the selector's; the "
+        "scoring is not, and the two must not be read as one measurement.\n\n"
+        "**NOTHING ACCEPTS A DESIGN EXCEPT THE BARRED LINE.** Every "
+        "golden-free configuration on this board accepts 0 of 9. The plan's "
+        "headline -- one class containing the correct design -- is not reached "
+        "by any selection rule available here."
+    )
