@@ -110,10 +110,40 @@ RULES, and each of them is refused by a gate rather than merely requested:
    how ten checks were previously made unfalsifiable. Say `cnt_nonzero`, not
    `cnt`.
 
-4. NAME THEM FOR THE SITUATION, not for the mechanism: `in_lrefill3`,
-   `cnt_nonzero`, `hitmiss_eval`. Lower case, valid Verilog identifiers.
+4. WHEN THE SPECIFICATION NAMES THE STATE, USE ITS NAME. Lower-cased, because
+   a probe becomes a port of the generated module, but otherwise the
+   specification's own identifier: `cSCL` -> `cscl`, `sta_condition` ->
+   `sta_condition`, `scl_sync` -> `scl_sync`. Only invent a name for a state
+   the text describes without naming.
 
-5. YOU MAY NOT SAY A STATE IS UNREACHABLE, or absent, or dead. You are reading a
+   THIS IS THE RULE MOST WORTH GETTING RIGHT, AND THE OPPOSITE ONE WAS HERE
+   FIRST. It said "name them for the situation, not for the mechanism", and on
+   an I2C bit controller the author obeyed: the specification names `cSCL`,
+   `cSDA`, `scl_sync`, `sda_chk`, `sta_condition`, `sto_condition`, `clk_en`
+   and `filter_cnt`, and **not one of the seventeen probes carried any of those
+   names** -- they came back as `filtered_scl_high`, `scl_sync_active`,
+   `start_condition`.
+
+   The cost is not cosmetic. A requirement reads "the controller captures the
+   raw scl_i and sda_i signals into two-stage internal synchronization
+   registers cSCL and cSDA". With no probe called `cscl`, `normalize` has
+   nothing to route that to and falls back to a declared output -- `busy` --
+   so every check written for it infers a START/STOP signature from raw input
+   edges and asserts about a port the requirement never mentions. That check
+   convicted the known-good reference design. It was the ONLY check in its run
+   to do so, and no golden-free instrument could see anything wrong with it:
+   it convicted none of the seven spec-derived designs, and scored exactly
+   zero on `placement`, `dissent_weighted` and cells closed.
+
+   A paraphrase also breaks the link a reader needs: a probe named after the
+   specification's term can be checked back against the sentence that names
+   it, and `filtered_scl_high` cannot.
+
+5. NAME THEM FOR THE SITUATION when, and only when, the specification does not
+   name them: `in_lrefill3`, `cnt_nonzero`, `hitmiss_eval`. Lower case, valid
+   Verilog identifiers.
+
+6. YOU MAY NOT SAY A STATE IS UNREACHABLE, or absent, or dead. You are reading a
    specification, not a design; no design exists yet. The ONE exception is a
    `config_gated` hypothesis, and only when the specification ITSELF states that
    the thing exists only under a build option -- quote that sentence in the
@@ -252,6 +282,54 @@ def build_prompt(*, requirements: list[dict], contract_json: str, spec: str,
     return "\n\n".join(parts)
 
 
+def _unnamed_states(out: "ProbeOutput", spec: str,
+                    declared: set[str]) -> list[Issue]:
+    """Identifiers the SPECIFICATION names that no probe and no port carries.
+
+    **WARNING-ONLY, AND ON PURPOSE AT THIS STAGE.** An identifier-shaped token
+    in prose is a heuristic: it catches a module name and a signal the text
+    mentions only in passing alongside the state terms that matter. A screen
+    whose false-positive rate is unmeasured does not block here -- this tree has
+    twice paid for one that did. What it does is make the gap visible.
+
+    THE GAP IT WAS WRITTEN FOR. On an I2C bit controller the specification names
+    `cSCL`, `cSDA`, `scl_sync`, `sda_chk`, `sta_condition`, `sto_condition`,
+    `clk_en` and `filter_cnt`, and **not one of the seventeen probes carried any
+    of those names** -- the rule in force said "name them for the situation, not
+    for the mechanism", and they came back as `filtered_scl_high`,
+    `scl_sync_active`, `start_condition`.
+
+    The consequence is not cosmetic. "The controller captures the raw scl_i and
+    sda_i signals into two-stage internal synchronization registers cSCL and
+    cSDA" has no probe to name, so `normalize` routes it to a declared output
+    -- `busy` -- and every check written for it asserts about a port the
+    requirement never mentions. That check convicted the known-good reference
+    design, alone in its run, and no golden-free instrument could see anything
+    wrong with it: zero convictions of seven spec-derived designs, zero
+    `placement`, zero `dissent_weighted`, zero cells closed.
+    """
+    import re as _re
+
+    have = {str(p.name or "").lower() for p in out.probes} | {
+        d.lower() for d in declared}
+    have |= {str(a.term or "").lower() for a in (out.aliases or [])}
+    #: `cSCL`-shaped and `snake_case`-shaped tokens both, because a
+    #: specification names its state in whichever it happens to use.
+    tokens = _re.findall(r"\b(?:[a-z]+[A-Z]\w*|[a-z]\w*_[a-z0-9]\w*)\b", spec)
+    missing = sorted({t for t in tokens if t.lower() not in have})
+    if not missing:
+        return []
+    return [Issue(
+        "warning", "probes.names",
+        f"{len(missing)} identifier(s) the specification names carry no probe, "
+        f"port or alias: {', '.join(missing[:12])}"
+        + (" ..." if len(missing) > 12 else "")
+        + ". Where one of these is a state a requirement is ABOUT, a check for "
+          "that requirement has nothing to name and `normalize` routes it to a "
+          "declared output instead -- which is how a check comes to assert "
+          "about a port its requirement never mentions.")]
+
+
 def parse_response(text: str) -> ProbeOutput:
     try:
         obj = extract_json_object(strip_markdown_code_fences(text))
@@ -284,6 +362,7 @@ def gate(out: ProbeOutput, *, contract: dict, spec: str,
     declared = {str(p.get("name")) for p in (contract.get("io") or [])
                 if p.get("name")}
     known = {str(r.get("uid") or "") for r in requirements}
+    issues.extend(_unnamed_states(out, spec or "", declared))
     seen: set[str] = set()
     for idx, probe in enumerate(out.probes):
         path = f"probes[{idx}]"
