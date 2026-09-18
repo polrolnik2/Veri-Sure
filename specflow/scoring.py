@@ -1869,3 +1869,43 @@ def the_placement_threshold_does_not_transfer_across_testpoint_counts() -> str:
         "testpoints says these three agree almost nowhere, which is what three "
         "combinational readings of a sequential module would look like."
     )
+
+
+def s2_is_an_all_or_nothing_gate_over_a_fan_out_of_151_calls() -> str:
+    """Why four of five full-pipeline runs died at S2, and why retrying is not
+    the answer. This is arithmetic, not a diagnosis of any one failure.
+    """
+    return (
+        "**S2 IS FANNED OUT PER REQUIREMENT AND GATED AS A WHOLE.** "
+        "`run_s2_fanout` makes one call per requirement, each with its own "
+        "repair budget, then `integration` folds every item's issues into one "
+        "`StageResult` and returns `BuildResult(False, 'S2', ...)` if any of "
+        "them still carries an error. 151 requirements is 151 independent "
+        "calls and one shared verdict:\n\n"
+        "    per-item residual  0.1%  ->  P(all 151 clean) = 86%\n"
+        "    per-item residual  1.0%  ->  P(all 151 clean) = 22%\n"
+        "    per-item residual  3.0%  ->  P(all 151 clean) =  1%\n\n"
+        "**SO THE BUILD CANNOT SUCCEED AT ANY REALISTIC PER-ITEM ERROR RATE, "
+        "AND RETRYING IS NOT A FIX** -- it re-rolls 151 dice. Observed: four "
+        "failures in five attempts, with a different failure each time. 32 "
+        "issues of testpoints covering `REQ-0148..0159`, uids off the end of a "
+        "148-requirement set; then 13; then 18, of which 10 were 'no testplan "
+        "elements produced' and 8 'covers nothing', with no bad uids at all. "
+        "The one success is the outlier.\n\n"
+        "**AND EVERY ONE OF THESE IS A PER-REQUIREMENT LOSS THE REST OF THE "
+        "PIPELINE ALREADY KNOWS HOW TO CARRY.** A requirement whose testpoints "
+        "went missing simply gets no oracle -- `run_oracle_gen` says so in as "
+        "many words: 'A requirement no testpoint covers gets no oracle: there "
+        "would be nothing to replay it against... better to not spend the "
+        "call.' The oracle stage gives such a requirement a DISPOSITION and "
+        "keeps going. S2 is the stage that stops the world.\n\n"
+        "**WHICH MAKES IT THE OPPOSITE OF THE FAILURE THIS TREE USUALLY "
+        "HAS.** The recorded pattern is a screen that blocks before its "
+        "false-positive rate is known -- gate 1 discarding 30 requirements, "
+        "correspondence rejecting 56 of 70. This one blocks on defects that are "
+        "real, and the objection is not that it is wrong about any item but "
+        "that its verdict is shared across 151 of them. **Unblocking it is a "
+        "change to what a stage may do, not a calibration**, and it can hide a "
+        "genuinely broken S2 behind a run that looks complete -- so it is "
+        "stated here rather than made unilaterally."
+    )
