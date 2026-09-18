@@ -17,8 +17,22 @@ can see it.
 """
 import collections
 import json
+import logging
 import sys
 from pathlib import Path
+
+#: **THE PIPELINE'S OWN PROGRESS, ON STDOUT.** Every stage reports what it is
+#: doing through `logger.info` and this driver configured no logging, so a
+#: three-hour run printed one line at the start and one at the end -- which is
+#: how a cell-authoring leg came to produce nothing with the only two lines
+#: that would have said so going nowhere. Filtered to the pipeline's own
+#: loggers, because the OpenAI client is chatty at INFO and drowns them.
+logging.basicConfig(level=logging.WARNING, format="%(message)s",
+                    stream=sys.stdout)
+for _name in ("specflow.oracles_stage", "specflow.scorecard",
+              "specflow.integration", "specflow.probes",
+              "specflow.refmodel.liveness"):
+    logging.getLogger(_name).setLevel(logging.INFO)
 
 sys.path.insert(0, "/home/user/Veri-Sure")
 from specflow.integration import build_artifacts  # noqa: E402
