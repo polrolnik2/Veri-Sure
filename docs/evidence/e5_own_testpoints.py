@@ -114,7 +114,8 @@ print(f"DECIDE   {len(verdicts)} of {len(blob['oracles'])} TRUSTED checks "
       f"decide on >=1 design   (the yardstick gave 51)")
 conv = {k: sum(1 for v in p.values() if v is False) for k, p in verdicts.items()}
 print(f"  of those, object to nothing: {sum(1 for k in conv if conv[k] == 0)}")
-print(f"  convict the control:         {len(ctl)}")
+print("  convict the control:         "
+      + (str(len(ctl)) if control is not None else "n/a -- NO CONTROL REPLAYED ON THIS BASIS"))
 
 shape = P.characterise(designs, OUT)
 pl = {k: P.tells(objections[k], shape).placement for k in verdicts}
@@ -127,11 +128,22 @@ def row(label, kept):
     bl = V.blind(cells, v)
     acc = [d for d in sorted(designs)
            if not any(p.get(d) is False for p in v.values())]
-    takes = not (set(v) & ctl)
+    #: **`audit 0` AND `audit None` ARE DIFFERENT CLAIMS.** With no replayable
+    #: control there is nothing to convict, so printing 0.0% would say "no
+    #: check is over-strict" where the truth is "no control was supplied" --
+    #: the exact misreading `rates()` documents costing a whole run, where
+    #: `over_strict: 0` was taken as a result and 22 of 54 trusted oracles
+    #: turned out to be failed by a known-good model.
+    if control is None:
+        aud = "audit    n/a (no control on this basis)"
+        takes = "  correct design: n/a"
+    else:
+        aud = (f"audit {len(set(v) & ctl):3d}="
+               f"{100*len(set(v) & ctl)/max(1, len(v)):5.1f}%")
+        takes = f"  accepts CORRECT: {not (set(v) & ctl)}"
     print(f"  {label:42} span {len(v):3d}/{N_REQ}={100*len(v)/N_REQ:5.1f}%  "
-          f"audit {len(set(v) & ctl):3d}={100*len(set(v) & ctl)/max(1, len(v)):5.1f}%  "
-          f"blind {100*len(bl)/max(1, len(cells)):5.1f}%  "
-          f"accepts {len(acc)}+{'CORRECT' if takes else 'no'}")
+          f"{aud}  blind {100*len(bl)/max(1, len(cells)):5.1f}%  "
+          f"accepts {len(acc)} of {len(designs)}{takes}")
 
 
 row("as frozen", set(verdicts))

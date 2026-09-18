@@ -1830,3 +1830,42 @@ def the_stimulus_loop_was_being_charged_for_other_stages_failures() -> str:
         "forms carry no input predicate at all. Naming them correctly is the "
         "precondition for working on them; it is not the work."
     )
+
+
+def the_placement_threshold_does_not_transfer_across_testpoint_counts() -> str:
+    """The selection experiments, re-run on the extended set -- the checks
+    scored on the testpoints they NAME rather than on seven synthetic ones.
+    Driver `e5_own_testpoints.py`.
+    """
+    return (
+        "**THE EXTENDED SET NEARLY DOUBLES SPAN.**\n\n"
+        "    yardstick, 7 synthetic testpoints   51 of 151 decide = 33.8%\n"
+        "    the run's own 625 testpoints        94 of 151 decide = 62.3%\n"
+        "                                        8633 cells, blindness 7.6%\n\n"
+        "**AND THE PLACEMENT FLOOR I RECOMMENDED DOES NOT SURVIVE THE MOVE.** "
+        "`placement` is a SHARE of split testpoints, so its scale is set by how "
+        "many there are. On the seven-testpoint yardstick a check objecting on "
+        "one testpoint scores 0.143, which is why floors of 0.143 and 0.286 "
+        "looked like natural knees. Here **623 of 625 testpoints are split**, "
+        "so a check objecting on two scores 0.003. Every floor from 0.05 up "
+        "therefore drops every objector and keeps only the 52 checks that "
+        "object to nothing -- span 34.4% at **100% blindness**, which is the "
+        "degenerate end wearing a good span number.\n\n"
+        "So `min_placement` cannot carry a constant across runs. It is a "
+        "quantile of the objectors' own distribution or it is nothing, and the "
+        "0.2857 that reached audit 0 on the yardstick is a fact about seven "
+        "testpoints rather than about the rule.\n\n"
+        "**AUDIT IS UNAVAILABLE ON THIS BASIS AND I ALMOST REPORTED IT AS "
+        "ZERO.** The control implements `step`; this run's population "
+        "implements `evaluate`, because the run was given a contract with no "
+        "`clocking` key. With no replayable control nothing can convict it, and "
+        "the driver printed `audit 0.0%` -- which says 'no check is "
+        "over-strict' where the truth is 'no control was supplied'. That is the "
+        "misreading `rates()` documents costing a whole run, reproduced in a "
+        "driver I wrote after reading that docstring. It now prints `n/a`.\n\n"
+        "**AND THE POPULATION IS TOO SMALL FOR THE SWEEP.** Three designs means "
+        "`max_convictions` has two meaningful settings, 0 and >=2, and nothing "
+        "between; `effective_size` is 3 with no clustering. 623 of 625 split "
+        "testpoints says these three agree almost nowhere, which is what three "
+        "combinational readings of a sequential module would look like."
+    )
