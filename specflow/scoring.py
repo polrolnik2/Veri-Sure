@@ -1694,3 +1694,55 @@ def a_rejection_rule_is_selection_and_mine_was_a_point_on_the_sweep() -> str:
         "`select` is about a trace shape the checks were not authored against, "
         "and cannot be compared with a per-testpoint number without saying so."
     )
+
+
+def placement_takes_the_audit_to_zero_and_six_checks_do_the_work() -> str:
+    """The first configuration measured here that accepts the correct design.
+
+    `min_placement` is the direction `population` records as unmeasured -- "no
+    threshold for this direction has been measured: the recorded plateau
+    belongs to the other sign and does not transfer". This measures it.
+    Driver `e5_placement.py`; the control is scored last and never selects.
+    """
+    return (
+        "**STACKED ON `max_convictions = 4`, ON THE FULL-PIPELINE SET:**\n\n"
+        "    t=4 alone              kept 37  audit 2.7%  blind 5.8%\n"
+        "                           accepts h,q,s -- and REJECTS the control\n"
+        "    t=4, placement>=0.143  kept  6  audit 0.0%  blind 5.8%\n"
+        "                           accepts h,q,s AND THE CONTROL, 4 classes\n"
+        "    t=4, placement>=0.429  kept  1  audit 0.0%  blind 51.5%\n\n"
+        "**AUDIT REACHES 0 AND BLINDNESS DOES NOT MOVE.** 5.8% either way, and "
+        "the accepted spec-derived set is the same three designs. Six checks "
+        "reproduce the entire constriction of thirty-seven.\n\n"
+        "**AND THE CORRECT DESIGN IS IN THE ACCEPTED SET, WHICH NOTHING ELSE "
+        "MEASURED HERE MANAGED.** Every other configuration on this board -- "
+        "every t, the refutation rule, the as-frozen set -- rejects the "
+        "control, so its accepted set could never contain the right answer "
+        "however few classes it held. This one accepts it. The plan's headline "
+        "is still not met: four classes against a target of one, so the set is "
+        "under-constricted. But it is under-constricted AROUND the correct "
+        "design rather than constricted past it, and that is a different "
+        "failure with a different fix.\n\n"
+        "**WHY SIX CHECKS SUFFICE: 31 OF THE 37 OBJECT TO NOTHING.** They "
+        "carry `placement +0.0000` and convict 0 of 9 -- they decide, and they "
+        "never disagree with any design. Sound by silence, which is exactly "
+        "what `min_decides: 0` is documented as admitting and what a "
+        "conviction-count threshold cannot see: a check convicting nobody "
+        "passes every t.\n\n"
+        "**THE SPAN COLUMN, AND IT MUST NOT BE READ AS THE RUN'S SPAN.**\n\n"
+        "    t=4                    37 of 151 = 24.5%\n"
+        "    t=4 + placement        6 of 151 =  4.0%\n\n"
+        "That is requirements whose check survives selection AND objects "
+        "somewhere ON THIS YARDSTICK -- seven synthetic testpoints, while the "
+        "run authored against 625 of its own. A check written for TP-0421 "
+        "cannot decide on TP-start, so the 51 TRUSTED checks that are silent "
+        "here are mostly silent because they are being scored against a "
+        "testpoint set they were not authored for. **The run's span is 102 of "
+        "151 = 67.5%, or 85.0% on `considered()`.** The 4.0% is the price of "
+        "this selection on this yardstick and nothing more.\n\n"
+        "**SO THE TRADE IS REAL AND STEEP.** Audit 2.7% -> 0 and the correct "
+        "design admitted, for six objecting checks instead of thirty-seven. "
+        "Whether that is a good exchange depends on a number this board cannot "
+        "give: how many of the 31 silent-here checks object on the run's own "
+        "testpoints, which is the measurement to take next."
+    )
