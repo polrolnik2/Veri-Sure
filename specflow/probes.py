@@ -374,6 +374,27 @@ def cross_constraint_requirements(out: ProbeOutput,
             "uid": mint(PREFIX_REQUIREMENT, base + offset),
             "text": cc.text.strip(),
             "unit_kind": "behavioural",
+            #: **`needs` IS WHAT MAKES "ORDINARY" TRUE, AND IT WAS MISSING.**
+            #: S2 covers a requirement only when it declares `needs=testplan`,
+            #: and every requirement S1 mints declares `("testplan",
+            #: "refmodel")`. A cross-constraint arrived with none, so S2 was
+            #: asked to plan a requirement that had not requested coverage.
+            #:
+            #: MEASURED, and it killed four of five full-pipeline runs. The
+            #: model answered correctly and said so in as many words --
+            #: "REQ-0151 does not declare needs=['testplan'], so it must not be
+            #: covered by any testplan element" -- returned zero elements, and
+            #: the gate failed it for producing nothing. Five repair rounds
+            #: could not converge because there was nothing to fix: the
+            #: requirement was malformed, not the answer. An earlier run showed
+            #: the same bug from the other side, the model covering them anyway
+            #: and the gate rejecting 32 elements with "does not declare
+            #: needs='testplan'; coverage was not requested".
+            #:
+            #: These are the only requirements in the system minted outside S1,
+            #: which is why they are the only ones that could arrive without
+            #: the field.
+            "needs": ["testplan", "refmodel"],
             "spec_spans": [cc.span] if cc.span else [],
             "derived_from_probe": cc.probe,
         })
