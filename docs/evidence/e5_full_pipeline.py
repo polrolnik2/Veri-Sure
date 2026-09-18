@@ -26,8 +26,27 @@ from specflow.model_io import PortSettings  # noqa: E402
 
 TASK = Path("benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl")
 OUT = Path(sys.argv[1])
-POP = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+#: **SEVEN, NOT THREE, AND THE SWEEP SAYS WHY.** Refutation requires the check
+#: to convict EVERY member, so a bigger population makes unanimity both rarer
+#: and stronger: on the probe run's own frozen 96, over the wide replay scope,
+#:
+#:     k   cells   refuted   blind(all set)
+#:     3    3530        47            22.3%
+#:     5   13546        45            19.3%
+#:     7   37288        41            10.4%
+#:     9   62932        40            11.2%
+#:
+#: More readings means fewer good checks lost to a coincidence of three, and
+#: more of the design space in the blindness denominator. Nine buys nothing
+#: over seven here and costs 69% more replay.
+POP = int(sys.argv[2]) if len(sys.argv) > 2 else 7
 CELLS = int(sys.argv[3]) if len(sys.argv) > 3 else 12
+#: SET-LEVEL repair attempts. The default is 2 and nothing ever passed it --
+#: `build_artifacts` did not forward `repair_attempts` at all until this run.
+#: Over-strictness is what needs the extra round: at the wide scope 47 of 96
+#: frozen checks are refuted by the whole population, and each attempt costs
+#: about one call per still-rejected check.
+ATTEMPTS = int(sys.argv[4]) if len(sys.argv) > 4 else 3
 
 spec = (TASK / "description.txt").read_text(encoding="utf-8")
 #: **A REAL CONTRACT, AND THE FIRST RUNS DID NOT USE ONE.** They reused
@@ -41,7 +60,17 @@ contract_json = Path(
     "benchmarks/baselines/i2c_master_bit_ctrl/arm_a/contract.json"
 ).read_text(encoding="utf-8")
 
-print(f"spec {len(spec)} bytes; population {POP}; cell budget {CELLS}")
+#: THE CONTROL, FOR THE SCORECARD'S AUDIT COLUMN AND FOR NOTHING ELSE. It goes
+#: in as `audit_control`, which reaches `scorecard.score` -- a module with no
+#: author, no prompt and no repair path -- and NOT as `refmodel_control`, which
+#: reaches the oracle stage and can reject. A control may REJECT an oracle and
+#: may never REPAIR one; here it does not even reject, it only scores.
+CONTROL = Path("benchmarks/controls/i2c_master_bit_ctrl/ref_model.py")
+control_source = CONTROL.read_text() if CONTROL.is_file() else None
+
+print(f"spec {len(spec)} bytes; population {POP}; cell budget {CELLS}; "
+      f"repair attempts {ATTEMPTS}; "
+      f"control {'loaded for the audit column' if control_source else 'ABSENT'}")
 print(f"out {OUT}\n", flush=True)
 
 built = build_artifacts(
@@ -58,6 +87,8 @@ built = build_artifacts(
     demote_faithfulness=True,
     population_size=POP,
     cell_budget=CELLS,
+    oracle_repair_attempts=ATTEMPTS,
+    audit_control=control_source,
     #: OFF. Correspondence is priced at ~half the stage and its label does not
     #: predict convicting the control; this run is not buying it.
     correspondence=False,
@@ -77,7 +108,8 @@ print(f"\nBUILD ok={built.ok} stage={built.stage} reason={built.reason}",
 KEEP = Path("docs/evidence/e5")
 KEEP.mkdir(parents=True, exist_ok=True)
 for name in ("requirements.json", "oracles.json", "stimulus.json",
-             "testplan.json"):
+             "testplan.json", "normalized.json", "probes.json",
+             "scorecard.json"):
     src_f = OUT / "specflow" / name
     if src_f.is_file():
         (KEEP / f"real-{name}").write_text(src_f.read_text(encoding="utf-8"),
@@ -112,3 +144,19 @@ if art.is_file():
         print(f"  requirements {len(reqs)}: {dict(kinds)}")
         print(f"  SPAN  {n_tr}/{len(reqs)} minted = {100*n_tr/max(1,len(reqs)):.1f}%"
               f" | {n_tr}/{beh} behavioural = {100*n_tr/max(1,beh):.1f}%")
+
+
+#: THE TRIPLE, AS THE RUN ITSELF COMPUTED IT. Not re-derived here: a number a
+#: run cannot produce about itself is a number nobody can reproduce, and every
+#: figure on this branch before the scorecard was taken afterwards by a driver
+#: against inputs the driver chose.
+card_path = OUT / "specflow" / "scorecard.json"
+if card_path.is_file():
+    from specflow.scorecard import Scorecard, render  # noqa: E402
+
+    card = Scorecard(**json.loads(card_path.read_text()))
+    print("\n" + render(card))
+    print(f"\nTARGET span > 90%, blindness < 10%, audit = 0: "
+          f"{'MET' if card.meets(span=0.9, blindness=0.1, audit=0.0) else 'NOT MET'}")
+else:
+    print("\nscorecard.json: MISSING -- the run could not score itself")

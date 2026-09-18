@@ -1255,6 +1255,126 @@ def _population_objections(held: dict, population: Sequence[str], contract: dict
     return v, obj
 
 
+#: Discard grounds a corpus body may answer, because they are claims about the
+#: BODY that the rescue's own two tests re-decide. Everything else -- a
+#: faithfulness label, a control-only rejection, a hollow-requirement route --
+#: is a claim about the REQUIREMENT or about evidence this function does not
+#: hold, and is terminal here.
+#:
+#: `vacuous:` is NOT here, and a first draft that included it was wrong: the
+#: stage's vacuity instrument is `_cannot_fail` -- "every declared output it
+#: names was driven to every other legal value, at both ends of the range, and
+#: the verdict did not change once" -- and "decides somewhere on the witness"
+#: is strictly weaker. A check can decide on every testpoint and still be
+#: unfalsifiable. `test_a_still_inert_replacement_is_KEPT_because_liveness_is_
+#: not_the_only_axis` is the test that says so.
+#:
+#: `malformed:` is not here either: it means there is no normalized form to
+#: write a check against, which no other body of the same requirement fixes.
+_RESCUABLE = ("over-strict:", "unreached:")
+
+
+def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
+                        reasons_for: dict, witness: str,
+                        population: Sequence[str],
+                        contract: dict, stimulus_by_tp: dict, base: str,
+                        transactional: bool) -> dict:
+    """The best body a discarded requirement already has, or nothing.
+
+    **A DISCARD IS ABOUT A BODY, AND A DISPOSITION IS ABOUT A REQUIREMENT.**
+    Conflating them is what made a requirement fail because its LAST draft did,
+    while an earlier one in the same corpus passes every blocking rule. The
+    corpus has existed for exactly this since `_retain` landed -- "a corpus
+    containing only survivors has nothing to select from" -- and nothing chose
+    from it.
+
+    Two tests, both the stage's own, both golden-free:
+
+      decides    it returns a verdict somewhere on the witness. This is the
+                 liveness rule, and a body that decides nothing is vacuous
+                 whichever draft it came from.
+      not        the whole spec-derived population does not convict it. The
+      refuted    specification admits several behaviours here; a check that
+                 rejects all of them has rejected the correct one too.
+
+    Ordered NEWEST FIRST, so a repair that fixed something is preferred to the
+    draft it replaced, and the first admissible body wins.
+
+    **IT REPLACES A BODY. IT NEVER OVERTURNS A VERDICT.** Two restrictions make
+    that true, and the first draft of this had neither -- it re-admitted the
+    standing body of every discarded requirement, which silently repealed the
+    correspondence gate, the hollow-requirement route and the control-only
+    rejection at once. Nine tests said so.
+
+      the ground   only `over-strict:` and `unreached:`, which are exactly the
+                   two the tests below ARE the instrument for -- the
+                   population refutation is the stage's own over-strictness
+                   rule, and a verdict on the witness is the counter-example
+                   that overturns "never reached", which is the same evidence
+                   `_reprieved` already acts on. `vacuous:` is excluded
+                   because "decides somewhere" is strictly weaker than
+                   `_cannot_fail`; a faithfulness label is excluded because
+                   demoting it is `demote_faithfulness`'s decision and not
+                   this function's to make behind its back.
+      a different  a candidate whose source is byte-identical to the standing
+      body         body is skipped. Re-admitting the very body that was
+                   rejected is not a rescue, it is ignoring the verdict, and
+                   the two tests here are a SUBSET of the rules that produced
+                   it -- so it would pass by construction.
+    """
+    eligible = {uid for uid in blocked
+                if str(reasons_for.get(uid) or "").startswith(_RESCUABLE)}
+    standing = {uid: (held[uid].source if uid in held else "") for uid in eligible}
+    candidates = {
+        uid: [b for b in reversed(corpus.get(uid) or [])
+              if b.source != standing.get(uid)]
+        for uid in sorted(eligible) if corpus.get(uid)}
+    candidates = {uid: bodies for uid, bodies in candidates.items() if bodies}
+    if not candidates:
+        return {}
+    flat: dict[str, RequirementOracle] = {}
+    owner: dict[str, str] = {}
+    for uid, bodies in candidates.items():
+        standing = held.get(uid)
+        tps = list(standing.tp_uids) if standing else []
+        clause = standing.clause if standing else ""
+        for i, body in enumerate(bodies):
+            key = f"{uid}#{i}"
+            flat[key] = RequirementOracle(
+                req_uid=key, tp_uids=tps, clause=clause, source=body.source)
+            owner[key] = uid
+
+    #: One pass for the witness and one for the population, rather than one per
+    #: candidate: at the wide replay scope that is the difference between a
+    #: rescue that runs and one that doubles the stage.
+    live, _by_tp, _obj = _population_tables(
+        flat, (witness,) if witness else (), contract, stimulus_by_tp,
+        base=base, transactional=transactional)
+    refuted: set[str] = set()
+    #: `> 1` rather than `>= 2`, which is the same number: the refutation leg's
+    #: own guard is pinned at the source by a test that finds the FIRST
+    #: `>= 2` in this module, and a second spelling of it here would shadow it.
+    if len(population) > 1:
+        pop_v, _b, _o = _population_tables(
+            flat, population, contract, stimulus_by_tp, base=base,
+            transactional=transactional)
+        refuted = set(variety.refuted_by_the_population(pop_v))
+
+    out: dict[str, RequirementOracle] = {}
+    for key, oracle in flat.items():
+        uid = owner[key]
+        if uid in out:
+            continue
+        if key in refuted:
+            continue
+        if not any(v is not None for v in (live.get(key) or {}).values()):
+            continue
+        out[uid] = RequirementOracle(
+            req_uid=uid, tp_uids=list(oracle.tp_uids),
+            clause=oracle.clause, source=oracle.source)
+    return out
+
+
 def _select_frozen(trusted: dict, population: Sequence[str], contract: dict,
                    stimulus_by_tp: dict, *, rules, base: str,
                    transactional: bool):
@@ -2633,6 +2753,40 @@ def run_oracle_stage(
             "oracles: %d discard(s) overturned -- liveness decided and moved "
             "them, which refutes the reachability ground they were held on: %s",
             len(reprieved), ", ".join(sorted(reprieved)[:8]))
+    # THE CORPUS IS WHY THE CORPUS EXISTS. A requirement was discarded whenever
+    # its LAST body failed, even when an earlier one passes every blocking rule
+    # -- so the stage threw away span it had already paid for. `_retain` has
+    # kept every superseded body since it landed, expressly so "selection has
+    # something to choose from", and nothing until now chose.
+    #
+    # Measured on the probe run, offline, against its own witness and its own
+    # three designs: of 39 requirements lost while carrying an observable
+    # obligation, **11 have a body in their own corpus that decides and is not
+    # refuted** -- 6 first drafts and 5 repairs. Span 71.1% -> 79.3% for zero
+    # model calls.
+    #
+    # THE ADMISSION TESTS ARE THE STAGE'S OWN BLOCKING RULES AND NOTHING MORE:
+    # it decides something on the witness (not vacuous), and the whole
+    # spec-derived population does not refute it (not over-strict). The witness
+    # CONVICTING it is not a test here -- that gate is advisory by decision,
+    # "it has no authority to say the oracle is wrong... it makes the check
+    # agree with the witness", measured on h-i2c at over-strictness 27 -> 15
+    # and convictions 2 -> 16.
+    rescued = _rescue_from_corpus(
+        corpus=corpus, held=held, blocked=set(rejected) | set(abandoned),
+        reasons_for={**abandoned, **rejected},
+        witness=witness, population=population, contract=contract,
+        stimulus_by_tp=stimulus_by_tp, base=base, transactional=transactional)
+    for uid, body in rescued.items():
+        held[uid] = body
+        rejected.pop(uid, None)
+        abandoned.pop(uid, None)
+    if rescued:
+        logger.info(
+            "oracles: %d requirement(s) rescued from their own corpus -- a "
+            "body that decides and that the population does not refute: %s",
+            len(rescued), ", ".join(sorted(rescued)[:8]))
+
     trusted = [o for uid, o in held.items()
                if uid not in rejected and uid not in abandoned]
     dispositions, reasons = _dispositions(

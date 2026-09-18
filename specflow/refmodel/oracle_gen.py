@@ -267,6 +267,51 @@ whenever their inputs appear.
         # 7 of one run's 43 control-refuted checks convicted on absent
         # evidence inside a window that opened.
 
+YOUR CHECK RUNS ON EVERY TESTPOINT IN THE SUITE, NOT ONLY THE ONES WRITTEN FOR
+THIS REQUIREMENT. THIS IS THE RULE MOST CHECKS HERE GET WRONG.
+
+There is no scenario filter in front of you. The suite drives hundreds of
+testpoints -- resets, aborted commands, arbitration loss, bus contention,
+unrelated commands, idle stretches -- and your `decide` is called on every one
+of them. The ONLY thing that keeps your check out of a scenario it has nothing
+to say about is your own activation returning None there.
+
+So the activation is not a description of your scenario. It is a TEST that has
+to be FALSE in every scenario the requirement does not govern. A trigger that is
+the right idea for the testpoint you are imagining -- "cmd is WRITE", "scl went
+high" -- will also open during a reset, mid-arbitration, and inside some other
+command's sequence, and there your expectation is simply not what the
+specification requires. A correct design is then convicted, by you, somewhere
+you were not looking.
+
+Measured on this pipeline, replaying each frozen check against every testpoint
+the stimulus drives: 47 of 96 checks convict EVERY ONE of three independently
+written spec-derived designs -- against 14 when each check was replayed only on
+the two testpoints its own requirement named. The checks did not change. The
+places they were asked about did.
+
+WHAT TO DO ABOUT IT, concretely:
+
+  - Build the activation out of conditions that CANNOT hold outside the
+    requirement's situation, not out of the one signal that happens to move in
+    it. If the normalized form gives you `aborts_on`, `until` or `sustains`,
+    they are exactly this and you should use them: `aborts_on` names the
+    conditions under which the window is no longer yours -- reset asserted,
+    arbitration lost, the command withdrawn -- and a window that ignores them
+    keeps asserting through an event that ended it.
+  - Re-open the window per occurrence, and close it. A check that finds its
+    trigger once and then asserts to the end of the trace is asserting across
+    every later scenario in that testpoint too.
+  - Return None the moment the situation stops being yours. None costs you
+    nothing: it is routed to whoever writes the stimulus, never counted against
+    the design. False costs a correct design its verdict.
+
+THE FAILURE MODE TO AVOID IS NOT "TOO STRICT", IT IS "FIRES IN THE WRONG
+PLACE". Do not weaken what you assert inside your window to compensate -- that
+produces a check that cannot fail, which is discarded as vacuous. Keep the
+assertion exactly as strong as the obligation states, and make the window
+exactly as narrow as the situation is.
+
 Rules, each for a reason:
 
   - Read only DECLARED PORTS out of `outputs` and `inputs`. Internal signals are

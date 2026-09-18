@@ -302,6 +302,29 @@ def _oracle_stage_issues(failed: str, oracle_set) -> list[Issue]:
     return []
 
 
+def _population_on_disk(run_dir: Path) -> list[str]:
+    """The population the oracle stage built, read back for the scorecard.
+
+    `run_oracle_stage` writes each member to `specflow/population/<i>.py` so it
+    holds still across rounds -- "the thing doing the measuring has to hold
+    still". Reading them back is how the scorecard scores against the SAME
+    designs the run refuted against, rather than against a yardstick a driver
+    picked afterwards, which is the defect this whole module exists to close.
+    """
+    root = Path(run_dir) / "specflow" / "population"
+    if not root.is_dir():
+        return []
+    out = []
+    for path in sorted(root.glob("*.py"), key=lambda p: p.name):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if text.strip():
+            out.append(text)
+    return out
+
+
 def build_artifacts(
     *,
     run_dir: Path,
@@ -444,6 +467,23 @@ def build_artifacts(
     #: every run before this did, and a ruleset that cannot apply is REPORTED
     #: rather than skipped.
     selection: "object | None" = None,
+    #: **THE CONTROL, FOR THE SCORECARD AND FOR NOTHING ELSE.** Deliberately
+    #: NOT `refmodel_control`, which reaches `run_oracle_stage` and may reject
+    #: an oracle. This one reaches `scorecard.score` only -- a module with no
+    #: author, no prompt and no repair path -- so "a control may REJECT an
+    #: oracle and may never REPAIR one" is enforced by there being nowhere for
+    #: it to go. Absent, `audit` is reported as absent rather than as 0%.
+    audit_control: str | None = None,
+    #: SET-LEVEL repair attempts in the oracle stage -- verify, re-ask, verify.
+    #: `run_oracle_stage` has taken this since it was written and nothing
+    #: passed it, so every run so far used the default 2, which is the same
+    #: class of defect as `demote_faithfulness` being built and not connected.
+    #:
+    #: It is the lever over-strictness needs: a check refuted by the whole
+    #: population is told to relax and gets one more attempt, and at the wide
+    #: replay scope 47 of 96 frozen checks are refuted. Each attempt costs
+    #: roughly one call per still-rejected check.
+    oracle_repair_attempts: int = 2,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -931,6 +971,7 @@ def build_artifacts(
             control_source=refmodel_control,
             want_variants=variants, want_correspondence=correspondence,
             demote_faithfulness=demote_faithfulness,
+            repair_attempts=oracle_repair_attempts,
             population=population_sources,
             population_size=population_size,
             cell_budget=cell_budget,
@@ -1107,6 +1148,32 @@ def build_artifacts(
     g5 = gate_g5(out_dir=suite_dir, manifest=manifest, bins=bins, checks=checks)
     if any(i.severity == "error" for i in g5):
         return BuildResult(False, "G5", g5)
+
+    # THE TRIPLE, COMPUTED BY THE RUN THAT EARNED IT -- see `scorecard`.
+    # Every span, blindness and audit figure before this was taken afterwards
+    # by a driver, against inputs the driver chose, which is how a run came to
+    # be scored against a contract that was not the one in force. Pure replay
+    # and set arithmetic, so it costs no model call; never fatal, because a
+    # measurement that cannot be taken must not take the build down.
+    try:
+        from . import scorecard as _scorecard
+
+        card = _scorecard.score(
+            oracles=[
+                {"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),
+                 "clause": o.clause, "source": o.source}
+                for o in (oracle_set.trusted if oracle_set else [])],
+            normalized=list((normalized_by_uid or {}).values()),
+            stimulus_by_tp=stim_by_tp or {},
+            contract=contract,
+            population=list(_population_on_disk(run_dir) or population_sources),
+            audit_control=audit_control,
+        )
+        _scorecard.write(run_dir, card)
+        for line in _scorecard.render(card).splitlines():
+            logger.info("scorecard: %s", line)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("scorecard: not computed (%r)", exc)
 
     # Written on the way out of every build, successful or not: a run that
     # failed at S3 still spent whatever it spent, and a cache that stopped

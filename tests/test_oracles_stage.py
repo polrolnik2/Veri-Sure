@@ -725,7 +725,11 @@ def test_an_oracle_that_cannot_fail_is_re_asked_with_the_counterexample(
         port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
         fanout=False, max_repairs=0, repair_attempts=1)
 
-    asked = [p for p in port.prompts if "cannot fail" in p]
+    #: FILTERED ON THE REJECTION, NOT ON A PHRASE. "cannot fail" also appears
+    #: in SYSTEM -- "weakening what you assert produces a check that cannot
+    #: fail, which is discarded as vacuous" -- so the loose filter matched the
+    #: first GENERATION prompt and asserted against it.
+    asked = [p for p in port.prompts if "vacuous: this check cannot fail" in p]
     assert asked, "the author is never told"
     assert "driven to every other legal value" in asked[0]
     # NO OFFER TO DECLINE. It is a rejection now, not an advisory, and a
@@ -1930,6 +1934,185 @@ def test_a_check_the_whole_population_convicts_is_rejected():
     #: relax-it instruction, which is the right ask for this defect.
     assert why.startswith("over-strict:")
     assert O._repair_issue("REQ-1", why).path.endswith(".over_strict")
+
+
+def _rescue_env(monkeypatch, *, live, refuted):
+    """Stub the two replay passes `_rescue_from_corpus` makes.
+
+    `live` is the set of candidate keys that decide on the witness; `refuted`
+    the set the population contradicts. Stubbed because both are whole-suite
+    replays and this test is about the ADMISSION RULE, not about replay.
+    """
+    from specflow import oracles_stage as O
+
+    def tables(flat, pop, *a, **k):
+        if len(pop) > 1:
+            return ({key: {"0": False} if key in refuted else {"0": True}
+                     for key in flat}, {}, {})
+        return ({key: {"0": True if key in live else None} for key in flat},
+                {}, {})
+
+    monkeypatch.setattr(O, "_population_tables", tables)
+    monkeypatch.setattr(O.variety, "refuted_by_the_population",
+                        lambda v, **k: tuple(u for u, per in v.items()
+                                             if all(x is False for x in per.values())))
+
+
+def test_a_discarded_requirement_is_rescued_by_its_OWN_corpus(monkeypatch):
+    """A requirement was discarded whenever its LAST body failed, even when an
+    earlier one passes every blocking rule -- so the stage threw away span it
+    had already paid for. `_retain` has kept every superseded body since it
+    landed, expressly so selection "has something to choose from".
+
+    Measured on the probe run, offline, against its own witness and its own
+    three designs: of 39 requirements lost while carrying an observable
+    obligation, 11 have a body in their own corpus that decides and is not
+    refuted. Span 71.1% -> 79.3% for zero model calls.
+    """
+    from specflow import oracles_stage as O
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    #: The standing body is filtered out before the candidates are keyed, so
+    #: the surviving draft is #0 -- which is the point of the filter.
+    _rescue_env(monkeypatch, live={"REQ-1#0"}, refuted=set())
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="older",
+                                     arm="generate", round_=0),
+                        O.CorpusBody(req_uid="REQ-1", source="newest",
+                                     arm="repair", round_=1)]}
+    held = {"REQ-1": RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                                       clause="c", source="newest")}
+    got = O._rescue_from_corpus(
+        corpus=corpus, held=held, blocked={"REQ-1"},
+        reasons_for={"REQ-1": "over-strict: convicts every design"},
+        witness="w", population=(), contract={}, stimulus_by_tp={},
+        base="", transactional=False)
+    assert set(got) == {"REQ-1"}, got
+    assert got["REQ-1"].source == "older"
+    #: It is keyed by the REQUIREMENT on the way out, never by the candidate id
+    #: the two replay passes used.
+    assert got["REQ-1"].req_uid == "REQ-1"
+
+
+def test_the_rescue_replaces_a_BODY_and_never_overturns_a_VERDICT(monkeypatch):
+    """The first draft of this re-admitted the standing body of every
+    discarded requirement, which silently repealed the correspondence gate, the
+    hollow-requirement route and the control-only rejection at once. Nine tests
+    said so.
+
+    Two restrictions make it true, and both are load-bearing.
+    """
+    from specflow import oracles_stage as O
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    _rescue_env(monkeypatch, live={"REQ-1#0", "REQ-1#1"}, refuted=set())
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="only",
+                                     arm="generate", round_=0)]}
+    held = {"REQ-1": RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                                       clause="c", source="only")}
+
+    def rescue(why):
+        return O._rescue_from_corpus(
+            corpus=corpus, held=held, blocked={"REQ-1"},
+            reasons_for={"REQ-1": why}, witness="w", population=(),
+            contract={}, stimulus_by_tp={}, base="", transactional=False)
+
+    #: 1. THE SAME BODY IS NOT A RESCUE. Re-admitting the very body that was
+    #:    rejected is ignoring the verdict: these tests are a SUBSET of the
+    #:    rules that produced it, so it would pass by construction.
+    assert rescue("over-strict: convicts every design") == {}
+
+    #: 2. ONLY A GROUND THESE TESTS ARE THE INSTRUMENT FOR. A faithfulness
+    #:    label accuses the REQUIREMENT, and demoting it is
+    #:    `demote_faithfulness`'s decision, not this function's.
+    corpus["REQ-1"].insert(0, O.CorpusBody(req_uid="REQ-1", source="older",
+                                           arm="generate", round_=0))
+    assert set(rescue("over-strict: convicts every design")) == {"REQ-1"}
+    for terminal in ("off-target: does not test the requirement",
+                     "not-assertable: the requirement states no obligation",
+                     "vacuous: this check cannot fail",
+                     "malformed: no normalized form"):
+        assert rescue(terminal) == {}, terminal
+
+
+def test_a_rescued_body_must_still_survive_the_population(monkeypatch):
+    """The rescue is an ADMISSION, not an amnesty: a candidate the whole
+    spec-derived population contradicts is over-strict whichever draft it came
+    from, and a candidate that decides nothing is vacuous whichever draft it
+    came from."""
+    from specflow import oracles_stage as O
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="older",
+                                     arm="generate", round_=0),
+                        O.CorpusBody(req_uid="REQ-1", source="newest",
+                                     arm="repair", round_=1)]}
+    held = {"REQ-1": RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                                       clause="c", source="newest")}
+
+    def rescue():
+        return O._rescue_from_corpus(
+            corpus=corpus, held=held, blocked={"REQ-1"},
+            reasons_for={"REQ-1": "over-strict: convicts every design"},
+            witness="w", population=("a", "b"), contract={},
+            stimulus_by_tp={}, base="", transactional=False)
+
+    _rescue_env(monkeypatch, live={"REQ-1#0"}, refuted={"REQ-1#0"})
+    assert rescue() == {}, "a refuted candidate is not a rescue"
+
+    _rescue_env(monkeypatch, live=set(), refuted=set())
+    assert rescue() == {}, "a candidate that decides nothing is not a rescue"
+
+
+def test_the_author_is_told_its_check_runs_on_every_testpoint():
+    """Nothing in the prompt said so, and the author reasonably assumed
+    otherwise: it is handed a requirement and its testpoints and writes a check
+    for that scenario. The harness then calls `decide` on every testpoint the
+    stimulus drives.
+
+    Measured, replaying each frozen check against all of them: 47 of 96 convict
+    EVERY ONE of three independently written spec-derived designs, against 14
+    when each was replayed only on the two testpoints its requirement named.
+    The checks did not change; the places they were asked about did.
+
+    A prompt-content pin, because the prompt is the only place this can be
+    said and a deletion here is invisible in every behavioural test.
+    """
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    assert "EVERY TESTPOINT IN THE SUITE" in SYSTEM
+    #: The ask has to be about the WINDOW, not about the assertion. Weakening
+    #: what a check asserts to stop it firing produces a check that cannot
+    #: fail, which is discarded as vacuous -- over-strictness and vacuity as
+    #: one defect with two signs.
+    assert 'IT IS "FIRES IN THE WRONG' in SYSTEM
+    assert "discarded as vacuous" in SYSTEM
+    #: And it has to name the fields that carry the answer, or it is advice
+    #: with nothing to act on.
+    for field in ("aborts_on", "until", "sustains"):
+        assert field in SYSTEM, field
+
+
+def test_the_set_level_repair_budget_reaches_the_stage_from_the_pipeline():
+    """`run_oracle_stage` has taken `repair_attempts` since it was written and
+    `build_artifacts` never passed it, so every run used the default 2 -- the
+    same class of defect as `demote_faithfulness` being built and not
+    connected, and as `cell_budget` arriving at a leg nothing could see.
+
+    A source-level pin: a call site inside `build_artifacts` has twice been
+    deleted on this branch without failing a single behavioural test.
+    """
+    import inspect
+    import re
+
+    from specflow import integration
+
+    assert "oracle_repair_attempts" in inspect.signature(
+        integration.build_artifacts).parameters
+    src = inspect.getsource(integration.build_artifacts)
+    call = re.search(r"oracle_set = run_oracle_stage\((.*?)\n        \)", src,
+                     re.S)
+    assert call, "cannot find the run_oracle_stage call"
+    assert "repair_attempts=oracle_repair_attempts" in call.group(1), call.group(1)
 
 
 def test_the_population_leg_is_off_below_two_designs():
