@@ -2271,6 +2271,67 @@ def test_a_refuted_cell_check_is_never_taken(monkeypatch):
     assert held == {}
 
 
+def test_a_check_that_tells_no_two_readings_apart_is_ADVISED(monkeypatch):
+    """The dual of the refutation leg, and the sign this stage had no
+    instrument for.
+
+    Measured on the run that motivated it: of 13,019 (check, testpoint)
+    decisions, **86.1% decided all seven designs and convicted none**, only
+    3.1% were mixed, and **76 of 104 checks never told any two readings apart
+    anywhere** -- with blindness at 55.1% and not one blind cell at a testpoint
+    no check reached. The set spoke everywhere and agreed everywhere.
+    """
+    from specflow import oracles_stage as O
+    from specflow import variety as V
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: (
+        V.Cell(testpoint="TP-1", port="p", left="0", right="1"),
+        V.Cell(testpoint="TP-1", port="q", left="0", right="1"),
+    ))
+    held = {u: RequirementOracle(req_uid=u, tp_uids=[], clause="c", source="x")
+            for u in ("REQ-1", "REQ-2", "REQ-3", "REQ-4")}
+    by_tp = {
+        #: decided both, same verdict, on a port it observes -> INERT
+        "REQ-1": {"TP-1": {"0": True, "1": True}},
+        #: decided both and SEPARATED them -> not inert
+        "REQ-2": {"TP-1": {"0": True, "1": False}},
+        #: abstained on one -> says nothing about the design
+        "REQ-3": {"TP-1": {"0": True}},
+        #: same verdict, but on a port its requirement does not observe
+        "REQ-4": {"TP-1": {"0": True, "1": True}},
+    }
+    normalized = {"REQ-1": {"observable": ["p"]}, "REQ-2": {"observable": ["p"]},
+                  "REQ-3": {"observable": ["p"]}, "REQ-4": {"observable": ["z"]}}
+    got = O._inert_where_it_should_decide(
+        held, by_tp, {"io": [{"name": "p", "dir": "output"}]}, {}, normalized,
+        population=("a", "b"), base="", transactional=False)
+    assert set(got) == {"REQ-1"}, got
+    assert "TP-1 on `p`" in got["REQ-1"]
+    assert "same verdict for both" in got["REQ-1"]
+
+
+def test_the_inert_note_asks_for_a_STRONGER_assertion_not_a_wider_window():
+    """The two signs pull in opposite directions and the message has to say
+    which one it wants. `_advisory` asks the author to ACCEPT a second
+    implementation -- pressure toward relaxation, measured at over-strictness
+    27 -> 15 with convictions 2 -> 16 -- so it is not sent alongside this."""
+    from specflow import oracles_stage as O
+
+    issues = O._witness_note("REQ-1", {"inert": "at TP-1 on `p` ...",
+                                       "witness": "failed at edge 3"})
+    assert len(issues) == 1, [i.path for i in issues]
+    text = issues[0].message
+    assert issues[0].path.endswith(".decides_nothing_apart")
+    assert "at full strength" in text
+    assert "Do not widen the window" in text
+    #: And it offers the one answer that is not a weakening: the specification
+    #: may simply not constrain that port there.
+    assert "finding about the specification" in text
+    assert issues[0].severity == "warning", "advisory, never blocking"
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the

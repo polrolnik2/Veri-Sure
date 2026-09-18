@@ -649,9 +649,58 @@ def _witness_note(req_uid: str, notes: dict[str, str]) -> list[Issue]:
         return issues
     if "self_split" in notes:
         return [_split_advisory(req_uid, notes["self_split"])]
+    #: BEFORE the witness advisory, and instead of it. `_advisory` asks the
+    #: author to try to ACCEPT a second implementation -- pressure toward
+    #: relaxation, measured at over-strictness 27 -> 15 with convictions
+    #: 2 -> 16 -- and this note asks for the opposite. Sending both would ask
+    #: for both at once.
+    if "inert" in notes:
+        return [_inert_advisory(req_uid, notes["inert"])]
     if "witness" in notes:
         return [_advisory(req_uid, notes["witness"])]
     return []
+
+
+def _inert_advisory(req_uid: str, note: str) -> Issue:
+    """The check decides, and cannot tell two readings of its own spec apart.
+
+    **THE OTHER SIGN OF THE DEFECT THIS STAGE ALREADY HAS AN INSTRUMENT FOR.**
+    `_refuted_everywhere` catches a check that convicts EVERY spec-derived
+    design; this catches one that convicts NONE of them at a place they visibly
+    differ on a port its own requirement observes. This tree calls them
+    "over-strictness and vacuity as one defect with two signs" and had a gate
+    for one sign only.
+
+    Measured on the run that motivated it: of 13,019 (check, testpoint)
+    decisions, **86.1% decided all seven designs and convicted none**, only
+    3.1% were mixed, and **76 of 104 checks never told any two readings apart
+    anywhere**. Blindness 55.1%, with not one blind cell at a testpoint no
+    check reached -- the set spoke everywhere and agreed everywhere.
+
+    ADVISORY, for the witness gate's reason: passing every spec-derived design
+    is not proof a check is wrong, because they may all be right there.
+    Declining is a real answer. Blocking on it would have discarded 76 of 104
+    checks on that run and traded the entire span for a blindness figure.
+    """
+    return Issue(
+        "warning", f"oracle.{req_uid}.decides_nothing_apart",
+        f"Your check RUNS here and cannot tell two readings of this same "
+        f"specification apart. {note}\n\n"
+        f"Neither design was shown to you and neither is known correct -- this "
+        f"is not a claim that your verdict is wrong. It is a claim about "
+        f"REACH: a check that returns the same answer whatever the design did "
+        f"on the port its own requirement observes is not deciding that "
+        f"requirement, it is only surviving it.\n\n"
+        f"Look at what the obligation actually demands of that port in that "
+        f"situation and assert THAT, at full strength. Do not widen the window "
+        f"to reach further -- a check that fires where its requirement does not "
+        f"govern convicts correct designs, which is the same defect with the "
+        f"other sign. Narrow window, strong assertion.\n\n"
+        f"If the obligation genuinely does not constrain that port there, say "
+        f"so in `reasoning` and change nothing: a requirement that decides "
+        f"nothing observable is a finding about the specification, and leaving "
+        f"the check as it is is the right answer.",
+    )
 
 
 def _witness_stands(req_uid: str, note: str) -> Issue:
@@ -1241,6 +1290,78 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                 break
         depth += 1
     return targets, all_cells
+
+
+def _inert_where_it_should_decide(held: dict, by_tp: dict, contract: dict,
+                                  stimulus_by_tp: dict, normalized: dict | None,
+                                  *, population: Sequence[str], base: str,
+                                  transactional: bool, limit: int = 3) -> dict:
+    """`uid -> where this check ran and could not tell two readings apart`.
+
+    The dual of `refuted_by_the_population`, and the sign this stage had no
+    instrument for. A check qualifies when, at a testpoint where it DECIDED on
+    both members of a pair, the two designs produce different traces on a port
+    the check's own requirement observes -- and it gave them the same verdict.
+
+    THREE CONDITIONS, AND EACH REMOVES A DIFFERENT FALSE POSITIVE:
+
+      it decided     an abstention says nothing about the design, so a check
+                     that was never in scope there is not inert there.
+      its own port   the port has to be in the requirement's `observable`.
+                     Two designs differing on a port this requirement never
+                     speaks about is not this check's failure to reach; it is
+                     some other requirement's cell, or none.
+      they differ    the designs must actually produce different traces on
+                     that port at that testpoint. Agreement is not blindness.
+
+    Reported as at most `limit` `(testpoint, port)` pairs: a list of four
+    hundred is not a location.
+
+    **NOT A REJECTION, AND IT IS THE CALLER THAT ENFORCES THAT.** Passing every
+    spec-derived design is not proof of error; they may all be right there.
+    """
+    if len(population) < 2 or not by_tp:
+        return {}
+    outputs = [str(p.get("name")) for p in (contract.get("io") or [])
+               if p.get("dir") == "output" and p.get("name")]
+    rows_by_design = _population_rows(
+        population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    if len(rows_by_design) < 2:
+        return {}
+    cells = variety.cells(rows_by_design, outputs)
+    at: dict[str, list] = {}
+    for c in cells:
+        at.setdefault(c.testpoint, []).append(c)
+
+    out: dict[str, str] = {}
+    for uid, table in by_tp.items():
+        shape = (normalized or {}).get(uid) or {}
+        mine = {str(p) for p in (shape.get("observable") or [])}
+        if not mine:
+            continue
+        found: list[tuple[str, str]] = []
+        for tp, col in table.items():
+            for c in at.get(tp, ()):
+                if c.port not in mine:
+                    continue
+                left, right = col.get(c.left), col.get(c.right)
+                if left is None or right is None or left != right:
+                    continue
+                if (c.testpoint, c.port) not in found:
+                    found.append((c.testpoint, c.port))
+                    break
+            if len(found) >= limit:
+                break
+        if not found:
+            continue
+        said = "; ".join(f"{tp} on `{port}`" for tp, port in found)
+        out[uid] = (
+            f"at {said} two independently written readings of this "
+            f"specification produce DIFFERENT traces on a port this "
+            f"requirement observes, your check decided at that testpoint, and "
+            f"it returned the same verdict for both")
+    return out
 
 
 def _adopt_cell_bodies(bodies: list, *, held: dict, population: Sequence[str],
@@ -2547,8 +2668,9 @@ def run_oracle_stage(
         #
         # OFF UNLESS A POPULATION WAS PASSED IN, because this stage runs before
         # any design of this run exists and must not acquire one of its own.
+        inert_notes: dict[str, str] = {}
         if len(population) >= 2:
-            pop_verdicts, _pop_tp, pop_where = _population_tables(
+            pop_verdicts, pop_tp, pop_where = _population_tables(
                 held, population, contract, stimulus_by_tp,
                 base=base, transactional=transactional)
             for uid in variety.refuted_by_the_population(pop_verdicts):
@@ -2559,6 +2681,17 @@ def run_oracle_stage(
                     _where_it_fired(pop_where.get(uid) or {}, testplan))
                 rejected[uid] = quotable[uid] = why
                 repairs.setdefault(uid, []).append(why)
+            #: **THE OTHER SIGN OF THE SAME DEFECT.** The leg above catches a
+            #: check that convicts EVERY reading; this catches one that
+            #: convicts NONE of them where they visibly differ. This tree names
+            #: them "over-strictness and vacuity as one defect with two signs"
+            #: and had an instrument for one sign only.
+            inert_notes = _inert_where_it_should_decide(
+                held, pop_tp, contract, stimulus_by_tp, normalized,
+                population=population, base=base, transactional=transactional)
+            for uid, note in inert_notes.items():
+                if uid not in quotable:
+                    disagreements.setdefault(uid, {})["inert"] = note
         # Gate 1 earns an attempt -- "try to make it pass" -- but only one, and
         # only where nothing else is already re-asking. It stays advisory: it is
         # a disagreement between two same-author readings, so declining it is a
@@ -2567,7 +2700,16 @@ def run_oracle_stage(
             uid for uid, note in disagreements.items()
             if "witness" in note and uid not in quotable and uid not in advised
         }
-        ask = set(quotable) | advisory_only
+        #: **ADVISORY, NEVER BLOCKING, AND FOR THE WITNESS GATE'S REASON.**
+        #: Passing every spec-derived design is not proof that a check is
+        #: wrong: they may all be right there. So this earns a re-ask on the
+        #: same terms gate 1 does and declining it is a real answer. Rejecting
+        #: on it would discard 76 of 104 checks on one run and trade the whole
+        #: span for a blindness figure, which is the trade this stage exists
+        #: not to make blindly.
+        inert_only = {uid for uid in inert_notes
+                      if uid not in quotable and uid not in advised}
+        ask = set(quotable) | advisory_only | inert_only
 
         if rounds == verifications:
             break
@@ -2606,7 +2748,7 @@ def run_oracle_stage(
             label=f"_fix{rounds}",
             standing=_standing(held, ask),
         )
-        advised |= advisory_only
+        advised |= advisory_only | inert_only
         # Only a replacement that actually arrived replaces anything. A round
         # that produced nothing leaves the previous oracle standing to be
         # rejected again, which is the honest outcome rather than a hole.
