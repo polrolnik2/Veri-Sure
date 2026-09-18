@@ -544,19 +544,47 @@ def decide_all(
     An oracle naming several testpoints holds only if it holds on all of them:
     each is a scenario the clause is supposed to survive, so the first failure
     is the answer and carries its own edge.
+
+    **EVERY TESTPOINT THE STIMULUS HAS, NOT THE ONES `tp_uids` NAMES.** A check
+    is a `decide(trace)` function that says for itself when it applies -- `ok`
+    is None exactly when the clause's scenario never occurred -- so `tp_uids`
+    was a second and cruder gate on top of that one: the testplan's `covers`
+    attachment is a model's opinion about relevance, while an abstention is a
+    fact about the trace. The median was **2 of 499** on the probe run.
+
+    THE TWO SCOPES HAD TO MOVE TOGETHER OR NEITHER SHOULD HAVE MOVED. The
+    oracle stage screens a check by replaying it wherever the stimulus goes,
+    because a cell at TP-0400 can only be separated by a check replayed at
+    TP-0400. If the suite that ships then ran each check on two testpoints, the
+    stage would be rejecting checks for firing where the product never asks
+    them -- span paid for a blindness figure the product does not have. The
+    reverse is worse: a check screened narrowly and shipped wide convicts a
+    correct design somewhere nothing looked.
+
+    `tp_uids` keeps its other two jobs, which is why it is not removed: it is
+    what `render_suite` attaches a check to, and what `rtl_trace` checks the
+    stimulus fingerprint against.
     """
     cache: dict[str, Replay] = {}
     out: list[OracleResult] = []
+    scope = [tp for tp, steps in (stimulus_by_tp or {}).items() if steps]
     for oracle in oracles:
         results: list[OracleResult] = []
+        #: KEPT, AND KEPT SEPARATE FROM THE SCOPE. A check naming a testpoint
+        #: the stimulus does not have is an inconsistency between two
+        #: artifacts, and it stays reportable however wide the replay gets:
+        #: `render_suite` attaches the check to that testpoint, so the suite
+        #: would emit a test with nothing to drive it.
         for tp in oracle.tp_uids:
-            steps = stimulus_by_tp.get(tp)
-            if not steps:
+            if not stimulus_by_tp.get(tp):
                 results.append(OracleResult(
                     oracle.req_uid, ok=False,
                     broken=f"no stimulus recorded for {tp}",
                     tp_uid=tp,
                 ))
+        for tp in scope:
+            steps = stimulus_by_tp.get(tp)
+            if not steps:
                 continue
             if tp not in cache:
                 cache[tp] = replay(

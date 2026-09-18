@@ -172,15 +172,38 @@ def decide_rtl(
                 + (" ..." if len(wrong) > 3 else ""))
 
     out: list[OracleResult] = []
+    #: **EVERY RECORDED TRACE, NOT THE ONES `tp_uids` NAMES -- AND THIS HAD TO
+    #: MOVE WITH THE STAGE'S SCOPE OR NEITHER SHOULD HAVE MOVED.** The oracle
+    #: stage screens a check by replaying it wherever the stimulus goes,
+    #: because a cell at TP-0400 can only be separated by a check replayed at
+    #: TP-0400 -- blindness 97% -> 12.8% on the probe run's own designs. If the
+    #: suite that ships then ran each check on the two testpoints its testplan
+    #: entry happens to name, the stage would be rejecting checks as
+    #: over-strict for firing where the product never asks them: span paid for
+    #: a number the product does not have.
+    #:
+    #: The reverse is the worse half. A check screened narrowly and shipped
+    #: wide convicts a correct design somewhere nothing looked, which is the
+    #: audit failure this pipeline exists to avoid.
+    #:
+    #: A check decides where its activation holds and abstains elsewhere; that
+    #: is what `ok=None` is for, and it is a fact about the trace where
+    #: `covers` is a model's opinion about relevance.
+    scope = sorted(traces_by_tp)
     for oracle in oracles:
         reads = ports_read(oracle, contract)
         results: list[OracleResult] = []
+        #: Still reported per NAMED testpoint: `render_suite` emits a test for
+        #: it, so a named testpoint that produced no trace is a hole in the
+        #: recording and not an abstention.
         for tp in oracle.tp_uids:
-            trace = traces_by_tp.get(tp)
-            if trace is None:
+            if traces_by_tp.get(tp) is None:
                 results.append(OracleResult(
                     oracle.req_uid, ok=None, tp_uid=tp,
                     detail=f"{tp} produced no trace, so it decided nothing"))
+        for tp in scope:
+            trace = traces_by_tp.get(tp)
+            if trace is None:
                 continue
             rows = rows_from(trace, side=side)
             if transactional:

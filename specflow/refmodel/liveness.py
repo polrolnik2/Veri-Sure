@@ -480,8 +480,20 @@ def disagrees_with_itself(
     passed: list[str] = []
     failed: list[str] = []
     for tp in named:
+        #: **SCOPED BY THE STIMULUS, NOT BY `tp_uids`.** `decide_all` replays a
+        #: check wherever the stimulus goes -- the check says for itself when
+        #: it applies, and `covers` is a model's opinion about relevance -- so
+        #: narrowing `tp_uids` no longer narrows anything, and every probe here
+        #: came back with the same folded verdict. The per-testpoint split this
+        #: detector exists to see disappeared silently, which is how a
+        #: detector stops detecting without any test noticing.
+        #: BOTH ends narrowed, because they mean different things now. The
+        #: one-entry stimulus is what scopes the replay; `tp_uids` is what
+        #: `decide_all` still reports a missing-stimulus inconsistency against,
+        #: and leaving the full list there would report the four testpoints
+        #: this probe is deliberately withholding as holes in the artifact.
         scoped = oracle.model_copy(update={"tp_uids": [tp]})
-        held = decide_all([scoped], source, contract, stimulus_by_tp,
+        held = decide_all([scoped], source, contract, {tp: stimulus_by_tp[tp]},
                           base=base, transactional=transactional)[0]
         if held.broken:
             continue

@@ -54,10 +54,28 @@ NORMALIZED = {
 }
 
 
+#: REQ-0002's own check, and it needs one. A check is replayed wherever the
+#: stimulus goes, not only on the testpoints it names -- so once a WRITE
+#: testpoint exists, a REQ-0002 sharing `WRITE_ORACLE` DECIDES there and stops
+#: being unexercised, which is correct and takes the duplicate-stimulus case
+#: out of reach. This one waits for a condition nothing here ever drives.
+IDLE_ORACLE = (
+    "def decide(trace):\n"
+    "    idle = [r for r in trace if r['inputs']['cmd'] == 0"
+    " and not r['inputs']['ena']]\n"
+    "    if not idle:\n"
+    "        return (None, None, 'the FSM was never idle in this trace')\n"
+    "    for r in idle:\n"
+    "        if r['outputs']['ack']:\n"
+    "            return (False, r['edge'], 'ack high while idle')\n"
+    "    return (True, None, 'ack low while idle')\n"
+)
+
+
 def _session(gen=None, **kw):
     oracles = [
         RequirementOracle(req_uid=u, tp_uids=["TP-0000"], clause="ack on WRITE",
-                          source=WRITE_ORACLE)
+                          source=IDLE_ORACLE if u == "REQ-0002" else WRITE_ORACLE)
         for u in ("REQ-0000", "REQ-0001", "REQ-0002")
     ]
     return DebugSession(
