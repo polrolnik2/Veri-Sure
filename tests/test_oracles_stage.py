@@ -2402,3 +2402,36 @@ def test_the_staging_budget_is_not_cut_short_by_a_normalisation_diagnosis():
     for bail in ("if evidence.get(\"route_never_moved\"): break",
                  "if _diagnose(evidence)", "route_never_moved:\n                break"):
         assert bail not in loop, f"an early exit crept in: {bail!r}"
+
+
+def test_an_undecidable_activation_is_not_reported_as_a_driven_one():
+    """**"COULD NOT BE DECIDED" IS NOT "WAS DRIVEN".**
+
+    `_evidence` writes `activation` only when `check_static` returns a verdict,
+    and `check_static` "Returns None when the obligation is not input-only, so
+    a caller can tell 'this stimulus does not stage it' from 'this cannot be
+    answered here'." `_diagnose` fell through on the absent key and asserted
+    the first.
+
+    Measured on a full run: all 17 requirements abandoned under that
+    fallthrough had NO activation evidence, so every one was reported as "the
+    activation was driven" on the strength of a key never written.
+    """
+    from specflow import oracles_stage as O
+
+    #: Absent key -- state-dependent, nothing decided it.
+    undecidable = O._diagnose({"edges": 12, "inert": False})
+    assert "state-dependent" in undecidable
+    assert "driven" not in undecidable, (
+        "an undecided activation is being reported as a driven one")
+    assert "probe" in undecidable
+
+    #: Present and fired -- the check is the one at fault, and that is the
+    #: case that belongs with its author rather than with the stimulus.
+    driven = O._diagnose({"activation": "fired: a=7 at edge 3", "edges": 12})
+    assert driven == "the activation was driven and the check still saw nothing"
+    assert undecidable != driven
+
+    #: The mechanically certain miss still outranks both.
+    assert O._diagnose({"activation": "not_fired: a never reached 7"}) == (
+        "a required input value was never driven")

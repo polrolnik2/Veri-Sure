@@ -3209,6 +3209,27 @@ def _diagnose(ev: dict) -> str:
     if ev.get("route_never_moved"):
         return ("the ports this requirement is observed on never moved, so the "
                 "observation route is what is wrong, not the stimulus")
+    #: **"COULD NOT BE DECIDED" IS NOT "WAS DRIVEN", and collapsing them is how
+    #: a check defect and a normalisation gap came to wear one string.**
+    #: `_evidence` sets `activation` only when `check_static` returns a verdict,
+    #: and `check_static` "Returns None when the obligation is not input-only,
+    #: so a caller can tell 'this stimulus does not stage it' from 'this cannot
+    #: be answered here'." An ABSENT key is the second of those. Falling
+    #: through to the line below asserted the first.
+    #:
+    #: Measured on a full run: all 17 requirements abandoned under the old
+    #: fallthrough had NO activation evidence at all, so every one of them was
+    #: reported as "the activation was driven" on the strength of a key that
+    #: was never written. They are the state-dependent activations -- the same
+    #: population as the 78 of 115 normalized forms carrying no `inputs`
+    #: predicate -- and what they need is a probe naming the state, not another
+    #: stimulus attempt and not a rewritten check.
+    if "activation" not in ev:
+        return ("the activation is state-dependent, so nothing here could "
+                "decide whether it occurred -- it needs a probe naming the "
+                "state, not another stimulus attempt")
+    #: The activation fired and the check still said nothing. THIS one is the
+    #: check's defect and belongs with its author.
     return "the activation was driven and the check still saw nothing"
 
 
