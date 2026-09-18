@@ -118,7 +118,7 @@ print(f"  convict the control:         {len(ctl)}")
 
 shape = P.characterise(designs, OUT)
 pl = {k: P.tells(objections[k], shape).placement for k in verdicts}
-print(f"  population effective_size: {shape.effective_size}; "
+print(f"  population effective_size: {shape.effective_size()}; "
       f"split testpoints {len(shape.split)} of {len(shape.testpoints)}\n")
 
 

@@ -15,6 +15,7 @@ The control is loaded for the AUDIT COLUMN ONLY and is computed last. It is
 never passed to `build_artifacts` as `refmodel_control`, so nothing in the run
 can see it.
 """
+import collections
 import json
 import sys
 from pathlib import Path
@@ -68,6 +69,21 @@ built = build_artifacts(
 )
 print(f"\nBUILD ok={built.ok} stage={built.stage} reason={built.reason}",
       flush=True)
+#: **KEEP THE REQUIREMENTS BESIDE THE FROZEN SET.** Earlier runs preserved
+#: `oracles.json` and not `requirements.json`, so the span denominator could
+#: be counted but never broken down -- how many of the minted requirements are
+#: behavioural, how many are scaffolding that can never yield a check. That
+#: question could then only be answered from a DIFFERENT run's artifact.
+KEEP = Path("docs/evidence/e5")
+KEEP.mkdir(parents=True, exist_ok=True)
+for name in ("requirements.json", "oracles.json", "stimulus.json",
+             "testplan.json"):
+    src_f = OUT / "specflow" / name
+    if src_f.is_file():
+        (KEEP / f"real-{name}").write_text(src_f.read_text(encoding="utf-8"),
+                                           encoding="utf-8")
+        print(f"kept docs/evidence/e5/real-{name}")
+
 art = OUT / "specflow" / "oracles.json"
 print(f"oracles.json: {'written' if art.is_file() else 'MISSING'}")
 if art.is_file():
@@ -81,3 +97,18 @@ if art.is_file():
     arms = collections.Counter(b.get("arm") for v in corp.values() for b in v)
     print(f"  corpus {sum(depth)} bodies / {len(depth)} reqs, "
           f"median {depth[len(depth)//2] if depth else 0}, provenance {dict(arms)}")
+    rq = OUT / "specflow" / "requirements.json"
+    if rq.is_file():
+        reqs = json.loads(rq.read_text())
+        reqs = reqs.get("requirements", reqs) if isinstance(reqs, dict) else reqs
+        kinds = collections.Counter(r.get("unit_kind") for r in reqs)
+        beh = kinds.get("behavioural", 0)
+        n_tr = len(blob.get("oracles") or [])
+        #: **THREE DENOMINATORS, ALL OF THEM REAL.** Scaffolding -- headings,
+        #: bare list markers -- can never yield a check, so it sits in the
+        #: minted count as permanent loss. `considered()` removes abandonment.
+        #: Reporting one without the others is the class of number this tree
+        #: has retracted twice.
+        print(f"  requirements {len(reqs)}: {dict(kinds)}")
+        print(f"  SPAN  {n_tr}/{len(reqs)} minted = {100*n_tr/max(1,len(reqs)):.1f}%"
+              f" | {n_tr}/{beh} behavioural = {100*n_tr/max(1,beh):.1f}%")
