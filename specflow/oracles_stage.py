@@ -1693,12 +1693,29 @@ def run_oracle_stage(
     # silently overwritten by a check written for one port.
     cell_authored: list[str] = []
     cell_bodies: list[RequirementOracle] = []
+    #: **THE LEG REPORTS WHY IT DID NOTHING, BECAUSE SILENCE COST A WHOLE RUN.**
+    #: A run configured with `cell_budget=12` and a population of three
+    #: produced zero cell bodies and zero prompts, and the artifact recorded
+    #: nothing about it -- so "the budget never arrived", "no cell was blind"
+    #: and "the author declined" were indistinguishable after the fact. Offline
+    #: on that run's own artifacts `_cell_targets` returns 12, and a stubbed
+    #: stage reaches it with the budget intact, so the cause is in-run state
+    #: that nothing preserved. `logger.info` is not enough: it does not survive
+    #: into the artifact a reader has.
+    cell_report: dict[str, object] = {
+        "budget": int(cell_budget or 0),
+        "population": len(population),
+        "targets": None,
+        "authored": None,
+        "adopted": None,
+    }
     if cell_budget and len(population) >= 2:
         targets = _cell_targets(
             population=population, held=held, contract=contract,
             stimulus_by_tp=stimulus_by_tp, testplan=testplan, by_uid=by_uid,
             normalized=normalized, budget=cell_budget, base=base,
             transactional=transactional)
+        cell_report["targets"] = len(targets)
         logger.info("oracles: %d blind cell(s) to author at", len(targets))
         for extra in run_cell_gen(
                 targets=targets, contract_json=contract_json, contract=contract,
@@ -1718,6 +1735,8 @@ def run_oracle_stage(
             held[extra.req_uid] = extra
             cell_bodies.append(extra)
             cell_authored.append(extra.req_uid)
+        cell_report["authored"] = len(cell_bodies)
+        cell_report["adopted"] = len(cell_authored)
         logger.info("oracles: %d cell check(s) adopted of %d authored",
                     len(cell_authored), len(cell_bodies))
 
@@ -2688,6 +2707,9 @@ def run_oracle_stage(
                    # `VACUOUS: None` problem one level over.
                    "selection_dropped": selection_dropped,
                    "selection_ran": selection is not None,
+                   # See `cell_report`: a leg that does nothing has to say
+                   # which nothing it was.
+                   "cell_report": cell_report,
                    "rounds": (previous.rounds + 1 if only and previous
                               else rounds),
                    "variants": len(variants),
