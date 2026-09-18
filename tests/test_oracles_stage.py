@@ -2115,6 +2115,46 @@ def test_the_set_level_repair_budget_reaches_the_stage_from_the_pipeline():
     assert "repair_attempts=oracle_repair_attempts" in call.group(1), call.group(1)
 
 
+def test_the_over_strict_message_names_WHERE_it_fired_and_no_design():
+    """The first version gave no location at all.
+
+    An author told only "you convict all of them" has to guess which clause is
+    wrong and which scenario made it wrong. The check runs on every testpoint
+    the suite drives, so the commonest cause is a window that opened where the
+    requirement does not govern rather than a detail pinned too tightly inside
+    it -- and only the location distinguishes those two.
+
+    What travels is a testpoint id and the scenario S2 wrote for it: this
+    pipeline's own inputs, already in the author's prompt for its own
+    testpoints. The population may only REFUTE; the witness is the one that may
+    repair. No design's source, no design's values, no claim that any of them
+    is correct -- the same discipline `CellBrief` enforces by its constructor.
+    """
+    from specflow import oracles_stage as O
+
+    testplan = [{"uid": "TP-1", "stimulus": "Assert reset mid-WRITE."},
+                {"uid": "TP-4", "stimulus": "Lose arbitration."}]
+    #: THE INTERSECTION, not the union: a testpoint where only some readings
+    #: were convicted is an ordinary disagreement.
+    where = O._where_it_fired(
+        {"0": frozenset({"TP-1", "TP-9"}), "1": frozenset({"TP-1", "TP-4"})},
+        testplan)
+    assert where == [("TP-1", "Assert reset mid-WRITE.")], where
+
+    why = O._refuted_everywhere(7, where)
+    assert why.startswith("over-strict:")
+    assert "TP-1" in why and "Assert reset mid-WRITE." in why
+    assert "not any design's behaviour" in why
+    #: It has to say which of the two repairs to make, or the location is a
+    #: fact with no instruction attached.
+    assert "make the activation FALSE there" in why
+    assert "aborts_on" in why
+
+    #: And with no location it is the message it always was, not a stub.
+    assert "IT FIRED" not in O._refuted_everywhere(7)
+    assert O._refuted_everywhere(7, []).startswith("over-strict:")
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the

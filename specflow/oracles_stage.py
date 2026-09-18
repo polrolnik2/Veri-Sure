@@ -1438,7 +1438,7 @@ def _select_frozen(trusted: dict, population: Sequence[str], contract: dict,
     return sel, shape
 
 
-def _refuted_everywhere(n: int) -> str:
+def _refuted_everywhere(n: int, where: list[tuple[str, str]] | None = None) -> str:
     """The rejection for a check the whole admissible population contradicts.
 
     **THE DUAL OF `_cannot_fail`, AND THE STAGE BLOCKED ONLY ONE SIGN.** A
@@ -1466,7 +1466,73 @@ def _refuted_everywhere(n: int) -> str:
         f"the specification leaves open -- which edge a response lands on, an "
         f"exact count the text does not state, an ordering it does not fix -- "
         f"that detail is where the over-strictness is."
+        + _fired_at_block(where)
     )
+
+
+def _fired_at_block(where: list[tuple[str, str]] | None) -> str:
+    """The testpoints every reading was convicted at, and what they drive.
+
+    **THE FIRST VERSION OF THIS MESSAGE GAVE NO LOCATION AT ALL**, and an
+    author told only "you convict all of them" has to guess which of its
+    clauses is wrong and which scenario made it wrong. Your check runs on every
+    testpoint the suite drives -- see SYSTEM -- so the commonest cause is not a
+    detail pinned too tightly inside the window but a window that opened
+    somewhere the requirement does not govern, and only the location
+    distinguishes the two.
+    """
+    if not where:
+        return ""
+    lines = "\n".join(f"  {tp}  {said}" if said else f"  {tp}"
+                       for tp, said in where)
+    return (
+        f"\n\nIT FIRED, AND EVERY READING WAS CONVICTED, AT THESE TESTPOINTS:\n\n"
+        f"{lines}\n\n"
+        f"These are scenarios this suite drives, with the stimulus written for "
+        f"them -- not any design's behaviour. Read them and ask whether your "
+        f"requirement governs them at all. If it does not, the defect is the "
+        f"window rather than the assertion: make the activation FALSE there, "
+        f"using `aborts_on`, `until` or the conditions that cannot hold outside "
+        f"the requirement's situation, and keep the assertion exactly as strong "
+        f"as the obligation states. If it does govern them, then the assertion "
+        f"pins something the specification leaves open in that scenario, and "
+        f"that is what to relax."
+    )
+
+
+def _where_it_fired(objections: dict, testplan: list[dict], *,
+                    limit: int = 3) -> list[tuple[str, str]]:
+    """`[(testpoint, its own scenario prose)]` where EVERY design was convicted.
+
+    **A LOCATION AND THE PIPELINE'S OWN STIMULUS -- NEVER A DESIGN'S
+    BEHAVIOUR.** The population may only refute; the witness is the one that
+    may repair. So what travels to the author is the testpoint id and the
+    scenario S2 wrote for it, both of which are this pipeline's own inputs and
+    were already in the author's prompt for its own testpoints. No design's
+    source, no design's values, and no claim that any of them is correct.
+
+    That distinction is the same one `CellBrief` makes, and it is made for the
+    same measured reason: presenting behaviours and asking which is meant makes
+    them the answer set, and it reproduces the pathology the witness gate was
+    deleted for -- "it does not make the check more correct, it makes the check
+    agree with the witness", h-i2c over-strictness 27 -> 15, convictions
+    2 -> 16.
+
+    The INTERSECTION across designs, not the union: a testpoint where only some
+    were convicted is an ordinary disagreement, and the refutation is about the
+    places every reading was rejected. Three of them, because a list of forty
+    testpoint ids is not a location, it is a wall.
+    """
+    sets = [set(v) for v in objections.values()]
+    if not sets:
+        return []
+    everywhere = set.intersection(*sets) if len(sets) > 1 else sets[0]
+    prose = {str(t.get("uid")): str(t.get("stimulus") or "") for t in testplan or []}
+    out = []
+    for tp in sorted(everywhere)[:limit]:
+        said = prose.get(tp, "")
+        out.append((tp, said[:240] + (" ..." if len(said) > 240 else "")))
+    return out
 
 
 def _cannot_fail(detail: str) -> str:
@@ -2373,13 +2439,15 @@ def run_oracle_stage(
         # OFF UNLESS A POPULATION WAS PASSED IN, because this stage runs before
         # any design of this run exists and must not acquire one of its own.
         if len(population) >= 2:
-            pop_verdicts = _population_verdicts(
+            pop_verdicts, _pop_tp, pop_where = _population_tables(
                 held, population, contract, stimulus_by_tp,
                 base=base, transactional=transactional)
             for uid in variety.refuted_by_the_population(pop_verdicts):
                 if uid in rejected:
                     continue
-                why = _refuted_everywhere(len(population))
+                why = _refuted_everywhere(
+                    len(population),
+                    _where_it_fired(pop_where.get(uid) or {}, testplan))
                 rejected[uid] = quotable[uid] = why
                 repairs.setdefault(uid, []).append(why)
         # Gate 1 earns an attempt -- "try to make it pass" -- but only one, and
