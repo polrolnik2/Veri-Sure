@@ -435,6 +435,15 @@ def build_artifacts(
     #: Needs a population, so it is inert without `population_sources` or
     #: `population_size`. Costs one call per cell.
     cell_budget: int = 0,
+    #: A `population.Ruleset` applied before freeze, so a run FREEZES THE
+    #: SELECTED SET. Until this existed, `population` was imported by `scoring`
+    #: and by no pipeline module, so selection was something a reader ran
+    #: afterwards against the artifact and never something a run produced.
+    #:
+    #: Needs a population. `None` leaves the set unselected, which is what
+    #: every run before this did, and a ruleset that cannot apply is REPORTED
+    #: rather than skipped.
+    selection: "object | None" = None,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -879,6 +888,7 @@ def build_artifacts(
             population=population_sources,
             population_size=population_size,
             cell_budget=cell_budget,
+            selection=selection,
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement

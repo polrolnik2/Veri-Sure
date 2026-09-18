@@ -2257,3 +2257,89 @@ def test_the_cell_budget_spreads_across_ports(monkeypatch):
     #: THE LIGHTER PORT IS REACHED BEFORE THE HEAVIER ONE IS EXHAUSTED. A
     #: budget of two with `p` carrying three cells must not be two `p`s.
     assert set(ports) == {"p", "q"}, ports
+
+
+def test_the_selected_set_is_what_gets_frozen():
+    """`population` was imported by `scoring` and by no pipeline module, so
+    every selection figure on this branch was post-hoc. A run must be able to
+    freeze the SELECTED set.
+    """
+    import inspect
+    import re
+    from pathlib import Path as Pth
+
+    from specflow import integration as I
+    from specflow import oracles_stage as O
+
+    assert "selection" in inspect.signature(O.run_oracle_stage).parameters
+    assert "selection" in inspect.signature(I.build_artifacts).parameters
+    src = Pth(I.__file__).read_text()
+    call = re.search(r"run_oracle_stage\((.{0,2600}?)\n        \)", src, re.DOTALL)
+    assert call and "selection=selection" in call.group(1)
+    #: SOURCE-LEVEL, because the apply site sits in the round loop's tail and a
+    #: behavioural test cannot reach it without a full run -- the same reason
+    #: the demotion forward needed one.
+    stage = Pth(O.__file__).read_text()
+    body = stage[stage.index("selection_dropped: dict[str, str] = {}"):][:1400]
+    assert "_select_frozen(" in body
+    assert "trusted = [o for o in trusted if o.req_uid in kept]" in body, (
+        "the selected set is computed and not frozen")
+
+
+def test_selection_scores_per_testpoint_not_on_a_concatenated_trace():
+    """The correction that makes wiring `select` honest.
+
+    `select` drives a check over a population member's rows. Flattening a
+    design's testpoints into one trace changes verdicts wholesale -- measured,
+    per-testpoint and concatenated scoring agreed on ONE check of 16 and 27 at
+    t=0. So each member is passed as a MARKER row and the closure returns the
+    verdict already computed on the testpoints the check names.
+    """
+    import re
+    from pathlib import Path as Pth
+
+    from specflow import oracles_stage as O
+
+    src = Pth(O.__file__).read_text()
+    body = src[src.index("def _select_frozen("):]
+    body = body[:body.index("def _refuted_everywhere")]
+    assert '{"__design__": d}' in body, "members are no longer markers"
+    assert re.search(r"verdicts\.get\(uid, \{\}\)\.get\(d\)", body), (
+        "the closure re-decides instead of using the per-testpoint verdict")
+
+
+def test_a_selection_refusal_is_recorded_not_silently_skipped():
+    """`Ruleset.min_population` is 5, so a three-design run is refused BY
+    DESIGN. That has to read as "the rule declined", never as "the rule found
+    nothing to drop" -- the `VACUOUS: 0` against `VACUOUS: None` problem one
+    level over.
+    """
+    from pathlib import Path as Pth
+
+    from specflow import oracles_stage as O
+
+    assert "selection_ran" in O.OracleSet.__dataclass_fields__
+    assert O.OracleSet.__dataclass_fields__["selection_ran"].default is False
+    src = Pth(O.__file__).read_text()
+    body = src[src.index("def _select_frozen("):]
+    body = body[:body.index("def _refuted_everywhere")]
+    assert "except ValueError as exc" in body and "REFUSED" in body
+
+
+def test_the_selection_record_survives_a_reuse():
+    """THE LOSSY-LOAD TRAP, which has cost this stage two fields already.
+
+    A key written at freeze and not read in `load` is absent from every
+    `--reuse`, so a reused run would report a set that HAD been selected as one
+    that never was.
+    """
+    import re
+    from pathlib import Path as Pth
+
+    from specflow import oracles_stage as O
+
+    src = Pth(O.__file__).read_text()
+    loader = src[src.index("def load(run_dir: Path)"):]
+    for key in ("selection_dropped", "selection_ran"):
+        assert re.search(rf'blob\.get\("{key}"\)', loader), (
+            f"`{key}` is frozen but never read back")

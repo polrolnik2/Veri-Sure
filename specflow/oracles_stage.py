@@ -266,6 +266,12 @@ class OracleSet:
     #: this makes possible is reading the triple over that population; nothing
     #: here licenses reading the count on its own.
     correspondence_rounds: list[dict] = field(default_factory=list)
+    #: `req_uid -> which selection leg dropped it, and why`. Empty both when no
+    #: ruleset ran and when one ran and dropped nothing; `selection_ran`
+    #: separates those, because "0 dropped" and "not looked at" are different
+    #: claims and this stage has already been misread once on exactly that.
+    selection_dropped: dict[str, str] = field(default_factory=dict)
+    selection_ran: bool = False
     #: `req_uid -> which `_unreached` guard silenced it`. A requirement that
     #: leaves through one of those guards produces NO rejection and NO
     #: disposition of its own, so it is invisible in every rate this class
@@ -1110,6 +1116,109 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     return targets
 
 
+def _population_objections(held: dict, population: Sequence[str], contract: dict,
+                           stimulus_by_tp: dict, *, base: str,
+                           transactional: bool) -> tuple[dict, dict]:
+    """`(verdicts, objections)` -- the second is per TESTPOINT, which placement needs.
+
+    `_population_verdicts` collapses a check to one bool per design. `placement`
+    asks WHERE it objected, so it needs the testpoints themselves.
+    """
+    verdicts: dict[str, dict[str, bool | None]] = {}
+    objections: dict[str, dict[str, frozenset]] = {}
+    names = [str(i) for i in range(len(population))]
+    for uid, oracle in held.items():
+        per: dict[str, bool | None] = {}
+        obj: dict[str, frozenset] = {}
+        for name, src in zip(names, population):
+            hits, saw = [], False
+            for tp in oracle.tp_uids:
+                steps = stimulus_by_tp.get(tp)
+                if not steps:
+                    continue
+                try:
+                    rep = replay(src, contract, steps, base=base)
+                    rows = (transactional_view(rep.rows) if transactional
+                            else rep.rows)
+                    r = decide(oracle, rows)
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("population replay failed (%r)", exc)
+                    continue
+                if r.broken or r.ok is None:
+                    continue
+                saw = True
+                if r.ok is False:
+                    hits.append(tp)
+            obj[name] = frozenset(hits)
+            per[name] = (False if hits else (True if saw else None))
+        verdicts[uid] = per
+        objections[uid] = obj
+    return verdicts, objections
+
+
+def _select_frozen(trusted: dict, population: Sequence[str], contract: dict,
+                   stimulus_by_tp: dict, *, rules, base: str,
+                   transactional: bool):
+    """Apply a `population.Ruleset` to the set about to be frozen.
+
+    **THE VERDICTS ARE COMPUTED PER TESTPOINT AND HANDED TO `select`, WHICH IS
+    USED FOR ITS RULES AND NOT ITS SCORING.** `select` drives a check over a
+    population member's rows, and a caller that flattens a design's testpoints
+    into one trace gets different answers: measured, per-testpoint scoring and
+    a concatenated trace agreed on ONE check of 16 and 27 at `t = 0`. A check
+    authored for one testpoint has no business being run over a trace that
+    concatenates six others. So each population member is passed as a marker
+    row and the closure returns the verdict already computed on the testpoints
+    the check NAMES.
+
+    Returns `(selection, shape)`, or `(None, None)` when the rules cannot be
+    applied -- a refusal is reported, never silently skipped.
+    """
+    from . import population as _pop
+
+    outputs = [str(p.get("name")) for p in (contract.get("io") or [])
+               if p.get("dir") == "output" and p.get("name")]
+    rows_by_design = _population_rows(
+        population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    if len(rows_by_design) < 2 or not outputs:
+        logger.warning("oracles: selection needs >=2 replayable designs and "
+                       "declared outputs; leaving the frozen set unselected")
+        return None, None
+    verdicts, objections = _population_objections(
+        trusted, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    shape = _pop.characterise(rows_by_design, outputs)
+    names = sorted(rows_by_design)
+    #: A MARKER ROW PER DESIGN. `convictions` passes each member to the
+    #: closure; the closure reads the marker and returns the precomputed
+    #: verdict rather than re-deciding on a trace shape the check never saw.
+    members = [[{"__design__": d}] for d in names]
+
+    def decider(uid: str):
+        def f(rows):
+            d = str((rows or [{}])[0].get("__design__"))
+            return verdicts.get(uid, {}).get(d)
+        return f
+
+    corpus = {uid: decider(uid) for uid in trusted}
+    obj_by_name = {uid: {d: objections[uid].get(str(i), frozenset())
+                         for i, d in enumerate(names)}
+                   for uid in trusted if uid in objections}
+    try:
+        sel = _pop.select(corpus, members, ruleset=rules, shape=shape,
+                          objections=obj_by_name)
+    except ValueError as exc:
+        #: REFUSED, NOT SKIPPED. `min_population` defaults to 5 and a run with
+        #: three designs will land here -- which is the rule protecting itself,
+        #: and it has to be visible rather than read as "selection found
+        #: nothing to drop".
+        logger.warning("oracles: selection REFUSED and the frozen set is "
+                       "unselected: %s", exc)
+        return None, shape
+    return sel, shape
+
+
 def _refuted_everywhere(n: int) -> str:
     """The rejection for a check the whole admissible population contradicts.
 
@@ -1406,6 +1515,18 @@ def run_oracle_stage(
     #: generation cannot reach the residual blindness and the honest output is
     #: the irreducible equivalence classes as a specification finding.
     cell_budget: int = 0,
+    #: A `population.Ruleset` applied to the frozen set, so a run FREEZES THE
+    #: SELECTED SET rather than leaving selection an afterthought nobody runs.
+    #: `population` was imported by `scoring` alone -- no pipeline module
+    #: touched it -- so every selection figure on this branch was post-hoc.
+    #:
+    #: Needs a population, for the same reason the refutation leg does. `None`
+    #: leaves the frozen set unselected, which is what every run so far did.
+    #:
+    #: **A REFUSAL IS REPORTED, NEVER SKIPPED.** `Ruleset.min_population`
+    #: defaults to 5, so a three-design run is refused by design; that has to
+    #: read as "the rule declined" and not as "the rule found nothing".
+    selection: "object | None" = None,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -2531,12 +2652,42 @@ def run_oracle_stage(
             "start a simulator, and nothing they produce decides anything",
             len(idle), len(testplan))
 
+    # THE SELECTED SET IS WHAT GETS FROZEN, when a ruleset is supplied.
+    # Everything above decides which checks are ADMISSIBLE; this decides which
+    # of them the suite keeps, and it is the last word before the artifact.
+    #
+    # Recorded either way: `selection_dropped` names every check the rules
+    # removed and why, because a set that is 30 checks smaller with no record
+    # of which 30 is not auditable.
+    selection_dropped: dict[str, str] = {}
+    if selection is not None and len(population) >= 2:
+        #: `trusted` is a LIST of oracles here, not the `held` mapping.
+        sel, _shape = _select_frozen(
+            {o.req_uid: o for o in trusted}, population, contract,
+            stimulus_by_tp, rules=selection, base=base,
+            transactional=transactional)
+        if sel is not None:
+            kept = set(sel.kept)
+            for v in sel.dropped:
+                selection_dropped[v.key] = f"{v.reason}: {v.detail}"
+            before = len(trusted)
+            trusted = [o for o in trusted if o.req_uid in kept]
+            logger.info("oracles: selection kept %d of %d check(s)",
+                        len(trusted), before)
+
     if run_dir is not None:
         trusted, drift = freeze.freeze(
             trusted, Path(run_dir) / "specflow" / ARTIFACT, normalized,
             rewrite=rewrite or bool(only),
             extra={"dispositions": dispositions, "reasons": reasons,
                    "witness": witness_kind,
+                   # A set 30 checks smaller with no record of WHICH 30 is not
+                   # auditable. Empty when no ruleset ran, which is different
+                   # from a ruleset that dropped nothing -- `selection_ran`
+                   # carries that distinction, the same `VACUOUS: 0` against
+                   # `VACUOUS: None` problem one level over.
+                   "selection_dropped": selection_dropped,
+                   "selection_ran": selection is not None,
                    "rounds": (previous.rounds + 1 if only and previous
                               else rounds),
                    "variants": len(variants),
@@ -2651,6 +2802,8 @@ def run_oracle_stage(
                              else rounds),
                      testpoints_no_oracle_names=idle,
                      unreached_silenced=dict(unreached_silenced),
+                     selection_dropped=dict(selection_dropped),
+                     selection_ran=selection is not None,
                      labels=dict(labels),
                      narrowing={u: list(v) for u, v in narrowing.items()},
                      liveness={u: r.get("verdict", _L.UNKNOWN)
@@ -4010,6 +4163,13 @@ def load(run_dir: Path) -> OracleSet | None:
         unreached_silenced={
             str(u): str(g)
             for u, g in (blob.get("unreached_silenced") or {}).items()},
+        #: THE LOSSY-LOAD TRAP. A field written at freeze and not read here is
+        #: absent from every `--reuse`, so a reused run would report a set that
+        #: had been selected as one that never was.
+        selection_dropped={
+            str(u): str(g)
+            for u, g in (blob.get("selection_dropped") or {}).items()},
+        selection_ran=bool(blob.get("selection_ran")),
         labels={str(u): str(g)
                 for u, g in (blob.get("faithfulness_labels") or {}).items()},
         narrowing={
