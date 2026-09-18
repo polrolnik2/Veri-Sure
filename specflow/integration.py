@@ -639,14 +639,40 @@ def build_artifacts(
             write_probes(run_dir, contract, None, error=repr(exc))
     if _probes_enabled:
         if cross:
-            # CROSS-CONSTRAINTS ARE ORDINARY REQUIREMENTS. They tie a probe to
-            # real ports where the spec states the relation, and they go through
-            # normalize, the check author and every existing gate exactly as any
-            # requirement does -- no new machinery. With the scope rule reduced
-            # to a default, they are what stops a check verifying the design
-            # against its own private vocabulary: a design that lies about a
-            # probe fails them, on signals golden and the miter can both see.
-            reqs = list(reqs) + cross
+            # **CROSS-CONSTRAINTS ARE NOT APPENDED, BECAUSE S1 HAS ALREADY
+            # MINTED EVERY ONE OF THEM.** The argument they were added on is
+            # that they "tie a probe to real ports where the spec STATES the
+            # relation" -- and if the spec states it, S1 mints a requirement
+            # from that sentence, because S1 divides the whole document.
+            #
+            # MEASURED on i2c_master_bit_ctrl: S1's obligations cover 15,523 of
+            # 15,713 spec bytes (98.8%), and **14 of 14 cross-constraint spans
+            # fall inside an S1 obligation whose quote is the same sentence**.
+            # The cross-constraint text is a paraphrase of a requirement that
+            # already exists, handed a second uid.
+            #
+            # So the case closes both ways: either the spec states the relation
+            # and S1 already minted it, or it does not and the constraint is
+            # unlicensed -- which the span gate in `probes.gate` now rejects.
+            # Nothing is left for one to add.
+            #
+            # And the duplication was not free. It inflated the span
+            # denominator, double-counted a failing relation across two uids,
+            # and -- because these were the only requirements minted outside S1
+            # and so the only ones without `needs` -- killed four of five
+            # full-pipeline runs at S2.
+            #
+            # THE ANTI-CIRCULARITY ARGUMENT SURVIVES WITHOUT THEM. A probe
+            # carries `licensed_by`, naming the requirements that license it,
+            # and those requirements name real ports: REQ-0113 licenses
+            # `slave_wait_active` and states the relation in terms of
+            # `scl_oen` and the filtered SCL input. A design that lies about
+            # the probe fails THAT requirement's checks, on the same boundary
+            # signals, with no second requirement needed.
+            logger.info(
+                "probes: %d cross-constraint(s) recorded and NOT minted as "
+                "requirements -- S1 already covers the spans they quote",
+                len(cross))
         if contract.get("probes"):
             contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
             write_probes(run_dir, contract, probe_result)

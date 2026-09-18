@@ -1,50 +1,43 @@
 
 
-def test_a_cross_constraint_declares_the_needs_that_make_it_ordinary():
-    """**`needs` IS WHAT MAKES "AN ORDINARY REQUIREMENT" TRUE.**
+def test_cross_constraints_are_not_minted_as_requirements():
+    """**S1 HAS ALREADY MINTED EVERY ONE OF THEM.**
 
-    `cross_constraint_requirements` promises they "go through normalize, the
-    check author and every existing gate exactly as any requirement does". S2
-    covers a requirement only when it declares `needs=testplan`, and every
-    requirement S1 mints declares `("testplan", "refmodel")`. These arrived
-    with none -- the only requirements in the system minted outside S1, and so
-    the only ones that could.
+    The argument they were added on is that they tie a probe to real ports
+    "where the spec STATES the relation" -- and if the spec states it, S1 mints
+    a requirement from that sentence, because S1 divides the whole document.
 
-    It killed four of five full-pipeline runs. The model answered correctly and
-    said so: "REQ-0151 does not declare needs=['testplan'], so it must not be
-    covered by any testplan element" -- zero elements, and the gate failed it
-    for producing nothing. Five repair rounds could not converge because the
-    requirement was malformed, not the answer.
+    Measured on i2c_master_bit_ctrl: S1's obligations cover 15,523 of 15,713
+    spec bytes (98.8%), and 14 of 14 cross-constraint spans fall inside an S1
+    obligation whose quote is the same sentence. The cross-constraint text is a
+    paraphrase of a requirement that already exists, handed a second uid.
+
+    The duplication was not free. It inflated the span denominator,
+    double-counted a failing relation across two uids, and -- because these
+    were the only requirements minted outside S1, and so the only ones without
+    `needs` -- killed four of five full-pipeline runs at S2.
+
+    The anti-circularity argument survives without them: a probe carries
+    `licensed_by`, those requirements name real ports, and a design that lies
+    about the probe fails THEIR checks on the same boundary signals.
     """
-    from specflow.probes import (CrossConstraint, ProbeOutput,
-                                 cross_constraint_requirements)
+    import re
+    from pathlib import Path
 
-    out = ProbeOutput(probes=[], cross_constraints=[
-        CrossConstraint(text="while slave_wait is active the counter pauses",
-                        probe="slave_wait", ports=[], span="")])
-    got = cross_constraint_requirements(out, [{"uid": "REQ-0000"}])
-    assert len(got) == 1
-    #: THE SAME VALUE S1 MINTS, not merely non-empty: a cross-constraint that
-    #: asked for a testplan and not a refmodel would be planned and then never
-    #: checked.
-    assert got[0]["needs"] == ["testplan", "refmodel"]
-    assert got[0]["uid"] == "REQ-0001"
+    from specflow import integration as I
 
-
-def test_every_field_an_s1_requirement_carries_is_carried_here_too():
-    """The fan-out gates read requirement dicts by key. A field S1 always sets
-    and this never does is a divergence that only shows up as a stage failing
-    on an item it cannot explain -- which is how `needs` was found.
-    """
-    from specflow.probes import (CrossConstraint, ProbeOutput,
-                                 cross_constraint_requirements)
-
-    got = cross_constraint_requirements(
-        ProbeOutput(probes=[], cross_constraints=[
-            CrossConstraint(text="t", probe="p", ports=[], span="")]),
-        [{"uid": "REQ-0000"}])[0]
-    for field in ("uid", "text", "unit_kind", "needs", "spec_spans"):
-        assert field in got, f"{field!r} is on every S1 requirement and not here"
+    src = Path(I.__file__).read_text()
+    #: Over the WHOLE module: `if _probes_enabled:` appears twice, and
+    #: anchoring on the first put the window before the code under test.
+    assert "reqs = list(reqs) + cross" not in src, (
+        "cross-constraints are being minted as requirements again")
+    #: Recorded, not silently dropped -- a stage that stops doing something has
+    #: to say so, or the next reader finds an empty list and no reason.
+    assert re.search(r"cross-constraint\(s\) recorded and NOT minted", src)
+    #: And the function that built them is still reachable, because the
+    #: measurement that retired it should be reproducible.
+    from specflow.probes import cross_constraint_requirements
+    assert callable(cross_constraint_requirements)
 
 
 def test_a_cross_constraint_must_quote_the_specification_verbatim():
