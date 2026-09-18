@@ -11,7 +11,8 @@ check objecting only where the designs differ, -1 for one objecting only where
 they agree, and **0 for a check that objects everywhere OR nowhere** -- both
 signs of the defect, in one number, already in the tree.
 """
-import json, sys, collections
+import json
+import sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/Veri-Sure")
 from specflow import oracles_stage as OS
@@ -76,7 +77,8 @@ crows, cabs = {}, ()
 for tp, steps in stimulus_by_tp.items():
     try:
         rep = replay(control, contract, steps, base=base)
-        crows[tp] = transactional_view(rep.rows); cabs = rep.unavailable
+        crows[tp] = transactional_view(rep.rows)
+        cabs = rep.unavailable
     except Exception:
         pass
 
