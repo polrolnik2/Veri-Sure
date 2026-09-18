@@ -444,3 +444,50 @@ def test_the_demotion_flag_reaches_the_oracle_stage():
     assert call, "could not locate the run_oracle_stage call"
     assert "demote_faithfulness=demote_faithfulness" in call.group(1), (
         "build_artifacts accepts the flag and does not forward it")
+
+
+def test_s2_is_gated_on_the_merged_testplan_not_the_per_item_issues():
+    """**A BUILD MUST FAIL ON DEFECTS ITS OWN ARTIFACT HAS.**
+
+    `run_s2_fanout` grades each item against its own slice; every later stage
+    consumes the MERGED testplan, and the two disagree. On the run that
+    motivated this, the per-item aggregate carried 18 errors and the merged
+    plan carried 8 -- the other 10 were "no testplan elements produced" for
+    requirements that are covered in the merged plan, all 151 of them.
+
+    The consequence was not a stricter gate but a wrongly addressed one, and
+    because the verdict is shared across 151 independent calls it failed at any
+    realistic per-item error rate: four of five full-pipeline runs died here,
+    each on a different issue.
+    """
+    import json
+    from pathlib import Path
+
+    from specflow import integration as I
+    from specflow.s2_testplan import TestplanOutput
+    from specflow.s2_testplan import gate as gate_s2
+
+    #: THE REAL ARTIFACT FROM THE FAILING RUN, not one this test invented --
+    #: a shape-invented fixture is what let the cell-authoring contract bug
+    #: through earlier on this branch.
+    root = Path("docs/evidence/e5")
+    reqs = json.loads((root / "s2-requirements.json").read_text())
+    reqs = reqs.get("requirements", reqs) if isinstance(reqs, dict) else reqs
+    plan = TestplanOutput.model_validate(
+        json.loads((root / "s2-merged-testplan.json").read_text()))
+
+    errs = [i for i in gate_s2(reqs, plan) if i.severity == "error"]
+    assert len(errs) == 8, [str(i.message) for i in errs[:3]]
+    assert all("covers nothing" in str(i.message) for i in errs), (
+        "the merged plan's only defect is testpoints naming no requirement")
+    #: And nothing was lost: every requirement is covered.
+    covered = {c.split("@")[0] for e in plan.elements for c in (e.covers or [])}
+    assert len({r["uid"] for r in reqs} - covered) == 0
+
+    src = Path(I.__file__).read_text()
+    i = src.index("merged, per_item = run_s2_fanout(")
+    block = src[i:i + 1800]
+    assert "StageResult(merged, gate_s2(reqs, merged)" in block, (
+        "S2 is gated on the per-item aggregate again")
+    #: The per-item issues stay available for diagnosis; they must not decide.
+    assert "_s2_per_item" in block

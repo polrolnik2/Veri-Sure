@@ -732,8 +732,28 @@ def build_artifacts(
                 requirements=reqs, contract_json=contract_json, port=port,
                 normalized=normalized_by_uid,
                 max_repairs=max_repairs)
-            s2 = StageResult(merged, [i for r in per_item for i in r.issues],
+            # **GATE THE MERGED ARTIFACT, NOT THE CONCATENATION OF PER-ITEM
+            # ISSUES.** The fan-out's items are graded against their own slice;
+            # what every later stage consumes is `merged`, and the two do not
+            # agree. Measured on a run that failed here: the per-item aggregate
+            # carried 18 errors and the merged testplan carried 8 -- the other
+            # 10 were "no testplan elements produced" for requirements that are
+            # COVERED in the merged plan, all 151 of them, none uncovered.
+            #
+            # The consequence was not a stricter gate but a WRONGLY ADDRESSED
+            # one: a build failing on defects its own artifact does not have.
+            # And because the verdict is shared across 151 independent calls,
+            # it fails at any realistic per-item error rate -- four of five
+            # full-pipeline runs died here, each on a different issue.
+            #
+            # Per-item issues are kept for diagnosis; they no longer decide.
+            s2 = StageResult(merged, gate_s2(reqs, merged),
                              max((r.rounds for r in per_item), default=0))
+            _s2_per_item = [i for r in per_item for i in r.issues]
+            if len(_s2_per_item) != len(s2.issues):
+                logger.info(
+                    "S2: %d per-item issue(s), %d on the merged testplan",
+                    len(_s2_per_item), len(s2.issues))
         else:
             s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
                         max_repairs=max_repairs)
