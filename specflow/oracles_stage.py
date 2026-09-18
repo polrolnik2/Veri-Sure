@@ -987,6 +987,50 @@ def _population_verdicts(held: dict, population: Sequence[str], contract: dict,
     return out
 
 
+def _population_verdicts_by_tp(held: dict, population: Sequence[str],
+                               contract: dict, stimulus_by_tp: dict, *,
+                               base: str, transactional: bool) -> dict:
+    """`req_uid -> testpoint -> design index -> verdict`, one entry per replay.
+
+    **THE SAME REPLAYS `_population_verdicts` RUNS, NOT COLLAPSED.** That
+    function folds a check's testpoints into one bool per design, which is what
+    the refutation leg wants -- "does this check convict this design at all" --
+    and is exactly wrong for a cell, whose first coordinate is a testpoint.
+    Handing the collapsed table to `variety.blind` made ONE separation stand in
+    for every testpoint of the pair: on the probe run, one check separating
+    designs 0 and 1 somewhere marked all 966 of that pair's cells adjudicated,
+    and blindness read 0.0% of 3,530 cells. At this resolution: 97.0%.
+
+    A testpoint with no stimulus, a replay that raises, and a `None` or broken
+    verdict all leave the entry out rather than recording a false one. An
+    absent entry separates nothing, which is the rule `separates` already
+    applies to an abstention.
+    """
+    out: dict[str, dict[str, dict[str, bool | None]]] = {}
+    for uid, oracle in held.items():
+        table: dict[str, dict[str, bool | None]] = {}
+        for tp in oracle.tp_uids:
+            steps = stimulus_by_tp.get(tp)
+            if not steps:
+                continue
+            col: dict[str, bool | None] = {}
+            for i, src in enumerate(population):
+                try:
+                    rep = replay(src, contract, steps, base=base)
+                    rows = (transactional_view(rep.rows) if transactional
+                            else rep.rows)
+                    r = decide(oracle, rows)
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("population replay failed (%r)", exc)
+                    continue
+                if not r.broken and r.ok is not None:
+                    col[str(i)] = r.ok
+            if col:
+                table[tp] = col
+        out[uid] = table
+    return out
+
+
 def _population_rows(population: Sequence[str], contract: dict,
                      stimulus_by_tp: dict, *, base: str,
                      transactional: bool) -> dict:
@@ -1044,10 +1088,15 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     if len(rows_by_design) < 2:
         return []
     all_cells = variety.cells(rows_by_design, outputs)
-    verdicts = _population_verdicts(
+    #: **AT `(TESTPOINT, PAIR)`, NOT AT `PAIR`.** See `variety.separates_at`:
+    #: the collapsed table this used to read let one separation anywhere close
+    #: every cell of a pair, so the probe run -- 12 budget, 3 designs, 3,530
+    #: cells -- authored NOTHING because blindness read 0.0%. It reads 97.0%
+    #: at the resolution the replays actually have.
+    verdicts = _population_verdicts_by_tp(
         held, population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
-    blind = variety.blind(all_cells, verdicts)
+    blind = variety.blind_at(all_cells, verdicts)
     if not blind:
         return []
     weight = dict(variety.ranked(blind))

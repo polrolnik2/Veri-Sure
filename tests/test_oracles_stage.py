@@ -2223,7 +2223,8 @@ def test_one_cell_target_per_requirement(monkeypatch):
 
     rows = _cellrows({"TP-1": ["p", "q"], "TP-2": ["p", "q"]})
     monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
-    monkeypatch.setattr(O, "_population_verdicts", lambda *a, **k: {})
+    monkeypatch.setattr(O, "_population_verdicts_by_tp",
+                        lambda *a, **k: {})
     contract = {"io": [{"name": "p", "dir": "output"},
                        {"name": "q", "dir": "output"}]}
     #: BOTH testpoints cover the SAME requirement.
@@ -2249,7 +2250,8 @@ def test_the_cell_budget_spreads_across_ports(monkeypatch):
     rows = _cellrows({"TP-1": ["p"], "TP-2": ["p"], "TP-3": ["p"],
                       "TP-4": ["q"]})
     monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
-    monkeypatch.setattr(O, "_population_verdicts", lambda *a, **k: {})
+    monkeypatch.setattr(O, "_population_verdicts_by_tp",
+                        lambda *a, **k: {})
     contract = {"io": [{"name": "p", "dir": "output"},
                        {"name": "q", "dir": "output"}]}
     testplan = [{"uid": f"TP-{i}", "covers": [f"REQ-{i}@1"]} for i in range(1, 5)]
@@ -2264,6 +2266,84 @@ def test_the_cell_budget_spreads_across_ports(monkeypatch):
     #: THE LIGHTER PORT IS REACHED BEFORE THE HEAVIER ONE IS EXHAUSTED. A
     #: budget of two with `p` carrying three cells must not be two `p`s.
     assert set(ports) == {"p", "q"}, ports
+
+
+def test_a_cell_is_blind_until_a_check_separates_it_AT_THAT_TESTPOINT(monkeypatch):
+    """One separation anywhere used to close every cell of the pair.
+
+    `_cell_targets` fed `variety.blind` the table `_population_verdicts`
+    returns, which is one bool per `(check, design)` with the testpoints folded
+    away. `separates` then read `cell.left`/`cell.right` and nothing else, so a
+    check that told two designs apart at ONE testpoint scored as adjudicating
+    that pair's cells at EVERY testpoint.
+
+    Measured on the first probe-bearing run: 151 checks, three designs, 3,530
+    cells, 14 separations in total -- and blindness read **0.0%**. The cell leg
+    ran with a budget of 12, found nothing to author at, and authored nothing.
+    At `(testpoint, pair)` resolution the same set and the same replays read
+    **97.0%**.
+    """
+    from specflow import oracles_stage as O
+
+    rows = _cellrows({"TP-1": ["p"], "TP-2": ["p"]})
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    #: ONE check, separating the pair at TP-1 and abstaining at TP-2.
+    monkeypatch.setattr(
+        O, "_population_verdicts_by_tp",
+        lambda *a, **k: {"REQ-1": {"TP-1": {"alpha": True, "bravo": False}}})
+    contract = {"io": [{"name": "p", "dir": "output"}]}
+    testplan = [{"uid": "TP-1", "covers": ["REQ-1@1"]},
+                {"uid": "TP-2", "covers": ["REQ-2@1"]}]
+    got = O._cell_targets(
+        population=("a", "b"), held={}, contract=contract,
+        stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
+        by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"},
+                "REQ-2": {"uid": "REQ-2", "text": "t"}},
+        normalized=None, budget=8, base="", transactional=True)
+    at = [t["cell"].testpoint for t in got]
+    #: TP-2 IS STILL BLIND. Collapsing to the pair returns no target at all.
+    assert at == ["TP-2"], at
+
+
+def test_the_per_testpoint_table_keeps_one_column_per_replay():
+    """`_population_verdicts_by_tp` is the same replays, not collapsed.
+
+    A testpoint with no stimulus, and a verdict that is broken or `None`, leave
+    the entry OUT rather than recording a false one -- an absent entry
+    separates nothing, which is the rule `separates` already applies to an
+    abstention.
+    """
+    from specflow import oracles_stage as O
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    seen = []
+
+    class _R:
+        def __init__(self, ok):
+            self.ok, self.broken = ok, False
+
+    def fake_decide(oracle, rows):
+        seen.append(rows)
+        #: design "0" says True, design "1" abstains.
+        return _R(True if rows == ["0"] else None)
+
+    monkeypatch_rows = {"0": ["0"], "1": ["1"]}
+    O_replay = O.replay
+    try:
+        O.replay = lambda src, contract, steps, base="": type(
+            "Rep", (), {"rows": monkeypatch_rows[src]})()
+        O_decide = O.decide
+        O.decide = fake_decide
+        held = {"REQ-1": RequirementOracle(
+            req_uid="REQ-1", tp_uids=["TP-1", "TP-NOSTIM"], clause="c",
+            source="def decide(trace):\n    return (None, None, '')")}
+        got = O._population_verdicts_by_tp(
+            held, ("0", "1"), {}, {"TP-1": [{}]}, base="", transactional=False)
+    finally:
+        O.replay = O_replay
+        O.decide = O_decide
+    #: The testpoint with no stimulus is absent, not present-and-empty.
+    assert got == {"REQ-1": {"TP-1": {"0": True}}}, got
 
 
 def test_the_selected_set_is_what_gets_frozen():

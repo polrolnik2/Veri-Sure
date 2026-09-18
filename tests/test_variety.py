@@ -92,6 +92,50 @@ def test_blind_defaults_to_separation_and_the_weaker_predicate_is_opt_in():
         "blindness figures stay comparable")
 
 
+def test_a_separation_at_one_testpoint_does_not_close_the_other_one():
+    """`separates` is handed a Cell and reads two of its four fields.
+
+    It takes `left`/`right` and ignores `testpoint`/`port`, so a check that
+    tells two designs apart ANYWHERE scores as adjudicating EVERY cell of that
+    pair. `cells` states in its own docstring that it works at "port
+    granularity, not testpoint granularity, because that is the resolution
+    blindness is defined at" -- and `blind` then works at pair granularity,
+    which is coarser than either.
+
+    Measured on the first probe-bearing run: 151 checks, three designs, 3,530
+    cells, 14 separations in all -- blindness **0.0%**. At `(testpoint, pair)`
+    the same set and the same replays read **97.0%**, and the cell-authoring
+    leg went from no targets to targets.
+    """
+    pop = {
+        "A": {"TP-0": _rows(0, 1), "TP-1": _rows(0, 1)},
+        "B": {"TP-0": _rows(0, 0), "TP-1": _rows(0, 0)},
+    }
+    cs = V.cells(pop, ["busy"])
+    assert {c.testpoint for c in cs} == {"TP-0", "TP-1"}
+
+    #: ONE check, separating A from B at TP-0 and never replayed at TP-1.
+    at_tp0 = {"c1": {"TP-0": {"A": True, "B": False}}}
+    left = V.blind_at(cs, at_tp0)
+    assert {c.testpoint for c in left} == {"TP-1"}, left
+
+    #: The recorded predicate closes BOTH, which is the figure being corrected.
+    flat = V.blind(cs, {"c1": {"A": True, "B": False}})
+    assert flat == (), flat
+
+
+def test_an_absent_testpoint_separates_nothing_under_the_new_predicate():
+    """Same rule `separates` applies to an abstention: silence from a check
+    that was shown nothing says nothing about the design. A check with no
+    column for the cell's testpoint is not evidence about it."""
+    cell = V.Cell(testpoint="TP-9", port="busy", left="A", right="B")
+    assert not V.separates_at(cell, {})
+    assert not V.separates_at(cell, {"TP-0": {"A": True, "B": False}})
+    assert not V.separates_at(cell, {"TP-9": {"A": True}})
+    assert not V.separates_at(cell, {"TP-9": {"A": None, "B": False}})
+    assert V.separates_at(cell, {"TP-9": {"A": True, "B": False}})
+
+
 def test_targets_are_ranked_by_port_not_enumerated_by_cell():
     """Forty briefs for one blind port buys forty near-copies of one check,
     which is the failure mode this module exists to avoid."""

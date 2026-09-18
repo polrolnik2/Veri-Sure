@@ -131,6 +131,67 @@ def separates(cell: Cell, verdict: Mapping[str, bool | None]) -> bool:
     return left != right
 
 
+def separates_at(cell: Cell,
+                 verdict_by_testpoint: Mapping[str, Mapping[str, bool | None]],
+                 ) -> bool:
+    """`separates`, ASKED WHERE THE CELL IS -- which is the whole point of a cell.
+
+    **`separates` IS HANDED A CELL AND READS TWO OF ITS FOUR FIELDS.** It takes
+    `cell.left` and `cell.right` and ignores `cell.testpoint` and `cell.port`,
+    so a check that tells two designs apart ANYWHERE scores as adjudicating
+    EVERY cell of that pair. `cells` says in its own docstring that it works at
+    "port granularity, not testpoint granularity, because that is the
+    resolution blindness is defined at" -- and then blindness is computed at
+    pair granularity, which is coarser than either.
+
+    Measured on the first probe-bearing run, 151 checks over three designs:
+    **ONE check separating pair (0, 1) somewhere marked all 966 of that pair's
+    cells adjudicated, across 268 testpoints and 8 ports.** Blindness read
+    **0.0%** of 3,530 cells on 14 separations in total. At the resolution below
+    the same set and the same replays read **97.0%**.
+
+    So this is not a stricter predicate; it is the same predicate stopped from
+    generalising a verdict to testpoints the check was never run against.
+
+    **THE PORT IS STILL NOT CONSULTED, AND THAT IS A LIMIT, NOT AN OVERSIGHT.**
+    A replay yields one verdict per `(check, design, testpoint)`: `decide`
+    reads a whole trace and returns a single answer, so no attribution of that
+    answer to one of eight ports exists to read. Inventing one -- crediting the
+    ports a check's `observable` names -- would be the suite grading its own
+    reach, which is the circularity this module exists to avoid. The honest
+    resolution is `(testpoint, pair)`, and cells on different ports of one
+    testpoint stand or fall together.
+    """
+    per = verdict_by_testpoint.get(cell.testpoint) or {}
+    left, right = per.get(cell.left), per.get(cell.right)
+    if left is None or right is None:
+        return False
+    return left != right
+
+
+def blind_at(population_cells: Sequence[Cell],
+             verdicts_by_testpoint: Mapping[
+                 str, Mapping[str, Mapping[str, bool | None]]],
+             ) -> tuple[Cell, ...]:
+    """`blind`, at `(testpoint, pair)` resolution. See `separates_at`.
+
+    `verdicts_by_testpoint` is `check -> testpoint -> design -> verdict`, one
+    entry per replay actually performed. A check absent from a testpoint
+    separates nothing there, which is the same rule `separates` applies to an
+    abstention: silence from a check that was shown nothing says nothing.
+
+    **KEPT BESIDE `blind` RATHER THAN REPLACING IT**, for the reason
+    `objects_to_either` is kept: every blindness figure recorded on this branch
+    -- 20.8%, 50.0%, 40.4%, 99.8%, and "blindness solved" -- was computed by
+    `blind`, and silently changing what the name means would make the record
+    incomparable instead of correcting it. Report both; never quote one as the
+    other.
+    """
+    return tuple(
+        c for c in population_cells
+        if not any(separates_at(c, t) for t in verdicts_by_testpoint.values()))
+
+
 def objects_to_either(cell: Cell, verdict: Mapping[str, bool | None]) -> bool:
     """The RECORDED blindness predicate, kept so numbers stay comparable.
 
@@ -276,6 +337,61 @@ def brief(cell: Cell, *, requirement: str, activation: str,
         f"requirement does not constrain `{cell.port}` here, say so in "
         f"`reasoning` and write no check. A check invented to fill this gap is "
         f"worse than an honest report that the specification is silent."
+    )
+
+
+def every_blindness_figure_on_this_branch_was_measured_per_PAIR() -> str:
+    """The resolution defect, found by a cell leg that authored nothing.
+
+    A run configured with `cell_budget=12`, a population of three spec-derived
+    designs and 3,530 disagreement cells produced zero cell checks and zero
+    prompts. The leg was reached, the budget arrived and the targets came back
+    empty, because blindness read 0.0%.
+
+    Driver: `docs/evidence/e4c_blindness_resolution.py`. Zero model calls --
+    the probe run's own artifacts, its own three designs and its own first
+    drafts, replayed.
+    """
+    return (
+        "**`separates` IS HANDED A CELL AND READS TWO OF ITS FOUR FIELDS.** It "
+        "takes `cell.left` and `cell.right`; `cell.testpoint` and `cell.port` "
+        "reach it and are never consulted. So a check that tells two designs "
+        "apart ANYWHERE scores as adjudicating EVERY cell of that pair, and "
+        "`blind` -- which every recorded blindness figure on this branch goes "
+        "through -- works at PAIR granularity. `cells` says in its own "
+        "docstring that it works at 'port granularity, not testpoint "
+        "granularity, because that is the resolution blindness is defined "
+        "at'.\n\n"
+        "**MEASURED ON THE FIRST PROBE-BEARING RUN.** 151 first drafts, three "
+        "designs, 3,530 cells over 8 ports:\n\n"
+        "    pair     cells   testpoints   checks that separate it ANYWHERE\n"
+        "    (0,1)      966          268   1\n"
+        "    (0,2)     1568          394   7\n"
+        "    (1,2)      996          349   6\n\n"
+        "**ONE check separating (0,1) somewhere closed all 966 of that pair's "
+        "cells.** Fourteen separations in total closed all 3,530. Blindness: "
+        "**0.0%**. At `(testpoint, pair)` -- the resolution a replay actually "
+        "has -- the same set, the same designs and the same replays read "
+        "**97.0%**, over 388 testpoints and all eight ports.\n\n"
+        "**THE PORT IS STILL NOT CONSULTED, AND THAT IS A LIMIT RATHER THAN A "
+        "CHOICE.** `decide` reads a whole trace and returns one answer per "
+        "`(check, design, testpoint)`, so no attribution of that answer to one "
+        "of eight ports exists to read. Crediting the ports a check's "
+        "`observable` names would be the suite grading its own reach. Cells on "
+        "different ports of one testpoint stand or fall together.\n\n"
+        "**WHAT IT RETRACTS.** Every blindness number this branch recorded is "
+        "a per-pair number, including 'blindness solved' on the full-pipeline "
+        "run and the 20.8% that made `placement` the best triple on the board. "
+        "They are not wrong about what they measured; they measured a coarser "
+        "thing than their name says. `blind` is kept unchanged beside "
+        "`blind_at` for exactly the reason `objects_to_either` was kept: "
+        "silently redefining a name makes a record incomparable instead of "
+        "correcting it. Report both; never quote one as the other.\n\n"
+        "**AND IT EXPLAINS THE NULL THAT WAS ABOUT TO BE REPORTED.** The plan "
+        "pre-registers <=15% fully caught as closing the authoring-at-cells "
+        "line. This run would have reported zero -- not because authoring "
+        "failed, but because the instrument said there was nothing to author "
+        "at. A lever cannot be falsified by a run that never fired it."
     )
 
 
