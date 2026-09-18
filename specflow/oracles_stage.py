@@ -1807,6 +1807,9 @@ def run_oracle_stage(
     #: generation cannot reach the residual blindness and the honest output is
     #: the irreducible equivalence classes as a specification finding.
     cell_budget: int = 0,
+    #: EXTRA FIRST DRAFTS per requirement, kept in the corpus and never held.
+    #: See the fold that uses it: a coverage lever, not a variety one.
+    extra_drafts: int = 0,
     #: A `population.Ruleset` applied to the frozen set, so a run FREEZES THE
     #: SELECTED SET rather than leaving selection an afterthought nobody runs.
     #: `population` was imported by `scoring` alone -- no pipeline module
@@ -1971,6 +1974,41 @@ def run_oracle_stage(
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
 
+    #: **FILL THE POOL, THEN SELECT.** A second independent draft per
+    #: requirement, kept in the CORPUS and never in `held`, so nothing about
+    #: the first draft's standing changes and `_rescue_from_corpus` gains
+    #: something to choose from when the first is refuted or never reached.
+    #:
+    #: Resampling one prompt returns 69% IDENTICAL bodies among pairs where
+    #: both are sound, which is why this is not a variety lever and is not
+    #: reported as one -- `effective_size` and `placement` are what say whether
+    #: a set gained anything. It is a COVERAGE lever, and the two are
+    #: different jobs: "nearly all the span left on the table is requirements
+    #: with no body at all, which is an AUTHORING problem, not a selection
+    #: one." The 69% figure is also measured among SOUND pairs, and the bodies
+    #: this is for are the ones that were not sound.
+    #:
+    #: Off at 0, because it costs one call per requirement and the rate it
+    #: converts at is not yet known on this branch.
+    alt_bodies: list[RequirementOracle] = []
+    for draft in range(max(0, int(extra_drafts))):
+        more, _r = run_oracle_gen(
+            requirements=requirements, contract_json=contract_json,
+            contract=contract, testplan=testplan, port=port,
+            normalized=normalized, conforming_source=witness,
+            stimulus_by_tp=stimulus_by_tp, base=base,
+            max_repairs=max_repairs, fanout=fanout,
+            only=only, feedback=feedback, standing=standing,
+            #: A DIFFERENT STAGE NAME, or `run_stage` keys its prompt/response
+            #: record by stage and each draft silently overwrites the last
+            #: one's evidence -- the defect `label` was added to fix.
+            label=f"{label}_alt{draft}",
+        )
+        alt_bodies.extend(more)
+    if alt_bodies:
+        logger.info("oracles: %d alternate draft(s) retained for selection",
+                    len(alt_bodies))
+
     # AUTHORING AT DISAGREEMENT CELLS -- the generation-stage variety lever,
     # in the same place as the per-requirement pass because it is the same
     # author and the same gate with a different ANCHOR.
@@ -2046,6 +2084,11 @@ def run_oracle_stage(
     #: it produced nothing. `arm` says where it came from.
     for _extra in cell_bodies:
         _retain(corpus, _extra, arm="cell", round_=0)
+    #: Alternate drafts, same rule: a body the stage paid for belongs in the
+    #: pool whether or not it was held. `_retain` de-duplicates by CONTENT, so
+    #: a resample identical to the first draft costs one entry, not two.
+    for _alt in alt_bodies:
+        _retain(corpus, _alt, arm="resample", round_=0)
 
     rejected: dict[str, str] = {}
     repairs: dict[str, list[str]] = {}

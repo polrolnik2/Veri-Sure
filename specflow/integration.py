@@ -484,6 +484,10 @@ def build_artifacts(
     #: replay scope 47 of 96 frozen checks are refuted. Each attempt costs
     #: roughly one call per still-rejected check.
     oracle_repair_attempts: int = 2,
+    #: Extra first drafts per requirement, kept in the corpus for the rescue to
+    #: choose from. One call per requirement per draft. See
+    #: `run_oracle_stage`'s `extra_drafts`.
+    oracle_extra_drafts: int = 0,
     #: Strengthening rounds after the debug loop converges: mutate the shipped
     #: model and re-ask any oracle a mutant got past. 0 measures and acts on
     #: nothing, which is how it ships -- the rate has to be known first.
@@ -972,6 +976,7 @@ def build_artifacts(
             want_variants=variants, want_correspondence=correspondence,
             demote_faithfulness=demote_faithfulness,
             repair_attempts=oracle_repair_attempts,
+            extra_drafts=oracle_extra_drafts,
             population=population_sources,
             population_size=population_size,
             cell_budget=cell_budget,

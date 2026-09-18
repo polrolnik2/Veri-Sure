@@ -34,6 +34,7 @@ OUT = Path(sys.argv[2])
 POP = int(sys.argv[3]) if len(sys.argv) > 3 else 7
 CELLS = int(sys.argv[4]) if len(sys.argv) > 4 else 12
 ATTEMPTS = int(sys.argv[5]) if len(sys.argv) > 5 else 3
+DRAFTS = int(sys.argv[6]) if len(sys.argv) > 6 else 0
 
 src = SRC / "specflow"
 out = OUT / "specflow"
@@ -78,7 +79,8 @@ print(f"{len(requirements)} requirement(s), {len(testplan)} testpoint(s), "
       f"{len(normalized)} normalized form(s), {len(probes)} probe(s)")
 print(f"carried over: witness {(out / 'witness.py').is_file()}, "
       f"population {have} of {POP} requested")
-print(f"population {POP}, cells {CELLS}, repair attempts {ATTEMPTS}\n", flush=True)
+print(f"population {POP}, cells {CELLS}, repair attempts {ATTEMPTS}, "
+      f"extra drafts {DRAFTS}\n", flush=True)
 
 port = make_port("api", OUT / "agent_io", settings=PortSettings())
 oracle_set = run_oracle_stage(
@@ -91,6 +93,7 @@ oracle_set = run_oracle_stage(
     demote_faithfulness=True,
     repair_attempts=ATTEMPTS,
     population=(), population_size=POP, cell_budget=CELLS, selection=None,
+    extra_drafts=DRAFTS,
     #: **NOT `rewrite=True`, WHICH WOULD UNLINK THE WITNESS.** `rewrite`
     #: deletes `witness.py` along with the artifact, so it would regenerate the
     #: very thing this driver copies in to hold fixed -- and a freshly drawn

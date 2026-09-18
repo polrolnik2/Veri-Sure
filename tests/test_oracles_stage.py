@@ -2155,6 +2155,42 @@ def test_the_over_strict_message_names_WHERE_it_fired_and_no_design():
     assert O._refuted_everywhere(7, []).startswith("over-strict:")
 
 
+def test_an_extra_draft_goes_to_the_CORPUS_and_never_to_held(tmp_path,
+                                                             monkeypatch):
+    """Fill the pool, then select.
+
+    A second draft must not disturb the first one's standing -- it is there so
+    `_rescue_from_corpus` has something to choose from when the first is
+    refuted or never reached. Holding it instead would silently replace a check
+    that passed with one nothing has verified.
+
+    It is a COVERAGE lever and is not reported as a variety one: resampling one
+    prompt returns 69% identical bodies among pairs where both are sound, and
+    `effective_size` is what says whether a set gained anything.
+    """
+    monkeypatch.setattr(O, "_witness", lambda **_kw: (WITNESS, O.WITNESS))
+    ALT = GOOD.replace("y did not follow a", "y differs from a")
+    port = _Port([_reply(GOOD), _reply(ALT)])
+    got = O.run_oracle_stage(
+        requirements=REQS, contract_json=json.dumps(CONTRACT),
+        contract=CONTRACT, testplan=TESTPLAN, stimulus_by_tp=STIM,
+        port=port, workdir=tmp_path, base="step", run_dir=tmp_path,
+        fanout=False, max_repairs=0, repair_attempts=0, extra_drafts=1)
+
+    bodies = got.corpus.get("REQ-0001") or []
+    arms = sorted(b.arm for b in bodies)
+    assert "resample" in arms, arms
+    #: THE FIRST DRAFT STILL HOLDS. The alternate is a candidate, not a
+    #: replacement.
+    assert len(got.trusted) == 1
+    assert got.trusted[0].source == GOOD, (
+        "the alternate draft displaced the verified body")
+    #: Each draft gets its own stage name, or `run_stage` keys its record by
+    #: stage and the second silently overwrites the first one's evidence.
+    labels = [s for s in port.stages if "alt" in s]
+    assert labels, port.stages
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the
