@@ -40,13 +40,20 @@ OUT = Path(sys.argv[1])
 #: more of the design space in the blindness denominator. Nine buys nothing
 #: over seven here and costs 69% more replay.
 POP = int(sys.argv[2]) if len(sys.argv) > 2 else 7
-CELLS = int(sys.argv[3]) if len(sys.argv) > 3 else 12
+#: **FORTY, NOT TWELVE.** A cell check is taken when it separates strictly
+#: more than the body it would replace, so the budget is how many requirements
+#: get the chance. At 12 the leg authored 12 and adopted 6; at 40 it authored
+#: 40 and adopted 5 more, and the run's blindness went 49.1% -> 20.4%.
+CELLS = int(sys.argv[3]) if len(sys.argv) > 3 else 40
 #: SET-LEVEL repair attempts. The default is 2 and nothing ever passed it --
 #: `build_artifacts` did not forward `repair_attempts` at all until this run.
 #: Over-strictness is what needs the extra round: at the wide scope 47 of 96
 #: frozen checks are refuted by the whole population, and each attempt costs
 #: about one call per still-rejected check.
 ATTEMPTS = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+#: ONE EXTRA FIRST DRAFT PER REQUIREMENT, kept in the corpus and never held --
+#: the pool `_choose_bodies` selects from. One call per requirement.
+DRAFTS = int(sys.argv[5]) if len(sys.argv) > 5 else 1
 
 spec = (TASK / "description.txt").read_text(encoding="utf-8")
 #: **A REAL CONTRACT, AND THE FIRST RUNS DID NOT USE ONE.** They reused
@@ -69,7 +76,7 @@ CONTROL = Path("benchmarks/controls/i2c_master_bit_ctrl/ref_model.py")
 control_source = CONTROL.read_text() if CONTROL.is_file() else None
 
 print(f"spec {len(spec)} bytes; population {POP}; cell budget {CELLS}; "
-      f"repair attempts {ATTEMPTS}; "
+      f"repair attempts {ATTEMPTS}; extra drafts {DRAFTS}; "
       f"control {'loaded for the audit column' if control_source else 'ABSENT'}")
 print(f"out {OUT}\n", flush=True)
 
@@ -88,6 +95,7 @@ built = build_artifacts(
     population_size=POP,
     cell_budget=CELLS,
     oracle_repair_attempts=ATTEMPTS,
+    oracle_extra_drafts=DRAFTS,
     audit_control=control_source,
     #: OFF. Correspondence is priced at ~half the stage and its label does not
     #: predict convicting the control; this run is not buying it.
