@@ -1364,6 +1364,132 @@ def _inert_where_it_should_decide(held: dict, by_tp: dict, contract: dict,
     return out
 
 
+def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
+                   contract: dict, stimulus_by_tp: dict, base: str,
+                   transactional: bool,
+                   max_dissent_weighted: float = 2.0) -> dict:
+    """Pick WHICH body of each requirement to freeze. Never drop a requirement.
+
+    **SELECTION THAT COSTS NO SPAN, WHICH IS THE WHOLE POINT.** `select` drops
+    CHECKS, and a requirement whose only check it drops loses its span --
+    `placement` at its recorded threshold takes span to 69.0%. But `_retain`
+    keeps every superseded body, so the same golden-free scores can choose
+    BETWEEN a requirement's bodies instead. Choosing between alternatives costs
+    nothing; discarding costs a requirement. No spec-derived design is
+    guaranteed correct, so none of them may cost a requirement its check -- but
+    they may say which of several checks to prefer.
+
+    TWO RECORDED LEGS, IN THIS ORDER.
+
+      dissent_weighted   `count` with each design weighted by 1 - its own
+                         dissent rate, "so a conviction of the population's
+                         outlier costs less than one of its centre". A GUARD,
+                         not the score: bodies inside it are preferred, and a
+                         requirement whose bodies are all outside it still gets
+                         one.
+      marginal cells     of the bodies that pass the guard, the one closing the
+                         most cells NOTHING ALREADY CHOSEN closes. `placement`
+                         is a per-check score and two checks with the same
+                         score can close the same cells; blindness is a SET
+                         quantity, so the greedy marginal gain is the quantity
+                         the figure is actually over. `placement` breaks ties.
+
+    Measured on one run's 510 bodies over 130 requirements, against its own
+    seven designs, choosing on span and blindness alone -- both golden-free:
+
+        the run's frozen set                 span 86.9%   blind 21.4%
+        best placement per requirement       span 97.7%   blind 11.4%
+        dissent_weighted <= 2.0, marginal    span 97.7%   blind  4.9%
+
+    **ITERATION ORDER IS SORTED EVERYWHERE, AND THAT IS NOT TIDINESS.** Ties
+    are broken by whichever body is seen first, and iterating a set breaks them
+    on string hash order, which Python randomises per process. The same
+    configuration gave 14.7% and 13.8% blindness on two runs before this.
+    """
+    if len(population) < 2 or not corpus:
+        return {}
+    outputs = [str(p.get("name")) for p in (contract.get("io") or [])
+               if p.get("dir") == "output" and p.get("name")]
+    rows_by_design = _population_rows(
+        population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    if len(rows_by_design) < 2 or not outputs:
+        return {}
+    cells = variety.cells(rows_by_design, outputs)
+    if not cells:
+        return {}
+
+    flat: dict[str, RequirementOracle] = {}
+    owner: dict[str, str] = {}
+    for uid in sorted(corpus):
+        standing = held.get(uid)
+        for i, body in enumerate(corpus[uid] or []):
+            key = f"{uid}#{i}"
+            flat[key] = RequirementOracle(
+                req_uid=key,
+                tp_uids=list(standing.tp_uids) if standing else [],
+                clause=standing.clause if standing else "",
+                source=body.source)
+            owner[key] = uid
+    if not flat:
+        return {}
+
+    verdicts, by_tp, objections = _population_tables(
+        flat, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    from . import population as _pop
+
+    shape = _pop.characterise(rows_by_design, outputs)
+    closes = {k: {c for c in cells if variety.separates_at(c, by_tp.get(k) or {})}
+              for k in flat}
+    tells = {k: _pop.tells({d: set(v) for d, v in (objections.get(k) or {}).items()},
+                           shape) for k in flat}
+    alive = sorted(k for k in flat
+                   if any(v is not None for v in (verdicts.get(k) or {}).values()))
+    if not alive:
+        return {}
+
+    #: INDEX ORDER, NOT LEXICAL. `sorted` puts `#10` between `#1` and `#2`, so
+    #: a tie broken by "the first one" would depend on how many bodies the
+    #: requirement happens to have. `flat` is built in index order.
+    live = set(alive)
+    per_req: dict[str, list[str]] = {}
+    for key in flat:
+        if key in live:
+            per_req.setdefault(owner[key], []).append(key)
+    #: Requirements whose best body could add the most go first, so the greedy
+    #: pass spends its early picks where they are worth most. `u` breaks ties.
+    order = sorted(per_req,
+                   key=lambda u: (-max(len(closes[k]) for k in per_req[u]), u))
+    covered: set = set()
+    out: dict[str, RequirementOracle] = {}
+    for uid in order:
+        inside = [k for k in per_req[uid]
+                  if tells[k].dissent_weighted <= max_dissent_weighted]
+        pool = inside or per_req[uid]
+        #: A TIE IS NOT A REASON TO REPLACE A CHECK THAT ALREADY STOOD. The
+        #: standing body wins an exact tie; otherwise `max` returns the first
+        #: maximal element of an index-ordered list, which is the oldest draft.
+        #: Measured before the tie-break was pinned: two bodies of REQ-0098
+        #: scored identically on every golden-free tell -- same verdicts, same
+        #: separation, both closing nothing -- and one of them convicted the
+        #: known-good control while the other did not.
+        standing_src = held[uid].source if uid in held else None
+        pick = max(pool, key=lambda k: (len(closes[k] - covered),
+                                        tells[k].placement,
+                                        flat[k].source == standing_src))
+        covered |= closes[pick]
+        standing = held.get(uid)
+        if standing is not None and standing.source == flat[pick].source:
+            continue
+        out[uid] = RequirementOracle(
+            req_uid=uid,
+            tp_uids=list(standing.tp_uids) if standing else [],
+            clause=standing.clause if standing else "",
+            source=flat[pick].source)
+    return out
+
+
 def _adopt_cell_bodies(bodies: list, *, held: dict, population: Sequence[str],
                        contract: dict, stimulus_by_tp: dict, cells,
                        base: str, transactional: bool) -> list[str]:
@@ -1555,18 +1681,29 @@ def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
             transactional=transactional)
         refuted = set(variety.refuted_by_the_population(pop_v))
 
+    #: **PREFERRED, NOT REQUIRED -- AND THAT DISTINCTION IS THE WHOLE OF THE
+    #: POPULATION'S AUTHORITY.** A body the population refutes is taken when it
+    #: is the only one that decides, because no spec-derived design is
+    #: guaranteed correct and none of them may cost a requirement its check.
+    #: Choosing BETWEEN bodies on their say-so is different: nothing is lost,
+    #: so a golden-free preference is free. Discarding on it is not.
     out: dict[str, RequirementOracle] = {}
+    fallback: dict[str, RequirementOracle] = {}
     for key, oracle in flat.items():
         uid = owner[key]
         if uid in out:
             continue
-        if key in refuted:
-            continue
         if not any(v is not None for v in (live.get(key) or {}).values()):
             continue
-        out[uid] = RequirementOracle(
+        body = RequirementOracle(
             req_uid=uid, tp_uids=list(oracle.tp_uids),
             clause=oracle.clause, source=oracle.source)
+        if key in refuted:
+            fallback.setdefault(uid, body)
+            continue
+        out[uid] = body
+    for uid, body in fallback.items():
+        out.setdefault(uid, body)
     return out
 
 
@@ -1998,6 +2135,12 @@ def run_oracle_stage(
     #: EXTRA FIRST DRAFTS per requirement, kept in the corpus and never held.
     #: See the fold that uses it: a coverage lever, not a variety one.
     extra_drafts: int = 0,
+    #: The `dissent_weighted` guard `_choose_bodies` prefers bodies inside --
+    #: `count` with each design weighted by 1 - its own dissent rate, so
+    #: convicting the population's outlier costs less than convicting its
+    #: centre. A GUARD and not a rejection: a requirement whose bodies are all
+    #: outside it still freezes one.
+    max_dissent_weighted: float = 2.0,
     #: A `population.Ruleset` applied to the frozen set, so a run FREEZES THE
     #: SELECTED SET rather than leaving selection an afterthought nobody runs.
     #: `population` was imported by `scoring` alone -- no pipeline module
@@ -2673,13 +2816,44 @@ def run_oracle_stage(
             pop_verdicts, pop_tp, pop_where = _population_tables(
                 held, population, contract, stimulus_by_tp,
                 base=base, transactional=transactional)
+            #: **ADVISORY. NO SPEC-DERIVED DESIGN IS GUARANTEED CORRECT, SO
+            #: NONE OF THEM MAY DISCARD A CHECK -- AND SEVEN CANNOT EITHER.**
+            #:
+            #: This rejected, and the argument was: the specification admits at
+            #: least seven equivalence classes, so a check convicting all of
+            #: them has convicted the class the correct design is in. That
+            #: holds only if the population SPANS the admissible classes. It is
+            #: N readings of one specification, drawn from one prompt by one
+            #: author, and their blind spots are correlated by construction --
+            #: so "every reading convicts it" is equally consistent with "every
+            #: reading shares a bug and the check is right".
+            #:
+            #: It is the pathology the witness gate was DELETED for, at a
+            #: larger N: "it has no authority to say the oracle is wrong...
+            #: telling an author 'an independent implementation fails your
+            #: check' does not make the check more correct, it makes the check
+            #: agree with the witness" -- h-i2c, over-strictness 27 -> 15 and
+            #: convictions 2 -> 16. Seven witnesses change the confidence, not
+            #: the kind of authority.
+            #:
+            #: MEASURED, ON THE ONLY SUBSET THAT CAN SETTLE IT. Of the checks
+            #: this rejected on the probe run, the known-good control could
+            #: judge three: it SPARED TWO and convicted one. On the next run it
+            #: could judge NONE of the eighteen, which cost eighteen
+            #: requirements their check on no evidence at all.
+            #:
+            #: It still earns a repair round -- the author is told, with the
+            #: testpoints -- and declining is a real answer, exactly as it is
+            #: for gate 1 and for the inert note below. What blocks is what
+            #: blocked before any design existed: `well_formed`, a replay
+            #: break, and a check that cannot fail.
             for uid in variety.refuted_by_the_population(pop_verdicts):
-                if uid in rejected:
+                if uid in rejected or uid in quotable:
                     continue
                 why = _refuted_everywhere(
                     len(population),
                     _where_it_fired(pop_where.get(uid) or {}, testplan))
-                rejected[uid] = quotable[uid] = why
+                quotable[uid] = why
                 repairs.setdefault(uid, []).append(why)
             #: **THE OTHER SIGN OF THE SAME DEFECT.** The leg above catches a
             #: check that convicts EVERY reading; this catches one that
@@ -3105,6 +3279,24 @@ def run_oracle_stage(
             "oracles: %d requirement(s) rescued from their own corpus -- a "
             "body that decides and that the population does not refute: %s",
             len(rescued), ", ".join(sorted(rescued)[:8]))
+
+    # WHICH BODY OF EACH REQUIREMENT TO FREEZE -- see `_choose_bodies`. The
+    # corpus is the pool the plan says selection needs ("fill the pool, then
+    # select"), and until now nothing chose from it except the rescue, and only
+    # for requirements that had already been lost.
+    chosen_bodies = _choose_bodies(
+        corpus=corpus, held=held, population=population, contract=contract,
+        stimulus_by_tp=stimulus_by_tp, base=base, transactional=transactional,
+        max_dissent_weighted=max_dissent_weighted)
+    for uid, body in chosen_bodies.items():
+        if uid in rejected or uid in abandoned:
+            continue
+        held[uid] = body
+    if chosen_bodies:
+        logger.info(
+            "oracles: %d requirement(s) freeze a different body of their own "
+            "corpus, chosen by marginal separation under "
+            "dissent_weighted <= %s", len(chosen_bodies), max_dissent_weighted)
 
     trusted = [o for uid, o in held.items()
                if uid not in rejected and uid not in abandoned]

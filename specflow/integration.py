@@ -1169,6 +1169,7 @@ def build_artifacts(
                  "clause": o.clause, "source": o.source}
                 for o in (oracle_set.trusted if oracle_set else [])],
             normalized=list((normalized_by_uid or {}).values()),
+            requirements=list(reqs or []),
             stimulus_by_tp=stim_by_tp or {},
             contract=contract,
             population=list(_population_on_disk(run_dir) or population_sources),

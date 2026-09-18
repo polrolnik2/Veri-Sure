@@ -2034,11 +2034,19 @@ def test_the_rescue_replaces_a_BODY_and_never_overturns_a_VERDICT(monkeypatch):
         assert rescue(terminal) == {}, terminal
 
 
-def test_a_rescued_body_must_still_survive_the_population(monkeypatch):
-    """The rescue is an ADMISSION, not an amnesty: a candidate the whole
-    spec-derived population contradicts is over-strict whichever draft it came
-    from, and a candidate that decides nothing is vacuous whichever draft it
-    came from."""
+def test_the_population_is_a_PREFERENCE_in_the_rescue_and_not_a_VETO(monkeypatch):
+    """No spec-derived design is guaranteed correct, so none of them may cost a
+    requirement its check -- and seven cannot either.
+
+    Choosing BETWEEN bodies on their say-so is a different act from discarding
+    one: nothing is lost, so a golden-free preference is free. A refuted body
+    is therefore taken when it is the only one that decides, and passed over
+    when another candidate decides too.
+
+    Deciding nothing is still disqualifying, and that is not the population's
+    judgement -- a check that returns no verdict anywhere is vacuous whatever
+    any design does.
+    """
     from specflow import oracles_stage as O
     from specflow.refmodel.oracle_gen import RequirementOracle
 
@@ -2056,9 +2064,16 @@ def test_a_rescued_body_must_still_survive_the_population(monkeypatch):
             witness="w", population=("a", "b"), contract={},
             stimulus_by_tp={}, base="", transactional=False)
 
+    #: THE ONLY CANDIDATE THAT DECIDES, AND THE POPULATION REFUTES IT. Taken:
+    #: losing the requirement on seven same-author readings is the authority
+    #: the witness gate was deleted for, at a larger N.
     _rescue_env(monkeypatch, live={"REQ-1#0"}, refuted={"REQ-1#0"})
-    assert rescue() == {}, "a refuted candidate is not a rescue"
+    got = rescue()
+    assert set(got) == {"REQ-1"}, got
+    assert got["REQ-1"].source == "older"
 
+    #: A candidate that decides nothing is still not a rescue, and that is not
+    #: the population's judgement about it.
     _rescue_env(monkeypatch, live=set(), refuted=set())
     assert rescue() == {}, "a candidate that decides nothing is not a rescue"
 
@@ -2340,6 +2355,139 @@ def test_the_inert_note_asks_for_a_STRONGER_assertion_not_a_wider_window():
     assert issues[0].severity == "warning", "advisory, never blocking"
 
 
+def test_choosing_a_BODY_costs_no_span_where_dropping_a_CHECK_does(monkeypatch):
+    """`select` drops CHECKS, and a requirement whose only check it drops loses
+    its span -- `placement` at its recorded threshold takes span to 69.0%.
+
+    `_retain` keeps every superseded body, so the same golden-free scores can
+    choose BETWEEN a requirement's bodies instead. No spec-derived design is
+    guaranteed correct, so none of them may cost a requirement its check -- but
+    they may say which of several checks to prefer.
+
+    Measured on one run's 510 bodies over 130 requirements, choosing on span
+    and blindness alone: the frozen set 86.9% span / 21.4% blind, best
+    placement per requirement 97.7% / 11.4%, this rule 97.7% / **4.9%**.
+    """
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    cells = (V.Cell(testpoint="TP-1", port="p", left="0", right="1"),
+             V.Cell(testpoint="TP-2", port="p", left="0", right="1"))
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: cells)
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+
+    #: #0 separates nothing; #1 separates TP-1 and sits inside the guard.
+    tables = {"REQ-1#0": {"TP-1": {"0": True, "1": True}},
+              "REQ-1#1": {"TP-1": {"0": True, "1": False}}}
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": True} for k2 in flat},
+        {k2: tables.get(k2, {}) for k2 in flat}, {k2: {} for k2 in flat}))
+    monkeypatch.setattr(P, "tells", lambda *a, **k: type(
+        "T", (), {"dissent_weighted": 0.0, "placement": 0.0})())
+
+    held = {"REQ-1": O.RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                                         clause="c", source="zero")}
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="zero",
+                                     arm="generate", round_=0),
+                        O.CorpusBody(req_uid="REQ-1", source="one",
+                                     arm="resample", round_=0)]}
+    got = O._choose_bodies(
+        corpus=corpus, held=held, population=("a", "b"), contract={
+            "io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False)
+    assert set(got) == {"REQ-1"}, got
+    assert got["REQ-1"].source == "one", "the separating body was not chosen"
+    #: It is the REQUIREMENT's uid on the way out, never the candidate key the
+    #: scoring pass used.
+    assert got["REQ-1"].req_uid == "REQ-1"
+
+
+def test_the_dissent_guard_is_a_PREFERENCE_and_never_loses_a_requirement(
+        monkeypatch):
+    """A requirement whose bodies are ALL outside the guard still freezes one.
+    Convicting the population's centre is a reason to prefer another body, not
+    a reason to have none -- seven same-author readings may not contain the
+    correct design, and on one run they demonstrably did not."""
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: (
+        V.Cell(testpoint="TP-1", port="p", left="0", right="1"),))
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": True} for k2 in flat},
+        {k2: {"TP-1": {"0": True, "1": False}} for k2 in flat},
+        {k2: {} for k2 in flat}))
+    #: EVERY body is far outside the guard.
+    monkeypatch.setattr(P, "tells", lambda *a, **k: type(
+        "T", (), {"dissent_weighted": 99.0, "placement": 0.0})())
+
+    held = {"REQ-1": O.RequirementOracle(req_uid="REQ-1", tp_uids=[],
+                                         clause="c", source="old")}
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="new",
+                                     arm="generate", round_=0)]}
+    got = O._choose_bodies(
+        corpus=corpus, held=held, population=("a", "b"),
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False,
+        max_dissent_weighted=2.0)
+    assert set(got) == {"REQ-1"}, "the requirement lost its check to the guard"
+    assert got["REQ-1"].source == "new"
+
+
+def test_a_tie_between_two_bodies_breaks_the_SAME_WAY_EVERY_RUN(monkeypatch):
+    """Ties are broken by whichever body is seen first, and iterating a SET
+    breaks them on string hash order -- which Python randomises per process.
+
+    Measured before this: the same configuration on the same artifact gave
+    14.7% blindness with audit 0 of 22 on one run and 13.8% with audit 1 of 21
+    on the next. Nothing had changed but the process. A selection rule that
+    does not hold still cannot be reported, which is the same property the
+    witness and the population are held on disk for.
+    """
+    import inspect
+
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: (
+        V.Cell(testpoint="TP-1", port="p", left="0", right="1"),))
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+    #: INDISTINGUISHABLE bodies: same verdicts, same separation, same tells.
+    #: Exactly the case that decided REQ-0098 on a real run, where one of two
+    #: identical-scoring bodies convicted the known-good control and the other
+    #: did not.
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": True} for k2 in flat},
+        {k2: {"TP-1": {"0": True, "1": True}} for k2 in flat},
+        {k2: {} for k2 in flat}))
+    monkeypatch.setattr(P, "tells", lambda *a, **k: type(
+        "T", (), {"dissent_weighted": 0.0, "placement": 0.0})())
+
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source=f"body{i}",
+                                     arm="generate", round_=0)
+                        for i in range(4)]}
+    picks = {O._choose_bodies(
+        corpus=corpus, held={}, population=("a", "b"),
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False)["REQ-1"].source
+        for _ in range(8)}
+    assert picks == {"body0"}, picks
+
+    #: And the source says so, because a single process cannot show the
+    #: failure this pins -- hash randomisation differs BETWEEN processes.
+    src = inspect.getsource(O._choose_bodies)
+    assert "alive = sorted(" in src
+    assert "for uid in sorted(corpus)" in src
+    assert "order = sorted(" in src
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the
@@ -2353,10 +2501,16 @@ def test_the_population_leg_is_off_below_two_designs():
     src = Path(O.__file__).read_text()
     assert re.search(r"if len\(population\) >= 2:", src), (
         "the population leg lost its minimum-size guard")
-    body = src[src.index("if len(population) >= 2:"):][:900]
+    body = src[src.index("if len(population) >= 2:"):][:4000]
     assert "variety.refuted_by_the_population" in body
-    assert "rejected[uid] = quotable[uid] = why" in body, (
-        "the refutation no longer rejects anything")
+    #: **AND IT DOES NOT REJECT.** No spec-derived design is guaranteed
+    #: correct, so none of them may discard a check and seven cannot either --
+    #: the pathology the witness gate was deleted for, at a larger N. It earns
+    #: a repair round; `rejected` is for what this stage can establish
+    #: mechanically without believing any implementation.
+    assert "quotable[uid] = why" in body, "the refutation tells nobody"
+    assert "rejected[uid] = quotable[uid] = why" not in body, (
+        "the population discards a check again")
 
 
 def test_the_population_reaches_the_stage_from_the_pipeline():

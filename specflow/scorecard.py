@@ -62,6 +62,7 @@ class Scorecard:
 
     requirements_minted: int = 0
     requirements_observable: int = 0
+    requirements_behavioural: int = 0
     trusted: int = 0
     span: float | None = None
 
@@ -128,6 +129,7 @@ def _verdicts(oracles: dict, rows: dict, absent: tuple[str, ...]) -> dict:
 
 def score(*, oracles: list[dict], normalized: list[dict] | dict,
           stimulus_by_tp: dict, contract: dict, population: list[str],
+          requirements: list[dict] | None = None,
           audit_control: str | None = None,
           transactional: bool = True) -> Scorecard:
     """The triple, from artifacts a completed run wrote. No model calls."""
@@ -136,7 +138,34 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
     minted = len(forms)
     observable = {str(f.get("req_uid")) for f in forms
                   if (f.get("observable") or [])}
+    #: **THE DENOMINATOR IS THE BEHAVIOURAL REQUIREMENTS.** S1 classifies each
+    #: authorial unit it mints, and only one of the three kinds is a claim
+    #: about behaviour a check could ever decide. On this module's own run:
+    #: 120 behavioural, 19 scaffolding, 9 interface, and 119 of the 120
+    #: behavioural ones carry an observable port while all but one of the
+    #: others do not.
+    #:
+    #: Scaffolding is a heading or a list marker -- normalize returns
+    #: `observable: []` for it with "This span is scaffolding rather than a
+    #: standalone requirement" -- and an interface unit states what ports the
+    #: module declares, which the contract already fixes. A suite is not less
+    #: complete for failing to check either, and dividing by them reports the
+    #: specification's typography as a verification gap.
+    #:
+    #: `observable != []` is kept and reported beside it: it is normalize's own
+    #: evidence rather than a classifier's label, and where the two disagree a
+    #: reader can see it.
+    behavioural = {str(r.get("uid")) for r in (requirements or [])
+                   if r.get("unit_kind") == "behavioural"}
+    denominator = behavioural or observable
     notes: list[str] = []
+    if not behavioural and requirements:
+        notes.append("no requirement is classified `behavioural`, so span "
+                     "falls back to the ones stating an observable obligation")
+    elif not requirements:
+        notes.append("no requirements were supplied, so span falls back to the "
+                     "forms stating an observable obligation rather than to "
+                     "the behavioural ones")
     if minted and not observable:
         notes.append("no requirement states an observable obligation, so span "
                      "has no denominator and is reported as absent")
@@ -149,7 +178,7 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
     #: numerator either -- the denominator's rule has to apply to both ends or
     #: it is not a rate. On the probe run this removes nothing: all 16 such
     #: requirements were abandoned.
-    counted = {u for u in held if u in observable}
+    counted = {u for u in held if u in denominator}
 
     base = choose_base(contract)
     outputs = [str(p.get("name")) for p in (contract.get("io") or [])
@@ -214,8 +243,9 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
     return Scorecard(
         requirements_minted=minted,
         requirements_observable=len(observable),
+        requirements_behavioural=len(behavioural),
         trusted=len(counted),
-        span=(len(counted) / len(observable)) if observable else None,
+        span=(len(counted) / len(denominator)) if denominator else None,
         cells=len(cells),
         blind=len(blind),
         blindness=(len(blind) / len(cells)) if cells else None,
@@ -243,10 +273,10 @@ def render(card: Scorecard) -> str:
         return "n/a" if x is None else f"{100 * x:.1f}%"
 
     lines = [
-        f"SPAN       {card.trusted}/{card.requirements_observable} observable "
-        f"= {pct(card.span)}   ({card.requirements_minted} minted, "
-        f"{card.requirements_minted - card.requirements_observable} state no "
-        f"observable obligation)",
+        f"SPAN       {card.trusted}/"
+        f"{card.requirements_behavioural or card.requirements_observable} "
+        f"behavioural = {pct(card.span)}   ({card.requirements_minted} minted, "
+        f"{card.requirements_observable} state an observable obligation)",
         f"BLINDNESS  {card.blind}/{card.cells} cells = {pct(card.blindness)}   "
         f"(population {card.population}, effective_size {card.effective_size})",
         f"AUDIT      {card.control_convicted_by}/{card.control_judges} "

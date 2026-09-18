@@ -22,6 +22,57 @@ def _check(uid: str, source: str = "def decide(trace):\n    return (True, None, 
     return {"req_uid": uid, "tp_uids": ["TP-1"], "clause": "c", "source": source}
 
 
+def _req(uid, kind="behavioural"):
+    return {"uid": uid, "unit_kind": kind}
+
+
+def test_span_is_over_the_BEHAVIOURAL_requirements():
+    """S1 classifies each authorial unit it mints and only one of the three
+    kinds is a claim about behaviour a check could decide.
+
+    Measured on this module's own run: 120 behavioural, 19 scaffolding, 9
+    interface. Scaffolding is a heading or a list marker; an interface unit
+    states what ports the module declares, which the contract already fixes. A
+    suite is not less complete for failing to check either.
+    """
+    card = S.score(
+        oracles=[_check("R1")],
+        normalized=[_form("R1", ["busy"]), _form("R2", ["al"]),
+                    _form("R3", [])],
+        requirements=[_req("R1"), _req("R2", "interface"),
+                      _req("R3", "scaffolding")],
+        stimulus_by_tp={}, contract={"io": []}, population=[])
+    assert card.requirements_behavioural == 1
+    assert card.requirements_minted == 3
+    #: Reported beside it, because it is normalize's own evidence rather than a
+    #: classifier's label and a reader has to be able to see them disagree.
+    assert card.requirements_observable == 2
+    assert card.trusted == 1 and card.span == 1.0, card
+
+    #: A check written for a non-behavioural requirement is not laundered into
+    #: the numerator either -- the rule applies at both ends or it is not a rate.
+    card2 = S.score(
+        oracles=[_check("R1"), _check("R2")],
+        normalized=[_form("R1", ["busy"]), _form("R2", ["al"])],
+        requirements=[_req("R1"), _req("R2", "interface")],
+        stimulus_by_tp={}, contract={"io": []}, population=[])
+    assert card2.trusted == 1 and card2.span == 1.0, card2
+
+
+def test_span_falls_back_to_the_observable_forms_and_says_so():
+    """A caller with no requirements -- an artifact predating `unit_kind`, or a
+    driver that did not load them -- gets the weaker denominator and a note
+    saying which one it got. Silently changing what a rate means is the defect
+    this module exists to remove."""
+    card = S.score(
+        oracles=[_check("R1")],
+        normalized=[_form("R1", ["busy"]), _form("R2", [])],
+        stimulus_by_tp={}, contract={"io": []}, population=[])
+    assert card.requirements_behavioural == 0
+    assert card.span == 1.0, card
+    assert any("falls back" in n for n in card.notes), card.notes
+
+
 def test_a_span_of_text_with_no_observable_obligation_is_in_NEITHER_end():
     """`normalize` returns `observable: []` with an `unobservable_reason` for a
     heading or a list marker -- "This span is scaffolding rather than a
@@ -106,6 +157,10 @@ def test_the_audit_control_reaches_the_scorecard_and_NOTHING_ELSE():
     assert card, "cannot find the scorecard.score call"
     assert "audit_control=audit_control" in card.group(1), card.group(1)
     assert "_scorecard.write(run_dir, card)" in src
+    #: AND THE REQUIREMENTS, or span silently falls back to the weaker
+    #: denominator on every real run while the tests keep passing on the
+    #: stronger one.
+    assert "requirements=list(reqs" in card.group(1), card.group(1)
 
 
 def test_blindness_is_scored_against_the_population_the_RUN_built():

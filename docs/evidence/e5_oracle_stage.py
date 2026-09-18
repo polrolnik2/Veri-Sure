@@ -133,7 +133,7 @@ card = SC.score(
               "clause": o.clause, "source": o.source}
              for o in oracle_set.trusted],
     normalized=list(normalized.values()), stimulus_by_tp=stimulus_by_tp,
-    contract=contract,
+    contract=contract, requirements=requirements,
     population=[p.read_text() for p in sorted((out / "population").glob("*.py"))],
     audit_control=control.read_text() if control.is_file() else None)
 SC.write(OUT, card)
