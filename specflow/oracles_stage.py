@@ -953,39 +953,129 @@ def _unreached(oracle, record: dict | None, witness: str, contract: dict,
     )
 
 
+def _population_scope(stimulus_by_tp: dict, oracle) -> list[str]:
+    """**EVERY TESTPOINT THE STIMULUS HAS, NOT THE TWO THE TESTPLAN ATTACHED.**
+
+    A check is a `decide(trace)` function that says for itself when it applies:
+    `decide` returns None exactly when the clause's scenario never occurred.
+    Restricting it to `oracle.tp_uids` -- median **2 of 499** on the probe run
+    -- is a second, cruder gate on top of that one, and it silently caps what
+    any set-level instrument can see. A cell at TP-0400 can only be separated
+    by a check that is replayed at TP-0400, so a suite whose checks are each
+    pinned to two testpoints is blind almost everywhere BY CONSTRUCTION.
+
+    Measured on the probe run's own three designs and 3,530 cells, at
+    `(testpoint, pair)` resolution:
+
+        set                 on own tp_uids   replayed everywhere
+        TRUSTED 96                   96.9%                 22.3%
+        all 151 first drafts         97.0%                 12.8%
+
+    It is also the honest scope for over-strictness, and the two are the same
+    measurement read twice: a check that fires where it should not is exactly a
+    check that convicts a design somewhere its requirement does not govern.
+    Narrowing the replay hides that instead of fixing it -- and this tree
+    already names over-strictness and vacuity as one defect with two signs.
+
+    `oracle` is taken and deliberately unused apart from the assertion below:
+    the parameter is what makes the change visible at every call site rather
+    than a silent widening, and a future caller wanting the narrow scope has to
+    say so by not calling this.
+    """
+    del oracle  # the scope is a property of the stimulus, not of the check
+    return [tp for tp, steps in (stimulus_by_tp or {}).items() if steps]
+
+
+def _population_tables(held: dict, population: Sequence[str], contract: dict,
+                       stimulus_by_tp: dict, *, base: str,
+                       transactional: bool) -> tuple[dict, dict, dict]:
+    """`(verdicts, by_testpoint, objections)` from ONE set of replays.
+
+    The three instruments -- refutation, cell blindness and `placement` -- want
+    three shapes of the same evidence, and each used to replay the population
+    for itself. With the scope widened to every testpoint that is 3 x 499
+    replays per instrument per round; done once it is 3 x 499 for all of them.
+
+      verdicts       `uid -> design -> bool | None`, testpoints folded away.
+                     What the refutation leg wants: does this check convict
+                     this design AT ALL.
+      by_testpoint   `uid -> testpoint -> design -> bool | None`, one entry per
+                     replay performed. What a CELL wants, whose first
+                     coordinate is a testpoint -- see `variety.separates_at`.
+      objections     `uid -> design -> frozenset(testpoints)`. What `placement`
+                     wants: not whether it objected but WHERE.
+    """
+    rows_by_design = _population_rows(
+        population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    absent = _population_unavailable(population, contract, base=base)
+
+    verdicts: dict[str, dict[str, bool | None]] = {}
+    by_tp: dict[str, dict[str, dict[str, bool | None]]] = {}
+    objections: dict[str, dict[str, frozenset]] = {}
+    for uid, oracle in held.items():
+        scope = _population_scope(stimulus_by_tp, oracle)
+        per: dict[str, bool | None] = {}
+        table: dict[str, dict[str, bool | None]] = {}
+        obj: dict[str, frozenset] = {}
+        for name, rows in rows_by_design.items():
+            hits, saw = [], False
+            for tp in scope:
+                r = rows.get(tp)
+                if not r:
+                    continue
+                try:
+                    v = decide(oracle, r, unavailable=absent.get(name, ()))
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("population decide failed (%r)", exc)
+                    continue
+                if v.broken or v.ok is None:
+                    continue
+                saw = True
+                table.setdefault(tp, {})[name] = v.ok
+                if v.ok is False:
+                    hits.append(tp)
+            obj[name] = frozenset(hits)
+            per[name] = (False if hits else (True if saw else None))
+        verdicts[uid] = per
+        by_tp[uid] = table
+        objections[uid] = obj
+    return verdicts, by_tp, objections
+
+
+def _population_unavailable(population: Sequence[str], contract: dict, *,
+                            base: str) -> dict[str, tuple[str, ...]]:
+    """`design -> the probes the contract declares and that design does not`.
+
+    Empty for every member of a population this pipeline generated, because it
+    generates them from the contract in force. Not empty for a control, a
+    standing yardstick design or a benchmark RTL, which is exactly when it
+    matters -- see `refmodel.base.probe_values`.
+    """
+    out: dict[str, tuple[str, ...]] = {}
+    for i, src in enumerate(population):
+        try:
+            rep = replay(src, contract, [{}], base=base)
+        except Exception:  # noqa: BLE001
+            out[str(i)] = ()
+            continue
+        out[str(i)] = tuple(rep.unavailable)
+    return out
+
+
 def _population_verdicts(held: dict, population: Sequence[str], contract: dict,
                          stimulus_by_tp: dict, *, base: str,
                          transactional: bool) -> dict:
     """`req_uid -> design index -> verdict` over spec-derived designs.
 
-    Same replay `_decides` uses, against each member instead of the witness.
-    Never raises: a measurement that cannot be taken must not take the stage
-    down, which is the rule every other instrument here follows.
+    Testpoints folded away: what the refutation leg wants. See
+    `_population_tables`, and `_population_verdicts_by_tp` for the shape a cell
+    needs. Never raises: a measurement that cannot be taken must not take the
+    stage down, which is the rule every other instrument here follows.
     """
-    out: dict[str, dict[str, bool | None]] = {}
-    for uid, oracle in held.items():
-        per: dict[str, bool | None] = {}
-        for i, src in enumerate(population):
-            vals = []
-            for tp in oracle.tp_uids:
-                steps = stimulus_by_tp.get(tp)
-                if not steps:
-                    continue
-                try:
-                    rep = replay(src, contract, steps, base=base)
-                    rows = (transactional_view(rep.rows) if transactional
-                            else rep.rows)
-                    r = decide(oracle, rows,
-                               unavailable=rep.unavailable)
-                except Exception as exc:  # noqa: BLE001
-                    logger.info("population replay failed (%r)", exc)
-                    continue
-                if not r.broken and r.ok is not None:
-                    vals.append(r.ok)
-            per[str(i)] = (False if any(v is False for v in vals)
-                           else (True if vals else None))
-        out[uid] = per
-    return out
+    return _population_tables(
+        held, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)[0]
 
 
 def _population_verdicts_by_tp(held: dict, population: Sequence[str],
@@ -1007,30 +1097,9 @@ def _population_verdicts_by_tp(held: dict, population: Sequence[str],
     absent entry separates nothing, which is the rule `separates` already
     applies to an abstention.
     """
-    out: dict[str, dict[str, dict[str, bool | None]]] = {}
-    for uid, oracle in held.items():
-        table: dict[str, dict[str, bool | None]] = {}
-        for tp in oracle.tp_uids:
-            steps = stimulus_by_tp.get(tp)
-            if not steps:
-                continue
-            col: dict[str, bool | None] = {}
-            for i, src in enumerate(population):
-                try:
-                    rep = replay(src, contract, steps, base=base)
-                    rows = (transactional_view(rep.rows) if transactional
-                            else rep.rows)
-                    r = decide(oracle, rows,
-                               unavailable=rep.unavailable)
-                except Exception as exc:  # noqa: BLE001
-                    logger.info("population replay failed (%r)", exc)
-                    continue
-                if not r.broken and r.ok is not None:
-                    col[str(i)] = r.ok
-            if col:
-                table[tp] = col
-        out[uid] = table
-    return out
+    return _population_tables(
+        held, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)[1]
 
 
 def _population_rows(population: Sequence[str], contract: dict,
@@ -1173,39 +1242,17 @@ def _population_objections(held: dict, population: Sequence[str], contract: dict
     """`(verdicts, objections)` -- the second is per TESTPOINT, which placement needs.
 
     `_population_verdicts` collapses a check to one bool per design. `placement`
-    asks WHERE it objected, so it needs the testpoints themselves.
+    asks WHERE it objected, so it needs the testpoints themselves. Both come
+    from `_population_tables`, over every testpoint the stimulus has rather
+    than the two `oracle.tp_uids` happens to carry -- see `_population_scope`.
+    `placement` scores "how much more often a check speaks where the population
+    disagrees than where it agrees", and a check replayed at two testpoints of
+    499 has almost no places to speak at.
     """
-    verdicts: dict[str, dict[str, bool | None]] = {}
-    objections: dict[str, dict[str, frozenset]] = {}
-    names = [str(i) for i in range(len(population))]
-    for uid, oracle in held.items():
-        per: dict[str, bool | None] = {}
-        obj: dict[str, frozenset] = {}
-        for name, src in zip(names, population):
-            hits, saw = [], False
-            for tp in oracle.tp_uids:
-                steps = stimulus_by_tp.get(tp)
-                if not steps:
-                    continue
-                try:
-                    rep = replay(src, contract, steps, base=base)
-                    rows = (transactional_view(rep.rows) if transactional
-                            else rep.rows)
-                    r = decide(oracle, rows,
-                               unavailable=rep.unavailable)
-                except Exception as exc:  # noqa: BLE001
-                    logger.info("population replay failed (%r)", exc)
-                    continue
-                if r.broken or r.ok is None:
-                    continue
-                saw = True
-                if r.ok is False:
-                    hits.append(tp)
-            obj[name] = frozenset(hits)
-            per[name] = (False if hits else (True if saw else None))
-        verdicts[uid] = per
-        objections[uid] = obj
-    return verdicts, objections
+    v, _by_tp, obj = _population_tables(
+        held, population, contract, stimulus_by_tp, base=base,
+        transactional=transactional)
+    return v, obj
 
 
 def _select_frozen(trusted: dict, population: Sequence[str], contract: dict,

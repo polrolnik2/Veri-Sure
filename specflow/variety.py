@@ -387,11 +387,57 @@ def every_blindness_figure_on_this_branch_was_measured_per_PAIR() -> str:
         "`blind_at` for exactly the reason `objects_to_either` was kept: "
         "silently redefining a name makes a record incomparable instead of "
         "correcting it. Report both; never quote one as the other.\n\n"
+        "**THE DRIVER NO LONGER PRINTS 97.0%, AND THAT IS A SECOND FIX, NOT A "
+        "RETRACTION OF THIS ONE.** Both numbers above were taken with each "
+        "check replayed only against its own `tp_uids`. Widening that scope -- "
+        "see `a_check_is_replayed_where_the_stimulus_goes` -- takes the same "
+        "set to 12.8% on the same 3,530 cells. The per-PAIR reading stays 0.0% "
+        "either way, because collapsing to the pair discards the coordinate "
+        "the scope acts on.\n\n"
         "**AND IT EXPLAINS THE NULL THAT WAS ABOUT TO BE REPORTED.** The plan "
         "pre-registers <=15% fully caught as closing the authoring-at-cells "
         "line. This run would have reported zero -- not because authoring "
         "failed, but because the instrument said there was nothing to author "
         "at. A lever cannot be falsified by a run that never fired it."
+    )
+
+
+def a_check_is_replayed_where_the_stimulus_goes() -> str:
+    """The second half of the blindness defect: scope, not just resolution.
+
+    Driver: `docs/evidence/e4c_blindness_resolution.py` and the reach
+    measurement beside it. Zero model calls -- replays of the probe run's own
+    three designs against its own frozen set and its own first drafts.
+    """
+    return (
+        "**A CHECK WAS REPLAYED ONLY AGAINST ITS OWN `tp_uids` -- MEDIAN 2 OF "
+        "499.** A cell at TP-0400 can only be separated by a check replayed at "
+        "TP-0400, so a suite whose checks are each pinned to two testpoints is "
+        "blind almost everywhere BY CONSTRUCTION, whatever the checks say.\n\n"
+        "Measured on the probe run, 3,530 cells at `(testpoint, pair)`:\n\n"
+        "    set                     on own tp_uids   replayed everywhere\n"
+        "    TRUSTED 96                       96.9%                 22.3%\n"
+        "    all 151 first drafts             97.0%                 12.8%\n\n"
+        "**THE RESTRICTION WAS ALWAYS REDUNDANT.** A check is a `decide(trace)` "
+        "function that says for itself when it applies: `decide` returns None "
+        "exactly when the clause's scenario never occurred, and that is the "
+        "third state the whole module exists to keep. `tp_uids` was a second, "
+        "cruder gate on top of it -- and a coarser one, since the testplan's "
+        "`covers` attachment is a model's opinion about relevance while an "
+        "abstention is a fact about the trace.\n\n"
+        "**IT IS THE HONEST SCOPE FOR OVER-STRICTNESS TOO, AND THAT IS THE "
+        "SAME MEASUREMENT READ TWICE.** A check that fires where it should not "
+        "is exactly a check that convicts a design somewhere its requirement "
+        "does not govern. Narrowing the replay hides that rather than fixing "
+        "it, which is this tree's own 'over-strictness and vacuity as one "
+        "defect with two signs' arriving through the harness instead of "
+        "through the prose. It costs: replaying everywhere, 46 of the lost "
+        "requirements' corpus bodies are refuted by the whole population "
+        "where the narrow scope found 14.\n\n"
+        "**AND IT MADE THE THREE INSTRUMENTS AFFORDABLE.** Refutation, cell "
+        "blindness and `placement` each replayed the population for "
+        "themselves; at the wide scope that is 3 x 499 replays per instrument "
+        "per round. `_population_tables` builds all three shapes from one pass."
     )
 
 

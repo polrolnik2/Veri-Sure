@@ -2346,6 +2346,71 @@ def test_the_per_testpoint_table_keeps_one_column_per_replay():
     assert got == {"REQ-1": {"TP-1": {"0": True}}}, got
 
 
+def test_a_check_is_replayed_where_the_STIMULUS_goes_not_where_the_testplan_points(
+        monkeypatch):
+    """`oracle.tp_uids` had a median of **2 of 499** on the probe run.
+
+    A cell at TP-0400 can only be separated by a check replayed at TP-0400, so
+    a suite whose checks are each pinned to two testpoints is blind almost
+    everywhere by construction. The check already says for itself where it
+    applies -- `decide` returns None when the clause's scenario never occurred
+    -- so `tp_uids` was a second, cruder gate on top of that one.
+
+    Measured on the run's own three designs and 3,530 cells, at
+    `(testpoint, pair)` resolution: TRUSTED 96 goes 96.9% -> 22.3% blind, and
+    all 151 first drafts 97.0% -> 12.8%.
+    """
+    from specflow import oracles_stage as O
+    from specflow.refmodel.oracle_gen import RequirementOracle
+
+    rows = {"0": {"TP-1": ["a"], "TP-2": ["b"]},
+            "1": {"TP-1": ["a"], "TP-2": ["b"]}}
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    monkeypatch.setattr(O, "_population_unavailable", lambda *a, **k: {})
+
+    class _V:
+        def __init__(self, ok):
+            self.ok, self.broken = ok, False
+
+    #: True at TP-1 on both designs; separates them at TP-2.
+    monkeypatch.setattr(O, "decide", lambda o, r, **k: _V(
+        True if r == ["a"] else (r == ["b"] and o.req_uid == "REQ-1")))
+
+    held = {"REQ-1": RequirementOracle(
+        req_uid="REQ-1", tp_uids=["TP-1"], clause="c", source="s")}
+    _v, by_tp, obj = O._population_tables(
+        held, ("x", "y"), {}, {"TP-1": [{}], "TP-2": [{}]},
+        base="", transactional=False)
+    #: TP-2 IS IN THE TABLE, and the check never named it.
+    assert sorted(by_tp["REQ-1"]) == ["TP-1", "TP-2"], by_tp
+    #: `placement` needs WHERE it objected, and TP-2 is where.
+    assert obj["REQ-1"]["0"] == frozenset(), obj
+    #: A testpoint with no stimulus is not in scope at all.
+    assert O._population_scope({"TP-1": [{}], "TP-3": []}, None) == ["TP-1"]
+
+
+def test_one_set_of_replays_feeds_all_three_population_instruments(monkeypatch):
+    """Refutation, cell blindness and `placement` want three shapes of the same
+    evidence. Replaying the population once per instrument was 3 x 499 replays
+    each; with the scope widened that is the difference between a stage that
+    finishes a round and one that does not."""
+    from specflow import oracles_stage as O
+
+    calls = []
+    monkeypatch.setattr(O, "_population_rows",
+                        lambda *a, **k: calls.append(1) or {})
+    monkeypatch.setattr(O, "_population_unavailable", lambda *a, **k: {})
+    O._population_tables({}, (), {}, {}, base="", transactional=False)
+    assert calls == [1], f"{len(calls)} replay passes for one table build"
+
+    #: And each public shape is ONE build, not one per value it returns.
+    for fn in (O._population_verdicts, O._population_verdicts_by_tp,
+               O._population_objections):
+        calls.clear()
+        fn({}, (), {}, {}, base="", transactional=False)
+        assert calls == [1], f"{fn.__name__}: {len(calls)} replay passes"
+
+
 def test_the_selected_set_is_what_gets_frozen():
     """`population` was imported by `scoring` and by no pipeline module, so
     every selection figure on this branch was post-hoc. A run must be able to
