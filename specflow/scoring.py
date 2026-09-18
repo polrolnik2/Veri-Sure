@@ -1790,3 +1790,43 @@ def the_full_pipeline_runs_were_given_a_truncated_contract() -> str:
         "truncated one was my experiment setup, reused from an E3 driver that "
         "only needed port names."
     )
+
+
+def the_stimulus_loop_was_being_charged_for_other_stages_failures() -> str:
+    """Working on the stimulus loop, which looked like the binding constraint:
+    30 of 49 losses on a full run were abandoned as "never reached in 3
+    attempt(s)". Running `_diagnose` over the staging records says most of them
+    are not the stimulus's failures at all.
+    """
+    return (
+        "**THE 30 ABANDONMENTS, BY THE STAGE'S OWN DIAGNOSIS:**\n\n"
+        "    17  the activation was DRIVEN and the check still saw nothing\n"
+        "     8  the ports this requirement is observed on never moved\n"
+        "        -- `_diagnose` calls this 'a finding against normalisation'\n"
+        "     5  nothing in the design moved -- a pacing problem\n\n"
+        "Across all 87 staged requirements the split is 64 / 11 / 7, and the "
+        "reach rate is 12 of 87 = 13.8%.\n\n"
+        "**SO ONLY 5 OF 30 ARE FAILURES THIS LOOP CAN ACT ON.** In 17 the "
+        "stimulus did its job -- the activation occurred -- and the check "
+        "abstained anyway, which is a defect in the check or in the normalized "
+        "form it was written from. In 8 the observation route is wrong. "
+        "Charging all 30 to staging is what made the stimulus loop look like "
+        "the binding constraint, and I reported it that way.\n\n"
+        "**FIXED BY ATTRIBUTION, NOT BY BUDGET.** The abandonment reason now "
+        "carries the diagnosis. The tempting fix is the other one: `_diagnose`"
+        "'s own docstring says `route_never_moved` is 'NOT a reason to spend "
+        "another attempt on the stimulus', so the loop should bail. **The same "
+        "run refutes it.** Of 27 requirements that hit `route_never_moved` at "
+        "some attempt, **3 were reached at a later one**. Bailing would have "
+        "saved 44 attempts and lost those 3 requirements -- about 15 calls per "
+        "requirement recovered, which is not obviously a bad trade in the "
+        "direction the docstring assumes. The budget is left alone and the "
+        "claim in the docstring is now measured at 11% wrong.\n\n"
+        "**WHAT THIS DOES NOT FIX.** The 17 remain lost, and they are the "
+        "largest single group of losses in the run. What they need is not more "
+        "stimulus: the scenario occurred and the check said nothing. That "
+        "points at the activation the check was written from -- the same "
+        "`Activation.inputs` coverage gap measured upstream, where 78 of 115 "
+        "forms carry no input predicate at all. Naming them correctly is the "
+        "precondition for working on them; it is not the work."
+    )

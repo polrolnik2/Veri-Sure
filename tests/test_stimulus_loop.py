@@ -121,7 +121,9 @@ def test_a_requirement_never_reached_is_abandoned_with_its_attempt_count():
     verdict. That distinction is what the discard is gated on."""
     gen = _Gen(MISS, MISS, MISS)
     abandoned, record = _run(gen)
-    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
+    assert list(abandoned) == ["REQ-0000"]
+    assert abandoned["REQ-0000"].startswith(
+        "never reached in 3 attempt(s)")
     assert record["REQ-0000"]["reached_at_attempt"] is None
     assert len([t for t in record["REQ-0000"]["attempts"] if t.get("staged")]) == 3
 
@@ -171,7 +173,9 @@ def test_staged_testpoints_are_appended_never_substituted():
 def test_a_generator_that_produces_nothing_is_recorded_not_crashed():
     gen = _Gen()
     abandoned, record = _run(gen)
-    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
+    assert list(abandoned) == ["REQ-0000"]
+    assert abandoned["REQ-0000"].startswith(
+        "never reached in 3 attempt(s)")
     assert all("nothing gate-clean" in t["outcome"]
                for t in record["REQ-0000"]["attempts"])
 
@@ -338,7 +342,9 @@ def test_a_generator_that_RAN_and_produced_nothing_still_counts_as_an_attempt():
     finding about the scenario; a budget that ran out is a finding about us."""
     gen = _Gen()
     abandoned, record = _run(gen)
-    assert abandoned == {"REQ-0000": "never reached in 3 attempt(s)"}
+    assert list(abandoned) == ["REQ-0000"]
+    assert abandoned["REQ-0000"].startswith(
+        "never reached in 3 attempt(s)")
     assert record["REQ-0000"]["attempted"] == 3
     assert record["REQ-0000"]["staged"] == 0
 
@@ -608,9 +614,13 @@ def test_abandonment_waits_for_the_last_round():
     assert rec["REQ-0000"]["attempted"] == 2
 
     gone2, _ = _run(_Gen(), attempts=2, prior=rec, final=True)
-    assert gone2 == {"REQ-0000": "never reached in 2 attempt(s)"}, (
+    assert list(gone2) == ["REQ-0000"], (
         "a requirement whose attempts an earlier round spent must still reach "
         "its disposition on the last round")
+    #: The reason carries the diagnosis when the attempt recorded evidence, so
+    #: these pin the prefix; naming the failure is pinned by
+    #: `test_an_abandonment_says_which_staging_failure_it_was`.
+    assert gone2["REQ-0000"].startswith("never reached in 2 attempt(s)")
 
 
 # ------------------------------------------- the `unreached` gate and its guards

@@ -3810,9 +3810,30 @@ def stage_unexercised(
             # ATTEMPTED AND EXHAUSTED. What is known is that we could not stage
             # it in N tries -- not that no stimulus could, which is a claim
             # about the requirement this has no evidence for.
-            abandoned[uid] = f"never reached in {attempted} attempt(s)"
-            logger.info("oracles: %s staged %d time(s), never reached", uid,
-                        staged_count)
+            #
+            # **AND IT SAYS WHICH FAILURE, because "never reached" charged
+            # every one of them to this loop.** `_diagnose` already separates
+            # four, and the stage was throwing that away at the one place a
+            # reader counts losses by stage. Measured on a full run: of 30
+            # requirements abandoned here, 17 had their activation DRIVEN and
+            # the check still saw nothing, 8 were `route_never_moved` -- which
+            # `_diagnose` calls "a finding against normalisation" -- and only 5
+            # were the pacing failure this loop can actually act on. Reading
+            # that as 30 stimulus failures is how the stimulus loop came to
+            # look like the binding constraint.
+            #
+            # THE BUDGET IS UNCHANGED, deliberately. The tempting move is to
+            # stop retrying once the diagnosis says normalisation, and the same
+            # run refutes it: of 27 requirements that hit `route_never_moved`
+            # at some attempt, **3 were reached at a later one**. Exiting early
+            # would have saved 44 attempts and lost those 3. So this changes
+            # what the loss is CALLED, not what is spent on it.
+            last = [t.get("evidence") or {} for t in tries if t.get("evidence")]
+            said = _diagnose(last[-1]) if last else ""
+            abandoned[uid] = (f"never reached in {attempted} attempt(s)"
+                              + (f" -- {said}" if said else ""))
+            logger.info("oracles: %s staged %d time(s), never reached (%s)",
+                        uid, staged_count, said or "no evidence")
         elif reached is None:
             # NOT ABANDONED, BECAUSE NOTHING WAS ATTEMPTED. Budget exhaustion is
             # precisely "the loop did not run", and section 8.0 makes that the

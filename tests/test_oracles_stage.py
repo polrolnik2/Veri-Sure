@@ -1119,13 +1119,20 @@ def test_a_requirement_the_stage_could_not_reach_leaves_the_frozen_set(
     """"Staged N times, never reached" and "nobody tried" stop being the same
     verdict, and the first one leaves the system."""
     got = _staged(tmp_path, monkeypatch, [{"a": 1}, {"a": 0}])
-    assert got.abandoned == {"REQ-0001": "never reached in 2 attempt(s)"}
+    #: THE REASON NOW NAMES THE FAILURE. "never reached" alone charged every
+    #: loss to the stimulus loop; measured on a full run, only 5 of 30 were
+    #: failures that loop could act on.
+    assert list(got.abandoned) == ["REQ-0001"]
+    assert got.abandoned["REQ-0001"].startswith(
+        "never reached in 2 attempt(s)")
     assert [o.req_uid for o in got.trusted] == [], "not in the driving set"
     assert got.dispositions["REQ-0001"] == "ABANDONED"
     assert got.considered() == 0, "it left the denominator too"
 
     blob = json.loads((tmp_path / "specflow" / O.ARTIFACT).read_text())
-    assert blob["abandoned"] == {"REQ-0001": "never reached in 2 attempt(s)"}
+    assert list(blob["abandoned"]) == ["REQ-0001"]
+    assert blob["abandoned"]["REQ-0001"].startswith(
+        "never reached in 2 attempt(s)")
     assert blob["staging"]["REQ-0001"]["reached_at_attempt"] is None
     assert len(blob["staging"]["REQ-0001"]["attempts"]) == 2, "both attempts"
 
@@ -2343,3 +2350,55 @@ def test_the_selection_record_survives_a_reuse():
     for key in ("selection_dropped", "selection_ran"):
         assert re.search(rf'blob\.get\("{key}"\)', loader), (
             f"`{key}` is frozen but never read back")
+
+
+def test_an_abandonment_says_which_staging_failure_it_was():
+    """"never reached in N attempts" charged every loss to the stimulus loop.
+
+    `_diagnose` already separates four failures and the stage was discarding
+    that at the one place a reader counts losses by stage. Measured on a full
+    run: of 30 requirements abandoned here, 17 had their activation DRIVEN and
+    the check still saw nothing, 8 were `route_never_moved` -- which
+    `_diagnose` itself calls a finding against normalisation -- and only 5 were
+    the pacing failure this loop can act on.
+    """
+    from pathlib import Path as Pth
+
+    from specflow import oracles_stage as O
+
+    #: The four diagnoses are distinct strings, so an abandonment carrying one
+    #: is attributable without re-reading the evidence.
+    assert O._diagnose({"activation": "not_fired"}) != O._diagnose({"inert": True})
+    #: The RETURNED text, not the docstring: "normalisation" is the
+    #: docstring's word for it and the string a reader sees says
+    #: "the observation route is what is wrong, not the stimulus".
+    assert "not the stimulus" in O._diagnose({"route_never_moved": True})
+
+    src = Pth(O.__file__).read_text()
+    site = src[src.index('abandoned[uid] = (f"never reached'):][:300]
+    assert "_diagnose" in src[src.index("ATTEMPTED AND EXHAUSTED"):
+                              src.index("ATTEMPTED AND EXHAUSTED") + 2000], (
+        "the abandonment no longer names the failure")
+    assert "said" in site
+
+
+def test_the_staging_budget_is_not_cut_short_by_a_normalisation_diagnosis():
+    """The tempting fix, refuted by the same run that motivated it.
+
+    `_diagnose` says `route_never_moved` is "NOT a reason to spend another
+    attempt on the stimulus". Measured: of 27 requirements that hit it at some
+    attempt, **3 were reached at a later one**. Exiting early would have saved
+    44 attempts and lost those 3, so the budget is deliberately unchanged and
+    only the attribution moved.
+    """
+    from pathlib import Path as Pth
+
+    from specflow import oracles_stage as O
+
+    src = Pth(O.__file__).read_text()
+    loop = src[src.index("def stage_unexercised("):]
+    loop = loop[:loop.index("\ndef ", 10)]
+    #: No early exit keyed on the diagnosis inside the attempt loop.
+    for bail in ("if evidence.get(\"route_never_moved\"): break",
+                 "if _diagnose(evidence)", "route_never_moved:\n                break"):
+        assert bail not in loop, f"an early exit crept in: {bail!r}"
