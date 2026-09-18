@@ -66,6 +66,27 @@ def test_an_alias_settles_it_too():
     assert got == [], got[0].message if got else ""
 
 
+def test_the_module_name_is_not_reported_as_a_missing_state():
+    """The first version listed `i2c_master_bit_ctrl` and the next run's probe
+    table carried a probe of that name -- a state that is not a state. A report
+    an author cannot distinguish from a real gap is an instruction, so the
+    obvious false positive is removed at source.
+
+    Through `gate`, not through `_unnamed_states`: the module name is excluded
+    by the CALLER, and a test that hands it in as a declared port passes
+    whether or not the caller does its job.
+    """
+    from specflow.probes import gate
+
+    spec = "The module i2c_master_bit_ctrl captures scl_i into cSCL."
+    contract = {"module_name": "i2c_master_bit_ctrl",
+                "io": [{"name": "scl_i", "dir": "input", "width": 1}]}
+    said = [i.message for i in gate(_out("cscl"), contract=contract, spec=spec,
+                                    requirements=[])
+            if i.path == "probes.names"]
+    assert said == [], said
+
+
 def test_it_WARNS_and_never_blocks():
     """An identifier-shaped token in prose is a heuristic: it catches a module
     name and a signal mentioned in passing. A screen whose false-positive rate

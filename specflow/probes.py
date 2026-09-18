@@ -292,6 +292,14 @@ def _unnamed_states(out: "ProbeOutput", spec: str,
     whose false-positive rate is unmeasured does not block here -- this tree has
     twice paid for one that did. What it does is make the gap visible.
 
+    **THE MODULE NAME IS EXCLUDED, BECAUSE THE FIRST VERSION LISTED IT AND THE
+    AUTHOR DECLARED A PROBE FOR IT.** `i2c_master_bit_ctrl` is
+    identifier-shaped and appears throughout the prose, so it came back in the
+    finding, and the next run's probe table carried a probe of that name -- a
+    state that is not a state. A report an author cannot distinguish from a
+    real gap is an instruction, so the obvious false positive is removed at
+    source rather than described in a docstring nobody downstream reads.
+
     THE GAP IT WAS WRITTEN FOR. On an I2C bit controller the specification names
     `cSCL`, `cSDA`, `scl_sync`, `sda_chk`, `sta_condition`, `sto_condition`,
     `clk_en` and `filter_cnt`, and **not one of the seventeen probes carried any
@@ -362,7 +370,8 @@ def gate(out: ProbeOutput, *, contract: dict, spec: str,
     declared = {str(p.get("name")) for p in (contract.get("io") or [])
                 if p.get("name")}
     known = {str(r.get("uid") or "") for r in requirements}
-    issues.extend(_unnamed_states(out, spec or "", declared))
+    issues.extend(_unnamed_states(
+        out, spec or "", declared | {str(contract.get("module_name") or "")}))
     seen: set[str] = set()
     for idx, probe in enumerate(out.probes):
         path = f"probes[{idx}]"
