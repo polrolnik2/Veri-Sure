@@ -37,6 +37,8 @@ ATTEMPTS = int(sys.argv[5]) if len(sys.argv) > 5 else 3
 
 src = SRC / "specflow"
 out = OUT / "specflow"
+if OUT.exists():
+    shutil.rmtree(OUT)
 out.mkdir(parents=True, exist_ok=True)
 
 #: THE CONTRACT THAT WAS IN FORCE, rebuilt from the run's own probe table --
@@ -89,7 +91,14 @@ oracle_set = run_oracle_stage(
     demote_faithfulness=True,
     repair_attempts=ATTEMPTS,
     population=(), population_size=POP, cell_budget=CELLS, selection=None,
-    run_dir=OUT, fanout=True, rewrite=True,
+    #: **NOT `rewrite=True`, WHICH WOULD UNLINK THE WITNESS.** `rewrite`
+    #: deletes `witness.py` along with the artifact, so it would regenerate the
+    #: very thing this driver copies in to hold fixed -- and a freshly drawn
+    #: witness is a different reading of the same requirements, which is how a
+    #: check gets accepted in one run of this and rejected in the next for no
+    #: reason anyone could name. `OUT` is emptied before each run instead, so
+    #: there is no stale artifact for `freeze` to refuse to overwrite.
+    run_dir=OUT, fanout=True, rewrite=False,
 )
 print(f"\nTRUSTED {len(oracle_set.trusted)}", flush=True)
 print("dispositions:",
