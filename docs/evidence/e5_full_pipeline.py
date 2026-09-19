@@ -127,16 +127,25 @@ print(f"\nBUILD ok={built.ok} stage={built.stage} reason={built.reason}",
 #: be counted but never broken down -- how many of the minted requirements are
 #: behavioural, how many are scaffolding that can never yield a check. That
 #: question could then only be answered from a DIFFERENT run's artifact.
+#:
+#: **AND KEEP THEM UNDER THE RUN THAT PRODUCED THEM.** `docs/evidence/e5` is a
+#: fixed path, so every run overwrote the previous one's artifacts -- including
+#: the corpus the previous run's published figures were computed from and the
+#: only input `e5_rechoose.py` can be re-run against. A second copy goes to a
+#: directory named for `--out`, which is per-run by construction.
 KEEP = Path("docs/evidence/e5")
+MINE = Path("docs/evidence") / f"e5run-{OUT.name}"
 KEEP.mkdir(parents=True, exist_ok=True)
+MINE.mkdir(parents=True, exist_ok=True)
 for name in ("requirements.json", "oracles.json", "stimulus.json",
              "testplan.json", "normalized.json", "probes.json",
              "scorecard.json"):
     src_f = OUT / "specflow" / name
     if src_f.is_file():
-        (KEEP / f"real-{name}").write_text(src_f.read_text(encoding="utf-8"),
-                                           encoding="utf-8")
-        print(f"kept docs/evidence/e5/real-{name}")
+        body = src_f.read_text(encoding="utf-8")
+        (KEEP / f"real-{name}").write_text(body, encoding="utf-8")
+        (MINE / name).write_text(body, encoding="utf-8")
+        print(f"kept docs/evidence/e5/real-{name} and {MINE}/{name}")
 
 art = OUT / "specflow" / "oracles.json"
 print(f"oracles.json: {'written' if art.is_file() else 'MISSING'}")
