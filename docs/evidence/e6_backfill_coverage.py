@@ -101,4 +101,27 @@ cov["bins"], cov["checks"] = bins, checks
 (sf / "stimulus.json").write_text(json.dumps({"testpoints": [
     {"tp_uid": u, "stimulus_steps": s} for u, s in stim.items()
     if u not in set(dropped)]}, indent=2, ensure_ascii=False) + "\n")
+
+#: **AND THE RENDERED SUITE, WHICH IS WHAT ACTUALLY RUNS.** Trimming the
+#: testplan and leaving `suite/` alone leaves a run whose simulation and whose
+#: plan disagree: the first pass of this dropped 60 testpoints and then
+#: executed 482 of them anyway, because every one still had a rendered module.
+#: Not unsound -- the scoping rule is that a check is replayed where the
+#: stimulus goes -- but it is the same artifacts-disagree defect this whole
+#: file exists to repair, one directory over.
+gone = {u.replace("-", "") for u in dropped}
+suite = sf / "suite"
+removed = 0
+for f in sorted((suite / "tests").glob("test_TP*.py")):
+    if f.stem.replace("test_", "") in gone:
+        f.unlink()
+        removed += 1
+man = suite / "manifest.json"
+if man.is_file():
+    doc = json.loads(man.read_text())
+    doc["modules"] = [m for m in doc.get("modules") or []
+                      if m.replace("test_", "") not in gone]
+    man.write_text(json.dumps(doc, indent=2) + "\n")
+    print(f"pruned {removed} rendered test module(s); manifest now "
+          f"{len(doc['modules'])}")
 print(f"wrote {DST}  ({len(keep)} testpoints, {len(bins)} bins)")
