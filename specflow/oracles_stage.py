@@ -1453,6 +1453,24 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
     #: a tie broken by "the first one" would depend on how many bodies the
     #: requirement happens to have. `flat` is built in index order.
     live = set(alive)
+    #: **NOT REFUTED FIRST, THEN THE DISSENT GUARD, THEN SEPARATION.** A body
+    #: the whole population convicts is the strongest golden-free signal this
+    #: stage has, and `_rescue_from_corpus` already prefers away from it. This
+    #: did not, and the end-to-end run says what that cost: REQ-0001 and
+    #: REQ-0047 each convicted all seven designs, each convicted the
+    #: known-good control, and each had sibling bodies the control SPARES --
+    #: three of them for REQ-0047. They were chosen because they close cells.
+    #:
+    #: They close cells BY convicting: a check refuted overall can still
+    #: separate a pair at one testpoint, so `placement` and marginal gain both
+    #: reward it. That is the recorded way this metric was gamed -- "24 of them
+    #: convict all seven designs, which score ~0 by objecting to everything" --
+    #: arriving through the per-testpoint predicate instead.
+    #:
+    #: A PREFERENCE AND NEVER A REJECTION, for the reason the leg itself is
+    #: advisory: no spec-derived design is guaranteed correct, so a requirement
+    #: whose bodies are ALL refuted still freezes one.
+    refuted = set(variety.refuted_by_the_population(verdicts))
     per_req: dict[str, list[str]] = {}
     for key in flat:
         if key in live:
@@ -1464,9 +1482,11 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
     covered: set = set()
     out: dict[str, RequirementOracle] = {}
     for uid in order:
-        inside = [k for k in per_req[uid]
+        spared = [k for k in per_req[uid] if k not in refuted]
+        tier = spared or per_req[uid]
+        inside = [k for k in tier
                   if tells[k].dissent_weighted <= max_dissent_weighted]
-        pool = inside or per_req[uid]
+        pool = inside or tier
         #: A TIE IS NOT A REASON TO REPLACE A CHECK THAT ALREADY STOOD. The
         #: standing body wins an exact tie; otherwise `max` returns the first
         #: maximal element of an index-ordered list, which is the oldest draft.

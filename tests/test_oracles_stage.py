@@ -2488,6 +2488,84 @@ def test_a_tie_between_two_bodies_breaks_the_SAME_WAY_EVERY_RUN(monkeypatch):
     assert "order = sorted(" in src
 
 
+def test_a_refuted_body_is_passed_OVER_when_a_spared_one_exists(monkeypatch):
+    """A body the whole population convicts is the strongest golden-free
+    signal this stage has, and the chooser ignored it.
+
+    Measured end to end: REQ-0001 and REQ-0047 each convicted all seven
+    spec-derived designs, each convicted the known-good control, and each had
+    sibling bodies the control SPARES -- three of them for REQ-0047. They were
+    chosen because they close cells, and they close cells BY convicting: a
+    check refuted overall can still separate a pair at one testpoint, so both
+    `placement` and marginal gain reward it. That is the recorded way this
+    metric was gamed -- "24 of them convict all seven designs, which score ~0
+    by objecting to everything" -- arriving through the per-testpoint
+    predicate instead.
+    """
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    cells = (V.Cell(testpoint="TP-1", port="p", left="0", right="1"),
+             V.Cell(testpoint="TP-2", port="p", left="0", right="1"))
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: cells)
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+    monkeypatch.setattr(P, "tells", lambda *a, **k: type(
+        "T", (), {"dissent_weighted": 0.0, "placement": 0.0})())
+
+    #: #0 convicts BOTH designs -- refuted -- and separates both cells.
+    #: #1 spares them and separates one.
+    folded = {"REQ-1#0": {"0": False, "1": False},
+              "REQ-1#1": {"0": True, "1": False}}
+    tables = {"REQ-1#0": {"TP-1": {"0": True, "1": False},
+                          "TP-2": {"0": False, "1": True}},
+              "REQ-1#1": {"TP-1": {"0": True, "1": False}}}
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: folded.get(k2, {}) for k2 in flat},
+        {k2: tables.get(k2, {}) for k2 in flat}, {k2: {} for k2 in flat}))
+
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="refuted",
+                                     arm="generate", round_=0),
+                        O.CorpusBody(req_uid="REQ-1", source="spared",
+                                     arm="repair", round_=1)]}
+    got = O._choose_bodies(
+        corpus=corpus, held={}, population=("a", "b"),
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False)
+    assert got["REQ-1"].source == "spared", (
+        "the refuted body was taken because it closes more cells")
+
+
+def test_a_requirement_whose_bodies_are_ALL_refuted_still_freezes_one(
+        monkeypatch):
+    """A preference and never a rejection, for the reason the refutation leg
+    itself is advisory: no spec-derived design is guaranteed correct, so seven
+    of them may not cost a requirement its only check."""
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: (
+        V.Cell(testpoint="TP-1", port="p", left="0", right="1"),))
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+    monkeypatch.setattr(P, "tells", lambda *a, **k: type(
+        "T", (), {"dissent_weighted": 0.0, "placement": 0.0})())
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": False, "1": False} for k2 in flat},
+        {k2: {"TP-1": {"0": True, "1": False}} for k2 in flat},
+        {k2: {} for k2 in flat}))
+
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="only",
+                                     arm="generate", round_=0)]}
+    got = O._choose_bodies(
+        corpus=corpus, held={}, population=("a", "b"),
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False)
+    assert got["REQ-1"].source == "only", "the requirement lost its only check"
+
+
 def test_the_population_leg_is_off_below_two_designs():
     """One design convicting a check is an ordinary disagreement, not the
     population contradicting it. The guard is in the stage, so this pins the
