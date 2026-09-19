@@ -311,3 +311,52 @@ def test_a_probe_the_new_table_drops_does_not_survive_in_the_interface() -> None
     now = fold_in(had, [{"name": "idle", "dir": "probe", "width": 1}])
     assert declared_probes(now) == ("idle",)
     assert all(p.get("name") != "gone" for p in now["io"])
+
+
+def test_a_REJECTED_probe_table_is_still_written_down(tmp_path) -> None:
+    """`run_probes` hands back the ORIGINAL contract when its gate cannot be
+    satisfied, and the caller only wrote `probes.json` when the contract came
+    back WITH probes -- so a gate failure left no artifact at all and the reason
+    survived as one `logger.warning`.
+
+    Measured on an end-to-end run: "probes: no usable probe table (1 issue(s))",
+    and which issue could not be recovered from anything on disk. That run
+    authored its whole check set with every state term unnameable -- a
+    materially different configuration from the run before it, where 106 of 122
+    checks read a probe -- and no artifact said so.
+    """
+    from specflow.probes import ProbeEntry, ProbeOutput, write_artifacts
+    from specflow.schema import Issue
+    from specflow.stage import StageResult
+
+    out = ProbeOutput(probes=[ProbeEntry(name="idle", spans=["the idle state"],
+                                    licensed_by=["REQ-1"],
+                                    notes="the FSM is idle")])
+    res = StageResult(out, [Issue("error", "probes[0].span",
+                                  "the span is not in the specification")], 1)
+    write_artifacts(tmp_path, {}, res, accepted=False)
+
+    blob = json.loads((tmp_path / "specflow" / "probes.json").read_text())
+    assert blob["accepted"] is False
+    #: NOT under `probes`: the reuse path re-gates whatever it finds there, and
+    #: a reader must not have to re-gate a file to learn its contents were
+    #: refused.
+    assert blob["probes"] == []
+    assert [p["name"] for p in blob["rejected"]] == ["idle"]
+    #: And the reason, which is the whole point.
+    assert any("not in the specification" in i["message"]
+               for i in blob["issues"])
+
+
+def test_an_ACCEPTED_probe_table_still_lands_under_probes(tmp_path) -> None:
+    """The rejection path must not change the normal one."""
+    from specflow.probes import ProbeEntry, ProbeOutput, write_artifacts
+    from specflow.stage import StageResult
+
+    out = ProbeOutput(probes=[ProbeEntry(name="idle", spans=["the idle state"],
+                                    licensed_by=["REQ-1"], notes="idle")])
+    write_artifacts(tmp_path, {}, StageResult(out, [], 0))
+    blob = json.loads((tmp_path / "specflow" / "probes.json").read_text())
+    assert [p["name"] for p in blob["probes"]] == ["idle"]
+    assert blob["accepted"] is True
+    assert blob["rejected"] == []

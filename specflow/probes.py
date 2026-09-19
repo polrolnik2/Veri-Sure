@@ -689,7 +689,7 @@ def not_exposed(contract: dict, exposes) -> tuple[str, ...]:
 
 def write_artifacts(run_dir, contract: dict,
                     result: StageResult[ProbeOutput] | None,
-                    error: str = ""):
+                    error: str = "", accepted: bool = True):
     """`probes.json` beside the other stage artifacts.
 
     The probe table is also written into `contract["io"]`, which is where every
@@ -710,8 +710,26 @@ def write_artifacts(run_dir, contract: dict,
     out_dir = _Path(run_dir) / "specflow"
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "probes.json"
+    #: **A REJECTED TABLE IS STILL A RECORD, AND IT WAS NOT WRITTEN AT ALL.**
+    #: `run_probes` returns the ORIGINAL contract when the gate cannot be
+    #: satisfied, and the caller only wrote this file when the contract came
+    #: back WITH probes -- so a gate failure left no artifact, and the reason
+    #: survived only as one `logger.warning` line.
+    #:
+    #: Caught on an end-to-end run that reported "no usable probe table (1
+    #: issue(s))" and left nothing on disk to say WHICH issue. That run went on
+    #: to author its whole check set with every state term unnameable, which is
+    #: a materially different configuration from the run before it -- where 106
+    #: of 122 checks read a probe -- and nothing in its artifacts said so.
+    #:
+    #: The nominations go under `rejected`, never `probes`: the reuse path
+    #: re-gates whatever it finds there, and a reader must not have to re-gate
+    #: a file to learn that its contents were refused.
+    rejected = [] if accepted else [p.as_io() for p in out.probes]
     path.write_text(json.dumps({
-        "probes": [p.as_io() for p in out.probes],
+        "probes": [p.as_io() for p in out.probes] if accepted else [],
+        "accepted": bool(accepted),
+        "rejected": rejected,
         "aliases": [a.model_dump() for a in out.aliases],
         "cross_constraints": [c.model_dump() for c in out.cross_constraints],
         "reasoning": out.reasoning,

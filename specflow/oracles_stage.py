@@ -4496,6 +4496,12 @@ def stage_unexercised(
         inherit. Deterministic: same inputs, same order, same record."""
         return (_blocked.get(u) or "", u)
 
+    #: Requirements passed over because normalize says they state no observable
+    #: obligation. NAMED, never dropped silently: a staging budget that goes
+    #: unspent has to say why, or the next reader measures the budget instead
+    #: of the reason.
+    skipped_unobservable: list[str] = []
+
     for uid in sorted(unexercised, key=_state_order):
         oracle = held.get(uid)
         req = by_uid.get(uid)
@@ -4509,6 +4515,26 @@ def stage_unexercised(
         # requirement that exhausted its budget in an earlier round could never
         # be abandoned at all.
         shape = normalized.get(uid) or {}
+        #: **A REQUIREMENT WITH NO OBSERVABLE HAS NOTHING TO EXERCISE.**
+        #: `normalize` returns `observable: []` with an `unobservable_reason`
+        #: for a span that states no boundary effect -- REQ-0000's is "Nothing
+        #: in this requirement constrains behavior at the interface; it only
+        #: identifies the module's architectural role." A testpoint exists to
+        #: put a check in the situation it watches for, and there is no such
+        #: situation at the boundary and no check to put there.
+        #:
+        #: Measured on the end-to-end run, which staged 111 testpoints:
+        #: **60 of them -- 54% of the whole staging budget -- went to 20
+        #: requirements that normalize says state no observable obligation.**
+        #: 51 scaffolding, 9 interface, and NOT ONE of the 20 carried a trusted
+        #: check. The run bought stimulus for headings.
+        #:
+        #: It is normalize's own evidence and not a classifier's label, which
+        #: is the same rule `scorecard.score` already divides by, stated there
+        #: as the reason it is not `unit_kind == "scaffolding"`.
+        if not (shape.get("observable") or ()):
+            skipped_unobservable.append(uid)
+            continue
         act = shape.get("activation") or {}
         saw = str(unexercised.get(uid) or "").strip()
         # `.of`, never the bare constructor -- it resolves symbols through the
@@ -4704,6 +4730,13 @@ def stage_unexercised(
                 "oracles: %s was never staged (%s) -- left NOT_EXERCISED so it "
                 "BLOCKS, because nothing was attempted", uid,
                 "; ".join(sorted({str(t.get("outcome") or "") for t in tries})))
+    if skipped_unobservable:
+        logger.info(
+            "oracles: %d requirement(s) NOT staged -- normalize states no "
+            "observable obligation for them, so there is no boundary situation "
+            "to reach and no check to put in it: %s",
+            len(skipped_unobservable),
+            ", ".join(sorted(skipped_unobservable)[:8]))
     if added:
         logger.info("oracles: staged %d new testpoint(s) for %d requirement(s); "
                     "%d still unreached", len(added), len(record), len(abandoned))

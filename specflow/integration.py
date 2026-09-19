@@ -689,6 +689,21 @@ def build_artifacts(
                            "re-run with reuse=False to try again", exc)
             _probes_enabled = False
             write_probes(run_dir, contract, None, error=repr(exc))
+        else:
+            #: **A GATE FAILURE IS A RECORD, NOT A LOG LINE.** `run_probes`
+            #: hands back the ORIGINAL contract when its gate cannot be
+            #: satisfied, so `contract.get("probes")` is empty below and the
+            #: artifact was never written -- leaving a run that authored every
+            #: check with the state terms unnameable, and nothing on disk
+            #: saying why. Measured: one end-to-end run reported "no usable
+            #: probe table (1 issue(s))" and the issue could not be recovered.
+            if not contract.get("probes"):
+                write_probes(run_dir, contract, probe_result, accepted=False)
+                logger.warning(
+                    "probes: the nominated table was REJECTED and is recorded "
+                    "in probes.json under `rejected`; this run authors every "
+                    "check with no state term nameable, which is not the same "
+                    "configuration as a run that has them")
     if _probes_enabled:
         if cross:
             # **CROSS-CONSTRAINTS ARE NOT APPENDED, BECAUSE S1 HAS ALREADY

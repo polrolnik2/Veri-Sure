@@ -3278,3 +3278,58 @@ def test_the_dissent_guard_never_prefers_a_check_that_SEPARATES_NOTHING(
     assert got.get("REQ-1") is not None, (
         "the inert body was kept: the guard still outranks separation")
     assert got["REQ-1"].source == "sharp", got["REQ-1"].source
+
+
+def test_a_requirement_with_NO_OBSERVABLE_is_never_staged(monkeypatch):
+    """A testpoint exists to put a check in the situation it watches for. A
+    requirement `normalize` says states no boundary effect has no such
+    situation and no check to put there, so staging one buys stimulus for a
+    heading.
+
+    Measured on the end-to-end run, which staged 111 testpoints: **60 of them,
+    54% of the whole staging budget, went to 20 requirements with no
+    observable** -- 51 classified scaffolding, 9 interface, and NOT ONE of the
+    20 carried a trusted check. Their own `unobservable_reason` says why:
+    "Nothing in this requirement constrains behavior at the interface; it only
+    identifies the module's architectural role."
+
+    Those testpoints then had no coverage bin either, which is what made a
+    finished run fail its OWN `gate_s3` on re-gate -- 111 errors, a contiguous
+    tail TP-0371..TP-0481 -- so `--reuse` re-bought S3 and everything below it.
+    """
+    from specflow import oracles_stage as O
+
+    from specflow import testcase_agent as TA
+
+    calls = []
+    #: Imported inside `stage_unexercised`, so the patch goes on the module it
+    #: is imported FROM.
+    monkeypatch.setattr(TA, "stimulus_for_scenario",
+                        lambda **kw: calls.append(kw) or [])
+
+    held = {"REQ-1": O.RequirementOracle(req_uid="REQ-1", tp_uids=[],
+                                         clause="c", source=GOOD),
+            "REQ-2": O.RequirementOracle(req_uid="REQ-2", tp_uids=[],
+                                         clause="c", source=GOOD)}
+    reqs = [{"uid": "REQ-1", "text": "the module is the bit controller"},
+            {"uid": "REQ-2", "text": "y follows a"}]
+    normalized = {
+        #: No observable, with normalize's own reason.
+        "REQ-1": {"activation": {"text": "always"}, "observable": [],
+                  "unobservable_reason": "identifies the module's role only"},
+        "REQ-2": {"activation": {"text": "when a rises"},
+                  "observable": ["y"], "expectation": "y follows a"},
+    }
+    testplan: list[dict] = []
+    O.stage_unexercised(
+        held=held, unexercised={"REQ-1": "never fired", "REQ-2": "never fired"},
+        requirements=reqs, normalized=normalized,
+        contract={"io": [{"name": "a", "dir": "input", "width": 1},
+                         {"name": "y", "dir": "output", "width": 1}]},
+        testplan=testplan, stimulus_by_tp={}, witness=WITNESS, port=None,
+        attempts=1, budget=8)
+
+    asked = {k["requirement"]["uid"] for k in calls if k.get("requirement")}
+    assert "REQ-1" not in asked, (
+        "stimulus was generated for a requirement with no observable")
+    assert "REQ-2" in asked, "the observable requirement was not staged"
