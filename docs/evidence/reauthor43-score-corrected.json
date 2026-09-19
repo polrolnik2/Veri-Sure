@@ -1,0 +1,209 @@
+{
+ "REQ-0001": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0002": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "START ordering matched: the sequence completed all 2 steps i",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0005": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "busy asserted after the filtered START and stayed asserted t",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0007": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "the invariant broke at edge 18, in the window opening at edg",
+  "first_pass_outcome": "unchanged    golden still convicted"
+ },
+ "REQ-0016": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT   the check decides nothing",
+  "detail": "the invariant held for every row seen, but the window openin",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)"
+ },
+ "REQ-0020": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "the invariant broke at edge 72, in the window opening at edg",
+  "first_pass_outcome": "unchanged    golden still convicted"
+ },
+ "REQ-0028": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "al dropped before reset cleared it; the arbitration-lost ind",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)",
+  "stimulus_added": [
+   "TP-0318"
+  ]
+ },
+ "REQ-0042": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0044": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "3 gated dout capture(s) observed, none coincident with a raw",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0050": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0055": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "the expected response never occurred in the window opening a",
+  "first_pass_outcome": "unchanged    golden still convicted"
+ },
+ "REQ-0057": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "the expected response never occurred in the window opening a",
+  "first_pass_outcome": "unchanged    golden still convicted"
+ },
+ "REQ-0059": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0073": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0075": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0082": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT   the check decides nothing",
+  "detail": "the activation never occurred",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)"
+ },
+ "REQ-0087": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged   golden still convicted",
+  "detail": "the forbidden condition occurred at edge 4, in the window op",
+  "first_pass_outcome": "unchanged    golden still convicted"
+ },
+ "REQ-0089": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "with clk_cnt=4 > 0, 15 clock edges elapsed between successiv",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)",
+  "stimulus_added": [
+   "TP-0320"
+  ]
+ },
+ "REQ-0101": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT   the check decides nothing",
+  "detail": "dout already equalled the expected bit before this READ bega",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)"
+ },
+ "REQ-0102": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "a nonzero cmd was present together with ena=1, nReset=1, rst",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0107": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0117": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred",
+  "first_pass_outcome": "CONVERGED   golden now passes it"
+ },
+ "REQ-0118": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred",
+  "first_pass_outcome": "went SILENT  stopped deciding (not a win)",
+  "stimulus_added": [
+   "TP-0322"
+  ]
+ },
+ "REQ-0124": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "23 row(s) with scl_oen==0 and 25 row(s) with sda_oen==0 all ",
+  "first_pass_outcome": "CONVERGED   golden now passes it",
+  "stimulus_added": [
+   "TP-0323",
+   "TP-0324",
+   "TP-0325"
+  ],
+  "UNRELIABLE": "trace never recovered for ['TP-0324', 'TP-0325']; verdict rests on a collided trace"
+ }
+}

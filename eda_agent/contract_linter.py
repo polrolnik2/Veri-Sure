@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
+
+from specflow.ports import is_reset
 
 
 @dataclass(frozen=True)
@@ -206,7 +208,203 @@ def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIs
     return issues
 
 
-def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], dict[str, Any] | None]:
+_DIRECTIONS = ("input", "output", "inout")
+
+
+def prototype_ports(spec: str) -> tuple[list[str], list[str]]:
+    """`(every port the spec's module header names, the ones with no direction)`.
+
+    A Verilog port list may state the direction once and let it carry forward
+    across the names that follow, and a spec written by stripping an original
+    header leaves names dangling under whatever line preceded them. The i2c
+    prototype does exactly this:
+
+        input      [ 3:0] cmd,
+               cmd_ack,
+               busy,
+               al,
+
+    Read literally, `cmd_ack`, `busy` and `al` are INPUTS -- the direction of
+    the last declaration carries. They are outputs, and the only place that says
+    so is the prose. So the architect has to override the header from the prose
+    on precisely those names, it is a judgement call, and it is re-taken on
+    every run: one a2-i2c run kept `busy` as an output and the next dropped it.
+
+    Returned rather than judged, because this cannot know which reading is
+    right. What it can say is WHICH NAMES THE SPEC DID NOT PIN, and that is the
+    set a reader should be told about.
+    """
+    head = re.search(r"\bmodule\s+\w+\s*\((.*?)\)\s*;", spec, re.S)
+    if not head:
+        return [], []
+    names: list[str] = []
+    undirected: list[str] = []
+    for raw in head.group(1).split(","):
+        line = re.sub(r"//.*", "", raw).strip()
+        if not line:
+            continue
+        stated = any(re.match(rf"\b{d}\b", line) for d in _DIRECTIONS)
+        ident = re.findall(r"[A-Za-z_]\w*", re.sub(r"\[[^\]]*\]", " ", line))
+        ident = [i for i in ident if i not in _DIRECTIONS
+                 and i not in ("reg", "wire", "logic", "signed", "unsigned")]
+        if not ident:
+            continue
+        name = ident[-1]
+        names.append(name)
+        if not stated:
+            undirected.append(name)
+    return names, undirected
+
+
+#: The THIRD port class, and the whole reason the blast radius stays small.
+#: Roughly fifteen call sites across `specflow/` and `eda_agent/` re-derive their
+#: port list inline with a `dir == "output"` test or a `dir in {input, output,
+#: inout}` test, so a probe is excluded from every one of them with NO EDIT --
+#: `liveness._widths` never perturbs one into a physically impossible row,
+#: `differential` never compares one against golden RTL that lacks it, the
+#: boolean miter never demands golden expose it. Declaring probes as
+#: `dir: "output"` would widen all fifteen at once, which is the shape an earlier
+#: experiment refuted.
+#:
+#: This module is the ONE hard blocker: it emits an `error` for any `dir` outside
+#: the set, so nothing downstream could be tried until it admitted the value.
+PROBE = "probe"
+PORT_DIRECTIONS = frozenset({"input", "output", "inout", PROBE})
+
+
+def _collapse(text: str) -> str:
+    """Whitespace-collapsed, for comparing a quoted span against the spec.
+
+    A span quoted out of a wrapped paragraph carries the wrap, so a byte-exact
+    match would refuse the honest case and teach the extractor to quote single
+    words. Collapsing runs of whitespace is the least normalisation that admits
+    a real quotation and still refuses a paraphrase.
+    """
+    return " ".join((text or "").split())
+
+
+def probe_issues(entries: list[dict], spec: str = "") -> list[ContractIssue]:
+    """Every rule a `dir: "probe"` entry must satisfy. The linter owns them all.
+
+    A probe is a specification term made observable -- a one-bit signal that is
+    true exactly when the situation the spec describes holds -- and the point of
+    it is that a check can name the moment a requirement is ABOUT. That is also
+    what makes it dangerous: a check may read a probe anywhere, so a wrong probe
+    makes every check that reads it wrong at once, and nothing downstream can
+    tell. The rules below are what stands between an LLM's reading of the spec
+    and a verdict about a design.
+
+    The load-bearing one is the SPAN. A probe must quote the specification text
+    that licenses it, verbatim. That is what stops the stage that proposes probes
+    from encoding a design choice: it runs before any design exists, so anything
+    it cannot quote it is inventing.
+
+    Exposed separately from `lint_contract_json` because the stage that proposes
+    the probe table gates on these rules BEFORE writing it into the contract, and
+    a second implementation there would be a second place for them to drift.
+    """
+    issues: list[ContractIssue] = []
+    spec_flat = _collapse(spec)
+    span_owner: dict[str, str] = {}
+
+    for idx, p in enumerate(entries):
+        name = str(p.get("name") or f"io[{idx}]")
+        path = f"io[{idx}]"
+
+        # Width 1, always. A probe is a PREDICATE -- "the FSM is in LREFILL3" --
+        # not a state vector. Two reasons, and the second is the measured one:
+        # a vector would need an encoding the specification never states, and
+        # inventing one is exactly the defect that broke ten checks through
+        # `cmd`; and the witness holds the state as a string while the RTL holds
+        # it as an integer, so only a boolean means the same thing on both sides.
+        w = _as_int(p.get("width", 1))
+        if w != 1:
+            issues.append(ContractIssue(
+                "error", f"{path}.width",
+                f"probe {name!r} has width {p.get('width')!r}; a probe is a "
+                f"one-bit predicate, because a wider one would need an encoding "
+                f"the specification does not state"))
+
+        # Some requirement has to want it. A probe nothing licenses is a signal
+        # the pipeline invented, and it would still be implemented in the RTL.
+        licensed = [str(x) for x in (p.get("licensed_by") or []) if str(x).strip()]
+        if not licensed:
+            issues.append(ContractIssue(
+                "error", f"{path}.licensed_by",
+                f"probe {name!r} names no requirement that licenses it; a probe "
+                f"no requirement needs is one the pipeline invented"))
+
+        spans = [str(x) for x in (p.get("spans") or []) if str(x).strip()]
+        if not spans:
+            issues.append(ContractIssue(
+                "error", f"{path}.spans",
+                f"probe {name!r} quotes no specification text; the span is what "
+                f"makes a probe spec-licensed rather than a design choice"))
+        for span in spans:
+            flat = _collapse(span)
+            if spec_flat and flat not in spec_flat:
+                issues.append(ContractIssue(
+                    "error", f"{path}.spans",
+                    f"probe {name!r} quotes {span[:60]!r}, which is not in the "
+                    f"specification; a span must be quoted, not paraphrased"))
+                continue
+            # TWO PROBES SHARING A SENTENCE IS A WARNING, NOT A REFUSAL, and
+            # the demotion is measured rather than cautious.
+            #
+            # It was written to catch the collapse failing -- three phrasings of
+            # one state shipped as three probes, two names for one thing. It
+            # cannot: three phrasings carry three DIFFERENT spans, so a
+            # same-span test never sees them. What it does catch is one sentence
+            # that names two distinct signals, which is ordinary English and
+            # ordinary hardware. On k1 it fired twice and both were correct
+            # tables: "either the store or load flag is set" licenses `store_flag`
+            # and `load_flag`, and a sentence about decrementing `cnt` inside the
+            # refill state licenses both `in_lrefill3` and `cnt_nonzero`.
+            #
+            # So it blocked 2 of 2 honest cases and 0 of its target case. Left as
+            # a warning because a reviewer reading the stage's report can still
+            # use it as weak evidence of a duplicate; what catches the real thing
+            # is the merged single call that makes the collapse happen at all,
+            # and the orphan report as its backstop.
+            if flat in span_owner and span_owner[flat] != name:
+                issues.append(ContractIssue(
+                    "warning", f"{path}.spans",
+                    f"probes {span_owner[flat]!r} and {name!r} both quote the "
+                    f"same sentence; check they are two situations and not one "
+                    f"named twice"))
+            span_owner.setdefault(flat, name)
+
+        # A config-gated hypothesis is the ONLY thing a probe may say about a
+        # design, and it is a hypothesis, never a verdict: it says the spec makes
+        # this state conditional on a build option. It exists for one purpose --
+        # so that a later PROOF of unreachability on the generated RTL reads as
+        # "legitimately absent" rather than "the design is missing a state the
+        # specification requires". Inferring it from the presence of a config key
+        # would be inferring a design fact from spec text, so it needs its own
+        # quoted span or it is refused.
+        gated = p.get("config_gated")
+        if gated:
+            gspan = _collapse(str((gated or {}).get("span") or "")
+                              if isinstance(gated, dict) else "")
+            if not gspan:
+                issues.append(ContractIssue(
+                    "error", f"{path}.config_gated",
+                    f"probe {name!r} claims a config dependency with no span of "
+                    f"its own; the specification must STATE the dependency, and "
+                    f"the presence of a config key is not the specification "
+                    f"stating it"))
+            elif spec_flat and gspan not in spec_flat:
+                issues.append(ContractIssue(
+                    "error", f"{path}.config_gated",
+                    f"probe {name!r} claims a config dependency on text that is "
+                    f"not in the specification"))
+
+    return issues
+
+
+def lint_contract_json(
+    contract_json_text: str, spec: str | None = None,
+) -> tuple[list[ContractIssue], dict[str, Any] | None]:
     """Best-effort semantic lint for the Architect contract JSON.
 
     This is intentionally lightweight: it catches the most common contract
@@ -233,6 +431,7 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
     seen_names: set[str] = set()
     inputs: set[str] = set()
     outputs: set[str] = set()
+    probes: list[dict] = []
 
     for idx, p in enumerate(io):
         ppath = f"io[{idx}]"
@@ -248,7 +447,7 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
         if name in seen_names:
             issues.append(ContractIssue("error", f"{ppath}.name", f"Duplicate port name: {name}"))
         seen_names.add(name)
-        if direction not in {"input", "output", "inout"}:
+        if direction not in PORT_DIRECTIONS:
             issues.append(ContractIssue("error", f"{ppath}.dir", f"Invalid dir for {name}: {direction!r}"))
         w = _as_int(width)
         if w is None or w <= 0:
@@ -257,6 +456,43 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
             inputs.add(name)
         elif direction == "output":
             outputs.add(name)
+        elif direction == PROBE:
+            # Deliberately NOT in `outputs`. That set feeds the spec-header
+            # cross-check below, and the header of a specification does not
+            # mention probes -- they are terms the prose uses, not ports the
+            # module was written with. Adding them there would report every
+            # probe as a port the contract has and the header lost.
+            probes.append(p)
+
+    # EVERY PORT THE SPEC'S HEADER NAMES MUST BE IN THE CONTRACT, and the ones
+    # the header did not pin a direction for are named for the reader.
+    #
+    # This is the check that was missing when a2-i2c's contract lost `busy`. The
+    # contract was internally consistent -- eight well-formed entries, no
+    # duplicates, valid widths -- and the port simply was not among them, so
+    # nothing here had anything to compare against. Everything downstream is
+    # derived from this file, so a port that never enters it is a port no
+    # requirement can be observed on, and the failure surfaces stages later as
+    # oracles that abstain and requirements abandoned for a stimulus that was
+    # never at fault.
+    if spec:
+        named, undirected = prototype_ports(spec)
+        for name in named:
+            if name not in seen_names:
+                issues.append(ContractIssue(
+                    "error", "io",
+                    f"the spec's module header names port {name!r} and the "
+                    f"contract does not; every stage downstream is derived from "
+                    f"this file, so a port missing here cannot be observed at all"))
+        inferred = [n for n in undirected if n in seen_names]
+        if inferred:
+            issues.append(ContractIssue(
+                "warning", "io",
+                "the spec's header states no direction for "
+                + ", ".join(sorted(inferred))
+                + " -- each carries the direction of the line above it, so their "
+                  "direction here was INFERRED from the prose rather than read. "
+                  "Re-deriving this contract may not infer it the same way"))
 
     # parameters is optional (many modules have none) but, when present, each
     # entry must carry a usable name so the Coder can declare it verbatim.
@@ -296,26 +532,68 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                 if rst_name not in inputs:
                     issues.append(ContractIssue("warning", "clocking.reset.name", f"Reset {rst_name} not found as input port."))
 
+    # -- idle_value: the quiescent level of every input ----------------------
+    #
+    # The testbench drives every input to its idle value before releasing reset
+    # so the DUT and the reference model start from the same defined state. 0 is
+    # the default and is right for most ports, but it is WRONG for an active-low
+    # or open-drain input -- and getting it wrong is not a cosmetic error. On
+    # i2c_master_bit_ctrl, `scl_i`/`sda_i` defaulted to 0, which is a bus held
+    # low; `dout` then accounted for 996 of 2016 diverging edges, and because a
+    # wrong candidate zeroed `dout` exactly as the model did while golden left it
+    # unreset, the harness scored the WRONG design above golden.
+    for port in obj.get("io") or []:
+        if not isinstance(port, dict) or port.get("dir") != "input":
+            continue
+        name = str(port.get("name") or "")
+        if not name:
+            continue
+        declared = port.get("idle_value")
+        if declared is not None:
+            if not isinstance(declared, bool) and not isinstance(declared, int):
+                issues.append(ContractIssue(
+                    "error", f"io.{name}.idle_value",
+                    f"idle_value must be an integer, got {declared!r}."))
+            elif isinstance(declared, int) and declared < 0:
+                issues.append(ContractIssue(
+                    "error", f"io.{name}.idle_value",
+                    f"idle_value must not be negative, got {declared!r}."))
+            continue
+        # Undeclared and the name says active-low. A warning, not an error: the
+        # convention is strong but not universal, and a false error here would
+        # block a contract that is merely unconventional.
+        if name.strip().lower().endswith(("_n", "_ni", "_b")) and not is_reset(name):
+            issues.append(ContractIssue(
+                "warning", f"io.{name}.idle_value",
+                f"{name} looks active-low but declares no idle_value, so the "
+                f"testbench will hold it at 0 -- i.e. permanently asserted -- "
+                f"through reset. State idle_value: 1 if that is wrong."))
+
     timing = obj.get("timing")
     if timing is not None and not isinstance(timing, dict):
         issues.append(ContractIssue("warning", "timing", "timing should be an object mapping output->timing info."))
     if isinstance(timing, dict):
         for out in sorted(outputs):
             tinfo = timing.get(out)
+            # A MISSING entry is no longer flagged. It used to be a warning, and
+            # a warning is fed back to the architect as something to fix -- so
+            # the pressure was to produce a number for every output whether or
+            # not the specification determined one. On i2c_master_bit_ctrl that
+            # produced `cmd_ack: 3` in one run of the same spec and `1` in the
+            # next, against a golden design that takes 5 clk_en phases. An
+            # absent latency states that the spec does not settle it, which is
+            # true; an invented one is read downstream as a requirement.
             if tinfo is None:
-                issues.append(ContractIssue("warning", f"timing.{out}", "Missing timing entry for output; latency may be ambiguous."))
                 continue
             if not isinstance(tinfo, dict):
                 issues.append(ContractIssue("warning", f"timing.{out}", "Timing entry should be an object."))
                 continue
             lat = tinfo.get("latency_cycles")
-            if lat is None:
-                issues.append(ContractIssue("warning", f"timing.{out}.latency_cycles", "Missing latency_cycles."))
-            else:
-                l = _as_int(lat)
-                if l is None or l < 0:
+            if lat is not None:
+                cycles = _as_int(lat)
+                if cycles is None or cycles < 0:
                     issues.append(ContractIssue("error", f"timing.{out}.latency_cycles", f"Invalid latency_cycles: {lat!r}"))
-                elif l > 1 and not _has_completion_signal(outputs):
+                elif cycles > 1 and not _has_completion_signal(outputs):
                     # A latency beyond a registered output is only integrable if a
                     # consumer can learn when the value is ready -- either from a
                     # completion signal, or from a latency the spec states outright.
@@ -331,13 +609,20 @@ def lint_contract_json(contract_json_text: str) -> tuple[list[ContractIssue], di
                     # FROM that contract and unusable to anything else.
                     issues.append(ContractIssue(
                         "warning", f"timing.{out}.latency_cycles",
-                        f"latency_cycles={l} but the interface has no completion signal "
-                        f"(no valid/ready/done/valid_out output). Nothing tells a consumer "
-                        f"when {out} is ready, so a multi-cycle latency is unobservable "
-                        f"from outside this module. Unless the spec names a specific cycle "
-                        f"count, state the MINIMUM latency the function needs (0 for "
-                        f"combinational, 1 for a registered output).",
+                        f"latency_cycles={cycles} but the interface has no completion "
+                        f"signal (no valid/ready/done/valid_out output). Nothing tells a "
+                        f"consumer when {out} is ready, so a multi-cycle latency is "
+                        f"unobservable from outside this module. If the spec names a "
+                        f"specific cycle count, quote it in `notes`; otherwise OMIT "
+                        f"latency_cycles rather than choosing a number -- an absent "
+                        f"latency says the spec does not determine it, which is true, "
+                        f"and a guessed one is read downstream as a requirement.",
                     ))
+
+    # The probe rules run here as well as at the stage that proposes the table,
+    # because this function lints a contract HOWEVER it was produced -- resumed
+    # from a cache, hand-edited, or carried in from an earlier run.
+    issues.extend(probe_issues(probes, spec or ""))
 
     issues.extend(_latency_prose_conflicts(obj, timing, outputs))
 

@@ -1,0 +1,296 @@
+{
+ "adequacy": {
+  "unknown": 58
+ },
+ "gate": {
+  "present": false
+ },
+ "model_present": false,
+ "oracles": {
+  "by_requirement": {
+   "REQ-0000": "TRUSTED",
+   "REQ-0001": "TRUSTED",
+   "REQ-0002": "VACUOUS",
+   "REQ-0003": "TRUSTED",
+   "REQ-0004": "TRUSTED",
+   "REQ-0005": "TRUSTED",
+   "REQ-0006": "UNOBSERVABLE",
+   "REQ-0007": "UNOBSERVABLE",
+   "REQ-0008": "VACUOUS",
+   "REQ-0009": "TRUSTED",
+   "REQ-0010": "TRUSTED",
+   "REQ-0011": "TRUSTED",
+   "REQ-0012": "VACUOUS",
+   "REQ-0013": "TRUSTED",
+   "REQ-0014": "TRUSTED",
+   "REQ-0015": "UNOBSERVABLE",
+   "REQ-0016": "TRUSTED",
+   "REQ-0017": "TRUSTED",
+   "REQ-0018": "TRUSTED",
+   "REQ-0019": "UNOBSERVABLE",
+   "REQ-0020": "TRUSTED",
+   "REQ-0021": "TRUSTED",
+   "REQ-0022": "TRUSTED",
+   "REQ-0023": "TRUSTED",
+   "REQ-0024": "TRUSTED",
+   "REQ-0025": "TRUSTED",
+   "REQ-0026": "TRUSTED",
+   "REQ-0027": "TRUSTED",
+   "REQ-0028": "UNOBSERVABLE",
+   "REQ-0029": "TRUSTED",
+   "REQ-0030": "UNOBSERVABLE",
+   "REQ-0031": "UNOBSERVABLE",
+   "REQ-0032": "TRUSTED",
+   "REQ-0033": "TRUSTED",
+   "REQ-0034": "TRUSTED",
+   "REQ-0035": "TRUSTED",
+   "REQ-0036": "VACUOUS",
+   "REQ-0037": "TRUSTED",
+   "REQ-0038": "TRUSTED",
+   "REQ-0039": "TRUSTED",
+   "REQ-0040": "TRUSTED",
+   "REQ-0041": "TRUSTED",
+   "REQ-0042": "TRUSTED",
+   "REQ-0043": "TRUSTED",
+   "REQ-0044": "VACUOUS",
+   "REQ-0045": "TRUSTED",
+   "REQ-0046": "ORACLE_INVALID",
+   "REQ-0047": "VACUOUS",
+   "REQ-0048": "TRUSTED",
+   "REQ-0049": "TRUSTED",
+   "REQ-0050": "TRUSTED",
+   "REQ-0051": "TRUSTED",
+   "REQ-0052": "TRUSTED",
+   "REQ-0053": "TRUSTED",
+   "REQ-0054": "TRUSTED",
+   "REQ-0055": "TRUSTED",
+   "REQ-0056": "TRUSTED",
+   "REQ-0057": "TRUSTED",
+   "REQ-0058": "TRUSTED",
+   "REQ-0059": "TRUSTED",
+   "REQ-0060": "TRUSTED",
+   "REQ-0061": "VACUOUS",
+   "REQ-0062": "VACUOUS",
+   "REQ-0063": "TRUSTED",
+   "REQ-0064": "VACUOUS",
+   "REQ-0065": "TRUSTED",
+   "REQ-0066": "TRUSTED",
+   "REQ-0067": "TRUSTED",
+   "REQ-0068": "TRUSTED",
+   "REQ-0069": "TRUSTED",
+   "REQ-0070": "TRUSTED",
+   "REQ-0071": "TRUSTED",
+   "REQ-0072": "VACUOUS",
+   "REQ-0073": "VACUOUS",
+   "REQ-0074": "TRUSTED",
+   "REQ-0075": "TRUSTED",
+   "REQ-0076": "TRUSTED"
+  },
+  "correspondence_checked": null,
+  "dispositions": {
+   "ORACLE_INVALID": 1,
+   "TRUSTED": 58,
+   "UNOBSERVABLE": 7,
+   "VACUOUS": 11
+  },
+  "frozen": 58,
+  "repaired": 0,
+  "rounds": 3,
+  "vacuity_checked": null
+ },
+ "rtl_produced": false,
+ "run": "v-i2c",
+ "turns": [
+  {
+   "conforms_by_liveness": {
+    "conforms": 46,
+    "from_a_check_that_can_fail": null,
+    "from_a_check_that_cannot": null,
+    "from_a_check_undecided": null,
+    "not_measured": null
+   },
+   "counts": {
+    "CONFORMS": 46,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 8
+   },
+   "idle_turns": 0,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r0",
+   "violates_the_witness_also_fails": []
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 46,
+    "from_a_check_that_can_fail": null,
+    "from_a_check_that_cannot": null,
+    "from_a_check_undecided": null,
+    "not_measured": null
+   },
+   "counts": {
+    "CONFORMS": 46,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 8
+   },
+   "idle_turns": 1,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r1",
+   "violates_the_witness_also_fails": []
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 46,
+    "from_a_check_that_can_fail": null,
+    "from_a_check_that_cannot": null,
+    "from_a_check_undecided": null,
+    "not_measured": null
+   },
+   "counts": {
+    "CONFORMS": 46,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 8
+   },
+   "idle_turns": 2,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r2",
+   "violates_the_witness_also_fails": []
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 46,
+    "from_a_check_that_can_fail": null,
+    "from_a_check_that_cannot": null,
+    "from_a_check_undecided": null,
+    "not_measured": null
+   },
+   "counts": {
+    "CONFORMS": 46,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 8
+   },
+   "idle_turns": 2,
+   "stimulus_added": 12,
+   "stopped_because": "",
+   "turn": "r3",
+   "violates_the_witness_also_fails": []
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 42,
+    "from_a_check_that_can_fail": 36,
+    "from_a_check_that_cannot": 6,
+    "from_a_check_undecided": 0,
+    "not_measured": 0
+   },
+   "counts": {
+    "CONFORMS": 42,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 12
+   },
+   "idle_turns": 1,
+   "stimulus_added": 12,
+   "stopped_because": "",
+   "turn": "r4",
+   "violates_the_witness_also_fails": [
+    "REQ-0001",
+    "REQ-0014",
+    "REQ-0020",
+    "REQ-0037",
+    "REQ-0040",
+    "REQ-0060",
+    "REQ-0065",
+    "REQ-0066",
+    "REQ-0069"
+   ]
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 42,
+    "from_a_check_that_can_fail": 36,
+    "from_a_check_that_cannot": 6,
+    "from_a_check_undecided": 0,
+    "not_measured": 0
+   },
+   "counts": {
+    "CONFORMS": 42,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 12
+   },
+   "idle_turns": 2,
+   "stimulus_added": 12,
+   "stopped_because": "",
+   "turn": "r5",
+   "violates_the_witness_also_fails": [
+    "REQ-0001",
+    "REQ-0014",
+    "REQ-0020",
+    "REQ-0037",
+    "REQ-0040",
+    "REQ-0060",
+    "REQ-0065",
+    "REQ-0066",
+    "REQ-0069"
+   ]
+  },
+  {
+   "conforms_by_liveness": {
+    "conforms": 42,
+    "from_a_check_that_can_fail": 36,
+    "from_a_check_that_cannot": 6,
+    "from_a_check_undecided": 0,
+    "not_measured": 0
+   },
+   "counts": {
+    "CONFORMS": 42,
+    "NOT_EXERCISED": 4,
+    "ORACLE_INVALID": 1,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 7,
+    "VACUOUS": 11,
+    "VIOLATES": 12
+   },
+   "idle_turns": 3,
+   "stimulus_added": 12,
+   "stopped_because": "turn budget of 6 spent with 16 oracle(s) short of CONFORMS; a second implementation of the same requirement also fails 9 of them (REQ-0001, REQ-0014, REQ-0020, REQ-0037, REQ-0040, REQ-0060), so those may be the check rather than the model",
+   "turn": "r6",
+   "violates_the_witness_also_fails": [
+    "REQ-0001",
+    "REQ-0014",
+    "REQ-0020",
+    "REQ-0037",
+    "REQ-0040",
+    "REQ-0060",
+    "REQ-0065",
+    "REQ-0066",
+    "REQ-0069"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,7858 @@
+"""Golden-free instruments for judging a check, measured on k1-dcfsm.
+
+The oracle stage has one hard problem: deciding whether a check is OVER-STRICT
+(it convicts a design that satisfies its requirement) without the known-good
+design, which exists only in the benchmark. Everything here is an attempt at
+that question using artifacts the pipeline can actually have -- several designs
+written independently from the same specification, and mechanical mutants of
+one of them.
+
+WHAT WAS MEASURED, so a caller knows what these are worth. On 134 checks that
+fire, 7 are both SOUND (spare the known-good design) and DISCRIMINATING (convict
+a design wrong on 61% of the suite, written from the specification and held out
+of every selection) -- a 5.2% base rate, spanning 7 requirements of 89. Figures
+below quoting a 3.0% base rate were taken against that design AFTER an editor
+had been pointed at the check set, so they are a floor.
+
+SOUND HERE MEANS "DECIDES ON THE KNOWN-GOOD DESIGN AND NEVER CONVICTS IT", AND
+THE FIRST HALF IS LOAD-BEARING. Written as "convicts it nowhere" the predicate is
+satisfied vacuously by a check that never decides there at all, which is sound by
+silence rather than by evidence -- the same conflation `stage_unexercised` names
+in capitals, arriving in the metric instead of in the staging loop. It is not
+hypothetical: recomputing this plan's headline adequacy without the first half
+counted one extra check, one that decides 0 of 318 testpoints on the known-good
+design and exactly 1 on a held-out one. Every figure here requires the check to
+decide.
+
+    split_cell_soundness   84% precision as an unsoundness predictor; the checks
+                           it keeps convict the known-good design 29% of the
+                           time against a 63% base rate. The best soundness
+                           filter measured.
+    disagreement_cells     97% of a held-out design's errors fall in the 11% of
+                           cells the ensemble cannot agree on -- an 8.6x
+                           localisation. It says WHERE the question is, and
+                           NOTHING here can answer it: see
+                           `split_cells_are_a_specification_finding`. Put the
+                           map in front of whoever owns the specification.
+    refuted_by             a check that spares every candidate and convicts a
+                           mechanical mutant is 100% sound (19 of 19) and 0%
+                           discriminating (0 of 19). Use it to reject a check
+                           that cannot fail, never as evidence that one is good.
+
+AND THE ONE THING THAT DOES NOT WORK, measured at every threshold: the ensemble's
+own CONSENSUS is not an accept criterion. At k-of-13 agreement for every k from
+9 to 13, a design wrong on 61% of the suite scores at or BELOW the known-good
+design, because the population's errors are correlated through the ambiguity of
+the specification they were all written from. Correctness is what makes the
+known-good design an outlier. `consensus_cells` is exported for the
+disagreement map only, and `agreement_is_not_an_oracle` documents the refutation
+so it cannot be rediscovered as a good idea.
+
+THE SAME IDEA ONE LEVEL DOWN IS ALSO REFUTED, and it is the more tempting one
+because the correlation argument above does not obviously apply: a requirement
+usually carries two to four independently authored checks, so "the requirement
+objects when at least k of its checks object" is an ensemble over readings of
+ONE SENTENCE rather than of a whole specification. Measured at k = 1, 2, a
+majority and unanimity, it adds ZERO requirements that the best single check for
+that requirement did not already supply. `check_agreement_is_not_an_oracle`
+carries the numbers.
+
+AND THE SET IS NOT A DESCENT CRITERION EITHER, which is the one that matters for
+a repair loop: a loop does not need an accept threshold, it needs a number that
+falls as the design improves. Over 16 designs and six golden-free weightings, no
+weighting orders designs by their actual distance from the known-good design at
+better than +0.20 Spearman, and the checks that DISCRIMINATE between designs
+order them backwards at -0.54. `conviction_count_is_not_a_descent_criterion`
+carries that, and it is the reason to score a repair loop on requirements it
+satisfies rather than on objections it has left, and
+`soundness_buys_termination_not_correctness` for the one property a sound
+set does have and the one it does not, and
+`the_residue_is_check_strength` for where the remaining gap actually is
+once span, stimulus and volume have each been excluded by measurement, and
+`strength_and_soundness_are_exchanged_not_traded` for what happens when you
+attack that residue directly -- and
+`the_soundness_boundary_is_reachable_from_one_side_only` for the correction that
+makes that partition actionable, because the boundary turns out to be findable
+from the over-strict side (7 of 47) and not from the weak side (0 of 34),
+p = 0.0196. Author strict and narrow; never author weak and strengthen.
+
+AND THE STOPPING POINT IS WORSE THAN WEAK, WHICH IS THE ONE A LOOP AUTHOR MUST
+READ BEFORE ANY OF THE ABOVE. On a set carrying even one check the known-good
+design fails, zero objections is not poor evidence of correctness -- it is proof
+of INCORRECTNESS, by arithmetic rather than by measurement, because the
+known-good design does not score zero either. Measured on the widest golden-free
+set here, spanning a majority of the specification at a 10% false-reject rate: a
+Sonnet editor reached zero and the bounded miter says DIFFERS, having moved
+TOWARD the reference while objections fell 11 to 3 and back AWAY from it over the
+final 3 to 0. `zero_objections_can_be_incompatible_with_correctness` carries it,
+and it is why a loop is stopped on a trial budget rather than on its criterion
+going quiet.
+
+AND ONE THING HERE IS CHEAP AND POSITIVE, WHICH IS RARE ENOUGH TO SAY SEPARATELY.
+Two authoring populations that measure equally bad are not interchangeable: on
+the 34 requirements answered by both a port-only author and a probe-using one,
+the adequate sets are 3 and 2 and their INTERSECTION IS ZERO, so the union is 5
+where the better arm alone is 3. An arm comparison decides which prompt to ship
+and must not decide which bodies to keep.
+`authoring_populations_are_complementary_not_ordered` carries it.
+
+AND ONE GATE HERE IS ENDORSED RATHER THAN REFUTED, WITH ITS PRICE ATTACHED.
+"objects to at most 2 of 13 independently written designs" keeps 59 checks and
+59 of 59 spare the known-good design -- precision 100% against a 31% base rate,
+spanning 44% of the specification and reading no known-good design to do it. It
+is also why the set it produces is weak: of the 18 adequate checks in the largest
+perfectly sound set, it keeps 9. Its precision and its cost are the same
+property. `the_minority_rule_is_precise_and_that_is_what_it_costs` carries both.
+**Corrected after four more authoring rounds: on the grown 484-body corpus it
+keeps 108 and 105 spare the known-good design -- 97%, not 100% -- and the three
+exceptions are bodies those rounds produced.** The golden-free span rose with it,
+rule B reaching 50 of 89 = 56% at a 10% false-reject rate and rule C 44 of 89 =
+49% at 3%; neither can be an accept criterion, for the reason the audit column
+always gives. `golden_free_span_grew_and_the_precision_did_not_hold` carries the
+table and the correction.
+
+AND THE CELL ITSELF NOW HAS A DECOMPOSITION RATHER THAN ONLY A SIZE. Among sound
+checks, the 52 that convict no candidate hold 3 adequate ones and the 16 that
+convict at least one hold 15 -- so ADEQUATE = SOUND AND REFUTABLE at 94%
+precision and 83% recall, with the second leg reading no known-good design.
+Composed with the soundness gate it is the first golden-free adequacy instrument
+here, at a 10.7x lift on n = 7. `adequacy_is_soundness_and_refutability` carries
+it, including why it must not be used to SELECT.
+
+AND THE AUDIT COLUMN IS A DEFECT, NOT A RATE TO TRADE AGAINST REACH. Two 68-check
+sets spanning the same 45 of 89 requirements, differing only in whether 7 members
+convict the known-good design: against a design wrong on 200 of 318 testpoints,
+the one with the unsound members scores ZERO objections and accepts it, and the
+perfectly sound one objects. Over the whole corpus 129 bodies catch that design
+across 64% of the specification and exactly ONE of them is sound.
+`soundness_is_what_makes_the_criterion_work` carries it.
+
+AND REMOVING THE UNSOUND MEMBERS IS STILL NOT ENOUGH, WHICH CLOSES THE CORPUS.
+The largest perfectly sound set here spans a majority -- 68 checks over 45 of 89
+requirements at a zero false-reject rate -- an editor drove a held-out design to
+ZERO objections against it in 6 of 14 trials, and the miter says DIFFERS at 193
+of 318 testpoints. 124 corpus bodies catch that design across 62% of the
+specification and NOT ONE of them is sound, and since this set already is every
+sound check in the corpus there are none a better selection could have found.
+`a_perfectly_sound_majority_set_still_false_accepts` carries it, and the residue
+it leaves is check strength rather than any property of the set.
+
+AND GROWING THE CORPUS AND RE-RUNNING IT CHANGES NOTHING. Rebuilt over the
+484-body corpus the authoring rounds produced, the same construction gives 119
+checks over 52 of 89 = 58% at a zero false-reject rate, with 31 discriminating
+members against 18. An editor drove the same held-out design to 0 objections and
+the miter still says DIFFERS -- at 187 of 318 testpoints, with objections,
+testpoints and cells all falling together and one output repaired, so not even a
+wrong gradient is left to blame. The objection rate on exposed decisions is 3.9%
+both times. `a_wider_sound_set_lands_the_same_design_in_the_same_place` carries
+it.
+
+AND THE TWO PROPERTIES CANNOT BE COMPOSED FROM SEPARATE BODIES, WHICH RETIRES
+THE LAST CEILING ARGUMENT HERE. On the 26 requirements holding a sound body and
+a discriminating body that are never the same body, an author shown BOTH and
+told in numbers where the answer sits between them landed 0 adequate of 26 --
+and 8 sound + 18 discriminating = 26 = n, so the two sets came out exactly
+disjoint, at the minimum the marginals allow. A ceiling computed by counting the
+two legs separately counts a vacuous body as half a check and an over-strict
+body as the other half. `the_two_legs_cannot_be_composed_from_separate_bodies`
+carries it.
+
+AND THE BEST GOLDEN-FREE FILTER HERE DOES NOT SURVIVE BEING A TARGET, WHICH
+CLOSES THE AUTHORING ROUTE. Given to 24 authors as a stated numeric goal with
+each check's own measured count fed back, "objects to 1 or 2 of 13" drove two
+into the band -- both sound, neither discriminating -- and the round's one
+adequate check convicts 12 of 13, so the rule would have rejected it. The count
+is a soundness signal, and there is no second golden-free signal for the other
+leg. `the_adequacy_filter_does_not_survive_being_a_target` carries it, together
+with the through-line all three authoring rounds share: every one lands on the
+overlap its own marginals force and never above it.
+
+WHY ALL OF THAT FAILS IS MEASURED AND IS NOT A PROPERTY OF ANY INSTRUMENT HERE.
+On the cells the population cannot agree on, a reader asked ONE targeted question
+-- one cell, one port, the specification and the input sequence, no design at all
+-- scores WORSE than the population it was meant to beat, and reproduces the
+population's exact wrong answer on most of the cells it gets wrong. The
+correlated error belongs to the specification-and-reader pair, not to the
+design-writing task, so no change of instrument, ordering or granularity
+decorrelates it. `split_cells_are_a_specification_finding` carries the numbers
+and the one thing that follows from them, and
+`accuracy_is_the_wrong_axis_for_a_reference` carries the last shape the idea
+takes -- the consensus as an expected-value column rather than as a criterion,
+which is 99.822% accurate and drives a loop nowhere.
+**Corrected on a second held-out design:
+`the_consensus_is_an_oracle_even_though_it_is_not_a_ranking`.**
+
+AND TWO OF THE ENTRIES HERE ARE ABOUT THE DRIVER RATHER THAN THE CRITERION,
+because both cost a measurement before they were understood. A repair loop
+latches on the COUNT of passing requirements, so a criterion encoded one
+pseudo-requirement per output cannot see an edit that removes 70% of the
+disagreement and leaves every output still wrong somewhere -- it reads
+"passing 1 -> 1" and rolls the edit back. Two numbers are needed and they are
+not the same number: a fine one to steer, a coarse one to judge.
+`a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` carries it. And a run
+directory written by two agents at once yields a design, a state file and a score
+that describe different moments, with nothing in it saying so;
+`a_run_directory_written_by_two_agents_is_not_a_measurement` carries the tell and
+the only remedy, which is to archive it unread and start again.
+
+AND THE SAME GRANULARITY QUESTION HAS A SECOND HALF, AT THE OTHER END OF THE
+PIPELINE. Every judgement here is of a WHOLE BODY, and a requirement states
+several obligations, so one over-reaching obligation makes a body unsound and
+takes its others down with it. 307 bodies are unsound AND discriminating and
+they span 61 of 89 requirements = 69%, against 17 = 19% with an adequate body --
+which is the size of the prize. Splitting each body along the objection reasons
+it itself emits buys +4 requirements, is GOLDEN-SELECTED and therefore a ceiling,
+and is blind to 78% of its own population because that many bodies print one
+message for every conviction they make. What blinds it is the author's detail
+string rather than the check, which is free to fix.
+`a_body_is_judged_whole_and_its_obligations_are_not` carries it, including why
+even the optimistic extrapolation stops short of a majority.
+
+AND THE ONE STAGE UPSTREAM OF EVERYTHING HERE IS NOT THE LIMIT EITHER, WHICH IS
+THE LAST PLACE A LEVER COULD HAVE BEEN. Every measurement in this module is
+downstream of the 89 extracted requirements, so if divergence lived on the ports
+those requirements barely constrain, re-extracting them would be untried and
+live. It does not: every declared output is declared by 3 to 16 requirements and
+read by 17 to 51 checks, so no port is dark and the lever has no target. What
+predicts a port's divergence is how ACTIVE it is on the reference, and the number
+of checks reading a port is very nearly a restatement of that -- Spearman +0.857
+against the reference's transitions, and once activity is held fixed the check
+correlation goes negative on four designs of five.
+`requirement_extraction_is_not_the_limit_and_activity_is_the_predictor` carries
+it, together with the ninth counting-shaped defect on this plan: its first run
+loaded zero requirements and printed a clean table saying every port was
+uncovered.
+
+AND THE LOOP ITSELF DOES NOT WANT MORE ROOM, WHICH CLOSES THE CHEAPEST LEVER OF
+ALL FOR NOTHING. Four graded runs shared a 21-trial budget and not one reached
+it: they stopped voluntarily with 6 to 16 trials unspent. All four stopped on a
+trial WORSE than their own best and none stopped at its best, so the ratchet on
+the accepted design is what preserved every grade reported here. Between a
+quarter and a half of all trials move the criterion's own count UP -- the
+oscillation the goal asks to be taken into account, measured -- and trials spent
+rank-order the final grade perfectly on four runs, confounded with criterion
+volume in a way that is not separable because the criterion is what decides how
+much the editor edits. AND THE LATCH IS WHERE THE PROXY DOES ITS DAMAGE: the
+editor keeps whichever trial has the most PASSING entries, so 160 proxy units
+published beside 169 checks hold 160 votes, and in the worst of the four runs
+they rejected the state with the fewest check objections -- 5 check votes lost
+against 48 proxy votes gained. A proxy may inform an editor and must not enter
+the criterion that decides which design is kept.
+`the_editor_declines_its_budget_and_stops_past_its_own_best` carries the table.
+
+AND THE CHECK-STRENGTH COLLAPSE HAS A SHAPE, WHICH IT HAS NEVER BEEN GIVEN.
+Split by PORT rather than by check, strength falling 5.7% to 0.3% is not a
+uniform dimming: on the best design the set goes COMPLETELY SILENT on nine ports
+of ten, leaving one still able to object. Its sharpest cell is a port 51 checks
+read, decide 2,383 times where it is wrong, and object zero times -- the
+most-watched port in the set and the one carrying the most divergence. And the
+worst run's design is not one the set had run out on: it stands at 3.1% strength
+with objections on all ten ports, so its latch preferred a state the checks were
+still objecting to.
+`the_strength_collapse_is_port_by_port_not_a_uniform_dimming` carries it.
+
+AND THE GOLDEN-FREE INSTRUMENT, CHECKED AGAINST THE GOLDEN ONE AT THAT SAME
+GRANULARITY, HAS A DEFECT THIS MODULE HAS BEEN QUOTING THROUGH. Set blindness per
+port and check strength per port agree at Spearman +0.714 over the seven ONE-BIT
+ports and at +0.200 over all ten -- 58% of port pairs ordered the same way,
+against a 50% chance. The whole difference is width, and the inversion is total:
+the widest port is the worst of ten on the golden-free reading and the second
+best on the golden one, because on a 32-bit port two spec-derived designs differ
+almost everywhere, so "two designs disagree" is a far weaker signal than "the
+design disagrees with the reference". 41% of every blind cell in the set sits on
+the three multi-bit ports. **Stratify set blindness by port width, or do not
+quote it** -- every blindness figure here is over mixed widths.
+`set_blindness_is_dominated_by_port_width_and_inverts_there` carries it.
+
+AND ITS REACH IS REPORTING, NOT SELECTION, WHICH BOUNDS THE CORRECTION. Per CHECK
+the corrected ranking moves by +0.613, keeps 80-89% of the same checks at every
+comparable cut, and identifies NOT ONE clean check the mixed reading did not
+already identify -- the corrected clean population is five, exactly the mixed
+eight restricted to checks that read a one-bit port. So the selection sweeps here
+are not invalidated. Two counting-shaped defects were produced on the way and
+both were caught before publication: a 35% overlap at the tightest cut that is
+sort order inside 38 tied values, and a clean population of 38 that is 33 checks
+with no one-bit port to be blind on.
+`the_width_correction_changes_reporting_and_not_selection` carries both.
+
+AND WHAT THE PIPELINE PRODUCED HAS A BASELINE AT LAST, WHICH NOTHING HERE HAD
+DRAWN. Seven designs written from the same specification by independent authors
+span 151 to 230 differing testpoints, mean 185, sd 23. The start design of every
+graded run is a bad draw at 279, and the best run drove it to 146 -- **better
+than all seven**. So the loop beats one-shot generation, and it still does not
+reach equivalence, and both halves have to be said together. The other three
+graded runs land at 214, 221 and 271, inside or above the population's own range,
+which is the sharpest reading of what their added proxy evidence cost.
+`the_loops_best_output_beats_every_independent_draw` carries it, including why an
+sd of 23 makes a 60-testpoint gap between two runs unremarkable.
+
+AND THE GOAL'S LAST CLAUSE -- HOW TO ASSURE IT GOLDEN-FREE -- HAS AN ANSWER WITH A
+MEASURED FAILURE SHAPE. The only reference-free verdict available on a finished
+design is where it sits relative to the population that selected its checks. On
+five designs whose grade is known the placement agrees with the reference on 3,
+and **both errors are optimistic**: one design the checks call better than any
+independent draw is merely typical, and one they call typical is worse than every
+member of the population. So the instrument can say OUTSIDE THE POPULATION and
+cannot reliably say ON THE GOOD SIDE -- which makes it worth computing as a
+trigger for a human look and unfit as a clean bill.
+`the_golden_free_placement_test_and_what_it_cannot_say` carries it.
+
+AND THE MOST IMPORTANT ENTRY HERE IS THE ONE THAT UNDERMINES THE OTHERS. Every
+graded run on this plan is n = 1, and several findings above read four such runs
+as ordered. A pre-registered replicate -- run 6's configuration a second time,
+byte-identical start design and brief, the same 21-trial budget, differing only
+in the session -- landed **61 testpoints away**: 146 against 207. That is the
+worst of the three pre-registered bands, and its consequence is applied rather
+than argued. **The trials-versus-grade correlation of +1.000 is withdrawn**, no
+two graded runs differing by less than about 60 testpoints may be read as
+differing for a reason, and 'the loop beats one-shot generation' becomes 'in one
+of two runs'. What survives is every claim resting on a COUNT over a fixed
+population rather than on a spread between runs.
+`one_graded_run_is_not_a_measurement` carries it.
+
+AND THAT VARIANCE HAS AN ANSWER, WHICH IS THE FIRST PIPELINE CHANGE HERE THAT
+MEASURABLY IMPROVES WHAT IS DELIVERED. Five draws of one configuration span 146
+to 220 testpoints -- range 74, sd 28, within a point of the sd across seven
+independently WRITTEN designs, so re-running this loop is about as noisy as
+re-writing the module. Selecting among them by the GOLDEN-FREE count -- fewest
+objections of 169 on the accepted design -- picks run 6 at 1 objection, which is
+the best of the five: **0 of 5 draws beat the selected one, and it is 45
+testpoints better than an average draw**. The ordering behind that is only
+partial (+0.564, and one draw scores four times worse on the checks for an
+identical grade), so the rule works as a SELECTOR of a clear minimum and not as a
+ranking. It does not produce equivalence -- it buys the best member of a bad
+distribution.
+`best_of_n_with_a_golden_free_rule_picks_the_best_draw` carries it, with the two
+counts these draws correct.
+
+AND THE SET IS SMALLER THAN ITS CHECK COUNT BY A FACTOR OF THREE, WHICH CORRECTS
+THE SPAN FIGURE QUOTED THROUGHOUT THIS MODULE. A check's usable content is its
+VERDICT VECTOR, and 149 live checks hold 77 distinct vectors -- 72 are exact
+duplicates and one vector is shared by 21 checks. Re-deciding every
+population-mute check against the six graded designs as well (fifteen
+spec-derived designs in total, no reference anywhere) shows 12 of 108 merely
+unexercised and **96 that never object on any of the fifteen**. So the effective
+set is **53 checks over 43 requirements = 48% of the specification**, against the
+**69 of 89 = 78%** this module and the scorecard have been quoting. And the
+minority rule keeps a check convicting NONE of the population by construction, so
+the one endorsed golden-free selection knob has an accept side dominated by
+silence. What this does NOT say is that the 96 are useless -- three checks that
+caught a held-out design convict none of the thirteen candidates.
+`the_set_holds_far_fewer_opinions_than_checks` carries it, including the
+golden-free authoring target it opened: score a new check on whether its verdict
+vector is NEW.
+
+AND THAT TARGET IS SHUT BY THE NEXT MEASUREMENT, WHICH IS THE CLOSURE AT THE LEVEL
+BLINDNESS ACTUALLY LIVES AT. Of 640 corpus bodies, 349 hold a vector the set does
+not; 285 of those say something about the population; 19 survive the minority
+rule -- and **all 19 convict the reference**. The contrast is exact because both
+halves are measured on the same corpus and population: the 53 ever-objecting
+opinions already IN the set have an audit of ZERO, the 19 new ones have an audit
+of NINETEEN. **The set already contains every sound opinion this corpus holds**,
+which is strictly stronger than the earlier closure -- not that no sound check is
+missing, but that no sound OPINION is. It also puts a number on the minority
+rule's defect: 97% accept-side precision over the corpus, **0 of 19** once mute
+bodies are excluded.
+`every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference`
+carries it.
+
+AND THAT CLOSURE IS AMENDED BY THE NEXT MEASUREMENT, WHICH TESTS ITS OWN NAMED
+CAVEAT. It said a sixteenth design could wake a mute vector; there are twenty --
+every editor run this plan drove to a stopping point, none of them in the
+population. Widening 9 -> 29 takes the survivors 19 -> 21, and of the two extra
+one is sound by silence (it decides NOTHING on the reference) and one is real.
+So the corpus holds exactly ONE sound opinion nine designs could not see, and it
+saturates by 24 designs -- a one-off, not a lever. Meanwhile blindness rises
+55.1% -> 59.4%, and the one sound opinion closes 78 of 41,998 blind cells. THE
+POPULATION THAT FINDS THE RESIDUE AND THE CORPUS THAT WOULD CLOSE IT SCALE APART
+BY A FACTOR OF TWENTY-TWO.
+`widening_the_population_reveals_more_blindness_than_the_corpus_can_close`
+carries it.
+
+AND THE WHOLE PICTURE IS THEN PUT THROUGH AN EDITOR, ON THE ONE SET COMPOSITION
+NOBODY HAD RUN. De-duplicating the set to one check per distinct opinion -- which
+removes nothing, since two checks with the same verdict vector agree everywhere
+either decides -- gives 87 checks with a ZERO audit, none of them silent on the
+reference. A Sonnet editor drove it from 22 objections to ZERO in 12 of 21 trials
+and stopped because the criterion was satisfied. The design went from 279 of 348
+testpoints differing to 174, and the miter says DIFFERS with all three pins green.
+Zero objections on an audit-zero set is CONSISTENT with equivalence, and
+equivalence did not follow.
+`a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite`
+carries it.
+
+AND THE EXHAUSTIVE TEST OF THE ONE EXPLANATION IT LEFT STANDING CLOSES SELECTION
+FOR GOOD. All 502 live corpus bodies re-decided against that accepted design: 154
+are sound, 255 object to it, and the overlap is ZERO against an expected 78. The
+87-set is inside the 154, and the 67 sound checks outside it do not object either,
+so this is not the design having been optimised against its own criterion -- ALL
+154 SOUND CHECKS IN THE CORPUS PASS IT, and the 255 that catch it are exactly the
+ones a sound set may not contain. Selection is finished: the residue is
+unauthored, not unselected.
+`every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it`
+carries it.
+
+AND THAT CLOSURE IS QUALIFIED ONE LEVEL DOWN, BECAUSE SOUNDNESS THERE IS
+SUITE-WIDE. A check is discarded for convicting the reference ANYWHERE on 348
+testpoints. Asked per OBJECTION instead: 879 of those checks' objections to the
+accepted design land on testpoints where they SPARE the reference, covering 133
+of its 174 wrong testpoints. So the evidence is not disjoint from soundness --
+the per-check aggregation is what makes it look that way, and 76% of the residue
+is already authored and in hand. The golden-free rule that would separate those
+879 plateaus at ~50% precision across its whole range, so the residue is not
+unauthored but UNSEPARABLE.
+`the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which`
+carries it.
+
+AND THE CEILING THAT REMOVES THE SEPARATION PROBLEM ENTIRELY MADE THINGS WORSE.
+All 502 bodies, each masked to the testpoints where it does not convict the
+reference, so every objection is vetted correct: the editor went 155 -> 86 and
+landed at 261 of 348 testpoints differing, against the golden-free 87-check set's
+174 and worse than all five control draws. Seven times the correct objections, a
+worse design. The criterion was never satisfied so this does not show the checks
+are insufficient -- the reason I first gave -- that the checks'
+EXPLANATIONS poison the run -- was pre-registered, tested, and REFUTED:
+suppressing every objection's reason landed at 276, worse than 261.
+`vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse`
+carries it -- including the withdrawal of the explanation mechanism I first gave,
+which a pre-registered re-run refuted at 276 against 261.
+
+AND THE AXIS NOBODY HAD TRIED IS THE ONE THAT MOVES: ITERATION. Every graded run
+had been a single loop from one start design. Chaining a second loop onto the
+output of the golden-free one takes the design 279 -> 174 -> 112 of 348, beating
+all seven prior draws, whose best was 146. A criterion reaching zero means the
+CRITERION is exhausted, not the design: loop 1 terminated with nine trials unspent
+and sat 62 testpoints from where loop 2 took it. The prescription is golden-free
+in shape -- loop, re-select, loop -- and the corpus cannot run it, because the 84
+objections that powered loop 2 come from checks of which ZERO are sound.
+`iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard`
+carries it.
+
+AND THE GOLDEN-FREE SECOND LOOP IS MEASURED EMPTY, WHICH ANSWERS THE STANDING
+QUESTION. Applying the minority rule to the 255 checks that object to the design
+loop 1 accepted keeps ZERO of them -- not narrowly: the minimum convicts FOUR of
+the nine against a threshold of two, and 240 of 255 convict all nine. No
+retuning reaches them, and the rule is RIGHT to reject them, since none of the
+255 is sound. So the chain's 62 testpoints are bought entirely with checks that
+convict a correct design, and a golden-free pipeline reaches 174 and stops.
+`the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it`
+carries it.
+
+AND THE CHECK CANNOT BE WRITTEN EITHER, WHICH CLOSES THE LAST ROUTE. If a sound
+check with that objection cannot be SELECTED, it might still be AUTHORED, and the
+goal puts regenerating oracles in scope. Narrowing 24 of the 255 -- one per
+requirement, population chosen golden-free because the reference-vetted subset
+could not be named to an author -- lands 0 of 24 on the minority rule. The trade
+is exact: 18 of 24 did not move on the population at all, and of the four that
+fell below nine, THREE STOPPED OBJECTING. The conviction count and the objection
+fall together, so there is no setting of the edit where one drops and the other
+survives, and the narrowing decay across three rounds is 15% -> 4% -> 0%.
+`narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together`
+carries it.
+
+AND THE ONE LEVER THAT DOES IMPROVE THE DELIVERED DESIGN NEEDS THE CRITERION
+ITSELF AS ITS SELECTOR. Picking among draws of one loop by the golden-free
+objection count picks the best draw -- but that rule is unavailable to a run
+which SATISFIES its criterion, since every such draw scores zero. The corpus
+OUTSIDE the criterion, 353 checks the editor never saw, does not break the tie:
+it is anti-correlated at -0.368 and picks the second-worst draw, because it
+objects to about 72% of everything whatever the design. The ordering signal is
+made by the optimisation, not held in the corpus, so the only golden-free
+instrument that orders a loop's draws is the criterion it descended on.
+`the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus`
+carries it.
+
+AND THAT SELECTOR'S ARGMIN IS NOT ITS BEST DESIGN, WHICH IS THE HALF THAT
+DECIDES WHAT SHIPS. Over six designs on one audit-zero criterion, adding the one
+draw that terminated raises the rank correlation from +0.564 to +0.696 and moves
+the argmin from a design at 146 testpoints to one at 174 -- the design scoring
+ZERO grades 28 testpoints WORSE than the design scoring ONE. Ordering and argmin
+are different properties, and the rule that follows is to take the argmin over
+draws with a strictly positive count: a draw that reached zero has exhausted its
+criterion, not shown itself best.
+`the_argmin_of_a_sound_criterion_is_not_its_best_design`
+carries it.
+
+AND THE FIELD'S OWN GOLDEN-FREE COMPLETENESS METRIC IS DISQUALIFIED BY
+SATURATION. Mutation adequacy -- functional qualification, the measure this
+repository already ships unwired as `specflow/qualify.py` -- needs no known-good
+design: a live mutant the set still passes convicts the set. Measured, both the
+169-check audit-zero set and the whole 502-body corpus kill 13 of 13 live
+mutants, so it cannot separate them, while the design that set accepts is wrong
+on 146 of 348 testpoints. The live mutants each move a median of ~150 testpoints,
+so the fault model is far coarser than the residue it is asked to measure. Keep
+it as a hygiene floor; never read it as adequacy.
+`the_standard_mutation_metric_saturates_and_cannot_rank_a_set`
+carries it.
+
+AND A GATE IS A DIFFERENT INSTRUMENT IN SELECTION THAN IN REPAIR, WHICH
+RE-READS SEVERAL RESULTS HERE. The minority rule keeps at 59 of 59 and 7 of 7
+as a SELECTOR and lands 7 of 47, then 1 of 28, then 0 of 24 as a REPAIR
+objection -- one signal, two regimes, opposite outcomes. Selection has one
+boundary that matters, the accept side, and can sacrifice recall freely because
+a discarded good check costs one body out of a pool. Repair additionally needs
+a low false-reject rate (a needless rewrite broke 2 of 4 working checks), an
+ACTIONABLE objection rather than a correct one, and gates that are jointly
+satisfiable rather than pulling against each other. So a decay curve measured
+by feeding a selection-shaped signal as a repair objection is a fact about that
+regime and not about whether checks can be authored into the adequate cell.
+`a_gate_is_a_different_instrument_in_selection_than_in_repair`
+carries it.
+
+AND THE HALTING POINT BETWEEN OVER-STRICT AND VACUOUS EXISTS, BUT IS NOT
+REACHABLE BY MONOTONE DESCENT. Asking sixteen over-strict checks for a LADDER of
+five progressively narrower variants, rather than one blind rewrite, finds one
+landing rung -- and the audit says it is SOUND, the first adequate check this
+project has authored. The count is not the finding: the landing rung sits at
+depth 3 with depths 1, 2, 4 and 5 all failing, one check RISES from 5 to 7
+convictions under narrowing, and another descends 5, 4, 0, 0 then jumps to 9. The
+conviction count is not monotone in narrowing depth, so a one-step round samples
+one point of a bumpy landscape and 0 of 24 is what it should be expected to
+return even where a target exists.
+`the_halting_point_exists_but_is_not_reachable_by_monotone_descent`
+carries it.
+
+AND THE FULL GATE BATTERY AS A SELECTION RULE ADDS ONLY UNSOUND CHECKS. Over all
+502 live bodies the conjunction keeps 38, of which the 25 already in the
+169-check set are sound 25 of 25 and the 13 it ADDS are unsound 13 of 13. So the
+five gates beyond the minority rule contribute nothing to soundness -- and that
+rule reads 66% precise here, against the 59 of 59 and 7 of 7 measured at t=2 of
+THIRTEEN on a 259-body corpus. The perfect-precision figure does not transfer,
+and every quotation of it must carry its (t, N, corpus).
+`the_minority_rules_perfect_precision_does_not_transfer`
+carries it.
+
+AND A FILTER WHOSE DECLINES ARE NOT PARTITIONED BY CAUSE CANNOT BE AUDITED. The
+per-site golden-free mask -- admit an objection only where the design departs
+from population consensus on a port the check reads -- reported 100% admitted
+while a smaller diagnostic of the same rule reported 57.4% masked. The cause was
+that a port value it could not resolve reads as *no consensus*, which ADMITS, and
+`ports_read` returns INPUTS while the lookup searched only outputs. Every way of
+failing to decide landed on the admit side, so the instrument's own absence was
+indistinguishable from a finding about the world.
+`a_fail_open_mask_reports_its_own_absence_as_a_measurement`
+carries it, with the decline histogram that names the defect.
+
+AND THE CORRECTED MASK WORKS WHILE BUYING NO DISCRIMINATION. It masks 41.4% of
+the delivered design's objection sites and 41.2% of the reference's -- measured
+in one process -- so it removes the same share from the design that is wrong as
+from the design that is right, and a filter that symmetric cannot move the
+separation between them whatever criterion reads it. The false-reject rate moves
+1.4 points and the yield by one testpoint, and there is a second reason for that
+which is independent: both legs of the criterion are EXISTENTIAL over sites, a
+testpoint counts if ANY objection survives and a body convicts if ANY of its
+objections survives. Clearing a body needs every one of its sites masked, so a
+41% cut is nearly invisible. The open route is a criterion scoring the FRACTION
+of a check's objections that survive rather than whether one does -- a change to
+what a verdict means, not a tuning knob, and nothing is built on it.
+`a_site_level_mask_is_invisible_to_an_existential_criterion`
+carries it.
+
+AND UNANIMITY LOCALISES A DESIGN'S OWN ERRORS AT 43x, WHICH IS THE FIRST
+GOLDEN-FREE DETECTOR OF BLINDNESS HERE. A cell where the 13 spec-derived designs
+are UNANIMOUS on a port the design drives and the design DEPARTS is a cell where
+the design really differs from the known-good one 80.4% of the time, against a
+1.88% base rate. It is the split-cell finding pointed at a DESIGN rather than at
+a check, and the complement of the disagreement map: that says where the question
+is, this says where the design is wrong. Its ceiling is the same partition seen
+from the other side -- recall is 20.4% of the design's differing cells but 94.5%
+of the differing cells INSIDE the unanimous region, so the lever reaches about a
+fifth of the blindness residue and the rest sits in split cells.
+`unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth`
+carries it.
+
+AND THE FRACTION CRITERION LEFT OPEN BY THE MASK IS UNMEASURABLE HERE RATHER THAN
+REFUTED. Scoring a check by the SHARE of its objections that survive the mask
+needs checks that object and spare the reference, and this corpus has none -- 0
+of 205. Every threshold reads 0% precision, which is a fact about the population
+and not a verdict on the rule, so the driver refuses instead of printing it.
+`the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound`
+carries it.
+
+AND AN INSTRUMENT MUST BE SHOWN ABLE TO REACH ITS OWN PREDICATE BEFORE ANY OF ITS
+VERDICTS ARE READ. A gate battery run on bodies that must fail its fourth leg
+instead had every body refused at its second -- oracles declared over 348
+testpoints against a testplan holding 318 -- so the smoke test's assertion held
+vacuously and printed OK while testing nothing. The battery would then have
+reported a clean, fictitious "0 of 20 kept". The fix is a reachability
+precondition on the test, not a better assertion.
+`an_instrument_must_be_shown_able_to_reach_its_own_predicate`
+carries it, and it subsumes the fail-open mask as the same defect from the other
+side.
+
+AND THE SET BEHIND THIS WORK'S BEST RESULT IS REFERENCE-SELECTED, THOUGH ITS OWN
+HEADER CALLS THE SELECTION GOLDEN-FREE. Reproducing the documented rule keeps 234
+of 600 bodies at a 27.4% audit; the set is 169 at an audit of zero, and it is
+EXACTLY the subset that decides on the reference and convicts it nowhere --
+identical in both directions. So it is `golden_check` over the corpus, every
+figure taken with it is a ceiling rather than a score, and the golden-free
+approximation costs 137 of 169 recovered at a 9.9% audit, or 168 at 27.4%.
+`the_sets_documented_rule_is_not_the_rule_that_built_it`
+carries it.
+
+THE PIPELINE'S VARIANTS ARE A FAITHFULNESS INSTRUMENT AND NOT A SELECTION ONE,
+and that is a property of what a variant IS rather than a yield. A variant is
+authored to break ONE CLAUSE of ONE requirement, so it tests whether a check
+asserts a NAMED obligation of its own sentence -- the under-assertion half of
+faithfulness, which `correspondence` cannot see. It can never test soundness,
+because a variant is by construction an INCORRECT design and soundness is a
+question about correct ones. Three measurements, one negative apiece:
+`variants_test_the_under_assertion_half_of_faithfulness`.
+
+AND A DESIGN POPULATION'S DISAGREEMENT IS NOT THE SPECIFICATION'S SILENCE. This
+module used population non-convergence as a proxy for underdetermination and
+labelled one the other. They come apart in both directions, and this corpus
+refutes the identification outright: the population is unanimous AND WRONG on
+269 of 217,590 cells at 13 designs, 1,557 of 225,544 at 7.
+`population_non_convergence_is_not_specification_silence` carries the
+retraction and what survives it.
+
+FAITHFULNESS IS REFUTABLE AND NOT VERIFIABLE, SO ITS ABSENCE OF EVIDENCE IS NOT
+EVIDENCE OF ABSENCE -- and the naive screen for it rewards a set that says
+nothing. Two independently authored checks for one sentence that contradict
+prove at least one unfaithful: 21 of 27 requirements here. But the complement is
+confounded with vacuity, because agreement is cheapest when neither check
+discriminates -- 12 of 12 consistent pairs sit at a conviction-count extreme
+against 27 of 42 contradicting ones. Conditioned on both checks discriminating,
+the contradiction rate is 5 of 5.
+`the_contradiction_screen_must_be_conditioned_on_discrimination` carries it.
+"""
+from __future__ import annotations
+
+from collections import Counter
+from typing import Any, Iterable, Mapping, Sequence
+
+Rows = Sequence[Mapping[str, Any]]
+ByDesign = Mapping[str, Rows]
+
+
+def _cell(row: Mapping[str, Any], port: str) -> str:
+    out = row.get("outputs") or {}
+    ins = row.get("inputs") or {}
+    return str(out.get(port, ins.get(port)))
+
+
+def consensus_cells(by_design: ByDesign, ports: Iterable[str],
+                    *, min_agree: int | None = None
+                    ) -> dict[tuple[int, str], tuple[str, int]]:
+    """`{(row index, port): (agreed value, how many designs agreed)}`.
+
+    `min_agree` defaults to unanimity. A cell is omitted when fewer than that
+    many designs share the top value.
+
+    NOT AN ORACLE. See `agreement_is_not_an_oracle`.
+    """
+    names = list(by_design)
+    if not names:
+        return {}
+    need = len(names) if min_agree is None else min_agree
+    n = min(len(by_design[k]) for k in names)
+    out: dict[tuple[int, str], tuple[str, int]] = {}
+    for i in range(n):
+        for p in ports:
+            vals = [_cell(by_design[k][i], p) for k in names]
+            top, cnt = Counter(vals).most_common(1)[0]
+            if cnt >= need:
+                out[(i, p)] = (top, cnt)
+    return out
+
+
+def disagreement_cells(by_design: ByDesign, ports: Iterable[str]) -> set[int]:
+    """Row indices where the designs do NOT all agree on some port.
+
+    On k1 these are 11% of cells and hold 97% of a held-out design's errors --
+    the only localisation of the residue this project has measured. Use it to
+    aim authoring or stimulus at the rows where the specification is ambiguous.
+    """
+    names = list(by_design)
+    if not names:
+        return set()
+    n = min(len(by_design[k]) for k in names)
+    hot: set[int] = set()
+    for i in range(n):
+        for p in ports:
+            if len({_cell(by_design[k][i], p) for k in names}) > 1:
+                hot.add(i)
+                break
+    return hot
+
+
+def split_cell_soundness(decide_on, by_design: ByDesign,
+                         ports: Iterable[str]) -> bool:
+    """True when the check makes a demand where the population is CERTAIN.
+
+    `decide_on(rows)` must return True when the check CONVICTS those rows.
+
+    The argument: on cells where every independently written design agrees, the
+    agreed value matched the known-good design 99.82% of the time on k1. So a
+    check convicting a design THERE is, at those odds, the thing that is wrong.
+    This is sharper than "it convicts every candidate", which cannot tell a
+    correct demand from a misreading the whole population shares.
+
+    Measured: 84% precision as an unsoundness predictor; checks it clears
+    convict the known-good design 29% of the time against a 63% base rate.
+    A True verdict is a REASON TO REJECT, never a proof.
+    """
+    hot = disagreement_cells(by_design, ports)
+    for rows in by_design.values():
+        certain = [r for i, r in enumerate(rows) if i not in hot]
+        if certain and decide_on(certain):
+            return True
+    return False
+
+
+def refuted_by(decide_on, candidates: Iterable[Rows],
+               mutants: Iterable[Rows]) -> bool:
+    """True when the check spares every candidate and convicts some mutant.
+
+    A mutant is a design wrong BY CONSTRUCTION, so this is a golden-free proof
+    that the check CAN fail -- which "no candidate objected" is not, since every
+    candidate may simply be right.
+
+    ITS LIMIT IS MEASURED AND IS SEVERE: of 19 checks this promoted, 19 spare
+    the known-good design and ZERO catch a from-scratch design that is wrong on
+    61% of the suite. A mechanical mutant is an operator substitution; a real
+    design's errors are different readings of an ambiguous sentence.
+
+    AND DO NOT USE THE CONVERSE AS A REJECTION, which is what an earlier
+    version of this docstring advised. "It objects to no candidate" is NOT
+    "it cannot fail": the population may simply be RIGHT about that
+    requirement. Measured on two designs held out of the population -- of the
+    14 sound checks that caught one of them, THREE convict none of the 13
+    candidates, so a refutable leg would have discarded 21% of the entire
+    measured yield, and this function promotes 0 of those 3. Keep such a
+    check. A pass here is still not evidence the check is any good.
+    """
+    if any(decide_on(rows) for rows in candidates):
+        return False
+    return any(decide_on(rows) for rows in mutants)
+
+
+def agreement_is_not_an_oracle() -> str:
+    """Why the ensemble's agreed value must never be used as an expected value.
+
+    Kept as code rather than a comment so it is found by whoever reaches for the
+    idea, which is a natural one and is refuted.
+    """
+    return (
+        "Measured on k1 at every agreement threshold from 9 to 13 of 13: a "
+        "design differing from the known-good design on 61% of the suite scores "
+        "at or BELOW that design against the consensus (k=13: 0 against 58; "
+        "k=12: 174 against 189; k=11: 233 against 359), and the margin widens as "
+        "the threshold relaxes. The population's errors are correlated through "
+        "the ambiguity of the one specification they were all written from, so "
+        "unanimity encodes the shared misreading and being right is what the "
+        "criterion penalises. Use `disagreement_cells` to find where the "
+        "question is; never use the agreed value as the answer."
+    )
+
+
+def accuracy_is_the_wrong_axis_for_a_reference() -> str:
+    """Why 99.822% accurate is compatible with driving a repair loop nowhere.
+
+    The last shape this idea takes: not the consensus as a pass/fail criterion
+    over checks, which `agreement_is_not_an_oracle` refutes, but the consensus as
+    an EXPECTED VALUE COLUMN -- a mismatch table for a repair loop, which is the
+    one thing this pipeline has never given its editor. The reference really is
+    that accurate, and it still cannot drive anything.
+    """
+    return (
+        "Measured on k1 over 36,440 cells. The 13-design population is unanimous "
+        "on 89.6% of them and the agreed value matches the known-good design on "
+        "99.822% of those -- a reference wrong 18 times in ten thousand, built "
+        "with no known-good design anywhere in its provenance. Used as a mismatch "
+        "table over 16 designs it ranks the known-good design 15th of 16: all 13 "
+        "population members score exactly 0 disagreements, and so does a held-out "
+        "design written from the same specification that differs from the "
+        "known-good design on 193 of 318 testpoints. Only the known-good design "
+        "(58) and one design that corrected a real defect (298) disagree at all, "
+        "and both scores are penalties for leaving the population's distribution. "
+        "The failure is structural: a consensus over a population is satisfied by "
+        "that population by construction, and by anything drawn from the same "
+        "distribution. What a reference needs is not to be right often but to be "
+        "right WHERE THE DESIGN UNDER TEST IS WRONG, and this one is silent on "
+        "100% of what makes that held-out design wrong. Do not read a high "
+        "accuracy figure as evidence that a reference can drive a loop."
+    )
+
+
+def check_agreement_is_not_an_oracle() -> str:
+    """Why an ensemble of CHECKS for one requirement buys nothing either.
+
+    The companion to `agreement_is_not_an_oracle`, and the more tempting idea of
+    the two: a requirement typically carries several independently authored
+    checks, so requiring k of them to agree looks like a way to cancel one
+    author's misreading without any reference design. It does not.
+    """
+    return (
+        "Measured on k1 over 134 checks spanning 63 requirements, 1 to 4 checks "
+        "each. Taking 'the requirement objects when at least k of its checks "
+        "object': at k=1 the requirement is SOUND (spares the known-good design) "
+        "12 times and DISCRIMINATING (convicts a held-out wrong design) 49 "
+        "times, at unanimity 40 and 24 -- so k trades one for the other exactly "
+        "as a conviction-count threshold does. The cell that needs BOTH peaks at "
+        "4 requirements, and its union with the per-check set is the per-check "
+        "set, so the ensemble never reaches past its own best member. At "
+        "unanimity the marginals 40 and 24 of 63 predict an overlap of 15.2 if "
+        "the two properties were independent; the observed overlap is 4, close "
+        "to the minimum the marginals allow. Sound and discriminating are not "
+        "merely uncorrelated but near-disjoint, which is why every threshold, "
+        "filter and ensemble measured here lands in the same place."
+    )
+
+
+def conviction_count_is_not_a_descent_criterion() -> str:
+    """Why a repair loop must not descend on how many checks object.
+
+    The natural way to drive an editor with a check set: count the objections
+    and minimise them. Measured here and it points the wrong way, which is worth
+    more than the two failed loop trajectories that suggested it -- those were
+    two runs, this is a property of the corpus.
+    """
+    return (
+        "Measured on k1 over 16 designs -- the known-good one, 13 written "
+        "independently from the specification, and two held out. Scoring each "
+        "by total (check, testpoint) convictions, the known-good design ranks "
+        "2nd, but by 0.7% over a population spanning 15%, and among the 15 "
+        "wrong designs the Spearman against testpoints actually differing from "
+        "the known-good design is -0.223: the count is slightly ANTI-correlated "
+        "with correctness. Six golden-free weightings were tried (equal, "
+        "discriminating, checkwise, rare, split-cell-clean, and the "
+        "intersection); none reaches +0.3, and every one either separates the "
+        "known-good design from the population or orders the population, never "
+        "both -- split-cell-clean is the only positive ordering at +0.201 and "
+        "ranks the known-good design 13th of 16, while the intersection ranks "
+        "it LAST. Worst is the subset that ought to carry the signal: checks "
+        "whose verdict varies across the population order designs BACKWARDS at "
+        "-0.542, because a check that separates spec-derived designs separates "
+        "them along their shared misreading, on which the correct design is the "
+        "outlier. Score a repair loop on requirements it satisfies, not on "
+        "objections it has left, and do not read a falling objection count as "
+        "progress toward correctness."
+    )
+
+def soundness_buys_termination_not_correctness() -> str:
+    """What a perfectly sound check set does and does not do for a repair loop.
+
+    The one positive property any rule here has produced: a set no correct
+    design violates makes zero objections REACHABLE, which is necessary --
+    against a set carrying one unsatisfiable demand the loop can never
+    terminate. The mistake is to read that as progress toward correctness.
+    """
+    return (
+        "Measured on k1 with the largest perfectly sound set the corpus can "
+        "produce: 50 checks over 40 requirements, 45% of the specification, "
+        "ZERO of them convicting the known-good design. Two Sonnet editor runs "
+        "on two designs written from the specification and held out of every "
+        "selection. On the clean one, objections went 7 to 1 while testpoints "
+        "differing from the known-good design went 249 to 188 -- the criterion "
+        "and the grade moving TOGETHER, and one output repaired to never "
+        "differing at all. So a perfectly sound set does give a repair loop a "
+        "correct gradient, which is more than any other rule measured here. "
+        "What it does NOT give is enough of one: the run ended with ONE "
+        "objection left on a design still wrong on 59% of the suite, so the set "
+        "runs out of things to say long before the design is right. The limit "
+        "is SPARSITY, not direction. (A second run on a design carrying an "
+        "injected constant no requirement mentions went the other way, 7 to 2 "
+        "objections while divergence rose 194 to 217; that measures the "
+        "injected defect, not the set, and is not evidence about the gradient.) "
+        "Soundness buys termination and a usable direction. It does not buy "
+        "sufficiency, and zero objections against a sparse sound set still "
+        "means very little.\n\n"
+        "AND MORE CHECKS DO NOT CLOSE THE GAP, measured rather than assumed. "
+        "Authoring three fresh checks each for the 22 behavioural "
+        "requirements the sound set does not cover -- 66 calls, all parsing, "
+        "all compiling, no duplicate bodies -- moved span from 40 to 43 of 89 "
+        "and produced ZERO new objections against the design under test. The "
+        "comparison explains it: on the requirements the set ALREADY covers, "
+        "53% of firing checks pass the rule; on the ones it does not, the "
+        "original corpus scored 0% over 54 prior attempts and the fresh round "
+        "13% over 66 more, six of its seven survivors landing on the three "
+        "least demanding sentences in the population. A requirement without a "
+        "sound check is not an unattempted one; it is a harder one.\n\n"
+        "REPRODUCED ON A SECOND SET, AND SPAN IS NOT THE VARIABLE. A "
+        "golden-free set spanning 45 of 89 requirements -- 51%, a majority, "
+        "at a 10% false-reject rate -- drove the same held-out design from "
+        "11 objections to 3 in six trials, divergence 249 to 192, one "
+        "output repaired to never differing, and one edit clearing four "
+        "objections at once by finding a shared root cause. The gradient is "
+        "therefore confirmed twice, independently. But the SMALLER set -- 40 "
+        "requirements, 44%, zero unsound -- finished four testpoints CLOSER "
+        "to correct on the same design. Nine more requirements, eighteen "
+        "more checks and four more objections bought no extra correctness. "
+        "Spanning a majority and driving a design to correctness are "
+        "independent properties of a set, and neither run reached "
+        "equivalence."
+    )
+
+def the_residue_is_check_strength() -> str:
+    """Where the gap actually is, after span, stimulus and volume are excluded.
+
+    A sound set that says almost nothing about a mostly-wrong design fails one
+    of two ways, and they demand opposite work: SILENCE (the checks never decide
+    where the design is wrong -- a stimulus finding) or BLINDNESS (they decide
+    there and pass -- which no stimulus fixes). Separating them is the same
+    distinction staging conflates, asked of the accept criterion instead.
+    """
+    return (
+        "Measured on k1, per check, restricted to the testpoints where a port "
+        "THAT CHECK ITSELF READS differs from the known-good design -- because a "
+        "testpoint is wrong if any of ten outputs differs, and a check watching "
+        "one port is not blind for passing a defect on another. Of 50 sound "
+        "checks against a held-out design: 3 are exposed to a wrong port and "
+        "never decide there, 36 DECIDE where their own port is wrong and PASS, "
+        "and 7 object. Across 3,399 decisions on exposed testpoints there are "
+        "134 objections -- 3.9%. One check reads a single port, decided on all "
+        "99 testpoints where that port is wrong, and objected zero times.\n\n"
+        "So the stimulus loop is worth 3 checks of 50 here, not the lever it is "
+        "usually assumed to be: the suite already drives the design into the "
+        "wrong behaviour on the exact ports the checks read. The residue is "
+        "CHECK STRENGTH -- a check asserts a fragment of its sentence and the "
+        "design violates the sentence elsewhere in the same port. That single "
+        "fact explains why more checks do not help (the ones already watching "
+        "do not object), why selection does not help (the blindness is uniform, "
+        "36 of 50, not a removable subset), and why a correct repair gradient is "
+        "still far too shallow to finish.\n\n"
+        "The uncomfortable half: raising 3.9% means each check asserting MORE of "
+        "its sentence, and asserting more is what produces over-strictness. This "
+        "set is at 3.9% strength and ZERO unsound simultaneously, which is the "
+        "first time both ends of that trade have been measured on one set.\n\n"
+        "REPRODUCED ON A SET 36% LARGER, AND IT DOES NOT SCALE. The same "
+        "measurement on the largest perfectly sound set this corpus contains -- "
+        "68 checks over 45 of 89 requirements, against the same held-out design "
+        "-- reads 4 probe-only, 3 SILENT, 54 BLIND, 7 objecting, and strength "
+        "134/4804 = 2.8%. **THE STIMULUS OPPORTUNITY IS THE SAME THREE CHECKS AT "
+        "68 AS AT 50**: the 18 checks added are 18 more blind ones and zero more "
+        "silent ones, and strength FELL, because the additions decide more and "
+        "object no more. So the 3-of-50 is not an artifact of that set's size, "
+        "and a stimulus round is worth the same three checks however wide the set "
+        "gets."
+    )
+
+def strength_and_soundness_are_exchanged_not_traded() -> str:
+    """The sharpest form of the finding this whole module is about.
+
+    Every other measurement here reports the two properties as anti-correlated
+    ACROSS a corpus, which leaves room for hoping a better author or a better
+    prompt lands in between. This one watches a single author make a single
+    change to a single check, 34 times, and there is no in between.
+    """
+    return (
+        "Measured on k1. 34 sound checks that read a real output, decide on 13 "
+        "independently written designs and object to none of them, each "
+        "re-authored to assert every obligation in its own requirement sentence. "
+        "The objection was admissible -- the sentence itself, plus a count over "
+        "the candidate population -- and named the over-reach hazard outright. "
+        "All 34 returned, compiled, and none came back unchanged.\n\n"
+        "Strength, measured as objections over decisions on testpoints where a "
+        "port the check itself reads is wrong, went 1.8% to 44.1%: a 24x rise, "
+        "so asserting the whole sentence is well within what the author can do. "
+        "Checks objecting to a held-out design went 3 to 18. And checks "
+        "convicting the known-good design went 0 to 23 of 34.\n\n"
+        "THE BOTH CELL IS 0 OF 34. Sound after the edit: 11. Discriminating "
+        "after the edit: 21. Overlap: zero, against 6.8 expected under "
+        "independence -- and zero is the MINIMUM the marginals allow, since 11 + "
+        "21 = 32 of 34. Every check that gained discrimination lost soundness "
+        "and every check that kept soundness gained none, with no exceptions.\n\n"
+        "So this is not a correlation between two properties of a corpus; it is "
+        "a partition produced by the edit itself. The few percent of checks that "
+        "are both sound and discriminating are not a low yield from a hard task "
+        "-- they are authors happening to stop at exactly the right point. What "
+        "would fix it is a soundness oracle available WHILE authoring, so the "
+        "author can stop at the boundary instead of crossing it. Nothing here "
+        "builds one without the known-good design."
+    )
+
+
+
+
+
+def zero_objections_can_be_incompatible_with_correctness() -> str:
+    """The result a repair loop is most likely to be built on, and it is false.
+
+    Every other refutation here says a check set is a WEAK guide. This one says
+    something stronger about the moment the guide declares success: on a set that
+    carries even one over-strict check, reaching zero objections is not weak
+    evidence of correctness -- it is PROOF of incorrectness, available before any
+    equivalence instrument runs, and the loop cannot see it.
+    """
+    return (
+        "Measured on k1, on the widest golden-free set this corpus has produced: "
+        "68 checks over 45 of 89 requirements = 51%, A MAJORITY OF THE "
+        "SPECIFICATION, selected by a rule that reads only spec-derived designs. "
+        "The audit, computed afterwards and feeding nothing: 7 of the 68 convict "
+        "the known-good design -- a 10% false-reject rate.\n\n"
+        "THAT 10% IS THE WHOLE FINDING, READ FORWARD RATHER THAN AS A COST. "
+        "The known-good design scores SEVEN objections against this set. A design "
+        "scoring ZERO therefore disagrees with it on at least those seven checks, "
+        "so it is not that design. Zero objections and equivalence are MUTUALLY "
+        "EXCLUSIVE here, and the exclusion is arithmetic -- no miter, no held-out "
+        "grade and no sampling is involved in deriving it.\n\n"
+        "It is not hypothetical. A Sonnet editor, driven through the shipped "
+        "staged-buffer policy on a design written from the specification and held "
+        "out of every selection, went 11 objections to 3 to 0 in 12 of 14 trials "
+        "and stopped, correctly, because the criterion it was given said it was "
+        "finished. The bounded miter returns DIFFERS, with all three grade pins "
+        "green in the same process.\n\n"
+        "AND THE LAST LEG IS THE PART TO KEEP. Objections 11 -> 3 moved the "
+        "design toward the reference: 249 of 318 testpoints differing -> 192, "
+        "2,904 differing cells -> 2,733, and one output repaired to NEVER "
+        "differing. Objections 3 -> 0 moved it back: 200 testpoints, 3,075 cells, "
+        "that repaired output broken again at 54 cells, and every one of the ten "
+        "declared outputs differing. The three points were each re-measured in "
+        "their own clean run directory. So the gradient was real and it INVERTED "
+        "over the final approach, at exactly the objection count that reads as "
+        "success.\n\n"
+        "The consequence for a loop is a disposition rule, not a better set: a "
+        "check set whose over-strict count is unknown -- which is every set "
+        "outside a benchmark -- cannot have zero objections read as done. Score "
+        "the loop on requirements it satisfies, stop it on a trial budget, and "
+        "treat a run that reaches zero as a set defect to investigate rather than "
+        "a design to ship."
+    )
+
+def authoring_populations_are_complementary_not_ordered() -> str:
+    """Whether to keep a second population, when the first one measures better.
+
+    Every arm comparison on this plan asks which population is BETTER, gets an
+    answer inside the noise, and moves on. That is the wrong question for a set
+    that is a union: two populations equally bad on average are worth keeping
+    together if they are bad in different places, and worth collapsing if not.
+    Measured here for the first time, and they are disjoint.
+    """
+    return (
+        "Measured on k1, on the 34 behavioural requirements the production run "
+        "never trusted, each answered by BOTH a port-only author and one given "
+        "spec-licensed state probes -- so the comparison is paired on the "
+        "requirement and a vague sentence subtracts from both arms equally.\n\n"
+        "NEITHER ARM IS BETTER. Adequate checks: 3 from the port-only arm, 2 "
+        "from the probe arm, two-sided sign test p = 1.000. The two legs move in "
+        "opposite directions and cancel -- the probe arm is more often sound (9 "
+        "against 6 paired, p = 0.607) and the port-only arm more often "
+        "discriminating (11 against 6, p = 0.332). That is the same exchange this "
+        "module measures inside a single check, appearing between two authors.\n\n"
+        "AND THE ADEQUATE SETS ARE DISJOINT: 3 + 2, INTERSECTION 0. No "
+        "requirement got an adequate check from both arms. So the union is 5 of "
+        "34 where the better arm alone is 3 -- two thirds more, from a lever that "
+        "costs nothing, because in an A/B both populations have already been "
+        "authored and the losing arm is usually discarded.\n\n"
+        "The rule this sets: an arm comparison decides which PROMPT to ship and "
+        "must not decide which BODIES to keep. Score arms against each other, "
+        "then select the set over their union. On this corpus the widest "
+        "perfectly sound set draws from every arm that was ever run, and "
+        "discarding any losing arm would have cost it span.\n\n"
+        "What this does NOT say is that more arms keep paying. Two arms are two "
+        "samples, the disjointness is measured once, and a third arm might "
+        "overlap both. The claim is the narrow one: a losing arm is not an empty "
+        "arm, and this plan has been treating it as one."
+    )
+
+def the_minority_rule_is_precise_and_that_is_what_it_costs() -> str:
+    """The one golden-free gate on this plan that works, and its price.
+
+    Everything else here refutes an instrument. This one endorses one -- and the
+    endorsement is the smaller half, because a filter that is perfectly precise
+    about soundness turns out to be perfectly precise about removing the checks
+    that discriminate. Read both numbers or this becomes a recommendation.
+    """
+    return (
+        "THE RULE: keep a check that objects to at most 2 of 13 independently "
+        "written spec-derived designs. It reads no known-good design, and its "
+        "rationale is not tuning -- a requirement that MOST competent independent "
+        "implementations violate is more likely one the CHECK has misread than "
+        "one all those authors got wrong.\n\n"
+        "Measured on k1 over 218 checks that fire, where the base rate of "
+        "soundness is 68/218 = 31%: the rule keeps 59, and **59 OF 59 SPARE THE "
+        "KNOWN-GOOD DESIGN. PRECISION 100%.** An earlier version of this was 7 of "
+        "7 and readable as an accident; at 59 of 59 against a 31% base rate it is "
+        "not. It spans 39 of 89 requirements = 44%, and it is the best "
+        "golden-free soundness instrument measured here by a wide margin -- the "
+        "next is the split-cell filter at 84%.\n\n"
+        "AND IT REMOVES HALF THE ADEQUACY, WHICH IS THE PART TO CARRY. The "
+        "largest perfectly sound set this corpus contains is 68 checks over 45 "
+        "requirements = 51%, and it holds 18 checks that are also discriminating. "
+        "The rule recovers 59 of those 68 checks -- 87% -- but only **9 of the 18 "
+        "adequate ones**. It drops 13% of the set and 50% of what makes the set "
+        "worth having.\n\n"
+        "The mechanism is visible in what it drops: the nine rejected checks "
+        "convict 6, 8, 11, 12 and 13 of the 13 candidates. They are sound AND "
+        "they object to most of the population -- which is exactly the profile "
+        "the rule is built to reject, and exactly the profile of a check that "
+        "discriminates. So this is not a tuning loss to be recovered at another "
+        "threshold; the rule's precision and its cost are the same property.\n\n"
+        "Use it as a soundness gate, which is what it is, and never as a "
+        "selector for the final set: gate with it, then take the union with "
+        "whatever else the corpus offers, because the checks it rejects are where "
+        "half the discrimination lives."
+    )
+
+def adequacy_is_soundness_and_refutability() -> str:
+    """The first near-exact decomposition of the cell everything here is about.
+
+    Every other entry measures how hard the adequate cell is to reach. This one
+    says what it IS, on this corpus, in two properties that are each cheap to
+    compute -- and the more interesting half of the answer is that the leg doing
+    the work is one this plan dropped as harmful.
+    """
+    return (
+        "Measured on k1 over 218 checks that decide on the known-good design, "
+        "with discrimination against BOTH held-out designs. Among the 68 SOUND "
+        "checks, where the chance of discriminating is 26% -- three times BELOW "
+        "the 75% base rate over all firing checks, which is the anti-correlation "
+        "this module exists to document:\n\n"
+        "    SOUND and convicting NO candidate   52 checks,  3 adequate =  6%\n"
+        "    SOUND and convicting AT LEAST ONE   16 checks, 15 adequate = 94%\n\n"
+        "**ADEQUATE = SOUND AND REFUTABLE, at 94% precision and 83% recall.** "
+        "Not a correlation -- a decomposition, and the second leg reads only "
+        "spec-derived candidates, so it needs no known-good design.\n\n"
+        "COMPOSED WITH THE SOUNDNESS GATE IT IS THE FIRST GOLDEN-FREE ADEQUACY "
+        "INSTRUMENT HERE. 'Convicts between 1 and 2 of 13' keeps 7 checks of "
+        "which 6 are adequate: 86% against an 8% base rate, a 10.7x lift, where "
+        "the best previously measured was 3.4x at 10% precision. Recall is 6 of "
+        "18 = 33%, and n = 7, so it is an instrument for saying WHICH checks do "
+        "the work, not a way of getting more of them.\n\n"
+        "TWO THINGS IT IS NOT, and both matter. The upper bound at 2 was chosen "
+        "by reading the known-good design, so the composite is a CALIBRATED rule "
+        "and not a score. And the lift does not come from the refutable leg "
+        "predicting discrimination: at 86% against a 75% base rate that leg is "
+        "at chance on its own. It works by REMOVING the 52 sound-and-blind "
+        "checks, which is a different mechanism from the one its name suggests.\n\n"
+        "SO THE DECISION TO DROP THE REFUTABLE LEG AS A SELECTION RULE STANDS, "
+        "AND NOW HAS ITS REASON. It discards 52 checks to keep 16, and the 52 are "
+        "SOUND AND SILENT -- a check that never objects never mis-steers a repair "
+        "loop, so keeping it costs nothing, while dropping it loses the 3 adequate "
+        "checks among them. Use this to REPORT which members of a set carry its "
+        "discrimination; do not use it to build the set."
+    )
+
+def soundness_is_what_makes_the_criterion_work() -> str:
+    """The counterweight to every "over-strictness is the cost of span" reading.
+
+    This module measures soundness as something a set PAYS for -- a false-reject
+    rate quoted beside a span. Measured against a design that a set actually
+    accepted, the sign flips: the unsound members are not a tax on an otherwise
+    working criterion, they are why it stopped working.
+    """
+    return (
+        "Measured on k1 against the design a 68-check golden-free set drove to "
+        "ZERO objections and which the bounded miter calls DIFFERS -- wrong on "
+        "200 of 318 testpoints and on all ten declared outputs. Every one of the "
+        "259 corpus bodies re-decided against its traces:\n\n"
+        "    decide on it                                215 of 259\n"
+        "    OBJECT to it            129, over 57 of 89 requirements = 64%\n"
+        "    of those, inside the set that accepted it     0\n"
+        "    of those, SOUND                               1\n\n"
+        "**THE CORPUS KNOWS THE DESIGN IS WRONG ACROSS 64% OF THE "
+        "SPECIFICATION AND CAN SAY SO SOUNDLY WITH EXACTLY ONE CHECK.** 128 of "
+        "the 129 catches are bought by also condemning the known-good design. "
+        "That is this module's central anti-correlation stated where it costs "
+        "something, rather than as a distribution over a corpus.\n\n"
+        "AND THE ONE SOUND CATCH IS THE ACTIONABLE HALF. Swap the accepting "
+        "set's 7 over-strict members for 7 sound ones -- same 68 checks, same 45 "
+        "of 89 requirements, same 51% span, audit 10% down to 0 -- and the "
+        "resulting set OBJECTS to that design where the original accepted it:\n\n"
+        "    the set with 7 unsound members   0 objections   ACCEPTED\n"
+        "    the perfectly sound set          1 objection    REJECTED\n\n"
+        "So the false-reject rate is not the price of the span. On this pair it "
+        "is the whole difference between a criterion that discriminates and one "
+        "that does not, at identical size and identical coverage. A set's audit "
+        "column should be read as a defect to remove, not as a rate to trade "
+        "against reach.\n\n"
+        "WHAT IT DOES NOT SAY: that the sound set is sufficient. One objection on "
+        "a design wrong on 200 testpoints is discrimination, not adequacy, and "
+        "the sound set's own limit is measured elsewhere here. The claim is "
+        "narrow and it is about the AUDIT COLUMN: unsound members do not merely "
+        "add false rejects, they remove the criterion's ability to reject."
+    )
+
+def a_perfectly_sound_majority_set_still_false_accepts() -> str:
+    """The ceiling result, and the one that closes the corpus rather than a lever.
+
+    `zero_objections_can_be_incompatible_with_correctness` shows that a set
+    carrying an over-strict check makes termination a certificate of
+    NON-equivalence. The obvious response is to remove the over-strict checks --
+    and this is that experiment, run on the largest perfectly sound set the
+    corpus can produce, which happens to span a majority.
+    """
+    return (
+        "Measured on k1. MAXSOUND is every one of the 259 corpus bodies that "
+        "decides on the known-good design and convicts it nowhere: **68 checks "
+        "over 45 of 89 requirements = 51%, A MAJORITY, at a false-reject rate of "
+        "ZERO.** It is selected BY the known-good design, so it is a CEILING and "
+        "never a score -- but that is what makes the negative below exhaustive "
+        "rather than a sampling result.\n\n"
+        "A Sonnet editor through the shipped staged-buffer policy, on a design "
+        "written from the specification and held out of every selection, reached "
+        "**0 objections of 68 in 6 of 14 trials.** Re-scored in its own clean run "
+        "directory. All three grade pins green in the same process.\n\n"
+        "**THE MITER RETURNS DIFFERS. The design is wrong on 193 of 318 "
+        "testpoints -- 61% -- and on nine of its ten declared outputs.**\n\n"
+        "EVERY AVAILABLE EXPLANATION IS EXCLUDED BY THE SET'S OWN PROPERTIES. Not "
+        "unsoundness: the audit is zero, so unlike the set in "
+        "`zero_objections_can_be_incompatible_with_correctness` reaching zero here "
+        "is CONSISTENT with equivalence rather than proof against it. Not "
+        "thinness: 51% of the specification, the widest sound set the corpus "
+        "holds. Not a wrong gradient: divergence fell on both measures, 249 "
+        "testpoints to 193 and 2,904 differing cells to 2,798, and one output was "
+        "repaired to never differing. Not an editor stopping early: it terminated "
+        "with 8 trials unspent because its criterion was satisfied.\n\n"
+        "AND THE CORPUS CANNOT FIX IT, WHICH IS THE PART THAT CLOSES THE "
+        "QUESTION. Re-deciding all 259 bodies against that design: **124 object, "
+        "across 55 of 89 requirements = 62% of the specification, and ZERO of the "
+        "124 are sound.** MAXSOUND already IS every sound check in the corpus, so "
+        "these are not checks a better selection missed -- there are none to "
+        "miss. **No sound set this corpus can produce rejects this design.**\n\n"
+        "So the binding constraint is not soundness, span, selection, termination "
+        "or the gradient. It is that the checks watch the right ports and pass: "
+        "of these 68, four read no real output, three are exposed to a wrong port "
+        "and never decide, seven object, and **54 decide where their own port is "
+        "wrong and pass**, at 134 objections in 4,804 exposed decisions = 2.8%. "
+        "See `the_residue_is_check_strength`."
+    )
+
+def the_soundness_boundary_is_reachable_from_one_side_only() -> str:
+    """The one prescription this module produces, and it corrects its own claim.
+
+    `strength_and_soundness_are_exchanged_not_traded` measures 34 checks widened
+    across the soundness boundary with 0 landing in between, and reads that as a
+    partition -- the boundary is not findable. Measured from the OTHER side it is
+    findable, and the asymmetry is the actionable result.
+    """
+    return (
+        "Measured on k1, on the two rounds that move a single check across the "
+        "same boundary in opposite directions, by the same author family, one "
+        "edit each:\n\n"
+        "    STRENGTH   sound and blind -> assert MORE   34 checks,  0 adequate =  0%\n"
+        "    NARROWING  over-strict -> assert LESS       47 checks,  7 adequate = 15%\n\n"
+        "**Two-sided Fisher exact p = 0.0196.** The boundary is reachable from the "
+        "over-strict side and not from the weak side.\n\n"
+        "WHY THE POPULATIONS ARE COMPARABLE, since that is what the claim rests "
+        "on. Both are single-edit repairs of an existing body, both are Haiku, "
+        "both got an admissible objection that reads only spec-derived designs -- "
+        "'you decided N times and objected zero times' one way, 'you object to N "
+        "of 13 independently written implementations' the other. Neither author "
+        "saw a known-good design, a held-out design, or any equivalence verdict. "
+        "The narrowing round's leak check was 0 violations over 47 prompts.\n\n"
+        "SO THE PRESCRIPTION IS TO AUTHOR STRICT AND NARROW, NEVER WEAK AND "
+        "STRENGTHEN. A check that objects to most of a spec-derived population is "
+        "a repairable check; a check that objects to none of it is, on this "
+        "evidence, not. That reverses the direction every repair round on this "
+        "plan has pushed -- unexercised, vacuous and off-target all push a check "
+        "toward FIRING, and none of them pushes it toward demanding less.\n\n"
+        "THE COST, WHICH IS THE HALF THAT MAKES IT A RATE AND NOT A ROUTE. Of the "
+        "47, twelve came back VACUOUS -- sound by asserting nothing, which the "
+        "pre-registration scores as a loss exactly as harshly as still "
+        "over-reaching -- and 24 did not move. Adequacy went 16 to 23 of 89, 18% "
+        "to 26%: the largest single-round gain here, and not a majority.\n\n"
+        "AND THE ROUTE IS BOUNDED, not merely slow. Its population is the "
+        "requirements that have an over-strict body which already catches a "
+        "held-out design, and there are 47 of them. Even if every one landed, "
+        "adequacy would reach 16 + 47 = 63 of 89 = 71%. At 15% a round on a "
+        "shrinking pool it converges well short of that, so this raises the "
+        "measured ceiling and does not by itself deliver a majority.\n\n"
+        "AND A SECOND ROUND MEASURED THE DECAY, WHICH SETTLES THE CEILING. The 28 "
+        "checks still over-strict and still discriminating were narrowed again, "
+        "each author shown its own first rewrite and told to find a DIFFERENT "
+        "over-reach -- the loop-memory discipline measured effective on RTL "
+        "repair. **It landed 1 of 28 = 4%**, against a pre-registered bar of 5 "
+        "for the rate holding. Adequacy 23 to 24 of 89.\n\n"
+        "THE NUMBER IS THE SAME AS THE OTHER LEVER'S, TO THE UNIT:\n\n"
+        "    repair    (push a check to FIRE)     8 of 45 = 18%   ->  1 of 28 = 4%\n"
+        "    narrowing (push a check to NARROW)   7 of 47 = 15%   ->  1 of 28 = 4%\n\n"
+        "Two levers pushing a check in OPPOSITE directions, with different "
+        "objections, produce the same two-round shape. **Stated carefully: the "
+        "within-lever decay is p = 0.245 at n = 28 and is NOT independently "
+        "significant.** What is solid is that the second round missed its bar and "
+        "landed exactly on the precedent, so the first attempt is where a "
+        "repair's value is and further rounds are worth about one check each.\n\n"
+        "SO THE ROUTE IS BOUNDED IN PRACTICE AS WELL AS IN PRINCIPLE. At the "
+        "measured rates it converges near 27-28 of 89 = 31%, against the 45 a "
+        "majority needs. **Authoring does not reach a majority on this corpus, "
+        "and that is now a decay curve rather than a tally of failed rounds.**"
+    )
+
+def the_two_legs_cannot_be_composed_from_separate_bodies() -> str:
+    """Why "both legs exist for N requirements" is not "N is reachable".
+
+    `the_soundness_boundary_is_reachable_from_one_side_only` measures a check
+    moved across the boundary from each side and reads the asymmetry as a
+    prescription. This measures the one configuration neither round had: an
+    author shown BOTH ends for the same requirement, and told in numbers where
+    the answer sits between them.
+    """
+    return (
+        "Measured on k1, on the 26 requirements where the corpus holds a body "
+        "that is SOUND and a body that DISCRIMINATES and never the same body. "
+        "One author per requirement, shown both, told each body's conviction "
+        "count over 13 independently written implementations, and told outright "
+        "that the check the requirement needs objects to a MINORITY of the 13 "
+        "and to more than zero. Both failure modes named. Integrity: 26 of 26 "
+        "returned, 26 of 26 compile, 0 duplicate bodies across requirements, and "
+        "0 returned either input unchanged.\n\n"
+        "                     INPUT A   INPUT B   THE MERGE\n"
+        "    SOUND                 26         0           8\n"
+        "    DISCRIMINATING         0        26          18\n"
+        "    **ADEQUATE**           0         0       **0**\n\n"
+        "AND ZERO IS THE MINIMUM THE MARGINALS ALLOW, WHICH IS THE CLAIM. "
+        "8 + 18 = 26 = n, so the two sets COULD have been disjoint and they "
+        "are, exactly: every merge is sound XOR discriminating, never both and "
+        "never neither. The overlap expected under independence is 5.5.\n\n"
+        "THAT IS THE SECOND ROUND TO LAND ON THE MARGINAL MINIMUM, and it is "
+        "tighter than the first. The strength round's 11 + 21 = 32 of 34 left "
+        "two requirements free to fall in neither cell; this leaves none.\n\n"
+        "AND THE TARGET WAS STATED IN NUMBERS, SO THIS IS NOT A READING "
+        "FAILURE. Where the 26 landed on the scale the prompt named: SIX at 0 "
+        "convictions of 13, THREE in the 2-4 band the prompt asked for, and "
+        "SEVENTEEN at 10-13. **Three hit the band and none of the three is "
+        "adequate** -- two are sound and catch no held-out design, one is "
+        "unsound and narrow. The minority rule identifies a SOUNDNESS band; "
+        "landing in it buys soundness and buys no discrimination.\n\n"
+        "THE EXCHANGE IS EXACT ON THE ONE OBJECTION THAT MATTERS. 18 of the 26 "
+        "discriminating inputs object to the design the largest perfectly sound "
+        "set accepted at zero objections; after the merge 16 still do, and "
+        "every one of the 16 is over-strict, so not one can enter a sound set. "
+        "The merges that became sound are exactly the merges that stopped "
+        "objecting to it.\n\n"
+        "SO A CEILING COMPUTED BY COUNTING THE TWO LEGS SEPARATELY DOES NOT "
+        "TRANSFER. Over this corpus a sound body exists for 52 of 89 "
+        "requirements and a discriminating body for 64, with both present in "
+        "different bodies for 50 -- and that 50 counts a vacuous body as half "
+        "an adequate check and an over-strict body as the other half. They do "
+        "not compose. **Read every 'both legs exist' figure as an upper bound "
+        "on a quantity that is not reachable by combining them.**\n\n"
+        "TWO LIMITS, AND NEITHER EXPLAINS THE RESULT. The prompt listed the "
+        "ports each input reads but not the contract's declared-port block, so "
+        "some authors described a DECLARED probe as a signal that does not "
+        "exist: 11 of 15 probe-bearing pairs kept one, 4 dropped every one, 1 "
+        "added one -- far better than the 12 of 12 a repair round drops, and "
+        "the clause that did it is 'use only the ports the two checks already "
+        "read'. It cannot explain 0 of 26, because 22 of the 26 dropped no "
+        "probe and none of those is adequate either. And it is one author, one "
+        "round, one design, at the first-attempt rate -- which on this plan has "
+        "always been the high one."
+    )
+
+
+def the_adequacy_filter_does_not_survive_being_a_target() -> str:
+    """What happens when the best golden-free filter here is optimised for.
+
+    `adequacy_is_soundness_and_refutability` measures "objects to 1 or 2 of 13"
+    at 86% precision on adequacy as a FILTER over checks that landed there by
+    themselves, and says outright it must not be used to SELECT. This measures
+    the stronger misuse -- handing it to an author as a TARGET, with the check's
+    own measured count fed back so it can tell which way it overshot.
+    """
+    return (
+        "Measured on k1, on 24 checks whose conviction count over 13 "
+        "independently written implementations sat outside the band. Each author "
+        "got its own body, its measured count, the direction to move, the target "
+        "stated as a number, and the complete declared-port list. Integrity: 24 "
+        "of 24 returned, 24 of 24 compile, 0 duplicates, 0 unchanged.\n\n"
+        "                                  before   after\n"
+        "    IN BAND -- convicts 1-2 of 13      0       2\n"
+        "    SOUND                              7      10\n"
+        "    DISCRIMINATING                    17      15\n"
+        "    **ADEQUATE**                       0   **1**\n\n"
+        "AND THE TWO THAT REACHED THE BAND SETTLE WHAT THE BAND IS. One convicts "
+        "2 of 13 and one convicts 1; **both are sound and NEITHER "
+        "discriminates**. The rule delivers the leg it was built on and does not "
+        "deliver the other one when it is aimed at rather than filtered with.\n\n"
+        "AND THE ONE ADEQUATE CHECK CONVICTS 12 OF 13 -- OUTSIDE THE BAND, so "
+        "the rule would have rejected the only check the round produced that "
+        "works. Both halves fail in the same round on the same population: it "
+        "does not drive authors to adequacy, and it does not select the adequate "
+        "check when one appears.\n\n"
+        "THE FEEDBACK IS NOT THE PROBLEM, AND SAYING SO KEEPS THE NEGATIVE "
+        "HONEST. The distribution moved: one check sat between 1 and 5 "
+        "convictions before the round and five do after. An author handed the "
+        "count can steer. It steers into a region that is sound and blind, "
+        "because the count is a soundness signal and there is no second "
+        "golden-free signal for the other leg -- discrimination is defined "
+        "against a design that is wrong, and every wrong design available is "
+        "drawn from the same specification-and-reader pair.\n\n"
+        "AND IT IS THE THIRD CONSECUTIVE ROUND TO LAND ON THE MARGINAL MINIMUM, "
+        "which is the structural claim this module has been circling:\n\n"
+        "    round                              n   SOUND  DISCR  S+D  min  OBS\n"
+        "    strength   -- blind, assert MORE  34     11     21    32    0    0\n"
+        "    merge      -- both ends shown     26      8     18    26    0    0\n"
+        "    band       -- numeric target      24     10     15    25    1    1\n\n"
+        "**Three rounds, three instructions, three populations, and every one "
+        "lands exactly on the floor its own marginals permit** -- against 6.8, "
+        "5.5 and 6.2 expected under independence. No round here has ever "
+        "produced an overlap larger than arithmetic forces. The two properties "
+        "are not merely anti-correlated across a corpus; they are exchanged one "
+        "for one by whatever edit the author makes.\n\n"
+        "AND THE ADEQUACY RATE IS 4% FOR THE THIRD TIME. Repair round 2 landed 1 "
+        "of 28, narrowing round 2 landed 1 of 28, and this lands 1 of 24 -- "
+        "three levers, three different objections, one figure. Adequacy 24 to 25 "
+        "of 89 = 28%, against the 45 a majority needs."
+    )
+
+
+def golden_free_span_grew_and_the_precision_did_not_hold() -> str:
+    """The golden-free score after four authoring rounds, and a correction.
+
+    `the_minority_rule_is_precise_and_that_is_what_it_costs` reports the rule at
+    59 of 59 -- PERFECT precision -- on a 259-body corpus. Precision is a
+    property of the population a rule is applied to, and the corpus has since
+    grown to 484. Re-measured, it is not perfect.
+    """
+    return (
+        "Measured on k1 over 484 check bodies -- the original 259 plus the "
+        "narrowing, merge and band rounds. Every row below is produced by a rule "
+        "reading only spec-derived designs; the audit is computed last and feeds "
+        "nothing.\n\n"
+        "    rule                        checks   requirements   of 89   *audit*\n"
+        "    C  convicts <= 2 of 13        108         44          49%    *3%*\n"
+        "    B  convicts a minority        125         50        **56%**  *10%*\n"
+        "    the ceiling, selected BY the\n"
+        "    known-good design            126         52          58%     *0*\n\n"
+        "**A GOLDEN-FREE SET NOW SPANS 56% OF THE SPECIFICATION**, up from the "
+        "51% the same rule reached before these rounds, and rule C is up from "
+        "44% to 49%. The ceiling moved 51% to 58%, so the golden-free rules "
+        "tracked it rather than closing on it.\n\n"
+        "**AND SPAN IS STILL NOT AN ACCEPT CRITERION, WHICH IS THE HALF THAT "
+        "MATTERS.** 13 of rule B's 125 members convict the known-good design, so "
+        "that design scores 13 against its own criterion and any design scoring "
+        "zero is a different design -- the arithmetic that made the earlier "
+        "rule-B run's termination a certificate of NON-equivalence. Rule C is "
+        "the same defect in miniature at 3.\n\n"
+        "THE CORRECTION, AND IT IS TO A HEADLINE HERE. The minority rule at "
+        "threshold 2 was measured 59 of 59 -- perfect -- and quoted as the best "
+        "golden-free soundness instrument by a wide margin. On the grown corpus "
+        "it keeps 108 and **105 of them spare the known-good design: 97%, not "
+        "100%**, against a base rate of 126 sound among 424 deciding = 30%. That "
+        "is a 3.2x lift at n = 108 and it is still the best instrument here -- "
+        "but the perfect figure was a property of the smaller population, and "
+        "the three exceptions are bodies these authoring rounds produced.\n\n"
+        "SO THE RULE DID NOT DEGRADE BY BEING WRONG; IT DEGRADED BY BEING "
+        "APPLIED TO CHECKS AUTHORED AGAINST IT. Three of the rounds scored here "
+        "used the conviction count as an objection or a target, and the checks "
+        "that came back are the ones the rule now misjudges. **A golden-free "
+        "gate measured on a corpus it did not shape is measuring something else "
+        "once it starts shaping one**, which is the same Goodhart the target "
+        "round measured directly and is why the audit column must be recomputed "
+        "after every authoring round rather than carried forward."
+    )
+
+
+def a_wider_sound_set_lands_the_same_design_in_the_same_place() -> str:
+    """The ceiling result, re-run on the corpus four authoring rounds grew.
+
+    `a_perfectly_sound_majority_set_still_false_accepts` closed the corpus AS IT
+    THEN WAS: no sound body objected to the design that set accepted, so there
+    were none a better rule could have found. Bodies have since been authored
+    that did not exist. This is the same construction over the larger corpus,
+    and it is the only run whose input had changed.
+    """
+    return (
+        "Measured on k1. The set is every body in the 484-body corpus that "
+        "decides on the known-good design and convicts it nowhere -- the same "
+        "construction as before, on a corpus grown by the narrowing, merge and "
+        "band rounds:\n\n"
+        "                       checks   span        *audit*  DISCRIMINATING\n"
+        "    the earlier set       68   45 of 89=51%    *0*        18\n"
+        "    **this one**         119   52 of 89=58%    *0*        31\n\n"
+        "75% more checks, seven more points of span, 72% more discriminating "
+        "members, at the same zero false-reject rate. The extra discrimination "
+        "is real where it can be seen: **12 objections against a held-out design "
+        "at init where the earlier set found 7.**\n\n"
+        "A Sonnet editor through the shipped edit-session policy, on that design "
+        "-- written from the specification by an agent forbidden to open any "
+        "other, and held out of every selection that produced this set -- reached "
+        "**0 objections of 119 on trial 7 of 14**, and the reset-constrained "
+        "bounded miter says **DIFFERS**, with all three grade pins green in the "
+        "same process. The zero-objection design was re-scored from scratch in "
+        "its own run directory, 0 of 119, before any of this was quoted.\n\n"
+        "                    objections   testpoints differing   cells   repaired\n"
+        "    at init            12 of 119    249 of 318 (78%)     2,904    none\n"
+        "    the earlier set     0 of  68    193 of 318 (61%)     2,798    one output\n"
+        "    **this set**        0 of 119    187 of 318 (59%)     2,786    one output\n\n"
+        "**AND THE GRADIENT IS CORRECT THE WHOLE WAY, WHICH IS WHAT MAKES THIS "
+        "THE CLEAN NEGATIVE.** Objections, testpoints and cells all fell "
+        "together and one output was repaired to never differing, with no "
+        "inversion over the final approach -- unlike the earlier over-strict run, "
+        "whose last three objections cost 8 testpoints and 342 cells and broke "
+        "the output it had repaired. Nothing went backwards here and the design "
+        "is still wrong on 59% of the suite.\n\n"
+        "SO EVERY REMAINING EXPLANATION IS EXCLUDED. Not unsoundness (audit zero "
+        "by construction). Not thinness (the widest sound set this corpus has "
+        "produced). Not weak discrimination (31 adequate members against 18). "
+        "Not a wrong gradient (all four measures moved together). Not an editor "
+        "stopping early (7 trials unspent, and its criterion is correct that no "
+        "check objects).\n\n"
+        "**AND THE RESIDUE DID NOT MOVE, TO ONE DECIMAL PLACE.** Judged only on "
+        "the testpoints where a port each check itself reads is wrong: the "
+        "earlier 50-check set objected on 134 of 3,399 exposed decisions = 3.9%; "
+        "this one objects on **300 of 7,677 = 3.9%**. Twice the decisions, twice "
+        "the objections, the identical rate, and the same two checks deciding on "
+        "249 of 249 exposed testpoints without objecting once. **Check strength "
+        "is not a property of a set's size, its span, or its selection rule.**"
+    )
+
+
+def split_cells_are_a_specification_finding() -> str:
+    """Why a disagreement cell is escalated, never resolved automatically.
+
+    `disagreement_cells` localises the residue better than anything else here,
+    and the natural next step -- have a model resolve those cells, or at least
+    flag the ones the specification leaves open -- is measured and does not work.
+    """
+    return (
+        "Measured on k1 over 20 cells drawn from the 3,863 a 13-design "
+        "population cannot agree on. Each was put to a fresh reader as ONE "
+        "targeted question: one cell, one port, the specification, the declared "
+        "interface, and the input sequence from reset, with no design of any "
+        "kind. The population majority is right on 60.9% of split cells and on "
+        "11 of the 20 sampled; the questioner scored 7 of 20 -- WORSE than the "
+        "population, not better. On the 9 cells where the population is wrong it "
+        "was right once, and produced the population's exact wrong answer 7 "
+        "times. So the correlated error is not an artifact of writing a whole "
+        "module under a budget; it is what this text produces in a competent "
+        "reader, and no simpler task decorrelates it. Worse for tooling: the "
+        "prompt offered 'the specification does not determine this' as a first "
+        "class answer, and 0 of 20 used it -- the ambiguity is invisible to the "
+        "reader it misleads, so a model cannot be asked to flag the gaps either. "
+        "Treat a split cell as a SPECIFICATION defect and route the map to "
+        "whoever owns the specification. Do not resolve it with another model, "
+        "and do not gate on a model's claim that the text is clear."
+    )
+
+
+def a_vacuous_check_is_not_a_defect_and_the_routing_assumes_it_is() -> str:
+    """Why "convicts no candidate" must not route to a strengthen repair.
+
+    The alternating loop classifies a check by how many of N spec-derived
+    designs it objects to: none is VACUOUS, a minority is KEEP, a majority is
+    OVER-STRICT. The first of those three is the one with no instrument behind
+    it, and this measures what that costs on the set the loop actually holds.
+    """
+    return (
+        "Measured on k1 over a 119-body set and a SEVEN-design population, with "
+        "adequacy audited last: SOUND means the check decides on the known-good "
+        "design and convicts it nowhere, ADEQUATE adds that it convicts a design "
+        "held out of every selection.\n\n"
+        "| state | checks | sound | adequate |\n"
+        "|---|---|---|---|\n"
+        "| VACUOUS -- convicts 0 of 7 | 82 | 82 = 100% | **8** |\n"
+        "| KEEP -- convicts 1 to 3 | 21 | 19 = 90% | **6** |\n"
+        "| OVER-STRICT -- convicts 4 to 7 | 16 | 12 | 0 |\n\n"
+        "**8 OF THE 14 ADEQUATE CHECKS ARE CLASSIFIED VACUOUS**, so the routing "
+        "sends them to the one repair move measured to trade soundness for "
+        "discrimination 34 times out of 34. No threshold reaches them: they "
+        "convict ZERO candidates, so the adequate count is the same 14 at every "
+        "cut from 1 to 7. The population is simply RIGHT about those "
+        "requirements, which is what this module's `refuted_by` docstring warns "
+        "about in the abstract and this measures at scale -- it was 3 of 14 when "
+        "first seen and it is 8 of 14 here.\n\n"
+        "TWO CONSEQUENCES, AND THE SECOND IS THE ONE TO BUILD ON.\n\n"
+        "The keep state is the only one BELOW the base rate on soundness -- 90% "
+        "against 95% -- and it is the only one worth keeping. Its two unsound "
+        "members are the price of its six adequate ones, and the 82 that spare "
+        "the known-good design perfectly are the 82 that mostly say nothing. A "
+        "cut chosen for soundness precision is choosing against adequacy.\n\n"
+        "And the instrument the VACUOUS state lacks already exists here: "
+        "`refuted_by`. A check that spares every candidate and convicts a "
+        "mechanical one-line mutant of one has demonstrated it CAN fail, with no "
+        "known-good design and no model call. **Route a refutable vacuous check "
+        "to KEEP, not to a repair.** Until that leg runs, an accept gate is what "
+        "contains the damage -- discard a strengthened body unless it lands in "
+        "the keep band, so an adequate vacuous check survives the round "
+        "unchanged.\n\n"
+        "WHAT THIS DOES NOT SAY. It is not a measurement of the minority rule's "
+        "precision. This body set descends from a soundness-selected set and a "
+        "gated repair round, so it is 95% sound before any rule touches it, and "
+        "the cut reads 1.03x lift on it against the 100%-at-a-31%-base-rate "
+        "measured on the full corpus. A soundness filter cannot be calibrated on "
+        "a population already selected for soundness; what this table answers is "
+        "the different question of what the cut is worth INSIDE the loop."
+    )
+
+
+def new_evidence_moves_the_rule_and_the_audit_together() -> str:
+    """The strongest evidence here that the golden-free routing tracks soundness.
+
+    Every other figure in this module compares a rule against an audit on ONE
+    body of evidence, where a threshold can be fitted. This is a before/after
+    across an evidence change neither column had seen.
+    """
+    return (
+        "Measured on k1. A stimulus round staged 18 testpoints on axes the suite "
+        "had never exercised -- bus errors, requests aborted mid-transaction, "
+        "reset arriving while a transaction is outstanding, back-to-back "
+        "refills, and the data-valid strobe pausing mid-sequence -- taking the "
+        "evidence from 330 to 348 testpoints. Both halves were scored INSIDE ONE "
+        "RENDER, because a probe declaration fixes the row-compression key and "
+        "two renders differ in every row.\n\n"
+        "    checks whose golden-free STATE changed        8\n"
+        "    checks that BECAME unsound on the audit       8\n"
+        "    intersection                                  8\n"
+        "    state-changed but still sound                 0\n"
+        "    newly unsound but state unchanged             0\n\n"
+        "**EVERY CHECK THE RULE MOVED TO OVER-STRICT IS EXACTLY A CHECK THAT "
+        "STARTED CONVICTING THE KNOWN-GOOD DESIGN, AND NO OTHER CHECK DID "
+        "EITHER.** The eight went from 0 or 1 convictions to 6 or 7 of a "
+        "seven-design population, so it is a decisive conviction event and not a "
+        "marginal one. Nothing was fitted: the movement was caused by stimulus "
+        "neither column had seen, and the two were computed independently.\n\n"
+        "This is the mechanism the conviction-count rule claims, observed rather "
+        "than assumed -- a demand no independent implementation satisfies is "
+        "more likely one the check misread than one all those authors got "
+        "wrong, and on all eight the known-good design agrees with the "
+        "authors.\n\n"
+        "AND THE SAME ROUND BOUGHT NO SPAN, WHICH IS THE HALF TO CARRY. The keep "
+        "set went 21 checks over 16 requirements to 17 over 12, while the "
+        "ADEQUATE count did not move at all -- 14 before, 14 after, every "
+        "adequate member surviving. What the wider evidence removed was four "
+        "FALSE keeps. So a stimulus round is an EVIDENCE move, not a span move: "
+        "it can only make the measurement more nearly right, and a measurement "
+        "getting more nearly right looks like a loss whenever the previous "
+        "number was too high. **Quote a keep-set span only beside the evidence "
+        "it was measured on. A span that falls when the evidence widens was "
+        "never a span.**"
+    )
+
+
+def the_keep_state_must_include_the_zero() -> str:
+    """The golden-free rule's best form, measured on the whole authored corpus.
+
+    A conviction-count rule has two natural boundaries: drop a check that
+    convicts most of the population, and drop one that convicts none of it. The
+    second is the one that keeps getting reintroduced, and it is the one that
+    does not pay.
+    """
+    return (
+        "Measured on k1 over ALL 484 authored bodies -- not the "
+        "soundness-selected subset an earlier loop ran on -- against SEVEN "
+        "independently written spec-derived designs and 348 testpoints. The "
+        "audit is computed last and feeds nothing.\n\n"
+        "| rule | checks | requirements | of 89 | *audit* | *adequate* |\n"
+        "|---|---|---|---|---|---|\n"
+        "| convicts 1-3 of 7 | 27 | 14 | 16% | *48%* | *6* |\n"
+        "| **convicts AT MOST 3 of 7** | **111** | **44** | **49%** | ***12%*** | ***14*** |\n"
+        "| convicts 0 of 7 alone | 84 | 35 | 39% | *0%* | *8* |\n"
+        "| convicts 4-7 of 7 | 313 | 61 | 69% | *96%* | *1* |\n"
+        "| everything that decides | 424 | 67 | 75% | *74%* | *15* |\n\n"
+        "**REQUIRING A KEPT CHECK TO CONVICT AT LEAST ONE CANDIDATE COSTS 30 "
+        "REQUIREMENTS OF SPAN AND QUADRUPLES THE FALSE-REJECT RATE**, and throws "
+        "away 8 of the corpus's 15 adequate checks. It is not a filter that "
+        "trades reach for precision; it loses on both. The fix is one "
+        "comparison: keep a check that convicts AT MOST half the population, "
+        "including none of it.\n\n"
+        "44 of 89 = 49% at a 12% false-reject rate, holding 14 of the 15 "
+        "adequate checks, is the best golden-free pair measured here -- one "
+        "requirement short of a majority, and the first time reach and precision "
+        "moved the same way at once.\n\n"
+        "AND THE CUT ITSELF, RE-DERIVED FOR THIS POPULATION. It was calibrated "
+        "at 100% precision on THIRTEEN designs against a 31% base rate. On seven "
+        "designs and 484 bodies the base rate is 26% and the cut at half the "
+        "population reads **88% precision at 88% recall, a 3.34x lift, n=111**. "
+        "The 100% does not survive the population shrink and the rule does. A "
+        "conviction threshold is a function of the population SIZE and must be "
+        "re-derived when N changes, never carried across.\n\n"
+        "THE CORRECTION THIS REPLACES. The same rule measured on a body set "
+        "descended from a soundness-selected set reads a 10% false-reject rate. "
+        "That is an artefact of the population, not a property of the rule: an "
+        "audit whose denominator was chosen by the instrument being audited is a "
+        "lower bound and must be labelled as one."
+    )
+
+
+def the_editor_can_read_a_state_it_cannot_argue_about() -> str:
+    """The validation run, and the one thing that made the editor's refusal right.
+
+    An editor handed an over-strict check has, on this plan's own measurement,
+    no way to tell it from a legitimate demand: it scored 1 of 3 on that
+    judgement in an earlier run and its stated reason was false. This is the
+    same judgement made correctly, and the difference is what the check reads.
+    """
+    return (
+        "Measured on k1. A 21-check set over 16 of 89 requirements, selected by "
+        "a conviction-count rule over seven spec-derived designs, drove a Sonnet "
+        "editor on a design written from the specification and held out of every "
+        "selection. No reference design, no reference trace, no expected "
+        "value.\n\n"
+        "| | objections of 21 | testpoints differing | cells | trials |\n"
+        "|---|---|---|---|---|\n"
+        "| at init | 8 | 279 of 348 = 80% | 4,450 | 0 |\n"
+        "| after the loop | **2** | **223 of 348 = 64%** | **3,969** | **3 of 14** |\n\n"
+        "Objections fell 75%, divergence 20% and cells 11%, all the same way, in "
+        "three trials with eleven unused. The bounded miter says DIFFERS with all "
+        "three pins green in the same process, so the set is still too SPARSE to "
+        "finish -- a statement about its size, not its direction.\n\n"
+        "**AND THE TWO OBJECTIONS IT COULD NOT CLEAR ARE EXACTLY THE TWO CHECKS "
+        "THE AUDIT CALLS UNSOUND.** The editor refused them with a reason it "
+        "could check rather than argue: the requirement demands something on "
+        "entry to a state whose feature is compiled out of this build, and the "
+        "check fires that template on ordinary back-to-back traffic. Verified "
+        "independently and exactly -- the state's probe is true in 0 of the "
+        "reference's 5,723 rows across 348 testpoints.\n\n"
+        "    earlier ceiling run   1 of 3   refused one unsound check and two\n"
+        "                                   sound ones, for a reason that is false\n"
+        "    this run              2 of 2   refused exactly the unsound pair, for\n"
+        "                                   a reason readable off the trace\n\n"
+        "**THE DIFFERENCE IS THAT THE STATE IS A DECLARED PROBE.** 'This state "
+        "never occurs' stops being a belief the editor argues for and becomes a "
+        "fact it reads out of recorded rows. That is the probe architecture "
+        "paying somewhere this plan never looked -- not in the check author, in "
+        "the EDITOR -- and it is the first time here that the editor's soundness "
+        "judgement was right for a reason that can be verified rather than "
+        "asserted. n is two; the mechanism is what to carry, not the rate."
+    )
+
+
+def an_occurrence_claim_is_checkable_and_a_meaning_claim_is_not() -> str:
+    """CORRECTS `the_editor_can_read_a_state_it_cannot_argue_about`.
+
+    That entry reported the editor's soundness judgement as 2 of 2 on a
+    21-check set. On a 111-check set the same editor family named FIVE
+    requirements as the check's fault and one of them is unsound, so the 2-of-2
+    was small-n. What survives is the distinction between the two kinds of
+    claim, which is the part worth carrying.
+    """
+    return (
+        "Measured on k1, two editor runs on the same held-out design with the "
+        "same evidence. **The rate is 1 of 5, not 2 of 2** -- the smaller set "
+        "happened to stop on the unsound pair. The DISTINCTION is what "
+        "survives:\n\n"
+        "    OCCURRENCE  'this state never happens'      RIGHT, 1 of 1\n"
+        "    MEANING     'the requirement owes one X'    WRONG, 0 of 4\n\n"
+        "The occurrence claim is a count over recorded rows and the state is a "
+        "declared probe, so the editor counted it -- 0 of 27,278 edges -- and it "
+        "is the one check in the set the audit calls unsound. The four meaning "
+        "claims are readings of a sentence: whether a requirement owes one "
+        "increment or two, whether an enable governs acceptance or continuation. "
+        "The editor supported each with real counted evidence from the traces, "
+        "and the evidence was about what the DESIGN does, never about what the "
+        "REQUIREMENT means -- which is the question it was answering.\n\n"
+        "**A probe makes an occurrence claim decidable and does nothing for a "
+        "meaning claim.** That is a bound on what any quantity of trace evidence "
+        "can buy an editor arguing with a check, and it is why an editor's "
+        "refusal must be recorded rather than trusted."
+    )
+
+
+def more_span_did_not_buy_more_correctness() -> str:
+    """Two sets, one design, a 3x span gap, and one testpoint of difference."""
+    return (
+        "Measured on k1. Two golden-free-selected sets drove the same Sonnet "
+        "editor on the same design -- written from the specification, held out "
+        "of every selection -- over the same 348-testpoint suite, graded by the "
+        "same bounded miter with all three pins green.\n\n"
+        "| set | span | objections | testpoints differing | cells | trials |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 21 checks | 16 of 89 = 18% | 8 -> 2 | 279 -> **223 = 64%** | 4,450 -> 3,969 | 3 of 14 |\n"
+        "| 111 checks | 44 of 89 = **49%** | 23 -> 7 | 279 -> **220 = 63%** | 4,450 -> 3,834 | 5 of 14 |\n\n"
+        "**THREE TIMES THE SPAN LANDED THE DESIGN THREE TESTPOINTS CLOSER**, and "
+        "both are DIFFERS. Spanning a majority of the specification and driving "
+        "a design to correctness are independent properties of a check set, and "
+        "the second does not follow from the first at any span this corpus "
+        "reaches. Both runs also stopped with most of their trial budget unspent "
+        "and with only checks the editor declined left, so neither is a "
+        "measurement of the editor running out of room."
+    )
+
+
+def selection_is_exhausted_and_authoring_is_the_constraint() -> str:
+    """Whether a better rule could have caught what a check set missed.
+
+    Every "the rule dropped the good checks" hypothesis on this plan has been
+    argued rather than counted. This counts it: all 484 authored bodies
+    re-decided against the design a golden-free set actually produced.
+    """
+    return (
+        "Measured on k1 against the design a 111-check golden-free set drove a "
+        "Sonnet editor to -- 7 objections remaining, and the bounded miter says "
+        "DIFFERS at 63% of testpoints.\n\n"
+        "    corpus bodies OBJECTING to it        278 of 484, over 60 of 89 = 67%\n"
+        "    of those, SOUND on the reference       6\n"
+        "    of those six, already in the keep set  5\n"
+        "    requirements a sound body catches      6 = 7% of 89\n\n"
+        "**THE CORPUS KNOWS THE DESIGN IS WRONG ACROSS 67% OF THE SPECIFICATION "
+        "AND CAN SAY SO SOUNDLY ON 7%, AND THE GOLDEN-FREE RULE HAS ALREADY "
+        "FOUND FIVE OF THE SIX.** 272 of the 278 catches are bought by also "
+        "condemning the reference. So this is not a selection failure with a "
+        "better rule waiting to be found -- there is ONE more sound catcher in "
+        "the whole corpus, and no rule can select what was never written.\n\n"
+        "AND THE RESIDUE HAS A NUMBER ON THIS SET. Restricted to the keep set and "
+        "to decisions where a port THE CHECK ITSELF READS is wrong -- a check "
+        "watching one output is not blind for passing a defect on another -- it "
+        "objects on **95 of 6,521 exposed decisions = 1.5%**. This plan measured "
+        "3.9% twice, on earlier sets against designs no editor had worked on; "
+        "1.5% is what is left once an editor has cleared everything the set "
+        "could see, which is the same statement one round further on.\n\n"
+        "**So the binding constraint is AUTHORING, and it is not the NUMBER of "
+        "checks -- it is what a check asserts.** 484 bodies over 68 requirements "
+        "yield six that can soundly convict a design wrong on 63% of the suite."
+    )
+
+
+def narrowing_the_span_gap_reaches_a_majority() -> str:
+    """The one authoring move with a positive yield, aimed where span can grow.
+
+    Selection is exhausted (see
+    `selection_is_exhausted_and_authoring_is_the_constraint`), so the remaining
+    lever is authoring. Of every authoring round measured on this plan, exactly
+    one has a positive yield: narrowing a check that objects to most of an
+    independently written population.
+    """
+    return (
+        "Measured on k1. The population is the ONLY one in which narrowing can "
+        "add span: the 23 requirements holding an OVER-STRICT body (convicts 4 "
+        "to 7 of seven spec-derived designs) and no keepable one. One call each, "
+        "on the least over-strict body.\n\n"
+        "Admissible and checked before dispatch -- the objection is 'your check "
+        "objects to N of seven independently written implementations of this "
+        "specification', with no known-good design, no held-out design and no "
+        "equivalence verdict in it. Leak check: 0 violations over 23 prompts "
+        "against 182 lines of the reference's source. Integrity: 23 of 23 "
+        "returned, 23 parse, 0 duplicates, 0 unchanged.\n\n"
+        "    23 calls, 6 ACCEPTED by the gate = 26%\n"
+        "      all six sound; two of them adequate\n"
+        "      17 refused: 16 still over-strict, 1 silent, 0 gone blind\n\n"
+        "| the golden-free keep set | checks | requirements | of 89 | *audit* | *adequate* |\n"
+        "|---|---|---|---|---|---|\n"
+        "| before | 111 | 44 | 49% | *12%* | *14* |\n"
+        "| **after** | **117** | **50** | **56%** | ***11%*** | ***16*** |\n\n"
+        "**SPAN UP, FALSE REJECTS DOWN, ADEQUACY UP -- the first round here where "
+        "all three moved the right way at once.** The landing rate is 26% against "
+        "an earlier 15% and 4%, because the population was chosen tightly: one "
+        "body per requirement, the least over-strict, only where span could be "
+        "gained, with the conviction cut re-derived for the population size.\n\n"
+        "**AND 56% SPAN IS NOT 56% ADEQUACY.** The set carries 16 "
+        "measured-adequate checks -- sound, and objecting to a design held out of "
+        "every selection -- which is 16 of 89 = 18% of the specification. Quoting "
+        "the span without the adequacy is the defect this module's own history "
+        "has retracted headlines for."
+    )
+
+
+def the_refutable_leg_predicts_discrimination_and_still_must_not_select() -> str:
+    """A golden-free substitute for adequacy, measured, and what it turned into.
+
+    Adequacy needs a known-good design for one leg and a held-out wrong one for
+    the other, so it cannot be a reported score; and across two editor runs it
+    did not predict the grade. This is the replacement that was proposed for it
+    and what happened when it was measured.
+    """
+    return (
+        "Measured on k1 over a 117-check set. The proposal was: on the "
+        "situations where independently written implementations DISAGREE about a "
+        "port a check reads, how often does it say anything? The predictor is "
+        "computed on seven candidates and the outcome on a design held out of "
+        "everything, so the two share no evidence.\n\n"
+        "| rule | checks | catch the held-out design | precision | *lift over 22%* |\n"
+        "|---|---|---|---|---|\n"
+        "| every check that decides | 113 | 25 | 22% | *1.00x* |\n"
+        "| convicts >= 1 candidate | 28 | 16 | **57%** | ***2.58x*** |\n"
+        "| objects in a DISPUTED situation | 28 | 16 | **57%** | ***2.58x*** |\n\n"
+        "**THE TWO SETS ARE IDENTICAL -- the same 28 checks, nothing in either "
+        "difference.** At testpoint granularity 64% of (testpoint, port) pairs "
+        "are already disputed, against the 11% `disagreement_cells` reports per "
+        "CELL, so the filter removes nothing and the substitute is the refutable "
+        "leg under a new name.\n\n"
+        "WHY ONLY THE WEAK TEST WAS AVAILABLE, and it is structural. The "
+        "transactional view compresses each design's rows independently, so row "
+        "i of one candidate is not row i of another and a cell-level comparison "
+        "has nothing to align on. A cell-level disagreement strength would need "
+        "raw-edge alignment and is untested.\n\n"
+        "**WHAT SURVIVES: the refutable leg predicts DISCRIMINATION at 57% "
+        "against a 22% base, 2.58x, n=28, golden-free and with no model call** -- "
+        "an instrument for the half of adequacy that never had one. **AND IT "
+        "STILL MUST NOT SELECT.** It misses 9 of the 25 catchers -- sound and "
+        "blind checks that catch a wrong design the candidates happen to get "
+        "right -- and as a keep rule it was measured to cost 30 requirements of "
+        "span and quadruple the false-reject rate. Report with it; never select "
+        "with it."
+    )
+
+
+def a_majority_span_set_satisfied_in_full_is_still_not_equivalent() -> str:
+    """The finish condition, run on a set spanning a majority of a specification.
+
+    Every earlier negative here had an available excuse -- the set was unsound,
+    or thin, or badly selected, or the editor stopped early. This one has none
+    of them, and the residue it leaves is zero.
+    """
+    return (
+        "Measured on k1. A 117-check set over 50 of 89 requirements = 56%, "
+        "selected by a conviction-count rule over seven spec-derived designs and "
+        "nothing else, drove a Sonnet editor on a design written from the "
+        "specification and held out of every selection.\n\n"
+        "    init  25 objections over 18 requirements\n"
+        "      1    9\n"
+        "      2    4\n"
+        "      3    4   did not latch; the requirement ratchet refused it, correctly\n"
+        "      4    2   49 of 50 requirements pass, 4 of 14 trials used\n\n"
+        "The two it stopped on are exactly the two the audit calls UNSOUND -- "
+        "both demanding something on entry to a state whose feature is compiled "
+        "out of the build, verified twice as an occurrence claim: that state's "
+        "probe is true in 0 of the reference's 5,723 rows and 0 of the accepted "
+        "design's 6,127. **So the design satisfies every SOUND check the set "
+        "contains.**\n\n"
+        "    testpoints differing   279 of 348 = 80%  ->  236 = 68%\n"
+        "    differing cells                   4,450  ->  3,533\n"
+        "    GRADE                                        DIFFERS, three pins green\n\n"
+        "**AND THE RESIDUE IS ZERO.** Restricted to that set and to decisions "
+        "where a port THE CHECK ITSELF READS is wrong: **0 objections in 6,542 "
+        "exposed decisions = 0.0%.** The design is wrong on 236 testpoints and "
+        "every sound check in a majority-span set watches it happen and says "
+        "nothing. Earlier sets measured 3.9% twice and 1.5% once.\n\n"
+        "**EVERY AVAILABLE EXCUSE IS EXCLUDED BY THE RUN'S OWN PROPERTIES.** Not "
+        "soundness -- every sound member is satisfied. Not span -- a majority. "
+        "Not selection -- five of the corpus's six sound catchers were already "
+        "kept. Not stimulus -- 348 testpoints, the design driven wrong on 236. "
+        "Not the editor -- 4 of 14 trials, stopping on checks it disproved by "
+        "counting. Not the gradient -- objections, cells and testpoints all fell "
+        "together inside the run.\n\n"
+        "**WHAT IS LEFT IS WHAT A CHECK ASSERTS: a fragment of its requirement, "
+        "satisfied by a design that violates the rest of the sentence.** Span is "
+        "not the quantity to optimise, and a set can span a majority, be "
+        "satisfied in full, and certify a design wrong on two thirds of its "
+        "observable behaviour."
+    )
+
+
+def a_gate_makes_a_failing_repair_free_without_making_it_work() -> str:
+    """The strength lever, re-run with an accept gate, and what the gate buys.
+
+    Strength repair -- ask an author to assert every obligation in its
+    requirement's sentence -- is the only lever aimed at what
+    `the_residue_is_check_strength` names. It was measured once at 34 of 34
+    crossing into over-strictness and 0 landing.
+    """
+    return (
+        "Measured on k1 over 40 requirements whose keep-set check convicts NONE "
+        "of seven independently written spec-derived designs. Gate: accept iff "
+        "the new body convicts 1 to 3 of the seven and the old convicted 0 -- a "
+        "conviction count, so golden-free.\n\n"
+        "    calls                                40\n"
+        "    ACCEPTED by the gate                  3 = 8%, all sound, two adequate\n"
+        "    crossed to over-strict, discarded    21\n"
+        "    still convict none, discarded        16\n\n"
+        "**THE GATE IS THE ENTIRE DIFFERENCE FROM THE ROUND THAT FAILED.** "
+        "Banking every body would have taken this round's false-reject count "
+        "from 0 to 19 of 40; the gate keeps 0. The authors did not improve -- 21 "
+        "of 40 still crossed, as 34 of 34 did before. What changed is that "
+        "crossing now costs nothing, so a lever that lands 8% is worth running "
+        "and a lever that lands 8% ungated is not.\n\n"
+        "**AND 8% IS NOT ENOUGH TO BUILD ON.** The pre-registered bar was 5 of 40 "
+        "to justify re-validating the set; 3 lands in the band that says record "
+        "the rate and stop, and no further validation run was dispatched. Moving "
+        "a bar after seeing the number is the defect this module's history is "
+        "made of.\n\n"
+        "A PROMPT DEFECT IN THIS ROUND, AND IT BIASES AGAINST IT. The prompt "
+        "enumerated the declared outputs and probes, said 'do not invent any "
+        "other signal name', and never enumerated the declared INPUTS -- one "
+        "author called a declared input 'NOT in the declared interface'. **11 of "
+        "40 strengthened bodies dropped an input the old body read.** A check "
+        "that drops an input it needs asserts LESS, which is the opposite of what "
+        "the round asks, so 3 of 40 is a FLOOR and this is not a clean test of "
+        "the lever."
+    )
+
+
+def the_consensus_is_an_oracle_even_though_it_is_not_a_ranking() -> str:
+    """CORRECTS `accuracy_is_the_wrong_axis_for_a_reference`, which closed this
+    route on a sample of one held-out design.
+
+    That entry reports a unanimous consensus ranking the known-good design 15 of
+    16 while every population member AND a held-out design scored 0, and
+    concludes a consensus "has nothing to say to any design a
+    specification-reading author would write". Measured again on a second
+    held-out design, that is too strong.
+    """
+    return (
+        "Measured on k1. Seven designs written independently from the "
+        "specification by agents forbidden to open any other implementation, all "
+        "run on one 348-testpoint stimulus. Wherever all seven produce the "
+        "identical value at a (clock edge, DECLARED OUTPUT) sample, that value "
+        "is the reference: **240,573 unanimous cells**.\n\n"
+        "Declared outputs only, deliberately -- two output-equivalent designs "
+        "may encode their states differently, so demanding the population's "
+        "value at a probe would convict a correct design for its encoding. Raw "
+        "edges, not transactional rows, because the transactional view "
+        "compresses each design independently and cannot be aligned across "
+        "designs.\n\n"
+        "    a population member (the control)          0   by construction\n"
+        "    THE KNOWN-GOOD DESIGN                  2,073   = 0.86%\n"
+        "    held-out L, unedited                   9,857\n"
+        "    held-out L, after a 117-check loop     5,602\n\n"
+        "**THE KNOWN-GOOD DESIGN SCORES 4.8x BETTER THAN THE HELD-OUT ONE** -- "
+        "the first instrument here on which it is clearly the best "
+        "non-population design -- and its false-reject rate is known IN ADVANCE, "
+        "which no check set's ever is.\n\n"
+        "**ZERO IS STILL NOT THE ACCEPT CRITERION.** A design scoring zero has "
+        "matched the population everywhere including the 2,073 cells where the "
+        "population is wrong, which is evidence against equivalence by the same "
+        "arithmetic that makes an over-strict check set's zero fatal. The "
+        "criterion is DESCENT under a trial budget.\n\n"
+        "AND IT SUPPLIES THE ONE THING AN EDITOR HAS NEVER HAD HERE: an "
+        "expected value that is OBSERVED rather than reconstructed. Not "
+        "synthesised, not inferred -- what seven agents who never saw each "
+        "other's work all produced at that moment.\n\n"
+        "**THE CORRECTION.** The earlier entry closed this route because held-out "
+        "J scored 0. Held-out L, written the same way by the same kind of agent "
+        "and held out of everything, scores 9,857. The discrimination is a "
+        "property of the (reference, design) PAIR, as the both-cell turned out to "
+        "be. THREE THINGS DIFFER BETWEEN THE TWO MEASUREMENTS AND CANNOT BE "
+        "SEPARATED -- thirteen designs against seven, 318 testpoints against 348, "
+        "all cells against declared outputs only -- and unanimity over seven is "
+        "easier than over thirteen, so this table has more cells and more chances "
+        "to disagree. The gap is far too large to be only that. The honest "
+        "statement is that the route was closed on a sample of one held-out "
+        "design and should not have been."
+    )
+
+
+def a_ratchet_on_counts_refuses_an_improvement_it_cannot_see() -> str:
+    """The granularity of a repair loop's ratchet is a proxy-metric choice, and
+    the coarse one is measured to REFUSE a real improvement.
+
+    `_EditSession.commit` latches an edit when the COUNT of passing requirements
+    rises. That is the pipeline's own accept rule and it is not wrong; what is
+    wrong is what a driver hands it as a "requirement" when the criterion is not
+    a check set.
+    """
+    return (
+        "Driving the editor on the consensus reference (one expected value per "
+        "declared output per raw edge, from seven independently written "
+        "implementations) the obvious encoding is ONE PSEUDO-REQUIREMENT PER "
+        "DECLARED OUTPUT -- ten of them, each passing iff that output disagrees "
+        "nowhere.\n\n"
+        "**THAT ENCODING CANNOT SEE PROGRESS, AND THE ARGUMENT IS ARITHMETIC "
+        "RATHER THAN EMPIRICAL.** A wrong design disagrees somewhere on nearly "
+        "every output, so nearly every pseudo-requirement is failing; an edit "
+        "that removes most of the disagreement on an output but not all of it "
+        "leaves that pseudo-requirement failing, and the count does not move. "
+        "The observed instance: an edit taking the disagreement from 9,857 cells "
+        "to under 3,000 -- a ~70% reduction -- read *passing requirements 1 -> 1* "
+        "and was REFUSED and rolled back.\n\n"
+        "**RE-ENCODED ON (OUTPUT, TESTPOINT) PAIRS THE SAME EDIT LATCHES.** A "
+        "pair passes iff that output disagrees nowhere in that testpoint, so an "
+        "edit that fixes an output on 200 testpoints and not on 30 raises the "
+        "count by 200. Re-measured serially from the unedited held-out design, "
+        "one commit under the pair ratchet takes 9,857 cells to **2,540**.\n\n"
+        "**THE RULE THIS SETS IS NOT ABOUT THIS CRITERION.** Two numbers are "
+        "needed and they are not the same number: a FINE one to steer, which "
+        "must fall whenever the design improves, and a COARSE one to judge, "
+        "which is the property being claimed. The companion plan states exactly "
+        "this for the check-set loop -- ratchet on (requirement, testpoint) "
+        "pairs, accept per requirement -- and this is that prescription arriving "
+        "as a defect in a driver that did not follow it. A criterion whose "
+        "granularity is coarser than the edits being made is not a weak "
+        "gradient; it is NO gradient, and it rejects correct work.\n\n"
+        "This is the same shape as "
+        "`conviction_count_is_not_a_descent_criterion`, from the other side: "
+        "there the count is fine enough and points the wrong way, here it points "
+        "the right way and is too coarse to move.\n\n"
+        "**CORRECTED BY THE RUN THAT FOLLOWED, AND THE CORRECTION MATTERS MORE "
+        "THAN THE DEFECT.** I wrote above that a criterion coarser than the edits "
+        "\"is NO gradient, and it rejects correct work\". That is true of the "
+        "per-output ratchet and FALSE as a general claim -- finer is not better. "
+        "Over seven trials of one editor run, the raw CELL count and the "
+        "(output, testpoint) PAIR count disagreed about whether the design had "
+        "improved THREE TIMES:\n\n"
+        "    trial  cells         pairs passing   latched\n"
+        "      3    3,003->2,721  3,210->3,192    REFUSED\n"
+        "      4    3,003->2,786  3,210->3,186    REFUSED\n"
+        "      5    3,003->2,216  3,210->3,205    REFUSED\n"
+
+        "Trial 5 is the sharpest: a **26% improvement in cells** that made the "
+        "property worse. A cell ratchet would have taken all three.\n\n"
+        "**AND THE REFUSALS COST NOTHING, ON EITHER MEASURE.** A refused commit "
+        "keeps the staged buffer, trials 6 and 7 built on it, and the run ended "
+        "at **1,758 cells -- lower than any of the three designs the cell "
+        "ratchet would have accepted.** The coarser criterion was right three "
+        "times out of three and lost nothing by being right.\n\n"
+        "**SO THE RULE IS NOT \"RATCHET FINELY\". IT IS: RATCHET AT THE "
+        "GRANULARITY OF THE PROPERTY BEING CLAIMED, NOT OF THE EVIDENCE.** A "
+        "cell is evidence. A (output, testpoint) pair is the property -- this "
+        "output is right in this situation. Per-output is coarser than the "
+        "property and refuses real progress; per-cell is finer than the property "
+        "and accepts real regressions. Both failure modes are measured here, on "
+        "one criterion, in one run.\n\n"
+        "**ONE DEFECT REMAINS AND IT IS IN THE BRIEF, NOT THE RATCHET.** The "
+        "editor was told its score was cells and the loop latched on pairs, so "
+        "three refusals looked arbitrary from where it sat -- it reported the "
+        "discrepancy itself. The number an agent is asked to optimise must be "
+        "the number that latches."
+    )
+
+
+def a_run_directory_written_by_two_agents_is_not_a_measurement() -> str:
+    """A harness discipline finding, made twice in one session, both times mine.
+
+    It is recorded here rather than absorbed because the failure mode is silent:
+    the run directory afterwards contains a design, a state file and a score, all
+    well-formed, and none of them describes the same moment.
+    """
+    return (
+        "An editor run directory holds a staged buffer, an accepted design, a "
+        "best-so-far design, a trial counter and a re-scored result. A commit "
+        "rewrites several of them in sequence over minutes of simulation. **Two "
+        "agents pointed at one such directory, or one agent plus an operator "
+        "re-initialising it, produce a directory in which those files come from "
+        "different moments** -- and nothing in it says so.\n\n"
+        "Both instances here had the same tell and it is worth naming: the "
+        "accepted design's SIZE matched neither the design the run started from "
+        "nor the one the last recorded commit produced. A file that is not any "
+        "of the versions the run is supposed to contain is the signature.\n\n"
+        "**NO NUMBER FROM EITHER DIRECTORY IS QUOTED ANYWHERE IN THIS MODULE OR "
+        "IN THE PLAN.** Both were archived unread and the run restarted from the "
+        "unedited held-out design, serially, with exactly one agent. That is the "
+        "only remedy: a partial result from a contended directory cannot be "
+        "repaired by inspection, because the question is not what the files say "
+        "but which moment each of them is from.\n\n"
+        "It belongs beside the other harness rules this plan has had to learn by "
+        "breaking them: select over the same corpus the score was taken over, "
+        "re-score in a fresh directory rather than comparing a design against "
+        "itself, and give every arm the same row list.\n\n"
+        "**CORRECTED, AND THE CORRECTION IS THE USEFUL HALF. I FIRST WROTE THAT \"the "
+        "discipline is one line -- one agent per run directory\", AND THEN BROKE IT A "
+        "THIRD TIME WITHIN THE HOUR.** The rule was stated in every dispatch brief, "
+        "in capitals, with the two previous failures named. The third instance was "
+        "not an agent ignoring it: it was me stopping one of two registered agents "
+        "and dispatching a new one into the directory the OTHER was still holding, "
+        "having never enumerated the live writers. The freshly dispatched agent "
+        "detected the collision itself, refused to commit, and said so -- which is "
+        "the only reason the third instance was caught at all.\n\n"
+        "**SO THE REMEDY IS NOT A RULE, IT IS A LOCK.** A rule that must be "
+        "remembered by every operator and every agent on every dispatch is not a "
+        "rule; it is a hope, and this one failed three times out of three. Every "
+        "MUTATING driver command now takes an exclusive lock on the run directory "
+        "and refuses with the holder's pid, command and start time; reads are "
+        "unlocked so a reader can never block a writer; a lock whose pid is gone is "
+        "reclaimed and the takeover is printed rather than done silently. Three "
+        "destroyed runs is what it cost to prefer the rule to the mechanism."
+    )
+
+
+def a_body_is_judged_whole_and_its_obligations_are_not() -> str:
+    """Every judgement on this plan is of a WHOLE BODY, and a requirement's
+    sentence states several obligations.
+
+    A body asserting three of them convicts a design if ANY of the three is
+    violated, so ONE over-reaching obligation makes the body unsound and takes
+    the other two down with it. This asks, without authoring anything, whether
+    the adequate cell is reachable at obligation granularity where it is not at
+    body granularity -- by partitioning each body's convictions by the DETAIL
+    STRING it itself emitted.
+    """
+    return (
+        "Measured over 547 authored bodies, 481 of which decide on both the "
+        "known-good design and held-out L. The class a split can rescue is the "
+        "UNSOUND AND DISCRIMINATING one -- it convicts the known-good design "
+        "somewhere and the held-out design elsewhere:\n\n"
+        "    bodies in that class                              307\n"
+        "    requirements they span                    61 of 89 = 69%\n"
+        "    requirements with an adequate body today  17 of 89 = 19%\n\n"
+        "**69% AGAINST 19% IS THE SIZE OF THE PRIZE**, and it is the same "
+        "anti-correlation this module is about, seen as a granularity question "
+        "rather than as a distribution: the discrimination for two thirds of "
+        "the specification is already authored, inside bodies whose soundness "
+        "one obligation ruins.\n\n"
+        "**THE MEASURED CEILING IS +4 REQUIREMENTS AND IT IS GOLDEN-SELECTED.** "
+        "Keeping only the reasons a body fires with on the held-out design and "
+        "never on the known-good one -- REQ-0016, REQ-0021, REQ-0074, REQ-0084 "
+        "-- takes adequacy 17 -> 21 of 89, 19% -> 24%. Choosing WHICH reason to "
+        "drop reads the known-good design, so this is a ceiling in the sense "
+        "MAXSOUND is, never a score. The golden-free form -- keep a reason that "
+        "objects to a minority of the candidate population, the minority rule "
+        "applied per REASON instead of per BODY -- is not measured here.\n\n"
+        "**AND THE CEILING IS ITSELF A FLOOR, BECAUSE THE INSTRUMENT IS BLIND TO "
+        "78% OF ITS OWN POPULATION.** 239 of the 307 bodies emit ONE message for "
+        "every conviction they ever make, so a body asserting several "
+        "obligations behind one string cannot be cut along them by anything "
+        "reading its output. At the requirement level the instrument sees 24 of "
+        "the 61 eligible requirements = 39%.\n\n"
+        "    of the 24 it can see, a reason fires only on the held-out design  9 = 38%\n"
+        "    of those 9, requirements with no adequate body today             4\n\n"
+        "**WHAT BLINDS IT IS THE DETAIL STRING THE AUTHOR CHOSE, NOT THE "
+        "CHECK.** That is a reporting defect and it is free to fix: require "
+        "every objection to name the obligation it fires on, which costs an "
+        "author nothing and takes this instrument from 39% coverage to 100%.\n\n"
+        "**AND EVEN THE OPTIMISTIC EXTRAPOLATION DOES NOT REACH A MAJORITY.** At "
+        "the observed 38% over all 61 eligible requirements the split would "
+        "reach roughly 31 of 89 = 35%, against the 45 a majority needs. That is "
+        "an ESTIMATE and not a measurement -- the 37 requirements the instrument "
+        "cannot see may split at a different rate, and a body whose obligations "
+        "share one `if` cannot be cut at all whatever it prints.\n\n"
+        "This is `a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` at "
+        "the other end of the pipeline. There a criterion coarser than the edits "
+        "being made rejects correct work; here a criterion coarser than the "
+        "obligations being asserted rejects correct assertions. Both say the "
+        "same thing: the unit you JUDGE at should not be forced to be the unit "
+        "you AUTHOR at.\n\n"
+        "**THE FOUR WERE READ RATHER THAN TRUSTED, AND THREE MECHANISMS APPEAR.** "
+        "REQ-0016 and REQ-0074 each hold two `return (False, ...)` sites and cut "
+        "by deleting one. REQ-0084 holds two independent loops its own comments "
+        "label `Case 1` and `Case 2`. REQ-0021 is different -- one verdict over a "
+        "conjunction of two asserted outputs, which cuts by dropping a conjunct "
+        "rather than a branch. All four are real cuts.\n\n"
+        "**AND THE ONE FALSE POSITIVE WAS EXCLUDED BY SYNTACTIC LUCK, WHICH IS THE "
+        "SHARPEST THING HERE.** REQ-0039 emits `outputs changed without a rising "
+        "clk edge: [a, b, c]` -- ONE obligation whose message varies with which "
+        "signals witnessed it, and it convicts the known-good design on 342 of 348 "
+        "testpoints. REQ-0021 emits `asserted dcram_we=1, tag_we=1` -- TWO "
+        "obligations whose message varies with which one fired. The instrument "
+        "kept the second and dropped the first because one used brackets and the "
+        "other used a comma-join. That is a formatting accident, not a principle, "
+        "so the +4 is not robust either.\n\n"
+        "**WHICH MAKES THE PRESCRIPTION NARROWER AND STRONGER THAN 'PRINT MORE'.** "
+        "The obligation an objection fires on must be a STRUCTURED FIELD the check "
+        "returns, not a phrase inside a message written for a human to read. As "
+        "prose it is unreadable for 78% of the population and misreadable for the "
+        "rest."
+    )
+
+
+def the_editors_dataflow_slice_was_dead_in_every_run_here() -> str:
+    """A thirteenth counting-shaped defect, mine, found by a subagent rather
+    than by any number looking wrong.
+
+    The companion document names the dataflow slice as the editor's answer to
+    the one problem a whole-module view creates -- *"`focus(req_uid)`. Slice
+    from one requirement's ports at a time"* -- and every editor run measured on
+    this plan was driven through a harness in which it returned nothing.
+    """
+    return (
+        "Every driver command is a fresh process that rebuilds the edit session "
+        "from `state.json`. All three drivers here test `s.focused` to decide "
+        "whether to build the slice -- **about thirty lines BEFORE the line that "
+        "reads `focused` out of `state.json`.** So `s.focused` is the "
+        "constructor default at the moment it is tested, `blocks_by_id` is empty "
+        "on every invocation, and `blocks` and `readblock` return nothing and "
+        "`unknown block_id`.\\n\\n"
+        "**THE EDITOR HAD NO DATAFLOW SLICE IN ANY RUN ON THIS PLAN** -- not the "
+        "ceiling runs, not the golden-free rule runs, not the 21-, 111- or "
+        "117-check runs. What it had was the `focus` call's own output, which is "
+        "computed in-process and therefore correct, and nothing afterwards. Every "
+        "editor here read the whole module and worked from it.\\n\\n"
+        "**IT WAS FOUND BY A SUBAGENT, NOT BY A NUMBER LOOKING WRONG**, which is "
+        "the same signature as the twelve before it: the harness ran clean, "
+        "printed plausible output, and answered a question nobody had asked. An "
+        "empty block list reads exactly like a slice that legitimately found "
+        "nothing.\\n\\n"
+        "**AND THE CONFOUND IS CONSTANT ACROSS ARMS, WHICH IS THE ONE PIECE OF "
+        "GOOD NEWS.** Every run was degraded identically, so the comparisons "
+        "BETWEEN check sets stand. What does not stand is any absolute reading: "
+        "every `DIFFERS` on this plan was produced by an editor missing the tool "
+        "the architecture puts at the centre of its evidence, so they are "
+        "pessimistic by an unknown amount.\\n\\n"
+        "**AND FIXING IT COSTS COMPARABILITY, WHICH HAS TO BE PAID RATHER THAN "
+        "AVOIDED.** A fixed driver running one new arm cannot be compared with "
+        "arms run against the broken one. The honest course is to re-run the "
+        "arms that carry the conclusion, not to leave a tool broken for the sake "
+        "of a table."
+    )
+
+
+def the_loop_descended_through_the_reference_designs_own_floor() -> str:
+    """The consensus reference used as a DESCENT criterion for a repair loop,
+    run to the same conditions as the check-set runs.
+
+    `the_consensus_is_an_oracle_even_though_it_is_not_a_ranking` establishes that
+    the known-good design scores 2,073 of 240,573 unanimous cells -- 0.86% --
+    because seven readers of one specification share misreadings. That figure was
+    written down in advance as the FLOOR: a design scoring below it has matched
+    the population where the population is wrong.
+    """
+    return (
+        "One Sonnet editor, held-out design L unedited, 348-testpoint suite, "
+        "14-trial budget, the shipped `_EditSession` policy, one writer in the "
+        "run directory. The editor is handed an OBSERVED expected value -- what "
+        "all seven independent implementations produce at that sample -- instead "
+        "of objections from a check set.\n\n"
+        "    consensus cells disagreeing   9,857 -> 1,758 in 7 of 14 trials\n"
+        "    THE KNOWN-GOOD DESIGN'S OWN SCORE           2,073\n\n"
+        "**THE LOOP DESCENDED THROUGH THE FLOOR, AND THAT IS PROOF OF "
+        "NON-EQUIVALENCE BEFORE ANY MITER RUNS.** The known-good design scores "
+        "2,073 against this reference. A design scoring 1,758 therefore agrees "
+        "with the seven on at least 315 cells where the known-good design does "
+        "NOT, so it cannot be the known-good design -- by arithmetic, exactly as "
+        "a design scoring zero against a set that convicts the known-good design "
+        "seven times cannot be it. The miter agrees: `DIFFERS`, three pins "
+        "green, 210 of 348 testpoints.\n\n"
+        "**AND THE PROXY MOVED SEVERAL TIMES FASTER THAN THE TRUTH.** Over the "
+        "same seven trials the criterion fell 82% while the actual divergence "
+        "from the known-good design fell 25% by testpoints (279 -> 210) and 13% "
+        "by cells (4,450 -> 3,890). Different denominators, so the percentages "
+        "are not directly comparable -- but the loop reduced its own objective "
+        "far faster than it reduced its distance from correctness, which is what "
+        "Goodharting looks like when the criterion is honest and merely "
+        "incomplete.\n\n"
+        "**THIS REMOVES THE COMPANION DOCUMENT'S OWN EXPLANATION FOR THE "
+        "EDITOR'S WEAKNESS.** That document names the loop's weakest point as "
+        "*\"expected/actual is reconstructed, not observed ... a fabricated "
+        "expected value would make it CONFIDENT in a wrong theory\"*. Here it is "
+        "OBSERVED -- seven agents who never saw each other's work -- and the "
+        "design still ends `DIFFERS`. Being real rather than reconstructed is "
+        "not what was missing.\n\n"
+        "**WHAT A LOOP AUTHOR TAKES FROM IT: A DESCENT CRITERION NEEDS A FLOOR, "
+        "AND THE FLOOR HAS TO BE KNOWN.** This one has a floor that is knowable "
+        "in advance, which no check set's ever is -- and the loop still walked "
+        "past it, because nothing stops a criterion being satisfied harder than "
+        "correctness satisfies it. Stop on the floor, not on the trial budget, "
+        "whenever the floor can be computed."
+    )
+
+
+def the_consensus_route_is_bounded_by_the_specification_not_the_editor() -> str:
+    """Where the divergence that SURVIVES a consensus-driven loop actually sits.
+
+    Raw edges, not transactional rows: the transactional view compresses each
+    design independently, so row i of one design is not row i of another, while
+    raw edges share an index because every design was driven by one stimulus.
+    """
+    return (
+        "The design the consensus loop produced, re-scored at raw edges against "
+        "the known-good design over 252,510 (edge, declared output) cells, with "
+        "each cell classified by whether the seven independent implementations "
+        "agree there:\\n\\n"
+        "                        cells    of all   still wrong    rate\\n"
+        "    the seven AGREE   238,559      94%          1,718    0.7%\\n"
+        "    the seven SPLIT    13,951       6%          3,405   24.4%\\n\\n"
+        "**66% OF WHAT IS STILL WRONG IS WHERE THE POPULATION CANNOT AGREE, A "
+        "12.0x CONCENTRATION** -- and those are precisely the cells the "
+        "consensus criterion is SILENT on, by construction. A unanimous "
+        "reference has nothing to say where there is no unanimity.\\n\\n"
+        "**SO THE ROUTE IS EXHAUSTED BY THE SPECIFICATION RATHER THAN BY THE "
+        "EDITOR.** Even a perfect consensus-driven loop could address at most "
+        "the 34% of the residue that lies in agreed cells. The other 66% sits "
+        "where `split_cells_are_a_specification_finding` measured a targeted "
+        "reader reproducing the population's own wrong answer 7 times in 9, so "
+        "no instrument drawn from this text resolves it -- not a check, not a "
+        "consensus, not a better editor.\\n\\n"
+        "**AND IT EXPLAINS THE FLOOR RESULT MECHANICALLY.** The loop drove the "
+        "error rate on cells the criterion CAN see down to 0.7%, which is below "
+        "the 0.86% at which the reference itself is wrong -- it over-fitted the "
+        "agreeable part of the design's behaviour -- while the disagreeable part "
+        "stayed wrong at 24.4%. Descending through the floor and stalling at "
+        "`DIFFERS` are one event seen from two sides.\\n\\n"
+        "**ONE FIGURE HERE WAS NOT PRE-REGISTERED AND MUST NOT BE USED AS A "
+        "TIEBREAK.** At raw edges this design is wrong on 5,123 cells against "
+        "10,926 for the design the 117-check loop produced. That looks decisive "
+        "for the consensus criterion and is a THIRD measure, computed afterwards "
+        "as the input to this analysis. The pre-registered pair -- testpoints "
+        "differing and transactional cells -- reads 210 against 236 and 3,890 "
+        "against 3,533, which is MIXED, and mixed is what stands."
+    )
+
+
+def two_criteria_on_one_harness_land_the_same_design_in_the_same_place() -> str:
+    """The comparison the whole session was arranged to make.
+
+    Every earlier head-to-head on this plan compared runs that differed in the
+    harness as well as the criterion -- the dataflow slice was dead in all of
+    them, and the drivers ratchet differently. This pair shares a harness: the
+    same held-out design unedited, the same 348-testpoint suite, the same
+    14-trial budget, one writer under a lock, and a WORKING slice on both.
+    """
+    return (
+        "    criterion                     testpoints of 348   cells   trials\\n"
+        "    the design, unedited                279 = 80%     4,450      --\\n"
+        "    117 CHECKS, 50 of 89 = 56%          206 = 59%     3,866   8/14\\n"
+        "    THE CONSENSUS OF SEVEN              210 = 60%     3,890   7/14\\n\\n"
+        "**FOUR TESTPOINTS AND TWENTY-FOUR CELLS APART. THEY ARE "
+        "INDISTINGUISHABLE.** Both end `DIFFERS` with three pins green. A "
+        "golden-free check set spanning a majority of the specification and an "
+        "OBSERVED expected value from seven independent implementations drive "
+        "the same held-out design to the same place, within 1.2%.\\n\\n"
+        "**AND THE CONSENSUS CRITERION IS TWICE AS GOOD AT THE THING IT "
+        "MEASURES, WHICH BOUGHT NOTHING.** On the cells where the seven agree -- "
+        "the only cells it scores -- it leaves the design wrong 0.7% of the time "
+        "against the check set's 1.3%. That advantage does not appear in the "
+        "grade at all, because both designs' remaining wrongness is "
+        "concentrated where the seven CANNOT agree: 66% of the consensus "
+        "residue and 56% of the check set's.\\n\\n"
+        "**SO THE CRITERION IS NOT THE BINDING CONSTRAINT, AND THAT IS THE "
+        "SESSION'S RESULT.** Every route this plan has tried -- more span, "
+        "better selection, narrowing, strengthening, volume, an ensemble of "
+        "checks, an ensemble of designs, an observed expected value -- optimises "
+        "something computed from the specification, and the specification "
+        "underdetermines the cells where these designs are actually wrong.\\n\\n"
+        "TWO CONFOUNDS, BOTH NAMED, BOTH POINTING THE SAME WAY. The check-set "
+        "loop ratchets per CHECK where the consensus loop ratchets per (output, "
+        "testpoint) PAIR, which handicaps the check set -- so if anything it is "
+        "the stronger of the two, and it still only ties. And the check-set arm "
+        "spent 8 trials to the consensus arm's 7, which is close enough not to "
+        "explain four testpoints.\\n\\n"
+        "**WHAT THE SLICE WAS WORTH, PRICED BY THE SAME PAIR.** The identical "
+        "117-check set on the broken harness reached 236 testpoints and 10,926 "
+        "raw-edge cells in 4 trials; on the fixed one, 206 and 6,903 in 8. "
+        "Better on both, and confounded with the trial count -- so the slice is "
+        "worth something and how much is not separable here."
+    )
+
+
+def the_floor_on_any_spec_derived_pipeline_is_146_of_348_testpoints() -> str:
+    """What the grade would still read for a pipeline that extracted everything
+    the specification determines.
+
+    Grant a spec-derived criterion its best case -- suppose it drove the design
+    to be correct on every cell the seven independent readings AGREE on, which
+    no run here comes near. Where they disagree it has no opinion to drive with:
+    a check convicting there is as likely wrong as right, and a consensus is
+    silent by construction.
+    """
+    return (
+        "Per testpoint, on the design the consensus loop produced, at raw edges "
+        "over declared outputs:\\n\\n"
+        "    testpoints differing anywhere                168 = 48%\\n"
+        "    ... at a cell the seven AGREE on              84 = 24%   reachable\\n"
+        "    ... at a cell the seven CANNOT agree on      146 = 42%   THE FLOOR\\n\\n"
+        "**ONLY 22 OF 348 TESTPOINTS = 6% DIFFER EXCLUSIVELY AT CELLS A "
+        "SPEC-DERIVED CRITERION HAS AN OPINION ABOUT.** Every other differing "
+        "testpoint contains at least one cell the specification, read seven "
+        "independent times, does not determine.\\n\\n"
+        "**SO EQUIVALENCE IS NOT REACHABLE BY STEERING FROM THIS "
+        "SPECIFICATION.** Not by a wider check set, not by more adequate checks, "
+        "not by an ensemble, not by an observed expected value, not by more "
+        "trials or a better editor -- every one of those is computed from the "
+        "text, and the text is silent where the design is wrong.\\n\\n"
+        "**ONE PRECISION, BECAUSE THE CLAIM IS EASY TO OVERSTATE.** This bounds "
+        "what a criterion can STEER, not what a design can ACHIEVE. A design may "
+        "be right in a split cell by luck, or because its author happened to "
+        "guess as the reference did -- 94% of cells are agreed and the population "
+        "is right on 99.1% of those. What no check set, ensemble or consensus "
+        "can do is DRIVE it there, having no opinion to drive with.\\n\\n"
+        "**AND IT IS A TRAJECTORY, NOT TWO ENDPOINTS.** The share of remaining "
+        "wrongness sitting in split cells rises monotonically as the loops do "
+        "their work -- 37% on the unedited design, 56% after the 117-check loop, "
+        "66% after the consensus loop -- while the agreed-cell wrongness falls "
+        "9,140 -> 3,066 -> 1,718. The loops clear what the specification "
+        "determines and stall on what it does not, which is the mechanism rather "
+        "than a correlation.\\n\\n"
+        "**WHAT WOULD CHANGE IT IS UNCHANGED FROM WHAT THIS MODULE ALREADY "
+        "SAYS**: a decision on the underdetermined cells from outside the "
+        "specification-and-reader loop. The disagreement map localises them at "
+        "10-12x and is the artifact to put in front of whoever can make that "
+        "decision. It is not an instrument this pipeline can build."
+    )
+
+
+def two_spec_only_instruments_stacked_still_stop_at_the_floor() -> str:
+    """The strongest spec-only configuration this plan can build, run to 27 of
+    30 trials, graded on the same instrument as every other arm.
+
+    Unanimity over seven independently written implementations gives a dense
+    gradient and is right 99.1% where it speaks, but is SILENT on the 6% of
+    cells the seven split on -- and that silence is the whole of the measured
+    floor. The 117 requirement-derived checks are the only other spec-only
+    instrument that says anything there. Both were put in one ratchet.
+    """
+    return (
+        "    criterion                    testpoints of 348   cells   trials\\n"
+        "    the design, unedited               279 = 80%     4,450      --\\n"
+        "    consensus alone                    210 = 60%     3,890    7/14\\n"
+        "    117 checks alone                   206 = 59%     3,866    8/14\\n"
+        "    BOTH, stacked                      205 = 59%     3,608   27/30\\n\\n"
+        "**`DIFFERS`, three pins green.** Stacking a second spec-only instrument "
+        "on the first bought ONE testpoint over either alone, on nearly four "
+        "times the trial budget.\\n\\n"
+        "**AND THE SPLIT RESIDUE SAYS WHY, FOR THE FOURTH TIME.** The share of "
+        "remaining wrongness sitting in cells the seven CANNOT agree on rises "
+        "monotonically as the criterion gets stronger -- 37% unedited, 56% after "
+        "the checks alone, 66% after the consensus alone, **71% after both** -- "
+        "while the error rate on cells they CAN agree on falls to 0.5%. Each "
+        "instrument clears what it can see; stacking them clears more of the "
+        "visible region and nothing of the invisible one.\\n\\n"
+        "**THE GOODHART MEASUREMENT, WITH A LARGE SAMPLE.** Trials 11-27 -- "
+        "seventeen of them, on an editor explicitly told not to stop early -- "
+        "improved BOTH proxies substantially and moved the grade backwards:\\n\\n"
+        "                        proxy: cells   proxy: checks   GRADE: testpoints\\n"
+        "    after trial 10             1,924         8 of 117            204\\n"
+        "    after trial 27             1,693         6 of 117            205\\n\\n"
+        "-12% and -25% on what the loop optimises, +1 on what it is judged by. "
+        "Once the region a spec-derived criterion can see is exhausted, further "
+        "descent on it is uncorrelated with correctness -- which is the same "
+        "shape as `conviction_count_is_not_a_descent_criterion`, now with 17 "
+        "trials behind it instead of a trajectory.\\n\\n"
+        "**A MAJORITY VOTE CANNOT FILL THE SILENCE, AND THAT WAS MEASURED "
+        "BEFORE THIS RUN RATHER THAN ASSUMED.** In the cells where the seven "
+        "split, the majority value equals the known-good design's **38.4% of "
+        "the time** -- below chance, so a majority criterion would steer AWAY "
+        "in 62% of the cells where it speaks. The breakdown is worse than the "
+        "headline: at 5-of-7 agreement the majority is right **12.3%** of the "
+        "time, meaning the two dissenters are right 87.7%. Unanimity's refusal "
+        "to speak there is therefore OPTIMAL for a population criterion, not "
+        "conservative, and the floor is a property of the specification rather "
+        "than of the choice of vote."
+    )
+
+
+def stacking_two_criteria_needs_weights_and_mine_had_none() -> str:
+    """A defect in the combined criterion, mine, found by reading what the loop
+    actually shipped rather than by any number looking wrong.
+
+    `_EditSession.commit` latches on a COUNT of passing units. Putting two
+    instruments in that count without weighting them makes the ratio of their
+    unit counts the exchange rate between them -- silently.
+    """
+    return (
+        "    (output, testpoint) pair units   3,480\\n"
+        "    per-output units                    10\\n"
+        "    CHECK units                        117   = 3.2% of the total\\n\\n"
+        "**ONE CHECK WEIGHS THE SAME AS ONE OUTPUT ON ONE TESTPOINT** -- 1/29 "
+        "of the cell-derived mass. The checks were nominally in the ratchet and "
+        "effectively powerless, which is the mechanism behind the combined run "
+        "beating the check-only run by a single testpoint.\\n\\n"
+        "**AND IT SHIPPED A DESIGN VIOLATING A SOUND CHECK, DELIBERATELY.** On "
+        "one trial the editor added a live cache-inhibit guard to `tag_we`, "
+        "gained ~11 cells, and broke REQ-0034 -- a check all six of whose "
+        "members spare the known-good design. It attempted the revert THREE "
+        "times, in three forms, and **the ratchet refused every one**, because "
+        "returning the pair-units cost more than the single check unit regained. "
+        "The editor documented the trade and could not act on it. The arithmetic "
+        "preferred cells and there was no way for it to say otherwise.\\n\\n"
+        "**SO A COMBINED CRITERION IS A WEIGHTING DECISION AND MUST BE MADE "
+        "EXPLICITLY.** Summing two instruments does not combine them; it prices "
+        "one in units of the other at whatever ratio their cardinalities "
+        "happen to have. The sparse instrument -- the one carrying the semantic "
+        "content, and the only one that speaks where the dense one is silent -- "
+        "is exactly the one that loses under an unweighted sum, because sparse "
+        "is what it is FOR.\\n\\n"
+        "This is the third granularity finding here and the first about "
+        "composition rather than resolution. "
+        "`a_ratchet_on_counts_refuses_an_improvement_it_cannot_see` says ratchet "
+        "at the granularity of the property; this says that when two properties "
+        "share a ratchet, their relative weight is a design parameter and "
+        "leaving it implicit sets it to an accident of counting."
+    )
+
+
+def a_finished_run_cannot_be_asked_what_its_ratchet_refused() -> str:
+    """A harness gap of mine, found by trying to price a one-line change and
+    discovering the finished run could not answer.
+
+    `stacking_two_criteria_needs_weights_and_mine_had_none` records that the
+    combined criterion weighted its two instruments by the accident of their
+    cardinalities. The obvious next question is a counterfactual -- WHICH of the
+    finished run's commits would a different weighting have latched, and which
+    would it have refused -- and it costs nothing to ask if the run kept the
+    per-commit numbers. It did not.
+    """
+    return (
+        "**WHAT A FINISHED RUN ON THIS PLAN RETAINS, in full:**\\n\\n"
+        "    state.json    the CURRENT counters -- trials used, last latched\\n"
+        "                  score, best score. No history.\\n"
+        "    report.json   the LAST review. Overwritten by every commit.\\n"
+        "    best.v        the design. No provenance.\\n\\n"
+        "So a 27-trial run records 27 decisions and keeps ONE. The accept "
+        "criterion is the object under study on this plan, and its own "
+        "decisions are the one thing not written down.\\n\\n"
+        "**THE COST IS EXACT AND WAS PAID.** Re-weighting the two instruments "
+        "is one line of arithmetic. Pricing it against the run it was written "
+        "for should have been a replay over recorded numbers -- no simulation, "
+        "no model call, seconds. Instead it needs a fresh 30-trial run: a full "
+        "348-testpoint suite per commit, plus an editor. The change is trivial "
+        "and the measurement is not, entirely because of what was not kept.\\n\\n"
+        "**AND IT SILENTLY BOUNDS WHAT CAN BE CLAIMED ABOUT EVERY ARM ALREADY "
+        "RUN.** Four arms landed at 205, 206, 210 and 205 testpoints of 348. "
+        "Whether that band is a property of the specification, of the design "
+        "space, or of a ratchet refusing correct work in all four is a question "
+        "about the refused commits -- and not one of the four runs can be asked "
+        "it. The band is reported as measured; its CAUSE is not attributable "
+        "from the artifacts those runs left.\\n\\n"
+        "**THE REMEDY IS ONE APPEND PER COMMIT, and it is not a rule.** A "
+        "ratchet that decides is a ratchet that must log what it decided and on "
+        "what evidence: the proposed unit counts, the latched unit counts, the "
+        "verdict, and the per-instrument numbers on both sides. Anything less "
+        "makes the loop's own accept criterion the only unaudited component of "
+        "a pipeline built to audit criteria.\\n\\n"
+        "This is the same shape as the phantom-baseline defect this plan "
+        "already records -- `req_results.json` rewritten by every review "
+        "including rolled-back ones, so nothing ever latched and the tell was a "
+        "timestamp. Both are the loop failing to distinguish what it CONSIDERED "
+        "from what it ACCEPTED. That one produced wrong numbers; this one "
+        "produces no numbers at all, which is harder to notice."
+    )
+
+
+def weighting_the_two_instruments_equally_changes_nothing_at_the_grade() -> str:
+    """The last untried configuration in this space, run to a graded result.
+
+    `stacking_two_criteria_needs_weights_and_mine_had_none` records the defect:
+    two instruments summed into one pass-count, priced against each other at
+    whatever ratio their cardinalities happened to have. This is that defect
+    fixed -- each check emitted as 30 units so the 117 checks weigh what the
+    3,490 cell units weigh -- and everything else held identical.
+    """
+    return (
+        "**THE WEIGHTING WORKED, MECHANICALLY, AND IT IS ON THE RECORD THIS "
+        "TIME.** Between trials 5 and 6 the editor broke a sound check and "
+        "fixed it forward, and the per-commit log shows what the ratchet did "
+        "with that: cells 2,710 -> 2,728 -- EIGHTEEN WORSE -- objecting checks "
+        "8 -> 7, and **the commit latched**. That is the exact trade the "
+        "unweighted run attempted three times and had refused. The editor "
+        "reports zero refusals across nine commits: 'every fix I made was net "
+        "positive under the 30-units-per-check weighting, so I never needed to "
+        "fight the scoreboard.'\\n\\n"
+        "**AND THE GRADE DID NOT MOVE. 205 OF 348, AGAINST THE UNWEIGHTED "
+        "RUN'S 205 OF 348.**\\n\\n"
+        "    criterion                    testpoints   cells   trials\\n"
+        "    L, unedited                    279         4,450    --\\n"
+        "    consensus alone                210         3,890    7 of 14\\n"
+        "    117 checks alone               206         3,866    8 of 14\\n"
+        "    both stacked, unweighted       205         3,608   27 of 30\\n"
+        "    both stacked, EQUAL WEIGHT     205         3,696    9 of 30\\n\\n"
+        "**THIS IS THE CLEANEST GOODHART INSTANCE ON THIS PLAN, BECAUSE THE TWO "
+        "MEASURES MOVE IN OPPOSITE DIRECTIONS BETWEEN THE ARMS.** The proxy "
+        "improved 22% -- 1,693 cells disagreeing with the consensus down to "
+        "1,325 -- while true divergence got 2.4% WORSE, 3,608 differing cells "
+        "up to 3,696, and the testpoint count was IDENTICAL. Earlier Goodhart "
+        "findings here show a proxy falling faster than the grade; this shows "
+        "a proxy falling while the grade rises, on the same instruments, the "
+        "same starting design and the same suite.\\n\\n"
+        "**WHAT IT COSTS AND WHAT IT DOES NOT BUY.** Nine trials against "
+        "twenty-seven for the same grade, so the weighting is cheaper per unit "
+        "of nothing. That is one sample per arm and one editor per arm, so the "
+        "3x is NOT attributable to the weighting -- editor variance is "
+        "uncontrolled and n = 1.\\n\\n"
+        "**SO THE COMBINATION QUESTION IS CLOSED, and it closes on the "
+        "pre-registered reading rather than on a retrofitted one.** Two "
+        "spec-derived instruments, stacked, at every weighting anyone has "
+        "reason to choose, land the same design in the same place. The 205-210 "
+        "band across five arms is a property of what a specification-derived "
+        "criterion can see, not of how its parts are priced."
+    )
+
+
+def the_fifth_contradiction_claim_is_the_fifth_refutation() -> str:
+    """The editor's soundness judgement, audited for the fifth time, and the
+    audit splits its two claims in opposite directions.
+
+    Golden is the audit instrument and nothing else: it runs after the grade,
+    selects nothing, repairs nothing, and reaches no prompt.
+    """
+    return (
+        "The weighted run's editor made two claims about the check set. The "
+        "structural one is the kind this plan has now refuted five times:\\n\\n"
+        "    REQ-0087.shipping wants dc_addr == start_addr while hitmiss_eval\\n"
+        "    is high; REQ-0087.control, REQ-0029.t2 and REQ-0030.* want\\n"
+        "    dc_addr == saved_addr while biu_read or biu_write is high. On\\n"
+        "    TP-9203 both hold at one edge and the two values differ, so no\\n"
+        "    design satisfies both.\\n\\n"
+        "**REFUTED IN ONE LINE, AS THE OTHER FOUR WERE. All five members spare "
+        "the known-good design** -- 348, 348, 348, 256 and 279 decisions, zero "
+        "convictions each -- so a design satisfying the whole group exists. The "
+        "editor resolved the alleged tie 3-checks-to-1 and reported it as 'a "
+        "trade, not a fix'; the audit says there was no trade to make.\\n\\n"
+        "**AND ITS OTHER CLAIM IS CORRECT, WHICH IS WHY THE TALLY IS THE POINT "
+        "RATHER THAN THE VERDICT.** REQ-0081.control and REQ-0081.merge@merge "
+        "both convict the known-good design on TP-9202 edge 11, for the reason "
+        "the editor gave: the check compares the entry row to the NEXT row and "
+        "cannot distinguish 'incremented on entry' from 'correctly began "
+        "receiving the first refill word'. That is the third independent "
+        "editor to name REQ-0081, and all three were right.\\n\\n"
+        "**RUNNING TALLY OVER FIVE RUNS: 9 of 36 = 25%.** 1 of 3, 1 of 5, 1 of "
+        "5, 2 of 8, 2 of 7. An editor with the design, the trace and the "
+        "requirement sentence in front of it, arguing with a check it has "
+        "every incentive to be right about, is at one in four -- and it cannot "
+        "tell its correct call from its incorrect one, since both arrive as "
+        "the same confident structural argument. **No gate can distinguish "
+        "them either**, which is why this is recorded as a bound on the "
+        "editor-as-soundness-instrument route rather than as a defect list.\\n\\n"
+        "One hedge is worth keeping: the editor flagged REQ-0015.v2@n3 as 'a "
+        "hypothesis, not a finding' because it could not get the evidence. The "
+        "audit says that check is SOUND. **It was right to decline**, and the "
+        "hedge is the only part of its judgement that tracked the truth "
+        "reliably."
+    )
+
+
+def a_criterion_only_corrects_where_it_beats_the_design_under_test() -> str:
+    """The mechanism behind every arm landing in the same place, measured on
+    five spec-only selectors at once instead of inferred from a trajectory.
+
+    Two audits changed the question. The first says the answer is IN the
+    population; the second says no rule over the population can extract it.
+    """
+    return (
+        "**THE ANSWER IS IN THE POPULATION, WHICH THIS PLAN HAS BEEN ASSUMING "
+        "WITHOUT CHECKING.** In the split cells -- the 6% the seven "
+        "spec-derived designs cannot agree on, carrying 65% of what the best "
+        "arm still gets wrong -- the right value is one of the seven values "
+        "produced in **13,210 of 13,973 cells = 94.5%**. So the population "
+        "contains the answer and the problem is SELECTION, not absence.\\n\\n"
+        "**AND THE DISTRIBUTION IS BIMODAL, WHICH IS WHY NO VOTE WORKS.** Of "
+        "the split cells, 24.5% have the right value in exactly ONE of the "
+        "seven and 31.4% in exactly two -- while 31.1% have it in SIX of "
+        "seven. The two regimes want opposite polarity, so any threshold wins "
+        "one and loses the other, and a majority lands at the measured 38.4%.\\n\\n"
+        "**DISSENT PREDICTS WHO HOLDS IT, AND THAT IS SPEC-ONLY.** Over the "
+        "seven, the rate at which a design holds a minority value correlates "
+        "with how often it is right in split cells at **r = +0.882** (n = 7, a "
+        "shape rather than a statistic). The two dissenters -- 91.7% and 38.3% "
+        "-- are the two most accurate, 63.7% and 63.9%; the five conformists "
+        "sit at 34-39%. That is the outlier finding arriving inside the "
+        "population: correctness makes a design dissent.\\n\\n"
+        "**AND EVERY ONE OF THEM IS USELESS AS A CRITERION, FOR ONE REASON.** "
+        "Scored on the design a loop actually has in front of it, restricted "
+        "to the cells where each selector would OBJECT:\\n\\n"
+        "    selector                  accuracy   objects on   PRECISION\\n"
+        "    majority                    38.4%        9,822       19.2%\\n"
+        "    minority                    56.0%        4,787       13.2%\\n"
+        "    follow the top dissenter    63.7%        3,861       17.8%\\n"
+        "    follow the 2nd dissenter    63.9%        6,217       30.8%\\n"
+        "    anti-majority               56.1%        4,791       12.9%\\n\\n"
+        "**NOT ONE REACHES 50%, so obeying any of them makes the design WORSE**, "
+        "and the best accuracy in the table has the second-worst yield per "
+        "objection.\\n\\n"
+        "**THE REASON IS ARITHMETIC AND IT IS THE GENERAL LAW: A CRITERION "
+        "CORRECTS ONLY WHERE ITS ACCURACY EXCEEDS THE DESIGN'S.** The design "
+        "under test is already right on **77.5%** of split cells. On the cells "
+        "where a 63.9%-accurate selector disagrees with a 77.5%-accurate "
+        "design, the selector is usually the one that is wrong -- so its "
+        "objections are mostly false, whatever its headline says.\\n\\n"
+        "**AND THAT IS WHY FIVE ARMS LAND IN THE SAME PLACE.** A loop improves "
+        "only where its criterion beats the design it is judging. Where the "
+        "seven agree, the consensus is right 99.1% and beats it comfortably, "
+        "and every arm drives the agreed-cell error to under 1%. Where they "
+        "split, nothing spec-derived beats it -- not a vote, not a minority, "
+        "not the best single member -- so the loop has nothing to say and the "
+        "grade stops at the floor.\\n\\n"
+        "**THIS QUALIFIES THIS PLAN'S OWN CONCLUSION.** The plan says the "
+        "missing input is 'a decision on the underdetermined cells, from "
+        "something outside the specification-plus-reader loop'. The first half "
+        "is now refuted: the decision is INSIDE, 94.5% of the time. What is "
+        "missing is an extractor, and extraction is hard for a reason the plan "
+        "never named -- **the design under test is a competent reader of the "
+        "same specification, and in the region that matters it is a BETTER one "
+        "than any rule over the population that produced it.**"
+    )
+
+
+def the_loop_drove_the_design_past_its_own_criterion() -> str:
+    """The sharpest thing measured on this plan, and it stopped a run I had
+    just dispatched on reasoning this refutes.
+
+    `a_criterion_only_corrects_where_it_beats_the_design_under_test` states the
+    law in the split region, where the criterion is silent anyway. This applies
+    the same test where the criterion actually SPEAKS.
+    """
+    return (
+        "**I RESUMED A RUN BECAUSE ITS GRADIENT LOOKED UNEXHAUSTED, AND THE "
+        "GRADIENT HAD INVERTED.** The editor stopped at 9 of 30 trials with "
+        "1,325 cells still disagreeing with the consensus of seven. I read "
+        "that as budget left on the table and dispatched a resume. Then the "
+        "precision test was applied to the criterion itself:\\n\\n"
+        "    at the 238,678 cells where the seven AGREE\\n"
+        "      the consensus of seven is right      99.13%\\n"
+        "      THE DESIGN UNDER TEST is right       99.30%\\n\\n"
+        "**THE DESIGN HAS OVERTAKEN ITS OWN CRITERION**, and the objections it "
+        "has left say so outright. Of the 1,314 cells where the two disagree "
+        "-- every objection the loop had remaining:\\n\\n"
+        "    the consensus is right, the design wrong     375   28.5%\\n"
+        "    THE DESIGN IS RIGHT, THE CONSENSUS WRONG     773   58.8%\\n"
+        "    both wrong                                   166   12.6%\\n\\n"
+        "**TWICE AS OFTEN AS NOT, AN OBJECTION IS THE CRITERION BEING WRONG.** "
+        "Driving those 1,325 to zero would have repaired 375 cells and broken "
+        "773. The resume was stopped before it committed anything.\\n\\n"
+        "**THE MECHANISM IS THAT ONE ACCURACY IS FIXED AND THE OTHER RISES.** "
+        "A criterion built from a population is a fixed artifact: 99.13% is "
+        "all the seven will ever be. The design's accuracy climbs as the loop "
+        "works. They cross, and after the crossing every remaining objection "
+        "is more likely wrong than right -- while the objection COUNT keeps "
+        "falling, so the loop reads the whole descent as progress and has no "
+        "way to see the inversion.\\n\\n"
+        "**AND IT EXPLAINS THE ARM-TO-ARM GOODHART EXACTLY.** Between the "
+        "unweighted and weighted stacked runs the proxy improved 22% while "
+        "true divergence rose 2.4% and the grade did not move. That is not a "
+        "coincidence of two arms; it is what descending past the crossing "
+        "point looks like from inside.\\n\\n"
+        "**THE PRESCRIPTION IS A STOPPING RULE, NOT A BETTER CRITERION.** A "
+        "loop driven by a fixed-accuracy reference must stop when the artifact "
+        "reaches that reference's accuracy, and everything after that is "
+        "damage the loop scores as progress. In a benchmark the crossing is "
+        "measurable. **In production it is not**, which makes the trial budget "
+        "-- the crude device this plan has been treating as a cost -- the only "
+        "protection against it.\\n\\n"
+        "It also reframes 'the editor stopped early with budget unspent', "
+        "which this plan has twice recorded as a weakness of a run. On this "
+        "evidence the editor stopped at very nearly the right moment, for "
+        "reasons it could not have articulated, and my correction of it was "
+        "the error."
+    )
+
+
+def a_consensus_cannot_outrank_a_competent_reader_at_any_size() -> str:
+    """The population lever, refuted without paying for it, and the crossing
+    point located in the run that crossed it.
+
+    `the_loop_drove_the_design_past_its_own_criterion` measures the inversion
+    and names the fixed-versus-rising mechanism. The obvious remedy is to make
+    the fixed side less fixed: 99.13% is a property of SEVEN designs, and the
+    goal puts oracle regeneration explicitly in scope. This prices that remedy
+    on the designs already in hand before a single new one is generated.
+    """
+    return (
+        "**HEADROOM -- the criterion's accuracy minus the design's, on the "
+        "cells the criterion speaks about -- MEASURED AT EVERY POPULATION SIZE "
+        "FROM TWO TO SEVEN.** Averaged over subsets, against the design nine "
+        "trials of the weighted run produced:\\n\\n"
+        "    designs   coverage   consensus   the design there   HEADROOM\\n"
+        "        2       97.9%     97.161%        98.498%        -1.337%\\n"
+        "        3       96.9%     97.775%        98.702%        -0.926%\\n"
+        "        4       96.1%     98.257%        98.873%        -0.615%\\n"
+        "        5       95.5%     98.642%        99.029%        -0.387%\\n"
+        "        6       94.9%     98.933%        99.171%        -0.238%\\n"
+        "        7       94.5%     99.131%        99.298%        -0.167%\\n\\n"
+        "**NEGATIVE AT EVERY SIZE, AND THE GAP CLOSES WITHOUT EVER CROSSING.** "
+        "Each added design removes about 35% of the remaining deficit, so "
+        "thirteen designs projects to -0.016% and twenty to -0.001%. The curve "
+        "is asymptotic to zero FROM BELOW. **Generating more designs cannot "
+        "restore the criterion's authority**, and that is now measured rather "
+        "than assumed -- six generations and six suite runs unspent.\\n\\n"
+        "**AND THE REASON IS VISIBLE IN THE COLUMN NOBODY WOULD HAVE WATCHED.** "
+        "The design's own accuracy on the surviving cells rises too, 98.498% to "
+        "99.298%, in lockstep. Unanimity SELECTS FOR EASY CELLS, and a design "
+        "written from the same specification is a competent reader of exactly "
+        "those. Both curves are driven by the same hidden variable -- how hard "
+        "the cell is to read correctly -- so growing the population moves them "
+        "together and never apart.\\n\\n"
+        "**THE CROSSING IS REAL AND IT IS NOW LOCATED.** The same measurement "
+        "against the UNEDITED held-out design, same population, same suite:\\n\\n"
+        "                          consensus   the design   HEADROOM\\n"
+        "    L, unedited            99.163%      96.160%     +3.003%\\n"
+        "    after 9 trials         99.131%      99.298%     -0.167%\\n\\n"
+        "The criterion began as a far better reader than the design and was "
+        "overtaken. Interpolating the run's own per-commit log between its two "
+        "measured endpoints puts the crossing near **1,780 disagreeing cells, "
+        "between trials 7 and 8** -- so the editor stopped ONE TRIAL after the "
+        "point where its criterion stopped being right. That is the first time "
+        "this plan can say when a run should have stopped, and it is only "
+        "sayable because the per-commit log was kept.\\n\\n"
+        "**WHAT IT WOULD TAKE, STATED AS A PROPERTY RATHER THAN A WISH.** A "
+        "criterion that can drive a design to equivalence must be a BETTER "
+        "READER than the design on the cells it speaks about, and stay one all "
+        "the way down. No consensus over spec-derived designs is, at any size, "
+        "because it is made of readers of the same text. The instrument that "
+        "could be is one that reads the SENTENCES rather than voting over "
+        "implementations -- which is what the checks are, and 117 of them "
+        "objecting 7 times is not enough coverage to carry a design the rest of "
+        "the way."
+    )
+
+
+def the_two_instruments_came_apart_and_only_one_was_overtaken() -> str:
+    """The precision test applied to the OTHER instrument, and it is the first
+    positive result in this region.
+
+    Every finding above measures the consensus and concludes that spec-derived
+    criteria are exhausted. That generalised from one instrument to a class
+    without checking the other member of it.
+    """
+    return (
+        "**THE SAME TEST, ON BOTH INSTRUMENTS, ON THE SAME DESIGN, RESTRICTED "
+        "TO WHERE EACH WOULD ACTUALLY OBJECT:**\\n\\n"
+        "    the consensus of seven     375 right of 1,314 objections   28.5%\\n"
+        "    the 117 spec checks          5 SOUND of 7 objections       71.4%\\n\\n"
+        "**ONE HAS INVERTED AND THE OTHER HAS NOT**, and 71.4% against 28.5% is "
+        "not a margin that needs statistics.\\n\\n"
+        "**THE MECHANISM SAYS WHY, AND IT PREDICTS THE SPLIT RATHER THAN "
+        "EXCUSING IT.** A consensus is a vote over IMPLEMENTATIONS, so its "
+        "accuracy tracks how hard a cell is to read -- which is the same "
+        "variable that governs the design's accuracy, so the two move together "
+        "and the design overtakes it. A check reads one requirement SENTENCE. "
+        "Nothing ties its errors to the population's errors and nothing ties "
+        "its accuracy to cell difficulty, so it is not overtaken by a design "
+        "getting better at reading the same text.\\n\\n"
+        "**AND THE EDITOR STOPPED BECAUSE IT DISBELIEVED THE ONE INSTRUMENT "
+        "THAT WAS STILL RIGHT.** It reported the remaining objections as "
+        "'check-methodology artifacts or genuine spec contradictions' and "
+        "stopped with 21 trials unspent. The audit says 5 of the 7 are SOUND -- "
+        "REQ-0015.v2@n3, REQ-0064.t1@n3, REQ-0073.shipping@narrow, "
+        "REQ-0087.shipping and REQ-0088.shipping each decide on a design that "
+        "satisfies the specification and convict it nowhere, so each objection "
+        "is a real defect. Only REQ-0081's two bodies are unsound, and the "
+        "editor was right about those. **It threw away five true objections "
+        "along with two false ones, on one mis-diagnosis.**\\n\\n"
+        "**SO THE PLAN'S OWN CONCLUSION NEEDS SPLITTING.** 'A spec-derived "
+        "criterion cannot carry this design further' is TRUE of a consensus "
+        "over designs and NOT SHOWN of checks over sentences. The gap for the "
+        "checks is COVERAGE -- 117 of them produce 7 objections on a design "
+        "wrong at 205 of 348 testpoints -- and coverage is the one thing the "
+        "goal explicitly licenses regenerating.\\n\\n"
+        "**WHAT IS CALIBRATED AND WHAT IS NOT, stated before the arm runs.** "
+        "Choosing WHICH instrument to keep was decided by an audit against the "
+        "known-good design; that is calibration, which the goal permits, and it "
+        "is labelled. The criterion that then drives the editor reads only "
+        "requirement sentences. No figure from a run built this way may be "
+        "quoted as an uncalibrated golden-free score."
+    )
+
+
+def sequencing_the_two_instruments_breaks_the_band() -> str:
+    """The first arm on this plan to leave the 205-210 band, and it is the
+    measured law applied rather than another instrument.
+
+    `the_two_instruments_came_apart_and_only_one_was_overtaken` measures that
+    the consensus has inverted (28.5%) and the checks have not (71.4%). This is
+    what follows if that is acted on: use each instrument only in the region
+    where it is still the better reader.
+    """
+    return (
+        "**RUN THE DENSE CRITERION UNTIL IT IS OVERTAKEN, THEN SWITCH.** The "
+        "consensus carried the design from 279 differing testpoints to 205 and "
+        "was measured overtaken doing it. Starting the CHECKS from exactly "
+        "that point, with the cell units out of the latch:\\n\\n"
+        "    arm                                 testpoints of 348   cells\\n"
+        "    L, unedited                               279           4,450\\n"
+        "    consensus alone                           210           3,890\\n"
+        "    117 checks alone, from unedited L         206           3,866\\n"
+        "    both stacked, unweighted                  205           3,608\\n"
+        "    both stacked, equal weight                205           3,696\\n"
+        "    CONSENSUS, THEN CHECKS AT THE CROSSING    186           3,052\\n\\n"
+        "**186 of 348, against a band five arms could not leave.** All three "
+        "miter pins green in the same process; `first_miss_err` is repaired to "
+        "never differing.\\n\\n"
+        "**AND SEQUENCE IS THE WHOLE OF IT, WHICH THE ARMS ABOVE ISOLATE.** The "
+        "same 117 checks driven from the UNEDITED design reach 206. The same "
+        "two instruments SUMMED, at either weighting, reach 205. Only using "
+        "each where it still has headroom reaches 186 -- so this is not a "
+        "better criterion, it is the same two criteria applied in the order "
+        "their accuracies dictate.\\n\\n"
+        "**THE VERDICT IS STILL `DIFFERS`, AND THE PRE-REGISTRATION SAYS WHERE "
+        "THIS LANDS.** The target was TWO objections, because REQ-0081's two "
+        "bodies convict the known-good design and the other five spare it, so "
+        "two is what a correct design scores against this set. The run reached "
+        "**five**: REQ-0081's two unsound ones, plus **three SOUND objections "
+        "still standing** -- REQ-0015.v2@n3, REQ-0064.t1@n3 and "
+        "REQ-0087.shipping. That is the pre-registered 'partial' band.\\n\\n"
+        "**SO THE CHECKS HAD NOT RUN OUT EITHER: 3 of 5 remaining objections "
+        "are real, and the editor stopped with 8 of 21 trials unspent.** Their "
+        "precision on this design is 60%, still above the 50% at which an "
+        "instrument starts doing harm. The binding constraint here is not the "
+        "criterion's authority and not the budget -- it is that 117 checks "
+        "produce five objections on a design differing at 186 testpoints, and "
+        "the editor reported a genuine repair (an off-by-one in the "
+        "refill-completion count) that moved the check count by ZERO.\\n\\n"
+        "**THAT IS A COVERAGE NUMBER, AND COVERAGE IS THE ONE THING THE GOAL "
+        "LICENSES REGENERATING.** It is also the first time on this plan that "
+        "the remaining gap has been attributed to something with a known "
+        "remedy rather than to a property of specifications."
+    )
+
+
+def the_soundness_filter_selects_exactly_the_silent_checks() -> str:
+    """#99 measured on one fresh round, at total separation, with the split
+    made by a rule that never saw the design.
+
+    Every earlier statement of this is distributional -- a corpus scored, a
+    conviction count tabulated. This is 42 checks authored in one round by one
+    standard, partitioned by the best golden-free soundness filter on this plan,
+    and then asked the only question that matters for a repair loop.
+    """
+    return (
+        "**THE GAP ROUND.** 21 behavioural requirements the 117-check set does "
+        "not touch, two independent draws each, authored STRICT because this "
+        "plan measured the soundness boundary findable from the over-strict "
+        "side (7 of 47) and not from the weak side (0 of 34). Integrity: 42 of "
+        "42 answered, 0 broken, 0 bodies shared across requirements.\\n\\n"
+        "**THE MINORITY RULE SPLIT THEM 9 / 31**, keeping a check that convicts "
+        "at most two of the seven spec-derived designs -- the filter this plan "
+        "measures at 59-of-59 precision against a 31% base rate. Then each half "
+        "was decided over the design the checks-only arm produced:\\n\\n"
+        "                                   checks   OBJECT   decide and PASS\\n"
+        "    KEPT by the minority rule         9        0            9\\n"
+        "    marked for NARROWING             31       27            4\\n\\n"
+        "**NINE OF NINE SILENT, TWENTY-SEVEN OF THIRTY-ONE OBJECTING.** The "
+        "admissible checks have nothing to say about the design; every check "
+        "with something to say is inadmissible.\\n\\n"
+        "**AND THE MECHANISM IS THE SAME COUPLING MEASURED TWICE ALREADY.** A "
+        "soundness filter built on a population of spec-derived designs selects "
+        "for checks that SPARE spec-derived designs -- and the design under "
+        "test is one. The filter cannot distinguish 'spares a correct design' "
+        "from 'spares this design', because on this evidence they are the same "
+        "predicate. That is `a_criterion_only_corrects_where_it_beats_the_"
+        "design_under_test` arriving at the SELECTION step rather than the "
+        "scoring step, and it is why the filter's excellent precision buys "
+        "nothing: it is precise about the wrong population.\\n\\n"
+        "**WHAT THE ROUND BOUGHT AND WHAT IT DID NOT.** Span goes 47 -> 52 of "
+        "89 = 58%, and 47 -> 52 of 68 behavioural = 76%. Objections on the "
+        "design go up by ZERO. **That is the volume round's result reproduced "
+        "on a targeted population with a better standard** -- +3 requirements "
+        "and +0 objections then, +5 and +0 now -- and it is the third time span "
+        "and signal have come apart on this plan.\\n\\n"
+        "**SO SPAN IS NOT THE METRIC, AND THIS IS THE CLEANEST DEMONSTRATION "
+        "OF IT.** A set can be grown to cover more of a specification by adding "
+        "checks selected for soundness, and gain no ability whatever to say "
+        "that a wrong design is wrong. The narrowing round is the only route "
+        "from the objecting side to the admissible one, and its measured rate "
+        "is about 15%."
+    )
+
+
+def narrowing_crosses_the_boundary_without_landing_on_it() -> str:
+    """The coverage route closed with a mechanism rather than a tally, and it
+    is the strength round's finding arriving from the opposite direction.
+
+    `the_soundness_filter_selects_exactly_the_silent_checks` measures the gap
+    round splitting 0-of-9 admissible-and-objecting against 27-of-31
+    objecting-and-inadmissible. Narrowing is the only route between those
+    states. This is that route, run.
+    """
+    return (
+        "**31 OVER-STRICT CHECKS, NARROWED, WITH THE ADMISSIBLE OBJECTION THIS "
+        "PLAN VALIDATED** -- *your check objects to N of seven independently "
+        "written implementations of this specification* -- and a leak check "
+        "showing 0 lines of the reference design's source, 0 testpoint ids, 0 "
+        "equivalence verdicts and 0 occurrences of the word 'golden' across all "
+        "31 prompts. Integrity: 31 of 31 answered, 0 broken, 0 shared bodies.\\n\\n"
+        "    outcome                                    checks   convictions\\n"
+        "    narrowed to death -- admissible, SILENT       9      7 -> 0\\n"
+        "    still over-strict                            22      7 -> 7, 6 -> 5\\n"
+        "    ADMISSIBLE AND OBJECTING                      0        --\\n\\n"
+        "**ZERO OF THIRTY-ONE, AGAINST A MEASURED FIRST-ATTEMPT RATE OF 15%.** "
+        "And the conviction column is the finding rather than the count: **every "
+        "check that became admissible went from SEVEN convictions to ZERO.** Not "
+        "one landed at one or two. There is no gradual narrowing here -- a check "
+        "either demands something all seven independent implementations violate, "
+        "or it demands nothing.\\n\\n"
+        "**THAT IS THE STRENGTH ROUND'S RESULT FROM THE OPPOSITE DIRECTION.** "
+        "That round pushed 34 sound-and-blind checks to assert more: 34 of 34 "
+        "crossed the boundary and 0 landed in between. This pushes 31 "
+        "over-strict checks to assert less: 9 of 9 that moved crossed it "
+        "completely. **Both directions overshoot, and the target between them is "
+        "measured empty on 65 attempts.**\\n\\n"
+        "**SO THE COVERAGE ROUTE IS CLOSED, AND IT CLOSES ON A TRANSFORMATION "
+        "RATHER THAN A YIELD.** The residue after the sequenced run was "
+        "attributed to coverage -- 117 checks producing five objections on a "
+        "design differing at 186 of 348 testpoints -- and coverage is what the "
+        "goal licenses regenerating. It was regenerated, on a targeted "
+        "population, at the standard this plan's own measurements prescribe, "
+        "with both rounds' integrity clean. Span went 47 -> 52 of 89 = 58%, "
+        "and objections went 5 -> 5.\\n\\n"
+        "**WHAT A SECOND NARROWING ROUND IS WORTH, PRICED RATHER THAN GUESSED.** "
+        "22 checks are still over-strict, and this plan measured a second "
+        "attempt on the same check at 1 of 28 = 4%. The observed jump -- 7 to 0 "
+        "with nothing between -- predicts that whatever moves will overshoot as "
+        "the first nine did. Expected yield is about one check, and the shape "
+        "says it will not be an admissible objecting one."
+    )
+
+
+def the_editor_could_not_aim_at_what_it_was_judged_by() -> str:
+    """The sixteenth counting-shaped defect on this plan, mine, and the first
+    one that plausibly explains a run stopping early rather than a number
+    reading wrong.
+
+    The checks-only arm stopped with three SOUND objections standing and eight
+    of twenty-one trials unspent, reporting that it could not isolate the
+    remaining defect "without a waveform (unavailable in this harness)".
+    """
+    return (
+        "**THE EDITOR WAS JUDGED BY 117 CHECKS AND COULD AIM AT TEN OUTPUTS.** "
+        "The driver latched on the checks and nothing else -- the consensus cell "
+        "units were deliberately out of the ratchet -- but `views()` still "
+        "returned one pseudo-requirement per declared OUTPUT and nothing for the "
+        "checks, and the check verdicts entered `req_results` under synthetic "
+        "`chk:<key>` ids that no view matched. Three consequences, all live in "
+        "the run:\\n\\n"
+        "  * `focus <check>` returned 'Unknown requirement', so the dataflow "
+        "slice could only ever start from a CONSENSUS output -- the instrument "
+        "that arm had removed.\\n"
+        "  * `explain <check>` failed identically, making the span, the boundary "
+        "trace and the perturbation `explain_failure` already computes "
+        "unreachable for every check.\\n"
+        "  * `failing` listed outputs, not checks.\\n\\n"
+        "**THE WAVEFORM WAS THERE.** It was keyed to a requirement id the "
+        "session had no view for, so the editor's report is literally accurate "
+        "about its experience and wrong about the cause -- and neither it nor "
+        "any gate could have told the difference.\\n\\n"
+        "**THE FIX IS ONE VIEW PER CHECK**, carrying the check's key as its uid, "
+        "the requirement's own SENTENCE as its text, and "
+        "`ports_read(oracle, contract)` as its ports -- which is exactly "
+        "`dynamic_slice`'s input shape, so the slice starts from the ports that "
+        "check watches. On one failing check that is fifteen ports including "
+        "five probes, against the single output it could name before.\\n\\n"
+        "**AND THE FIRST ATTEMPT AT THE FIX DID NOT WORK, FOR THE REASON THIS "
+        "PLAN HAS ALREADY RECORDED ONCE.** The views were built inside "
+        "`review()` -- which `focus` and `explain` never run. Every CLI call is "
+        "a fresh process, so the views existed only during a commit and every "
+        "other command still saw ten outputs. That is the same fresh-process "
+        "fact that left the dataflow slice dead in every run on this plan, "
+        "arriving in a different function. It has to be built where the SESSION "
+        "is built, not where the verdicts are.\\n\\n"
+        "**WHAT THIS DOES AND DOES NOT CLAIM.** It does not claim the editor "
+        "would have converged. It claims that the run which stopped at five "
+        "objections with eight trials left was aiming a requirement-oriented "
+        "slice at a requirement it could not name, and that the single-variable "
+        "re-run is the only way to find out what that cost. Reporting the "
+        "earlier stop as a property of the editor, without this, would have "
+        "been reporting my harness as a finding."
+    )
+
+
+def five_sound_checks_jointly_satisfiable_and_the_editor_is_stuck() -> str:
+    """The first failure on this plan located in the SEARCH rather than in the
+    criterion, and it is the sharpest statement here about the editor as the
+    goal's validator.
+
+    Run with check-aware `focus`/`explain`, same criterion, same design, same
+    budget as the arm that stopped at five objections.
+    """
+    return (
+        "**THE RUN MADE NO PROGRESS: 5 objections to 5, two of twenty-one "
+        "trials, both commits rejected and discarded.** What it produced is the "
+        "diagnosis.\\n\\n"
+        "**COMMIT 1 CHANGED `dc_addr` TO SATISFY REQ-0087.shipping. IT DID -- "
+        "AND BROKE FOUR OTHERS**: REQ-0029.t2, REQ-0030.band@band, "
+        "REQ-0030.control and REQ-0087.control, taking the count 5 -> 8. The "
+        "editor concluded that REQ-0087.shipping and REQ-0087.control 'are "
+        "compiled from the same sentence but demand opposite values of dc_addr "
+        "... no memoryless formula satisfies both'.\\n\\n"
+        "**THE AUDIT SAYS ALL FIVE SPARE THE KNOWN-GOOD DESIGN** -- 348, 348, "
+        "348, 256 and 279 decisions, zero convictions each. **A design "
+        "satisfying all five exists and is that one.** The set is sound and "
+        "JOINTLY SATISFIABLE, the design satisfies four and fails one, and the "
+        "single-step edit that fixes the one breaks the other four.\\n\\n"
+        "**SO THIS IS A SEARCH FAILURE, NOT AN ORACLE FAILURE, AND IT IS THE "
+        "FIRST ONE ON THIS PLAN.** Every earlier negative here is about a "
+        "criterion -- inverted, silent, over-strict, or precise about the wrong "
+        "population. This one has a criterion that is sound, jointly "
+        "satisfiable and correctly objecting, and the editor cannot reach the "
+        "satisfying design because every local move that clears one demand "
+        "violates four. It is a local optimum, and the loop has no mechanism "
+        "for leaving one: `commit` judges the whole suite, so a repair that "
+        "must pass through a worse intermediate state can never latch.\\n\\n"
+        "**AND THE CONTRADICTION CLAIM IS NOW REPRODUCIBLE, WHICH MAKES IT A "
+        "PROPERTY RATHER THAN AN ANECDOTE.** Two independent Sonnet editors, "
+        "given different tooling, both concluded the REQ-0087 group is "
+        "mutually unsatisfiable, and both are wrong by the same one-line audit. "
+        "That is the sixth structural-contradiction claim on this plan and the "
+        "sixth refutation -- but the first where two editors reached the same "
+        "false claim independently, so it is a systematic misreading of this "
+        "requirement rather than one agent's error.\\n\\n"
+        "**TWO THINGS THAT QUALIFY THE RUN, BOTH MINE.** The evidence fix was "
+        "PARTIAL: the driver runs the suite with `trace=False` and never "
+        "populates `rows` for a check, so `explain` returned the requirement "
+        "sentence, the verdict and the span but NOT the boundary trace, the "
+        "suspect blocks' internals or the perturbation analysis -- the three "
+        "things that would have shown the editor WHY its edit broke four "
+        "checks. It reported the gap precisely rather than treating it as a "
+        "dead end. And the editor read the check BODIES from disk. That is "
+        "admissible -- they are spec-derived artifacts and contain nothing from "
+        "the known-good design -- but it changes the experiment from 'can an "
+        "editor repair from objections' to 'from objections plus the criterion's "
+        "source', and the two are not the same question."
+    )
+
+
+def three_dropped_values_and_one_root_cause() -> str:
+    """The evidence path, completed -- and the three defects between the editor
+    and the evidence were all the same mistake in three functions.
+
+    `the_editor_could_not_aim_at_what_it_was_judged_by` fixed the first. The
+    editor's next report named the remaining two precisely, and neither was a
+    missing capability: both were values computed and then dropped.
+    """
+    return (
+        "**`explain_failure` HAS RENDERED ALL FIVE PARTS OF ITS ANNOTATION SINCE "
+        "IT WAS WRITTEN. THE DRIVER WAS FEEDING IT THREE EMPTY ARGUMENTS.**\\n\\n"
+        "    what was missing        why                          the fix\\n"
+        "    the boundary trace      `_Res(rows=)` never set      pass the rows\\n"
+        "    the perturbation        emitted only `if rows`       the same rows\\n"
+        "    the block internals     `vcd_by_tp` never populated  map by filename\\n\\n"
+        "**ONE ROOT CAUSE, THREE FUNCTIONS, AND IT IS THE SAME ONE THIS PLAN HAS "
+        "ALREADY RECORDED TWICE: every CLI call is a fresh process.** The rows "
+        "were computed in `review()` and thrown away one line later. "
+        "`req_accepted.json` round-trips `ok`, `edge`, `detail` and `tp_uid` and "
+        "nothing else, so a reloaded `_Res` has no rows even when the review "
+        "that produced them succeeded. And the suite had written **349 "
+        "waveforms** to disk while the payload told the editor 'this run dumped "
+        "no waveform' -- which is why an editor spent a whole run reading "
+        "boundary ports and source, and said so.\\n\\n"
+        "**THE ROWS DID NOT NEED PERSISTING.** They are derivable from the trace "
+        "the loader already reads, so the fix is to rebuild rather than store "
+        "them -- and the waveforms needed nothing but a filename map.\\n\\n"
+        "**AND THE FIFTH PART SAYS SOMETHING NO EDITOR ON THIS PLAN HAS SEEN.** "
+        "On the check two independent editors called unsatisfiable, the "
+        "perturbation analysis reports:\\n\\n"
+        "    NO single-value change at the deciding edge satisfies this check,\\n"
+        "    so the defect is TEMPORAL -- the ordering or the timing, not a\\n"
+        "    wrong value at one edge.\\n\\n"
+        "**BOTH EDITORS TREATED IT AS A FORMULA PROBLEM** -- 'no memoryless "
+        "formula satisfies both' -- and made memoryless edits to `dc_addr`. The "
+        "instrument that would have told them the class of defect was built, "
+        "was correct, and was unreachable because three values were dropped "
+        "between the review and the prompt.\\n\\n"
+        "**SO THE HONEST READING OF THE TWO EARLIER STOPS IS THAT NEITHER "
+        "MEASURED THE EDITOR.** They measured a loop that judged by checks and "
+        "could not aim at one, then a loop that could aim but had nothing to "
+        "show. Only the run after this one is evidence about whether a Sonnet "
+        "editor can repair from a sound spec-derived criterion, and reporting "
+        "either earlier stop as an editor result would have been reporting my "
+        "harness as a finding."
+    )
+
+
+def the_editor_oscillates_between_two_clauses_of_one_sentence() -> str:
+    """The first run on this plan where the editor was BOTH judged by checks it
+    could aim at AND handed the evidence to aim with -- so the first that is
+    evidence about the editor rather than about my harness.
+
+    `three_dropped_values_and_one_root_cause` closed the evidence path and said
+    the run after it would be the measurement. This is that run's first four
+    trials, scored by re-deciding the 117 checks over each design's own traces
+    rather than by reading the run's bookkeeping.
+    """
+    return (
+        "**FOUR COMMITS, ALL REJECTED, AND THE ACCEPTED DESIGN IS BYTE-IDENTICAL "
+        "TO THE ONE THE RUN STARTED FROM.** Not a stalled loop -- a ratchet doing "
+        "exactly its job, on a design that sits at a point the editor cannot "
+        "leave in one step.\\n\\n"
+        "**THE SPECIFICATION STATES TWO OBLIGATIONS ABOUT ONE WIRE, AND THIS "
+        "DESIGN SATISFIES EXACTLY ONE OF THEM AT A TIME.** REQ-0087 carries both "
+        "in a single sentence -- *drive dc_addr to start_addr during hit/miss "
+        "evaluation and to saved_addr during post-evaluation BIU transfers* -- "
+        "and REQ-0029 and REQ-0030 restate them separately:\\n\\n"
+        "    clause A  start_addr WHILE EVALUATING      REQ-0029, REQ-0087.shipping\\n"
+        "    clause B  saved_addr DURING THE TRANSFER   REQ-0030 (5 bodies), REQ-0087.control\\n\\n"
+        "    accepted   (biu_read || biu_write) ? saved_addr_r : start_addr\\n"
+        "               satisfies B, fails A          -> 5 objections of 117\\n"
+        "    staged     (hitmiss_eval_r || in_idle) ? start_addr : saved_addr_r\\n"
+        "               satisfies A, fails B          -> 8 objections of 117\\n\\n"
+        "Every attempt clears `REQ-0087.shipping` and introduces `REQ-0029.t2`, "
+        "`REQ-0030.band@band`, `REQ-0030.control` and `REQ-0087.control`. **One "
+        "objection traded for four.**\\n\\n"
+        "**AND THE RATCHET IS NOT MISCALIBRATED, WHICH HAD TO BE CHECKED BEFORE "
+        "THE OSCILLATION COULD BE BLAMED ON THE EDITOR.** REQ-0030 carries five "
+        "bodies against REQ-0029's one, so a body-count latch could have been "
+        "encoding an authoring accident as a preference between two obligations "
+        "the specification weights equally. It is not: at REQUIREMENT "
+        "granularity the trade is 4 failing to 6, worse by the same sign. The "
+        "refusal is correct at both granularities.\\n\\n"
+        "**SO THIS IS THE OSCILLATION THE GOAL ASKS ABOUT, ON RTL REPAIR, WITH A "
+        "SOUND SPEC-ONLY CRITERION AND A COMPLETE EVIDENCE PATH** -- and it is "
+        "not the criterion swapping failure modes, which is what every earlier "
+        "oscillation on this plan turned out to be. Both clauses are real, both "
+        "are stated, and a correct design meets both; the design meets one, and "
+        "one memoryless edit can only move which.\\n\\n"
+        "**THE INSTRUMENT HAD ALREADY SAID SO AND WAS NOT ACTED ON.** The "
+        "perturbation analysis reports on this exact check that *no single-value "
+        "change at the deciding edge satisfies it, so the defect is TEMPORAL*. "
+        "Both rejected edits are memoryless mux rewrites, and the second differs "
+        "from the first mainly by which registered flag it reads. **That is now "
+        "a fact about the editor rather than about the harness, which is what "
+        "closing the evidence path bought.**"
+    )
+
+
+def a_committing_design_is_not_stable_while_the_commit_runs() -> str:
+    """Mine, caught by a diff that went empty between two reads.
+
+    The lesson is not the file layout; it is that a run's artifacts have a
+    meaning ONLY at rest, and this plan's instruments read them while moving.
+    """
+    return (
+        "**`dut.v` IS REWRITTEN DURING A COMMIT AND ROLLED BACK WHEN THE RATCHET "
+        "REFUSES, SO A MID-FLIGHT READ RETURNS A CANDIDATE THAT MAY NEVER HAVE "
+        "BEEN ACCEPTED.** I read it between a commit's start and its verdict, "
+        "found it changed, concluded the design had moved, and started grading "
+        "it. Thirty seconds later the same file was back to the baseline.\\n\\n"
+        "**THE TELL WAS A DIFF THAT WENT EMPTY.** `diff L_afterCHK.v "
+        "loopEV/dut.v` printed fifteen lines, then nothing, with no edit of mine "
+        "in between -- which is not something a settled run does.\\n\\n"
+        "**THREE ARTIFACTS OF THIS RUN MEAN DIFFERENT THINGS AND ONLY ONE IS THE "
+        "ACCEPTED DESIGN:**\\n\\n"
+        "    dut.v      the accepted design AT REST; a candidate mid-commit\\n"
+        "    staged.v   the staged buffer, which SURVIVES a rejection by design\\n"
+        "    best.v     written by `note_best`, which tracks the CELL count --\\n"
+        "               an instrument this arm removed from the ratchet\\n"
+        "    run1/      overwritten by every review, so it describes whichever\\n"
+        "               text was last simulated, not the one that latched\\n\\n"
+        "**SO A DESIGN MUST BE READ WITH THE RUN QUIESCENT AND SCORED IN ITS OWN "
+        "CLEAN DIRECTORY**, which this plan already required for the second "
+        "reason and had not stated for the first. The cost here was one wasted "
+        "scoring run, caught before any number from it was reported -- and the "
+        "same defect reported would have been a design movement that never "
+        "happened."
+    )
+
+
+def a_check_on_an_unreachable_state_reads_as_sound_and_costs_half_a_budget() -> str:
+    """The population rule's blind spot, found by an editor spending three of
+    six trials trying to satisfy a demand no design in this build can meet.
+
+    This is the first instrument on the plan that removes an over-strict check
+    WITHOUT reading a known-good design and without a population vote.
+    """
+    return (
+        "**TWO OF THE FIVE OBJECTIONS WERE ON A STATE THIS BUILD CANNOT ENTER, "
+        "AND THE GOLDEN-FREE SOUNDNESS RULE KEPT BOTH.**\\n\\n"
+        "    in_srefill4 true on   0 of 27,335 edges, over 9 independent designs\\n"
+        "    k-induction           UNREACHABLE, sby PASS, unbounded\\n"
+        "    control in_lrefill3   REACHABLE, counterexample -- the prover is\\n"
+        "                          not proving everything unreachable\\n"
+        "    the specification     'an OPTIONAL store-miss refill WHEN\\n"
+        "                          OR1200_DC_STORE_REFILL is enabled'\\n"
+        "    build_config          OR1200_DC_STORE_REFILL: false\\n\\n"
+        "So the absence is spec-licensed and formally proved: `UNREACHABLE`, "
+        "not `DESIGN_MISSING_STATE`.\\n\\n"
+        "**AND THE MINORITY RULE CANNOT SEE IT, WHICH IS THE FINDING.** Both "
+        "checks convict 2 of 7 spec-derived designs, so *convicts at most two* "
+        "KEEPS them at its 59-of-59 precision. The mechanism: **a check on an "
+        "unreachable state mostly ABSTAINS, and abstention is not conviction, so "
+        "silence is scored as soundness.** Every population rule on this plan "
+        "counts convictions, so every one of them is blind to exactly this "
+        "class -- and the class is not rare, it is whatever the build "
+        "configuration switches off.\\n\\n"
+        "**THE COST IS NOT A WASTED OBJECTION. IT IS A WRONG STEER, AND IT TOOK "
+        "HALF THE BUDGET.** Commits 1, 2 and 3 of six all `define`d "
+        "`OR1200_DC_STORE_REFILL` -- the editor changing the BUILD "
+        "CONFIGURATION to reach a state its checks demanded. Three trials, zero "
+        "repairs, and one of them cost twelve new objections. An over-strict "
+        "check does not merely fail to help; it can drive the editor to "
+        "contradict the configuration the specification itself fixes.\\n\\n"
+        "**AND THE CHECKS READ NO PROBE**, which is why they fire at all: they "
+        "infer 'SREFILL4 entry' from a port pattern that occurs in other "
+        "states. That is the lossy proxy the probe architecture exists to "
+        "remove, appearing as an unsatisfiable demand rather than as a false "
+        "alarm.\\n\\n"
+        "**THE SCREEN, AND EVERY LEG OF IT IS GOLDEN-FREE:** a requirement "
+        "leaves the denominator when the spec licenses the absence by a quoted "
+        "span, the config key is off, a prover says the state is unreachable ON "
+        "THE DESIGN UNDER TEST, and the requirement is ENTIRELY about it. The "
+        "last leg is what keeps REQ-0026, REQ-0002, REQ-0036 and REQ-0088 in: "
+        "they name SREFILL4 as one branch beside a live LREFILL3 clause.\\n\\n"
+        "    criterion as run      5 objections of 117 checks over 54 requirements\\n"
+        "    after the screen      3 objections of 114 checks over 52 requirements\\n"
+        "    span                  52 of 89 = 58%, A MAJORITY\\n\\n"
+        "**AND THE THREE THAT REMAIN ARE REAL** -- REQ-0015.v2@n3, "
+        "REQ-0064.t1@n3, REQ-0087.shipping -- so for the first time on this "
+        "plan every objection the editor is asked to clear is one some design "
+        "in this build could clear."
+    )
+
+
+def six_designs_satisfy_the_group_three_editors_called_unsatisfiable() -> str:
+    """The 'mutually unsatisfiable' claim, refuted constructively rather than
+    by argument -- with witnesses, from the spec-derived population alone.
+
+    Three editors in succession have stopped on this group and reported that no
+    design can satisfy it. Each was reasoning from its own failed attempts.
+    """
+    return (
+        "**SIX OF SEVEN INDEPENDENTLY WRITTEN SPEC-DERIVED DESIGNS SATISFY ALL "
+        "SEVEN dc_addr CHECKS AT ONCE.** B, C, D, E, F and H pass every one of "
+        "`REQ-0087.shipping`, `REQ-0087.control`, `REQ-0029.t2`, "
+        "`REQ-0030.control`, `REQ-0030.band@band`, `REQ-0030.shipping` and "
+        "`REQ-0030.merge@merge`. G fails four. The design under repair fails "
+        "**exactly one** -- `REQ-0087.shipping`.\\n\\n"
+        "**SO THE GROUP IS JOINTLY SATISFIABLE, AND THE PROOF IS SIX WITNESSES "
+        "RATHER THAN AN ARGUMENT.** Every previous refutation of this claim on "
+        "the plan was an audit saying the checks spare a known-good design, "
+        "which is admissible only as an audit. This one reads nothing but "
+        "designs the specification produced, so it is a golden-free refutation "
+        "of a golden-free claim.\\n\\n"
+        "**AND IT RECLASSIFIES THE FAILURE.** The editor is ONE check away from "
+        "a point six of its siblings occupy. That is not an oracle defect, not "
+        "an over-strict demand and not a contradiction in the set -- it is a "
+        "SEARCH failure, in a place where the target is known to be occupied "
+        "and known to be one step from where the loop is standing.\\n\\n"
+        "**THREE EDITORS HAVE NOW MADE THE SAME WRONG CALL**, each from its own "
+        "failed attempts and each stating it as a property of the checks. The "
+        "pattern is worth naming: an editor that cannot find a satisfying edit "
+        "concludes none exists, and nothing in the loop can contradict it, "
+        "because the loop shows it only its own trajectory. **The population "
+        "can contradict it, cheaply, and no editor has ever been shown that** "
+        "-- the same seven designs the soundness rule already reads are sitting "
+        "unused as an existence proof."
+    )
+
+
+def seven_readings_seven_designs_and_the_soundness_sufficiency_trade() -> str:
+    """The session's central measurement, with a formal instrument on both ends
+    and golden appearing only in the audit column.
+
+    Sufficiency -- does the set FORCE equivalence -- had never been measurable
+    here. It is, without a reference: if two designs both satisfy the set and
+    are not equivalent to each other, the set does not force equivalence.
+    """
+    return (
+        "**SEVEN INDEPENDENTLY WRITTEN SPEC-DERIVED DESIGNS FALL INTO SEVEN "
+        "EQUIVALENCE CLASSES.** All 21 pairs return `DIFFERS` under a bounded "
+        "reset-constrained miter that reads no known-good design. The "
+        "specification is compatible with at least seven distinct behaviours, "
+        "and that is measured on the designs themselves rather than inferred "
+        "from cell disagreement.\\n\\n"
+        "**SO A CRITERION ACCEPTING EXACTLY ONE IS DOING THE MOST A CORRECT "
+        "CRITERION COULD.** That settles a reading the plan could not settle "
+        "before: 'the set rejects 6 of 7' is DISCRIMINATION, not "
+        "over-strictness, because at most one of seven mutually inequivalent "
+        "designs can match any reference.\\n\\n"
+        "**AND SOUNDNESS DOES NOT SURVIVE CONJUNCTION.** The minority rule "
+        "bounds each CHECK at two convictions of seven, at 59-of-59 precision. "
+        "A design is rejected when ANY of 114 members objects, so rejections "
+        "UNION:\\n\\n"
+        "    worst single check convicts        3 of 7\\n"
+        "    the 114-check SET rejects          6 of 7\\n\\n"
+        "Every per-check soundness filter on this plan is blind to this by "
+        "construction, and eight requirements do all the rejecting.\\n\\n"
+        "**THE TRADE, BOTH ENDS MEASURED, GOLDEN ONLY IN THE AUDIT:**\\n\\n"
+        "    set                    checks  span   accepts  *audit*  objects to\\n"
+        "                                          of 7             the design\\n"
+        "    screened                 114   58%      1      *10*        3\\n"
+        "    UNANIMOUS (convicts 0)    89   47%      7      *0*         2\\n\\n"
+        "**THE UNANIMITY RULE IS THE FIRST GOLDEN-FREE RULE HERE THAT PREDICTS "
+        "SOUNDNESS RATHER THAN BEING HANDED IT.** Dropping every check that "
+        "convicts even one of the seven removes **10 of the 10** checks that "
+        "convict the reference -- **100% recall**, at 40% precision -- and the "
+        "surviving 89 convict the reference **zero** times, verified directly "
+        "with a probe-liveness guard. MAXSOUND was perfectly sound too and was "
+        "SELECTED BY golden, so it was a ceiling; this is selected by the "
+        "population and the audit merely confirms it.\\n\\n"
+        "**AND EACH END FAILS THE GOAL IN THE OPPOSITE WAY, WHICH IS THE POINT."
+        "** The screened set convicts the reference ten times, so zero "
+        "objections is UNREACHABLE for a correct design and its accepted design "
+        "B is measured `DIFFERS`. The unanimous set accepts all seven -- seven "
+        "equivalence classes at once -- so it cannot force equivalence at all. "
+        "**Over-strictness and vacuity as one defect with two signs, now at SET "
+        "level, with a formal equivalence instrument on both ends instead of a "
+        "proxy.**\\n\\n"
+        "**WHAT MAKES THE UNANIMOUS SET WORTH RUNNING ANYWAY:** it is the first "
+        "set on this plan that is simultaneously sound on the reference (0), "
+        "discriminating on the design under repair (2 objections), and "
+        "reachable -- zero objections is a state a correct design occupies. On "
+        "every earlier set, terminating at zero was a certificate of "
+        "NON-equivalence by arithmetic."
+    )
+
+
+def no_sound_subset_of_this_corpus_forces_equivalence() -> str:
+    """Exhaustive over the SCORED corpus, with a witness pair.
+
+    **CORRECTED, AND THE WORD DOING THE DAMAGE IS "CORPUS".** The argument
+    below is valid and its conclusion was overstated: it enumerates the 114
+    checks that were SCORED, and 477 further bodies over the 26 uncovered
+    behavioural requirements existed on disk having never been decided against
+    anything. Scoring them produced 14 checks that spare the reference AND
+    convict B -- so the witness pair is removed and the exhaustive step no
+    longer closes. See `a_proof_is_exhaustive_only_over_what_it_enumerated`.
+
+    What survives unchanged: no sound subset of the checks that WERE scored
+    forces equivalence, and no threshold on population convictions separates
+    a reference-sparing check from a reference-convicting one.
+    """
+    return (
+        "**THE CEILING SET IS EVERY CORPUS CHECK THAT SPARES THE REFERENCE** -- "
+        "104 checks over 49 requirements, the 89 that convict none of the seven "
+        "spec-derived designs plus the 15 that convict some and spare the "
+        "reference. Verified: 104 decide on the reference, **0 convict it**.\\n\\n"
+        "    designs it accepts of the seven      B, and only B\\n"
+        "    B against the reference              *DIFFERS* (miter, three pins green)\\n\\n"
+        "**SO THE REFERENCE PASSES, B PASSES, AND THEY ARE NOT EQUIVALENT.** "
+        "That is sufficiency refuted with a WITNESS PAIR rather than left "
+        "untestable, and the argument generalises in one step: any SOUND subset "
+        "of this corpus is a subset of the 104, B satisfies all 104, so B "
+        "satisfies every sound subset. **No sound subset of this corpus forces "
+        "equivalence.** Exhaustive, no further runs required.\\n\\n"
+        "**AND NO GOLDEN-FREE RULE RECOVERS THE CEILING EITHER**, which closes "
+        "the other half. Splitting the 25 checks that convict at least one of "
+        "the seven by whether they also convict the reference:\\n\\n"
+        "    convicts 1 of 7    16 checks    5 convict the reference, 11 do not\\n"
+        "    convicts 2 of 7     8 checks    4 convict the reference,  4 do not\\n"
+        "    convicts 3 of 7     1 check     1 convicts the reference\\n\\n"
+        "The split is near-even at every level, so **no threshold on population "
+        "convictions separates a check that spares the reference from one that "
+        "convicts it.** The ceiling set is selected BY the reference and is a "
+        "ceiling, not a score.\\n\\n"
+        "**WHAT THIS LEAVES.** Selection over this corpus is closed as a route "
+        "to a set that forces equivalence -- not 'has not worked yet' but "
+        "cannot, because the best sound set the corpus admits accepts two "
+        "inequivalent designs. The remedy has to be NEW CHECKS separating B "
+        "from the reference. Authoring those from the reference's behaviour is "
+        "the control leak `oracles_stage.py:66-73` forbids, and nothing "
+        "golden-free identifies that particular gap -- the seven designs are "
+        "SEVEN equivalence classes and none of them is the reference, so the "
+        "population cannot point at it either.\\n\\n"
+        "**THE HONEST SCOPE.** This is one design, one corpus of 259 bodies and "
+        "one population of seven. It says selection is exhausted HERE; it does "
+        "not say a richer corpus could not contain a separating check."
+    )
+
+
+def a_proof_is_exhaustive_only_over_what_it_enumerated() -> str:
+    """A retraction of this module's own strongest claim, and the cheapest
+    measurement of the session is what forced it.
+
+    The claim was not wrong about its population. It was wrong about which
+    population it had.
+    """
+    return (
+        "**THE CLAIM WAS THAT NO SOUND SUBSET OF THE CORPUS FORCES EQUIVALENCE**, "
+        "argued exhaustively: the ceiling set is every check that spares the "
+        "reference, it accepts design B, B differs from the reference, and any "
+        "sound subset is a subset of the ceiling -- so B satisfies all of them. "
+        "The argument is valid. Its premise was that the ceiling enumerated "
+        "every sound check there is.\n\n"
+        "**IT ENUMERATED EVERY SCORED CHECK.** The 26 behavioural requirements "
+        "the ceiling did not cover had **477 distinct authored bodies on disk, "
+        "not one of which had ever been decided against any design.** They were "
+        "absent from the corpus the score was taken over, so the ceiling was "
+        "never complete and the exhaustive step never closed.\n\n"
+        "    scoring them, 7 designs x 348 testpoints, no model calls:\n"
+        "      decide on some design                              350 of 477\n"
+        "      spare the reference (audit, computed LAST)          59\n"
+        "      **spare the reference AND convict design B**        **14, over 7 requirements**\n\n"
+        "**FOURTEEN CHECKS REMOVE THE WITNESS PAIR.** REQ-0013, 0014, 0020, "
+        "0022, 0032, 0037 and 0077 each carry a body that a correct design "
+        "satisfies and B does not, so the sound set containing them rejects B "
+        "and the impossibility argument no longer has its witness.\n\n"
+        "**AND THE SET THIS BUILDS IS THE FIRST HERE THAT IS SOUND, WIDE AND "
+        "ABLE TO REJECT.** Every check in either corpus that decides on the "
+        "reference and spares it -- 104 scored plus 59 recovered = 163, over 59 "
+        "of 87 requirements = 68%, audit 0:\n\n"
+        "    objections at init, of 163\n"
+        "      the reference                       0\n"
+        "      the eight spec-derived designs      11 to 22 -- **ALL EIGHT REJECTED**\n\n"
+        "Every previous set failed on exactly one of the three legs: rule B "
+        "convicted the reference, so zero objections was unreachable for a "
+        "correct design and terminating there was a certificate of "
+        "NON-equivalence; MAXSOUND and the 104-check ceiling were sound and "
+        "accepted a wrong design at zero. This one leaves zero reachable only "
+        "for something no design in the population is.\n\n"
+        "**WHAT DOES NOT CHANGE, AND IT IS THE HALF THAT MATTERS FOR A "
+        "GOLDEN-FREE PIPELINE.** The 14 checks convict 4 to 7 of the 7 designs; "
+        "the golden-free minority rule keeps at most 2 and therefore keeps "
+        "**ZERO of them.** So the recovered corpus moves the CEILING and not "
+        "the reachable-without-a-reference set, which is this module's central "
+        "anti-correlation confirmed a third time on fresh bodies.\n\n"
+        "**THE DISCIPLINE, WHICH IS THE PORTABLE PART.** An exhaustive argument "
+        "is exhaustive over the population it enumerated, and 'the corpus' and "
+        "'the corpus that was scored' are different sets. Selecting over a "
+        "different corpus than the score is a defect this experiment has made "
+        "eight times and has always caught as an inflated result; here the sign "
+        "is reversed -- the score was taken over a SUBSET -- and it produced an "
+        "impossibility instead. **A negative result needs its denominator "
+        "checked exactly as hard as a positive one, and this one did not get "
+        "it.**"
+    )
+
+
+def a_missing_body_reads_as_a_check_that_passed() -> str:
+    """Caught before it ran, by reading the scorer rather than its output.
+
+    The sixteenth counting-shaped defect on this plan, and the second in the
+    same file -- whose docstring already names the defect class.
+    """
+    return (
+        "`chkscore.py` takes its check SET from an environment variable and "
+        "loaded its BODIES from a hardcoded filename, then looped:\n\n"
+        "    body = BODIES.get(key)\n"
+        "    if not body:\n"
+        "        continue          # <- a check with no body is not scored\n\n"
+        "**SO SCORING A 163-CHECK SET WHOSE BODIES LIVE IN TWO FILES WOULD HAVE "
+        "DECIDED 104 OF THEM AND REPORTED THE RESULT UNDER THE 163's NAME.** "
+        "Not an error, not a warning: 59 checks silently absent, and since the "
+        "criterion is 'no check objects', **every absent check reads exactly "
+        "like a check that passed.** A design rejected by 14 recovered checks "
+        "would have scored zero objections and been reported as accepted.\n\n"
+        "The file's own docstring already names this class -- *'a number that "
+        "reads as a result and is measuring something else'* -- for the SET "
+        "variable, one line above the BODIES variable that had the same defect. "
+        "Fixed by parameterising the body source and REFUSING when any check in "
+        "the set has no body, rather than skipping it.\n\n"
+        "**THE GENERAL RULE: A SCORER MUST REFUSE AN INCOMPLETE DENOMINATOR, "
+        "NEVER SKIP IT.** `drive9.review` learned the same rule from the "
+        "opposite direction, refusing a suite that produced 8 of 348 traces -- "
+        "a missing testpoint is a check that was never given its evidence, not "
+        "a check that passed. Both are the same sentence about a different "
+        "kind of gap."
+    )
+
+
+def a_recovered_check_catches_a_design_the_scored_set_almost_accepted() -> str:
+    """The enlarged set tested against an EDITED design rather than an unchecked
+    one, which is the only version of the test that can be Goodharted.
+
+    Every earlier "does this set discriminate" measurement here was against
+    designs written from the specification and never repaired. Those are easy:
+    nothing has optimised against the checks. This one is against a design an
+    editor spent seven trials driving down against 104 of the 163.
+    """
+    return (
+        "An RTL editor was run against the 104-check scored ceiling from an "
+        "unchecked spec-derived design, seven trials. Its ACCEPTED design, "
+        "re-measured in a clean run directory with all three miter pins green "
+        "in the same process:\n\n"
+        "    against the 104 it was edited on      1 objection\n"
+        "    **against the 163 with the recovered checks added**   **2**\n"
+        "    testpoints differing from the reference              178 of 348 = 51%\n"
+        "    miter                                               *DIFFERS*\n\n"
+        "**THE EXTRA OBJECTION IS A RECOVERED CHECK** -- `REQ-0037`, one of the "
+        "477 bodies that sat on disk unscored. It spares the reference, it "
+        "convicts 5 of the 7 spec-derived designs, and it fires on a design "
+        "seven trials of editing had driven to a single objection against the "
+        "set it was being edited on.\n\n"
+        "**SO THE RECOVERED CORPUS ADDS DISCRIMINATION AGAINST AN OPTIMISED "
+        "DESIGN, NOT ONLY AGAINST NAIVE ONES.** That is the form of the claim "
+        "worth having: a check set is only interesting where a loop has already "
+        "pushed a design to satisfy everything else it says.\n\n"
+        "**AND THE GOLDEN-FREE RULE REJECTS THAT CHECK.** Convicting 5 of 7 "
+        "puts it far outside the minority rule's threshold of 2. So the check "
+        "carrying the discrimination here is, once more, exactly the kind no "
+        "rule reading only spec-derived designs will keep -- and one objection "
+        "is discrimination, not sufficiency: the design still differs from the "
+        "reference on 51% of testpoints."
+    )
+
+
+def the_accepted_design_is_not_the_last_one_simulated() -> str:
+    """Two artifacts of one loop disagreed, and reading the wrong one produced a
+    wrong number in each direction within the same hour.
+
+    Recorded because the fix is not a code change -- the harness already refuses
+    this -- it is knowing which file answers which question.
+    """
+    return (
+        "A run directory holds three descriptions of 'the design' and they are "
+        "not the same design:\n\n"
+        "    dut.v               the ACCEPTED RTL. `commit` restores it byte for\n"
+        "                        byte when a batch does not latch\n"
+        "    run1/.../results    the traces of whatever was LAST SIMULATED --\n"
+        "                        for a rejected commit, the CANDIDATE\n"
+        "    best.v              selected by `note_best` on the CELL count, an\n"
+        "                        instrument the checks-only arm removed from its\n"
+        "                        own ratchet\n\n"
+        "**MEASURED ON ONE LOOP, ONE HOUR, BOTH DIRECTIONS.** The accepted "
+        "design carried 1 objection of 104. Scoring `run1` gave 3 -- the "
+        "rejected candidate -- and the timestamp gap made it look as though the "
+        "accepted-verdict file was stale, so the true number was called stale "
+        "and the candidate's number reported as the correction. A clean suite "
+        "run on `dut.v` restored the original: **1 of 104, and 2 of 163.**\n\n"
+        "**THE TELL WAS THAT THE TWO DISAGREED IN BOTH DIRECTIONS AT ONCE** -- "
+        "three checks objecting only in one reading, one check objecting only "
+        "in the other. A stale file is behind; it does not also object to "
+        "something the fresh one clears. Two sets differing in both directions "
+        "are two different designs, never one design seen at two times.\n\n"
+        "**THE RULE, AND THE HARNESS ALREADY STATES IT:** grade the accepted "
+        "design in its OWN clean directory, never from the loop's working run "
+        "directory, because that directory is overwritten by every review and "
+        "describes whichever text was last simulated. The instruction existed, "
+        "was written for exactly this, and was skipped because scoring the "
+        "existing traces was faster."
+    )
+
+
+def three_editors_called_a_sound_set_self_contradictory() -> str:
+    """The failure mode that ends these runs, now on its third reproduction --
+    and the one-line refutation is not available without the reference.
+
+    This is not a finding about a bad editor. All three were right that they
+    could not find a joint reading, and wrong about what that implied.
+    """
+    return (
+        "Three RTL editors, three different check sets, one conclusion: **the "
+        "remaining objections are checks that contradict each other, so no "
+        "design can satisfy them all.** Each time it is refutable in a single "
+        "line, because every member of each set was selected by *decides on the "
+        "reference and spares it*:\n\n"
+        "    the reference satisfies all N of them AT ONCE\n"
+        "    => no subset of the set is jointly unsatisfiable\n"
+        "    => for every pair called contradictory, a joint reading exists\n\n"
+        "On the 50-check ceiling an editor called `REQ-0032` and `REQ-0069` *a "
+        "contradiction baked into the check set*; on the 163-check set another "
+        "reported *three genuine, textually-evidenced conflicts between check "
+        "variants that cannot both be satisfied*. Both false, same way.\n\n"
+        "**AND IT IS EXPENSIVE RATHER THAN MERELY WRONG.** The ceiling run "
+        "terminated with 8 of 14 trials unspent on this basis. The budget is "
+        "not spent on the design; it is spent adjudicating the oracle set, and "
+        "then abandoned.\n\n"
+        "**WHY NO PROMPT FIXES IT.** From inside, *I cannot find a reading in "
+        "which both hold* and *there is no such reading* are the same "
+        "observation. The brief already says in as many words not to dismiss a "
+        "check as unsatisfiable, and says to find the reading in which both "
+        "hold. All three editors had that instruction and reached the "
+        "conclusion anyway, with budget remaining.\n\n"
+        "**THE PART THAT MATTERS FOR A GOLDEN-FREE PIPELINE, AND IT IS THE "
+        "SHARP ONE.** The refutation above reads the reference. Nothing else "
+        "here can supply it:\n\n"
+        "    checks each satisfied by >=1 of 7 spec-derived designs   161 of 163\n"
+        "    **designs in the population satisfying ALL 163**          **0**\n\n"
+        "Per-check satisfiability does not compose -- 161 checks each having "
+        "some design that satisfies it says nothing about whether one design "
+        "satisfies them together, and here no design in the population does. "
+        "**So *this set is jointly satisfiable* is exactly the fact the "
+        "editor needs, and exactly the fact a golden-free pipeline cannot "
+        "give it.**\n\n"
+        "**AND THE WITNESS IS CIRCULAR.** The only golden-free evidence that a "
+        "set is jointly satisfiable is a design satisfying all of it -- which "
+        "is the artifact the loop is trying to produce. It cannot be an input "
+        "to producing it. That is a structural gap in the golden-free story, "
+        "not a missing instrument someone could go and build.\n\n"
+        "**WHAT IS ADMISSIBLE, AND IT IS WEAKER.** A per-check population fact "
+        "-- *N of seven independently written implementations satisfy this "
+        "check* -- reads no reference and is true of 161 of the 163. It tells "
+        "an editor that a check is individually achievable. It does not tell it "
+        "the set is jointly achievable, and the difference is precisely where "
+        "all three runs stopped."
+    )
+
+
+def the_gradient_holds_on_a_set_that_rejects_everything() -> str:
+    """The 163-check run, reported under the reading its pre-registration fixed
+    BEFORE dispatch -- which is not the reading its numbers invite.
+
+    The numbers are the best on this plan. The pre-registration says they do not
+    answer the question the run was built to answer, and that is the reading
+    that governs.
+    """
+    return (
+        "A Sonnet editor, 21 trials, on the 163-check set -- sound (audit 0), "
+        "68% span, and objecting to all eight spec-derived designs. Started "
+        "from an unchecked design written from the specification and never "
+        "repaired. Re-measured in a clean run directory, three miter pins green "
+        "in the same process:\n\n"
+        "    at init          22 objections   279 of 348 testpoints (80%)   4,450 cells\n"
+        "    after 19 trials   **5**          **190 of 348 (55%)**          **3,287**\n"
+        "    grade            ***DIFFERS***\n\n"
+        "**OBJECTIONS FELL 77%, DIVERGENCE 32%, CELLS 26% -- ALL THREE TOGETHER.** "
+        "That has happened once before here and never on a set of this size. On "
+        "a set where zero objections is reachable by a correct design and no "
+        "design in the population reaches it, the accept criterion and the "
+        "grade move the same way for 19 consecutive trials.\n\n"
+        "**AND IT IS NOT A RESULT ABOUT THE SET, BY THE RULE FIXED BEFORE IT "
+        "RAN.** The pre-registration named three outcomes; this is the third -- "
+        "*an editor that stalls above zero with trials left measures the EDITOR, "
+        "not the set.* It stopped at 5 objections with **2 trials unspent.** So "
+        "the question the run was built to decide -- can this set drive a design "
+        "to equivalence -- is still open. It is not the strongest negative and "
+        "it is not a positive, and the temptation to bank the best numbers on "
+        "the plan as one is exactly what the pre-registration exists to "
+        "refuse.\n\n"
+        "**FOUR OF THE FIVE REMAINING OBJECTIONS ARE RECOVERED CHECKS** -- "
+        "bodies that had never been decided against any design before this "
+        "round. Three are variants of one requirement firing at the same "
+        "testpoint and edge, so the five objections are three distinct defects. "
+        "Together with the same corpus catching a design already driven to one "
+        "objection on the scored ceiling, **the checks doing the discriminating "
+        "at the END of a long run are overwhelmingly the ones that were sitting "
+        "unused**, which is where a Goodharted design would otherwise look "
+        "finished.\n\n"
+        "**AND THE BLINDNESS RESIDUE SHOWS UP AS A PORT, NOT A STATISTIC.** "
+        "`first_hit_ack` is the worst output at init (1,063 differing cells) and "
+        "ends at 938 -- essentially untouched, while every other output moved. A "
+        "set spanning 68% of the specification left the single largest source of "
+        "divergence almost unaddressed. That is this plan's 3.9%-of-exposed-"
+        "decisions figure with a name on it."
+    )
+
+
+def blindness_has_a_golden_free_instrument_that_ranks_but_cannot_certify() -> str:
+    """The first golden-free instrument here that strongly tracks a property
+    that matters -- and the cell that would make it a certificate is n=8.
+
+    Completeness has never had an instrument on this plan. This is one, and the
+    honest reading is that it aims work rather than approving it.
+    """
+    return (
+        "**THE CONSTRUCTION NEEDS NO REFERENCE.** Golden-based blindness asks "
+        "whether a check decides where a port it reads is WRONG and passes -- "
+        "and 'wrong' needs the reference. But the property a complete set must "
+        "have is not *objects to wrong values*, it is *forces agreement*, so "
+        "the reference drops out:\n\n"
+        "    a check that PASSES TWO DESIGNS which DIFFER on a port it reads\n"
+        "    is blind to that difference, whichever of the two is right\n\n"
+        "The pair is the witness. Nine designs -- seven written independently "
+        "from the specification and two produced by editors -- give 36 pairs, "
+        "and every differing pair a check passes is a hole in the set with a "
+        "testpoint and a port named.\n\n"
+        "**MEASURED AGAINST THE REFERENCE-BASED ARTICLE, on 143 checks that "
+        "read a real output:**\n\n"
+        "                              golden: BLIND   not-blind\n"
+        "      golden-free BLIND            118           17\n"
+        "      golden-free CLEAN              3            5\n\n"
+        "    Spearman(blind pairs, blind decisions)   **+0.908**\n"
+        "    precision of the flag                    118/135 = 87%\n"
+        "    **purity of the CLEAN cell**             **5/8 = 62%, n=8**\n\n"
+        "**+0.908 IS BY A WIDE MARGIN THE STRONGEST GOLDEN-FREE CORRELATION ON "
+        "THIS PLAN.** Six re-weightings of the corpus-as-an-order route reached "
+        "nothing above +0.3 and the discriminating checks ordered designs "
+        "BACKWARDS at -0.54. This ranks the residue that actually blocks the "
+        "loop, and it reads no reference.\n\n"
+        "**AND IT IS A PRIORITISER, NOT A CERTIFICATE, WHICH IS THE WHOLE "
+        "DISTINCTION.** For approving a set the useful guarantee is the "
+        "converse of precision: if it says CLEAN, is the check really not "
+        "blind? That cell is 5 of 8. Worse, all five correct CLEANs are checks "
+        "that NEVER DECIDE where their port is wrong -- clean by SILENCE, not "
+        "by strength -- so the cell that would certify completeness is filled "
+        "by exactly the checks that assert nothing. That is over-strictness and "
+        "vacuity as one defect with two signs, arriving in the completeness "
+        "instrument.\n\n"
+        "**WHY THE CLEAN CELL CANNOT BE FIXED BY MORE DESIGNS ALONE.** A check "
+        "reads CLEAN when no pair in the population differs on its ports. With "
+        "a finite population that means *these designs happen to agree there*, "
+        "which is the shared-misreading blind spot: the population agrees where "
+        "the specification is clear and agrees WRONGLY where it is ambiguous. "
+        "So the clean cell inherits precisely the failure that closed the "
+        "consensus route.\n\n"
+        "**WHAT IT IS GOOD FOR, STATED NARROWLY.** Ranking which checks to "
+        "re-author, and handing each one a concrete admissible objection -- a "
+        "pair, a testpoint, a port and two values -- which is the first "
+        "COMPLETENESS objection this pipeline has ever been able to emit. "
+        "Whether an author can act on it is a separate question with its own "
+        "pre-registration."
+    )
+
+
+def a_witness_makes_blindness_authorable_and_does_not_break_the_trade() -> str:
+    """The blindness round, against its own pre-registered bar -- which it
+    misses -- and against the strength round, which it beats.
+
+    Both readings are true at once and the pre-registered one governs what
+    happens next.
+    """
+    return (
+        "40 of the blindest checks, one per requirement, re-authored with the "
+        "golden-free objection this pipeline has never been able to emit: *you "
+        "passed design A and design B at testpoint T, they differ there on port "
+        "P which you read, at least one is wrong and you said nothing.* 39 "
+        "usable; integrity clean, 0 unchanged, 0 duplicates, leak check 0.\n\n"
+        "**THE PRE-REGISTERED MEASURE IS A PAIR: sound AND strictly less "
+        "blind.**\n\n"
+        "    SOUND (spares the reference)          17 of 39\n"
+        "    LESS BLIND                            24 of 39\n"
+        "    **WIN = both**                        **6 of 39 = 15%**\n"
+        "    the cost: became UNSOUND              22 = 56%   (strength round 68%)\n\n"
+        "**THE BAR WAS 8 AND IT LANDED ON 6, so by the rule fixed before the "
+        "round ran this is the middle band: real but weak, record the rate, do "
+        "NOT rebuild the set on it.**\n\n"
+        "**AND IT IS THE FIRST LEVER TO BEAT THE STRENGTH ROUND, WHICH IS THE "
+        "OTHER TRUE THING.** Same author family, same direction of travel "
+        "(assert more of the sentence), differing only in whether a concrete "
+        "witness was attached:\n\n"
+        "    STRENGTH   untargeted, 'assert every obligation'   **0 of 34**\n"
+        "    BLINDNESS  a pair, a testpoint, a port, two values  **6 of 39**\n"
+        "    two-sided Fisher exact                              **p = 0.0271**\n\n"
+        "So the strength round's 0-of-34 was not a fact about asserting more. "
+        "**It was a fact about asserting more with nothing to aim at**, and "
+        "targeting is the variable -- which is what the narrowing round already "
+        "suggested from the opposite direction and this confirms with a "
+        "different objection.\n\n"
+        "**A HEADLINE THAT HAD TO BE DEFLATED BEFORE IT WAS REPORTED.** Blind "
+        "pairs over the round fall **26%**, which reads as the round working. "
+        "Split by whether the check stayed sound:\n\n"
+        "    SOUND checks     42,158 -> 38,529   **-9%**\n"
+        "    UNSOUND checks   44,315 -> 25,474   **-43%**\n\n"
+        "**A CHECK THAT CONVICTS THE REFERENCE CONVICTS MORE DESIGNS, SO IT "
+        "PASSES FEWER PAIRS, SO ITS BLINDNESS FALLS FOR THE WRONG REASON.** "
+        "Most of the -26% is over-strictness wearing completeness's clothes, "
+        "and the honest reduction is -9%. `REQ-0001` is the pure case: 4,264 "
+        "blind pairs to ZERO, with 168 convictions of the reference. Quoting "
+        "the aggregate would have been the failure-mode swap this plan has "
+        "retracted nine headlines for, in a metric built this session.\n\n"
+        "**WHAT IT SETTLES.** Blindness IS authorable against -- the objection "
+        "is admissible, emittable and acted on. It does not break the trade: "
+        "22 checks bought their completeness with soundness, and the six that "
+        "did not are 15% of the attempt. The completeness residue is reducible "
+        "at roughly the rate every other authoring lever on this plan has "
+        "measured, and by the same mechanism it always fails -- most authors "
+        "asked to assert more cross the soundness boundary instead of "
+        "approaching it."
+    )
+
+
+def blindness_is_correlated_across_checks_so_strengthening_one_adds_nothing() -> str:
+    """Why every authoring round on this plan plateaus, measured at set level
+    for the first time -- and a correction to the metric I used to measure it.
+
+    The per-check score said the round worked. The set-level score says its
+    contribution was exactly zero, and the two are not in tension: they are
+    measuring different things and only one of them is completeness.
+    """
+    return (
+        "**FIRST, THE METRIC WAS WRONG AND ITS FAILURE IS THE CLUE.** Blindness "
+        "was scored per check -- *does it decide where a port it reads is wrong "
+        "and pass* -- and 17 checks each measured LESS blind than the body it "
+        "came from were added to the set. Blind checks went **121 to 136** and "
+        "the objection rate on exposed decisions went **0.8% to 0.7%.** A set "
+        "cannot get worse by gaining a check: rejection is a union, so a metric "
+        "that falls when you add one is measuring the denominator, not the "
+        "set.\n\n"
+        "**THE SET-LEVEL QUESTION IS DISCRIMINATION.** For every pair of "
+        "designs and every testpoint where they disagree on a real output, does "
+        "SOME check object to at least one of them? That composes correctly -- "
+        "adding a check can only close holes -- and it is golden-free, since "
+        "the disagreement is the whole evidence.\n\n"
+        "    (pair, testpoint) cells where two designs DISAGREE     5,656\n"
+        "    the 163-check set objects to at least one              2,435\n"
+        "    **SET BLINDNESS**                                      **3,221 = 56.9%**\n"
+        "    the same, after adding the 17                          **3,221 = 56.9%**\n\n"
+        "**IDENTICAL, AND VERIFIED RATHER THAN ACCEPTED**, because byte-identical "
+        "numbers across an edit are this plan's own signature for a harness "
+        "defect. Asked directly: the added checks object at 163 (design, "
+        "testpoint) cells, the base set objects at 486, and the cells the added "
+        "checks reach that the base set does not is **ZERO**. A strict "
+        "subset.\n\n"
+        "**SO THE ROUND'S CONTRIBUTION TO COMPLETENESS IS NOT SMALL, IT IS "
+        "NIL** -- 39 model calls, 6 checks that are genuinely sound and "
+        "genuinely less blind, and the set discriminates exactly as it did "
+        "before.\n\n"
+        "**THE MECHANISM, AND IT EXPLAINS THE WHOLE PLATEAU.** The witness "
+        "pointed each author at a place its own check was silent. The authors "
+        "complied -- the rewrites do object more. But every cell they object at "
+        "was already covered by a DIFFERENT check in the set. Strengthening a "
+        "check moves it toward what the set already says; it does not extend "
+        "the set into where the set is silent.\n\n"
+        "**BLINDNESS IS CORRELATED ACROSS CHECKS, and that is the check-level "
+        "form of this module's oldest finding.** Independently written designs "
+        "agree wrongly where the specification is ambiguous; independently "
+        "written CHECKS are silent in the same places, for the same reason -- "
+        "they are all readings of the same text by the same kind of reader. The "
+        "56.9% the set cannot see is not 163 separate blind spots that could be "
+        "closed one at a time. It is one blind spot with 163 checks in front of "
+        "it.\n\n"
+        "**WHAT FOLLOWS FOR AUTHORING.** Per-check improvement is the wrong "
+        "target and every round here has optimised it: repair, strength, "
+        "narrowing, volume, two-sided, and now blindness. A round should be "
+        "scored on cells the SET newly reaches, which is a number that has "
+        "never been reported for any of them -- and for this one it is zero."
+    )
+
+
+def no_body_in_this_corpus_closes_a_set_hole_soundly() -> str:
+    """Selection measured against the SET metric, over the whole corpus, with
+    no model calls -- and it closes the completeness route as the ceiling run
+    closed the soundness one.
+
+    The holes are closable. Closing one soundly is what nothing here can do.
+    """
+    return (
+        "**THE SET IS BLIND ON 3,221 OF 5,656 DISAGREEING (pair, testpoint) "
+        "CELLS = 56.9%, AND THE HOLES ARE UNIFORM.** 196 of 348 testpoints "
+        "carry one, the twenty worst hold 14% of them, and every declared "
+        "output runs between 43% and 76% uncaught -- `first_hit_ack` best at "
+        "43%, `biu_write` worst at 76%. There is no cluster to aim a round "
+        "at.\n\n"
+        "**AND THAT RULES OUT THE STIMULUS BEFORE A CALL IS SPENT.** Every one "
+        "of these cells is a testpoint the suite already runs, on which two "
+        "designs already produce different values. The evidence is present and "
+        "the set is silent on it, so no stimulus round closes any of them -- "
+        "which is the goal's stimulus clause answered with a measurement "
+        "rather than an estimate.\n\n"
+        "**SO: CAN ANY BODY IN THE CORPUS CLOSE ONE?** 431 bodies the set does "
+        "not use, decided over nine designs:\n\n"
+        "    reach a cell the set cannot see              **296** -- the holes ARE closable\n"
+        "      CONVICT the reference                       288\n"
+        "      never DECIDE on it -- sound by silence        2\n"
+        "      soundness unmeasured                          6\n"
+        "      **DECIDE on the reference AND spare it**    **0**\n\n"
+        "**NOT ONE BODY IN THIS CORPUS CLOSES A SET HOLE WHILE BEING "
+        "DEMONSTRABLY SOUND.** Selection is exhausted for COMPLETENESS exactly "
+        "as the ceiling run exhausted it for soundness, and the trade at set "
+        "level is not 288 against 2 -- it is total.\n\n"
+        "**A CORRECTION MADE INSIDE THIS MEASUREMENT, AND IT IS THE ONE THIS "
+        "MODULE NAMES IN CAPITALS.** The first filter kept bodies whose audit "
+        "says *convicts the reference: false*, which two bodies satisfied, and "
+        "a 165-check set was built on them. Both have *decides: false* -- they "
+        "never decide on the reference at all, so they are sound BY SILENCE, "
+        "which is not sound. The set was withdrawn. `SOUND` requires the check "
+        "to decide there AND never convict, and the first half is load-bearing "
+        "precisely so that a silent check cannot buy a completeness result.\n\n"
+        "**WHAT REMAINS OPEN, STATED NARROWLY.** This closes SELECTION over the "
+        "corpus against the set metric. It does not close AUTHORING -- but the "
+        "blindness round is the evidence on that, and its contribution to the "
+        "same metric was zero. Two routes, two zeroes, on the measure that "
+        "composes."
+    )
+
+
+def convicting_none_of_the_population_is_the_soundness_rule() -> str:
+    """The best golden-free selection rule measured on this plan, and a
+    retraction of the one it replaces.
+
+    Applied to the FULL corpus rather than the fifth of it that had been
+    scored, the minority rule loses its perfect precision -- and the threshold
+    that keeps it is not the one the plan has been quoting.
+    """
+    return (
+        "**THE RULE THAT WAS BEING QUOTED: *convicts at most 2 of the "
+        "population* -- measured at 59 of 59 sparing the reference, 100% "
+        "precision, and called the best golden-free soundness instrument "
+        "here.** Re-run over all 594 bodies instead of the 114 that had been "
+        "scored, it keeps 167 checks and **22 of them convict the reference: a "
+        "13% false-reject rate.** The perfect precision does not survive the "
+        "corpus growing; 13 of the 22 come from bodies never previously "
+        "scored.\n\n"
+        "**AND THE PROFILE SHOWS THE THRESHOLD WAS IN THE WRONG PLACE:**\n\n"
+        "    convicts 0 of 7    126 checks   **0 convict the reference =  0%**\n"
+        "    convicts 1 of 7     23 checks    11 convict the reference = 48%\n"
+        "    convicts 2 of 7     18 checks    11 convict the reference = 61%\n\n"
+        "**A CHECK CONVICTING NONE OF SEVEN INDEPENDENTLY WRITTEN "
+        "IMPLEMENTATIONS SPARES THE REFERENCE, 126 FOR 126. ONE CONVICTION AND "
+        "IT IS A COIN FLIP.** The step is at zero, not at two, and it is sharp "
+        "rather than monotone -- which is why a threshold fitted at 2 on a "
+        "smaller corpus read as perfect and is not.\n\n"
+        "**THE SET IT SELECTS IS THE STRONGEST GOLDEN-FREE ARTIFACT HERE.**\n\n"
+        "    checks                                   126\n"
+        "    span                                     49 of 87 = 56%\n"
+        "    objections on HELD-OUT design L           **11**\n"
+        "    objections on two edited designs           1 each\n"
+        "    *audit, computed last*                    ***0, measured***\n\n"
+        "Sound AND discriminating on a design held out of its own selection, "
+        "with the soundness PREDICTED golden-free rather than checked "
+        "afterwards. Every earlier rule bought span with false rejects (rule B: "
+        "52% at 10%) or bought soundness by being handed the answer (the "
+        "ceilings are reference-selected).\n\n"
+        "**WHAT IT STILL CANNOT DO, AND IT IS STRUCTURAL.** Selecting *convicts "
+        "none of the population* guarantees every population member passes. The "
+        "set accepts all seven by construction, so it cannot force equivalence "
+        "among them, and 'all accepted designs are mutually equivalent' is "
+        "self-certification rather than a result. The rule predicts SOUNDNESS "
+        "without a reference; nothing here predicts SUFFICIENCY without one.\n\n"
+        "**AND IT RE-DATES A RUN IN FLIGHT.** An editor was dispatched against "
+        "the 167-check version before its audit was computed -- correctly, "
+        "since the audit must come last. That audit is 13%, so the reference "
+        "itself scores 22 against that set and a design reaching zero on it "
+        "cannot be the reference. Terminating there would be a certificate of "
+        "NON-equivalence, which is the rule-B arithmetic exactly. The 126-check "
+        "set is the one to carry forward."
+    )
+
+
+def the_golden_free_soundness_rule_costs_essentially_all_discrimination() -> str:
+    """The trade, measured at SET level on a metric that composes, with both
+    ends built and scored the same way.
+
+    This module has measured the soundness/discrimination anti-correlation nine
+    ways per check. This is the first time both ends exist as SETS and are
+    scored on the same golden-free completeness number.
+    """
+    return (
+        "Two sets, each audited at zero false rejects, differing only in what "
+        "SELECTED them:\n\n"
+        "    set     selected by            span   *audit*   **set blindness**\n"
+        "    CEIL2   the REFERENCE           68%    *0%*      **56.9%**\n"
+        "    ZERO    the POPULATION only     56%    *0%*      **99.8%**\n\n"
+        "Set blindness is the golden-free completeness number: of 5,656 (pair, "
+        "testpoint) cells where two spec-derived designs disagree, how many does "
+        "no check in the set object to. **The golden-free set sees 12 of "
+        "5,656.**\n\n"
+        "**AND THE MECHANISM IS THE RULE ITSELF, NOT A WEAKNESS IN IT.** The "
+        "rule that predicts soundness perfectly without a reference is *convicts "
+        "NONE of the seven*, measured 126 for 126 sparing the reference. A check "
+        "convicting none of the population is, by the definition of the rule, a "
+        "check that does not discriminate on the population. **Selecting for "
+        "predictable soundness IS selecting for blindness**; the two are the "
+        "same predicate read twice.\n\n"
+        "**SO THE ANSWER TO WHETHER COMPLETENESS CAN BE ASSURED GOLDEN-FREE IS "
+        "MEASURED, AND IT IS NO ON THIS CORPUS.** The instrument that ranks "
+        "blindness golden-free is excellent -- Spearman +0.908 -- and the rule "
+        "that predicts soundness golden-free is perfect at n=126. Composing "
+        "them yields a set that is sound, wide enough to span 56% of the "
+        "specification, and blind to 99.8% of the disagreements it is shown.\n\n"
+        "**WHAT SURVIVES, AND IT IS NARROW BUT REAL.** The ZERO set still "
+        "objects **11 times to design L, held out of the seven that selected "
+        "it** -- the both-cell, reached by a rule that read no reference. Sound "
+        "and discriminating on unseen designs is a property this plan has "
+        "measured at 3-5% per check and never before obtained from a "
+        "golden-free rule at set level. It is a real capability and it is two "
+        "orders of magnitude short of forcing equivalence.\n\n"
+        "**PRE-REGISTERED, BEFORE THE EDITOR ON THIS SET REPORTS.** A set seeing "
+        "12 of 5,656 disagreements should be easy to satisfy: the prediction is "
+        "that the editor drives 11 objections to zero in few trials and the "
+        "miter still says `DIFFERS`. If that happens it is NOT a new negative "
+        "-- it is this number restated, and must be reported as the expected "
+        "consequence rather than as a fresh finding."
+    )
+
+
+def an_editor_cannot_locate_over_strictness_even_when_it_is_there() -> str:
+    """The fourth measurement of this, and the first against a labelled answer
+    on a set that genuinely contains over-strict checks.
+
+    The previous three runs are weaker evidence than they look: those sets were
+    sound, so the editor's suspicion was false by construction and refuting it
+    took no instrument. This run gave it a real target.
+    """
+    return (
+        "An editor ran 6 trials on a 167-check set, took it from 30 objections "
+        "to 10, and reported two of the survivors as check defects rather than "
+        "design defects: `REQ-0015` and `REQ-0064`, on the argument that their "
+        "vectors change an input mid-transaction and compare against the "
+        "post-change value where a real bus latches at acceptance.\n\n"
+        "**THAT SET REALLY DOES CONTAIN OVER-STRICT CHECKS -- 22 of the 167 "
+        "convict the reference -- so unlike every previous instance the "
+        "suspicion was not wrong in principle.** Scored against the labelled "
+        "audit:\n\n"
+        "    checks that convict the reference        22, over 9 requirements\n"
+        "      REQ-0002 0021 0025 0027 0072 0079 0081 0083 0085\n"
+        "    the editor named                          REQ-0015, REQ-0064\n"
+        "    of those, over-strict                     **0**\n"
+        "    of the 22, named by the editor            **0**\n\n"
+        "**ZERO PRECISION AND ZERO RECALL, WITH A REAL TARGET PRESENT.** Both "
+        "checks it accused spare the reference; not one of the nine "
+        "requirements whose checks actually are over-strict appears in its "
+        "report.\n\n"
+        "**THIS IS WHAT MAKES THE EARLIER RUNS INTERPRETABLE.** Three editors "
+        "on three SOUND sets each concluded the remaining checks contradicted "
+        "each other, and each was refuted in one line because the reference "
+        "satisfies every member. That refutation shows the conclusion was "
+        "false; it does not show the editor could not have been right somewhere "
+        "else. Here it could have been -- and it was not.\n\n"
+        "**WHAT THIS RUN SHOWS IS THAT THIS EDITOR DID NOT LOCATE IT.** The "
+        "suspicion is well founded roughly 13% of the time on this set and "
+        "this identification is at chance or worse.\n\n"
+        "**AND THE GENERALISATION I DREW FROM IT -- *editors cannot locate "
+        "over-strictness* -- IS RETRACTED.** A later run on a 201-check set "
+        "holding 38 over-strict members named seven and was right about all "
+        "seven, partitioning its surviving objections exactly. See "
+        "`an_editor_can_locate_over_strictness_when_it_tests_the_claim`. What "
+        "stands here is the measurement, not the conclusion: pooled over five "
+        "runs editors have named 12 checks and been right about 8, and the "
+        "spread between 0-of-2 and 7-of-7 is what needs explaining rather than "
+        "an average.\n\n"
+        "**THE DIFFERENCE IS NOT THE EDITOR, IT IS WHETHER THE CLAIM WAS "
+        "TESTED.** This one argued from the shape of the vectors. That one "
+        "implemented the design each check demanded, committed it, and read "
+        "what broke -- and reported the claim only when the experiment "
+        "survived. From inside, a check an editor cannot satisfy and a check "
+        "no design can satisfy present identically to REASONING; they do not "
+        "present identically to an EDIT."
+    )
+
+
+def set_blindness_predicts_how_far_an_editor_gets() -> str:
+    """A matched pair, and the first golden-free number here that PREDICTS
+    editor progress rather than describing a set after the fact.
+
+    The prediction was written down before the second run was dispatched, and
+    the run landed on it.
+    """
+    return (
+        "Two editors, **the same unchecked starting design**, the same model, "
+        "the same brief and budget. The only difference is which set drove "
+        "them, and the sets differ in the golden-free completeness number:\n\n"
+        "    set                      blindness   objections      testpoints differing\n"
+        "    CEIL2 163, ref-selected    56.9%     22 -> 5  (-77%)   279 -> 190  (**-32%**)\n"
+        "    ZERO  126, golden-free     99.8%     11 -> 1  (-91%)   279 -> 271  (** -3%**)\n"
+        "    both grades: *DIFFERS*, three pins green in the same process\n\n"
+        "**THE GOLDEN-FREE SET SPENT 91% OF ITS OBJECTIONS AND MOVED THE DESIGN "
+        "3%.** The reference-selected set spent less of its criterion and moved "
+        "the design ten times further. Set blindness is not a description of a "
+        "set after the fact -- it says in advance how much of a design's "
+        "divergence a loop driven by that set will close.\n\n"
+        "**AND IT WAS PRE-REGISTERED.** Before the second run was dispatched "
+        "the prediction on record was that a set objecting to 12 of 5,656 "
+        "disagreements would be cheap to satisfy, so objections going to nearly "
+        "zero with the grade unmoved would be that number restated rather than "
+        "a fresh negative. That is what happened, which is the difference "
+        "between a metric and a post-hoc story.\n\n"
+        "**THIS IS THE PROXY THE GOAL ASKS FOR.** A metric chosen by how well "
+        "it facilitates the RTL editor succeeding, computable from spec-derived "
+        "designs alone, and validated against editor progress on a matched "
+        "pair. Every earlier proxy here was scored on how well it described "
+        "CHECKS; this one is scored on what the loop achieves.\n\n"
+        "**THE TRIAL COUNTS ARE AN OUTPUT, NOT A CONFOUND -- AND SAY SO.** The "
+        "golden-free run used 10 of 21 trials and the other 19 of 21. Neither "
+        "stopped for budget: each stopped when its criterion ran out of things "
+        "to say. A blinder set stops giving feedback sooner, so unequal effort "
+        "is part of what blindness causes rather than an artefact confounding "
+        "it. Stated because equal effort would be the natural thing to demand "
+        "of a matched pair.\n\n"
+        "**SCOPE, AND IT IS TWO RUNS.** One design, one starting point, two "
+        "sets. The relationship is monotone in the right direction with a large "
+        "gap, and two points do not establish a slope. What they do establish "
+        "is that the number is not inert: a set at 99.8% and a set at 56.9% "
+        "produce visibly different loops from identical inputs."
+    )
+
+
+def blindness_and_soundness_are_one_golden_free_knob() -> str:
+    """The completeness/false-reject trade, measured as a curve rather than
+    argued from two points -- and the reference-selected set sits off it.
+
+    Eight sets from one selection rule that never reads the reference. The
+    audit is computed last and feeds nothing.
+    """
+    return (
+        "One golden-free knob -- **keep a check that convicts at most t of the "
+        "seven independently written spec-derived designs** -- swept end to "
+        "end. t = 0, 2 and 7 reproduce three sets that were built separately "
+        "and byte-for-byte, which is what says the sweep is the same "
+        "instrument. The intermediate thresholds had never been scored.\n\n"
+        "    t   checks   reqs of 87   SET BLINDNESS   *audit: convict the reference*\n"
+        "    0     126      55 = 63%      99.8%          *  0 =  0.0%*\n"
+        "    1     149      63 = 72%      93.5%          * 11 =  7.4%*\n"
+        "    2     167      68 = 78%      66.5%          * 22 = 13.2%*\n"
+        "    3     171      68 = 78%      64.2%          * 23 = 13.5%*\n"
+        "    4     179      69 = 79%      61.9%          * 27 = 15.1%*\n"
+        "    5     188      70 = 80%      52.7%          * 27 = 14.4%*\n"
+        "    6     201      71 = 82%      40.4%          * 38 = 18.9%*\n"
+        "    7     464      73 = 84%       0.0%          *299 = 64.4%*\n\n"
+        "**BLINDNESS FALLS AND THE AUDIT RISES ACROSS THE WHOLE SWEEP.** "
+        "Completeness and soundness are not two properties a better rule could "
+        "optimise jointly -- golden-free, on this corpus, they are ONE KNOB "
+        "read in two directions. Reaching the completeness floor costs a set "
+        "that convicts a correct design with two checks in three.\n\n"
+        "**AND THE CUMULATIVE TABLE OVERSTATES HOW ORDERLY THAT IS, WHICH IS A "
+        "CORRECTION TO THE FIRST VERSION OF THIS FINDING.** The thresholds "
+        "NEST, so the audit COUNT cannot fall as t grows -- its monotonicity is "
+        "a property of the construction and carries no information. The audit "
+        "RATE is not monotone either: it dips at t = 5. The informative "
+        "decomposition is per bucket rather than cumulative:\n\n"
+        "    the check convicts   checks   convict the reference\n"
+        "    0 of 7                 126      0 =   0.0%\n"
+        "    1 to 6 of 7             75     38 =  50.7%\n"
+        "    7 of 7                 263    261 =  99.2%\n\n"
+        "**THE RULE IS EXACT AT BOTH ENDS AND A COIN FLIP IN BETWEEN.** "
+        "Convicting none of the population spares the reference 126 times out "
+        "of 126; convicting all of it convicts the reference 261 times out of "
+        "263. In the middle band it has NO SIGNAL AT ALL, at 50.7%.\n\n"
+        "**AND THE MIDDLE BAND IS EXACTLY WHERE THE BLINDNESS REDUCTION "
+        "LIVES.** Those 75 checks are everything between the sound-and-blind "
+        "set and t = 6, and they carry blindness from 99.8% to 40.4%. So the "
+        "trade is not a smooth price to pay: it is a region where the "
+        "golden-free rule stops discriminating altogether, and every point "
+        "inside it is bought blind.\n\n"
+        "**AND THE REFERENCE-SELECTED SET IS OFF THE CURVE, WHICH IS THE PART "
+        "THAT MATTERS.** CEIL2 is 163 checks at **56.9% blind with an audit of "
+        "zero**. No golden-free threshold reaches that point: getting to 52.7% "
+        "golden-free costs 14.4% false rejection. The reference is doing work "
+        "here that no rule over the population reproduces.\n\n"
+        "**THE MECHANISM IS ARITHMETIC RATHER THAN A TENDENCY, AND IT CLOSES "
+        "EXACTLY.** 161 of CEIL2's 163 checks are inside t = 6, and t = 6 "
+        "holds exactly 38 audit failures. CEIL2's other two are the only two "
+        "checks in the whole corpus that convict all seven and still spare "
+        "the reference, so CEIL2 is t = 6 with its 38 audit failures removed "
+        "and those two added, with nothing left over. Removing the 38 takes "
+        "blindness from 40.4% back to 56.9%. **Those 38 checks close 933 "
+        "disagreement cells, 16.5 points of blindness, and nothing sound "
+        "replaces them**, which is the no-sound-hole-closer finding restated "
+        "where it costs something.\n\n"
+        "**WHAT IT ANSWERS.** The question was how to assure a set's "
+        "completeness without a reference. The answer on this corpus is that "
+        "you cannot: every golden-free step toward completeness is a step into "
+        "false rejection, and the obstruction is a measured monotone trade "
+        "rather than a missing instrument.\n\n"
+        "**SCOPE.** One design, one corpus of 594 bodies, one population of "
+        "seven. The rule is one knob -- a different golden-free rule could in "
+        "principle find a different frontier, and eleven have been tried "
+        "without one doing so. What is established is the shape of THIS "
+        "rule's frontier and that the reference-selected point is not on it."
+    )
+
+
+def a_complete_set_is_an_undrivable_one() -> str:
+    """The second opposition, and it is independent of soundness: the set that
+    sees every disagreement cannot tell the designs apart by its own count.
+
+    Measured on the population before the editor run was dispatched, and
+    recorded as an amendment to that run's pre-registration.
+    """
+    return (
+        "Set blindness says whether SOME check objects somewhere in a "
+        "disagreeing cell. It says nothing about whether the objection COUNT "
+        "orders designs -- and on the set that reaches the completeness floor "
+        "it does not:\n\n"
+        "    set                       blindness   population objections   spread / mean\n"
+        "    ZERO 126, golden-free       99.8%            0 -  0                --\n"
+        "    CEIL2 163, ref-selected     56.9%           11 - 22              69%\n"
+        "    T6   201, golden-free       40.4%           22 - 38              50%\n"
+        "    MIN  464, the floor          0.0%          285 - 301           **5.4%**\n\n"
+        "**EIGHT DESIGNS THAT DIFFER FROM EACH OTHER ACROSS A LARGE FRACTION "
+        "OF THE SUITE ARE SEPARATED BY SIXTEEN CHECKS OF FOUR HUNDRED AND "
+        "SIXTY-FOUR.** The cause is structural rather than incidental: the "
+        "0.0% blindness is bought by admitting 288 bodies that convict a "
+        "correct design, and a check that convicts a correct design convicts "
+        "nearly every design, so it contributes a constant to every score.\n\n"
+        "**SO COMPLETENESS AND DRIVABILITY ARE OPPOSED, INDEPENDENTLY OF "
+        "SOUNDNESS.** A loop descending the count of a complete set is "
+        "descending a signal with a 5% dynamic range. That is a second reason "
+        "the completeness floor is not somewhere to drive from, and it is not "
+        "the same reason as the audit.\n\n"
+        "**IT WAS RECORDED BEFORE THE RUN THAT WOULD HAVE BEEN READ AS "
+        "SOUNDNESS.** The pre-registration for the floor-set editor run named "
+        "two hypotheses, blindness and soundness. This measurement supplies a "
+        "third explanation for a poor result there, so the negative band was "
+        "amended in advance to say the run cannot separate them -- rather than "
+        "attributing the outcome to soundness after seeing it.\n\n"
+        "**WHAT IT DOES NOT SAY.** Spread is not the only way a set can steer: "
+        "a weighting, a per-requirement fold or a subset view could recover a "
+        "gradient the raw count does not have. What is measured is that the "
+        "RAW COUNT -- which is what every loop on this plan has descended -- "
+        "carries almost no information on a complete set."
+    )
+
+
+def an_unspent_budget_is_not_evidence_about_the_set() -> str:
+    """Two editor runs stopped after one trial for a reason that has nothing to
+    do with the checks, and from outside it looked exactly like a loop that had
+    run out of things to fix.
+
+    Observed twice in one session, on two different sets.
+    """
+    return (
+        "A commit runs the whole suite and takes several minutes -- longer "
+        "than a foreground command may run in the agent driving the loop. Both "
+        "editors handled that by backgrounding the commit and **ending their "
+        "turn to wait for it**. The completion notice is delivered to whatever "
+        "dispatched the agent, not to the agent, so ending the turn ends the "
+        "RUN. One stopped at trial 2 of 21 and one at trial 0 of 21.\n\n"
+        "**AND THE RUN DIRECTORY LOOKS IDENTICAL TO A LOOP THAT FINISHED "
+        "EARLY BECAUSE IT WAS SATISFIED.** Trials unspent, a latched design, a "
+        "sensible objection count. Nothing in the artifacts distinguishes *the "
+        "criterion stopped saying useful things* from *the harness stopped the "
+        "agent*, and the first has been read off an unspent budget on this "
+        "plan more than once.\n\n"
+        "**SO AN UNSPENT BUDGET IS NOT A FACT ABOUT THE CHECK SET UNLESS THE "
+        "RUN RECORDS WHY IT STOPPED.** Here the agents' own words were the "
+        "only tell -- *\"I'll stop issuing commands now and wait for the "
+        "background notification\"* -- which is a transcript artefact and not "
+        "something the loop's own record captures.\n\n"
+        "**THE FIX IS IN THE BRIEF, NOT THE HARNESS -- AND THE FIRST FIX I "
+        "WROTE DOWN WAS THE WRONG ONE.** I prescribed backgrounding the "
+        "commit and polling the loop's status inside the turn. Both agents "
+        "were given that and **both stopped again the same way**, because a "
+        "poll loop still leaves work outstanding across a turn boundary and "
+        "an agent asked to wait will end the turn to do it.\n\n"
+        "**THE FIX THAT WORKS REMOVES THE WAIT INSTEAD OF MANAGING IT:** run "
+        "the commit as an ORDINARY FOREGROUND COMMAND with an explicit long "
+        "timeout on the call. A commit here is four to six minutes against a "
+        "ten-minute maximum, so it was never necessary to background it at "
+        "all -- the timeout DEFAULT, not the runtime, is what made it look "
+        "impossible. The call blocks and returns the result, and nothing is "
+        "left in flight for a turn boundary to drop.\n\n"
+        "**THE GENERAL FORM, WHICH IS THE PART WORTH KEEPING.** A loop whose "
+        "unit of work outlasts the DEFAULT command timeout will be broken by "
+        "any recipe that answers *how do I wait*, and fixed only by one that "
+        "answers *how do I not have to*. Measure the unit against the "
+        "maximum before reaching for concurrency.\n\n"
+        "**WHAT THIS DOES NOT RETRACT.** The two earlier runs that stopped "
+        "with budget left each stated a reason at the time -- one reached zero "
+        "objections, the other argued the remaining objections were check "
+        "defects -- so neither is an instance of this. What is retracted is "
+        "the general inference: *trials left over* is evidence about the set "
+        "only when the run says, in its own record, what it stopped for."
+    )
+
+
+def an_editor_can_locate_over_strictness_when_it_tests_the_claim() -> str:
+    """The retraction of `an_editor_cannot_locate_over_strictness_even_when_it_
+    is_there`, on a run with a larger labelled target and one procedural change.
+
+    Scored against the survivors it could actually have accused, not against
+    the whole set -- the base rate that flatters the result is the wrong one.
+    """
+    return (
+        "A 201-check set holding **38 members that convict the reference**. An "
+        "editor took a held-out design from 39 objections to 11 over 13 trials "
+        "and reported seven survivors as demanding more than their own "
+        "sentences license, each with the sentence quoted.\n\n"
+        "    of the 11 objections still standing on the graded design\n"
+        "      UNSOUND -- convict the reference        7\n"
+        "      SOUND   -- the reference satisfies them 4\n"
+        "    the editor accused                        7\n"
+        "    correct                                   **7**\n"
+        "    false accusations                         **0**\n\n"
+        "**IT PARTITIONED THE SURVIVORS EXACTLY.** Every unsound one named, "
+        "every sound one left alone.\n\n"
+        "**AND THE BASE RATE THAT MATTERS IS 64%, NOT 19%.** Over the whole set "
+        "the over-strict share is 19%, and quoting that would make 7-of-7 look "
+        "far more impressive than it is: the editor could only accuse checks it "
+        "SAW OBJECTING, and a check that convicts a correct design convicts "
+        "most designs, so the survivors are enriched. Against the survivor rate "
+        "seven random accusations score 4.5. Against the exact partition, "
+        "choosing 7 of 11 at random lands all seven **1 time in 330 -- "
+        "p = 0.003**.\n\n"
+        "**THE FOUR IT DID NOT ACCUSE, IT GOT RIGHT IN A SECOND WAY.** It "
+        "reported those as conflicts it could not resolve rather than as "
+        "over-reach. The reference satisfies all four, so no such conflict "
+        "exists and its diagnosis is wrong -- but the claim it made is about "
+        "ITS OWN SEARCH, not about the checks, and it declined to convict them. "
+        "That is the distinction three earlier editors collapsed.\n\n"
+        "**THE VARIABLE IS THE PROCEDURE, NOT THE MODEL.** The run this "
+        "retracts argued from the shape of the vectors. This one implemented "
+        "the design each suspect check demanded, committed it, read what broke, "
+        "and reported the claim only when the experiment survived -- three "
+        "structurally distinct attempts on one of them. Its brief asked for "
+        "exactly that: do not dismiss a check, and if you still believe it "
+        "after real effort, write it down with the sentence quoted.\n\n"
+        "**SO AN EDITOR IS AN INSTRUMENT FOR SOUNDNESS AND THE GATES ARE NOT, "
+        "FOR A REASON THAT IS NOT ABOUT INTELLIGENCE.** It is the only party in "
+        "this pipeline that can BUILD the design a check demands and observe "
+        "the consequence. A gate reads text or replays a fixed design; it "
+        "cannot run the experiment. Twelve routes have failed to separate "
+        "sound from over-strict without a reference, and every one of them was "
+        "a way of READING checks.\n\n"
+        "**SCOPE, AND IT IS ONE RUN.** n = 11 survivors, one design, one set, "
+        "one editor. The partition is exact and p = 0.003, and a second run is "
+        "what would turn a procedure into a method. What it already settles is "
+        "the negative it replaces: locating over-strictness from inside the "
+        "loop is not impossible, and the earlier zero was a property of a run "
+        "rather than of editors."
+    )
+
+
+def a_golden_free_set_did_not_out_drive_the_reference_selected_one() -> str:
+    """The pre-registered test of blindness against soundness, at matched
+    drivability. It landed in the middle band.
+    """
+    return (
+        "Two sets, the same unchecked starting design, the same model, brief "
+        "and 21-trial budget. The variable is 16.5 points of set blindness, "
+        "and the cost of buying them golden-free is 38 checks that convict a "
+        "correct design:\n\n"
+        "    set                     blindness  *audit*  objections   testpoints differing\n"
+        "    CEIL2 163, ref-selected   56.9%    *  0*    22 -> 5      279 -> 190  (**-32%**)\n"
+        "    T6    201, golden-free    40.4%    * 38*    39 -> 11     279 -> 200  (**-28%**)\n"
+        "    both grades: *DIFFERS*, three pins green in the same process\n\n"
+        "**THE LESS BLIND SET DROVE THE DESIGN VERY SLIGHTLY LESS FAR.** The "
+        "pre-registered bands were: better than -32% means blindness dominates; "
+        "-32% to -20% means comparable; worse than -20% or rising means "
+        "soundness dominates. **-28% is the middle band**, and the reading "
+        "fixed in advance was that the extra completeness bought nothing the "
+        "unsound checks did not take back.\n\n"
+        "**SO THE MATCHED PAIR'S SLOPE DOES NOT EXTEND.** Blindness separated "
+        "99.8% from 56.9% by a factor of ten in divergence closed. From 56.9% "
+        "to 40.4% it separates nothing -- and this is the first point on that "
+        "curve where the two sets differ in soundness as well, which is exactly "
+        "what a golden-free rule must accept to get there.\n\n"
+        "**WHAT IT DOES NOT SAY.** It does not refute set blindness as a "
+        "proxy: the ZERO/CEIL2 gap stands, and a single point cannot "
+        "distinguish *blindness saturates near 50%* from *the audit cost "
+        "exactly cancelled the gain*. Separating those needs a set that is "
+        "40% blind AND sound, which this corpus does not contain -- that is "
+        "the same wall, met from a third direction.\n\n"
+        "**AND THE RUN IS NOT A NULL RESULT.** 39 objections to 11, 200 of 348 "
+        "testpoints still differing, and the editor spent 13 of its 21 trials. "
+        "The goal's terminal condition is not met: no set measured here drives "
+        "a spec-derived design to equivalence, and the four graded runs land at "
+        "271, 200, 190 and -- for the completeness floor -- pending."
+    )
+
+
+def completeness_bought_with_unsoundness_drives_a_design_worse() -> str:
+    """Four graded editor runs, one starting design, four sets spanning the
+    whole blindness range. The completeness floor is beaten by a set 57 points
+    blinder, and that settles what a golden-free completeness push is worth.
+
+    Every band was pre-registered before its run was dispatched.
+    """
+    return (
+        "Four Sonnet editors, **the same arbitrary unchecked design**, the same "
+        "brief and 21-trial budget, four sets. Blindness is golden-free; the "
+        "audit is computed last and fed nothing:\n\n"
+        "    set                     blindness  *audit*   objections     testpoints differing\n"
+        "    ZERO  126, sound          99.8%    *  0 = 0%*  11 ->   1     279 -> 271  ( -3%)\n"
+        "    CEIL2 163, sound          56.9%    *  0 = 0%*  22 ->   5     279 -> **190**  (**-32%**)\n"
+        "    T6    201, golden-free    40.4%    * 38 = 19%* 39 ->  11     279 -> 200  (-28%)\n"
+        "    MIN   464, the floor       0.0%    *299 = 64%* 295 -> 277    279 -> 241  (-14%)\n"
+        "    all four grades: *DIFFERS*, three pins green in the same process\n\n"
+        "**RANKED BY WHAT THE EDITOR ACHIEVED: CEIL2, T6, MIN, ZERO. BLINDNESS "
+        "DOES NOT ORDER THEM.** The set that sees every disagreement in the "
+        "population came third, beaten by one 57 points blinder.\n\n"
+        "**SPLIT BY SOUNDNESS AND IT RESOLVES CLEANLY.** Among the two sets "
+        "that convict no correct design, blindness predicts exactly as the "
+        "matched pair said: 99.8% closes 3%, 56.9% closes 32%. Among the two "
+        "bought with false rejection it inverts: 40.4% closes 28% and 0.0% "
+        "closes 14%. **Blindness helps while soundness is held and stops "
+        "helping the moment it is spent.**\n\n"
+        "**SO THE GOAL'S COMPLETENESS PUSH IS ANSWERED, AND THE ANSWER IS "
+        "NO.** Reducing blindness residue makes a set a better driver only "
+        "along the sound frontier, and golden-free there is only one point on "
+        "that frontier this corpus reaches -- 99.8%. Every step toward "
+        "completeness without a reference admits checks that convict correct "
+        "designs, and those cost more than the completeness gains.\n\n"
+        "**THE COST IS VISIBLE AS LOST WORK, NOT ONLY AS A RATE.** On the "
+        "floor set the editor found a real defect -- a refill servicing three "
+        "words where the requirement states four, worth about 970 consensus "
+        "cells in one change -- and the commit was refused every time it was "
+        "tried, by two checks that are in the audit's unsound list. A set at "
+        "64% false rejection does not merely accept wrong designs; it rejects "
+        "right repairs.\n\n"
+        "**AND THE FLOOR SET'S NUMBER CANNOT BE ATTRIBUTED TO SOUNDNESS "
+        "ALONE**, which was recorded before it ran. Its objection count spans "
+        "5.4% over the whole population, so its gradient is nearly flat "
+        "independently of its audit -- and the run showed that live, moving "
+        "the count 6% while divergence moved 14%. Its band was pre-registered "
+        "as uninterpretable between the two causes and it is reported that "
+        "way.\n\n"
+        "**WHAT IS NOT CLAIMED.** No run reached equivalence, so this orders "
+        "four failures rather than finding a winner. Four points, one design, "
+        "one corpus; the two sound points are the matched pair already on "
+        "record and the two unsound ones are new."
+    )
+
+
+def a_second_accusation_run_carried_no_information() -> str:
+    """The editor named five over-strict checks and was right about all five,
+    and it is worth almost nothing. Recorded so the pair is not quoted as two
+    confirmations.
+    """
+    return (
+        "On the 201-check set an editor partitioned its 11 surviving "
+        "objections exactly -- seven unsound named, four sound spared, "
+        "p = 0.003. The obvious next question is whether that reproduces, and "
+        "a second run named five checks on the 464-check floor set and was "
+        "right about all five.\n\n"
+        "**IT IS NOT A SECOND CONFIRMATION AND MUST NOT BE QUOTED AS ONE.**\n\n"
+        "    set   survivors   of those UNSOUND   named   right   p by chance\n"
+        "    T6         11        7 = **64%**       7       7      **0.003**\n"
+        "    MIN       277      259 = **94%**       5       5        0.71\n\n"
+        "**ON A SET WHERE 94% OF THE SURVIVING OBJECTIONS ARE OVER-STRICT, "
+        "BEING RIGHT FIVE TIMES IS THE EXPECTED OUTCOME** -- 4.7 of 5 at "
+        "chance. The first run was informative for the opposite reason: its "
+        "set is 81% sound, so a wrong accusation was the likely result and the "
+        "exact partition was not.\n\n"
+        "**THE GENERAL RULE, WHICH IS THE PART TO KEEP.** An accusation's "
+        "denominator is the population the accuser could have drawn from -- "
+        "here the checks it saw objecting, not the whole set. Quoting the "
+        "whole-set rate would have read 19% for the first run and 64% for the "
+        "second, flattering both and inverting which one carries evidence.\n\n"
+        "**SO THE REPLICATION IS STILL OWED.** It needs a mostly-sound set "
+        "where a wrong accusation is the default outcome, which is what the "
+        "first run had and the second did not."
+    )
+
+
+def the_leak_rule_named_source_and_the_traces_were_next_door() -> str:
+    """An integrity hazard in all four graded runs, found while building a
+    fifth experiment where it would have been an answer key.
+
+    Checked rather than assumed: both editor transcripts were searched.
+    """
+    return (
+        "Every editor run here carries an absolute rule -- do not go looking "
+        "for a reference implementation, nothing under the benchmark tree, no "
+        "Verilog file the tools did not hand you, no other loop directory. "
+        "**It names SOURCE, and the reference's recorded TRACES sat in a "
+        "directory the loop legitimately reads.**\n\n"
+        "The driver takes its stimulus from `SUITESRC`, which pointed at "
+        "`p4G/suite` -- and `p4G/suite/results` holds the reference's 348 "
+        "recorded traces. An editor had a reason to be in that directory and "
+        "no rule against going one level deeper, where the answer to every "
+        "question it was asked is written out per testpoint.\n\n"
+        "**IT WAS NOT WALKED THROUGH, AND THAT IS CHECKED RATHER THAN "
+        "ARGUED.** Both editor transcripts were searched: **zero accesses to "
+        "`p4G/suite/results`**. What they did read under `p4G` is the stimulus "
+        "(`suite/tests`, `manifest.json`) and the witness -- both spec-derived "
+        "pipeline artifacts the loop replays against anyway, neither the "
+        "reference. Every `benchmarks/` occurrence is the rule text itself or "
+        "a path constant inside the driver they read.\n\n"
+        "**AND THE GRADES CORROBORATE IT.** Four runs ended at 271, 241, 200 "
+        "and 190 of 348 testpoints differing. A run that had read the "
+        "reference's traces could have matched them far more closely; nothing "
+        "in the outcomes looks like it.\n\n"
+        "**THE FIX IS A SANITISED STIMULUS SOURCE, AND IT COSTS NOTHING.** "
+        "The driver copies only `suite/tests` and `manifest.json` out of "
+        "`SUITESRC`, so a directory holding exactly those two runs the loop "
+        "identically with the traces nowhere in reach. The rule is also "
+        "extended to say recorded behaviour is as forbidden as source.\n\n"
+        "**THE GENERAL FORM.** A leak rule that names artifacts by KIND -- *an "
+        "implementation* -- misses them by ROLE. A trace file is the same "
+        "information in another format, and it is the format a checking "
+        "pipeline necessarily keeps lying around. State the rule over what an "
+        "artifact ENCODES, then check the transcripts rather than trusting "
+        "the wording."
+    )
+
+
+def the_balanced_sample_was_balanced_in_labels_and_not_in_difficulty() -> str:
+    """A pre-registered experiment that cleared its top band, and a control run
+    afterwards that says the band was set against the wrong null.
+
+    The result is reported as not claimable. The defect is mine and it is the
+    same shape as a dozen others here: a denominator that looks right.
+    """
+    return (
+        "The question was whether an agent with an editor's tools can decide "
+        "soundness -- the thing twelve routes have failed to do without a "
+        "reference. Twenty checks from a 201-check set, **ten that convict the "
+        "reference and ten that do not**, drawn by hash and shuffled, with the "
+        "key sealed. Pre-registered: >= 16 correct means the capability is "
+        "real, <= 13 means chance.\n\n"
+        "    CORRECT 16 of 20, no UNSURE          binomial p = 0.0059\n"
+        "      OVER-STRICT calls   8, right 7      precision 88%\n"
+        "      unsound found       7 of 10         recall 70%\n\n"
+        "**IT CLEARED THE TOP BAND, AND THE BAND IS NOT CLAIMABLE.**\n\n"
+        "**THE CONTROL: SEVEN OF THE TEN SOUND ITEMS NEVER CONVICT ANY DESIGN "
+        "AT ALL.** A check with no reachable `False` is sound trivially, and "
+        "spotting it needs only the source -- the agent said so itself for "
+        "four of them, one of which it noticed cannot convict because it "
+        "throws and the harness reports `ok=None`. So half the sample was "
+        "free, and the 50% coin the p-value is computed against does not "
+        "exist.\n\n"
+        "**ON THE THIRTEEN ITEMS WHERE THE ANSWER IS NOT VISIBLE IN THE TEXT "
+        "-- ten unsound and three sound-and-deciding -- IT SCORED 10.** "
+        "Answering `OVER-STRICT` to all thirteen also scores 10. **No "
+        "measurable lift on the part of the task that was the task.**\n\n"
+        "**THE DEFECT IS IN MY SAMPLER AND IT IS THE FAMILIAR SHAPE.** It "
+        "required each item to DECIDE on the reference, which correctly "
+        "excludes a check that never fires -- and admits one that fires and "
+        "only ever returns True. Balanced by label, unbalanced by difficulty, "
+        "and the imbalance runs entirely one way. **The fix is one clause: "
+        "every sampled check must convict at least one of the nine "
+        "spec-derived designs**, so no item is answerable from whether a "
+        "`False` path exists.\n\n"
+        "**WHAT SURVIVES IS THE SAME NARROW THING THE EARLIER RUN SHOWED.** "
+        "Precision on the OVER-STRICT calls is 7 of 8, and the one false "
+        "accusation is a check that convicts none of the nine. That is a "
+        "DETECTOR with good precision and 70% recall, which the "
+        "pre-registration already named as the smaller claim to report if the "
+        "pattern repeated. It repeated.\n\n"
+        "**AND THE INSTRUMENT WAS NOT THE ONE UNDER TEST.** The agent spent "
+        "**zero** of its 25 commit trials. It executed each check against "
+        "hand-built traces instead of building RTL and observing what broke -- "
+        "cheaper and more general, and not what the earlier run did, so this "
+        "does not replicate that run's method either. Tested items scored 85% "
+        "against untested 71%, on 13 and 7 items with the trivial ones split "
+        "across both, which settles nothing.\n\n"
+        "**SO THE REPLICATION IS STILL OWED, FOR THE THIRD TIME.** Three "
+        "attempts: one informative (exact partition, p = 0.003), one at a 94% "
+        "base rate, one against a null a sampler defect invalidated."
+    )
+
+
+def authoring_at_a_named_hole_closes_cells_that_selection_cannot() -> str:
+    """The first positive of the session on the goal's central axis, and it
+    refutes a generalisation I drew from the corpus three findings earlier.
+
+    Pre-registered as a PAIR -- blindness down AND audit zero -- because
+    blindness bought with false rejection is measured to drive designs worse.
+    """
+    return (
+        "Every set measured here was a SELECTION over 594 bodies authored in "
+        "earlier sessions, and over that corpus the answer is flat: of 431 "
+        "unused bodies, 296 close a set hole and **every one convicts the "
+        "reference**; 0 decide-and-spare. I let that harden into a claim about "
+        "the problem. It is a claim about the corpus.\n\n"
+        "**37 checks authored AT A NAMED HOLE** -- a (pair, testpoint, port) "
+        "cell where two spec-derived designs disagree on a declared output and "
+        "no check in the sound 163-check set objects to either. The author gets "
+        "the port, the testpoint, both designs' rows and its requirement's "
+        "sentence. Golden-free by construction: the disagreement between two "
+        "spec-written designs is the whole evidence, and at most one can be "
+        "right.\n\n"
+        "    integrity   37 of 37 returned, 37 compile, 0 duplicate bodies,\n"
+        "                0 identical to any existing corpus body\n"
+        "    vacuous     6      object on no cell at all\n"
+        "    over-strict 25     convict 5 to 7 of the 7-design population\n"
+        "    ACCEPTED     6     decide, and convict at most 3 of 7\n\n"
+        "**THE PAIR, AND BOTH HALVES LANDED:**\n\n"
+        "    set                          checks   SET BLINDNESS   *audit*\n"
+        "    CEIL2, the sound base          163       56.9%        *0*\n"
+        "    CEIL2 + the six authored       169       **55.1%**    ***0***\n"
+        "    cells closed                                102\n\n"
+        "**102 CELLS CLOSED AT AN AUDIT OF ZERO.** Small -- 1.8 points of "
+        "3,221 holes -- and it is the thing selection cannot do at any price. "
+        "The one previous authoring round closed **exactly zero** new cells: "
+        "its 17 accepted checks were a strict subset of what the base already "
+        "caught. Naming the cell is the difference.\n\n"
+        "**SO `no_body_in_this_corpus_closes_a_set_hole_soundly` STANDS AND THE "
+        "GENERALISATION I BUILT ON IT DOES NOT.** The corpus contains no sound "
+        "hole-closer; a sound hole-closer is nonetheless writable. Every "
+        "blindness-versus-audit figure here is a curve over SELECTIONS, and "
+        "authoring moves off that curve.\n\n"
+        "**THE RATE, WITH THE DENOMINATOR CORRECTED FOR MY OWN DEFECT.** 6 of "
+        "37 = 16%, which is the 15% the previous round got and the 3% every "
+        "earlier round got -- naming the cell did not change how often an "
+        "author lands. At least 8 targets were mis-assigned, because "
+        "`mkhole.py` paired a requirement to a hole when its TEXT MENTIONED "
+        "THE PORT rather than when its sentence GOVERNED THE CELL; against ~29 "
+        "answerable targets it is 21%. Both numbers, never one.\n\n"
+        "**WHAT IT DOES NOT ESTABLISH.** 102 of 3,221 is 3% of the residue, "
+        "and these are the cells a first pass reaches -- there is no reason to "
+        "think the rate holds as the easy ones are consumed. It is a positive "
+        "RATE, not a complete set, and only an editor run says whether a set "
+        "built this way reaches the goal's terminal condition. What is settled "
+        "is the direction: the lever is authoring, the residue is addressable "
+        "at zero audit cost, and the corpus was the limit rather than the "
+        "problem."
+    )
+
+
+def six_authored_checks_drove_a_design_further_than_any_selection() -> str:
+    """The fifth graded editor run, and the first where the criterion reached
+    ZERO on a set whose audit is also zero and broad enough to be worth
+    reaching.
+
+    Reported as the goal's pair, because the headline is a negative and the
+    body is a positive: the design is NOT equivalent, and it is the closest any
+    set here has driven one.
+    """
+    return (
+        "Same starting design as the four graded runs before it -- `gen/L.v`, "
+        "written from the specification by an agent forbidden to open any "
+        "other, held out of every selection. Same Sonnet editor through the "
+        "shipped `_EditSession` policy, same 21-trial budget. The set is "
+        "**CEIL2's 163 sound checks plus the six authored at named holes**: "
+        "169 checks, **set blindness 55.1%, audit ZERO**. Graded in its own "
+        "clean directory from `dut.v`, three pins green in the same process.\n\n"
+        "    run   set                checks  blind  *audit*  objections  "
+        "testpoints differing of 348\n"
+        "    1     ZERO                 126   99.8%   *0*      11 -> 1      "
+        "279 -> 271  (78%)\n"
+        "    2     MIN                  464    0.0%  *64%*    295 -> 277    "
+        "279 -> 241  (69%)\n"
+        "    3     T6                   201   40.4%  *19%*     39 -> 11     "
+        "279 -> 200  (57%)\n"
+        "    4     CEIL2                163   56.9%   *0*      22 -> 5      "
+        "279 -> 190  (55%)\n"
+        "    **5   CEIL2 + the six**    169   55.1%   *0*      24 -> **0**  "
+        "279 -> **151  (43%)**\n\n"
+        "**IT IS `DIFFERS`, AND IT IS THE BEST-DRIVEN DESIGN ON THIS PLAN BY "
+        "39 TESTPOINTS.** Divergence fell 46% from the start point against the "
+        "next-best set's 32%, and the criterion terminated at zero rather than "
+        "stalling with objections standing.\n\n"
+        "**AND ZERO STILL DOES NOT MEAN EQUIVALENT, ON A SET THAT SPARES THE "
+        "REFERENCE EVERYWHERE.** This is the second time zero has been reached "
+        "at an audit of zero. The first was MAXSOUND, where the explanation "
+        "was thinness. Here the set is 169 checks over a sound base and the "
+        "explanation is stated as a golden-free number: **3,119 of 5,656 "
+        "disagreement cells -- 55.1% -- are invisible to it.** A design can "
+        "satisfy every check and still sit 151 testpoints from the reference "
+        "because the checks cannot see the other 55%. Blindness and the "
+        "residual divergence are the same fact measured two ways, and only the "
+        "first is golden-free.\n\n"
+        "**THE SIX ARE ATTRIBUTABLE, AND THE TEST HAS NO RUN VARIANCE IN IT.** "
+        "Comparing run 4 with run 5 compares two editor samples. So the six "
+        "were scored directly against the design **run 4 itself produced**:\n\n"
+        "    the six authored checks, on each graded accepted design\n"
+        "      L_afterHOLE   0 of 6      L_afterZERO   1 of 6\n"
+        "      L_afterSOUND  0 of 6      L_afterT6     2 of 6\n"
+        "      L_afterSD     1 of 6      **L_afterFULL  2 of 6**\n"
+        "      L_afterMIN    4 of 6\n\n"
+        "**TWO OF THE SIX CONVICT THE DESIGN CEIL2's OWN RUN STOPPED ON**, "
+        "naming a concrete edge each -- `REQ-0029@dc_addr` at TP-9203 edge 22 "
+        "(`dc_addr` not driven from `start_addr` during hit/miss evaluation) "
+        "and `REQ-0087@biu_read` at TP-0033 edge 5 (`biu_read` low during miss "
+        "evaluation). Those are defects the 163-check set that produced that "
+        "design could not see, found by checks that convict the reference "
+        "nowhere. **That is the blindness residue closing, on a fixed design, "
+        "with no editor in the loop.**\n\n"
+        "**BLINDNESS DID NOT PREDICT THE IMPROVEMENT, WHICH CORRECTS THE "
+        "READING OF THE CURVE.** Runs 4 and 5 differ by **1.8 points of "
+        "blindness** and by **39 testpoints of drive**. So at the margin the "
+        "aggregate number is not the thing that moved -- six specific checks "
+        "aimed at named cells were. Blindness remains the right target and is "
+        "measured here to be a poor unit of account for small changes to a "
+        "set: report the cells closed and which they were, not the percentage "
+        "alone.\n\n"
+        "**WHAT IS NOT ESTABLISHED.** One run per set, so the 190-versus-151 "
+        "comparison is directional and the 2-of-6 is the part that stands "
+        "without it. Run 5 spent 10 of 21 trials and stopped because its "
+        "criterion was met, so the remaining 151 testpoints are not evidence "
+        "the editor could not go further -- they are evidence the set stopped "
+        "asking. And 55.1% blindness at 169 checks against 0.0% at 464 with an "
+        "audit of 64% is the same trade as ever: authoring is the only route "
+        "measured to move blindness at zero audit cost, and six checks bought "
+        "1.8 points of it."
+    )
+
+
+def the_authoring_round_was_capped_by_a_regex_not_by_the_holes() -> str:
+    """Why the first authoring round could not have a second: its target
+    population was exhausted, and the thing that exhausted it was a lexical
+    shortcut over an artifact the pipeline already computes properly.
+
+    Purely mechanical -- two set sizes and their inclusion. No model call, no
+    reference, nothing to pre-register.
+    """
+    return (
+        "The authoring round that closed 102 cells drew 37 targets. Drawing "
+        "again, against the same targeting and the enlarged set's 3,119 "
+        "remaining holes, yields **ONE**. So it was never a sample of the "
+        "residue -- it was the whole reach of the instrument, and the "
+        "instrument stopped.\n\n"
+        "**WHAT DID THE STOPPING.** A target is a (requirement, port) pair: a "
+        "port two spec-derived designs disagree on, and a requirement whose "
+        "sentence is the author's authority for saying which is wrong. The "
+        "pairing was a regex -- *does this behavioural requirement's TEXT "
+        "contain the port's name*. `normalized.json`, which the pipeline "
+        "already produces from specification and contract alone, answers the "
+        "same question structurally, in `activation` / `observable` / "
+        "`observed_via`:\n\n"
+        "    port              lexical   normalized    new\n"
+        "    biu_read                5           38     33\n"
+        "    saved_addr              7           32     25\n"
+        "    biu_write               4           26     22\n"
+        "    burst                   3           26     23\n"
+        "    dc_addr                 3           26     23\n"
+        "    first_miss_ack          3           23     20\n"
+        "    dcram_we                5           21     16\n"
+        "    first_hit_ack           5           20     15\n"
+        "    tag_we                  2           16     14\n"
+        "    first_miss_err          1            9      8\n"
+        "    **TOTAL**             **38**     **237**  **199**\n\n"
+        "**THE REGEX REACHED 16% OF WHAT THE PIPELINE ALREADY KNEW, AND THE "
+        "NORMALIZED MAP IS A STRICT SUPERSET** -- their union is 237, so every "
+        "pair the text names the normalization names too, plus 199 more.\n\n"
+        "**AND ONE SHORTCUT PRODUCED BOTH DIRECTIONS OF ERROR.** It "
+        "over-matched: a requirement that MENTIONS a port need not have an "
+        "obligation GOVERNING it, which is why at least 8 of the 37 targets "
+        "were unanswerable and the round's rate had to be quoted twice, 6 of "
+        "37 and 6 of ~29. It under-matched: 199 requirements with a normalized "
+        "obligation on a hole port were never asked at all. A lexical proxy "
+        "for a structural relation is wrong in both directions at once.\n\n"
+        "**WHAT THIS DOES AND DOES NOT REVISE.** The round's own numbers are "
+        "unchanged -- 6 accepted, 102 cells closed, audit zero, and two of the "
+        "six convict the design the base set's own editor stopped on. What is "
+        "revised is what they were a rate OF: not 16% of an open population "
+        "but 16% of a nearly closed one. **`authoring_at_a_named_hole_closes_"
+        "cells_that_selection_cannot` said the corpus was the limit rather "
+        "than the problem; this says the same of the targeting.** Whether the "
+        "wider population authors at the same rate is a separate measurement "
+        "and is not claimed here.\n\n"
+        "**THE GENERAL FORM, because this is the third time on this plan.** An "
+        "instrument that looked like a sampler was a census. The tell is "
+        "cheap and was available before any call: **draw the sample twice.** "
+        "A population that yields 37 and then 1 is not one you are sampling, "
+        "and no rate measured on it projects."
+    )
+
+
+def blindness_saturates_at_four_designs_and_two_can_read_zero() -> str:
+    """How to ASSURE completeness golden-free -- the goal's last clause, and
+    the first constructive answer to it here.
+
+    Blindness is the completeness instrument this session proposes, and it is
+    measured against the designs you HAVE. So the question is whether the
+    estimate settles, and at what population size. Purely mechanical: per pair
+    the two counts are independent, so one pass gives every subset by summation.
+    """
+    return (
+        "Blindness -- of the (pair, testpoint) cells where two spec-derived "
+        "designs disagree on a declared output, the share where no check "
+        "objects to either -- reads a set's incompleteness without a "
+        "reference. Its weakness is obvious and had never been sized: a set at "
+        "0% against the designs you have can be blind to the next one.\n\n"
+        "**IT SATURATES, AND EARLY.** The 169-check set, mean over every "
+        "subset of the population at each size:\n\n"
+        "    designs   9 designs (7 written + 2 accepted)   7 independently written\n"
+        "        2                  50.4%                          37.3%\n"
+        "        3                  54.2%                          40.9%\n"
+        "      **4**              **55.1%**                      **42.0%**\n"
+        "        5                  55.3%                          42.4%\n"
+        "        6                  55.3%                          42.6%\n"
+        "        7                  55.3%                          42.9%\n"
+        "        8                  55.2%                            --\n"
+        "        9                  55.1%                            --\n\n"
+        "**FOUR INDEPENDENTLY WRITTEN DESIGNS ESTIMATE A SET'S BLINDNESS AS "
+        "WELL AS NINE**, within a point, on both populations. Blindness is "
+        "therefore cheap to assure: it does not need a large population, and "
+        "the fifth design onward buys nothing on the aggregate.\n\n"
+        "**AND TWO DESIGNS CAN READ ZERO ON A SET THAT IS 43% BLIND.** The "
+        "spread across subsets is the other half of the table and it is the "
+        "part with a failure mode in it:\n\n"
+        "    designs      min      max        (7 independently written)\n"
+        "        2       0.0%    76.3%\n"
+        "        3       0.0%    75.0%\n"
+        "        4       0.0%    72.0%\n"
+        "        5       6.7%    69.0%\n"
+        "        7      42.9%    42.9%\n\n"
+        "**DESIGNS B AND D DISAGREE ON 23 TESTPOINTS AND THE SET OBJECTS ON "
+        "ALL 23 -- 0 of 23, a clean sheet, on a set that is 42.9% blind "
+        "against seven.** So the mean saturates at four and a *particular* "
+        "four can still read zero. The prescription is both numbers: **at "
+        "least four spec-derived designs, and the per-pair spread reported "
+        "beside the aggregate, never the aggregate alone.** A blindness of "
+        "zero on a small population is the same shape of evidence as a check "
+        "that passes because it never fired.\n\n"
+        "**THE DESIGNS YOUR OWN CHECKS ACCEPTED BELONG IN THE POPULATION, AND "
+        "THEY ARE THE VALUABLE ONES.** The two columns differ by the two "
+        "editor-produced designs -- outputs of graded runs, each driven to a "
+        "stopping point against a check set -- and adding them moves the "
+        "estimate **42.9% -> 55.1%, twelve points.** They are adversarially "
+        "selected against the checks by construction: whatever a set could see "
+        "was edited out of them, so what remains is exactly what it cannot. "
+        "They cost nothing, since the pipeline produces them anyway.\n\n"
+        "**WHAT THIS DOES NOT SAY.** Saturation of the ESTIMATE is not "
+        "completeness of the SET: 55.1% blind at nine designs stays 55.1%, and "
+        "the fifth graded run shows a design can satisfy every check at that "
+        "blindness and sit 151 testpoints from the reference. This says the "
+        "instrument is trustworthy and cheap, not that the number it reports "
+        "is good. And the saturation point is measured for one set on one "
+        "design; four is what it took here, not a constant."
+    )
+
+
+def the_biggest_blindness_drop_here_was_bought_entirely_with_false_rejection() -> str:
+    """The pre-registered negative, and the clearest case this plan has for why
+    blindness may never be quoted without its audit.
+
+    Recorded in PREREG_HOLE2.md before the round ran: "a round that raises the
+    accept count while the audit moves off zero is a NEGATIVE and is reported
+    as one." It did, and it is.
+    """
+    return (
+        "40 checks authored at named holes, on targets drawn from normalize's "
+        "own port map -- the widened instrument that reaches 237 "
+        "(requirement, port) pairs against a regex's 38. A defect in my "
+        "ranking, recorded before any score was read, sent all 40 calls to the "
+        "**eleven broadest requirements in the specification**: candidates were "
+        "ordered by uid, and the generic overview sentences name every port in "
+        "their normalization, so they win every port and sort first. REQ-0001 "
+        "is the module's one-line purpose statement; REQ-0003 says sequential "
+        "state updates on the rising edge of the clock.\n\n"
+        "    integrity     40 of 40 returned, 40 compile, 0 duplicate bodies,\n"
+        "                  0 identical to any of the 600 corpus bodies\n"
+        "    over-strict   32   convict 7 of the 7 spec-derived designs\n"
+        "    vacuous        6   object on no cell at all\n"
+        "    accepted       2   decide, and convict at most 3 of 7\n\n"
+        "**AND THE TWO ACCEPTED CHECKS CLOSED 1,293 CELLS -- BLINDNESS 55.1% "
+        "-> 32.3%, THE LARGEST MOVE ON THIS PLAN BY AN ORDER OF MAGNITUDE.** "
+        "The previous round's six closed 102. Quoted alone that is the "
+        "session's headline: two checks, 23 points of completeness, from a "
+        "golden-free rule.\n\n"
+        "**THE AUDIT IS 2 OF 2.**\n\n"
+        "    REQ-0001@dc_addr    decides 329   convicts the reference on 41   UNSOUND\n"
+        "    REQ-0001@dcram_we   decides  80   convicts the reference on  7   UNSOUND\n\n"
+        "**EVERY ONE OF THOSE 1,293 CELLS WAS BOUGHT WITH FALSE REJECTION**, "
+        "and four graded runs already measure what that does: a set carrying "
+        "over-strict checks does not merely admit wrong designs, it rejects "
+        "right repairs, and the run that reached the completeness floor at 64% "
+        "audit drove a design *worse* than one 57 points blinder. So this is "
+        "the pair discipline earning its keep on the largest number it has ever "
+        "had to reject.\n\n"
+        "**AND IT LOCATES A LIMIT OF THE MINORITY RULE THAT CONVICTION COUNT "
+        "CANNOT SEE.** Both checks convict **2 of 7** -- inside the strict end "
+        "of a rule measured at 126 of 126 precision. The previous round "
+        "accepted checks at 0, 1 and 2 of 7 and its audit was **0 of 6**. Same "
+        "rule, same threshold, same population, opposite outcome. What differs "
+        "is the SENTENCE: those six came from specific behavioural obligations, "
+        "these two from the module's purpose statement.\n\n"
+        "**A SCAFFOLDING SENTENCE LICENSES NOTHING, SO THE AUTHOR INVENTS AN "
+        "OBLIGATION** -- and an invented obligation can be violated by only a "
+        "couple of the population and by the reference as well, which is "
+        "exactly the profile the minority rule is built to accept. The rule "
+        "reads how many designs a check convicts; it cannot read whether the "
+        "check's own requirement gave it anything to say. **Requirement "
+        "specificity is a golden-free property the selection rules here have "
+        "never used, and this is the measurement that says they should.**\n\n"
+        "**WHAT THIS ROUND DOES NOT SETTLE.** It is the BROAD arm and it was "
+        "run by accident. Whether authoring at named holes scales is a question "
+        "about the specific requirements -- 40 of the 67 name at most three "
+        "hole ports and supply 82 targets -- and that arm is separate. This "
+        "round becomes its control: same holes, same brief, same exemplar rule, "
+        "opposite end of the breadth distribution."
+    )
+
+
+def authoring_at_a_named_hole_does_not_escape_the_soundness_trade() -> str:
+    """The controlled pair, and it closes the lever this session opened.
+
+    `authoring_at_a_named_hole_closes_cells_that_selection_cannot` showed a
+    sound hole-closer is WRITABLE where the corpus contains none. That stands.
+    What it does not establish -- and this measures -- is whether the lever
+    escapes the anti-correlation every other lever here has hit. It does not.
+    """
+    return (
+        "Two arms, 76 authoring calls, the same 3,119 blind cells, the same "
+        "brief, the same exemplar rule and the same accept rule. They differ in "
+        "ONE thing: which requirements were asked. Breadth is how many of the "
+        "ten hole ports a requirement's normalization names -- 3 of the 67 name "
+        "all ten, 40 name at most three.\n\n"
+        "    arm                        calls  accepted  over-strict  vacuous  "
+        "cells closed  *audit*\n"
+        "    BROAD    (11 reqs, 4-10)     40       2         32          6      "
+        "**1,293**      ***2 of 2***\n"
+        "    SPECIFIC (27 reqs, 1-3)      36       2         33          1      "
+        "**0**          ***0 of 2***\n\n"
+        "**ONE END BUYS 1,293 CELLS AT A 100% FALSE-REJECT RATE; THE OTHER BUYS "
+        "NOTHING AT ZERO.** Both are negatives by the rules fixed before either "
+        "ran, and together they say the same thing from two sides: **76 calls on "
+        "the corrected targeting closed ZERO cells soundly**, against round 1's "
+        "102 from 37 calls.\n\n"
+        "**THE MECHANISM, OVER ALL 76 AND NOT AS TWO ANECDOTES.** Of the 69 "
+        "checks that object anywhere:\n\n"
+        "    kept by the minority rule (<=3 of 7)   n= 4   mean   74 cells\n"
+        "    rejected             (>3 of 7)         n=65   mean  638 cells\n"
+        "                                                        **8.6x**\n\n"
+        "    Spearman(cells objected, designs convicted) = **+0.350**\n\n"
+        "**THE CHECKS THAT WOULD CLOSE THE RESIDUE ARE EXACTLY THE ONES THE "
+        "GOLDEN-FREE SOUNDNESS RULE REJECTS** -- measured inside the one lever "
+        "that was supposed to be off that curve. The three biggest closers here "
+        "each shut over a thousand cells and each convicts all seven designs.\n\n"
+        "**AND IT RE-READS THE POSITIVE RATHER THAN RETRACTING IT.** Round 1's "
+        "six accepted closed 102 cells -- **17 each**, inside the kept band's "
+        "own mean of 74. So that round was never off the anti-correlation; it "
+        "was the same narrow band with six members instead of two. What stands "
+        "is the narrow claim it actually made: a sound hole-closer is "
+        "**writable** where the corpus contains none, and its audit is zero. "
+        "What is now refuted is the reading I put next to it -- that the residue "
+        "is 'addressable at zero audit cost' at a usable rate.\n\n"
+        "**THE COST, PROJECTED FROM THE MEASURED RATES.** 3,119 cells at ~17-74 "
+        "cells per accepted check needs 40-180 accepted checks; at the measured "
+        "accept rate of 5-16% that is **250 to 3,600 authoring calls**, and the "
+        "rate fell from 16% to 5% between the rounds. Authoring is not a cheap "
+        "route to a complete set on this corpus.\n\n"
+        "**WHAT WOULD STILL CHANGE IT, and it is not another authoring round.** "
+        "The 65 rejected checks are not obviously wrong -- they are demands most "
+        "of a spec-derived population violates, which the minority rule treats "
+        "as the CHECK's misreading. On a specification whose readers share a "
+        "misreading that inference is false, and the split-cell measurement here "
+        "says 97% of a held-out design's errors live in the 11% of cells the "
+        "population cannot agree on. **So the rule that rejects them is right on "
+        "average and wrong exactly where the residue is**, which is the same "
+        "wall this plan has hit from eleven directions, now reached from the "
+        "twelfth."
+    )
+
+
+def the_blindness_residue_is_closeable_and_almost_none_of_it_soundly() -> str:
+    """The session's decisive measurement, and it settles the goal's central
+    question as a property of the CELLS rather than of the checks.
+
+    It also refutes a hedge I attached to
+    `authoring_at_a_named_hole_does_not_escape_the_soundness_trade` one finding
+    earlier. That correction is stated before the result.
+    """
+    return (
+        "**A HEDGE OF MINE, REFUTED BY MEASUREMENT.** I wrote that the 65 "
+        "checks the minority rule rejects 'are not obviously wrong' and that "
+        "the rule is 'right on average and wrong exactly where the residue "
+        "is'. Audited: **0 of 65 spare the reference.** Every check the rule "
+        "rejects convicts a correct design. Its reject side is 65 of 65 "
+        "precise on this population, at the residue, which is where I said it "
+        "would fail. The rule is discarding nothing.\n\n"
+        "**SO THE CONSTRAINT IS NOT THE RULE, THE CORPUS, OR THE TARGETING**, "
+        "and the partition below says what it is. Take the 3,119 cells the "
+        "169-check set is blind to, and classify each by what kind of authored "
+        "check closes it. The classification reads only the population's "
+        "disagreements and the checks' verdicts on it:\n\n"
+        "    of the 3,119 blind cells                          cells    share\n"
+        "      closed by a check the minority rule KEEPS         1,293   41.5%\n"
+        "      closed ONLY by a check it REJECTS                 1,826   58.5%\n"
+        "      **closed by NOTHING among the 76 authored**       **0**   **0.0%**\n\n"
+        "**EVERY BLIND CELL IS CLOSEABLE. 76 checks authored at the residue "
+        "cover 100% of it.** The author is not failing to reach the cells -- "
+        "the plan has spent nine rounds assuming some version of that, and it "
+        "is false.\n\n"
+        "**AND THE CALIBRATION, COMPUTED LAST, SAYS WHAT THE COVER COSTS:**\n\n"
+        "    of the 76 authored checks, sparing the reference        9\n"
+        "    of those 9, BLIND CELLS CLOSED                        **0**\n"
+        "    of the 65 REJECTED checks, sparing the reference         0\n\n"
+        "    soundly closeable residue   **0 of 3,119 = 0.00%**\n\n"
+        "*A CORRECTION, AND IT IS MINE. The first version of this finding read "
+        "**21 of 3,119 = 0.7%**, taken from 'cells the sound checks object on'. "
+        "That counts EVERY cell they object on, blind or not; the residue "
+        "figure must count blind cells only. All 21 are cells the 169-check set "
+        "already covers. The tell was in the same table and I read past it -- "
+        "adding those two checks moved blindness by exactly nothing, 3,119 to "
+        "3,119. The corrected number is ZERO, and the error made the result "
+        "look milder than it is.*\n\n"
+        "**AND A SECOND LEG WAS NEVER IMPLEMENTED, WHICH SHARPENS IT FURTHER.** "
+        "Every write-up of these rounds -- mine -- says an accepted check "
+        "'DECIDES at the named cell, OBJECTS to one of the two designs there, "
+        "and convicts at most 3 of 7'. The scorer accepts on *decides ANYWHERE* "
+        "and the minority rule; the named-cell leg was never coded. Measured "
+        "afterwards on the four accepted: the two that DO close their own cell "
+        "are the two that convict the reference, and the two that spare it "
+        "close some other cell instead. **Zero of 76 checks both closed the "
+        "cell it was given and spared the reference.**\n\n"
+        "**AN AUTHOR ASKED TO CLOSE A NAMED BLIND CELL SUCCEEDS EVERY TIME, "
+        "AND EVERY TIME THE CHECK IT WRITES CONVICTS A CORRECT "
+        "DESIGN.** That is the completeness/soundness trade stated as a "
+        "property of the CELLS, and it is why every lever on this plan lands "
+        "in the same place: they were all trying to author into a region where "
+        "adjudicating the disagreement and sparing the reference are, cell by "
+        "cell, nearly incompatible.\n\n"
+        "**WHAT IT GIVES A GOLDEN-FREE PIPELINE, AND THIS IS THE "
+        "CONSTRUCTIVE HALF.** The partition above needs no reference: it is "
+        "'does every check I can author for this cell convict a majority of "
+        "the population'. The calibration says that question tracks soundness "
+        "at 65 of 65 on the reject side. **So a pipeline with no golden CAN "
+        "determine that a cell is irreducibly blind** -- author at it, read the "
+        "conviction counts, and if they are all majorities the cell is not "
+        "soundly closeable. What it cannot do is close it anyway.\n\n"
+        "**AND THAT MAKES BLINDNESS A TWO-PART NUMBER RATHER THAN ONE.** "
+        "Reporting 55.1% invites the reading that 55.1% is work outstanding. "
+        "On this evidence **none of it is**: 55.1% of the disagreements two "
+        "competent readers produce are cells where no check that adjudicates "
+        "spares a correct design. A set should report the pair -- **residue, "
+        "and the share of it any check could soundly close** -- because the "
+        "second number is what further authoring can buy, and here it is "
+        "zero.\n\n"
+        "**LIMITS, AND THE FIRST ONE IS LOAD-BEARING NOW THAT THE NUMBER IS "
+        "ZERO.** 76 checks is a cover, not an exhaustive search: a 77th could "
+        "be the sound closer for a cell these close only unsoundly, so 0.00% "
+        "is a floor and the gap between it and the truth is unmeasured. That "
+        "gap is what the narrowing round pre-registered in `PREREG_NARROW.md` "
+        "is for. One design, one specification, one population of nine. And "
+        "'closed' means the check objects to one of the two designs at that "
+        "cell -- not that it is right about which one."
+    )
+
+
+def narrowing_the_hole_closers_moved_the_conviction_count_by_nothing() -> str:
+    """The pre-registered test of whether 0.00% is a floor or the truth, and it
+    closes the authoring route on this residue.
+
+    `PREREG_NARROW.md`, fixed before dispatch: >= 4 of 30 means the zero is an
+    artifact of one attempt per cell; <= 1 means it is close to the truth.
+    """
+    return (
+        "The soundly-closeable residue reads **0 of 3,119**, and the limit on "
+        "that number was stated with it: 76 checks are a COVER, not a SEARCH. "
+        "Each cell got one attempt. So the 30 largest hole-closers -- every one "
+        "convicting 6 or 7 of the seven spec-derived designs -- were re-authored "
+        "with the narrowing objection, the one lever aimed at exactly this "
+        "population and measured at **7 of 47 = 15%** on its first round "
+        "elsewhere. Golden-free: *your check objects to N of seven independently "
+        "written implementations of this specification; narrow it so it still "
+        "objects at the cell you were given and spares most of them.*\n\n"
+        "    integrity   30 of 30 returned, 30 compile, 0 duplicates,\n"
+        "                **0 returned unchanged** from the over-strict body\n\n"
+        "**THE AUTHORS DID THE WORK, AND EACH NAMED WHAT IT DELETED** -- a "
+        "cycle-alignment rule the sentence never stated, a holding time, a "
+        "converse clause, word-count arithmetic, a scope wider than the words "
+        "given. These are not refusals.\n\n"
+        "    STILL CLOSES its own named cell        29 of 30\n"
+        "    passes the MINORITY rule (<=3 of 7)     1 of 30\n"
+        "    **BOTH -- the pre-registered measure**  **0 of 30**\n\n"
+        "**AND THE CONVICTION COUNT DID NOT MOVE.** 28 of 30 went 7-of-7 to "
+        "**7-of-7**. One went 6-of-7 to 7-of-7 -- *stricter*. The single check "
+        "that passed the minority rule went 7-of-7 to **0-of-7 on zero cells**: "
+        "it narrowed into vacuity, which is this round's known failure mode and "
+        "is counted as a loss.\n\n"
+        "**SO THE OVER-STRICTNESS IS NOT AN ACCRETION OF REMOVABLE EXTRAS.** "
+        "Delete the unlicensed demand -- a real one, correctly identified -- and "
+        "the check still adjudicates its cell and still convicts every "
+        "implementation. What survives narrowing is the CORE reading of the "
+        "sentence, and that core is what the population violates.\n\n"
+        "**THE CALIBRATION, COMPUTED LAST: 29 OF 30 CONVICT THE REFERENCE**, "
+        "and the one that spares it is the vacuous one. Taken with the 65 from "
+        "the previous round, **the golden-free minority rule and the audit "
+        "agree on 95 of 95 checks authored at this residue.** The rule is not "
+        "discarding completeness. There is none to discard.\n\n"
+        "**WHICH LEAVES ONE READING, AND IT IS THE SPECIFICATION'S.** At these "
+        "cells the sentence, asserted as its own author reads it after being "
+        "told to assert less, is violated by all seven independent "
+        "implementations AND by the reference. That is not check "
+        "over-strictness as this plan has measured it elsewhere -- it is the "
+        "requirement text and the design disagreeing, at the exact cells where "
+        "two competent readers of that text disagree with each other.\n\n"
+        "**BY THE PRE-REGISTERED BAR THIS IS THE `<= 1` BAND: 0.00% IS NOT A "
+        "FLOOR, IT IS CLOSE TO THE TRUTH.** One attempt per cell was enough "
+        "because the cells do not admit a sound closer, and no further "
+        "authoring round on this residue is worth running. That is the third "
+        "and last lever aimed at the blindness residue -- selection, authoring, "
+        "narrowing -- and all three are now closed with a measurement rather "
+        "than a budget running out.\n\n"
+        "**WHAT WOULD STILL CHANGE IT.** Not a check and not a prompt: a "
+        "decision on the underdetermined cells from outside the "
+        "specification-plus-reader loop. The disagreement map localises them "
+        "exactly -- 3,119 cells, named by pair and testpoint -- and that map is "
+        "the artifact to put in front of whoever can make that decision. It "
+        "needs no reference to produce."
+    )
+
+
+def blindness_is_a_property_of_the_stimulus_too_and_it_predicts() -> str:
+    """The first golden-free quantity here that PREDICTS, at testpoint
+    granularity, where an editor-driven design will still be wrong.
+
+    It also corrects an attribution every finding on this plan has made:
+    blindness has been treated as a property of the CHECK SET. It is a property
+    of the (check set, stimulus) pair, and the stimulus half was never measured.
+    """
+    return (
+        "Blindness is holes over disagreements across (pair, **testpoint**) "
+        "cells. Every lever aimed at it moved the numerator by authoring "
+        "checks, and all three -- selection, authoring, narrowing -- are now "
+        "closed by measurement. The denominator is the STIMULUS and it had "
+        "never been looked at. If disagreements were uniformly blind, blindness "
+        "would be a property of the set alone. **They are not, and it is "
+        "not.**\n\n"
+        "    the same 169-check set, per testpoint    tps   disagreements   blind\n"
+        "      no pair disagrees at all                91         0           --\n"
+        "      **every disagreement CAUGHT**           61      1,217      **0.0%**\n"
+        "      partly blind                           126      3,235       59.2%\n"
+        "      **every disagreement BLIND**            70      1,204    **100.0%**\n\n"
+        "**ONE SET IS PERFECTLY COMPLETE ON 61 TESTPOINTS AND PERFECTLY BLIND "
+        "ON 70.** Blindness is a property of the (check set, stimulus) PAIR, and "
+        "every figure on this plan has attributed it to the set alone.\n\n"
+        "**AND THE CLASSIFICATION PREDICTS THE GRADE.** The fifth graded run's "
+        "accepted design -- objections driven to 0 of 169, still differing from "
+        "the reference on 151 of 348 testpoints -- scored against the "
+        "golden-free class of each testpoint. The class reads only the "
+        "population's disagreements and the checks' verdicts; the divergence is "
+        "computed last and is the thing predicted:\n\n"
+        "    class of the testpoint                tps   differ    rate\n"
+        "      no pair disagrees                    91       1     **1%**\n"
+        "      every disagreement CAUGHT            61      15      25%\n"
+        "      partly blind                        126      75      60%\n"
+        "      every disagreement BLIND             70      60     **86%**\n\n"
+        "**MONOTONE ACROSS ALL FOUR CLASSES, 1% TO 86%, AND 3.5x BETWEEN THE "
+        "EXTREMES.** The causal chain is complete and every link is measured: a "
+        "blind testpoint gives the editor no objection, so it makes no edit "
+        "there, so the design still differs there. **135 of the 151 differing "
+        "testpoints -- 89% -- are partly or fully blind.**\n\n"
+        "**AND THE TOP ROW IS AN INDEPENDENT REPRODUCTION.** Where nine "
+        "spec-derived designs all agree, the edited design matches the "
+        "reference on 90 of 91 testpoints. That is the 99.82% consensus "
+        "accuracy measured per CELL, arriving again per TESTPOINT from a "
+        "different direction.\n\n"
+        "**WHAT IT LICENSES AND WHAT IT MUST NOT.** It does NOT license adding "
+        "easy testpoints to move the ratio: blindness would fall while the "
+        "3,119 blind cells stayed exactly where they are, which is metric "
+        "gaming and would be caught by the absolute count. What it licenses is "
+        "the question the goal names and this plan never asked -- **whether a "
+        "DIFFERENT testpoint exercising the same scenario produces its "
+        "disagreements at cells the specification determines**, where a sound "
+        "check exists. The target is now exact: 70 testpoints, 1,204 "
+        "disagreement cells, 100% blind, carrying 86% of the residual "
+        "divergence.\n\n"
+        "**AND IT REFRAMES THE THREE CLOSED LEVERS RATHER THAN REOPENING "
+        "THEM.** No sound check closes those cells -- 95 of 95 attempts convict "
+        "the reference. That stands. This says the cells were never the only "
+        "variable: they are the disagreements THIS stimulus happens to produce, "
+        "and nothing has tested whether another stimulus produces better ones."
+        "\n\n**CORRECTED OUT OF SAMPLE, AND THE MONOTONE SHAPE DOES NOT SURVIVE.** The four-class ordering above was read off ONE design. On a second, independent editor run it reads 1% -> 48% -> 44% -> 87% and the middle two classes INVERT. **The two extremes hold and the ordering does not** -- see `the_monotone_predictor_is_a_two_point_instrument`. Quote the endpoints; do not quote the ranking."
+    )
+
+
+def the_blind_testpoints_differ_from_the_caught_ones_by_scenario_not_only_port() -> str:
+    """The sizing that decides whether a stimulus loop can move blindness, and
+    it is the first positive sizing for that loop on this plan.
+
+    Costs nothing: both classes already exist in the 348-testpoint suite.
+    """
+    return (
+        "The same 169-check set is 100% blind on 70 testpoints and 0% blind on "
+        "61. Whether a stimulus loop can exploit that turns on ONE question, "
+        "and both classes are already on disk so it costs nothing to ask.\n\n"
+        "**IF the two classes disagree on DIFFERENT PORTS**, blindness is about "
+        "which outputs the specification underdetermines, and no stimulus "
+        "helps -- you cannot choose which port a design gets wrong. **IF the "
+        "SAME ports appear in both**, blindness is about the scenario the "
+        "testpoint puts those ports in, and reaching a different scenario for "
+        "the same port is a lever.\n\n"
+        "    port              caught    blind    ratio\n"
+        "      biu_write         8.0%    40.5%   **5.06x**\n"
+        "      first_miss_ack   15.1%    18.3%     1.21x\n"
+        "      biu_read         18.2%    14.7%     0.81x\n"
+        "      dc_addr          10.8%    12.3%     1.13x\n"
+        "      first_hit_ack     5.7%     3.6%     0.64x\n"
+        "      tag_we            7.3%     3.6%     0.48x\n"
+        "      saved_addr        6.5%     3.3%     0.50x\n"
+        "      dcram_we         10.1%     2.2%     0.22x\n"
+        "      burst            14.7%     1.6%   **0.11x**\n"
+        "      first_miss_err    3.7%     0.0%   **0.00x**\n\n"
+        "    total-variation distance between the profiles   **0.372**\n\n"
+        "**IT IS BOTH, AND THE SCENARIO HALF IS THE LARGER ONE.** 63% of the "
+        "disagreement mass overlaps, and **8 of the 10 ports carry more than 2% "
+        "in BOTH classes** -- the same output is adjudicated on one testpoint "
+        "and invisible on another. That is the stimulus component, it is the "
+        "majority of the residue, and it has never been tested.\n\n"
+        "**AND THERE IS A PORT COMPONENT WITH A NAME.** `biu_write` carries "
+        "**40.5% of blind disagreements against 8.0% of caught ones**, a 5x "
+        "concentration; `burst` and `first_miss_err` run the other way and are "
+        "essentially never blind. So blindness is not uniform over the "
+        "interface either, and the store write-through path is where it "
+        "collects.\n\n"
+        "**THIS IS THE FIRST POSITIVE SIZING FOR THE STIMULUS LOOP HERE.** The "
+        "previous one -- *the stimulus loop is worth 3 checks of 50* -- asked a "
+        "different question: whether checks are SILENT rather than BLIND on one "
+        "design. That answer stands and does not bear on this. What is sized "
+        "here is whether the DISAGREEMENT POPULATION a suite produces can be "
+        "steered toward cells the set can adjudicate, and for 8 of 10 ports the "
+        "answer is that both kinds of cell already exist.\n\n"
+        "**WHAT IT DOES NOT ESTABLISH, and it is the load-bearing caveat.** "
+        "That the same port is caught somewhere and blind elsewhere does NOT "
+        "mean a stimulus author can reach the caught kind on demand -- the "
+        "scenario that produces an adjudicable `dc_addr` disagreement may be "
+        "the one the design already gets right. The experiment that settles it "
+        "is a stimulus round targeted at the 70 fully-blind testpoints' "
+        "scenarios, scored on whether the NEW testpoints are also fully blind. "
+        "That is not run here, and this measurement says only that it is worth "
+        "running -- which is more than any previous sizing of it said.\n\n"
+        "**AND THE CONCENTRATION IS A CO-OCCURRENCE, NOT A CAUSE.** `biu_write` "
+        "dominating the blind class may be the port the specification "
+        "underdetermines, or the port whose scenarios this suite happens to "
+        "reach badly. Distinguishing those is the same question one level down "
+        "and it is not answered."
+    )
+
+
+def a_different_route_to_the_same_scenario_is_blinder_not_clearer() -> str:
+    """The stimulus loop, RUN -- the fourth and last lever aimed at the
+    blindness residue, and the one the goal names twice.
+
+    Pre-registered in `PREREG_STIM.md` before a testpoint was authored:
+    >= 40% of the disagreement-producing new testpoints fully caught means the
+    scenario is the lever; < 15% closes it.
+    """
+    return (
+        "Blindness is holes over disagreements across (pair, **testpoint**) "
+        "cells, and the denominator is the stimulus. It was licensed by a "
+        "measurement -- the same 169-check set is 0% blind on 61 testpoints and "
+        "100% blind on 70, and **8 of 10 ports carry disagreements in both "
+        "classes**, so the same output is adjudicated in one scenario and "
+        "invisible in another.\n\n"
+        "**THE ROUND.** The 20 fully-blind testpoints carrying the most blind "
+        "cells -- 460 of the 1,204 in that class, disagreeing on `biu_write` "
+        "445, `first_miss_ack` 418, `biu_read` 160, `tag_we` 80: the store "
+        "write-through path, where blindness collects at 5x. Four authors, each "
+        "given only the driven inputs of a testpoint that already runs and "
+        "which outputs two spec-derived designs disagree on there. Asked for a "
+        "NEW testpoint reaching the same functional scenario **by a different "
+        "route**. All nine designs then simulated on the result.\n\n"
+        "**THE ROUTES ARE GENUINELY DIFFERENT, AND THE SCENARIOS WERE "
+        "REACHED.** Zero-latency bus against a 12-cycle stall; refill words "
+        "back to back against ragged 4/3/2/5-cycle gaps; the request withdrawn "
+        "after the write-through ack so the refill completes with nothing on "
+        "the interface; preceded by a load hit, a cache-inhibited access, a "
+        "full load-miss refill, an error-then-retry; three store misses back to "
+        "back with the strobe never released. **INERT: 0 of 20** -- not one "
+        "failed to produce a disagreement, which was the pre-registered "
+        "failure mode and did not occur.\n\n"
+        "    the 20 new testpoints         tps   disagreements   blind\n"
+        "      INERT -- no pair disagrees    0          0           0\n"
+        "      **FULLY CAUGHT**            **1**        8           0\n"
+        "      partly blind                  4        111          59\n"
+        "      **FULLY BLIND**            **15**      267         267\n\n"
+        "    **fully caught, of the 20 that disagree : 1 = 5%**\n"
+        "    cell blindness on the new testpoints    : **326 of 386 = 84.5%**\n"
+        "    the suite they were drawn from          : 55.1%\n\n"
+        "**5% AGAINST A PRE-REGISTERED 40% BAR. AND THE NEW TESTPOINTS ARE "
+        "BLINDER THAN THE AVERAGE OLD ONE -- 84.5% AGAINST 55.1%.** That second "
+        "figure is the stronger half: four independent authors, taking five "
+        "materially different routes each into the same scenario class, "
+        "produced disagreements the set sees LESS of than it sees of the "
+        "suite's average. The blindness travels with the scenario, not with "
+        "the route.\n\n"
+        "**BY THE PRE-REGISTERED BAR THIS IS THE `< 15%` BAND: THE STIMULUS "
+        "LOOP IS CLOSED AS A LEVER ON BLINDNESS.** Four levers have now been "
+        "aimed at the residue -- selection over the corpus, authoring at named "
+        "holes, narrowing the over-strict closers, and the stimulus -- and all "
+        "four are closed by measurement rather than by a budget running out.\n\n"
+        "**THE SCOPE OF THE CLAIM, AND IT IS NARROWER THAN THE HEADLINE.** The "
+        "sample was chosen deliberately as the WORST scenarios, so it inherits "
+        "their difficulty; a round aimed at a random testpoint might do better, "
+        "and this does not measure that. What it settles is the case that "
+        "matters: **for the scenario class carrying the residue, the route "
+        "taken into it does not determine whether the set can adjudicate the "
+        "disagreement.**\n\n"
+        "**AND THE RATIO WAS NOT THE HEADLINE, AS PRE-REGISTERED.** Adding "
+        "these 20 lowers nothing: the old 3,119 blind cells are exactly where "
+        "they were and these add 326 more. Had the round gone the other way, "
+        "the honest report would still have been the CLASS of the new "
+        "testpoints beside the absolute count -- because a suite can always be "
+        "made to look less blind by adding testpoints it happens to catch."
+    )
+
+
+def the_population_vote_is_inverted_on_one_port_and_perfect_on_another() -> str:
+    """Can the population's VOTE adjudicate a cell the check set is blind on?
+
+    Measured on the artifact built to try it: 60 cells, each the earliest cell
+    of a fully-blind testpoint where nine independently written spec-derived
+    designs disagree on a declared output. Blindness, ordinal position and the
+    vote are all golden-free; the reference scores the vote and nothing else,
+    and it selected none of the sixty.
+    """
+    return (
+        "**THE VOTE IS NOT AN ADJUDICATOR, AND THE WAY IT FAILS IS WORSE THAN "
+        "BEING UNINFORMATIVE.** On the sixty cells the larger side matches the "
+        "reference **20 times = 33%**, and the reference sits on a MINORITY "
+        "side on the other 40. Corpus-wide over all split cells that figure is "
+        "53%, so these cells are not merely harder -- the vote there points the "
+        "WRONG WAY.\n\n"
+        "**AND THE TIDY EXPLANATION IS CONFOUNDED, WHICH WAS CHECKED BEFORE IT "
+        "WAS WRITTEN DOWN.** The selection takes the FIRST split of each "
+        "testpoint, and first splits separate sharply by blindness:\n\n"
+        "    first split of a testpoint     cells   majority right\n"
+        "      fully blind                    70        **33%**\n"
+        "      everything else               187        **95%**\n\n"
+        "**That 62-point separation is PORT COMPOSITION and must not be quoted "
+        "as a blindness effect.** Blind first splits are 47 of 70 `biu_read`; "
+        "the rest are 130 of 187 `burst`, whose majority is right 130 of 130. "
+        "Broken out by port, the effect REVERSES:\n\n"
+        "    first split, by port      fully blind      other testpoints\n"
+        "      `biu_read`             **3/47 =  6%**      34/38 = 89%\n"
+        "      `biu_write`           **20/20 = 100%**      8/13 = 62%\n"
+        "      `dcram_we`                0/3                4/5  = 80%\n"
+        "      `burst`                    --             130/130 = 100%\n\n"
+        "Margin does not rescue it either: at a majority of 8 of 9 the blind "
+        "cells read 34% and the others 97%.\n\n"
+        "**SO THE CLAIM IS THE NARROW ONE: THE POPULATION'S VOTE SWINGS FROM 6% "
+        "TO 100% BETWEEN TWO PORTS AT THE SAME MARGIN, AND NO GOLDEN-FREE "
+        "FEATURE MEASURED HERE TELLS THEM APART.** Blindness is not that "
+        "feature -- it is confounded with the port. A pipeline that hands an "
+        "editor the population's vote on a blind cell is handing it something "
+        "whose reliability it cannot estimate, and on the port carrying two "
+        "thirds of this residue the vote is inverted.\n\n"
+        "**INTEGRITY: NOT A DECODE DEFECT ON ONE PORT**, which is the shape "
+        "eight counting-shaped defects on this plan have had. Where all nine "
+        "designs agree, the reference agrees on `biu_read` **97.63%** of "
+        "40,867 unanimous cells -- alongside `tag_we` at 97.62% and "
+        "`saved_addr` at 98.27%, against 99.10% overall. The port is read "
+        "correctly; the 6% is the population being wrong.\n\n"
+        "**WHAT IT DOES NOT SAY.** It does not say the disagreement is useless "
+        "evidence: at most one side of a split can be right, and that is true "
+        "whatever the counts do. It says the COUNTS cannot pick the side, so an "
+        "editor handed them has to adjudicate from the specification -- and any "
+        "instrument that resolves a blind cell by majority is, on this "
+        "corpus's dominant blind port, wrong two times in three."
+    )
+
+
+def the_disagreement_report_did_not_move_the_cells_it_named() -> str:
+    """The sixth graded run, and the fifth lever aimed at the blindness residue
+    -- the only one that used the residue's own evidence instead of trying to
+    remove it.
+
+    Pre-registered in `PREREG_DIS.md` and `PREREG_DIS_ATTRIB.md` before the
+    editor ran: EQUIVALENT meets the goal; <= 120 of 348 is a real lever;
+    121-160 is variance; > 160 means the report drives the design away. The
+    attribution split -- 60 NAMED testpoints against the fully-blind ones the
+    report does not name -- was fixed at the same time, together with the
+    warning that its matched control is 10 testpoints and too small to quote.
+    """
+    return (
+        "**THE ARM.** Identical to the fifth graded run in every respect -- same "
+        "start design `gen/L.v`, same Sonnet editor, same policy, same 21-trial "
+        "budget, same 169-check set at audit ZERO, same baseline of **24 "
+        "objections of 169** -- plus one artifact: 60 cells on 60 distinct "
+        "fully-blind testpoints giving the port, the edge, the driven inputs, "
+        "the FSM states, and how nine independently written spec-derived "
+        "designs SPLIT on the value. Golden-free by construction; the artifact "
+        "was verified cell by cell against the traces, 0 mismatches, and names "
+        "no design -- only counts.\n\n"
+        "    trial   objections   consensus cells   ratchet\n"
+        "      init      24            9,857          --\n"
+        "      1       **27**          3,074       **rejected**\n"
+        "      2         14            1,982        latched\n"
+        "      3          6            1,999        latched\n"
+        "      4       **1**           2,840        latched\n"
+        "      5          3            3,307       **rejected**\n\n"
+        "                          control (run 5)     this arm\n"
+        "    objections at rest       0 of 169        **1 of 169**\n"
+        "    trials spent             21 of 21        **5 of 21**\n"
+        "    **testpoints differing** **151 of 348**  **146 of 348**\n"
+        "    grade                     DIFFERS        **DIFFERS**\n\n"
+        "**146 IS THE PRE-REGISTERED `121-160` BAND: NO EFFECT DISTINGUISHABLE "
+        "FROM RUN-TO-RUN VARIANCE.** Five testpoints of 348. All three pins green "
+        "in the same process.\n\n"
+        "**AND THE ATTRIBUTION TEST SAYS THE FIVE ARE NOT THE REPORT'S.** Both "
+        "groups sit in the same run under the same editor, so run variance "
+        "subtracts out:\n\n"
+        "    group                    control      this arm    change\n"
+        "      **NAMED by the report** 53/60 = 88%  **54/60 = 90%**  **+1 WORSE**\n"
+        "      UNNAMED, fully blind     7/10 = 70%    7/10 = 70%       0\n"
+        "      **not fully blind**     91/278 = 33% **85/278 = 31%**  **-6**\n\n"
+        "**THE AGGREGATE GAIN IS ENTIRELY OUTSIDE THE REPORT.** The run improved "
+        "by five testpoints; the group the report says NOTHING about improved by "
+        "six, and the sixty cells it names got one worse. That is the third row "
+        "of the pre-registered table verbatim. The n = 10 control is not needed "
+        "and its difference-in-differences is not quoted, as registered -- the "
+        "NAMED group carries it at n = 60.\n\n"
+        "**THE EDITOR'S OWN ACCOUNT IS THE MECHANISM, AND THE MEASUREMENT "
+        "REFUTES ITS CONCLUSION WHILE CONFIRMING ITS READING.** It reported "
+        "working all sixty cells and finding **59 of 60 already matched its "
+        "design's behaviour under the governing requirement text**. At 54 of "
+        "those 60 testpoints the design still differs from the reference. It "
+        "read the specification at each cell, concluded its design was right, "
+        "and was wrong 90% of the time -- with the disagreement in front of it, "
+        "the design in front of it, and **16 trials unspent**.\n\n"
+        "**THAT IS THE TARGETED-QUESTION FINDING ARRIVING ON AN EDITOR.** A "
+        "reader asked one question about an underdetermined cell reproduced the "
+        "population's wrong answer 7 times in 9 with no design in view; an "
+        "editor with the design, the split and the budget reproduces it too. The "
+        "shared misreading is not a shortage of context -- adding the "
+        "disagreement did not decorrelate it.\n\n"
+        "**FIVE LEVERS ARE NOW CLOSED BY MEASUREMENT**: selection over the "
+        "corpus, authoring at named holes, narrowing the over-strict closers, "
+        "the stimulus, and disagreement evidence. **What is NOT closed is that "
+        "the disagreement is evidence** -- at most one side of a split is right, "
+        "and at 54 of 60 named cells the design is on the wrong side. What is "
+        "refuted is that handing that split to a spec-reading editor resolves "
+        "it."
+    )
+
+
+def the_monotone_predictor_is_a_two_point_instrument() -> str:
+    """CORRECTION, MINE, REFUTED OUT OF SAMPLE BY THE SIXTH GRADED RUN.
+
+    `blindness_is_a_property_of_the_stimulus_too_and_it_predicts` reports a
+    monotone four-class predictor -- 1% / 25% / 60% / 86% of testpoints
+    differing, rising with how blind the class is. That was measured on ONE
+    design, and a monotone shape read off one sample is exactly what this plan
+    has retracted headlines for. The sixth graded run is a held-out test: an
+    independent editor session, same start design, same set, its accepted design
+    never seen when the classes were computed. The classes are golden-free;
+    divergence is the thing predicted, computed last.
+    """
+    return (
+        "    golden-free class of the testpoint   tps   run 5 FITTED   run 6 HELD OUT\n"
+        "      inert -- no pair disagrees          91      1 =  1%        1 =  1%\n"
+        "      every disagreement CAUGHT           61     15 = 25%     **29 = 48%**\n"
+        "      partly blind                       126     75 = 60%     **55 = 44%**\n"
+        "      every disagreement BLIND            70     60 = 86%       61 = 87%\n"
+        "      TOTAL                              348    151 = 43%      146 = 42%\n\n"
+        "**THE MONOTONE ORDERING DOES NOT HOLD OUT OF SAMPLE.** Run 6 reads "
+        "1% -> 48% -> 44% -> 87%: the middle two classes INVERT, and the "
+        "blind-against-caught ratio falls from 3.5x to 1.8x. **The four-point "
+        "predictor is withdrawn.**\n\n"
+        "**WHAT SURVIVES IS THE PAIR OF ENDPOINTS, AND THEY SURVIVE WELL.** A "
+        "testpoint on which no two spec-derived designs disagree carries a "
+        "design that is right there -- **1% in both runs**. A testpoint on which "
+        "every disagreement is unadjudicated carries a design that is wrong "
+        "there -- **86% and 87%**, 60 of 70 and 61 of 70, across two independent "
+        "editor sessions. That is the golden-free warning a practitioner can "
+        "actually be given, and it is a two-point instrument, not a ranking.\n\n"
+        "**AND `CAUGHT` DOES NOT MEAN THE SET CATCHES THIS DESIGN'S ERRORS, "
+        "WHICH IS A VOCABULARY DEFECT OF MINE.** On the 61 fully-caught "
+        "testpoints run 6's design differs from the reference on **29**, while "
+        "the set raises **ONE objection in the entire suite** -- and that one "
+        "sits on a caught testpoint. `CAUGHT` says the set can adjudicate the "
+        "POPULATION's disagreements there. It says nothing about whether it "
+        "catches the errors of the design under test, and every use of the word "
+        "on this plan should be read that way.\n\n"
+        "**THE HONEST READING OF WHY THE MIDDLE MOVED.** Run 6 improved on "
+        "partly-blind testpoints (75 -> 55) and got WORSE on fully-caught ones "
+        "(15 -> 29), at one more objection than run 5. Two runs is not enough to "
+        "call that a trade, and it is recorded as the reason the ordering is not "
+        "quotable rather than as a mechanism."
+    )
+
+
+def the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote() -> str:
+    """WHY EVERY CONSENSUS ROUTE ON THIS PLAN FAILED, AND A GOLDEN-FREE FIX.
+
+    `the_population_vote_is_inverted_on_one_port_and_perfect_on_another` closes
+    the population's vote as an adjudicator. That is right about the PLAIN
+    majority and it left the mechanism unexamined. The mechanism is that the
+    population is not nine independent readings where it matters, and once that
+    is corrected the vote recovers most of the available ceiling -- with no
+    fitted parameter and no reference.
+    """
+    return (
+        "**AT EVERY ONE OF THE 812 BLIND SPLIT CELLS, DESIGNS B, D, E, F AND H "
+        "PRODUCE IDENTICAL VALUES.** Grouped by behavioural signature -- a "
+        "golden-free operation over the traces -- the nine designs are **FIVE "
+        "distinct opinions**: a bloc of five, and C, G, FULL and SD alone.\n\n"
+        "**SO A MAJORITY OVER NINE IS STRUCTURALLY THE BLOC'S ANSWER, ALWAYS.** "
+        "The bloc holds 5 of 9 votes, so the vote is capped at the bloc's own "
+        "accuracy however many designs are added -- which is the saturation this "
+        "plan measured from the outside and never explained. Adding a tenth "
+        "design drawn from the same distribution makes it worse, not better.\n\n"
+        "    rule                          the 60 NAMED cells   all blind split cells\n"
+        "      MAJORITY -- all 9              20/60   33%          456/812   56%\n"
+        "      **DEDUP -- one vote per bloc** 23/60   38%      **595/812   73%**\n"
+        "      LEAST-5 -- calibrated k        23/60   38%          637/812   78%\n"
+        "      *ORACLE-BEST (C) -- ceiling*   23/60   38%          637/812   78%\n\n"
+        "**DEDUP IS GOLDEN-FREE AND HAS NO FITTED PARAMETER**: group designs by "
+        "behavioural signature, give each group one vote. It moves the vote "
+        "**56% -> 73%**, recovering most of the distance to the single-best "
+        "design. 4% of its decisions are ties broken by order and are reported "
+        "as such. **LEAST-5** -- vote among the five designs the check set "
+        "convicts least -- reaches the ceiling exactly, 637 of 812 on the same "
+        "cells as C, with **zero** ties; its k was chosen by reading the audit, "
+        "so it is a CALIBRATION exactly as rule C's threshold at two is, not a "
+        "score.\n\n"
+        "**AND ON THE CELLS THAT CARRY THE RESIDUE, NOTHING HELPS: EVERY RULE "
+        "TIES AT 38%, INCLUDING THE CEILING.** The 60 cells the disagreement "
+        "report named are the FIRST split of each blind testpoint, and there "
+        "even the best single design in the population is wrong 62% of the "
+        "time. So the earlier closure stands where it was measured, and this "
+        "adds the reason the arm could not have worked: **the report was drawn "
+        "from the one sample on which no rule over this population beats any "
+        "other.**\n\n"
+        "**WHAT THIS CHANGES.** The vote is reopened as an adjudicator for blind "
+        "cells IN GENERAL, at 73% golden-free against 56%, and the instrument "
+        "is de-duplication rather than a better threshold. What stays closed is "
+        "adjudicating the first-divergence cells, where the ceiling itself is "
+        "38%.\n\n"
+        "**AND IT PRICES THE PHRASE 'INDEPENDENTLY WRITTEN' ON THIS PLAN.** Nine "
+        "agents, each forbidden to read another's work, produced five opinions "
+        "where the checks are blind. Every majority figure on this document is "
+        "a bloc of five wearing the authority of nine, and every 'widening the "
+        "population' result should be read against that."
+        "\n\n**CORRECTED: WHETHER DE-DUPLICATION HELPS DEPENDS ENTIRELY ON "
+        "THE DENOMINATOR.** On RAW EDGES the same blocs on the same blind "
+        "cells read plain majority **82%** and de-duplicated **54%** -- the "
+        "reverse of the 56%/73% above, and by more. The structural claim "
+        "stands; **the claim that correcting for it improves the reading is "
+        "WITHDRAWN.** See "
+        "`whether_dedup_helps_the_vote_depends_entirely_on_the_denominator`."
+    )
+
+
+def unscored_evidence_does_not_move_an_editor() -> str:
+    """The seventh graded run, and a CORRECTION to my own reasoning that
+    preceded it.
+
+    The sixth run's disagreement report failed for two measured reasons: it named
+    the first split of each blind testpoint (where every rule over the population
+    ties at 38%, ceiling included) and it reported raw nine-design counts over a
+    population that holds only five distinct readings. This arm rebuilt the
+    artifact to remove both, and pre-registered the bands in `PREREG_DIS2.md`
+    before dispatch.
+    """
+    return (
+        "**THE CORRECTED ARTIFACT.** 97 cells on 54 fully-blind testpoints, "
+        "chosen because THE START DESIGN disagrees with the reading held by the "
+        "most DISTINCT implementations, with readings merged by value and the "
+        "bloc named as a bloc. Selection golden-free at every step; integrity "
+        "97 of 97 re-derived from traces, 0 mismatches.\n\n"
+        "                        run 5     run 6    **run 7**\n"
+        "    objections at rest   0/169     1/169    **5/169**\n"
+        "    trials spent         21        5        **12 of 21**\n"
+        "    **testpoints differing** 151   146      **214 of 348**\n"
+        "    grade                DIFFERS   DIFFERS  **DIFFERS**\n\n"
+        "**214 IS THE PRE-REGISTERED `> 160` BAND: THE RUN DROVE THE DESIGN "
+        "AWAY.** All three pins green in the same process.\n\n"
+        "    group                  n     run 6        run 7      change\n"
+        "      **NAMED**            54   48 = 89%   **53 = 98%**  **+5 WORSE**\n"
+        "      UNNAMED fully blind  16   13 = 81%     13 = 81%      0\n"
+        "      **not fully blind** 278   85 = 31%  **148 = 53%**  **+63 WORSE**\n\n"
+        "**AND THE EDITOR DID NOT USE THE REPORT.** Re-read on the accepted "
+        "design, the 97 named cells show it **ADOPTED the leading reading at 1**, "
+        "and **KEPT its own value at 96**. So the +63 is not the advice going "
+        "wrong -- it is the editor's check-driven structural edits, with the "
+        "report inert. The worst output is `first_hit_ack` at 963 differing "
+        "cells, a port the report never names.\n\n"
+        "**MY INFERENCE WAS WRONG AND THE CALIBRATION WAS NOT.** Before the run "
+        "I measured that changing exactly those cells to the leading reading "
+        "fixes 91 of 97, and called it *the strongest lever measured on this "
+        "plan*. **That was an over-claim.** 91-of-97 is a true statement about "
+        "CELLS, and **an editor cannot change a cell** -- it changes RTL, and "
+        "every structural edit moves thousands of cells at once. A per-cell "
+        "counterfactual does not transfer to an agent whose only instrument is a "
+        "structural edit.\n\n"
+        "**WHAT TWO RUNS SHOW TOGETHER, AND IT IS THE USABLE PART.** Run 6's "
+        "editor judged 59 of 60 cells already fine; run 7's adopted 1 of 97 -- "
+        "**the report built to fix run 6's defects was used LESS, not more.** The "
+        "common cause is in the brief both carried: *the checks remain the latch "
+        "and `checks_objecting` is the number you drive down; the disagreements "
+        "are not scored and nothing counts them.* **An editor optimises what is "
+        "scored.** Unscored evidence, however accurate and however well aimed, "
+        "does not move it -- which is repE's finding about UNTARGETED advice, "
+        "now measured on advice that was targeted, verified and 93% accurate.\n\n"
+        "**SO THE NEXT THING TO TRY IS NOT A BETTER REPORT.** It is putting the "
+        "de-duplicated disagreement IN THE LATCH, which is golden-free and has "
+        "never been run. This finding does not claim that would work; it "
+        "identifies it as the untested option and closes handing an editor "
+        "unscored evidence."
+    )
+
+
+def a_criterion_cannot_take_a_design_past_its_own_accuracy() -> str:
+    """The eighth graded run: the de-duplicated disagreement IN THE LATCH.
+
+    `unscored_evidence_does_not_move_an_editor` named putting the disagreement in
+    the latch as the untested option, and refused to claim it would work. It was
+    run. `drive10.py` added 160 units beside the 169 checks -- one per (blind
+    testpoint, declared output) pair carrying a split cell, passing when the
+    design matches the population's DE-DUPLICATED reading there. Golden-free at
+    every step; bands fixed in `PREREG_LATCH.md` before dispatch.
+    """
+    return (
+        "**THE CRITERION WAS DRIVEN TO A PERFECT SCORE AND THE DESIGN IS THE "
+        "WORST OF THE EIGHT RUNS.**\n\n"
+        "                       run 5  run 6  run 7  **run 8**\n"
+        "    checks objecting      0      1      5    **13 of 169**\n"
+        "    **dedup units failing** --   --     --   **0 of 160**\n"
+        "    **testpoints differing** 151  146   214  **221 of 348**\n"
+        "    grade              DIFFERS DIFFERS DIFFERS **DIFFERS**\n\n"
+        "**AND IT GOT WORSE ON EXACTLY THE REGION IT SCORES.** The 70 fully-blind "
+        "testpoints the units cover went **61 -> 66 differing**; `not fully "
+        "blind` went 85 -> 155 of 278. The pre-registered regression-net bar was "
+        "<= 85 and it read 155 -- **worse than the run with no such latch at "
+        "all.**\n\n"
+        "**THE MECHANISM, EXACT.** On the 3,827 blind split cells the units "
+        "score:\n\n"
+        "    the DE-DUPLICATED READING is right   **2,070 = 54%**\n"
+        "    the START design L was right         **2,209 = 58%**\n"
+        "    **the ACCEPTED design is right**     **2,070 = 54%**\n\n"
+        "**The accepted design's accuracy equals the reading's TO THE CELL**, "
+        "because it matches the reading everywhere it is scored and therefore "
+        "inherits its error rate by construction. On the 1,757 cells where the "
+        "reading is WRONG, the start design was right at 174 and the accepted "
+        "design is right at **0**.\n\n"
+        "**A CRITERION CANNOT TAKE A DESIGN PAST ITS OWN ACCURACY, AND THIS "
+        "DESIGN STARTED ABOVE IT** -- 58% to 54%, by satisfying it perfectly. "
+        "That is `zero_objections_can_be_incompatible_with_correctness` on a "
+        "GOLDEN-FREE criterion, and sharper: there a wrong design satisfied an "
+        "over-strict set, here a perfect score is arithmetically a cap.\n\n"
+        "**A DEFECT IN MY OWN REASONING, AND IT IS THE CAUSE.** The arm was "
+        "motivated by the reading measured at **73%** over blind cells and 93% "
+        "over a targeted subset. **Those were measured on TRANSACTIONAL ROWS; the "
+        "latch was built on RAW EDGES, where the same reading is 54%.** Rows "
+        "collapse runs of identical values, so the two denominators weight cells "
+        "differently and are not the same instrument. The coordinate change was "
+        "right -- raw edges survive an edit where row indices do not -- but I did "
+        "not re-measure the accuracy in the new coordinates before building a "
+        "latch on it, and a 54% reading cannot drive a 58% design anywhere good. "
+        "**That was knowable before the run from data already on disk.**\n\n"
+        "**WHAT THIS CLOSES.** Scoring the population's reading is the seventh "
+        "lever aimed at the blindness residue and the last one available from "
+        "this population: selection, authoring at named holes, narrowing, the "
+        "stimulus, unscored disagreement evidence, and now scored disagreement "
+        "evidence. **The population's reading is 54% accurate where the checks "
+        "are blind, so no criterion built from it can certify a design better "
+        "than that** -- which is the ceiling the whole route runs into, stated "
+        "as a number rather than as a failed round."
+    )
+
+
+def whether_dedup_helps_the_vote_depends_entirely_on_the_denominator() -> str:
+    """CORRECTION, MINE, TO A FINDING LANDED THE SAME DAY.
+
+    `the_population_is_five_opinions_not_nine_and_dedup_recovers_the_vote`
+    reports that grouping behaviourally identical designs takes the vote from
+    56% to 73% at blind cells, and calls de-duplication a golden-free fix with
+    no fitted parameter. Re-measured on the OTHER available weighting of the
+    same cells, it goes the other way, and by more.
+    """
+    return (
+        "**THE SAME CELLS, THE SAME BLOCS, OPPOSITE ANSWERS:**\n\n"
+        "    at blind cells        plain majority   de-duplicated\n"
+        "      **raw edges** (3,827)   **82%**          **54%**\n"
+        "      transactional rows (812)    56%              73%\n\n"
+        "**De-duplication HELPS by 17 points in one weighting and HURTS by 28 in "
+        "the other.** Neither denominator is privileged: transactional rows "
+        "collapse runs of identical values, so they weight transitions; raw "
+        "edges weight sustained stretches. The population is right on stretches "
+        "and wrong at transitions, and that is the whole reversal.\n\n"
+        "**SO NEITHER FIGURE IS QUOTABLE WITHOUT ITS DENOMINATOR, AND THE "
+        "ORIGINAL FINDING QUOTED ONE AS THE ANSWER.**\n\n"
+        "**AND THE PER-DESIGN TABLE SAYS WHY DE-DUPLICATION HURTS WHERE IT "
+        "HURTS.** On raw-edge blind cells: C **89%**, the bloc B/D/E/F/H "
+        "**82%**, SD 54%, FULL 53%, **G 20%**. One vote per bloc gives G's 20% "
+        "reading the same weight as the bloc's 82%. **The bloc of five is the "
+        "most accurate group in the population, and its multiplicity is exactly "
+        "what made the plain majority good.**\n\n"
+        "**THE A PRIORI ARGUMENT I USED WAS NOT OBVIOUSLY RIGHT AND I DID NOT "
+        "MEASURE IT.** *Five copies are one opinion* is one reading; *five "
+        "agents independently arriving at the same behaviour is evidence* is the "
+        "other, and this corpus says the second is the better one where the "
+        "checks are blind. The structural observation stands -- five of nine "
+        "designs ARE behaviourally identical at every blind split cell, and a "
+        "majority over nine IS structurally their answer. **What is withdrawn is "
+        "that correcting for it improves the reading.**\n\n"
+        "**AND IT EXPLAINS THE EIGHTH GRADED RUN COMPLETELY.** That run put the "
+        "de-duplicated reading in the latch, drove it to a perfect score, and "
+        "produced the worst design of the eight -- the design's accuracy ending "
+        "at the reading's 54%, having started at 58%. **The plain majority was "
+        "available in the same coordinates at 82%, and I chose the one reading "
+        "below the design's own accuracy.** The run's law -- a criterion cannot "
+        "take a design past its own accuracy -- is confirmed and was applied to "
+        "the wrong reading."
+    )
+
+
+def a_proxys_aggregate_accuracy_is_not_its_effective_accuracy() -> str:
+    """THE NINTH GRADED RUN, and the finding the whole latch line was for.
+
+    Run 8 put the DE-DUPLICATED reading in the latch (54% accurate) and failed.
+    Run 9 is identical but scores the PLAIN MAJORITY, which is 82% accurate on
+    the same cells in the same coordinates -- 24 points of headroom over the
+    start design's 58%, where run 8's was minus four. `PREREG_MAJ.md` fixed the
+    bands and a mechanism check before dispatch.
+    """
+    return (
+        "**IT IS THE WORST OF THE NINE.** 18 objections of 169, majority units "
+        "91 -> 42 of 160, 15 of 21 trials, **271 of 348 testpoints differing** "
+        "against 146 and 151. Pins green, `DIFFERS`. The pre-registered `> 160` "
+        "band reads: **scoring the population's reading drives the design away "
+        "whichever reading is used, and the route is closed on both.**\n\n"
+        "**AND THE PRE-REGISTERED MECHANISM CHECK FAILED IN THE INFORMATIVE "
+        "DIRECTION.** It predicted blind-cell accuracy would rise toward the "
+        "criterion's own 82%. It **FELL, 58% -> 53%**, while the criterion "
+        "improved by 49 units. A criterion improving substantially while its own "
+        "region gets less accurate is not measuring what it claims to.\n\n"
+        "**WHY, AND IT IS EXACT.** Split the 160 units by what the editor did "
+        "with them:\n\n"
+        "    unit transition   units  cells   THE READING is right   design before -> after\n"
+        "      pass -> pass       72   2171          87%                 87% -> 87%\n"
+        "      **FAIL -> pass**   43    387        **17%**             66% -> **17%**\n"
+        "      **FAIL -> FAIL**   42   1269        **94%**              6% ->   6%\n\n"
+        "**THE EDITOR REPAIRED EXACTLY THE UNITS WHERE THE READING IS WORST AND "
+        "LEFT THE ONES WHERE IT IS BEST** -- 17% against 94%. Every unit it "
+        "satisfied dragged the design to a value the reading gets wrong five "
+        "times in six.\n\n"
+        "**SO A PROXY'S AGGREGATE ACCURACY IS NOT ITS EFFECTIVE ACCURACY.** What "
+        "governs is its accuracy on the subset an optimiser can actually MOVE, "
+        "and for a population-derived proxy those anti-correlate: a unit the "
+        "population gets systematically wrong is wrong for a STRUCTURAL reason -- "
+        "a whole port's convention most designs share -- so one edit flips it, "
+        "while a unit the population gets right demands the design be genuinely "
+        "correct there, which no single edit buys. **The criterion is easiest to "
+        "satisfy exactly where it is most wrong.**\n\n"
+        "**THIS EXPLAINS ALL THREE OF THE PRECEDING RUNS AT ONCE** -- the "
+        "unscored report (adopted at 1 of 97), the de-duplicated latch (perfect "
+        "score, worst design), and this one. None of them failed for want of a "
+        "more accurate reading.\n\n"
+        "**AND IT NAMES MY OWN ERROR IN THE CHAIN, WHICH WAS THE SAME ONE THREE "
+        "TIMES.** I priced this arm on the reading's AGGREGATE accuracy (82%), "
+        "having priced run 8's on a figure from a different denominator, having "
+        "priced run 7's on a per-cell counterfactual an editor cannot perform. "
+        "**Every one of the three was a statement about cells that ignored what "
+        "an optimiser does with them.** The measurement that would have "
+        "predicted all three is the per-unit table above, and it needs no "
+        "reference to compute the split -- only the reference to score it."
+    )
+
+
+def the_stimulus_loop_has_zero_opportunity_and_the_editor_consumes_the_strength() -> str:
+    """FINISHING THE STIMULUS LOOP: measured to be worth NOTHING on this set,
+    and the measurement replaces the argument.
+
+    The goal names the stimulus loop as likely necessary. An earlier round sized
+    it as a BLINDNESS lever at 1 of 20 and closed it there. This asks the
+    different question run 9's law makes the right one: the 169 checks are audit
+    ZERO, so where they speak they are right, and the only thing wrong with them
+    could be REACH -- which is exactly what stimulus buys.
+
+    Two ways a check set can fail to speak where a design is wrong, and they
+    demand opposite work: SILENCE (no check DECIDES there -- a stimulus gap) and
+    BLINDNESS (a check decides on a port that IS wrong there and passes -- no
+    stimulus fixes that). The fair test restricts to testpoints where a port THE
+    CHECK ITSELF READS differs. The classification is golden-free; which
+    testpoints differ is the thing being explained, computed last.
+    """
+    return (
+        "    design                differing  objects  **SILENT**  blind  strength\n"
+        "      the START design L      279      169      **0**      110    6.4%\n"
+        "      run 5 accepted          151        0      **0**      151    **0.0%**\n"
+        "      run 6 accepted          146       20      **0**      126    **0.4%**\n\n"
+        "**THE STIMULUS OPPORTUNITY IS ZERO ON ALL THREE.** Not small -- zero. "
+        "There is no testpoint, on any of these designs, where the design is "
+        "wrong and no check decides. And the fourth class -- no check watches a "
+        "wrong port at all -- is **also zero**. The suite already drives every "
+        "one of these designs into its wrong behaviour, on the exact ports the "
+        "checks read, and the checks decide there and pass.\n\n"
+        "**SO FINISHING THE STIMULUS LOOP CANNOT MOVE THIS SET**, and that is now "
+        "a measurement on three graded designs rather than the earlier estimate "
+        "on a different set. It is a stronger form of the plan's `3 of 50`: for "
+        "the 169-check set it is 0 of 146, 0 of 151 and 0 of 279.\n\n"
+        "**AND THE STRENGTH COLUMN IS A MECHANISM NOBODY HAS NAMED: THE EDITOR "
+        "CONSUMES THE SET'S DISCRIMINATING POWER.** Objections per exposed "
+        "decision fall **6.4% -> 0.4% -> 0.0%** as the loop works. The editor "
+        "does not fail to satisfy the checks -- it satisfies exactly the few "
+        "percent they can see, and what is left is what they were always going "
+        "to decide on and pass.\n\n"
+        "**THAT IS WHY EVERY RUN ENDS QUIET AND WRONG.** A set at audit zero "
+        "cannot be over-strict, its stimulus reaches everything it needs, and it "
+        "still ends with 126 of 146 differing testpoints where a check looked at "
+        "a wrong port and said nothing. **The residue is check STRENGTH and only "
+        "check strength** -- 0.4% of 4,529 exposed decisions.\n\n"
+        "**AND STRENGTH IS THE ONE THING MEASURED TO COST SOUNDNESS ONE FOR "
+        "ONE.** The strength round re-authored 34 sound-and-blind checks to "
+        "assert every obligation in their own sentences: strength rose 24x, "
+        "**23 of 34 began convicting the reference**, and the both-cell was "
+        "**0 of 34** -- the minimum the marginals allow. So the lever that would "
+        "raise 0.4% is the lever that destroys the audit-zero property, and run "
+        "9's law says accuracy where a criterion acts is what governs.\n\n"
+        "**WHAT THIS CLOSES.** The stimulus loop, as a lever on this set, with a "
+        "number. What it does NOT claim is that stimulus is worthless in "
+        "general: a set whose checks did not already decide everywhere would "
+        "have a real gap, and this measures that this set is not one."
+    )
+
+
+def the_set_is_complete_over_the_corpus_and_the_corpus_is_the_limit() -> str:
+    """THE EXHAUSTIVE CLOSURE, replacing an inferential one.
+
+    The closure reported after run 9 was an argument about AUTHORING: the residue
+    is check strength, and raising strength costs soundness. That leaves a
+    cheaper question unasked -- of every check body this session produced, does a
+    SOUND one object to a graded design, which the 169-set simply does not
+    contain? Selection is far cheaper than authoring, and if the answer were yes
+    the closure would be wrong.
+
+    SOUND: decides somewhere on the reference and convicts it nowhere. That is
+    the audit, computed last, selecting nothing here.
+    """
+    return (
+        "    design            corpus bodies OBJECTING   of those SOUND   MISSING from the set\n"
+        "      start design L          331                   24                **0**\n"
+        "      run 5 accepted          305                  **0**              **0**\n"
+        "      run 6 accepted (best)   302                    1                **0**\n\n"
+        "**NOT ONE SOUND CHECK IN 640 CORPUS BODIES IS MISSING FROM THE SET, ON "
+        "ANY OF THE THREE DESIGNS.** Every sound check the corpus can produce for "
+        "them is already in the 169. **Selection is exhausted -- provably, not by "
+        "inference.**\n\n"
+        "**AND THE CORPUS KNOWS THE DESIGNS ARE WRONG.** 302 of 640 bodies object "
+        "to the best graded design, which differs from the reference on 146 of "
+        "348 testpoints. **301 of those 302 buy the catch by also convicting the "
+        "reference.** The corpus can see the design is wrong three hundred ways "
+        "and can say so soundly in exactly one.\n\n"
+        "**THE SOUND COLUMN FALLS AS THE EDITOR WORKS: 24 -> 1 -> 0.** The start "
+        "design is caught soundly by 24 checks, run 6's accepted design by one, "
+        "run 5's by none. **The editor consumes the corpus's soundly-expressible "
+        "discriminating power**, which is the same phenomenon as strength "
+        "collapsing 6.4% -> 0.4% -> 0.0%, seen from the corpus's side instead of "
+        "the set's.\n\n"
+        "**SO THE CLOSURE IS NOW EXHAUSTIVE ON BOTH LEGS.** Selection: 0 of 640 "
+        "sound bodies missing, on three designs. Authoring: the strength round "
+        "moved 23 of 34 checks into convicting the reference with a both-cell of "
+        "0 of 34. **The set is COMPLETE with respect to everything this session "
+        "can author, and its residue is neither selectable nor soundly "
+        "authorable.**\n\n"
+        "**WHAT IT DOES NOT SAY.** Not that no sound check exists -- the "
+        "reference satisfies the specification, so a check capturing what it does "
+        "at those cells is possible in principle. It says **no author working "
+        "from this specification produced one in 640 attempts**, which is the "
+        "specification-plus-reader limit measured over the corpus rather than "
+        "over a round."
+    )
+
+
+def requirement_extraction_is_not_the_limit_and_activity_is_the_predictor() -> str:
+    """THE LAST UNTOUCHED STAGE, measured -- and the lever it would open is shut.
+
+    Every measurement in this module is downstream of S1: the 89 requirements an
+    extraction stage read out of the specification. If divergence lived on the
+    ports the requirements barely constrain, re-extracting S1 would be a live
+    lever nothing has tried, and the goal puts regenerating oracles to new
+    standards explicitly in scope.
+
+    Two golden-free readings of "does the specification constrain this port",
+    per declared output: how many requirements DECLARE it in their own `ports`
+    list, and how many of the 169 checks READ it. Divergence from the reference
+    is the calibration, computed last, on five graded designs.
+
+    A HARNESS DEFECT OF MINE PRECEDED THIS AND IS RECORDED RATHER THAN QUIETLY
+    FIXED. The first version of the script looked for the requirements in the
+    scratch directory, found nothing, loaded ZERO of them, and printed a clean
+    ten-row table in which every port had no requirement mentioning it -- which
+    reads exactly like the finding the run was looking for. The loader now reads
+    the same path the driver reads and REFUSES on a short set. That is the ninth
+    counting-shaped defect on this plan and it has the signature of the other
+    eight: a plausible table that is an artifact of a file never opened.
+    """
+    return (
+        "**NO PORT IS DARK, AND THAT ALONE CLOSES THE LEVER.** Every one of the "
+        "ten declared outputs is declared by between 3 and 16 of the 89 "
+        "requirements, and read by between 17 and 51 of the 169 checks. There is "
+        "no port the specification failed to reach, so re-extracting S1 to cover "
+        "where the divergence lives has NO TARGET.\n\n"
+        "    port             REQ decl   CHECKS   divergence, five designs\n"
+        "      first_hit_ack       7        37    1063    6  963  963   81\n"
+        "      biu_read           10        51     584  373  542  573  550\n"
+        "      burst              10        24     412  168  331  308  294\n"
+        "      tag_we             10        32     299  153  358  313  320\n"
+        "      biu_write           9        39     262   73  262  270  180\n"
+        "      first_miss_ack      5        36     222   13  217  297  290\n"
+        "      first_miss_err      3        21      13    1    3    1    0\n\n"
+        "*(One-bit ports only. `saved_addr` and `dc_addr` are 32 bits and "
+        "`dcram_we` is 4, and a wide port has far more ways to be wrong, so a "
+        "correlation across all ten is confounded by width. Controlling it "
+        "MATTERS: the check correlation reads +0.01 uncontrolled and +0.45 "
+        "across the seven narrow ports.)*\n\n"
+        "**AND THE CORRELATION RUNS THE WRONG WAY FOR THE LEVER.** Against "
+        "divergence, over the seven one-bit ports, on each of five designs: "
+        "requirement count **+0.52 to +0.93**, check count **+0.36 to +0.54**. "
+        "Five of five positive on both. A port that more requirements constrain "
+        "and more checks watch is MORE wrong, not less.\n\n"
+        "**THE ACTIVITY CONTROL IS WHAT SETTLES IT, AND IT CORRECTS THE READING "
+        "ABOVE IN BOTH DIRECTIONS.** A port that is almost always idle has almost "
+        "no opportunity to diverge, so activity on the reference -- rows the port "
+        "is high, transitions it makes -- is the rival explanation for the whole "
+        "table. Measured, and it is not a rival, it is the answer:\n\n"
+        "    predictor of divergence, seven one-bit ports          five designs\n"
+        "      golden HIGH rows, alone                          +0.46 .. +0.93\n"
+        "      CHECKS reading the port, alone                   +0.36 .. +0.54\n"
+        "      CHECKS,   holding HIGH rows fixed    -0.48 -0.03 -0.12 -0.15 +0.07\n"
+        "      REQ decl, holding HIGH rows fixed    +0.03 +0.13 +0.05 +0.88 +0.81\n\n"
+        "**CHECK COUNT CARRIES NO INFORMATION ONCE ACTIVITY IS HELD FIXED -- FOUR "
+        "OF FIVE DESIGNS GO NEGATIVE.** And the reason is visible in one number: "
+        "**Spearman(checks reading a port, golden transitions) = +0.857.** How "
+        "many checks watch a port is very nearly a restatement of how busy that "
+        "port is. So the raw +0.45 was activity wearing coverage's name, and this "
+        "is the check-strength finding at port granularity: the checks are where "
+        "the action is and they say nothing there.\n\n"
+        "**THE REQUIREMENT CORRELATION IS NOT ROBUST EITHER.** It survives holding "
+        "transitions fixed and collapses on three of five designs holding high "
+        "rows fixed. So the honest statement is the weak one: requirement "
+        "coverage does not predict divergence in the direction the lever needs, "
+        "and may not predict it at all.\n\n"
+        "**WHAT THIS CLOSES.** The requirement extraction, as a lever. Divergence "
+        "is predicted by how much a port DOES, which is a property of the "
+        "design's behaviour and not of the specification's coverage -- and the "
+        "coverage is already maximal everywhere. `first_miss_err` is the clean "
+        "instance from the other end: 3 requirements, 21 checks, 62 high rows of "
+        "5,714, and 0 to 13 differing cells across five designs. The thinnest "
+        "coverage in the set sits on the port nothing gets wrong.\n\n"
+        "**WHAT IT DOES NOT CLAIM.** Seven ports and five designs that share a "
+        "common ancestor, so no single coefficient here is significant and none "
+        "is offered as one. What is solid is the raw table: no dark port, and "
+        "activity dominating both coverage instruments."
+    )
+
+
+def the_editor_declines_its_budget_and_stops_past_its_own_best() -> str:
+    """THE OSCILLATION THE GOAL ASKS FOR, AND THE TRIAL BUDGET -- both read off
+    artifacts four graded runs already wrote. No new run, no model call.
+
+    Every graded run used the shipped editor policy with the same trial budget
+    (21) and the same 169-check reporting instrument; they differ only in what
+    extra evidence the criterion carried. The loop's own `state.json` records
+    trials spent, and its tracker records the objection count after each one.
+
+    Trials used is taken from `action_calls`, not from the tracker's line count:
+    three of the four trackers log an init reading at trial 0 and one does not,
+    so counting lines would over-report three runs by one. The reader asserts the
+    two agree before printing anything.
+
+    AND THE LATCH RECONSTRUCTION BELOW IS PINNED RATHER THAN ASSERTED. It
+    recomputes, trial by trial, the passing count the editor latches on, and
+    checks the trial it picks against the objection count the GRADER measured on
+    that run's accepted design. It reproduces the grader 4 of 4; had it not, none
+    of it would be quotable.
+    """
+    return (
+        "    run              used  declined   best  at trial  stopped at  up-moves   testpoints\n"
+        "      run 6 loopDIS     5        16      1       4          3       1/4          146\n"
+        "      run 7 loopDIS2   12         9      5      10          7       3/11         214\n"
+        "      run 8 loopLATCH  14         7     13      12         19       7/13         221\n"
+        "      run 9 loopMAJ2   15         6     13       7         18       4/14         271\n\n"
+        "**NOT ONE OF THE FOUR REACHED ITS BUDGET.** Each stopped voluntarily "
+        "with 6 to 16 of 21 trials unspent, so *give the editor more trials* is "
+        "not a lever -- the editor already declines the budget it has. That is a "
+        "closure bought for nothing, off data on disk.\n\n"
+        "**AND 4 OF 4 STOPPED ON A TRIAL WORSE THAN THEIR OWN BEST; 0 OF 4 "
+        "STOPPED AT THEIR BEST.** Run 6 reached 1 objection at trial 4 and "
+        "stopped at trial 5 with 3. Run 8 reached 13 at trial 12 and stopped at "
+        "19. The loop gives no sign of knowing which trial was its best, so what "
+        "each run SHIPS is decided by the latch rather than by where it "
+        "stopped.\n\n"
+        "**AND THE LATCH IS WHERE THE PROXY DID ITS DAMAGE, WHICH CORRECTS A "
+        "SENTENCE THAT STOOD HERE.** I wrote that the ratchet preserved every "
+        "grade reported here. It preserved three. The editor latches on the "
+        "HIGHEST count of PASSING entries in `req_results`, and runs 8 and 9 "
+        "publish 160 proxy units there beside the 169 checks -- so the proxy "
+        "holds 160 votes against the checks' 169. Reconstructed trial by trial "
+        "from the trackers and PINNED against the grader's own objection count "
+        "on each accepted design, which it reproduces 4 of 4:\n\n"
+        "    run    units in latch   latch picks   fewest objections seen\n"
+        "      6         no          trial 4, 1 objection      1 at trial 4\n"
+        "      7         no          trial 10, 5 objections    5 at trial 10\n"
+        "      8        yes          trial 12, 13 obj, 0 units  13 at trial 12\n"
+        "      9        yes          trial 11, **18** obj, 42 units  **13 at trial 7**\n\n"
+        "**RUN 9's LATCH REJECTED THE STATE WITH THE FEWEST CHECK OBJECTIONS.** "
+        "Going from 13 objections to 18 cost 5 check votes and bought 48 proxy "
+        "votes -- 90 failing units down to 42 -- so **the proxy outvoted the "
+        "checks 48 to 5**, and the design it chose is the worst of the four at "
+        "271 of 348. Run 8 escapes only because its proxy units reached zero at "
+        "trial 10 and stopped voting.\n\n"
+        "**SO THE HARM HAS A MECHANISM AND IT IS ARITHMETIC, NOT JUDGEMENT.** "
+        "Adding units to a latch is not neutral: it re-weights what the loop "
+        "ships. 160 units of a reading measured 54% accurate per unit will "
+        "outvote 169 checks whenever they disagree by less than the units do, "
+        "and here they did. **A proxy may inform an editor and must not enter "
+        "the criterion that decides which design is kept.**\n\n"
+        "**OSCILLATION IS BETWEEN A QUARTER AND A HALF OF ALL TRIALS.** Up-moves "
+        "on the criterion's own count run 1 of 4, 3 of 11, 7 of 13 and 4 of 14. "
+        "Run 8's sequence is the plainest: 21, 39, 21, 34, 33, 16, 22, 28, 14, "
+        "15, 23, 13, 13, 19 -- six reversals of two or more, and the run ends "
+        "above where it stood two trials earlier.\n\n"
+        "**WITHDRAWN BY THE REPLICATE, AND THE WITHDRAWAL IS THE FINDING.** The "
+        "paragraph below stood until a pre-registered second run of run 6's "
+        "configuration landed 61 testpoints away from it. 5 trials gave 146 and 9 "
+        "trials gave 207 with nothing different but the session, so the "
+        "correlation cannot be told from the loop's own variance. "
+        "`one_graded_run_is_not_a_measurement` carries it. Also corrected there: "
+        "4 of 4 runs stopping past their own best becomes **4 of 5**, because the "
+        "replicate's last trial equals its best.\n\n"
+        "*Superseded, kept because the withdrawal is unreadable without it:* "
+        "**TRIALS SPENT AND THE FINAL GRADE ARE PERFECTLY RANK-ORDERED: "
+        "SPEARMAN +1.000 ON n = 4** -- 5 trials to 146 testpoints, 12 to 214, 14 "
+        "to 221, 15 to 271, against a start design at 279. **The confound is "
+        "stated and is not separable:** the criterion determines how much the "
+        "editor edits, so trials are an OUTPUT of the criterion rather than an "
+        "independent variable, and the runs that carried more scored proxy "
+        "evidence are the runs that edited more. Read as one mechanism rather "
+        "than two: **more units on a criterion barely better than chance means "
+        "more edits, and the harm scales with the volume.**\n\n"
+        "**ONE POSITIVE READING, AND IT DOES NOT GENERALISE.** Each run's "
+        "MINIMUM objection count ranks the four designs at +0.949 against the "
+        "grade. That is the check set ordering designs it itself drove, which is "
+        "the condition the -0.223 measured over sixteen designs was NOT taken "
+        "under. A golden-free pipeline needs to rank designs it did not drive, "
+        "and nothing here shows it can.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Four runs from one start design against "
+        "one check set. The budget closure is exact -- the counters are on disk. "
+        "The ordering correlations are n = 4 and are offered as shape, not "
+        "significance."
+    )
+
+
+def the_strength_collapse_is_port_by_port_not_a_uniform_dimming() -> str:
+    """WHERE THE CHECK STRENGTH WENT, decomposed by port for the first time.
+
+    Strength -- objections per exposed decision -- is measured collapsing 5.7%
+    to 0.3% as an editor works, and blindness was measured UNIFORM across CHECKS
+    on an earlier set (36 of 50). It has never been split by PORT, and that split
+    decides whether a targeted authoring round has anywhere to aim.
+
+    Per (check, testpoint, port): a check is EXPOSED on port p at testpoint t if
+    it reads p and p differs from the reference there; it DECIDES if `decide`
+    returns a verdict and OBJECTS if that verdict is False. A check reading two
+    wrong ports counts for both, because nothing says which one it should have
+    caught. The exposure population is reference-derived and is the thing being
+    explained; the check-side quantities are not.
+    """
+    return (
+        "    design            exposed   decided   objected   strength   ports at ZERO\n"
+        "      start design L    30,906    17,656     1,013      5.7%        1 of 10\n"
+        "      run 9 (worst)     29,361    17,624       550      3.1%        0 of 10\n"
+        "      run 6 (best)      11,300     5,927        20      **0.3%**    **9 of 10**\n\n"
+        "**THE COLLAPSE IS NOT A UNIFORM DIMMING. IT IS THE SET GOING COMPLETELY "
+        "SILENT ON NINE PORTS OF TEN.** On the best design exactly one port still "
+        "draws an objection -- `burst`, at 4.2% -- and the other nine draw zero "
+        "in 5,283 decisions between them. Strength is a RATE, so the fall is not "
+        "an artifact of the design having fewer wrong ports to be exposed on.\n\n"
+        "**THE SHARPEST SINGLE CELL IS `biu_read` ON THE BEST DESIGN: 51 CHECKS "
+        "READ IT, THEY DECIDE 2,383 TIMES AT TESTPOINTS WHERE IT IS WRONG, AND "
+        "THEY OBJECT ZERO TIMES** -- on the port carrying 373 differing cells, "
+        "more than any other. The most-watched port in the set is the one it "
+        "cannot see at all.\n\n"
+        "**AND THE EDITOR CONSUMES THE STRENGTH PORT BY PORT.** On the start "
+        "design `burst` is at 31.9% -- an order of magnitude above every other "
+        "port, and where this set's discriminating power actually lives. The best "
+        "run drove it to 4.2% and silenced the rest outright. So `the editor "
+        "consumes the strength` is not a metaphor about a set-wide quantity: it "
+        "is the set losing ports one at a time until one is left.\n\n"
+        "**AND RUN 9's DESIGN IS NOT ONE THE SET HAD RUN OUT ON.** It stands at "
+        "3.1% strength with objections on ALL TEN ports and 18 of 169 checks "
+        "objecting -- a design the checks were still talking about. Its run "
+        "stopped there because its latch preferred a state 48 proxy votes better "
+        "and 5 check votes worse. **The proxy did not merely pick a worse design; "
+        "it picked one the checks were still objecting to.**\n\n"
+        "**WHAT THIS DOES AND DOES NOT OPEN.** It is a sharper target than any "
+        "authoring round on this plan has had -- not *a blind cell* but *the port "
+        "where 51 checks decide 2,383 times and say nothing*. It is not a new "
+        "lever, because the corpus closure already answers it: of 640 authored "
+        "bodies, 302 object to that design and exactly one is sound, and that one "
+        "is already in the set. A check for `biu_read` there would have to be one "
+        "640 attempts did not produce."
+    )
+
+
+def set_blindness_is_dominated_by_port_width_and_inverts_there() -> str:
+    """THE GOLDEN-FREE INSTRUMENT, CHECKED AGAINST THE GOLDEN ONE PER PORT --
+    and a defect in this module's own headline measure.
+
+    Both instruments now exist at port granularity and they answer the goal's
+    question directly: does the reference-free one point at the ports the
+    reference-based one would have named?
+
+      GOLDEN-FREE  set blindness per port -- of (pair, testpoint) cells where two
+                   spec-derived designs differ on that port, the share where no
+                   check watching it objects to either. No reference anywhere.
+      GOLDEN       check strength per port -- objections per exposed decision,
+                   where exposed means the port differs FROM THE REFERENCE.
+
+    Nine designs, 348 testpoints, 36 pairs, 169 checks, 17,681 split cells.
+    """
+    return (
+        "    port             width   GF sighted   GOLD strength\n"
+        "      first_hit_ack      1      66.0%          2.8%\n"
+        "      burst              1      49.3%         31.9%\n"
+        "      biu_read           1      26.1%          5.8%\n"
+        "      dcram_we           4      21.8%          2.5%\n"
+        "      first_miss_ack     1       8.6%          0.1%\n"
+        "      tag_we             1       7.7%          2.7%\n"
+        "      first_miss_err     1       6.9%          0.0%\n"
+        "      **dc_addr**       32       1.8%          4.3%\n"
+        "      biu_write          1       0.8%          1.5%\n"
+        "      **saved_addr**    32       0.4%          7.0%\n\n"
+        "**OVER ALL TEN PORTS THE TWO INSTRUMENTS BARELY AGREE: SPEARMAN +0.200, "
+        "AND 26 OF 45 PORT PAIRS = 58% ORDERED THE SAME WAY AGAINST A 50% "
+        "CHANCE.** Restricted to the seven ONE-BIT ports it is **+0.714**. The "
+        "whole difference is the wide ports, and the inversion is total: "
+        "`saved_addr` is the WORST port of ten on the golden-free reading and the "
+        "SECOND BEST on the golden one.\n\n"
+        "**AND THE MECHANISM IS THE DENOMINATOR, NOT THE CHECKS.** On a 32-bit "
+        "port two independently written designs differ almost everywhere -- "
+        "`saved_addr` and `dc_addr` carry 1,939 and 2,694 split cells -- and a "
+        "check must be right about a specific 32-bit value to catch any of them. "
+        "So *two designs disagree here* is nearly always true and is a far weaker "
+        "signal than *the design disagrees with the reference*. **The golden-free "
+        "denominator explodes with width and the golden one does not.**\n\n"
+        "**SO THE HEADLINE BLINDNESS FIGURE IS DOMINATED BY THE PORTS ITS OWN "
+        "INSTRUMENT IS WORST ON.**\n\n"
+        "    population          split cells   caught    blind   blindness\n"
+        "      all ten ports        17,681      3,074   14,607     82.6%\n"
+        "      seven one-bit        11,276      2,632    8,644     76.7%\n"
+        "      three multi-bit       6,405        442    5,963     93.1%\n\n"
+        "**41% of every blind cell in the set sits on three ports of ten**, and "
+        "on those three the instrument is measured not to track the reference-"
+        "based one at all.\n\n"
+        "**THE PRESCRIPTION IS NARROW AND CHECKABLE: STRATIFY SET BLINDNESS BY "
+        "PORT WIDTH, OR DO NOT QUOTE IT.** A single number over mixed widths is a "
+        "weighted average of a signal that works and one that inverts, with the "
+        "inverting half carrying 41% of the weight. Every blindness figure on "
+        "this plan is over mixed widths and should be read that way.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Ten ports and seven, so +0.714 is not "
+        "significant at that n and is not offered as significant; the 58% of "
+        "ordered pairs is the assumption-free reading and it is barely above "
+        "chance. What is solid is the inversion itself -- the two widest ports "
+        "sit at opposite ends of the two rankings -- and the arithmetic share of "
+        "blind cells they carry."
+    )
+
+
+def the_width_correction_changes_reporting_and_not_selection() -> str:
+    """HOW FAR THE WIDTH CORRECTION REACHES -- and two counting-shaped defects it
+    produced on the way, both caught before publication.
+
+    The width inversion is a defect in the per-PORT reading. Whether it matters
+    for anything concluded here depends on the per-CHECK reading, because that is
+    what every selection sweep ranked on. Two rankings over the same 169 checks:
+    blind cells over all ten declared outputs (MIXED, what has been quoted), and
+    over the seven one-bit outputs only (ONE-BIT, the population where the
+    golden-free instrument tracks the reference-based one).
+
+    THE FIRST DEFECT, MINE. The raw run reported the two rankings overlapping on
+    13 of 37 = 35% at the least-blind 25% cut, which reads as the correction
+    being decisive exactly where selection bites. It is not: the corrected
+    instrument leaves 38 checks TIED at zero blind cells, so a 37-check cut picks
+    37 of 38 equal values and which 37 is sort order. The figure is withdrawn and
+    the cut is not comparable.
+
+    THE SECOND DEFECT, ALSO MINE. The raw run reported checks blind on NOTHING
+    going 8 to 38 -- a 4.75x larger clean population. A check reading only 32-bit
+    or 4-bit outputs has no one-bit cells to be blind on and scores clean BY
+    CONSTRUCTION, which is `stage_unexercised`'s own conflation in a new place.
+    """
+    return (
+        "**THE RANKING MOVES MODESTLY, AND THE CUTS THAT CAN BE COMPARED KEEP "
+        "ALMOST THE SAME CHECKS.**\n\n"
+        "    Spearman(per-check MIXED blindness, per-check ONE-BIT blindness) = +0.613\n"
+        "      keep the least-blind 50% (74 of 149)   overlap 59 = 80%\n"
+        "      keep the least-blind 75% (111 of 149)  overlap 99 = 89%\n"
+        "      keep the least-blind 25%               NOT COMPARABLE -- the cut\n"
+        "                                             falls inside 38 tied values\n\n"
+        "**AND THE CORRECTION IDENTIFIES NOT ONE CHECK THE MIXED READING DID NOT "
+        "ALREADY IDENTIFY.** With the vacuity exclusion applied the arithmetic is "
+        "exact:\n\n"
+        "    population                                      n   requirements   audit\n"
+        "      checks reading a real output                149        69          0\n"
+        "      ...of those, reading a ONE-BIT output       116         --          --\n"
+        "      ...reading ONLY multi-bit outputs            33   <- clean by construction\n"
+        "      MIXED-clean (blind on no cell at all)         8         7          0\n"
+        "      ONE-BIT-clean, as printed                    38        18          0\n"
+        "      **ONE-BIT-clean, reading a one-bit port**     **5**     **5**      **0**\n\n"
+        "**THE FIVE ARE EXACTLY THE MIXED-CLEAN EIGHT RESTRICTED TO NARROW "
+        "READERS: 8 = 5 + 3, and all five are mixed-clean.** The other 33 of the "
+        "38 were the vacuity. So the corrected clean population is SMALLER than "
+        "the mixed one, not 4.75x larger -- the correction discards the wide-port "
+        "evidence three checks were clean on and adds nothing.\n\n"
+        "**AND THE AUDIT IS ZERO IN EVERY ROW**, so the pair is (blindness, 0) "
+        "throughout and no row is being bought with false rejection. Five checks "
+        "over 5 of 89 requirements is not a set anything can be driven with; it "
+        "is reported because a blindness figure without its audit is not "
+        "quotable.\n\n"
+        "**SO THE CORRECTION'S REACH IS REPORTING, NOT SELECTION.** Per PORT it is "
+        "real and large -- a 26x spread and an inversion on the two widest ports. "
+        "Per CHECK it moves the ranking by +0.613, keeps 80-89% of the same "
+        "checks at every comparable cut, and produces no new clean member. **The "
+        "selection sweeps on this plan are not invalidated by it**, and the "
+        "prescription stays what it was: stratify the per-port figure by width, "
+        "or do not quote it.\n\n"
+        "**THE METHODOLOGICAL NOTE IS THE DURABLE PART.** Both defects have the "
+        "signature the other nine on this plan have -- a clean, plausible number "
+        "that flatters the hypothesis under test. One was ties masquerading as "
+        "disagreement; the other was an empty denominator masquerading as "
+        "cleanliness. Neither was visible in the output; both needed a second "
+        "measurement aimed at the first."
+    )
+
+
+def the_loops_best_output_beats_every_independent_draw() -> str:
+    """WHAT THE PIPELINE ACTUALLY PRODUCED, against the only fair baseline -- and
+    the generation-side variance that says what a one-draw figure is worth.
+
+    Seven designs were each written from the SAME specification and the SAME
+    brief by an agent forbidden to open any other design. Their spread is author
+    variance at generation, measured off artifacts already on disk. It is not the
+    replicate's question -- a fresh editor on one design is a different sampling
+    unit -- but it is the baseline the loop's output has to beat to have been
+    worth running at all, and nothing on this plan had ever drawn that line.
+
+    The grade is testpoints differing from the reference on a declared output.
+    It is calibration and selects nothing.
+    """
+    return (
+        "    design                       testpoints differing from the reference\n"
+        "      C                                 151 of 348\n"
+        "      B                                 176\n"
+        "      E                                 182\n"
+        "      D                                 184\n"
+        "      G                                 185\n"
+        "      H                                 190\n"
+        "      F                                 230\n"
+        "      **L, the start design**           **279**\n"
+        "      **run 6's accepted design**       **146 -- better than all seven**\n\n"
+        "**SEVEN INDEPENDENT DRAWS FROM ONE SPECIFICATION SPAN 151 TO 230, MEAN "
+        "185, SD 23.** That is what writing this module from this specification "
+        "costs before any loop runs, and it is the number every one-run "
+        "comparison on this plan should have been read against.\n\n"
+        "**AND THE LOOP TOOK THE WORST START AND BEAT THE BEST DRAW.** L is a bad "
+        "draw -- 279, outside the population's range on the wrong side -- and the "
+        "169-check criterion drove it to 146, past C's 151. **The best design "
+        "this plan produced is better than any of the seven a competent author "
+        "wrote from the same specification in one shot.** That is the first "
+        "statement here of what the pipeline is FOR that survives its own "
+        "measurement.\n\n"
+        "**AND IT DOES NOT REPLICATE, WHICH IS THE FIRST THING TO SAY ABOUT IT.** "
+        "A pre-registered second run of the same configuration on the same start "
+        "design landed at **207 -- inside the population's 151 to 230**, not "
+        "below it. So the loop's output beat every independent draw in **one of "
+        "two** runs and was merely typical in the other. The claim is not "
+        "'the loop beats one-shot generation'; it is **'the loop can beat "
+        "one-shot generation, about half the time in two attempts'**, and the "
+        "difference matters because the first phrasing is what a reader would "
+        "act on. `one_graded_run_is_not_a_measurement` carries the replicate.\n\n"
+        "**AND IT IS NOT EQUIVALENCE, WHICH IS THE BAR.** 146 of 348 testpoints "
+        "still differ and the miter says `DIFFERS`. A loop that beats one-shot "
+        "generation and does not reach equivalence is a useful loop and an "
+        "unmet goal, and reporting the first without the second is the defect "
+        "this plan has retracted headlines for.\n\n"
+        "**THE FOUR GRADED RUNS AGAINST THAT BASELINE.** 146 is below all seven; "
+        "214, 221 and 271 are inside or above the population's range. So run 6 is "
+        "the outlier in the good direction and the other three did not improve on "
+        "one-shot generation at all -- which is the sharpest reading of what the "
+        "added proxy evidence cost.\n\n"
+        "**AND IT SIZES THE REPLICATE'S QUESTION.** A generation process with an "
+        "sd of 23 makes a 60-testpoint gap between two runs unremarkable and a "
+        "125-testpoint spread across four runs only about five sd -- so the "
+        "pre-registered +/-20 band on the replicate is roughly ONE generation sd, "
+        "which is the right order without having been chosen for that reason."
+    )
+
+
+def the_golden_free_placement_test_and_what_it_cannot_say() -> str:
+    """THE GOAL'S LAST CLAUSE, ANSWERED: how to assure it golden-free, and the
+    measured reliability of the one statement a reference-free pipeline can make
+    about a finished design.
+
+    A production pipeline has no reference, so it cannot ask *how far from
+    correct is this design*. It CAN ask where the design sits relative to the
+    population that selected its checks -- the same nine spec-derived designs the
+    blindness instrument already needs. That placement is the only golden-free
+    verdict available on a finished artifact, and it has never been scored.
+
+    Scored here on five designs whose reference grade is known: the start design
+    and the four graded runs. The check count is golden-free; the grade is the
+    calibration, computed last.
+    """
+    return (
+        "    design    objections of 169   golden-free placement   grade   reference placement\n"
+        "      L                24         ABOVE  (pop 13-23)       279     ABOVE  (pop 151-230)   agree\n"
+        "      run 6             1         BELOW                    146     BELOW                  agree\n"
+        "      **replicate**     8         BELOW                    207     inside               **disagree**\n"
+        "      run 7             5         BELOW                    214     inside               **disagree**\n"
+        "      run 8            13         inside                   221     inside                 agree\n"
+        "      run 9            18         inside                   271     ABOVE                **disagree**\n\n"
+        "**THE PLACEMENT AGREES WITH THE REFERENCE ON 3 OF 6, AND ALL THREE "
+        "ERRORS ARE OPTIMISTIC.** On run 7 the checks say *better than any independent "
+        "design* and the reference says *typical*. On run 9 the checks say "
+        "*typical* and the reference says **worse than every one of the seven**. "
+        "Neither error is in the direction that would reject a good design; both "
+        "are in the direction that would ship a bad one.\n\n"
+        "**SO THE GOLDEN-FREE INSTRUMENT CAN SAY 'OUTSIDE THE POPULATION' AND "
+        "CANNOT RELIABLY SAY 'ON THE GOOD SIDE'.** That is the -0.223 measured "
+        "over sixteen designs arriving as a concrete misplacement rather than as "
+        "a coefficient, and it is the honest limit of what a reference-free "
+        "pipeline can certify about a finished artifact.\n\n"
+        "**AND THE THREE 'BELOW' DESIGNS DO NOT EVEN ORDER WITHIN THEIR OWN "
+        "CLASS:** 1, 5 and 8 objections give 146, 214 and 207 testpoints, "
+        "so the count inverts between the second and third. The instrument "
+        "places, and within a placement it says nothing.\n\n"
+        "**AND IT IS STILL WORTH COMPUTING, FOR A NARROW REASON.** A design "
+        "scoring 1 against a population scoring 13 to 23 is outside anything the "
+        "specification's readers produced, so it is either much better or much "
+        "worse than they are, and it is worth a human look either way. What the "
+        "instrument must not do is decide which -- **run 9 sits inside the range "
+        "and is worse than every member of it**, so 'inside the population' is "
+        "not a clean bill.\n\n"
+        "**WHAT THIS MEANS FOR THE ONE POSITIVE ON THIS PLAN.** The loop's best "
+        "output beats every independent draw, and that statement rests on the "
+        "REFERENCE grade. Its golden-free counterpart -- 1 objection against 13 "
+        "to 23 -- points the same way, and the table above is exactly why that "
+        "agreement cannot be generalised from one design.\n\n"
+        "**WHAT IT DOES NOT CLAIM.** Six designs from one lineage on one "
+        "specification. 3 of 6 is a count, not a rate, and is offered as the "
+        "shape of the failure -- optimistic in both directions -- rather than as "
+        "a reliability figure."
+    )
+
+
+def one_graded_run_is_not_a_measurement() -> str:
+    """THE PRE-REGISTERED REPLICATE, AND IT LANDS IN THE WORST BAND.
+
+    Every graded run on this plan is n = 1, and several findings here read four
+    such runs as ordered. That reading has never been checked. The check was the
+    run-6 configuration run a second time -- byte-identical start design, the same
+    169 checks with only the checks in the latch, the same disagreement report,
+    the same 21-trial budget, the same driver and suite, and a brief differing
+    only in three path substitutions verified by diff. The fresh loop reported 24
+    objections of 169 at init, exactly where run 6 started. What differed was one
+    thing: a fresh editor session.
+
+    THE BAR WAS FIXED AND COMMITTED BEFORE DISPATCH. Within 20 testpoints of 146
+    and one run resolves to that; 21-50 and adjacent runs are unresolvable; over
+    50 and every one-run comparison here is under-powered and the trials/grade
+    correlation is withdrawn.
+    """
+    return (
+        "    | | run 6 | the replicate |\n"
+        "      trials used              5 of 21        9 of 21\n"
+        "      objections per trial     27 14 6 1 3    27 20 12 11 11 8 16 14 8\n"
+        "      best objections          1              8\n"
+        "      accepted design          1 of 169       8 of 169\n"
+        "      **testpoints differing** **146**        **207**\n"
+        "      differing cells          1,358          3,674\n"
+        "      grade                    DIFFERS        DIFFERS, all three pins green\n\n"
+        "**|207 - 146| = 61, WHICH IS THE > 50 BAND. THE PRE-REGISTERED "
+        "CONSEQUENCE APPLIES AND IS APPLIED: A SINGLE EDITOR SESSION'S GRADE IS "
+        "NOT A MEASUREMENT AT THE RESOLUTION THIS MODULE HAS BEEN REPORTING.**\n\n"
+        "**WHAT IS WITHDRAWN, IMMEDIATELY AND IN FULL.** The trials-versus-grade "
+        "Spearman of +1.000 on four runs is **withdrawn**: 5 trials gave 146 and "
+        "9 trials gave 207 on the identical configuration, which is the same "
+        "direction the correlation asserted and cannot be told from it. Any "
+        "reading that two graded runs differing by less than ~60 testpoints "
+        "differ FOR A REASON is withdrawn with it -- runs 7, 8 and 9 at 214, 221 "
+        "and 271 are not separable from each other, and 214 is not separable from "
+        "the replicate's 207 at all.\n\n"
+        "**WHAT SURVIVES, AND IT IS NOT NOTHING.** 146 against 271 is 125, about "
+        "twice the observed gap, so the extremes are still ordered. And every "
+        "claim resting on a COUNT rather than a spread is untouched: both runs "
+        "stopped voluntarily with 16 and 12 trials unspent, which is the fifth "
+        "and sixth confirmation that the editor declines its budget; both "
+        "oscillate; and the audit, corpus-completeness and per-port readings are "
+        "exhaustive statements over fixed populations, not one-run comparisons.\n\n"
+        "**AND ONE COUNT DOES CHANGE.** Four of four runs had stopped on a trial "
+        "strictly WORSE than their own best. The replicate's last trial equals "
+        "its best, so that becomes **4 of 5**, and the claim weakens from 'always' "
+        "to 'usually'.\n\n"
+        "**THE UNCOMFORTABLE READING, STATED BECAUSE IT IS THE POINT.** The "
+        "replicate spent nearly twice the trials and reached 8 objections where "
+        "run 6 reached 1, and its design is 61 testpoints worse. Nothing "
+        "distinguished the two runs but the session. **The variance of this loop "
+        "is comparable to the entire effect this plan has been measuring**, and "
+        "no amount of care in a single run recovers that."
+    )
+
+
+def best_of_n_with_a_golden_free_rule_picks_the_best_draw() -> str:
+    """THE ANSWER TO THE VARIANCE, AND THE FIRST PIPELINE CHANGE HERE THAT
+    MEASURABLY IMPROVES THE DELIVERED DESIGN.
+
+    The replicate established that one graded run is not a measurement: two runs
+    of an identical configuration landed 61 testpoints apart. That is a problem
+    for the science and an OPPORTUNITY for the pipeline -- if the spread is real,
+    running the loop several times and picking is worth more than tuning it, and
+    the picking can be done without a reference.
+
+    Five draws of ONE configuration: the same start design (md5 34a7fd66, verified
+    byte-equal in every loop), the same 169 checks with only the checks in the
+    latch, the same disagreement report (one md5 across all copies), the same
+    21-trial budget, the same brief but for paths. Each reported 24 objections of
+    169 at init. Only the session differed.
+
+    THE SELECTION RULE WAS FIXED BEFORE ANY GRADE WAS READ: fewest objections of
+    169 on the accepted design, ties broken by fewest consensus cells. It reads no
+    reference. Every objection count comes from the GRADER re-scoring `dut.v` in a
+    clean directory, never from the editor's own summary -- one editor reported
+    its accepted design as 14 objections where the re-score says 11.
+    """
+    return (
+        "    draw        trials   objections   testpoints   cells\n"
+        "      run 6         5          1          146      1,358\n"
+        "      N3           19          4          192      3,572\n"
+        "      replicate     9          8          207      3,674\n"
+        "      N2           21         11          220      3,973\n"
+        "      N1           11         16          192      3,367\n\n"
+        "**FIVE IDENTICAL RUNS SPAN 146 TO 220 OF 348 -- A RANGE OF 74, MEAN 191, "
+        "SD 28.** That is the replicate's 61-testpoint gap confirmed and sized on "
+        "five samples, and the sd lands within a point of the 23 measured across "
+        "seven independently WRITTEN designs. **Re-running this loop is about as "
+        "noisy as re-writing the module from scratch.**\n\n"
+        "**AND THE GOLDEN-FREE RULE PICKED THE BEST OF THE FIVE.** It selects run "
+        "6 at 1 objection, which is the 146 -- the best design available. **0 of "
+        "5 draws beat the selected one**, and the selected design is 45 "
+        "testpoints better than an average draw (146 against 191), a 24% "
+        "reduction bought with no reference and no new checks.\n\n"
+        "**THE ORDERING IS ONLY PARTIAL, AND THE PRE-REGISTERED BAR SAYS SO.** "
+        "Spearman(objections, testpoints) = **+0.564**, in the +0.5 to +0.9 band "
+        "fixed in advance as PARTIAL rather than the >= +0.9 that would make the "
+        "count a reliable order. **N1 is the counterexample and it is stark: 16 "
+        "objections -- the worst golden-free score of the five -- and 192 "
+        "testpoints, tied with N3's 4.** A design can score four times worse on "
+        "the checks and be exactly as good.\n\n"
+        "**SO THE RULE WORKS AS A SELECTOR AND NOT AS A RANKING**, and the "
+        "distinction is the whole finding: picking the MINIMUM of five is robust "
+        "to an ordering that is wrong in the middle, because the minimum here is "
+        "a clear outlier (1 against a next-best 4). A rule that had to separate 4 "
+        "from 8 from 11 would not have this property.\n\n"
+        "**AND IT DOES NOT PRODUCE EQUIVALENCE.** 146 of 348 testpoints still "
+        "differ, the miter says `DIFFERS`, and all three pins are green on every "
+        "one of the five. Best-of-N buys the best member of a bad distribution; "
+        "it does not move the distribution.\n\n"
+        "**TWO COUNTS THESE DRAWS CORRECT, BOTH AGAINST FINDINGS LANDED EARLIER "
+        "THE SAME DAY.** N2 spent 21 of 21 trials, so **the editor declines its "
+        "budget in 6 of 7 runs, not 7 of 7**. And across the two resumed sessions "
+        "eight late-run trials latched **zero** commits -- every one repaired two "
+        "or three checks and broke more. Late trials are not merely noisy; on "
+        "this evidence they are unproductive.\n\n"
+        "**WHAT THIS DOES NOT CLAIM.** Five draws on one configuration and one "
+        "specification. 'Picked the best of five' has a one-in-five chance of "
+        "happening by luck and is not significant alone; it is offered together "
+        "with the +0.564, which points the same way and is also not significant "
+        "at n = 5. And two of the five were interrupted by a machine restart and "
+        "RESUMED in a fresh session, so they are not single continuous runs -- "
+        "recorded here because it is a deviation from the protocol rather than a "
+        "detail."
+    )
+
+
+def the_set_holds_far_fewer_opinions_than_checks() -> str:
+    """WHAT A 169-CHECK SET ACTUALLY CONTAINS -- measured, and it corrects the
+    span figure this module has quoted all session.
+
+    Every count here treats the set as 169 checks. But a check's usable content
+    is its VERDICT VECTOR: what it says about each (design, testpoint) it decides.
+    Two checks with identical vectors are one opinion counted twice -- they can
+    never separate a pair the other cannot, they add nothing to blindness, and an
+    editor satisfying one satisfies the other. That had never been counted.
+
+    THE FOLLOW-UP MATTERS AS MUCH AS THE COUNT, and it was run before anything was
+    claimed. 'Never objects on the nine population designs' is not 'never
+    objects': a check silent on the population may still object on a design an
+    editor produced, and reading the first as the second is `stage_unexercised`'s
+    own conflation. So every population-mute check was re-decided against the six
+    GRADED designs as well -- fifteen spec-derived designs in total. No reference
+    is read anywhere here.
+    """
+    return (
+        "    over nine population designs        checks\n"
+        "      live, reading a real output          149\n"
+        "      DISTINCT VERDICT VECTORS              77\n"
+        "      exact duplicates of another check     72   (48%)\n"
+        "      largest identical group               21\n"
+        "      vectors that never object             49   covering 108 checks\n\n"
+        "**THE POPULATION UNDER-REPORTS, AND THAT IS WHY THE FOLLOW-UP RAN.** Of "
+        "the 108 mute on the nine, **12 do object on a graded design** -- 11 on "
+        "the start design and 1 on an edited one. So 11% of the population-mute "
+        "set is merely unexercised, and quoting the nine-design figure as though "
+        "it settled the matter would have overstated the result.\n\n"
+        "**BUT 96 OF 149 NEVER OBJECT ON ANY OF FIFTEEN SPEC-DERIVED DESIGNS.**\n\n"
+        "    the effective set                       checks   requirements\n"
+        "      ever object on any of fifteen            53         43\n"
+        "      never object on any of fifteen           96         31 requirements\n"
+        "                                                          have nothing else\n\n"
+        "**SO THE SPAN FIGURE IS WRONG BY THIRTY POINTS AND THE ERROR IS MINE.** "
+        "This module and the scorecard quote **69 of 89 requirements = 78%**. "
+        "Counted by requirements holding a check that ever objects on anything, it "
+        "is **43 of 89 = 48%**. The rest is span made of checks that have never "
+        "said a word.\n\n"
+        "**AND THE MINORITY RULE SELECTS FOR THEM, WHICH IS A DEFECT IN THE ONE "
+        "GOLDEN-FREE SELECTION KNOB THIS MODULE ENDORSES.** The rule keeps a check "
+        "convicting at most t of the population -- and a check convicting NONE "
+        "passes it trivially. Its measured 95-of-95 precision on the reject side "
+        "is real and unaffected; what is new is that its ACCEPT side is dominated "
+        "by silence. `the_minority_rule_is_precise_and_that_is_what_it_costs` "
+        "should be read with this beside it.\n\n"
+        "**WHAT THIS EXPLICITLY DOES NOT SAY: THAT THE 96 ARE USELESS.** This plan "
+        "has already measured the opposite case -- of 14 checks that caught a "
+        "held-out design, **three convict NONE of the thirteen candidates**, and "
+        "they are not unfalsifiable; the population simply happens to be right "
+        "about those requirements and a fourteenth design is not. A check silent "
+        "on fifteen designs may catch the sixteenth. What is established is "
+        "narrower and still large: **the 96 contribute nothing to any golden-free "
+        "instrument built on this population, they inflate every span figure here "
+        "by thirty points, and the endorsed selection rule prefers them.**\n\n"
+        "**THE LEVER THIS OPENS, AND IT IS THE FIRST AIMED AT BLINDNESS RATHER "
+        "THAN AT COVERAGE.** Every authoring round on this plan scored a new check "
+        "on which requirement it cites or on the sound-and-discriminating pair. "
+        "Neither notices that 21 checks can share one vector. **Score a candidate "
+        "check on whether its verdict vector is NEW** -- computable over the "
+        "population with no reference, mechanical, and it rejects the 48% "
+        "duplicate rate by construction. Whether authoring against that target "
+        "produces adequate checks is unmeasured, and this plan's authoring rounds "
+        "have a 3-5% base rate that nothing has moved."
+    )
+
+
+def every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference() -> str:
+    """THE CLOSURE AT THE LEVEL OF OPINION, WHICH IS THE LEVEL BLINDNESS LIVES AT
+    -- and it shuts the novelty lever this module opened one finding ago.
+
+    The corpus closure asked whether a SOUND body is missing that CATCHES a graded
+    design: none of 640 is. That does not close selection at the level of OPINION.
+    A body can hold a verdict vector the set does not hold -- a genuinely new thing
+    to say about the population -- without catching the particular designs that
+    closure tested, and blindness is closed by new opinions rather than by catches.
+
+    Three filters, all reference-free, applied in order to every corpus body
+    outside the set: its vector is NOT one of the 77 the set holds; it EVER
+    OBJECTS on the nine (a mute vector closes no cell); and it convicts at most 2
+    of the nine, the minority rule. The audit runs last and selects nothing.
+    """
+    return (
+        "    640 corpus bodies, 169 in the set, 77 vectors held\n"
+        "      outside the set with a NEW vector          349\n"
+        "      of those, EVER OBJECT on the nine          285\n"
+        "      of those, passing the minority rule         19\n"
+        "      *audit: convict the reference*           **19 of 19**\n\n"
+        "**EVERY ONE OF THE NINETEEN CONVICTS THE REFERENCE. NOT ONE IS SOUND.** "
+        "The corpus holds 349 opinions the set does not, 285 of them say something "
+        "about the population, and every single one that survives the golden-free "
+        "soundness filter is over-strict. They span 9 requirements, 5 of them new "
+        "to the set, and adding any would break the audit-zero property that "
+        "`soundness_is_what_makes_the_criterion_work` measures as the whole "
+        "difference between a criterion that discriminates and one that does "
+        "not.\n\n"
+        "**AND THE CONTRAST IS EXACT, BECAUSE BOTH HALVES ARE MEASURED ON THE SAME "
+        "CORPUS AND THE SAME POPULATION.**\n\n"
+        "    ever-objecting opinions        n     audit\n"
+        "      ALREADY IN the set          53     **0**\n"
+        "      NEW, passing the minority   19    **19**\n\n"
+        "**THE SET ALREADY CONTAINS EVERY SOUND OPINION THIS CORPUS HOLDS.** That "
+        "is the vector-level form of the corpus closure and it is strictly "
+        "stronger: not merely that no sound check is missing, but that no sound "
+        "OPINION is missing, and the 349 that do exist are mute, over-strict, or "
+        "both.\n\n"
+        "**IT ALSO KILLS THE LEVER THIS MODULE PROPOSED IMMEDIATELY BEFORE IT.** "
+        "`the_set_holds_far_fewer_opinions_than_checks` ends by proposing that a "
+        "candidate check be scored on whether its verdict vector is NEW -- "
+        "mechanical, reference-free, and rejecting the 48% duplicate rate by "
+        "construction. **Applied to the 640 bodies that already exist, that "
+        "target selects 19 checks and every one of them is unsound.** Novelty is "
+        "a real property and it is not a soundness-preserving one; scoring on it "
+        "would have bought exactly the checks the audit forbids.\n\n"
+        "**AND IT SHARPENS THE MINORITY RULE'S DEFECT FROM 'DOMINATED BY SILENCE' "
+        "TO A NUMBER.** Over the corpus the rule spares the reference 105 times in "
+        "108 -- 97%. Restricted to bodies that actually SAY something and say "
+        "something new, it spares it **0 times in 19**. **The rule's accept-side "
+        "precision is carried entirely by checks that convict nothing**, and "
+        "strip the silence away and it is not 97% but zero.\n\n"
+        "**WHAT REMAINS OPEN, STATED NARROWLY.** This is 640 authored bodies, one "
+        "specification, one nine-design population. A sixteenth design could make "
+        "a currently-mute vector object, and three checks on this plan already did "
+        "exactly that. What is closed is SELECTION over what exists: there is "
+        "nothing sound left in the corpus to select, at the level of catches or of "
+        "opinions."
+    )
+
+
+def widening_the_population_reveals_more_blindness_than_the_corpus_can_close() -> str:
+    """THE CLOSURE'S OWN CAVEAT, TESTED -- and it costs one check and buys four
+    points of newly visible blindness.
+
+    `every_new_opinion_the_corpus_holds_is_bought_by_convicting_the_reference`
+    closed the corpus at the level of opinion against NINE designs, and named its
+    limit in as many words: a sixteenth design could make a currently-mute vector
+    object. Twenty exist -- every editor run driven to its own stopping point,
+    each with a complete trace set, none of them in the population that every
+    golden-free figure is measured against. The blindness finding says these are
+    the valuable ones, because whatever the set could see was edited out of them.
+
+    Pre-registered before any number was read, including the one decision that
+    could have been made to fit the answer: the minority threshold is NOT scaled
+    to the widened population and NOT applied across it. Twenty of the twenty-nine
+    are edits of one start design, so a check catching that design's defect would
+    convict every descendant and read as over-strict -- the rule's premise
+    inverted by correlation. It stays on the nine it was calibrated on.
+    """
+    return (
+        "**THE CLOSURE WAS POPULATION-LIMITED, BY EXACTLY ONE CHECK.**\n\n"
+        "    population                       9        29\n"
+        "      new vector, outside the set  349       350\n"
+        "      of those, ever object        285       287\n"
+        "      of those, minority rule       19    **21**\n"
+        "      *audit: convict reference*    19        19\n"
+        "      **spare the reference**        0     **2**\n"
+        "      of those, SOUND BY SILENCE     -     **1**\n"
+        "      **genuinely sound**            0     **1**\n\n"
+        "Both extra survivors are mute on the nine and object only on the twenty, "
+        "so the widening is what found them -- and **one of the two is not sound, "
+        "it is silent**: it decides 0 of 348 testpoints on the reference, so "
+        "'spares the reference' is silence. Counting it would reproduce, one level "
+        "down, the very defect the previous finding measured. The one that stands "
+        "decides 329 of 348 on the reference, objects nowhere on it, and catches a "
+        "graded design.\n\n"
+        "**AND IT SATURATES, WHICH IS WHAT CLOSES THE LEVER.** Sound survivors "
+        "against population size, over several random subsets per size:\n\n"
+        "    designs    9    12    15    18    21    24    27    29\n"
+        "    sound      0   0.2   0.5   0.8   0.6     1     1     1\n\n"
+        "The union of survivors over EVERY subset is 21 bodies, of which exactly "
+        "one is sound. So this is not a rate that keeps paying as designs are "
+        "added -- it is a one-off, flat by 24, in the same shape as the blindness "
+        "ESTIMATE saturating at four designs. **Widening the population is not a "
+        "lever.**\n\n"
+        "**AND THE BLINDNESS IT REVEALS RISES, WHICH WAS THE PRE-REGISTERED "
+        "DIRECTION.** In the (pair, testpoint) cell, pinned to the published "
+        "nine-design figure or the run refuses:\n\n"
+        "    population                      mixed    one-bit\n"
+        "      the nine                       55.1%      55.9%\n"
+        "      **all 29 the pipeline made**   59.4%      61.2%\n\n"
+        "So 55.1% was optimistic, because that population held two loop-accepted "
+        "designs where the pipeline produces them by the dozen.\n\n"
+        "**THE TWO HALVES MOVE APART, AND THAT IS THE RESULT.** The wider "
+        "population REVEALS 4.3 points more blindness; the one sound opinion the "
+        "corpus holds CLOSES 78 of 41,998 blind cells, 0.19%, and closes zero on "
+        "the nine because it is mute there. **The population that finds the "
+        "residue and the corpus that would close it scale apart by a factor of "
+        "twenty-two.** That is the strongest form the closure has taken: not that "
+        "the corpus is exhausted against one population, but that enlarging the "
+        "population makes the gap WIDER.\n\n"
+        "**WHAT IT DOES NOT DO.** It does not raise the graded score. Equivalence "
+        "is unmet at 146 of 348 on the best of five draws, the one sound check "
+        "catches the WORST of those draws and not the best, and a correction to a "
+        "closure is not progress toward equivalence."
+    )
+
+
+def a_golden_free_set_with_a_perfect_audit_terminates_on_a_design_wrong_on_half_the_suite() -> str:
+    """THE SEVENTH GRADED RUN, AND THE STRONGEST NEGATIVE THE PLAN HOLDS.
+
+    Every earlier zero-objection run had an escape. The rule-B run reached zero on
+    a set seven of whose checks convict the reference, so zero was arithmetic proof
+    of non-equivalence rather than a failure of the criterion. The MAXSOUND ceiling
+    run had a perfect audit and reached zero -- but it was selected BY the
+    reference and was labelled a ceiling, not a result a pipeline could reach.
+
+    This run has neither escape. The set is selected golden-free -- one check per
+    distinct verdict vector over the population's own traces, plus the one sound
+    opinion the corpus widening found, filtered by the minority rule -- and its
+    audit, computed last, is zero.
+
+    Pre-registered before dispatch, including the bar: five control draws of the
+    undeduplicated set from this same start design graded at 146, 192, 192, 207,
+    220, so anything inside that spread means the de-duplication did nothing.
+    """
+    return (
+        "**THE CRITERION TERMINATES, AND THE DESIGN IS WRONG ON HALF THE SUITE.**\n\n"
+        "    objections            22 of 87  ->  **0 of 87**   (12 of 21 trials, nine unspent)\n"
+        "    testpoints differing  279 of 348  ->  **174 of 348**\n"
+        "    differing cells       4,450  ->  **2,071**\n"
+        "    miter                 **DIFFERS**, three pins green in one process\n\n"
+        "**AND THE AUDIT IS WHAT MAKES THIS THE SHARP ONE.** On the rule-B set "
+        "seven checks convict the reference, so a design scoring zero could not be "
+        "correct -- by arithmetic, before any miter ran. **Here no check convicts "
+        "the reference, so reaching zero is CONSISTENT with equivalence.** The "
+        "criterion could have been satisfied by a correct design. It was satisfied "
+        "by one differing on 174 of 348 testpoints, on all ten declared outputs, "
+        "with not one output repaired to never-differing.\n\n"
+        "**EVERY AVAILABLE EXPLANATION IS EXCLUDED BY THE RUN'S OWN PROPERTIES.** "
+        "Not unsoundness -- the audit is zero and was verified before dispatch. Not "
+        "redundancy weighting -- this is the de-duplicated set, one opinion one "
+        "vote, where the shipped set let a single opinion carried by 19 checks cast "
+        "19 votes. Not thinness -- 86 of the 87 decide on the accepted design. Not "
+        "an editor stopping early -- nine trials unspent and the criterion "
+        "satisfied. Not a wrong gradient -- objections, testpoints and cells all "
+        "fell together, the largest correct-direction move on record. **Not "
+        "oscillation** -- the ratchet was offered three regressions and refused all "
+        "three, and the loop never returned to a design it already had.\n\n"
+        "**ON THE PRE-REGISTERED BAR, THE LEVER DID NOTHING.** 174 sits inside the "
+        "control spread of 146 to 220 -- better than the median, worse than the "
+        "best. De-duplication is not shown to help, which is what was predicted, "
+        "and the objection count is not comparable across the two sets because the "
+        "denominators differ by construction.\n\n"
+        "**WHAT IT LEAVES, AND IT IS A STATEMENT ABOUT COMPLETENESS.** The set is "
+        "59.4% blind on the population this pipeline produces, and the design it "
+        "accepted differs on 50% of testpoints. Those are different denominators "
+        "and the agreement is not a numerical claim, but the direction is the "
+        "point: **a criterion that cannot see most of what two spec-derived designs "
+        "disagree about will terminate on a design wrong about most of it.** "
+        "Soundness is solved, weighting is now excluded, and completeness is the "
+        "binding constraint -- with blindness as its measure."
+    )
+
+
+def every_sound_check_in_the_corpus_passes_the_design_and_only_unsound_ones_catch_it() -> str:
+    """SELECTION IS FINISHED, AND THIS IS THE MEASUREMENT THAT ENDS IT.
+
+    The seventh graded run excluded unsoundness, redundancy weighting, thinness,
+    early stopping, a wrong gradient and oscillation one at a time, leaving
+    completeness as the only standing explanation for a criterion that terminates
+    on a design differing on half the suite.
+
+    This is the exhaustive test of that. Every live corpus body re-decided against
+    the design the de-duplicated set accepted -- the closest design to the
+    reference this pipeline has produced, and one that did not exist when the
+    corpus was previously closed at the level of catches.
+
+    Pre-registered as a binary bar before the scan: one sound objector means the
+    set is improvable by selection; zero means selection is over.
+    """
+    return (
+        "    of 502 live corpus bodies\n"
+        "      **SOUND** -- decide on the reference and spare it     **154**  (31%)\n"
+        "      **OBJECT** to the accepted design                     **255**  (51%)\n"
+        "      **BOTH**                                                **0**\n"
+        "      *expected overlap if independent*                        *78*\n\n"
+        "**ZERO AGAINST AN EXPECTED SEVENTY-EIGHT.** Not below chance -- at the "
+        "floor the marginals allow, on the best design this pipeline has produced, "
+        "judged by the best set it can build.\n\n"
+        "**AND IT IS NOT THE DESIGN HAVING BEEN OPTIMISED AGAINST ITS OWN "
+        "CRITERION.** The 87-check set is audit-zero and every member decides, so "
+        "all 87 are among the 154. That leaves **67 sound checks in the corpus "
+        "outside the set, and not one of them objects either.** All 154 sound "
+        "checks in the corpus pass this design; the 255 that catch it are exactly "
+        "the ones a sound set may not contain. They span **60 requirements** -- the "
+        "corpus knows the design is wrong across that much of the specification "
+        "and can say so soundly with **zero** checks.\n\n"
+        "**WHAT IT SETTLES.** Not that no better rule was found -- that there is "
+        "nothing left to select. Every check that would reject the best design "
+        "convicts a correct one, so the golden-free soundness rule, whose reject "
+        "side is 95 of 95, correctly discards all 255. **A sound set that rejects "
+        "this design does not exist in this corpus at any size, under any rule, "
+        "with or without the reference.**\n\n"
+        "**SO THE RESIDUE IS UNAUTHORED RATHER THAN UNSELECTED** -- and the "
+        "authoring half is already priced: 76 calls aimed at named blind cells "
+        "closed ZERO cells soundly, with the checks that close the residue "
+        "measured as exactly the ones the soundness rule rejects. Both halves of "
+        "the remaining route are closed.\n\n"
+        "**AND THAT IS WHY THE LOOP TERMINATES WHERE IT DOES.** Not a tuning, "
+        "weighting, stimulus or editor failure -- each was excluded individually. "
+        "Soundness and discrimination are, on this specification and this "
+        "population, very nearly disjoint properties, and the finish condition "
+        "needs their intersection."
+    )
+
+
+def the_discarded_objections_are_locally_right_and_nothing_golden_free_tells_which() -> str:
+    """THE PER-OBJECTION QUESTION, WHICH THE PER-CHECK CLOSURE DOES NOT ANSWER.
+
+    Soundness as this plan measures it is SUITE-WIDE: a check is discarded for
+    convicting the reference anywhere on 348 testpoints. A check convicting it at
+    testpoints {A,B} while catching the accepted design at C is, AT C, making a
+    correct objection -- and the per-check rule throws away the whole check, C
+    included. This plan already recorded one instance of that and never measured
+    it at scale.
+
+    Two legs, BOTH REQUIRED, fixed before any number was read: the phenomenon must
+    exist on at least 20% of the discarded objectors, AND a golden-free rule must
+    separate the legitimate objections at 70% precision. Leg 1 alone is an audit
+    finding with no instrument behind it, which is what this plan refuses to build
+    on.
+    """
+    return (
+        "**LEG 1 PASSES, AND THE PHENOMENON IS MOST OF THE RESIDUE.**\n\n"
+        "    unsound objectors right somewhere    84 of 255 = 33%   (bar 20%)\n"
+        "    objection CELLS locally legitimate  879 of 15,795 = 6%\n"
+        "    distinct testpoints they land on    **133**\n"
+        "    the accepted design is wrong on      174 of 348\n\n"
+        "**So 76% of the design's remaining wrong testpoints already carry an "
+        "objection that is locally correct** -- authored, in the corpus, and "
+        "discarded. That is the opposite of nothing left.\n\n"
+        "**LEG 2 FAILS AT EVERY THRESHOLD.** The rule is the minority rule moved "
+        "down a level -- admit an objection at testpoint T if the check spares at "
+        "least k of the nine AT T -- and it reads no reference:\n\n"
+        "    k      admitted   legit   precision   lift\n"
+        "    4         3,195     730         23%   4.11x\n"
+        "    5         3,019     727         24%   4.33x\n"
+        "    **6**     1,374     720     **52%**  **9.42x**\n"
+        "    7           671     321         48%   8.60x\n"
+        "    8           329     171         52%   9.34x\n"
+        "    9           117      58         50%   8.91x\n\n"
+        "**Precision plateaus at about half and never approaches 70%. The curve is "
+        "FLAT**, so this is not a threshold to retune: tightening from 6 to 9 costs "
+        "92% of the volume and moves precision two points. The LIFT is real and "
+        "large -- up to 9.4x over a 6% base -- and it is still a coin flip on the "
+        "question that matters. A criterion built on it hands the editor one demand "
+        "no correct design can meet for every one it should, which the ordering "
+        "argument names as fatal.\n\n"
+        "**BY THE PRE-REGISTERED RULE THIS IS A NEGATIVE AND IS RECORDED AS ONE** -- "
+        "the thirteenth instrument to fail, and the first aimed at the objection "
+        "rather than the check.\n\n"
+        "**WHAT IT RELOCATES.** The evidence EXISTS, covering 76% of the residue. "
+        "The per-check soundness rule discards it, correctly, since no rule can "
+        "keep a check only where it is right without knowing where that is. And "
+        "the golden-free instrument that would say where is measured at ~50%, flat. "
+        "**So the residue is not unauthored -- it is UNSEPARABLE**, and the only "
+        "instrument that identifies it is the reference. That is the strongest form "
+        "of the case for a decision on the underdetermined cells from outside the "
+        "specification-plus-reader loop."
+    )
+
+
+def vetted_objections_did_not_help_and_suppressing_their_reasons_made_it_worse() -> str:
+    """THE CEILING, AND IT IS A CEILING -- it uses the reference and no figure
+    from it is a golden-free score.
+
+    Thirteen instruments show no golden-free RULE separates good objections from
+    bad. This removes the separation problem instead of solving it: every live
+    corpus body, masked to the testpoints where it does not convict the reference,
+    so every objection it can raise is one a correct design would not draw. Audit
+    verified zero by re-scoring the reference through the mask.
+
+    The pre-registered binary -- equivalence means the checks suffice, DIFFERS at
+    zero objections means they do not -- DOES NOT APPLY, because the criterion was
+    never satisfied. The editor stopped with six trials unspent and thirteen
+    commits rejected, which the earlier ceiling's pre-registration already fixes
+    the reading of: objections remaining with trials left measures the editor, not
+    the set. This is also one draw against a control spread with sd 28.
+    """
+    return (
+        "    arm                                   objections   testpoints   cells\n"
+        "      the start design                            --     279/348   4,450\n"
+        "      **DEDUP** -- 87 checks, GOLDEN-FREE      22 -> 0     **174**   2,071\n"
+        "      **CEILING** -- 502 checks, all vetted  155 -> 86     **261**   2,526\n"
+        "    five golden-free control draws: 146, 192, 192, 207, 220\n\n"
+        "**THE MAXIMALLY-INFORMED CRITERION PRODUCED A DESIGN WORSE THAN EVERY ONE "
+        "OF THEM** -- 87 testpoints worse than a golden-free set with a fourteenth "
+        "of its objections.\n\n"
+        "**OBJECTION COUNT AND DESIGN QUALITY CAME APART.** Objections fell 44% "
+        "while divergence fell 6%; the DEDUP arm fell 100% on objections and 38% on "
+        "divergence. More correct objections did not convert.\n\n"
+        "**THE MECHANISM I FIRST GAVE FOR THIS WAS WRONG, AND THE TEST IS BELOW.** "
+        "I inferred that the checks' EXPLANATIONS were poisoning the run -- these "
+        "502 are unsound suite-wide, so the mask makes their verdicts correct "
+        "where they fire without making their reasoning correct. That was one run "
+        "plus an editor's self-report, so it was pre-registered and tested by "
+        "re-running the identical arm with every objection's reason replaced by "
+        "the ports that check reads:\n\n"
+        "    arm                              objections   testpoints   cells\n"
+        "      CEILING -- theory shown         155 -> 86      261       2,526\n"
+        "      **ND -- theory SUPPRESSED**    155 -> 122    **276**     3,959\n\n"
+        "**THE BAR WAS 261-OR-WORSE MEANS REFUTED, AND IT LANDED ON 276.** "
+        "Suppressing the reasons made the design worse on testpoints, much worse "
+        "on cells, and left more objections standing after three MORE trials. "
+        "**The explanations were not poisoning the run; on this evidence they "
+        "were net helpful, and the mechanism is withdrawn.**\n\n"
+        "**WHAT IS LEFT STANDING IS VOLUME, AND IT IS NOT ISOLATED EITHER.** Both "
+        "155-objection arms land at 261 and 276 while the 22-objection arm lands "
+        "at 174 -- but those arms differ in set SIZE and in soundness profile too, "
+        "so volume is a candidate and not a finding. Saying more would repeat the "
+        "mistake this paragraph exists to correct.\n\n"
+        "**AND LOCALISATION ALONE IS ENOUGH TO DIAGNOSE.** Given only where to "
+        "look and no theory at all, the editor still found an inverted guard, an "
+        "off-by-one refill counter, error responses misread as completions, and a "
+        "spurious idle cycle between back-to-back requests -- which is why "
+        "removing the reasons did not collapse the run, only made it modestly "
+        "worse.\n\n"
+        "**AND IT REVERSES THE PRIOR THAT MORE SIGNAL IS BETTER.** Redundancy was "
+        "treated as a reporting defect and more designs were chased as an "
+        "improvement. Here seven times the objections, every one correct, lost to "
+        "an 87-check set -- which says the editor's budget goes on PRIORITISING "
+        "objections, and a large correct criterion can exhaust it before a small "
+        "one does. The smaller set's advantage was never its soundness, which the "
+        "ceiling also has; it was that 22 objections are actionable and 155 are "
+        "not."
+    )
+
+
+def iteration_descends_and_its_fuel_is_what_a_soundness_rule_must_discard() -> str:
+    """THE BEST DESIGN THIS PLAN HAS PRODUCED, AND THE REASON A GOLDEN-FREE
+    PIPELINE CANNOT REPRODUCE IT.
+
+    The second loop's criterion is reference-masked, so its grade IS A CEILING and
+    is not a golden-free score. Pre-registered before dispatch with the bar fixed
+    at under-146 means best ever.
+
+    Every graded run on this plan had been a single loop from one start design --
+    seven draws, three sets, one starting point. Iteration was never tested, and
+    it is the one axis that moves the grade.
+    """
+    return (
+        "    stage                                       testpoints   cells\n"
+        "      the arbitrary unchecked LLM design           279/348   4,450\n"
+        "      **after loop 1** -- 87 checks, GOLDEN-FREE,\n"
+        "        driven to ZERO objections                  **174**   2,071\n"
+        "      **after loop 2** -- 502 vetted, chained       **112**   **813**\n"
+        "    seven prior draws span 146-220; the previous best was 146\n\n"
+        "**112 BEATS EVERY DRAW THIS PLAN HAS GRADED**, by 34 testpoints, with "
+        "differing cells down 82% from the start design. The miter still says "
+        "DIFFERS.\n\n"
+        "**SO A LOOP'S STOPPING POINT IS NOT ITS DESIGN'S FLOOR.** Loop 1 "
+        "terminated on its own criterion -- zero objections of 87, nine trials "
+        "unspent -- and every reading available then said it was finished. It sat "
+        "**62 testpoints** from where a second loop took the same design. **Zero "
+        "objections means the CRITERION is exhausted, not the design**, and that "
+        "is now measured rather than argued.\n\n"
+        "**AND THE GOLDEN-FREE PIPELINE CANNOT RUN THIS.** The obvious "
+        "prescription -- loop, re-select against the design produced, loop again "
+        "-- needs no reference in shape. But all 502 corpus bodies were re-decided "
+        "against that same 174 design: **255 object to it and ZERO of them are "
+        "sound.** The 84 objections that powered loop 2 are drawn from those 255. "
+        "A golden-free re-selection keeps only sound checks, all 154 of which PASS "
+        "this design, so it finds zero objections and the second loop never "
+        "starts -- which is exactly what loop 1's own set reported.\n\n"
+        "**THE TWO HALVES MUST BE QUOTED TOGETHER: the mechanism is worth 62 "
+        "testpoints, and its fuel is precisely what a golden-free soundness rule "
+        "must discard.**\n\n"
+        "**WHAT IT DOES NOT DO** is reach equivalence -- DIFFERS at 112 of 348, "
+        "after eight graded draws. **What it does** is retire 'the loop has "
+        "converged' as a reading of zero objections, and make a reference-free "
+        "way to tell WHICH objections are right the thing worth building: 133 of "
+        "the 174 wrong testpoints carried a locally-correct objection, and this "
+        "run converted part of exactly that into grade."
+    )
+
+
+def the_golden_free_second_loop_is_empty_and_the_rule_is_right_to_empty_it() -> str:
+    """THE ANSWER TO 'HOW TO ASSURE IT GOLDEN-FREE', AND IT IS A NEGATIVE.
+
+    Iteration is the one mechanism measured to move the grade -- a second loop
+    took the design 174 -> 112, better than all seven single-loop draws. But that
+    loop's criterion was reference-masked, so its grade is a ceiling and not a
+    golden-free score. What decides whether it means anything for a production
+    pipeline is whether a golden-free rule can assemble the second-loop criterion
+    at all.
+
+    The analogue uses no reference: keep a check that OBJECTS to the design the
+    first loop accepted and convicts at most two of the nine population designs --
+    the minority rule, reject side measured 95 of 95.
+    """
+    return (
+        "    live corpus bodies                            502\n"
+        "      **OBJECT** to the design loop 1 accepted    **255**\n"
+        "      of those, passing the **minority rule**       **0**\n\n"
+        "**AND IT IS A STRUCTURAL EXCLUSION, NOT A THRESHOLD TO TUNE.**\n\n"
+        "    convicts, of nine    checks    minority rule\n"
+        "      4                       8    rejects\n"
+        "      5                       3    rejects\n"
+        "      6                       1    rejects\n"
+        "      7                       3    rejects\n"
+        "      **9 -- all of them**  **240**  rejects\n\n"
+        "**The minimum over all 255 is FOUR of nine against a threshold of two**, "
+        "and 94% convict every population design. There is a gap between the "
+        "threshold and the nearest candidate, so t=3 still keeps nothing and t=4 "
+        "would keep eight checks while abandoning the rule's rationale -- "
+        "convicting half the population is the signature the rule exists to "
+        "reject.\n\n"
+        "**AND THE RULE IS CORRECT TO REJECT THEM.** Not one of these 255 is "
+        "sound. The minority rule is making no error: it is identifying 255 "
+        "over-strict checks exactly as designed, **and in doing so it removes the "
+        "entire fuel supply for the second loop.** The chain's 62 testpoints are "
+        "bought entirely with checks that convict a correct design.\n\n"
+        "**SO THE GOLDEN-FREE PIPELINE REACHES 174 AND STOPS** -- which is "
+        "precisely what loop 1 reported when it terminated at zero objections with "
+        "nine trials unspent. The gap to the ceiling is 62 testpoints, and it is "
+        "**not a gap in the rule, the prompt, the stimulus or the editor**. It is "
+        "the corpus containing no sound check that objects to a design its own "
+        "criterion has finished with."
+    )
+
+
+def narrowing_cannot_author_the_fuel_because_conviction_and_objection_fall_together() -> str:
+    """THE LAST ROUTE TO A GOLDEN-FREE SECOND LOOP: WRITE THE CHECK INSTEAD OF
+    SELECTING IT. It is closed, and the reason is a measured trade rather than
+    a zero.
+
+    Selection is empty (`the_golden_free_second_loop_is_empty_...`) and widening
+    the population saturates at one sound opinion
+    (`widening_the_population_reveals_more_blindness_than_the_corpus_can_close`).
+    The remaining route is AUTHORING: take a check that objects to the design the
+    first loop accepted and narrow it until it convicts a minority of the
+    population, which is what the golden-free soundness rule demands.
+
+    THE POPULATION HAD TO BE THE UNVETTED 255, NOT THE 84 THAT POWERED THE CHAIN.
+    Those 84 were vetted BY THE REFERENCE, so naming one to an author would put a
+    reference-derived finding into an authoring prompt, which the control-leak
+    rule forbids. Both legs of the population used here read only spec-derived
+    artifacts: objects to loop 1's design, and convicts all nine independent
+    implementations.
+    """
+    return (
+        "**Integrity, run before scoring:** 24 of 24 returned, 24 compile, "
+        "**0 duplicate bodies** (the fabricated-response signature), 0 returned "
+        "unchanged, leak check clean over every prompt.\n\n"
+        "    of the 24 narrowed checks                        n\n"
+        "      **VACUOUS -- object to nothing at all**      **2**  *(counted as losses)*\n"
+        "      still OBJECT to loop 1's design               19\n"
+        "      **passing the MINORITY rule**                 **0**\n"
+        "      *audit: sound*                                 *0*\n\n"
+        "**AND THE TRADE IS EXACT, WHICH IS THE FINDING RATHER THAN THE ZERO.**\n\n"
+        "    convicts, of nine    checks    still objects?\n"
+        "      **0**                    2    **no -- vacuous**\n"
+        "      **5**                    3    **no**\n"
+        "      6                        1    yes\n"
+        "      **9 -- unmoved**      **18**  yes\n\n"
+        "**Eighteen of twenty-four did not move on the population at all**, and "
+        "of the four that fell below nine, **three stopped objecting**. The one "
+        "that kept its objection still convicts **six of nine** -- three times the "
+        "threshold.\n\n"
+        "**So the conviction count and the objection fall together.** There is no "
+        "setting of this edit where one drops and the other survives: narrow "
+        "enough to satisfy the golden-free soundness rule and the check stops "
+        "saying the thing that made it worth keeping. That is #99 -- "
+        "over-strictness and vacuity as one defect with two signs -- measured on "
+        "the one population where the objection was known to be worth "
+        "something.\n\n"
+        "**A CHECK THAT STOPS OBJECTING IS A LOSS, NOT A NEUTRAL OUTCOME**, and "
+        "the two vacuous ones are scored that way. A narrowing round that reports "
+        "only the conviction count falling would book this as four successes.\n\n"
+        "**AND THE DECAY ACROSS THREE ROUNDS IS NOW COMPLETE.**\n\n"
+        "    round             population                                   landed\n"
+        "      narrowing 1     over-strict, catches a held-out design       7 of 47 = **15%**\n"
+        "      narrowing 2     the 28 still over-strict                     1 of 28 = **4%**\n"
+        "      **narrowing 3** **convicts 9 of 9, objects to loop 1's design**  **0 of 24 = 0%**\n\n"
+        "The route was projected to converge near 31% of the specification and it "
+        "reaches **zero** on the population that matters most.\n\n"
+        "**SO ALL THREE ROUTES TO A GOLDEN-FREE SECOND LOOP ARE CLOSED** -- "
+        "selection (255 objectors, 0 sound, minimum 4 of 9 against a threshold of "
+        "2), population widening (one sound opinion by 24 designs), and authoring "
+        "by narrowing (0 of 24, with the conviction count and the objection "
+        "measured to move together). **The 62-testpoint gap between the "
+        "golden-free pipeline's 174 and the ceiling's 112 is structural on this "
+        "corpus, stated three ways rather than inferred once.**"
+    )
+
+
+def the_ordering_signal_is_made_by_the_optimisation_not_held_in_the_corpus() -> str:
+    """BEST-OF-N NEEDS A SELECTOR, AND ONLY THE CRITERION ITSELF IS ONE.
+
+    Selecting among draws of one loop by the golden-free objection count picks
+    the best draw. That rule is unavailable to a run which SATISFIES its
+    criterion, because every such draw scores zero, so the natural move is to
+    break the tie with an instrument the editor never saw -- the corpus outside
+    the criterion. Measured over five draws of one configuration, it is
+    ANTI-correlated and picks the second-worst.
+
+    AND THE AUDIT-ZERO ALTERNATIVE IS NOT AN INDEPENDENT INSTRUMENT. The obvious
+    reading of that failure is that the held-out corpus is unsound rather than
+    held out, so an audit-zero set should be used instead. The audit-zero set
+    here agrees with the criterion -- and overlaps it at 86 of its 87 checks. It
+    is the criterion under another name, and quoting its agreement would be
+    counting one measurement twice.
+    """
+    return (
+        "    draw        in-set/169   HELD OUT/353   grade\n"
+        "      run 6              1            254   **146**\n"
+        "      N3                 4            255     192\n"
+        "      replicate          8          **251**   207\n"
+        "      N2                11            254     220\n"
+        "      N1                16            264     192\n\n"
+        "    Spearman(in-set,   grade)   **+0.564**\n"
+        "    Spearman(HELD OUT, grade)   **-0.368**   picks the second-worst draw\n\n"
+        "**THE SPREAD SAYS WHY BEFORE THE CORRELATION DOES.** The held-out corpus "
+        "objects to about **72% of everything** whatever the design, varying by "
+        "**13 checks in 353** across designs that span **74 testpoints** of "
+        "grade. It is the over-strict bulk, and a set that objects to everything "
+        "cannot tell designs apart.\n\n"
+        "**SO THE ORDERING SIGNAL IS MANUFACTURED BY THE OPTIMISATION, NOT HELD "
+        "IN THE CORPUS.** A check the editor descended on carries information "
+        "about the design because the editor moved the design with respect to it. "
+        "A check it never saw carries essentially none. That is the opposite of "
+        "the usual held-out intuition, and it is why best-of-N cannot be given an "
+        "independent referee: **the only golden-free instrument that orders a "
+        "loop's draws is the criterion that loop was optimising against.**"
+    )
+
+
+def the_argmin_of_a_sound_criterion_is_not_its_best_design() -> str:
+    """ORDERING AND SELECTION ARE DIFFERENT PROPERTIES OF ONE RULE.
+
+    Six designs, one audit-zero criterion, one start design. Adding the sixth --
+    the only one that SATISFIED its criterion -- raises the rank correlation and
+    breaks the argmin. A rule can get better at ordering while getting worse at
+    selecting, and it is selection that decides what ships.
+
+    This is `zero_objections_can_be_incompatible_with_correctness` arriving as a
+    selection rule with a price attached, and it is measured golden-free on the
+    criterion side: the grade is calibration, read last, and selects nothing.
+    """
+    return (
+        "    design         169-set   grade   stopped\n"
+        "      **DEDUP loop**    **0**   **174**   **TERMINATED, 9 trials unspent**\n"
+        "      **run 6**         **1**   **146**   budget\n"
+        "      N3                   4     192    budget\n"
+        "      replicate            8     207    budget\n"
+        "      N2                  11     220    budget\n"
+        "      N1                  16     192    budget\n\n"
+        "    population                  Spearman   argmin picks   best available\n"
+        "      the five budget draws       +0.564   run 6 -> 146   run 6 -> 146  ok\n"
+        "      **all six**               **+0.696** **DEDUP -> 174** run 6 -> 146  **-28**\n\n"
+        "**ADDING ONE DESIGN RAISED THE CORRELATION BY 0.13 AND COST THE ARGMIN "
+        "28 TESTPOINTS.** So a selector's rank correlation is not the number to "
+        "read: ordering and argmin are different properties, and only the second "
+        "decides which design ships.\n\n"
+        "**The mechanism is that a design at zero has exhausted its CRITERION, "
+        "not shown itself the best DRAW.** The design scoring **zero** grades 28 "
+        "testpoints **worse** than the design scoring **one**, on the same "
+        "audit-zero criterion, from the same start design. Both criteria audit "
+        "zero with every check deciding, so neither is sound by silence, and the "
+        "shared start was pinned from behaviour rather than assumed -- the "
+        "87-check set reads 22 objections on the start design, exactly that arm's "
+        "recorded init.\n\n"
+        "**THE RULE, AND IT IS ONE LINE AND GOLDEN-FREE:**\n\n"
+        "> **Select the argmin over draws with a STRICTLY POSITIVE count. A draw "
+        "that reached zero is unselectable, not best.**\n\n"
+        "On these six that recovers the 146 design where naive argmin loses 28 "
+        "testpoints. **It does not reach equivalence** -- 146 of 348 still differs "
+        "on 42% of the suite -- and it picks the best member of a noisy "
+        "distribution rather than tightening the distribution."
+    )
+
+
+def the_standard_mutation_metric_saturates_and_cannot_rank_a_set() -> str:
+    """FUNCTIONAL QUALIFICATION, THE FIELD'S GOLDEN-FREE COMPLETENESS MEASURE,
+    MEASURED AND DISQUALIFIED AS A PROXY HERE.
+
+    Mutation adequacy is what the testing literature prescribes for exactly this
+    question, and it needs no known-good design: mutate the CANDIDATE, and a live
+    mutant the set still passes convicts the SET. This repository ships that gate
+    (`specflow/qualify.py`, mcy) and it is unwired.
+
+    Measured, it is perfect and useless. Both the 169-check audit-zero set and the
+    502-body corpus kill every live mutant, so the metric cannot separate them --
+    and the design the 169-check set accepts is wrong on 146 of 348 testpoints.
+
+    THE LIVE FILTER IS NOT OPTIONAL. A mutant that changes no observable behaviour
+    is EQUIVALENT and is excluded rather than counted as a miss; 2 of 15 here.
+    Counting an equivalent mutant as a survivor manufactures blindness that is not
+    there, which is the mirror of the defect this metric is meant to catch.
+    """
+    return (
+        "    mutants available                       15\n"
+        "      **EQUIVALENT -- excluded**             **2**\n"
+        "      live                                   13\n"
+        "      **169-check audit-zero set kills**  **13 of 13 = 100%**\n"
+        "      the 502-body corpus kills            13 of 13 = 100%\n\n"
+        "**THE SET SCORES PERFECT ON THE FIELD'S GOLDEN-FREE COMPLETENESS METRIC "
+        "AND THE DESIGN IT ACCEPTS DIFFERS FROM THE REFERENCE ON 146 OF 348 "
+        "TESTPOINTS.**\n\n"
+        "**IT IS DISQUALIFIED BY SATURATION, AND THE REASON IS THE FAULT MODEL'S "
+        "COARSENESS.** The live mutants change **7 to 318 testpoints, median "
+        "around 150 of 318** -- a single-operator mutation of a tightly coupled "
+        "FSM breaks behaviour across half the suite, so almost any check that "
+        "fires at all catches it. The metric reads the same 100% for a 169-check "
+        "set and a 502-body corpus, so it cannot rank two sets, let alone say "
+        "whether either forces correctness.\n\n"
+        "**This is the mutant leg's earlier result seen from the other side.** "
+        "That round measured mutant-promoted checks at 100% sound and 0% "
+        "discriminating and read it as a fact about those checks. It is a fact "
+        "about the INSTRUMENT: mechanical mutants are easy on both legs, so they "
+        "neither reject a bad check nor reward a strong one.\n\n"
+        "**SO KEEP IT AS A HYGIENE FLOOR AND NEVER AS AN ADEQUACY MEASURE.** A "
+        "set that fails mutation qualification is certainly broken; a set that "
+        "passes has been told nothing about whether its demands are right. "
+        "Reporting 100% beside a design wrong on 42% of the suite would be the "
+        "most defensible-looking and least informative number available.\n\n"
+        "**And it settles the method question it was run to answer:** a proxy CAN "
+        "be validated before equivalence is chased, and this one fails that "
+        "validation for a cost of no model calls -- against an editor run and a "
+        "false conclusion otherwise."
+    )
+
+
+def a_gate_is_a_different_instrument_in_selection_than_in_repair() -> str:
+    """THE SAME SIGNAL CAN BE AN EXCELLENT SELECTOR AND AN UNUSABLE REPAIR DRIVER,
+    AND THIS PROJECT RAN ONE AS THE OTHER.
+
+    A gate has two possible jobs. In SELECTION it is a filter over independently
+    authored bodies: keep the ones that pass, discard the rest. In REPAIR it is a
+    feedback signal: tell the author what is wrong and take a rewrite.
+
+    Those jobs have different, and largely opposite, requirements -- and the
+    minority rule is the worked example, because it was used both ways here and
+    the outcomes are 100% and 0%.
+    """
+    return (
+        "    the SAME rule, two regimes\n"
+        "      as a SELECTOR -- what it keeps spares the reference  "
+        "**59 of 59**, **7 of 7**\n"
+        "      its reject side against the audit                    **95 of 95**\n"
+        "      as a REPAIR OBJECTION -- checks landing on target      "
+        "**7 of 47, then 1 of 28, then 0 of 24**\n"
+        "      and it pushed **12 of 47** past the target into asserting nothing\n\n"
+        "**SELECTION HAS ONE BOUNDARY THAT MATTERS: THE ACCEPT SIDE.** Everything "
+        "kept must be good; recall is nearly free to sacrifice, because a "
+        "discarded good check costs one body out of a large pool and another draw "
+        "may supply an equivalent. A bad check that gets in is not replaceable. So "
+        "there is exactly one number to tune, and the minority rule's terrible "
+        "recall -- it discards precisely the discriminating checks -- is a SUPPLY "
+        "cost, fixable with volume, not a CONTAMINATION cost, which is not "
+        "fixable at all.\n\n"
+        "**REPAIR NEEDS THREE THINGS SELECTION DOES NOT.**\n\n"
+        "1. **False rejects stop being free.** Sending a working check into a "
+        "rewrite destroys it -- telling an author its already-sound check needed "
+        "fixing anyway **broke 2 of 4 working checks**, one into a crash. In "
+        "selection that check would simply have been kept.\n"
+        "2. **The objection must be ACTIONABLE, not merely correct.** Selection "
+        "needs no message at all; a boolean suffices. A gate that says 'the "
+        "oracle passed N variants' without saying what any variant DID is "
+        "starvation, and it sits beside a round that produced **0 of 72**.\n"
+        "3. **The gates must be JOINTLY SATISFIABLE.** Selection intersects, with "
+        "no interaction. Repair oscillates, because moving a check to satisfy one "
+        "gate carries it across another's boundary -- over-strictness and vacuity "
+        "as one defect with two signs. It can be structural between gates: "
+        "`liveness` reads a moving verdict as proof the check is alive, while a "
+        "soundness rule reads the same movement as over-reach. A set where one "
+        "gate demands movement and another forbids it cannot be satisfied at "
+        "all.\n\n"
+        "**SO A RESULT FROM ONE REGIME IS NOT A RESULT ABOUT THE OTHER.** The "
+        "narrowing rounds fed a SELECTION-shaped signal as a REPAIR objection, "
+        "one signal and one rewrite where the stage offers seven gates and five "
+        "rounds. Their 15% -> 4% -> 0% decay is a measurement of that degenerate "
+        "regime, and it is **not** evidence that checks cannot be authored into "
+        "the adequate cell -- which remains unmeasured rather than closed."
+    )
+
+
+def the_halting_point_exists_but_is_not_reachable_by_monotone_descent() -> str:
+    """A LADDER OF FIVE NARROWING DEPTHS FINDS WHAT ONE BLIND STEP CANNOT.
+
+    Three narrowing rounds each took ONE rewrite per check and landed 7 of 47,
+    1 of 28, 0 of 24 -- read at the time as the conviction count and the
+    objection being coupled with no point between them. Asking sixteen checks for
+    FIVE progressively narrower variants instead finds a landing rung, and it is
+    SOUND: the first adequate check this project has authored, after seven rounds
+    that produced none.
+
+    THE COUNT IS NOT THE FINDING. The shape is: the conviction count is NOT
+    monotone in narrowing depth, so a single blind step samples one point of a
+    bumpy landscape and the landing band is narrow. That re-reads the decay curve
+    rather than retracting it -- the procedure was not built to find a point that
+    demonstrably exists.
+    """
+    return (
+        "    check        h0   rung1  rung2  rung3  rung4  rung5\n"
+        "      REQ-0002    9     9*     9*   **2***   9*     9*   <= LANDS, and it is SOUND\n"
+        "      REQ-0010    7     5x     4x     0x     0x     9*\n"
+        "      REQ-0013    5     7*     7*     7*     5x     0x\n\n"
+        "    `*` still objects to the design under test; `x` vacuous on it -- a LOSS\n\n"
+        "| | |\n|---|---|\n"
+        "| checks with a LANDING rung | **1 of 16** |\n"
+        "| of those, sound on the audit read last | **1 of 1 -- an AUTHORED both-cell check** |\n\n"
+        "**THE LANDING RUNG IS AT DEPTH 3 AND DEPTHS 1, 2, 4 AND 5 ALL FAIL.** "
+        "REQ-0002 runs 9, 9, **2**, 9, 9 -- it passes through the target and comes "
+        "back out. REQ-0010 descends 5, 4, 0, 0 then jumps to 9. REQ-0013 RISES "
+        "from 5 to 7 under narrowing, so removing an obligation made it convict "
+        "MORE implementations.\n\n"
+        "**SO THE CONVICTION COUNT IS NOT MONOTONE IN NARROWING DEPTH**, and a "
+        "one-step round is sampling one point of that landscape. **0 of 24 is "
+        "what such a procedure should be expected to return even where a halting "
+        "point exists** -- and one here demonstrably does.\n\n"
+        "**The other fifteen split into the two known shapes.** Six never move at "
+        "all, `h` identical across every depth with every rung still objecting. "
+        "The rest collapse to zero and go vacuous in the SAME step, which is the "
+        "conviction-and-objection coupling reproduced across five depths instead "
+        "of one.\n\n"
+        "**By the pre-registered band 1 of 16 reads 'rare; record and build "
+        "nothing', and that stands.** What changes is the reading of the decay "
+        "curve: 15% -> 4% -> 0% measures a one-sample-per-check procedure on a "
+        "non-monotone landscape, not the absence of a target."
+    )
+
+
+def the_minority_rules_perfect_precision_does_not_transfer() -> str:
+    """THE FULL GATE BATTERY AS A SELECTION RULE ADDS ONLY UNSOUND CHECKS.
+
+    Selection here had always used ONE signal, the minority rule. Applying the
+    whole conjunction -- compile and fires-on-witness and not-vacuous and
+    h(c) <= 2 and discriminating -- over all 502 live bodies costs no model calls
+    and answers whether the other five gates find anything it missed.
+
+    They do not, and the split is perfect. It also corrects a precision figure
+    quoted throughout this work.
+    """
+    return (
+        "    scanned                                   502\n"
+        "      **kept**                               **38**  over 23 requirements = 26%\n"
+        "      rejected: sound 248, discriminating 137, compile 34, fires 6\n"
+        "      **survivors convicting the reference**  **13 of 38 = 34%**\n\n"
+        "    the 25 survivors already in the 169-check set   unsound **0 of 25**\n"
+        "    **the 13 the conjunction ADDED**                unsound **13 of 13**\n\n"
+        "**EVERY CHECK THE FULLER BATTERY CONTRIBUTED IS UNSOUND, AND EVERY CHECK "
+        "IT KEPT FROM THE EXISTING SELECTION IS SOUND.** The five extra gates add "
+        "nothing to soundness; the only soundness signal in the conjunction is the "
+        "minority rule.\n\n"
+        "**AND ON THIS POPULATION THAT RULE IS 66% PRECISE, NOT ~100%.** The "
+        "perfect figures -- 59 of 59, 7 of 7 -- were measured at **t = 2 of "
+        "THIRTEEN designs on a 259-body corpus**. This is **t = 2 of NINE on 502 "
+        "bodies**. Two candidate causes and this measurement cannot separate them: "
+        "the threshold is looser relative to the population (2 of 9 is 22% where "
+        "2 of 13 is 15%), and the corpus is nearly twice the size with a different "
+        "composition.\n\n"
+        "**The negative is what is established: the perfect-precision figure does "
+        "not transfer, and every quotation of it must carry its (t, N, corpus) or "
+        "not be made.**\n\n"
+        "**What it settles about gating a SELECTION regime:** on this corpus the "
+        "extra gates find nothing the one-signal selection missed. The 169-check "
+        "audit-zero set remains the better artifact -- audit 0 against the "
+        "conjunction's 34%. The gates broke nothing; they had nothing to add."
+    )
+
+
+def a_fail_open_mask_reports_its_own_absence_as_a_measurement() -> str:
+    """SPLITMASK -- the per-site golden-free rule, and the defect that hid it.
+
+    Every whole-check rule measured here selects or drops a check entire, and no
+    whole check both objects to the delivered design and spares the reference --
+    255 objectors, 0 sound. But over-strictness is LOCAL: the reference-vetted
+    per-site mask takes the chained loop to 112 of 348, so the corpus holds the
+    information and only its localisation is missing. SPLITMASK is that
+    localisation made golden-free:
+
+        Admit check c's objection at (tp, edge) iff the design DIFFERS from the
+        population consensus on some port c reads. Mask it where the design does
+        exactly what 13 independent implementations unanimously do on every such
+        port -- there, at ~998:1000, the CHECK is what is wrong.
+
+    The rule is sound and the first driver of it measured nothing, because every
+    way of failing to decide landed on the same side.
+    """
+    return (
+        "**THE DRIVER REPORTED 100% ADMITTED AND A 60-BODY DIAGNOSTIC REPORTED "
+        "57.4% MASKED, WHICH IS THE ONLY REASON EITHER WAS CHECKED.** The "
+        "headline -- a rule that masks nothing -- reads as a clean negative "
+        "about the world. It was a defect in the instrument.\n\n"
+        "    declines, by first cause, over 5,172 objection sites\n"
+        "      **a port value could not be resolved   3,972   76.8%**\n"
+        "      population not unanimous                 585   11.3%\n"
+        "      no population evidence for that tp       538   10.4%\n"
+        "      edge outside the covering row             55    1.1%\n"
+        "      design departs from consensus -> ADMIT     22    0.4%\n\n"
+        "**THE MASK RESOLVED EVERY PORT FROM `row['outputs']`, AND `ports_read` "
+        "RETURNS INPUTS TOO** -- 461 of them against 312 outputs over 120 bodies. "
+        "A value it could not find reads as *no consensus*, which ADMITS, so a "
+        "check reading a single input could never be masked. Corrected, the "
+        "driver and the diagnostic agree at 57.4% to the decimal.\n\n"
+        "**THE RULE'S QUANTIFIER WAS ALSO WRONG IN PRINCIPLE, NOT ONLY IN "
+        "LOOKUP.** Every design is driven by the same stimulus, so an input is "
+        "unanimous and matching BY CONSTRUCTION and can never distinguish a "
+        "design from the population. The rule quantifies over the ports the "
+        "design DRIVES.\n\n"
+        "    on the full corpus, 502 bodies against the delivered design\n"
+        "      objection sites                     15,936\n"
+        "        no locatable site (admitted)         670\n"
+        "        no population testpoint (admitted) 1,874\n"
+        "        **instrumented**                  **13,392**\n"
+        "      **MASKED**                           **6,603   41.4% of all, "
+        "49.3% of instrumented**\n\n"
+        "**THE GENERAL RULE, AND IT IS THE POINT OF RECORDING THIS.** A filter "
+        "whose declines are not PARTITIONED BY CAUSE cannot be audited, because "
+        "'I found nothing to mask' and 'I could not look it up' are the same "
+        "output. Count every decline by cause and refuse to report when a "
+        "non-substantive cause dominates -- here one cause held 76.8%. This is "
+        "the nineteenth counting-shaped defect in this work and, like all "
+        "eighteen before it, it was caught by disagreement with a prior "
+        "measurement rather than by the headline looking wrong."
+    )
+
+
+def a_site_level_mask_is_invisible_to_an_existential_criterion() -> str:
+    """SPLITMASK works and the criterion cannot use it. The bands were fixed in
+    `docs/evidence/prereg/splitmask.md` before anything was computed.
+
+    This is the result once the fail-open above is corrected, and it is a
+    structural negative rather than a weak number: the instrument does what it
+    was designed to do at the level it operates on, and both legs of the
+    criterion read a quantity that level cannot move.
+    """
+    return (
+        "    yield   blind testpoints acquiring an ADMITTED objection   "
+        "**125 of 126**\n"
+        "    audit   bodies convicting the reference at an admitted site  "
+        "**276 of 502 = 55.0%**\n"
+        "    band    >= 25 with audit > 5%  ->  **PARTIAL: record the pair and "
+        "BUILD NOTHING**\n\n"
+        "**THE MASK REMOVES 41.4% OF OBJECTION SITES AND MOVES THE FALSE-REJECT "
+        "RATE BY 1.4 POINTS**, 56.4% to 55.0% -- seven bodies of 283. The yield "
+        "moves by one testpoint, 126 to 125.\n\n"
+        "**AND THE FIRST REASON IS THAT THE MASK IS SYMMETRIC.** Both designs "
+        "scored in ONE process, so the pair is not a cross-run comparison:\n\n"
+        "                              sites    masked        bodies objecting\n"
+        "      the delivered design   15,936   6,603  **41.4%**   255 -> 252, "
+        "cleared **3 = 1.2%**\n"
+        "      **the reference**      16,461   6,789  **41.2%**   283 -> 276, "
+        "cleared **7 = 2.5%**\n\n"
+        "**41.4% against 41.2%.** The mask removes the same share of a design "
+        "wrong on 146 of 348 testpoints as of the design that is right, so it "
+        "cannot move the separation between them whatever the criterion reads. "
+        "An instrument that filters both arms equally is not a discriminator, "
+        "and that is a property of the RULE rather than of the threshold: "
+        "unanimity-matching is about as common at the reference's objection "
+        "sites as at the design's.\n\n"
+        "**THE SECOND REASON IS STRUCTURAL AND IT GENERALISES TO ANY SITE-LEVEL "
+        "INSTRUMENT.** Both legs are EXISTENTIAL over sites: a blind testpoint "
+        "counts if ANY objection survives, and a body convicts the reference if "
+        "ANY of its objections survives. Clearing a body therefore requires "
+        "masking EVERY site at which it objects, and a body that objects at many "
+        "sites survives a 41% cut almost surely. A site-level instrument is "
+        "nearly invisible to a criterion quantified that way, however well it "
+        "localises.\n\n"
+        "**SO THE CHOICE IS NOT A BETTER MASK, IT IS A DIFFERENT CRITERION** -- "
+        "one that scores a check by the FRACTION of its objections that survive "
+        "rather than by whether one does. That is a change to what a verdict "
+        "means and it is not a tuning knob; it is recorded here as the open "
+        "route and nothing was built on it.\n\n"
+        "**AND THE INSTRUMENT IS BLIND WHERE THE ERRORS ARE, WHICH THE "
+        "PRE-REGISTRATION PREDICTED.** SPLITMASK can only remove over-strictness "
+        "that CONTRADICTS consensus. A demand that is wrong inside a split region "
+        "survives the mask because the population has no opinion there -- and 97% "
+        "of a held-out design's errors live in the 11% of cells the population "
+        "cannot agree on. 11.3% of declines are exactly that: no unanimity.\n\n"
+        "**Coverage limit, stated because it bounds the figures above.** The "
+        "population was scored on a 318-testpoint suite and the graded designs "
+        "carry 348, so 1,874 sites on 30 testpoints hold no population evidence "
+        "at all. They are admitted and counted apart, and the masked rate is "
+        "quoted over both denominators -- a rate over a denominator the "
+        "instrument cannot see is the defect the companion finding records."
+    )
+
+
+def unanimity_localises_a_designs_errors_at_43x_and_covers_a_fifth() -> str:
+    """THE FIRST GOLDEN-FREE DETECTOR OF BLINDNESS, and its ceiling.
+
+    Blindness is the whole residue now. The stimulus loop is finished -- decide
+    coverage 348 of 348, SILENT 0 of 146 -- so every testpoint the delivered
+    design is wrong on is one the set DECIDES and PASSES, 126 of 146. But every
+    measurement of that reads the reference: "the design is wrong here and the
+    set said nothing" needs a `wrong`.
+
+    The golden-free analogue asks the population instead:
+
+        ANOMALOUS(cell)  the 13 spec-derived designs are UNANIMOUS on a port the
+                         design DRIVES, and the design under test DEPARTS.
+
+    It is the split-cell finding pointed at a design rather than at a check, and
+    it is the complement of the disagreement map: that says WHERE THE QUESTION IS
+    and this says WHERE THE DESIGN IS WRONG.
+    """
+    return (
+        "    cells the population can be read on      475,120\n"
+        "      the design really differs there          8,913  = **1.88% BASE "
+        "RATE**\n"
+        "    of those, population UNANIMOUS           429,161   (90.3%)\n"
+        "      the design really differs there          1,923  = 0.45%\n"
+        "    **ANOMALOUS -- unanimous and design departs**  **2,260**\n"
+        "      the design really differs there          **1,818 = 80.44%**\n\n"
+        "**42.9x OVER THE BASE RATE. The best localisation measured in this "
+        "work by a factor of five** -- the disagreement map is 8.6x, the "
+        "two-sided filter 3.4x, `correspondence` 1.3x. The audit is computed "
+        "last and selects nothing; the detector reads only spec-derived "
+        "designs.\n\n"
+        "**AND ITS CEILING IS EXACTLY THE 97%-IN-11% FINDING, ARRIVING FROM THE "
+        "OTHER SIDE.** Recall is **20.4%** of the design's differing cells -- "
+        "but **94.5%** of the differing cells INSIDE the unanimous region "
+        "(1,818 of 1,923). The detector finds nearly everything findable where "
+        "the population can speak; the population can only speak about 21.6% of "
+        "this design's errors. **So the lever's ceiling is about a fifth of the "
+        "blindness residue and the other four fifths are in split cells, where "
+        "no instrument built from this population can say anything.** Two "
+        "independent measurements now agree on that partition.\n\n"
+        "**PRECISION IS PER-PORT, AND THAT MATTERS FOR HOW IT IS USED.** Of the "
+        "2,260 anomalous cells, 2,213 sit on six ports reading 74.9% to 100%: "
+        "`cnt_nonzero`, `in_lrefill3`, `dc_addr`, `saved_addr`, `in_cload` and "
+        "`hitmiss_eval` at 100%, `biu_read` 79.1%, `in_idle` and `load_flag` "
+        "75.4%, `burst` 74.9%. Two ports read below 16% -- `dcram_we` 2 of 13 "
+        "and `tag_we` 1 of 11 -- and **those n are 13 and 11, so they are not a "
+        "finding**; they are flagged as the place to look if a port-stratified "
+        "version is ever built, and nothing is concluded from them.\n\n"
+        "**THE TESTPOINT-LEVEL READING IS WEAKER AND IT IS THE LOSSY ONE.** "
+        "Rolled up to testpoints, ANOMALOUS predicts DIFFERING at 72.5% "
+        "precision and 29.8% recall, and the silent-and-anomalous set predicts "
+        "BLIND at 62.2% and 21.7%. The loss is structural rather than noise: a "
+        "testpoint counts as differing only if a DECLARED OUTPUT differs, while "
+        "the anomaly quantifies over every driven port including probes -- 9 "
+        "testpoints are anomalous on a probe only, which is internal state "
+        "differing without an output differing, and that is a real difference "
+        "rather than a detector error. **Use the cell, not the testpoint.**"
+    )
+
+
+def the_fraction_criterion_is_unmeasurable_where_no_objector_is_sound() -> str:
+    """The open route left by the per-site mask, tested and REFUSED rather than
+    answered -- the distinction is the point.
+
+    SPLITMASK fails as a mask because it is symmetric per site. The route
+    recorded in its place was the PER-CHECK statistic: score a check by the
+    SHARE of its objections that survive the mask, rather than by whether one
+    does. That is a different quantity and the symmetry does not settle it.
+    """
+    return (
+        "    checks with an instrumented objection on the delivered design   "
+        "205\n"
+        "    **of them SOUND (spare the reference)**                         "
+        "**0**\n\n"
+        "**THE POSITIVE CLASS IS EMPTY, SO NO PREDICTOR OF SOUNDNESS CAN BE "
+        "SCORED HERE.** Every threshold reads 0% precision whatever it selects, "
+        "and the bands printed beside them would be a verdict on the RULE when "
+        "they are a fact about the POPULATION. The driver now refuses and says "
+        "so instead of printing the table.\n\n"
+        "**This reproduces the known '255 objectors, 0 sound' rather than "
+        "discovering anything**, and it is the guard `series.py` needed -- the "
+        "seventeenth counting-shaped defect in this work, met again in a new "
+        "place and caught this time before a number was quoted.\n\n"
+        "**SO THE FRACTION CRITERION IS UNMEASURABLE ON THIS POPULATION, NOT "
+        "REFUTED, and those must not be conflated.** Measuring it needs a "
+        "population containing objectors that spare the reference. This corpus "
+        "contains none, which is itself the central negative of this work "
+        "restated: the both-cell is empty at the whole-check level. Any future "
+        "attempt at the fraction criterion has to solve that first, and solving "
+        "it would make the fraction criterion unnecessary."
+    )
+
+
+def an_instrument_must_be_shown_able_to_reach_its_own_predicate() -> str:
+    """Two harness defects from one battery, and the rule that catches both.
+
+    The blindness-targeted round needed a five-leg gate battery. Before any
+    authored answer was scored, the battery was run on the TWENTY UNMODIFIED
+    bodies -- which are blind at their own target cell BY CONSTRUCTION, so leg 4
+    ("does this check object at the cell it was targeted at") must reject all
+    twenty. That smoke test found two defects, and the second is the more
+    instructive because the first one hid inside it.
+    """
+    return (
+        "**DEFECT ONE: EVERY CHECK WAS REFUSED BY `well_formed`, AND IT WAS THE "
+        "HARNESS.** The oracles were declared over the suite's **348** "
+        "testpoints while `testplan.json` holds the original **318** -- the "
+        "stimulus-loop testpoints were minted after the plan was frozen. "
+        "`well_formed` then refuses every check for *names testpoints that are "
+        "not in the testplan*, which reads exactly like a corpus of broken "
+        "bodies. It would have printed a clean **0 of 20 kept** and that number "
+        "would have been fiction. Twentieth counting-shaped defect here, and "
+        "mine.\n\n"
+        "**DEFECT TWO: THE SMOKE TEST PASSED, AND IT PASSED FOR THE WRONG "
+        "REASON.** Its assertion was *no unmodified body objects at its own "
+        "target*. With every body refused at leg 2, none ever reached leg 4 -- "
+        "so the assertion held vacuously and the run printed OK. **A test that "
+        "cannot reach the thing it is testing passes for free.**\n\n"
+        "    first run    well_formed 20   cell  0   -> printed OK\n"
+        "    **corrected**  well_formed  1   **cell 19**  -> genuinely OK\n\n"
+        "The fix is not a better assertion, it is a REACHABILITY PRECONDITION: "
+        "the test now refuses unless at least 60% of the bodies reach leg 4 and "
+        "fail THERE. One body still fails earlier, on a real hygiene defect in "
+        "its own source (`eventually` without `strong`), which is the shipped "
+        "gate doing its job and is reported rather than suppressed.\n\n"
+        "**THE RULE, AND IT SUBSUMES THE FAIL-OPEN MASK TOO.** An instrument "
+        "must be shown CAPABLE OF PRODUCING THE OUTCOME IT EXISTS TO DETECT "
+        "before any of its verdicts are read. The mask in "
+        "`a_fail_open_mask_reports_its_own_absence_as_a_measurement` failed this "
+        "from one side -- every way of failing to decide landed on *admit*. This "
+        "fails it from the other -- the deciding step never ran at all. **Both "
+        "produce a confident number, and in both the tell is that a cause which "
+        "should be rare holds nearly all the mass.** Partition the outcomes by "
+        "cause, and refuse to report when the substantive cause is not among "
+        "them."
+    )
+
+
+def the_sets_documented_rule_is_not_the_rule_that_built_it() -> str:
+    """THE SESSION'S HEADLINE SET IS REFERENCE-SELECTED, AND ITS OWN HEADER SAYS
+    OTHERWISE.
+
+    Four graded runs used one check set. Its launcher describes the selection as
+    golden-free -- *"decides on some spec-derived design AND convicts at most 6
+    of the 7 independent implementations"* -- and every figure taken with it has
+    been quoted as a golden-free result. Reproducing that rule from the corpus
+    settles it, and the answer is that the rule did not build the set.
+    """
+    return (
+        "    the stated rule over 600 bodies      keeps **234**\n"
+        "      of them convicting the reference     **64 = 27.4%**\n"
+        "    the actual set                       **169**\n"
+        "      of them convicting the reference     **0**\n\n"
+        "**THE RULE RECOVERS 168 OF THE 169 AND ADDS 66 MORE, OF WHICH 64 ARE "
+        "UNSOUND.** So it is an outer filter that over-generates almost purely "
+        "over-strict checks, and one set member violates it outright at h = 7 "
+        "of 7. No threshold rescues it: swept from t = 0 to t = 6 the audit "
+        "runs 9.9%, 17.0%, 19.6%, 20.2%, 21.4%, 22.0%, 27.4% -- **never zero** "
+        "-- and the set's own conviction profile spans the whole range, "
+        "`{0:137, 1:9, 2:6, 3:2, 4:4, 5:7, 6:3, 7:1}`. A threshold rule cannot "
+        "produce a set shaped like that.\n\n"
+        "**WHAT DID BUILD IT, CONFIRMED BY EXACT SET IDENTITY IN BOTH "
+        "DIRECTIONS.** Of the 600 bodies, **169** decide on the reference and "
+        "convict it nowhere. The set is those 169: set minus audit-zero = 0, "
+        "audit-zero minus set = 0. **It is `golden_check` applied to the "
+        "corpus.**\n\n"
+        "**AND THE DE-DUPLICATED SET INHERITS IT, WHICH WIDENS THE "
+        "CORRECTION TO A SECOND RUN.** The 87-check set was built by grouping "
+        "the 169 by verdict vector and keeping one representative per group, "
+        "plus one check from elsewhere -- so **86 of its 87 members are "
+        "members of the 169**. Its own selection step is golden-free and that "
+        "is not the point: a de-duplication cannot launder the provenance of "
+        "what it de-duplicates. The run it drove to zero objections at 174 "
+        "testpoints is a ceiling for the same reason the 146 is.\n\n"
+        "**SO EVERY FIGURE TAKEN WITH EITHER SET IS A CEILING, NOT A "
+        "GOLDEN-FREE SCORE** -- including the best design this work has "
+        "produced. That is the same status `MAXSOUND` carries and is labelled "
+        "with (*'selected by golden and is a ceiling, not a score'*); this set "
+        "is the same construction at larger scale, 169 checks over 74 "
+        "requirements against MAXSOUND's 68 over 45, and it was **not** "
+        "labelled. The label is the correction.\n\n"
+        "**AND IT PRICES THE GOLDEN-FREE APPROXIMATION, WHICH IS THE USABLE "
+        "HALF.** The minority rule is what a pipeline can actually run, and "
+        "against the reference-selected set it reads:\n\n"
+        "    t = 0   keeps 152   recovers **137 of 169**   audit **9.9%**\n"
+        "    t = 6   keeps 234   recovers **168 of 169**   audit **27.4%**\n\n"
+        "Recall and false-reject move together, and neither end is free. That "
+        "trade is the honest statement of what selection without a reference "
+        "costs on this corpus, and it is the first time it has been measured "
+        "against a set known to be exactly the reference's own answer."
+    )
+
+
+def variants_test_the_under_assertion_half_of_faithfulness() -> str:
+    """THE PIPELINE'S VARIANTS ARE A FAITHFULNESS INSTRUMENT, NOT A SELECTOR.
+
+    `variants.py` states the distinction this finding rests on: mechanical
+    mutants come from a model's SOURCE and test *"does this oracle notice an
+    edit to this implementation"*, while a variant is derived from the
+    REQUIREMENT and tests *"does this oracle notice a design that violates this
+    requirement"*. One variant per clause KIND, so each carries a label naming
+    which obligation of the sentence it breaks. `must_fail` folds that to one
+    bit.
+    """
+    return (
+        "**WHAT THE BIT HIDES.** Over 54 checks, 19 scorable once those "
+        "convicting the conforming witness are excluded (their must-fail "
+        "reading is void, and `variants.py` states that ordering itself):\n\n"
+        "    catches EVERY clause kind of its own requirement   **4**\n"
+        "    catches SOME -- a NAMED missing obligation         **5**\n"
+        "    catches NONE                                      **10**\n\n"
+        "`must_fail` reports 9 sensitive / 10 not, merging the 4 complete with "
+        "the 5 partial. Per kind, a check misses the obligation it names most "
+        "often on TRIGGER -- 12 of 15 = 80% -- against action 47%, order 57%, "
+        "threshold 40%. That is the false-alarm taxonomy's class A, *a held "
+        "input read as a live trigger*, reached by an independent "
+        "instrument.\n\n"
+        "**AS A REPAIR SIGNAL IT MISSES ITS BAR, AND THE DECOMPOSITION IS WHY.** "
+        "15 checks were each told ONE named missing clause and shown the design "
+        "that exploits it. Pre-registered at >= 4 of 15; it landed **3**, and "
+        "bought them with **8** newly convicting the reference -- net -5 on the "
+        "audit, which by the pair discipline is a negative result. But 10 of 15 "
+        "GAINED the obligation. **The author finds the direction and not the "
+        "stopping point**, which is the same wall the strength round hit at 34 "
+        "of 34, now with the author's half shown working.\n\n"
+        "**AND 4 OF THE 15 TARGETS WERE UNANSWERABLE BY CONSTRUCTION** -- the "
+        "clk-rising-edge clause, on a trace whose rows ARE edges, so no check "
+        "can distinguish the variant. That is a defect in the variant "
+        "generator: `variants.py` already drops a variant whose trace is "
+        "identical projected onto the requirement's observable ports, and the "
+        "same guard belongs on CLAUSE observability.\n\n"
+        "**AS A SELECTION SIGNAL IT CANNOT WORK, AND THAT IS STRUCTURAL.** A "
+        "variant is an INCORRECT design by construction, so it carries no "
+        "information about correct ones -- and separating sound from "
+        "over-strict is a question about correct ones. It was already "
+        "quantified before this: `must_fail` sensitivity reads "
+        "P(sensitive | convicts the reference) = 0.95 against "
+        "P(sensitive | sound) = 0.52, so sensitivity is MONOTONE IN "
+        "OVER-STRICTNESS. The per-obligation profile reproduces it -- complete "
+        "profile 2 of 4 convicting the reference, none-profile 0 of 10.\n\n"
+        "**VARIANTS LICENSE REJECTION, NEVER SELECTION.** Rejecting needs one "
+        "leg: a check convicting no variant of its own requirement cannot be "
+        "complete about its sentence. Keeping needs both, and variants supply "
+        "one. That is the control-leak rule's asymmetry reached from the other "
+        "side.\n\n"
+        "**WHERE THEY DO PAY, measured like-for-like on one check population.** "
+        "The dedup step ranks on a verdict signature, and 7 designs resolve 54 "
+        "checks into **13** opinions with 76% exact duplicates and a largest "
+        "group of 23. 264 variants resolve the same 54 into **39**, 28% "
+        "duplicates, largest group 6; together 40. **3x the resolution**, and "
+        "it says why no threshold on the conviction count separates the "
+        "audit-zero set: the signature it ranks on cannot tell 23 checks "
+        "apart."
+    )
+
+
+def population_non_convergence_is_not_specification_silence() -> str:
+    """A RETRACTION, AND WHAT SURVIVES IT.
+
+    This work read a design population's disagreement at a cell as the
+    SPECIFICATION underdetermining that cell, and reported the two as one
+    thing. They are not. The population can diverge because the text is silent
+    OR because it determines the cell and the readers misread it; and it can
+    converge WRONGLY through a shared misreading, which is Knight-Leveson and
+    is measured here rather than supposed.
+    """
+    return (
+        "**THE IDENTIFICATION IS REFUTED BY THIS CORPUS'S OWN NUMBERS.** Cells "
+        "where the population is UNANIMOUS and NOT the reference:\n\n"
+        "    13 designs   269 of 217,590 = 0.124%\n"
+        "     7 designs  1,557 of 225,544 = 0.690%\n\n"
+        "So unanimity does not imply determination. The targeted-question "
+        "round does not rescue it either: **0 of 20** readers declined those "
+        "cells as underdetermined, which is equally consistent with *the text "
+        "says it and they misread* as with *the text is silent*. That "
+        "experiment cannot separate the two, and it was presented as though it "
+        "could.\n\n"
+        "**WHAT SURVIVES IS CHECK-INDEPENDENT AND WORTH MORE THAN WHAT DOES "
+        "NOT.** The delivered design's residue -- 3,356 differing cells, keyed "
+        "by RAW EDGE so compression cannot misalign designs -- partitions:\n\n"
+        "                          7 designs   13 designs\n"
+        "    population SPLITS        66.1%       77.3%\n"
+        "    population UNANIMOUS     33.9%       22.7%\n"
+        "      ...and it is RIGHT     27.0%       21.6%   (905 / 725 cells)\n\n"
+        "Between a fifth and a quarter of what remains sits where the "
+        "population agrees, its agreed value IS the reference's, the design is "
+        "wrong, and nothing objected. **That is not silence of any kind.**\n\n"
+        "**AND THE LOOP BEHAVED AS THE DECOMPOSITION PREDICTS.** Start design "
+        "to delivered, 7-design view: errors at unanimous cells 7,841 -> 1,138 "
+        "(**-85%**), at split cells 4,055 -> 2,218 (-45%). It cleared the "
+        "agreed half nearly twice as effectively and left 1,138 behind.\n\n"
+        "**THE CLOSABILITY TRADE, AND POPULATION SIZE IS THE KNOB.** A check "
+        "demanding the agreed value wherever the population is unanimous:\n\n"
+        "     7 designs   catch 905   false reject 1,557   **0.58 : 1**\n"
+        "    13 designs   catch 725   false reject   269   **2.70 : 1**\n\n"
+        "7 -> 13 costs 20% of the catches and removes **5.8x** of the false "
+        "rejects. This is the first catch-to-false-reject ratio above 1 this "
+        "work has produced at cell granularity, and it refines rather than "
+        "contradicts *consensus ranks the reference 15 of 16* -- that was "
+        "consensus RANKING DESIGNS, this is consensus LOCALISING CELLS. The "
+        "20.4% recall reported for the anomaly detector was diluted by the "
+        "split region where nothing can work; within the unanimous region it "
+        "was already 94.5%.\n\n"
+        "**ONE ATTRIBUTION THAT DOES NOT SURVIVE.** Reading those 725-905 "
+        "cells as a CHECK blind spot assumes the corpus is faithful enough "
+        "that *no check objected* means blindness rather than *no faithful "
+        "check exists there*. At a measured >=78% unfaithful that assumption "
+        "is not available. The divergence is real; the blame is not "
+        "assigned."
+    )
+
+
+def the_contradiction_screen_must_be_conditioned_on_discrimination() -> str:
+    """FAITHFULNESS IS REFUTABLE AND NOT VERIFIABLE, AND THE NAIVE SCREEN
+    REWARDS A SET THAT SAYS NOTHING.
+
+    Two checks authored independently for the SAME sentence are two
+    translations of one meaning. If one returns False where the other returns
+    True on the same trace, at least one does not mean what the sentence means
+    -- proof, with no reference, no rater and no design population. It is
+    ONE-SIDED: it identifies unfaithful and never faithful.
+    """
+    return (
+        "**THE RAW RATE.** 21 of 27 requirements = **78%** carry a check "
+        "proved unfaithful. Only decided-vs-decided disagreements count; one "
+        "check abstaining while the other decides is coverage, not "
+        "contradiction, and folding them together is the None/True conflation "
+        "this module forbids. It converges with the independent bracket -- "
+        "correspondence accepts 41 of 54 = 76% (no MORE than the sentence), "
+        "clause variants find 4 of 19 = 21% complete (no LESS), and their "
+        "intersection is **3 of 19 = 16% faithful by both**.\n\n"
+        "**THE COMPLEMENT IS CONFOUNDED WITH VACUITY, AND THIS WORK READ IT AS "
+        "FAITHFULNESS.** Agreement is cheapest when neither check "
+        "discriminates:\n\n"
+        "    consistent pairs     h(c) at an extreme (0 or 7)  **12 of 12**\n"
+        "    contradicting pairs                                27 of 42\n"
+        "    two-sided Fisher                                   **p = 0.024**\n\n"
+        "So the consistent group is partly two checks jointly saying nothing, "
+        "which is why it shows no soundness benefit (3 of 12 still convict the "
+        "reference against 17 of 42, p = 0.50).\n\n"
+        "**CONDITIONED ON THE PAIR BEING ABLE TO CONTRADICT** -- both checks "
+        "decide and neither is pinned at 0 or N -- the rate is **5 of 5 = "
+        "100%**, against 16 of 22 = 73% where one is pinned. Every pair of "
+        "independently authored checks that both discriminate disagrees about "
+        "what their shared sentence means.\n\n"
+        "**SO A BLIND SCREEN IS A PAIR, NEVER A NUMBER**, and an arbitrary "
+        "compile-gated set would score WELL on the naive one because vacuous "
+        "checks never contradict:\n\n"
+        "    1. what share of requirements yield TWO discriminating checks   "
+        "**19%** here -- this is where a ranking lives\n"
+        "    2. of those, what share contradict                              "
+        "**100%** here -- zero for a faithful set\n\n"
+        "**TWO DISTRIBUTIONAL PROXIES WERE TESTED AND BOTH FAILED**, one "
+        "backwards: h(c) bimodality was predicted to mark unfaithfulness and "
+        "correlates with CONSISTENCY at p = 0.024, because it is a "
+        "discrimination signal and discrimination and faithfulness are "
+        "different axes; and *reads a port its own sentence never names* "
+        "separates 5.08 against 4.57, which is nothing.\n\n"
+        "**AND THE DOCUMENT LEG IS CLEAN, WHICH LOCATES THE PROBLEM.** "
+        "Backward traceability -- every span of the specification claimed by "
+        "some requirement -- is **99.1%** of 12,954 characters with 0 "
+        "unmatched spans and no unclaimed run over 60 characters. Nothing was "
+        "dropped from the text. Text coverage is not behaviour coverage, so "
+        "this argues only that the extraction is complete; the binding leg is "
+        "per-check, which is where optimisation is cheap."
+    )

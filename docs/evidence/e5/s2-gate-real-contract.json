@@ -1,0 +1,114 @@
+{
+  "ok": false,
+  "rounds": 6,
+  "issues": [
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "s2.elements",
+      "message": "no testplan elements produced",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "covers nothing; every testplan must name a requirement",
+      "kind": "orphaned"
+    }
+  ]
+}

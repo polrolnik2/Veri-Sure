@@ -1,0 +1,4 @@
+elaborating stub.v against 122 frozen check(s)
+482 testpoint trace(s) recorded
+CHECK SET  14 pass, 0 FAIL, 108 abstain (never fired), of 122
+EVERY CHECK THAT FIRED PASSED.

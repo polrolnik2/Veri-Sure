@@ -1,0 +1,370 @@
+{
+  "task": "or1200_ctrl",
+  "arm_a": {
+    "run": {
+      "arm": "A",
+      "description": "pre-specflow SystemVerilog testbench path (merge-base + transport fixes)",
+      "task": "or1200_ctrl",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "high",
+      "api_flavor": "responses",
+      "spec_bytes": 14323,
+      "is_sim_pass": false,
+      "rtl_bytes": 20097,
+      "artifacts_present": [
+        "architect_prompt.txt",
+        "architect_raw_output.txt",
+        "asserter",
+        "boolean_proof",
+        "coder_prompt.txt",
+        "coder_prompt_regen_after_mismatch.txt",
+        "coder_raw_output.txt",
+        "coder_raw_output_regen_after_mismatch.txt",
+        "contract.json",
+        "contract_lint.txt",
+        "debug_sim_output.json",
+        "debug_sim_output_i1.json",
+        "debug_sim_output_i2.json",
+        "debug_sim_output_i3.json",
+        "debug_sim_output_i4.json",
+        "debug_sim_output_i5.json",
+        "debug_sim_output_i6.json",
+        "debug_sim_output_i7.json",
+        "debug_sim_output_i9.json",
+        "debug_trajectory.jsonl",
+        "debugger_prompt.txt",
+        "if.sv",
+        "obj_dir",
+        "properly_finished.tag",
+        "rtl.sv",
+        "rtl_before_debug.sv",
+        "rtl_regen_after_mismatch.sv",
+        "sim_failed_log.json",
+        "sim_output.bin",
+        "tb.sv",
+        "trace_report.json",
+        "verifier_prompt.txt",
+        "verifier_raw_output.txt",
+        "wave.vcd"
+      ],
+      "tb_bytes": 17272,
+      "compile_gate": {
+        "status": "pass",
+        "exit_code": 0,
+        "stderr": ""
+      }
+    },
+    "score": {
+      "status": "equivalence_error",
+      "flow": "equivalence",
+      "proof_type": "bounded_seq",
+      "reason": "ERROR: Failed to import cell $flatten\\gold.$auto$proc_rom.cc:150:do_switch$114 (type $mem_v2) to SAT database.",
+      "reference_precheck": "pass",
+      "interface_status": "compatible",
+      "formal_status": "unknown",
+      "compile_gate_status": "pass",
+      "task": "or1200_ctrl",
+      "label": "armA"
+    },
+    "node": null,
+    "produced_rtl": true
+  },
+  "arm_b": {
+    "run": {
+      "task": "or1200_ctrl",
+      "family": "or1200",
+      "hierarchical": false,
+      "instantiates": [],
+      "spec_bytes": 14323,
+      "reference_lines": 931,
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "high",
+      "api_flavor": "responses",
+      "tb_backend": "specflow",
+      "child_sources": [],
+      "include_dirs": [
+        "/home/user/Veri-Sure/benchmarks/chipverilog/Des/or1200",
+        "/home/user/Veri-Sure/benchmarks/chipverilog/Des/or1200/or1200_ctrl"
+      ],
+      "is_sim_pass": false,
+      "rtl_bytes": 0,
+      "tokens": {
+        "eda_agent_input": 39964,
+        "eda_agent_output": 18126,
+        "breakdown": {
+          "architect": {
+            "input": 39964,
+            "output": 18126
+          },
+          "tb_gen": {
+            "input": 0,
+            "output": 0
+          },
+          "rtl_gen": {
+            "input": 0,
+            "output": 0
+          },
+          "rtl_edit": {
+            "input": 0,
+            "output": 0
+          },
+          "consensus_rtl_player": {
+            "input": 0,
+            "output": 0
+          },
+          "consensus_tb_player": {
+            "input": 0,
+            "output": 0
+          },
+          "total": {
+            "input": 39964,
+            "output": 18126
+          }
+        },
+        "specflow": {
+          "calls": 4,
+          "prompt": 37039,
+          "completion": 70851,
+          "reasoning": 31672
+        }
+      },
+      "stages": {
+        "s1": {
+          "ok": false,
+          "rounds": 4,
+          "issues": [
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0000.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0001.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0002.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0003.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0004.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0005.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0006.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0007.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0008.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0009.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0010.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0011.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0012.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0013.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0014.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0015.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0016.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0017.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0018.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0019.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0020.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0021.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0022.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0023.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0024.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0025.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0026.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0027.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0028.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0029.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "requirement.REQ-0030.spec_spans[0]",
+              "message": "quote is not the verbatim spec text at that range",
+              "kind": null
+            },
+            {
+              "severity": "error",
+              "path": "spec[0:14323]",
+              "message": "no requirement claims this text: 'Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, ex'",
+              "kind": "uncovered"
+            }
+          ]
+        },
+        "s2": null,
+        "s3": null,
+        "refmodel": null
+      },
+      "artifacts_present": [
+        "requirements.json",
+        "s1_gate.json"
+      ],
+      "compile_gate": {
+        "status": "fail",
+        "reason": "no candidate RTL was produced"
+      },
+      "submodule_sources_supplied": []
+    },
+    "score": null,
+    "node": {
+      "backend": "specflow",
+      "history": [],
+      "artifacts": {
+        "ok": false,
+        "stage": "S1",
+        "reason": "S1 gate failed with 32 issue(s)"
+      }
+    },
+    "produced_rtl": false
+  },
+  "arm_a_artifacts": [
+    "rtl.sv",
+    "tb.sv",
+    "contract.json",
+    "baseline.json",
+    "score.json"
+  ],
+  "arm_b_artifacts": [
+    "contract.json",
+    "baseline.json",
+    "specflow_node.json",
+    "specflow/requirements.json",
+    "specflow/s1_gate.json"
+  ]
+}

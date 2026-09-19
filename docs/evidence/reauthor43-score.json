@@ -1,0 +1,170 @@
+{
+ "REQ-0001": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred"
+ },
+ "REQ-0002": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "START ordering matched: the sequence completed all 2 steps i"
+ },
+ "REQ-0005": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "busy asserted after the filtered START and stayed asserted t"
+ },
+ "REQ-0007": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged    golden still convicted",
+  "detail": "the invariant broke at edge 18, in the window opening at edg"
+ },
+ "REQ-0016": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "the invariant held for every row seen, but the window openin"
+ },
+ "REQ-0020": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged    golden still convicted",
+  "detail": "the invariant broke at edge 72, in the window opening at edg"
+ },
+ "REQ-0028": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "the activation never occurred"
+ },
+ "REQ-0042": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout"
+ },
+ "REQ-0044": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "3 gated dout capture(s) observed, none coincident with a raw"
+ },
+ "REQ-0050": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout"
+ },
+ "REQ-0055": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged    golden still convicted",
+  "detail": "the expected response never occurred in the window opening a"
+ },
+ "REQ-0057": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged    golden still convicted",
+  "detail": "the expected response never occurred in the window opening a"
+ },
+ "REQ-0059": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout"
+ },
+ "REQ-0073": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred"
+ },
+ "REQ-0075": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred"
+ },
+ "REQ-0082": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "the activation never occurred"
+ },
+ "REQ-0087": {
+  "was": false,
+  "now": false,
+  "disposition": "TRUSTED",
+  "outcome": "unchanged    golden still convicted",
+  "detail": "the forbidden condition occurred at edge 4, in the window op"
+ },
+ "REQ-0089": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "every clk_cnt>=1 interval between scl_oen transitions while "
+ },
+ "REQ-0101": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "dout already equalled the expected bit before this READ bega"
+ },
+ "REQ-0102": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "a nonzero cmd was present together with ena=1, nReset=1, rst"
+ },
+ "REQ-0107": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the invariant held throughout"
+ },
+ "REQ-0117": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "the expected response occurred"
+ },
+ "REQ-0118": {
+  "was": false,
+  "now": null,
+  "disposition": "TRUSTED",
+  "outcome": "went SILENT  stopped deciding (not a win)",
+  "detail": "the activation never occurred"
+ },
+ "REQ-0124": {
+  "was": false,
+  "now": true,
+  "disposition": "TRUSTED",
+  "outcome": "CONVERGED   golden now passes it",
+  "detail": "23 row(s) with scl_oen==0 and 25 row(s) with sda_oen==0 all "
+ }
+}

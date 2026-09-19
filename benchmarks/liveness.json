@@ -1,0 +1,1068 @@
+[
+  {
+    "moved": [
+      "Q"
+    ],
+    "outputs": [
+      "Q",
+      "x_o",
+      "y_o",
+      "z_o",
+      "theta_o",
+      "valid_out"
+    ],
+    "constant": [
+      "theta_o",
+      "valid_out",
+      "x_o",
+      "y_o",
+      "z_o"
+    ],
+    "clocked": false,
+    "task": "cordic",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "Q"
+    ],
+    "outputs": [
+      "Q",
+      "x_o",
+      "y_o",
+      "z_o"
+    ],
+    "constant": [
+      "x_o",
+      "y_o",
+      "z_o"
+    ],
+    "clocked": false,
+    "task": "rotator",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "Q"
+    ],
+    "outputs": [
+      "Q"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "signed_shifter",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "task": "fpu",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/fpu/build', '--top-module', 'fpu', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'fpu', '-LDFLAGS', '-Wl,"
+  },
+  {
+    "moved": [
+      "exponent_2",
+      "sum_2"
+    ],
+    "outputs": [
+      "sign",
+      "sum_2",
+      "exponent_2"
+    ],
+    "constant": [
+      "sign"
+    ],
+    "clocked": true,
+    "task": "fpu_add",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "ready"
+    ],
+    "outputs": [
+      "out",
+      "ready"
+    ],
+    "constant": [
+      "out"
+    ],
+    "clocked": true,
+    "task": "fpu_addsub_pipeline",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "fpu_div",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/fpu_div/build', '--top-module', 'fpu_div', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'fpu_div', '-LDF"
+  },
+  {
+    "moved": [
+      "ex_enable",
+      "exception",
+      "inexact",
+      "out"
+    ],
+    "outputs": [
+      "out",
+      "ex_enable",
+      "underflow",
+      "overflow",
+      "inexact",
+      "exception",
+      "invalid"
+    ],
+    "constant": [
+      "invalid",
+      "overflow",
+      "underflow"
+    ],
+    "clocked": true,
+    "task": "fpu_exceptions",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "fpu_mul",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/fpu_mul/build', '--top-module', 'fpu_mul', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'fpu_mul', '-LDF"
+  },
+  {
+    "moved": [
+      "ready"
+    ],
+    "outputs": [
+      "ready",
+      "outfp"
+    ],
+    "constant": [
+      "outfp"
+    ],
+    "clocked": true,
+    "task": "fpu_mul_pipeline",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "fpu_round",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/fpu_round/build', '--top-module', 'fpu_round', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'fpu_round',"
+  },
+  {
+    "task": "fpu_sub",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/fpu_sub/build', '--top-module', 'fpu_sub', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'fpu_sub', '-LDF"
+  },
+  {
+    "moved": [
+      "cmd_ack",
+      "dout",
+      "scl_oen",
+      "sda_oen"
+    ],
+    "outputs": [
+      "cmd_ack",
+      "busy",
+      "al",
+      "dout",
+      "scl_o",
+      "scl_oen",
+      "sda_o",
+      "sda_oen"
+    ],
+    "constant": [
+      "al",
+      "busy",
+      "scl_o",
+      "sda_o"
+    ],
+    "clocked": true,
+    "task": "i2c_master_bit_ctrl",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "i2c_master_byte_ctrl",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/i2c_master_byte_ctrl/build', '--top-module', 'i2c_master_byte_ctrl', '--vpi', '--public-flat-rw', '--prefix', 'Vto"
+  },
+  {
+    "task": "i2c_master_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/i2c_master_top/build', '--top-module', 'i2c_master_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'i"
+  },
+  {
+    "task": "EX_stage",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/EX_stage/build', '--top-module', 'EX_stage', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'EX_stage', '-"
+  },
+  {
+    "moved": [
+      "branch_offset_imm",
+      "pipeline_reg_out"
+    ],
+    "outputs": [
+      "pipeline_reg_out",
+      "branch_offset_imm",
+      "branch_taken",
+      "reg_read_addr_1",
+      "reg_read_addr_2",
+      "decoding_op_src1",
+      "decoding_op_src2"
+    ],
+    "constant": [
+      "branch_taken",
+      "decoding_op_src1",
+      "decoding_op_src2",
+      "reg_read_addr_1",
+      "reg_read_addr_2"
+    ],
+    "clocked": true,
+    "task": "ID_stage",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "IF_stage",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/IF_stage/build', '--top-module', 'IF_stage', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'IF_stage', '-"
+  },
+  {
+    "task": "MEM_stage",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/MEM_stage/build', '--top-module', 'MEM_stage', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'MEM_stage',"
+  },
+  {
+    "moved": [],
+    "outputs": [
+      "_write_en",
+      "reg_write_dest",
+      "reg_write_data",
+      "wb_op_dest"
+    ],
+    "constant": [
+      "_write_en",
+      "reg_write_data",
+      "reg_write_dest",
+      "wb_op_dest"
+    ],
+    "clocked": false,
+    "task": "WB_stage",
+    "clock": null,
+    "status": "frozen"
+  },
+  {
+    "moved": [
+      "r"
+    ],
+    "outputs": [
+      "r"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "alu",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "moved": [
+      "mem_read_data"
+    ],
+    "outputs": [
+      "mem_read_data"
+    ],
+    "constant": [],
+    "clocked": true,
+    "task": "data_mem",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "pipeline_stall_n"
+    ],
+    "outputs": [
+      "pipeline_stall_n"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "hazard_detection_unit",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "moved": [],
+    "outputs": [
+      "instruction"
+    ],
+    "constant": [
+      "instruction"
+    ],
+    "clocked": true,
+    "task": "instruction_mem",
+    "clock": "clk",
+    "status": "frozen"
+  },
+  {
+    "task": "mips_16_core_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/mips_16_core_top/build', '--top-module', 'mips_16_core_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o'"
+  },
+  {
+    "moved": [],
+    "outputs": [
+      "reg_read_data_1",
+      "reg_read_data_2"
+    ],
+    "constant": [
+      "reg_read_data_1",
+      "reg_read_data_2"
+    ],
+    "clocked": true,
+    "task": "register_file",
+    "clock": "clk",
+    "status": "frozen"
+  },
+  {
+    "moved": [
+      "result"
+    ],
+    "outputs": [
+      "result",
+      "flagforw",
+      "flag_we",
+      "cyforw",
+      "cy_we"
+    ],
+    "constant": [
+      "cy_we",
+      "cyforw",
+      "flag_we",
+      "flagforw"
+    ],
+    "clocked": false,
+    "task": "or1200_alu",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "moved": [
+      "spr_dat_o"
+    ],
+    "outputs": [
+      "spr_dat_o"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "or1200_cfgr",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "task": "or1200_cpu",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_cpu/build', '--top-module', 'or1200_cpu', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1200_cp"
+  },
+  {
+    "moved": [],
+    "outputs": [
+      "ex_insn",
+      "branch_op",
+      "rf_addrw",
+      "rf_addra",
+      "rf_addrb",
+      "rf_rda",
+      "rf_rdb",
+      "alu_op",
+      "mac_op",
+      "shrot_op",
+      "rfwb_op",
+      "wb_insn",
+      "simm",
+      "branch_addrofs",
+      "lsu_addrofs",
+      "sel_a",
+      "sel_b",
+      "lsu_op",
+      "comp_op",
+      "multicycle",
+      "cust5_op",
+      "cust5_limm",
+      "spr_addrimm",
+      "sig_syscall",
+      "sig_trap",
+      "force_dslot_fetch",
+      "no_more_dslot",
+      "ex_void",
+      "id_macrc_op",
+      "ex_macrc_op",
+      "rfe",
+      "except_illegal"
+    ],
+    "constant": [
+      "alu_op",
+      "branch_addrofs",
+      "branch_op",
+      "comp_op",
+      "cust5_limm",
+      "cust5_op",
+      "ex_insn",
+      "ex_macrc_op",
+      "ex_void",
+      "except_illegal",
+      "force_dslot_fetch",
+      "id_macrc_op",
+      "lsu_addrofs",
+      "lsu_op",
+      "mac_op",
+      "multicycle",
+      "no_more_dslot",
+      "rf_addra",
+      "rf_addrb",
+      "rf_addrw",
+      "rf_rda",
+      "rf_rdb",
+      "rfe",
+      "rfwb_op",
+      "sel_a",
+      "sel_b",
+      "shrot_op",
+      "sig_syscall",
+      "sig_trap",
+      "simm",
+      "spr_addrimm",
+      "wb_insn"
+    ],
+    "clocked": true,
+    "task": "or1200_ctrl",
+    "clock": "clk",
+    "status": "frozen"
+  },
+  {
+    "moved": [
+      "biu_read",
+      "biu_write",
+      "burst",
+      "dc_addr",
+      "dcram_we",
+      "first_miss_ack",
+      "first_miss_err",
+      "saved_addr",
+      "tag_we"
+    ],
+    "outputs": [
+      "saved_addr",
+      "dcram_we",
+      "biu_read",
+      "biu_write",
+      "first_hit_ack",
+      "first_miss_ack",
+      "first_miss_err",
+      "burst",
+      "tag_we",
+      "dc_addr"
+    ],
+    "constant": [
+      "first_hit_ack"
+    ],
+    "clocked": true,
+    "task": "or1200_dc_fsm",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "or1200_dc_ram",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_dc_ram/build', '--top-module', 'or1200_dc_ram', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "task": "or1200_dc_tag",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_dc_tag/build', '--top-module', 'or1200_dc_tag', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "task": "or1200_dc_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_dc_top/build', '--top-module', 'or1200_dc_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "task": "or1200_dmmu_tlb",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_dmmu_tlb/build', '--top-module', 'or1200_dmmu_tlb', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', "
+  },
+  {
+    "task": "or1200_dmmu_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_dmmu_top/build', '--top-module', 'or1200_dmmu_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', "
+  },
+  {
+    "moved": [
+      "dbg_ack_o",
+      "dbg_bp_o",
+      "dbg_dat_o",
+      "dbg_is_o",
+      "du_addr",
+      "du_dat_o",
+      "du_read",
+      "du_stall",
+      "du_write"
+    ],
+    "outputs": [
+      "du_dsr",
+      "du_stall",
+      "du_addr",
+      "du_dat_o",
+      "du_read",
+      "du_write",
+      "du_hwbkpt",
+      "spr_dat_o",
+      "dbg_lss_o",
+      "dbg_is_o",
+      "dbg_wp_o",
+      "dbg_bp_o",
+      "dbg_dat_o",
+      "dbg_ack_o"
+    ],
+    "constant": [
+      "dbg_lss_o",
+      "dbg_wp_o",
+      "du_dsr",
+      "du_hwbkpt",
+      "spr_dat_o"
+    ],
+    "clocked": true,
+    "task": "or1200_du",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "except_start",
+      "except_started",
+      "extend_flush"
+    ],
+    "outputs": [
+      "id_pc",
+      "lr_sav",
+      "epcr",
+      "eear",
+      "esr",
+      "flushpipe",
+      "extend_flush",
+      "except_type",
+      "except_start",
+      "except_started",
+      "except_stop",
+      "spr_dat_ppc",
+      "spr_dat_npc",
+      "abort_ex"
+    ],
+    "constant": [
+      "abort_ex",
+      "eear",
+      "epcr",
+      "esr",
+      "except_stop",
+      "except_type",
+      "flushpipe",
+      "id_pc",
+      "lr_sav",
+      "spr_dat_npc",
+      "spr_dat_ppc"
+    ],
+    "clocked": true,
+    "task": "or1200_except",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "genpc_freeze",
+      "id_freeze"
+    ],
+    "outputs": [
+      "genpc_freeze",
+      "if_freeze",
+      "id_freeze",
+      "ex_freeze",
+      "wb_freeze"
+    ],
+    "constant": [
+      "ex_freeze",
+      "if_freeze",
+      "wb_freeze"
+    ],
+    "clocked": true,
+    "task": "or1200_freeze",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "icpu_adr_o",
+      "taken"
+    ],
+    "outputs": [
+      "icpu_adr_o",
+      "icpu_cycstb_o",
+      "icpu_sel_o",
+      "icpu_tag_o",
+      "taken"
+    ],
+    "constant": [
+      "icpu_cycstb_o",
+      "icpu_sel_o",
+      "icpu_tag_o"
+    ],
+    "clocked": true,
+    "task": "or1200_genpc",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "P"
+    ],
+    "outputs": [
+      "P"
+    ],
+    "constant": [],
+    "clocked": true,
+    "task": "or1200_gmultp2_32x32",
+    "clock": "CLK",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "biu_read",
+      "burst",
+      "first_hit_ack",
+      "first_miss_ack",
+      "first_miss_err",
+      "icram_we",
+      "saved_addr",
+      "tag_we"
+    ],
+    "outputs": [
+      "saved_addr",
+      "icram_we",
+      "biu_read",
+      "first_hit_ack",
+      "first_miss_ack",
+      "first_miss_err",
+      "burst",
+      "tag_we"
+    ],
+    "constant": [],
+    "clocked": true,
+    "task": "or1200_ic_fsm",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "or1200_ic_ram",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_ic_ram/build', '--top-module', 'or1200_ic_ram', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "task": "or1200_ic_tag",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_ic_tag/build', '--top-module', 'or1200_ic_tag', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "task": "or1200_ic_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_ic_top/build', '--top-module', 'or1200_ic_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1"
+  },
+  {
+    "moved": [
+      "genpc_refetch",
+      "if_insn",
+      "if_pc"
+    ],
+    "outputs": [
+      "if_insn",
+      "if_pc",
+      "if_stall",
+      "genpc_refetch",
+      "except_itlbmiss",
+      "except_immufault",
+      "except_ibuserr"
+    ],
+    "constant": [
+      "except_ibuserr",
+      "except_immufault",
+      "except_itlbmiss",
+      "if_stall"
+    ],
+    "clocked": true,
+    "task": "or1200_if",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "or1200_immu_tlb",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_immu_tlb/build', '--top-module', 'or1200_immu_tlb', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', "
+  },
+  {
+    "task": "or1200_immu_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_immu_top/build', '--top-module', 'or1200_immu_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', "
+  },
+  {
+    "moved": [
+      "biu_ack_o",
+      "biu_dat_o",
+      "wb_sel_o"
+    ],
+    "outputs": [
+      "wb_cyc_o",
+      "wb_adr_o",
+      "wb_stb_o",
+      "wb_we_o",
+      "wb_sel_o",
+      "wb_dat_o",
+      "wb_cab_o",
+      "wb_cti_o",
+      "wb_bte_o",
+      "biu_dat_o",
+      "biu_ack_o",
+      "biu_err_o"
+    ],
+    "constant": [
+      "biu_err_o",
+      "wb_adr_o",
+      "wb_bte_o",
+      "wb_cab_o",
+      "wb_cti_o",
+      "wb_cyc_o",
+      "wb_dat_o",
+      "wb_stb_o",
+      "wb_we_o"
+    ],
+    "clocked": true,
+    "task": "or1200_iwb_biu",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "or1200_lsu",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_lsu/build', '--top-module', 'or1200_lsu', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1200_ls"
+  },
+  {
+    "moved": [
+      "regdata"
+    ],
+    "outputs": [
+      "regdata"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "or1200_mem2reg",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "task": "or1200_mult_mac",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_mult_mac/build', '--top-module', 'or1200_mult_mac', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', "
+  },
+  {
+    "moved": [
+      "muxed_b"
+    ],
+    "outputs": [
+      "operand_a",
+      "operand_b",
+      "muxed_b"
+    ],
+    "constant": [
+      "operand_a",
+      "operand_b"
+    ],
+    "clocked": true,
+    "task": "or1200_operandmuxes",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "intr",
+      "pic_wakeup",
+      "spr_dat_o"
+    ],
+    "outputs": [
+      "spr_dat_o",
+      "pic_wakeup",
+      "intr"
+    ],
+    "constant": [],
+    "clocked": true,
+    "task": "or1200_pic",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "pm_lvolt",
+      "pm_wakeup"
+    ],
+    "outputs": [
+      "spr_dat_o",
+      "pm_clksd",
+      "pm_dc_gate",
+      "pm_ic_gate",
+      "pm_dmmu_gate",
+      "pm_immu_gate",
+      "pm_tt_gate",
+      "pm_cpu_gate",
+      "pm_wakeup",
+      "pm_lvolt"
+    ],
+    "constant": [
+      "pm_clksd",
+      "pm_cpu_gate",
+      "pm_dc_gate",
+      "pm_dmmu_gate",
+      "pm_ic_gate",
+      "pm_immu_gate",
+      "pm_tt_gate",
+      "spr_dat_o"
+    ],
+    "clocked": true,
+    "task": "or1200_pm",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "dcqmem_adr_o",
+      "dcqmem_ci_o",
+      "dcqmem_cycstb_o",
+      "dcqmem_dat_o",
+      "dcqmem_sel_o",
+      "dcqmem_tag_o",
+      "icqmem_adr_o",
+      "icqmem_ci_o",
+      "icqmem_cycstb_o",
+      "icqmem_tag_o",
+      "qmemdcpu_ack_o",
+      "qmemdcpu_dat_o",
+      "qmemdcpu_rty_o",
+      "qmemdmmu_err_o",
+      "qmemdmmu_tag_o",
+      "qmemicpu_ack_o",
+      "qmemicpu_dat_o",
+      "qmemimmu_err_o",
+      "qmemimmu_rty_o",
+      "qmemimmu_tag_o"
+    ],
+    "outputs": [
+      "mbist_so_o",
+      "qmemicpu_dat_o",
+      "qmemicpu_ack_o",
+      "qmemimmu_rty_o",
+      "qmemimmu_err_o",
+      "qmemimmu_tag_o",
+      "icqmem_adr_o",
+      "icqmem_cycstb_o",
+      "icqmem_ci_o",
+      "icqmem_sel_o",
+      "icqmem_tag_o",
+      "qmemdcpu_dat_o",
+      "qmemdcpu_ack_o",
+      "qmemdcpu_rty_o",
+      "qmemdmmu_err_o",
+      "qmemdmmu_tag_o",
+      "dcqmem_adr_o",
+      "dcqmem_cycstb_o",
+      "dcqmem_ci_o",
+      "dcqmem_we_o",
+      "dcqmem_sel_o",
+      "dcqmem_tag_o",
+      "dcqmem_dat_o"
+    ],
+    "constant": [
+      "dcqmem_we_o",
+      "icqmem_sel_o",
+      "mbist_so_o"
+    ],
+    "clocked": true,
+    "task": "or1200_qmem_top",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "memdata"
+    ],
+    "outputs": [
+      "memdata"
+    ],
+    "constant": [],
+    "clocked": false,
+    "task": "or1200_reg2mem",
+    "clock": null,
+    "status": "live"
+  },
+  {
+    "task": "or1200_rf",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_rf/build', '--top-module', 'or1200_rf', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1200_rf',"
+  },
+  {
+    "moved": [
+      "dcsb_ack_o",
+      "dcsb_dat_o",
+      "dcsb_err_o",
+      "sbbiu_adr_o",
+      "sbbiu_cyc_o",
+      "sbbiu_dat_o",
+      "sbbiu_sel_o",
+      "sbbiu_stb_o",
+      "sbbiu_we_o"
+    ],
+    "outputs": [
+      "dcsb_dat_o",
+      "dcsb_ack_o",
+      "dcsb_err_o",
+      "sbbiu_dat_o",
+      "sbbiu_adr_o",
+      "sbbiu_cyc_o",
+      "sbbiu_stb_o",
+      "sbbiu_we_o",
+      "sbbiu_cab_o",
+      "sbbiu_sel_o"
+    ],
+    "constant": [
+      "sbbiu_cab_o"
+    ],
+    "clocked": true,
+    "task": "or1200_sb",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "du_dat_cpu",
+      "flag",
+      "spr_addr",
+      "spr_cs",
+      "spr_dat_o",
+      "spr_we",
+      "sr",
+      "sr_we",
+      "to_sr",
+      "to_wbmux"
+    ],
+    "outputs": [
+      "flag",
+      "carry",
+      "to_wbmux",
+      "epcr_we",
+      "eear_we",
+      "esr_we",
+      "pc_we",
+      "sr_we",
+      "to_sr",
+      "sr",
+      "spr_addr",
+      "spr_dat_o",
+      "spr_cs",
+      "spr_we",
+      "du_dat_cpu"
+    ],
+    "constant": [
+      "carry",
+      "eear_we",
+      "epcr_we",
+      "esr_we",
+      "pc_we"
+    ],
+    "clocked": true,
+    "task": "or1200_sprs",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "task": "or1200_top",
+    "status": "build_fail",
+    "reason": "Command '['perl', '/usr/local/bin/verilator', '-cc', '--exe', '-Mdir', '/tmp/liveness/or1200_top/build', '--top-module', 'or1200_top', '--vpi', '--public-flat-rw', '--prefix', 'Vtop', '-o', 'or1200_to"
+  },
+  {
+    "moved": [
+      "spr_dat_o"
+    ],
+    "outputs": [
+      "spr_dat_o",
+      "intr"
+    ],
+    "constant": [
+      "intr"
+    ],
+    "clocked": true,
+    "task": "or1200_tt",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "biu_ack_o",
+      "biu_dat_o",
+      "wb_sel_o"
+    ],
+    "outputs": [
+      "wb_cyc_o",
+      "wb_adr_o",
+      "wb_stb_o",
+      "wb_we_o",
+      "wb_sel_o",
+      "wb_dat_o",
+      "wb_cab_o",
+      "wb_cti_o",
+      "wb_bte_o",
+      "biu_dat_o",
+      "biu_ack_o",
+      "biu_err_o"
+    ],
+    "constant": [
+      "biu_err_o",
+      "wb_adr_o",
+      "wb_bte_o",
+      "wb_cab_o",
+      "wb_cti_o",
+      "wb_cyc_o",
+      "wb_dat_o",
+      "wb_stb_o",
+      "wb_we_o"
+    ],
+    "clocked": true,
+    "task": "or1200_wb_biu",
+    "clock": "clk",
+    "status": "live"
+  },
+  {
+    "moved": [
+      "muxout"
+    ],
+    "outputs": [
+      "muxout",
+      "muxreg",
+      "muxreg_valid"
+    ],
+    "constant": [
+      "muxreg",
+      "muxreg_valid"
+    ],
+    "clocked": true,
+    "task": "or1200_wbmux",
+    "clock": "clk",
+    "status": "live"
+  }
+]

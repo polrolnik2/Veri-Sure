@@ -1,0 +1,1423 @@
+"""Bridge between `eda_agent`'s node-level run and the specflow pipeline.
+
+Kept in `specflow/` rather than threaded through `top_agent.py` so the two can be
+tested apart: everything here is a pure function of a run directory plus a model
+port, and none of it needs the orchestrator.
+
+The one thing this genuinely fixes on the `eda_agent` side is the spec. `spec:
+str` is already a required parameter of `TopAgent.run` (`:963-973`) and both
+entry points supply it, but only `cli.py:74` writes it to disk. specflow reads
+`prompt.txt`, so `ensure_prompt_file` makes the benchmark path carry it too.
+"""
+
+from __future__ import annotations
+
+import json
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Sequence
+
+import logging
+
+from .cache_stats import CacheStats
+from .coverage import build_report, freeze_denominator
+from .gate import evaluate
+from .model_io import PortSettings, make_port, resumable
+from .normalize import resolve_indirect, run_normalize_fanout
+from .normalize import write_artifacts as write_normalized
+from eda_agent.contract_linter import probe_issues
+from .probes import orphans as probe_orphans
+from .probes import run_probes
+from .probes import write_artifacts as write_probes
+from .probes import fold_in
+from .probes import write_contract
+from .refmodel.compose import choose_base, run_refmodel
+from .refmodel.compose import write_artifacts as write_refmodel
+from .refmodel.validate import validate_source
+from .run import reconcile, run_suite
+from .s1_requirements import RequirementsOutput, S1Result
+from .s1_requirements import gate as gate_s1
+from .s1_requirements import renumber as renumber_reqs
+from .s1_requirements import run_s1
+from .s1_requirements import write_artifacts as write_s1
+from .s2_testplan import TestplanOutput
+from .s2_testplan import gate as gate_s2
+from .s2_testplan import renumber as renumber_tps
+from .s2_testplan import run_s2, run_s2_fanout
+from .s2_testplan import write_artifacts as write_s2
+from .s3_coverage import CoverageOutput
+from .s3_coverage import gate as gate_s3
+from .s3_coverage import renumber as renumber_cov
+from .s3_coverage import run_s3, run_s3_fanout
+from .s3_coverage import write_artifacts as write_s3
+from .schema import GateVerdict, Issue, has_errors
+from .stage import StageResult
+from .testcase_agent import (
+    STIMULUS_MAX_STEPS,
+    SuiteStimulus,
+    gate_suite,
+    run_suite_stimulus,
+    run_suite_stimulus_fanout,
+    stimulus_by_tp,
+    starved_by_divider,
+    stimulus_diagnostics,
+    unrealisable_reset,
+)
+from .tb.render import gate_g5, render_suite
+
+logger = logging.getLogger(__name__)
+
+
+def _persist_grown(
+    run_dir: Path, testplan: list[dict], stimulus: dict | None,
+    *, before: tuple[int, int],
+    bins: list[dict] | None = None, checks: list[dict] | None = None,
+) -> None:
+    """Write back a testplan, stimulus and coverage model a turn appended to.
+
+    Only on growth, and only ever growth: `add_stimulus` appends and never
+    edits, so a file that did not get longer has nothing to say. Silent when it
+    cannot write -- losing the artifact is bad, failing a run that otherwise
+    succeeded over a bookkeeping write is worse.
+
+    **THE COVERAGE MODEL GOES WITH THEM, AND DID NOT.** A staged testpoint got
+    a testplan element and a stimulus entry and no bin, so a finished run failed
+    its own `gate_s3` -- 111 errors on the end-to-end run, a contiguous tail
+    that is exactly the testpoints it staged -- and every `--reuse` re-bought
+    S3 and everything below it. Three artifacts describe one testpoint; writing
+    two of them back is what made the third disagree.
+    """
+    stimulus = stimulus or {}
+    if (len(testplan), len(stimulus)) == before:
+        return
+    sf = Path(run_dir) / "specflow"
+    try:
+        # Create rather than assume. The caller always has this directory by
+        # now, but the one failure mode this helper exists to prevent is losing
+        # the appended testpoints -- so it must not lose them to an absent
+        # parent it could simply have made.
+        sf.mkdir(parents=True, exist_ok=True)
+        (sf / "testplan.json").write_text(
+            json.dumps({"elements": testplan}, indent=2, ensure_ascii=False)
+            + "\n", encoding="utf-8")
+        (sf / "stimulus.json").write_text(
+            json.dumps({"testpoints": [
+                {"tp_uid": uid, "stimulus_steps": steps}
+                for uid, steps in stimulus.items()
+            ]}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        if bins is not None and checks is not None:
+            path = sf / "coverage_model.json"
+            doc = {}
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = {}
+            doc["bins"], doc["checks"] = list(bins), list(checks)
+            path.write_text(json.dumps(doc, indent=2, ensure_ascii=False)
+                            + "\n", encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001
+        logger.warning("appended testpoints not persisted (%r)", exc)
+
+
+class _Reused(Exception):
+    """A cached artifact was good; skip the generation below it.
+
+    An exception rather than a flag because both blocks it guards are `try`
+    bodies already, and threading a boolean through them would put the cache
+    check and the thing it guards in different places.
+    """
+
+
+def ensure_prompt_file(run_dir: Path, spec: str) -> Path:
+    """Persist the spec so specflow (and any offline replay) can read it.
+
+    `cli.py` does this for the `run` subcommand; the benchmark path builds its
+    prompt separately and never writes it, so a benchmark node had no spec on
+    disk at all.
+    """
+    path = Path(run_dir) / "prompt.txt"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(spec.rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+@dataclass
+class BuildResult:
+    ok: bool
+    stage: str = ""
+    issues: list[Issue] | None = None
+    suite_dir: Path | None = None
+    refmodel_path: Path | None = None
+    bins: list[dict] | None = None
+    #: Non-fatal. A stimulus failure falls back to `default_stimulus` rather
+    #: than aborting: a weaker sweep beats no node at all, and the coverage
+    #: gate is what reports the gap it leaves.
+    stimulus_issues: list[Issue] | None = None
+    #: Prompt-cache accounting for this build. Its verdict fails the *report*,
+    #: never the run -- the artifacts are fine and the cost is already spent.
+    cache: object | None = None
+
+    @property
+    def reason(self) -> str:
+        if self.ok:
+            return "artifacts built"
+        n = len(self.issues or ())
+        return f"{self.stage} gate failed with {n} issue(s)"
+
+
+def _reuse(
+    run_dir: Path, artifact: str, model, regate
+) -> tuple[object, list[Issue]] | None:
+    """A certified artifact from a previous run, re-gated rather than trusted.
+
+    The point of reuse is to skip the *model call*, which costs minutes, not the
+    *gate*, which is pure code and costs nothing. Re-running it is what keeps
+    this honest in both directions: a cached artifact that a since-tightened gate
+    would now reject is regenerated, and one that a since-corrected gate would
+    now accept is kept. The G1 whitespace fix is the live example -- the same
+    `requirements.json` scored 2 errors before it and 0 after, so trusting the
+    recorded verdict would have thrown away a usable artifact.
+
+    Returns None when there is nothing usable, and the caller regenerates.
+    """
+    path = Path(run_dir) / "specflow" / artifact
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    try:
+        out = model.model_validate(data)
+    except Exception:  # noqa: BLE001
+        return None
+    issues = regate(out)
+    if has_errors(issues):
+        return None
+    return out, issues
+
+
+def _run_divided_s1(
+    *, run_dir: Path, spec: str, contract_json: str, port, max_repairs: int,
+    reuse: bool,
+) -> tuple[list[dict], list[Issue], bool]:
+    """S1 by division, and the artifact it leaves behind.
+
+    Writes the same `requirements.json` the generative arm writes, so every
+    downstream stage, the `reuse` path and the committed baselines all read one
+    shape regardless of which arm produced it. What differs is `s1_gate.json`,
+    which records G1' per unit rather than G1 over the whole spec.
+
+    Returns `(requirements, issues, regenerated)`. The caller needs the last one:
+    a stage that was reused does not invalidate the stages after it, and treating
+    it as though it did is how `--reuse` ends up rebuilding everything downstream
+    of a cache hit.
+    """
+    from .divide import coverage as unit_coverage
+    from .schema import core_span
+    from .s1_classify import divide_and_classify
+
+    out_dir = Path(run_dir) / "specflow"
+    reqs_path = out_dir / "requirements.json"
+    if reuse and reqs_path.is_file():
+        try:
+            data = json.loads(reqs_path.read_text(encoding="utf-8"))
+            cached = data.get("requirements") if isinstance(data, dict) else data
+            if cached:
+                return list(cached), [], False
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    units, results, reqs = divide_and_classify(
+        spec=spec, contract_json=contract_json, port=port, max_repairs=max_repairs,
+    )
+    issues = [i for r in results for i in r.issues]
+
+    covered, total, gaps = unit_coverage(spec, units)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    reqs_path.write_text(
+        json.dumps({"requirements": reqs}, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (out_dir / "s1_gate.json").write_text(
+        json.dumps(
+            {
+                "arm": "divide",
+                "ok": not has_errors(issues),
+                "units": len(units),
+                "requirements": len(reqs),
+                # Reported, never claimed. The residue between units is
+                # whitespace; a gap carrying a word is a divider defect and must
+                # be visible rather than rounded away.
+                "spec_chars": total,
+                "unit_chars": covered,
+                "word_carrying_gaps": len(gaps),
+                # The CORE span only. A supporting span belongs to the
+                # requirement it was linked from, and counting it here would
+                # report "the largest thing any requirement cites" under a name
+                # that says "the largest requirement".
+                "largest_requirement_chars": max(
+                    ((core_span(r).get("end", 0) - core_span(r).get("start", 0))
+                     for r in reqs), default=0,
+                ),
+                "issues": [
+                    {"severity": i.severity, "path": i.path, "message": i.message,
+                     "kind": i.kind}
+                    for i in issues
+                ],
+            },
+            indent=2, ensure_ascii=False,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    return reqs, issues, True
+
+
+def _oracle_stage_issues(failed: str, oracle_set) -> list[Issue]:
+    """A model checked against nothing has not been checked.
+
+    THE FALSE GREEN HAS TWO CAUSES AND THIS IS THE SECOND. y-i2c lost its
+    oracle stage to a mid-stream drop; z-i2c lost its to one gateway 500 on
+    `variant_REQ-0028_trigger`, one of ~600 variant calls, after 1h40m. Both
+    runs then built a reference model and both reported `ok: true, errors: 0` --
+    not because the model was good but because an EMPTY ORACLE SET HAS NO
+    FAILURES IN IT. Fixing the transport cause did nothing about this one.
+
+    So the absence is reported as the error it is. This does not change what the
+    gate accepts about a model: it says the gate was never in a position to
+    accept anything.
+    """
+    if failed:
+        return [Issue("error", "oracles.stage.incomplete",
+                      f"The oracle stage did not complete ({failed}), so this "
+                      f"reference model was compared against NO requirement "
+                      f"checks. A gate with no oracle set reports zero failures "
+                      f"because it has nothing to fail, which is not the same "
+                      f"as a model that passed.")]
+    if oracle_set is not None and not list(oracle_set.trusted):
+        return [Issue("error", "oracles.stage.empty",
+                      "The oracle stage completed and produced no trusted "
+                      "check, so this reference model was decided against an "
+                      "empty set. Zero failures here means nothing was asked.")]
+    # WHAT WAS DISCARDED, ON THE FACE OF THE GATE.
+    #
+    # An abandoned requirement leaves the driving set, so nothing downstream can
+    # report it and this is the last place it can be said. A warning rather than
+    # an error: the attempt ran and ran out, so there is no party left with a
+    # move -- but a build that passes with N requirements carrying no live check
+    # has to say N, beside the denominator they left, or one misleading number
+    # has been traded for another.
+    gave_up = dict(getattr(oracle_set, "abandoned", {}) or {})
+    if gave_up:
+        by_reason = Counter(gave_up.values())
+        considered = oracle_set.considered()
+        return [Issue(
+            "warning", "oracles.stage.abandoned",
+            f"{len(gave_up)} requirement(s) were ABANDONED after a bounded "
+            f"attempt and are not in the driving set: "
+            f"{', '.join(f'{n} {r}' for r, n in sorted(by_reason.items()))}. "
+            f"Every rate below is against {considered} requirement(s), not "
+            f"{considered + len(gave_up)}. Named: "
+            f"{', '.join(sorted(gave_up))}.")]
+    return []
+
+
+def _population_on_disk(run_dir: Path) -> list[str]:
+    """The population the oracle stage built, read back for the scorecard.
+
+    `run_oracle_stage` writes each member to `specflow/population/<i>.py` so it
+    holds still across rounds -- "the thing doing the measuring has to hold
+    still". Reading them back is how the scorecard scores against the SAME
+    designs the run refuted against, rather than against a yardstick a driver
+    picked afterwards, which is the defect this whole module exists to close.
+    """
+    root = Path(run_dir) / "specflow" / "population"
+    if not root.is_dir():
+        return []
+    out = []
+    for path in sorted(root.glob("*.py"), key=lambda p: p.name):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if text.strip():
+            out.append(text)
+    return out
+
+
+def build_artifacts(
+    *,
+    run_dir: Path,
+    spec: str,
+    contract_json: str,
+    model_port: str = "replay",
+    #: Rounds of gate-fed repair per item, so 5 gives r0..r5.
+    #:
+    #: Was 3. Measured on n4-i2c: of 111 requirements exactly one exhausted the
+    #: budget, and it was CONVERGING when it ran out -- REQ-0014 went from no
+    #: routes, to eight routes without discriminating `shows`, to six of eight
+    #: discriminating. Two more of a shape it had already got right six times.
+    #: A budget that stops a converging item one round short buys nothing: the
+    #: cost is paid per FAILING item, which is now ~1%, while the failure it
+    #: prevents is a whole requirement dropped from the set.
+    max_repairs: int = 5,
+    #: [P] -- declare the specification's state terms as `dir: "probe"` entries
+    #: before normalize, so a check can name the state a requirement names
+    #: instead of proxying it through output combinations. Costs ONE model call.
+    #:
+    #: ON by default. It is one model call, and it is the one that decides
+    #: whether a check can NAME the situation its requirement is about or has to
+    #: guess at it from output combinations -- measured 0 of 11 to 5 of 11 on the
+    #: requirements whose bodies use one, with all five survivors sensitive on
+    #: the vacuity screen.
+    #:
+    #: The risk it carries is real and is bounded elsewhere rather than by
+    #: leaving it off: a wrong probe makes every check that reads it wrong at
+    #: once, which is what the linter's span rules and the cross-constraint
+    #: requirements exist for. Pass False for a comparison arm.
+    enable_probes: bool = True,
+    #: The reference model gets its own budget, and a larger default. Its repair
+    #: round is the only one whose feedback comes from RUNNING the artifact
+    #: rather than from a script checking its shape, and that feedback converges
+    #: rather than plateauing. Measured on `i2c_master_bit_ctrl`: blocking
+    #: verdicts went 8 -> 4 -> 3 -> 2 over four rounds, monotonically, and the
+    #: node then hard-failed on exhaustion with the trajectory still descending.
+    #: The budget was the binding constraint, not the model.
+    refmodel_max_repairs: int | None = None,
+    #: An agent that EDITS the reference model against the frozen requirement
+    #: oracles, instead of prose driving a regeneration. Injected as a
+    #: Protocol, like `loop.RtlRepair`, so nothing here imports AgentScope.
+    #: Absent one, the stage behaves exactly as it always has.
+    refmodel_debugger: object | None = None,
+    refmodel_judge_turns: int = 3,
+    #: A known-good reference model for this design, if one exists. It is the
+    #: ONLY input to trust gate 3, and it never reaches the debug agent or the
+    #: generator -- it is used solely to throw away oracles that demand
+    #: something no correct model does.
+    #:
+    #: Leaving it unset does not skip a formality. Measured on the a-i2c run,
+    #: where it was unset: 22 of 54 trusted oracles (41%) are failed by the
+    #: control model that scores 181/181 against golden RTL, and 10 of the 18
+    #: oracles the debug agent could not discharge were in that set. The agent
+    #: spent its attempts on demands that no correct model can satisfy, and
+    #: `over_strict: 0` in the trust report read as "none found" when it
+    #: actually meant "never looked".
+    refmodel_control: str | None = None,
+    stimulus_agent: bool = True,
+    #: Restate each requirement as activation / observable / expectation, and
+    #: Step 7's must-fail leg. Off by default: it costs k model calls per
+    #: requirement -- 150 to 230 on i2c -- paid once. What it buys is that
+    #: VACUOUS stops being inferred from silence under source mutation and is
+    #: earned against a design that actually violates the requirement.
+    variants: bool = False,
+    #: Ask a reviewer, per oracle, whether it decides the requirement it names.
+    #: One call each -- 77 on i2c. The only check of any kind that connects an
+    #: oracle to ITS requirement rather than judging it as a check in general.
+    #:
+    #: **PRICED, AND THE PRICE IS HALF THE STAGE.** Measured on the unbiased
+    #: run: 80 correspondence calls against 94 oracle calls gated and 66
+    #: demoted -- 46% and 55% of the arm. See
+    #: `correspondence_costs_half_the_stage_and_its_label_predicts_nothing`.
+    correspondence: bool = False,
+    #: **THE PLAN'S CENTRAL CHANGE, AND IT WAS UNREACHABLE FROM A REAL RUN
+    #: UNTIL THIS PARAMETER EXISTED.** `run_oracle_stage` has carried
+    #: `demote_faithfulness` since E2; nothing passed it, so only a driver
+    #: calling the stage directly could turn it on and the pipeline itself
+    #: could not. Building the lever and not connecting it is the defect this
+    #: line fixes.
+    #:
+    #: ON, the faithfulness grounds -- `off-target:`, `not-assertable:`, "no
+    #: discrimination stated", "malformed: no normalized form" -- become
+    #: LABELS. Blocking is then three mechanical grounds only: `well_formed`,
+    #: a replay break, and `DEAD_ORACLE` -> `vacuous:`.
+    #:
+    #: **DEFAULT True, AND WHAT THAT COSTS IS KNOWN.** Span rose +8 then +17 of
+    #: 40 across two replicates -- positive both times, magnitude not
+    #: estimable. The audit branch is UNRESOLVED: one run put the admitted set
+    #: at 33.3% against kept-only's 55.6%, the replicate reversed it to 71.4%
+    #: against 28.6%, and 7 deciding checks per group separates nothing. And it
+    #: COSTS CORPUS DEPTH: repair is driven by `rejected`, so demotion repairs
+    #: 1 requirement instead of 18 and the corpus falls to one body per
+    #: requirement with no alternative for any of them. See
+    #: `every_requirement_gets_one_body_and_only_repair_adds_more`.
+    demote_faithfulness: bool = True,
+    #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
+    #: sources. A check convicting every one of them is rejected before freeze.
+    #:
+    #: **EMPTY BY DEFAULT BECAUSE A FIRST RUN HAS NOWHERE TO GET ONE.** Oracles
+    #: are authored before `run_refmodel`, so this run has no design yet and
+    #: must not acquire one -- that ordering is what stops a check being
+    #: written against the thing it checks. A population therefore comes from
+    #: OUTSIDE, exactly as `refmodel_control` does, and the operator supplies
+    #: ref models from earlier runs of the same specification.
+    #:
+    #: These are not the control and never include it. The filter reads no
+    #: reference and no grade; the argument is that a check rejecting every
+    #: admissible reading has rejected the correct one.
+    population_sources: Sequence[str] = (),
+    #: BUILD the population in-run instead of being handed one: k calls to the
+    #: generator that already writes the witness, held on disk beside it.
+    #:
+    #: The ordering guarantee is intact. What it forbids is an oracle written by
+    #: something that could have read THE SHIPPED DESIGN, which `run_refmodel`
+    #: produces after the oracle stage; these are throwaway readings of the
+    #: requirements, exactly as the witness is, and they are never shown to an
+    #: author -- `variety.brief` has no parameter one could arrive through.
+    #:
+    #: Off at 0 because it costs k conforming-implementation calls. 2 is the
+    #: minimum that means anything; seven independent readings fell into seven
+    #: equivalence classes, so more designs expose more of the space.
+    population_size: int = 0,
+    #: AUTHOR A CHECK AT THIS MANY DISAGREEMENT CELLS, after the
+    #: per-requirement pass. The generation-stage variety lever: the author is
+    #: handed a location the suite is silent on rather than a requirement it
+    #: already has a check for, so the anchor differs per call instead of
+    #: resampling one prompt -- which returns 69% identical bodies among sound
+    #: pairs.
+    #:
+    #: Needs a population, so it is inert without `population_sources` or
+    #: `population_size`. Costs one call per cell.
+    cell_budget: int = 0,
+    #: A `population.Ruleset` applied before freeze, so a run FREEZES THE
+    #: SELECTED SET. Until this existed, `population` was imported by `scoring`
+    #: and by no pipeline module, so selection was something a reader ran
+    #: afterwards against the artifact and never something a run produced.
+    #:
+    #: Needs a population. `None` leaves the set unselected, which is what
+    #: every run before this did, and a ruleset that cannot apply is REPORTED
+    #: rather than skipped.
+    selection: "object | None" = None,
+    #: **THE CONTROL, FOR THE SCORECARD AND FOR NOTHING ELSE.** Deliberately
+    #: NOT `refmodel_control`, which reaches `run_oracle_stage` and may reject
+    #: an oracle. This one reaches `scorecard.score` only -- a module with no
+    #: author, no prompt and no repair path -- so "a control may REJECT an
+    #: oracle and may never REPAIR one" is enforced by there being nowhere for
+    #: it to go. Absent, `audit` is reported as absent rather than as 0%.
+    audit_control: str | None = None,
+    #: SET-LEVEL repair attempts in the oracle stage -- verify, re-ask, verify.
+    #: `run_oracle_stage` has taken this since it was written and nothing
+    #: passed it, so every run so far used the default 2, which is the same
+    #: class of defect as `demote_faithfulness` being built and not connected.
+    #:
+    #: It is the lever over-strictness needs: a check refuted by the whole
+    #: population is told to relax and gets one more attempt, and at the wide
+    #: replay scope 47 of 96 frozen checks are refuted. Each attempt costs
+    #: roughly one call per still-rejected check.
+    oracle_repair_attempts: int = 2,
+    #: Extra first drafts per requirement, kept in the corpus for the rescue to
+    #: choose from. One call per requirement per draft. See
+    #: `run_oracle_stage`'s `extra_drafts`.
+    oracle_extra_drafts: int = 0,
+    #: Strengthening rounds after the debug loop converges: mutate the shipped
+    #: model and re-ask any oracle a mutant got past. 0 measures and acts on
+    #: nothing, which is how it ships -- the rate has to be known first.
+    #: Rounds of the relax-side feedback edge
+    #: because the two pull opposite ways -- see `compose._closed_loop`.
+    reconsider_rounds: int = 0,
+    #: Blocking verdicts reported as `warning` rather than `error`. Only
+    #: `verdict.DOWNGRADABLE` is honoured.
+    advisory_verdicts: frozenset[str] = frozenset(),
+    reuse: bool = False,
+    #: Replay a call whose response is already recorded in `agent_io`, instead
+    #: of paying for it again. For RESUMING AN INTERRUPTED RUN OVER UNCHANGED
+    #: INPUTS, and nothing else: the recording is keyed by (stage, round_) and
+    #: is NOT checked against the prompt, so a changed prompt would be answered
+    #: by the old response. Separate from `reuse` on purpose -- `reuse` skips a
+    #: stage whose artifact still passes its gate, which does not imply the
+    #: inputs are unchanged, and a stage the gate REJECTS must regenerate with
+    #: a real call rather than replay the answer that produced the rejection.
+    resume_calls: bool = False,
+    divide_s1: bool = True,
+    fanout: bool = True,
+    judge: bool = True,
+    #: Every model-call switch, stated by the caller. `None` means the defaults
+    #: in `PortSettings` -- never the ambient environment, which is what let a
+    #: caller's `--env-file` be overridden by whichever file a stage re-read.
+    port_settings: "PortSettings | None" = None,
+) -> BuildResult:
+    """S1 -> S2 -> S3 -> reference model -> rendered suite, gate by gate.
+
+    Stops at the first gate that fails, and says which. Exhaustion is a hard
+    failure everywhere: a stage that could not be certified never propagates a
+    partial artifact downstream.
+
+    `divide_s1` swaps the generative S1 for division at authorial boundaries plus
+    a per-unit classifier (`divide.py` + `s1_classify.py`); `fanout` does the
+    same for S2, S3 and the reference model. Both default off so the generative
+    arm stays runnable for A/B on the same task, model and effort -- without
+    that, any measured delta could be the decomposition or could be the weather.
+
+    With `reuse`, a stage whose artifact is already on disk and still passes its
+    gate is not regenerated. Two rules keep that from going stale: the gate is
+    always re-run rather than read from the recorded verdict, and once any stage
+    regenerates, every stage after it regenerates too -- a cached S2 is only
+    valid against the S1 that produced it.
+    """
+    run_dir = Path(run_dir)
+    ensure_prompt_file(run_dir, spec)
+    stats = CacheStats()
+    port = make_port(model_port, run_dir / "agent_io", stats, port_settings)
+
+    # RESUME THE CALLS, NOT JUST THE STAGES. `reuse` skips a stage whose
+    # ARTIFACT is on disk, which covers S1..stimulus but does nothing for a
+    # fan-out that dies part way through: variants and oracle generation write
+    # no artifact until the whole stage completes, so a reclaim discarded every
+    # call they had already paid for. `ResumePort` was written for exactly this
+    # -- its docstring cites the oracle stage losing ~600 variant calls after
+    # 1h40m -- and was never wired to anything. Measured here: two container
+    # restarts inside forty minutes, each throwing away every oracle generated
+    # since the last, against a stage that needs about seventy.
+    #
+    # IT IS ITS OWN SWITCH, AND MUST NOT RIDE ON `reuse`. Hanging it there was
+    # tried and is wrong: `reuse` means "skip a stage whose artifact still
+    # passes its gate", which is NOT the same claim as "the inputs have not
+    # changed". A run can carry `reuse=True` over an artifact the gate then
+    # REJECTS, and that stage must regenerate with a real call -- but a replayed
+    # recording hands back the very answer that produced the rejected artifact,
+    # so the regeneration returns the same bad content and re-gating stops
+    # meaning anything. `test_a_stale_artifact_is_regenerated_not_trusted`
+    # catches exactly that.
+    #
+    # So the caller states the precondition ResumePort actually needs -- same
+    # run, unchanged inputs -- and nothing infers it.
+    if resume_calls:
+        port = resumable(port, run_dir / "agent_io")
+    contract = json.loads(contract_json) if contract_json.strip() else {}
+
+    # Set once a stage regenerates: everything downstream must regenerate too,
+    # because a cached artifact is only valid against the upstream that made it.
+    stale = not reuse
+
+    if divide_s1:
+        # Division: the partition is built by code, so granularity stops being
+        # the model's to choose. Its gate is G1' rather than G1, and it has no
+        # `RequirementsOutput` to re-validate, so reuse is by artifact presence
+        # plus the downstream gates that consume it.
+        reqs, s1_issues, regenerated = _run_divided_s1(
+            run_dir=run_dir, spec=spec, contract_json=contract_json, port=port,
+            max_repairs=max_repairs, reuse=not stale,
+        )
+        if has_errors(s1_issues):
+            return BuildResult(False, "S1", s1_issues)
+        # Only when S1 actually regenerated. Setting this unconditionally meant
+        # the divided arm could never benefit from `--reuse` downstream: the
+        # requirements came back from disk in milliseconds and then S2, S3 and
+        # the reference model all re-ran anyway. Measured on one run before the
+        # fix -- 72 + 200 calls and about ten minutes, to rebuild artifacts that
+        # were already on disk and still passing their gates.
+        stale = stale or regenerated
+    else:
+        cached = None if stale else _reuse(
+            run_dir, "requirements.json", RequirementsOutput,
+            lambda out: gate_s1(spec, out, contract),
+        )
+        if cached is not None:
+            s1 = S1Result(cached[0], list(cached[1]), 0)
+        else:
+            stale = True
+            s1 = run_s1(spec=spec, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_reqs(s1.output)
+            write_s1(run_dir, s1)
+        if not s1.ok:
+            return BuildResult(False, "S1", s1.issues)
+
+        reqs = [r.model_dump() for r in s1.output.requirements]
+
+    # [P] -- the specification's nouns, made into declared signals. BEFORE
+    # normalize, so the first normalization pass already sees probes as declared
+    # ports and a requirement's `observable` can name the state directly instead
+    # of being routed to a proxy built out of output combinations. Running it
+    # after would leave every downstream stage planned against the proxy, which
+    # is the translation this exists to remove.
+    #
+    # NEVER FATAL, on two levels. `run_probes` returns the ORIGINAL contract
+    # when its gate cannot be satisfied -- a half-accepted probe table is worse
+    # than none, because every stage below would build on names that failed
+    # their licensing. And the call itself is wrapped, which it was not while
+    # the stage defaulted off: `run_stage` calls `port.complete` bare, a
+    # `ReplayPort` raises `FileNotFoundError` for a stage it has no recording
+    # of, and a `FilePort` raises `PendingResponse`. On by default, unwrapped,
+    # that takes down every run directory recorded before probes existed.
+    #
+    # A run with no probe table is exactly the run we had yesterday, so failing
+    # the node over one would make the pipeline strictly worse than before this
+    # stage existed.
+    #
+    # AND IT REUSES ITS ARTIFACT like every other stage. `[P]` ran
+    # unconditionally at first, which was invisible while it defaulted off and
+    # became a resumed run's ONE model call the moment it defaulted on --
+    # `test_reuse_makes_no_model_calls_when_every_gate_still_passes` caught it.
+    # The probe table is a pure function of the requirements and the spec, so a
+    # recorded one is as good as a fresh one; re-asking for it spends a call to
+    # be told the same thing.
+    # AND ITS OUTCOME IS DURABLE, which is what makes `reuse` mean what it says.
+    # `[P]` ran unconditionally at first -- invisible while it defaulted off,
+    # and a resumed run's ONE model call the moment it defaulted on, which
+    # `test_reuse_makes_no_model_calls_when_every_gate_still_passes` caught.
+    #
+    # So the stage records that it ran, INCLUDING when it produced nothing. An
+    # empty table is a real answer (a specification may name no state at all),
+    # and a run directory certified before probes existed would otherwise
+    # re-attempt the stage on every resume, forever, for a result it cannot get.
+    #
+    # THE COST, stated because it is a real one: a transport failure is latched
+    # too, so a gateway outage leaves that run directory probe-free until
+    # someone re-runs it. `reuse=False` is the retry, the artifact records the
+    # reason, and the warning below names it. The alternative -- retrying
+    # forever -- spends a call per resume on every pre-probe run there is.
+    probes_path = run_dir / "specflow" / "probes.json"
+    _probes_enabled = enable_probes
+    if _probes_enabled and reuse and probes_path.is_file():
+        _probes_enabled = False
+        try:
+            entries = (json.loads(probes_path.read_text(encoding="utf-8"))
+                       .get("probes") or [])
+        except (OSError, ValueError):
+            entries = []
+        # RE-GATED, never trusted on the recorded verdict -- the rule every
+        # other reuse path here follows, and why `[P]` writes its issues into
+        # the artifact at all. A table whose spans no longer match the spec is
+        # not reused; it is dropped, and the run continues without probes.
+        if entries and not has_errors([Issue(i.severity, i.path, i.message)
+                                       for i in probe_issues(entries, spec)]):
+            #: `fold_in`, not an append: `write_contract` means a resumed run
+            #: reads a contract that ALREADY carries the table, and appending
+            #: gave 48 `dir: "probe"` entries for 24 probes on the first run
+            #: that did.
+            contract = fold_in(contract, entries)
+            contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
+            #: The reuse path folds the same table in, so it owes the same
+            #: file. Without this a resumed run leaves a `contract.json` from
+            #: whichever path wrote it last, or none at all.
+            write_contract(run_dir, contract)
+            logger.info("probes: reusing %d probe(s) from %s",
+                        len(entries), probes_path)
+        elif entries:
+            logger.warning("probes: the held table no longer passes its own "
+                           "gate -- dropping it and continuing without probes")
+    elif _probes_enabled:
+        try:
+            contract, cross, probe_result = run_probes(
+                requirements=reqs, contract=contract, contract_json=contract_json,
+                spec=spec, port=port, max_repairs=max_repairs)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("probes: not produced (%r) -- continuing without "
+                           "them, so every state term stays unnameable; "
+                           "re-run with reuse=False to try again", exc)
+            _probes_enabled = False
+            write_probes(run_dir, contract, None, error=repr(exc))
+        else:
+            #: **A GATE FAILURE IS A RECORD, NOT A LOG LINE.** `run_probes`
+            #: hands back the ORIGINAL contract when its gate cannot be
+            #: satisfied, so `contract.get("probes")` is empty below and the
+            #: artifact was never written -- leaving a run that authored every
+            #: check with the state terms unnameable, and nothing on disk
+            #: saying why. Measured: one end-to-end run reported "no usable
+            #: probe table (1 issue(s))" and the issue could not be recovered.
+            if not contract.get("probes"):
+                write_probes(run_dir, contract, probe_result, accepted=False)
+                logger.warning(
+                    "probes: the nominated table was REJECTED and is recorded "
+                    "in probes.json under `rejected`; this run authors every "
+                    "check with no state term nameable, which is not the same "
+                    "configuration as a run that has them")
+    if _probes_enabled:
+        if cross:
+            # **CROSS-CONSTRAINTS ARE NOT APPENDED, BECAUSE S1 HAS ALREADY
+            # MINTED EVERY ONE OF THEM.** The argument they were added on is
+            # that they "tie a probe to real ports where the spec STATES the
+            # relation" -- and if the spec states it, S1 mints a requirement
+            # from that sentence, because S1 divides the whole document.
+            #
+            # MEASURED on i2c_master_bit_ctrl: S1's obligations cover 15,523 of
+            # 15,713 spec bytes (98.8%), and **14 of 14 cross-constraint spans
+            # fall inside an S1 obligation whose quote is the same sentence**.
+            # The cross-constraint text is a paraphrase of a requirement that
+            # already exists, handed a second uid.
+            #
+            # So the case closes both ways: either the spec states the relation
+            # and S1 already minted it, or it does not and the constraint is
+            # unlicensed -- which the span gate in `probes.gate` now rejects.
+            # Nothing is left for one to add.
+            #
+            # And the duplication was not free. It inflated the span
+            # denominator, double-counted a failing relation across two uids,
+            # and -- because these were the only requirements minted outside S1
+            # and so the only ones without `needs` -- killed four of five
+            # full-pipeline runs at S2.
+            #
+            # THE ANTI-CIRCULARITY ARGUMENT SURVIVES WITHOUT THEM. A probe
+            # carries `licensed_by`, naming the requirements that license it,
+            # and those requirements name real ports: REQ-0113 licenses
+            # `slave_wait_active` and states the relation in terms of
+            # `scl_oen` and the filtered SCL input. A design that lies about
+            # the probe fails THAT requirement's checks, on the same boundary
+            # signals, with no second requirement needed.
+            logger.info(
+                "probes: %d cross-constraint(s) recorded and NOT minted as "
+                "requirements -- S1 already covers the spans they quote",
+                len(cross))
+        if contract.get("probes"):
+            contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
+            write_probes(run_dir, contract, probe_result)
+            #: **AND THE CONTRACT ITSELF, WITH THE PROBES IN IT.** Every stage
+            #: below here works to this object; until it was written down the
+            #: only contract on disk was the input one, which declares none of
+            #: them, so anything scoring the finished run had to rebuild the
+            #: in-force interface by hand from `probes.json`.
+            write_contract(run_dir, contract)
+            # THE CONTRACT CHANGED, SO WHAT WAS COMPUTED AGAINST THE OLD ONE
+            # MUST NOT BE REUSED. `_reuse` hands back a cached artifact that
+            # still passes its gate, and no gate below here looks at probes --
+            # so a resumed run would pair a probe-bearing contract with a
+            # normalization that cannot name a single probe, which is the one
+            # state in which probes cost a call and buy nothing. Same rule the
+            # S1 path already states: passing a gate is not the same claim as
+            # the inputs not having changed.
+            stale = True
+
+    # Normalization runs on the requirements and nothing else, so it sits here
+    # rather than later: its output is about S1's artifact, and a stage that
+    # reads a requirement should be able to read the normalized form beside it.
+    #
+    # Never fatal. A requirement that could not be normalized is one nothing
+    # knows the activation of, which is exactly today's situation for all of
+    # them -- so failing the node over it would make the pipeline strictly worse
+    # than before this stage existed.
+    normalized_by_uid: dict[str, dict] = {}
+    normalized_path = run_dir / "specflow" / "normalized.json"
+    if not stale and normalized_path.is_file():
+        try:
+            normalized_by_uid = {
+                n["req_uid"]: n
+                for n in json.loads(normalized_path.read_text(encoding="utf-8"))
+                .get("normalized", []) if n.get("req_uid")
+            }
+        except (OSError, ValueError, TypeError):
+            normalized_by_uid = {}
+    # Not optional any more: the oracle stage reads the normalized form, and
+    # the oracle stage is the only thing that produces a verdict at all now.
+    try:
+        if normalized_by_uid:
+            raise _Reused
+        normalized, norm_results = run_normalize_fanout(
+            requirements=reqs, contract_json=contract_json, contract=contract,
+            port=port, max_repairs=max_repairs, fanout=fanout,
+        )
+        # EVERY UNOBSERVABLE REQUIREMENT IS ASKED THE SECOND QUESTION, before
+        # anything downstream is planned from the first answer. A corrected
+        # `observable` reaches S2, S3, stimulus and [O]; a correction made later
+        # would leave the testplan built from the claim that was wrong.
+        normalized, indirect_results = resolve_indirect(
+            normalized=normalized, requirements=reqs,
+            contract_json=contract_json, contract=contract,
+            port=port, max_repairs=max_repairs, fanout=fanout,
+        )
+        norm_results = list(norm_results) + list(indirect_results)
+    except _Reused:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("normalize: not produced (%r)", exc)
+    else:
+        write_normalized(run_dir, normalized, norm_results, requirements=reqs)
+        normalized_by_uid = {n.req_uid: n.model_dump() for n in normalized
+                             if n.req_uid}
+        # ORPHANS -- probes no activation or effect ended up naming. Reported,
+        # never enforced, and the report has to be read as one of two opposite
+        # things: if a licensing requirement's text plainly names the state but
+        # its activation does not, normalize failed to USE a declared probe and
+        # the defect is in the port lookup; if no requirement's activation
+        # actually depends on the state, [P] over-nominated.
+        orphaned = probe_orphans(contract, list(normalized_by_uid.values()))
+        if orphaned:
+            logger.warning(
+                "probes: %d probe(s) named by no activation or effect: %s -- "
+                "either normalize did not use a declared probe, or [P] "
+                "over-nominated; check the licensing requirements' text",
+                len(orphaned), orphaned)
+
+    cached = None if stale else _reuse(
+        run_dir, "testplan.json", TestplanOutput, lambda out: gate_s2(reqs, out),
+    )
+    if cached is not None:
+        s2 = StageResult(cached[0], list(cached[1]), 0)
+    else:
+        stale = True
+        if fanout:
+            merged, per_item = run_s2_fanout(
+                requirements=reqs, contract_json=contract_json, port=port,
+                normalized=normalized_by_uid,
+                max_repairs=max_repairs)
+            # **GATE THE MERGED ARTIFACT, NOT THE CONCATENATION OF PER-ITEM
+            # ISSUES.** The fan-out's items are graded against their own slice;
+            # what every later stage consumes is `merged`, and the two do not
+            # agree. Measured on a run that failed here: the per-item aggregate
+            # carried 18 errors and the merged testplan carried 8 -- the other
+            # 10 were "no testplan elements produced" for requirements that are
+            # COVERED in the merged plan, all 151 of them, none uncovered.
+            #
+            # The consequence was not a stricter gate but a WRONGLY ADDRESSED
+            # one: a build failing on defects its own artifact does not have.
+            # And because the verdict is shared across 151 independent calls,
+            # it fails at any realistic per-item error rate -- four of five
+            # full-pipeline runs died here, each on a different issue.
+            #
+            # Per-item issues are kept for diagnosis; they no longer decide.
+            s2 = StageResult(merged, gate_s2(reqs, merged),
+                             max((r.rounds for r in per_item), default=0))
+            _s2_per_item = [i for r in per_item for i in r.issues]
+            if len(_s2_per_item) != len(s2.issues):
+                logger.info(
+                    "S2: %d per-item issue(s), %d on the merged testplan",
+                    len(_s2_per_item), len(s2.issues))
+        else:
+            s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_tps(s2.output)
+        write_s2(run_dir, s2)
+    if not s2.ok:
+        return BuildResult(False, "S2", s2.issues)
+
+    tps = [e.model_dump() for e in s2.output.elements]
+
+    cached = None if stale else _reuse(
+        run_dir, "coverage_model.json", CoverageOutput,
+        lambda out: gate_s3(tps, out, contract),
+    )
+    if cached is not None:
+        s3 = StageResult(cached[0], list(cached[1]), 0)
+    else:
+        stale = True
+        if fanout:
+            merged3, per_item3 = run_s3_fanout(
+                testplan=tps, contract_json=contract_json, port=port,
+                normalized=normalized_by_uid,
+                max_repairs=max_repairs)
+            s3 = StageResult(merged3, [i for r in per_item3 for i in r.issues],
+                             max((r.rounds for r in per_item3), default=0))
+        else:
+            s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
+                        max_repairs=max_repairs)
+            renumber_cov(s3.output)
+        write_s3(run_dir, s3)
+    if not s3.ok:
+        return BuildResult(False, "S3", s3.issues)
+
+    bins = [b.model_dump() for b in s3.output.bins]
+    checks = [c.model_dump() for c in s3.output.checks]
+
+    # Concrete stimulus BEFORE the reference model, not after it.
+    #
+    # It depends on nothing the refmodel produces -- only on the testplan and
+    # the contract, both of which S2/S3 have already written -- and running it
+    # first is what lets the judge replay each requirement's own scenario
+    # against the model. Judging on the generic sweep alone cannot do that:
+    # the sweep varies every input every step, so on i2c_master_bit_ctrl the
+    # longest run that could advance the FSM is 0, where one START needs ~26
+    # edges. These steps are written to hold a command stable for exactly as
+    # long as the design needs.
+    stim_by_tp: dict[str, list[dict]] = {}
+    stim_issues: list[Issue] = []
+    # Reused like every other stage, and for the same reason. Stimulus was the
+    # one major artifact never written to `specflow/`, so `--reuse` could not
+    # cover it and every rerun paid for it again -- 167 calls on
+    # i2c_master_bit_ctrl, the most expensive stage in the pipeline now that it
+    # fans out, repeated even when nothing upstream of it had changed.
+    stim_cached = None if stale else _reuse(
+        run_dir, "stimulus.json", SuiteStimulus,
+        lambda out: gate_suite(out, testplan=tps, contract=contract,
+                               max_steps=STIMULUS_MAX_STEPS),
+    )
+    if stim_cached is not None:
+        stim_issues = (list(stim_cached[1]) + stimulus_diagnostics(stim_cached[0])
+                       + unrealisable_reset(tps)
+                       + starved_by_divider(stim_cached[0], contract))
+        stim_by_tp = stimulus_by_tp(stim_cached[0])
+    elif stimulus_agent:
+        # A stimulus failure is not fatal: `default_stimulus` still renders a
+        # valid suite, and a weaker sweep is worth more than an aborted node.
+        # The gate's EXTEND_TB branch is what reports the resulting gap. This
+        # also lets a ReplayPort with no recorded stimulus stage fall through
+        # to the old behaviour rather than crashing a fixture-driven run.
+        try:
+            if fanout:
+                # One call per testpoint. Testpoints do not constrain each
+                # other, so nothing is lost by splitting -- and monolithic was
+                # measured degrading badly at scale: on i2c_master_bit_ctrl's
+                # 167 testpoints, three rounds returned stimulus for ten of
+                # them and the fourth returned all 167 with one step each.
+                merged, per_item = run_suite_stimulus_fanout(
+                    testplan=tps, contract=contract, port=port,
+                    max_repairs=max_repairs,
+                    # The spec quotes behind each testpoint, joined through
+                    # `covers`. A testpoint carries no spec of its own.
+                    requirements=reqs,
+                )
+                st = StageResult(
+                    merged, [i for r in per_item for i in r.issues],
+                    sum(r.rounds for r in per_item),
+                )
+            else:
+                st = run_suite_stimulus(
+                    testplan=tps, contract=contract, port=port,
+                    max_repairs=max_repairs,
+                )
+        except Exception as exc:  # noqa: BLE001
+            stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
+        else:
+            stim_issues = (list(st.issues) + stimulus_diagnostics(st.output)
+                           + unrealisable_reset(tps)
+                           + starved_by_divider(st.output, contract))
+            stim_by_tp = stimulus_by_tp(st.output)
+            if not has_errors(stim_issues):
+                (run_dir / "specflow" / "stimulus.json").write_text(
+                    json.dumps(st.output.model_dump(), indent=2) + "\n",
+                    encoding="utf-8",
+                )
+
+    # [O] The requirement oracles, BEFORE the reference model exists.
+    #
+    # Their isolation from the design used to be a discipline -- a prompt
+    # builder with no parameter a design could arrive through, plus a test that
+    # reads the prompt back. Running the stage here makes it a fact about time
+    # instead: there is no reference model yet, so there is nothing to leak.
+    #
+    # Never fatal, AND NEVER SILENT -- see `oracle_stage_failed` below. A run
+    # whose oracles could not be produced is the run every run was before this
+    # stage existed, which is a reason not to abort the process and not a
+    # reason to let the gate report success.
+    # BEFORE [O], not after it. The oracle stage's own stimulus loop appends
+    # testpoints, and measuring growth after it returned meant [O]'s additions
+    # were never counted -- so a run where only [O] staged anything wrote
+    # nothing back, and `oracles.json` named tp_uids `stimulus.json` did not
+    # contain. A `--reuse` re-entry then reads frozen oracles pointing at
+    # testpoints that do not exist and they abstain, discarding every model call
+    # the staging loop paid for.
+    grown_before = (len(tps), len(stim_by_tp or {}))
+    oracle_set = None
+    oracle_stage_failed = ""
+    try:
+        from .oracles_stage import load as load_oracles
+        from .oracles_stage import run_oracle_stage
+
+        if not stale:
+            oracle_set = load_oracles(run_dir)
+            if oracle_set is not None:
+                logger.info("oracles: %d trusted, reused",
+                            len(oracle_set.trusted))
+                raise _Reused
+
+        oracle_set = run_oracle_stage(
+            requirements=reqs, contract_json=contract_json,
+            contract=contract, testplan=tps,
+            stimulus_by_tp=stim_by_tp or {},
+            #: Mutated in place when the stage stages a testpoint, and written
+            #: back below. Without them a finished run fails its own `gate_s3`.
+            bins=bins, checks=checks,
+            port=port, workdir=run_dir / "specflow",
+            base=choose_base(contract),
+            normalized=normalized_by_uid or None,
+            # Reaches `correspondence.review`, whose shared prefix is otherwise
+            # `SYSTEM` alone -- under the provider's 1024-token cache floor, so
+            # nothing cached at all. See `run_oracle_stage`'s `spec`.
+            spec=spec,
+            control_source=refmodel_control,
+            want_variants=variants, want_correspondence=correspondence,
+            demote_faithfulness=demote_faithfulness,
+            repair_attempts=oracle_repair_attempts,
+            extra_drafts=oracle_extra_drafts,
+            population=population_sources,
+            population_size=population_size,
+            cell_budget=cell_budget,
+            selection=selection,
+            run_dir=run_dir, fanout=fanout,
+            # Upstream regenerated, so the frozen oracles are about
+            # requirements that no longer exist. Freezing is per requirement
+            # SET, not per directory.
+            rewrite=stale,
+        )
+    except _Reused:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        # THE SECOND ROUTE TO A FALSE GREEN, and the one that fired. `run_fanout`
+        # raises an item's exception to its caller deliberately -- "a stage that
+        # silently dropped an item would produce an artifact with a hole in it
+        # and a gate that reports the hole as the model's fault" -- and this
+        # handler then swallowed it as a WARNING and let the run continue.
+        #
+        # Measured on z-i2c: one gateway 500 on `variant_REQ-0028_trigger`, one
+        # of ~600 variant calls, ended the stage after 1h40m. No `oracles.json`,
+        # no `variants.json`, and the run went on to build a reference model
+        # with NOTHING TO DECIDE IT AGAINST -- which is how `refmodel_gate`
+        # comes back `ok: true, errors: 0`. That is exactly the presentation
+        # y-i2c had, reached by a completely different cause: there the oracle
+        # stage died on a mid-stream drop, here it died on a 500, and both times
+        # the run reported success because an empty oracle set has no failures
+        # in it.
+        #
+        # So the log line was the whole defect. Carried to the gate as an error
+        # instead: the process still finishes and still writes its artifacts,
+        # which is what makes a failure diagnosable, but `ok` is false and the
+        # reason names the call that killed it.
+        oracle_stage_failed = repr(exc)
+        logger.error("oracles: stage did not complete (%r) -- the refmodel gate "
+                     "will FAIL, because a model with no oracle set has not "
+                     "been checked against anything", exc)
+
+    # PERSIST [O]'s STAGING BEFORE THE MODEL STAGE RUNS. The reference model is
+    # the longest stage in the pipeline and the one most likely to be cut short,
+    # and until this call the staged testpoints reached disk only after it
+    # finished. a2-i2c staged 23 scenarios and lost every one of them that way.
+    # Append-only and idempotent, so the second call after [D] still works.
+    _persist_grown(run_dir, tps, stim_by_tp, before=grown_before,
+                   bins=bins, checks=checks)
+
+    # The reference model is validated by executing it, so "re-gate rather than
+    # trust" here means re-running G4 against the rendered source on disk.
+    refmodel_path = run_dir / "specflow" / "ref_model.py"
+    rm_issues: list[Issue] = []
+    if stale or not refmodel_path.is_file():
+        stale = True
+        # The reference model is generated whole, by the configured (strong)
+        # model, regardless of `fanout`. Splitting generation was the wrong half
+        # to fan out: a model needs global context for ordering, reset priority
+        # and shared state, and per-requirement calls removed exactly that. The
+        # fan-out moved into the gate, where "does this model satisfy
+        # requirement N" is a local question with a local answer.
+        rm, source = run_refmodel(
+            requirements=reqs, contract_json=contract_json, port=port,
+            workdir=run_dir / "specflow" / "_refmodel_check",
+            max_repairs=(max_repairs if refmodel_max_repairs is None
+                         else refmodel_max_repairs),
+            # The judge shares the port -- and therefore the small-model
+            # override -- because it is a fanned-out per-item stage like the
+            # others. The generator above is the same port but a whole-artifact
+            # call; the model split is by `SPECFLOW_SMALL_MODEL`, not by port.
+            item_port=port,
+            run_dir=run_dir,
+            # S2 ran before this, so every testpoint -- and the requirement each
+            # one covers -- already exists by the time the judge is asked.
+            testplan=tps,
+            stimulus_by_tp=stim_by_tp or None,
+            debugger=refmodel_debugger,
+            max_judge_turns=refmodel_judge_turns,
+            control_source=refmodel_control,
+            normalized=normalized_by_uid or None,
+            oracle_set=oracle_set,
+            reconsider_rounds=reconsider_rounds,
+            advisory_verdicts=advisory_verdicts,
+        )
+        refmodel_path = write_refmodel(run_dir, rm, source)
+        rm_issues = list(rm.issues)
+        rm_issues.extend(_oracle_stage_issues(oracle_stage_failed, oracle_set))
+        # A debug turn may have APPENDED testpoints, and both halves of one --
+        # the testplan element and its stimulus -- grew in the objects above.
+        # Persist them, or the artifacts on disk disagree with the suite that
+        # is about to be rendered from those same objects, and a `--reuse`
+        # re-entry silently loses the scenarios the loop paid model calls to
+        # stage. Append-only, so this can only ever grow the files.
+        _persist_grown(run_dir, tps, stim_by_tp, before=grown_before)
+        if not rm.ok or has_errors(rm_issues):
+            # `rm.ok` is the model's own verdict and knows nothing about whether
+            # an oracle set existed to produce it, so the oracle-stage issues
+            # have to be consulted here too or a run with no oracles walks past
+            # a gate that never looked.
+            return BuildResult(False, "refmodel", rm_issues)
+    else:
+        # The coverage map lives in the recorded gate file, not in the model
+        # source -- it is the generator's claim about the source, not part of
+        # it. Without it the re-gate reports every requirement as unclaimed and
+        # regenerates a model that was fine, which is `--reuse` doing the exact
+        # opposite of its job.
+        recorded = {}
+        try:
+            recorded = json.loads(
+                (run_dir / "specflow" / "refmodel_gate.json").read_text(encoding="utf-8")
+            )
+            covers = recorded.get("covers") or {}
+        except (OSError, json.JSONDecodeError):
+            covers = {}
+        rm_issues = validate_source(
+            source=refmodel_path.read_text(encoding="utf-8"),
+            requirements=reqs, contract=contract,
+            expected_base=choose_base(contract),
+            workdir=run_dir / "specflow" / "_refmodel_check",
+            coverage=covers,
+        )
+        # A RECORDED FAILURE IS A FAILURE. `validate_source` checks structure;
+        # the gate that actually rejected this model was the oracle loop, whose
+        # verdicts are in the recorded file and not re-derivable from the
+        # source. Re-gating on structure alone therefore holds a reused model to
+        # a WEAKER standard than the one it already failed -- and passes it.
+        #
+        # Measured: n-i2c's refmodel stage failed with 31 blocking oracle
+        # verdicts and produced no RTL. Re-running the same directory with
+        # `--reuse` took the identical model (same md5), re-gated it on
+        # structure, passed it, and generated RTL from it. A failing artifact
+        # was laundered into a passing one by re-running the command.
+        if recorded and not recorded.get("ok", True):
+            logger.info(
+                "reuse: the recorded refmodel gate failed (%d issue(s)), so the "
+                "model is re-entered rather than trusted",
+                len(recorded.get("issues") or []))
+        if has_errors(rm_issues) or (recorded and not recorded.get("ok", True)):
+            stale = True
+            # The SAME arguments as the generative path above. This branch
+            # regenerates a model that failed re-validation, and it was doing so
+            # with no judge and no behavioural evidence -- so a `--reuse` run
+            # whose recorded model went stale produced a model held to a weaker
+            # standard than a fresh run would apply, silently.
+            rm, source = run_refmodel(
+                requirements=reqs, contract_json=contract_json, port=port,
+                workdir=run_dir / "specflow" / "_refmodel_check",
+                max_repairs=(max_repairs if refmodel_max_repairs is None
+                             else refmodel_max_repairs),
+                item_port=port,
+                run_dir=run_dir,
+                testplan=tps,
+                stimulus_by_tp=stim_by_tp or None,
+                debugger=refmodel_debugger,
+                max_judge_turns=refmodel_judge_turns,
+                control_source=refmodel_control,
+                normalized=normalized_by_uid or None,
+                oracle_set=oracle_set,
+            reconsider_rounds=reconsider_rounds,
+            advisory_verdicts=advisory_verdicts,
+            )
+            refmodel_path = write_refmodel(run_dir, rm, source)
+            if not rm.ok:
+                return BuildResult(False, "refmodel", rm.issues)
+
+    suite_dir = run_dir / "specflow" / "suite"
+
+    # Stimulus per testpoint, from each element's own prose. Without this every
+    # testpoint renders with `default_stimulus` -- one shared deterministic-random
+    # sweep -- and the suite becomes N copies of one test under N names. Measured
+    # on i2c_master_bit_ctrl: 25 modules, 1 distinct stimulus list, and seven
+    # failing testpoints failing on the identical 19 vectors. The testplan's
+    # `stimulus` field, which S2 is gated on producing, was consumed by nothing.
+    manifest = render_suite(
+        testplan=tps, bins=bins, checks=checks, contract=contract, out_dir=suite_dir,
+        stimulus_by_tp=stim_by_tp or None,
+    )
+    g5 = gate_g5(out_dir=suite_dir, manifest=manifest, bins=bins, checks=checks)
+    if any(i.severity == "error" for i in g5):
+        return BuildResult(False, "G5", g5)
+
+    # THE TRIPLE, COMPUTED BY THE RUN THAT EARNED IT -- see `scorecard`.
+    # Every span, blindness and audit figure before this was taken afterwards
+    # by a driver, against inputs the driver chose, which is how a run came to
+    # be scored against a contract that was not the one in force. Pure replay
+    # and set arithmetic, so it costs no model call; never fatal, because a
+    # measurement that cannot be taken must not take the build down.
+    try:
+        from . import scorecard as _scorecard
+
+        card = _scorecard.score(
+            oracles=[
+                {"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),
+                 "clause": o.clause, "source": o.source}
+                for o in (oracle_set.trusted if oracle_set else [])],
+            normalized=list((normalized_by_uid or {}).values()),
+            requirements=list(reqs or []),
+            stimulus_by_tp=stim_by_tp or {},
+            contract=contract,
+            population=list(_population_on_disk(run_dir) or population_sources),
+            audit_control=audit_control,
+        )
+        _scorecard.write(run_dir, card)
+        for line in _scorecard.render(card).splitlines():
+            logger.info("scorecard: %s", line)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("scorecard: not computed (%r)", exc)
+
+    # Written on the way out of every build, successful or not: a run that
+    # failed at S3 still spent whatever it spent, and a cache that stopped
+    # working is most likely to be noticed on the run that also went wrong.
+    stats.write(run_dir)
+
+    return BuildResult(
+        True, suite_dir=suite_dir, refmodel_path=refmodel_path, bins=bins,
+        stimulus_issues=stim_issues, cache=stats,
+    )
+
+
+def judge(
+    *,
+    rtl_path: Path,
+    hdl_toplevel: str,
+    suite_dir: Path,
+    refmodel_path: Path,
+    bins: list[dict],
+    iteration: int = 0,
+    extra_sources: Sequence[Path | str] = (),
+    include_dirs: Sequence[Path | str] = (),
+) -> tuple[GateVerdict, dict]:
+    """One evaluation: run the suite and return the three-valued verdict.
+
+    This is the replacement for `sim_reviewer.sim_review`'s two-valued answer.
+    That function decides pass or fail from log markers, so `is_pass=True,
+    mismatch_cnt=0` means both "everything was checked and passed" and "nothing
+    ran". Here the verdict is data written by the runtime, per testpoint, and
+    an unexercised testpoint is its own outcome rather than a silent success.
+    """
+    suite_dir = Path(suite_dir)
+    manifest = json.loads((suite_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    outcome = run_suite(
+        rtl_path=rtl_path, hdl_toplevel=hdl_toplevel, suite_dir=suite_dir,
+        refmodel_path=refmodel_path, iteration=iteration,
+        extra_sources=extra_sources, include_dirs=include_dirs,
+    )
+    denominator = freeze_denominator(bins, suite_dir / "denominator.json")
+    report = build_report(denominator=denominator, results=outcome.results)
+
+    verdict = evaluate(
+        results=outcome.results,
+        report=report,
+        missing_records=reconcile(outcome, manifest),
+        build_ok=outcome.build_ok,
+        build_log=outcome.build_log,
+    )
+    return verdict, {
+        "results": {u: r.status for u, r in outcome.results.items()},
+        "uncovered": report.undisposed,
+        "build_ok": outcome.build_ok,
+        # The waveform, so a caller can hand the repair agent a real file rather
+        # than guess a path. Absent when tracing is off or the build failed.
+        "wave_vcd": str(outcome.wave_vcd) if outcome.wave_vcd else None,
+    }
+
+
+def trace_summary(suite_dir: Path, wave_vcd: Path | None = None) -> dict:
+    """The failure half of a trace report, from specflow's own records.
+
+    `eda_agent.trace_report` derives `fail_time`, `fail_outputs` and
+    `input_window` by parsing a SystemVerilog testbench's mismatch log. This
+    backend has no such log -- it has something better, a structured record per
+    testpoint -- but nothing was reading it, so every one of those fields
+    reached the repair agent null or zero while the data sat on disk.
+
+    `fail_step` replaces `fail_time`: a stimulus step index, which is what a
+    specflow failure is actually located by. The waveform is named alongside so
+    the agent can go from "step 7 of TP-0031, sda_oen wrong" to the wave.
+    """
+    payload = failure_payload(suite_dir)
+    by_signal: dict[str, int] = {}
+    first_step: int | None = None
+    total = 0
+    for entry in payload:
+        for m in entry.get("mismatches") or []:
+            total += 1
+            # Every diverging signal, not just the first. One check covers all
+            # the outputs the coverage model listed for it and a state is the
+            # tuple of them, so several can leave the model's sequence on the
+            # same state -- ranking by the first alone would under-report the
+            # rest to exactly the question this summary exists to answer.
+            names = m.get("signals") or ([m["signal"]] if m.get("signal") else [])
+            for sig in names:
+                by_signal[sig] = by_signal.get(sig, 0) + 1
+            step = m.get("step")
+            if isinstance(step, int) and (first_step is None or step < first_step):
+                first_step = step
+    return {
+        "fail_step": first_step,
+        "total_mismatches": total,
+        "failing_testpoints": [e["testpoint"] for e in payload],
+        "fail_outputs": [
+            {"sig": k, "mismatches": v}
+            for k, v in sorted(by_signal.items(), key=lambda kv: -kv[1])
+        ],
+        "wave_vcd": str(wave_vcd) if wave_vcd else None,
+    }
+
+
+def failure_payload(suite_dir: Path) -> list[dict]:
+    """Every failing check across every testpoint, with values and stimulus.
+
+    The replacement for a scraped simulation log. `rtl_editor` currently gets a
+    log excerpt filtered by keyword, and the recorded failure of that approach
+    was 210 MISMATCH lines carrying two actual values. Here each entry already
+    carries the check, the expected and actual values, and the stimulus that
+    produced them -- and every failing testpoint is present, not just the first.
+    """
+    payload: list[dict] = []
+    for path in sorted((Path(suite_dir) / "results").glob("*.json")):
+        # `{tp}.trace.json` shares this directory and is the RECORDING, not a
+        # verdict. See `run._read_results` for the same exclusion and why the
+        # bare glob stopped being right.
+        if path.name.endswith(".trace.json"):
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("status") != "FAIL":
+            continue
+        payload.append(
+            {
+                "testpoint": data["tp_uid"],
+                "failed_checks": data.get("checks_failed") or [],
+                "failed_signals": data.get("signals_failed") or [],
+                "mismatches": data.get("mismatches") or [],
+            }
+        )
+    return payload
+
+
+def describe_oracle(
+    *,
+    suite_dir: Path,
+    refmodel_path: Path,
+    testplan: list[dict] | None = None,
+    max_chars: int = 16000,
+) -> str:
+    """What the repair agent is shown in place of a SystemVerilog testbench.
+
+    `rtl_editor.chat` was written for the monolithic SV path and read
+    `<run>/tb.sv` off disk to fill its `generated_tb` prompt slot. specflow never
+    writes that file -- its testbench is the rendered cocotb suite -- so the very
+    first repair iteration died with `FileNotFoundError` and the repair loop had
+    never once run on this backend.
+
+    The substitute is deliberately not the rendered testcases. Those are
+    generated plumbing: a stimulus list, an `env.cov.hit` per bin and an
+    `env.check` per check, identical in shape across every testpoint. What
+    actually determines the expected values is the reference model, so that is
+    what a repair agent needs to read. It is frozen and no tool can edit it, so
+    showing it cannot produce a retrofitted oracle.
+
+    Budgeted in priority order: the model whole first, then as many failing
+    testplan elements as fit. Truncating the model would leave the agent
+    reasoning about half a specification.
+    """
+    header = (
+        "The oracle is NOT a SystemVerilog testbench. Expected values come from a\n"
+        "Python reference model generated from the specification alone -- it has\n"
+        "never seen this RTL -- and are compared by a cocotb suite, one test per\n"
+        "testplan element. Neither is editable: a mismatch means the RTL and the\n"
+        "specification disagree.\n\n"
+        "=== reference model (the expected behaviour) ===\n"
+    )
+    try:
+        model_src = Path(refmodel_path).read_text(encoding="utf-8")
+    except OSError as exc:
+        model_src = f"<reference model unreadable: {exc}>"
+
+    out = header + model_src
+    failing = {e["testpoint"] for e in failure_payload(suite_dir)}
+    if testplan and failing:
+        lines = ["\n\n=== testplan elements for the failing testpoints ===\n"]
+        for tp in testplan:
+            if tp.get("uid") not in failing:
+                continue
+            entry = (
+                f"[{tp['uid']}] {tp.get('dimension', '?')}\n"
+                f"  stimulus: {tp.get('stimulus', '')}\n"
+                f"  expected: {tp.get('expected_response', '')}\n"
+                f"  check:    {tp.get('check_method', '')}\n"
+            )
+            if len(out) + sum(map(len, lines)) + len(entry) > max_chars:
+                lines.append("  ... further failing testpoints omitted\n")
+                break
+            lines.append(entry)
+        out += "".join(lines)
+    return out[:max_chars]

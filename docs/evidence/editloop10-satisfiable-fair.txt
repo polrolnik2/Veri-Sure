@@ -1,0 +1,36 @@
+req        class            cand   gold   requirement
+REQ-0010   INVERTED         True   False  The module reduces short glitches by sampling histories for SDA 
+REQ-0027   INVERTED         True   False  The busy output is set when a filtered START condition is detect
+REQ-0030   INVERTED         True   False  The arbitration-lost output al is asserted when a STOP condition
+REQ-0042   DISCRIMINATING   False  True   The module shall assert scl_sync when a falling edge occurs on t
+REQ-0048   GOLDEN-SILENT    False  None   The module detects an I2C STOP condition when the filtered SDA t
+REQ-0054   INVERTED         True   False  The command finite-state machine decodes the cmd input while in 
+REQ-0059   INVERTED         True   False  The START sequence then pulls the SDA line low while the SCL lin
+REQ-0060   INVERTED         True   False  The START sequence pulls the SCL line low by asserting the SCL o
+REQ-0068   INVERTED         True   False  The module captures the filtered SDA value into dout when the fi
+REQ-0088   CONVICTS-GOLDEN  False  False  If the external SCL line falls while this master has released it
+REQ-0095   INVERTED         True   False  The module shall enable arbitration checking during the stable h
+REQ-0099   DISCRIMINATING   False  True   The module performs read-data sampling from the filtered SDA lin
+REQ-0105   INVERTED         True   False  The FSM ensures the SDA line is driven low by asserting the SDA 
+REQ-0115   INVERTED         True   False  The controller must assert the SDA open-drain enable low (drive 
+REQ-0119   DISCRIMINATING   False  True   The FSM pulls SCL low again (asserts scl_oen to drive SCL low) t
+REQ-0126   INVERTED         True   False  The module asserts cmd_ack synchronized to clk for exactly one c
+
+   11  INVERTED
+    3  DISCRIMINATING
+    1  GOLDEN-SILENT
+    1  CONVICTS-GOLDEN
+
+PROVEN UNSATISFIABLE (golden fails them too): 1  ['REQ-0088']
+REACHABLE BY THE LOOP (golden passes them)  : 3
+UNKNOWN -- golden never exercised them, so no verdict either way: 1  ['REQ-0048']
+
+                           candidate   golden
+passing (the objective)           61       51
+agrees with golden             71/90    90/90
+passes what golden FAILS          11        0   ['REQ-0010', 'REQ-0027', 'REQ-0030', 'REQ-0054', 'REQ-0059', 'REQ-0060', 'REQ-0068', 'REQ-0095', 'REQ-0105', 'REQ-0115', 'REQ-0126']
+broke what golden passes           3        0   ['REQ-0042', 'REQ-0099', 'REQ-0119']
+
+  ! the candidate scores ABOVE the reference design. That is not
+    a better design -- it is a design shaped to satisfy checks the
+    reference violates. Read `agrees with golden`, not `passing`.

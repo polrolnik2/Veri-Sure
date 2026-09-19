@@ -1,0 +1,11 @@
+{
+  "module_name": "TopModule",
+  "io": [
+    {"name": "a", "dir": "input", "width": 1},
+    {"name": "b", "dir": "input", "width": 1},
+    {"name": "sum", "dir": "output", "width": 1},
+    {"name": "cout", "dir": "output", "width": 1}
+  ],
+  "clocking": {"is_sequential": false},
+  "timing": {"sum": {"latency_cycles": 0}, "cout": {"latency_cycles": 0}}
+}

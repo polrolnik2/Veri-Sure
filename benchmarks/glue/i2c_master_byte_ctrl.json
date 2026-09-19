@@ -1,0 +1,23 @@
+{
+  "parent": "i2c_master_byte_ctrl",
+  "child_module": "i2c_master_bit_ctrl",
+  "instance": "bit_controller",
+  "note": "Every field below is stated by description.txt: the spec names the instance ('instantiates i2c_master_bit_ctrl with the instance name bit_controller'), names each child-facing net (core_cmd, core_ack, core_txd, core_rxd) and says which direction it carries. Widths come from the child's own header, which is a discharged component and legitimately known. Nothing here was read off the parent's implementation.",
+  "shared_domain": ["clk", "rst", "nReset"],
+  "ports": [
+    {"child": "ena",     "glue": "bit_controller_ena",     "dir": "output", "width": 1,  "parent_net": "ena"},
+    {"child": "clk_cnt", "glue": "bit_controller_clk_cnt", "dir": "output", "width": 16, "parent_net": "clk_cnt"},
+    {"child": "cmd",     "glue": "bit_controller_cmd",     "dir": "output", "width": 4,  "parent_net": "core_cmd"},
+    {"child": "din",     "glue": "bit_controller_din",     "dir": "output", "width": 1,  "parent_net": "core_txd"},
+    {"child": "scl_i",   "glue": "bit_controller_scl_i",   "dir": "output", "width": 1,  "parent_net": "scl_i"},
+    {"child": "sda_i",   "glue": "bit_controller_sda_i",   "dir": "output", "width": 1,  "parent_net": "sda_i"},
+    {"child": "cmd_ack", "glue": "bit_controller_cmd_ack", "dir": "input",  "width": 1,  "parent_net": "core_ack"},
+    {"child": "busy",    "glue": "bit_controller_busy",    "dir": "input",  "width": 1,  "parent_net": "i2c_busy"},
+    {"child": "al",      "glue": "bit_controller_al",      "dir": "input",  "width": 1,  "parent_net": "i2c_al"},
+    {"child": "dout",    "glue": "bit_controller_dout",    "dir": "input",  "width": 1,  "parent_net": "core_rxd"},
+    {"child": "scl_o",   "glue": "bit_controller_scl_o",   "dir": "input",  "width": 1,  "parent_net": "scl_o"},
+    {"child": "scl_oen", "glue": "bit_controller_scl_oen", "dir": "input",  "width": 1,  "parent_net": "scl_oen"},
+    {"child": "sda_o",   "glue": "bit_controller_sda_o",   "dir": "input",  "width": 1,  "parent_net": "sda_o"},
+    {"child": "sda_oen", "glue": "bit_controller_sda_oen", "dir": "input",  "width": 1,  "parent_net": "sda_oen"}
+  ]
+}
