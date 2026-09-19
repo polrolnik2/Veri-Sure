@@ -268,7 +268,46 @@ def test_build_artifacts_WRITES_the_contract_on_both_probe_paths() -> None:
     src = inspect.getsource(integration.build_artifacts)
     assert src.count("write_contract(run_dir, contract)") == 2, (
         "the contract is no longer written on both probe paths")
-    #: And it is written where the probes are actually in it -- after the fold,
-    #: not before.
-    fold = src.index('contract["probes"] = [str(e["name"]) for e in entries]')
+    #: And it is written where the probes are actually IN it -- after the fold,
+    #: never before. A contract written before the table is folded in declares
+    #: no probes, which is the state this whole change exists to end.
+    fold = src.index("fold_in(contract, entries)")
     assert src.index("write_contract(run_dir, contract)") > fold
+
+
+def test_folding_the_probe_table_in_TWICE_does_not_double_the_interface() -> None:
+    """Appending was safe only while a contract could not already carry probes.
+
+    It cannot be any more: `write_contract` writes the in-force contract back,
+    so a resumed run reads one that already has them. Caught in the first run
+    that did -- **48 `dir: "probe"` entries in `io` for 24 declared probes**.
+    Nothing errors on that; it quietly doubles the interface.
+    """
+    from specflow.probes import declared_probes, fold_in
+
+    base = {"io": [{"name": "q", "dir": "output", "width": 1}]}
+    entries = [{"name": "idle", "dir": "probe", "width": 1},
+               {"name": "cscl", "dir": "probe", "width": 1}]
+
+    once = fold_in(base, entries)
+    twice = fold_in(once, entries)
+    assert once == twice, "the fold is not idempotent"
+    assert len([p for p in twice["io"] if p.get("dir") == "probe"]) == 2
+    assert declared_probes(twice) == ("idle", "cscl")
+    #: The real port survives, and keeps its place ahead of the table.
+    assert twice["io"][0]["name"] == "q"
+
+
+def test_a_probe_the_new_table_drops_does_not_survive_in_the_interface() -> None:
+    """The table SUPERSEDES. A probe the stage no longer nominates must not stay
+    declared -- a design would still be obliged to expose it, and every check
+    reading it would still be judged, against a name the run no longer knows."""
+    from specflow.probes import declared_probes, fold_in
+
+    had = fold_in({"io": [{"name": "q", "dir": "output"}]},
+                  [{"name": "idle", "dir": "probe", "width": 1},
+                   {"name": "gone", "dir": "probe", "width": 1}])
+    assert declared_probes(had) == ("idle", "gone")
+    now = fold_in(had, [{"name": "idle", "dir": "probe", "width": 1}])
+    assert declared_probes(now) == ("idle",)
+    assert all(p.get("name") != "gone" for p in now["io"])

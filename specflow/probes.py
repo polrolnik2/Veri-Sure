@@ -452,12 +452,35 @@ def gate(out: ProbeOutput, *, contract: dict, spec: str,
     return issues
 
 
+def fold_in(contract: dict, entries: list[dict]) -> dict:
+    """`contract` with `entries` as its probe table. Never mutates. IDEMPOTENT.
+
+    **APPENDING WAS SAFE ONLY WHILE THE CONTRACT COULD NOT ALREADY CARRY
+    PROBES.** It cannot be any more: `write_contract` writes the in-force
+    contract back, so a resumed run -- or anything pointed at a finished run
+    directory -- now reads a contract that already has them, and a second fold
+    appended a duplicate of every one.
+
+    Caught in the first run that read a written-back contract: 48 `dir:
+    "probe"` entries in `io` for 24 declared probes. Nothing downstream errors
+    on that; it just quietly doubles the interface.
+
+    So a probe is REPLACED by name rather than appended, and any `dir: "probe"`
+    entry not in the new table is dropped -- the table supersedes, so a probe
+    the stage no longer nominates must not survive in the interface.
+    """
+    doc = json.loads(json.dumps(contract))
+    names = {str(e.get("name")) for e in entries if e.get("name")}
+    kept = [p for p in (doc.get("io") or [])
+            if p.get("dir") != "probe" and str(p.get("name")) not in names]
+    doc["io"] = kept + list(entries)
+    doc["probes"] = [str(e["name"]) for e in entries if e.get("name")]
+    return doc
+
+
 def augmented(contract: dict, out: ProbeOutput) -> dict:
     """`contract` with the probe table written into `io`. Never mutates."""
-    doc = json.loads(json.dumps(contract))
-    doc.setdefault("io", [])
-    doc["io"] = list(doc["io"]) + [p.as_io() for p in out.probes]
-    doc["probes"] = [p.name for p in out.probes]
+    doc = fold_in(contract, [p.as_io() for p in out.probes])
     if out.aliases:
         doc["probe_aliases"] = [a.model_dump() for a in out.aliases]
     return doc

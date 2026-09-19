@@ -30,6 +30,7 @@ from eda_agent.contract_linter import probe_issues
 from .probes import orphans as probe_orphans
 from .probes import run_probes
 from .probes import write_artifacts as write_probes
+from .probes import fold_in
 from .probes import write_contract
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
@@ -662,9 +663,11 @@ def build_artifacts(
         # not reused; it is dropped, and the run continues without probes.
         if entries and not has_errors([Issue(i.severity, i.path, i.message)
                                        for i in probe_issues(entries, spec)]):
-            contract = json.loads(json.dumps(contract))
-            contract["io"] = list(contract.get("io") or []) + entries
-            contract["probes"] = [str(e["name"]) for e in entries]
+            #: `fold_in`, not an append: `write_contract` means a resumed run
+            #: reads a contract that ALREADY carries the table, and appending
+            #: gave 48 `dir: "probe"` entries for 24 probes on the first run
+            #: that did.
+            contract = fold_in(contract, entries)
             contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
             #: The reuse path folds the same table in, so it owes the same
             #: file. Without this a resumed run leaves a `contract.json` from
