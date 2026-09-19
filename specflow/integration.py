@@ -1078,6 +1078,22 @@ def build_artifacts(
     refmodel_path = run_dir / "specflow" / "ref_model.py"
     rm_issues: list[Issue] = []
     if stale or not refmodel_path.is_file():
+        #: **SAY WHY, BECAUSE THIS IS THE EXPENSIVE ONE.** Generating and then
+        #: debugging the reference model is the longest stage in the pipeline,
+        #: and a resumed run that rebuilds it spends that on an artifact
+        #: already on disk. Whether it rebuilt because an upstream stage
+        #: regenerated or because the file simply was not there is the first
+        #: question anyone asks, and the run did not record either.
+        #:
+        #: Measured: an editor-loop run reused S1, normalize, S2, S3 and all
+        #: 122 oracles -- no model call for any of them -- and still rebuilt
+        #: the reference model, with nothing in the log to say which of the two
+        #: reasons applied.
+        logger.info(
+            "refmodel: rebuilding -- %s",
+            "an upstream stage regenerated, so a cached model would be about "
+            "requirements that changed" if stale
+            else f"no model on disk at {refmodel_path}")
         stale = True
         # The reference model is generated whole, by the configured (strong)
         # model, regardless of `fanout`. Splitting generation was the wrong half
