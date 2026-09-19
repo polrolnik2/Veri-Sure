@@ -3333,3 +3333,21 @@ def test_a_requirement_with_NO_OBSERVABLE_is_never_staged(monkeypatch):
     assert "REQ-1" not in asked, (
         "stimulus was generated for a requirement with no observable")
     assert "REQ-2" in asked, "the observable requirement was not staged"
+
+    #: **AND AN EMPTY `observable` ALONE IS NOT ENOUGH.** That is absence of
+    #: evidence -- normalize may never have run for the uid at all -- and
+    #: skipping on it drops a requirement nobody has examined. The skip is on
+    #: `unobservable_reason`, which is normalize SAYING SO. Dropping the reason
+    #: from REQ-1 must bring it back.
+    calls.clear()
+    silent = {**normalized, "REQ-1": {"activation": {"text": "always"},
+                                      "observable": []}}
+    O.stage_unexercised(
+        held=held, unexercised={"REQ-1": "never fired"},
+        requirements=reqs, normalized=silent,
+        contract={"io": [{"name": "a", "dir": "input", "width": 1},
+                         {"name": "y", "dir": "output", "width": 1}]},
+        testplan=[], stimulus_by_tp={}, witness=WITNESS, port=None,
+        attempts=1, budget=8)
+    assert {k["requirement"]["uid"] for k in calls if k.get("requirement")} \
+        == {"REQ-1"}, "an unexamined requirement was skipped as unobservable"

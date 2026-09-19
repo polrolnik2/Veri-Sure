@@ -4532,7 +4532,15 @@ def stage_unexercised(
         #: It is normalize's own evidence and not a classifier's label, which
         #: is the same rule `scorecard.score` already divides by, stated there
         #: as the reason it is not `unit_kind == "scaffolding"`.
-        if not (shape.get("observable") or ()):
+        #: **THE POSITIVE EVIDENCE, NOT THE EMPTY FIELD.** An absent or empty
+        #: `observable` is ABSENCE OF EVIDENCE: normalize may never have run
+        #: for this uid at all, and skipping on that would silently drop a
+        #: requirement nobody has examined. `unobservable_reason` is normalize
+        #: SAYING SO, and on the run this was measured from all twenty carried
+        #: one -- the same distinction the scorecard makes when it reports a
+        #: rate as `None` rather than 0.0 for an empty denominator.
+        if (str(shape.get("unobservable_reason") or "").strip()
+                and not (shape.get("observable") or ())):
             skipped_unobservable.append(uid)
             continue
         act = shape.get("activation") or {}
