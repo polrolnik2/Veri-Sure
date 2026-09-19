@@ -1484,9 +1484,6 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
     for uid in order:
         spared = [k for k in per_req[uid] if k not in refuted]
         tier = spared or per_req[uid]
-        inside = [k for k in tier
-                  if tells[k].dissent_weighted <= max_dissent_weighted]
-        pool = inside or tier
         #: A TIE IS NOT A REASON TO REPLACE A CHECK THAT ALREADY STOOD. The
         #: standing body wins an exact tie; otherwise `max` returns the first
         #: maximal element of an index-ordered list, which is the oldest draft.
@@ -1495,7 +1492,31 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
         #: separation, both closing nothing -- and one of them convicted the
         #: known-good control while the other did not.
         standing_src = held[uid].source if uid in held else None
-        pick = max(pool, key=lambda k: (len(closes[k] - covered),
+        #: **THE GUARD CHOOSES BETWEEN CHECKS THAT DO THE JOB. IT DOES NOT MAKE
+        #: AN INERT CHECK PREFERABLE TO A WORKING ONE.** `dissent_weighted` was
+        #: applied as a TIER -- `inside or tier` -- so any body inside the
+        #: guard beat any body outside it whatever either one decided, and a
+        #: body convicting NOBODY is as far inside as a body can get. The
+        #: end-to-end run says what that cost: four requirements froze a check
+        #: separating nothing over a sibling separating thousands of cells,
+        #: REQ-0001 at 0 against 7863, and the run's blindness was 14.6%.
+        #:
+        #: That is this tree's own "over-strictness and vacuity as one defect
+        #: with two signs" arriving inside the chooser: a guard against the
+        #: first sign buying its safety with the second. Separation comes
+        #: first, the guard chooses among the bodies that have it, and only
+        #: then does more separation win.
+        #:
+        #: **AND IT RETIRES THE THRESHOLD AS A KNOB**, which is the evidence
+        #: this is the right repair rather than a fitted one. Swept over the
+        #: same corpus, `max_dissent_weighted` at 1.0 / 2.0 / 3.0 / 3.5 gave
+        #: 16.6% / 14.6% / 14.1% / 9.0% before and 9.0% / 9.2% / 9.2% / 9.0%
+        #: after; on a second run's corpus, where no body convicted more than
+        #: two designs, both rules read 5.7% at every value.
+        pick = max(tier, key=lambda k: (bool(closes[k] - covered),
+                                        tells[k].dissent_weighted
+                                        <= max_dissent_weighted,
+                                        len(closes[k] - covered),
                                         tells[k].placement,
                                         flat[k].source == standing_src))
         covered |= closes[pick]

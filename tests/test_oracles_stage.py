@@ -3220,3 +3220,61 @@ def test_an_undecidable_activation_is_not_reported_as_a_driven_one():
     #: The mechanically certain miss still outranks both.
     assert O._diagnose({"activation": "not_fired: a never reached 7"}) == (
         "a required input value was never driven")
+
+
+def test_the_dissent_guard_never_prefers_a_check_that_SEPARATES_NOTHING(
+        monkeypatch):
+    """The guard was a TIER -- `inside or tier` -- so any body inside it beat
+    any body outside it whatever either one decided. A body convicting NOBODY
+    is as far inside as a body can get, so the guard against over-strictness
+    selected for the other sign of the same defect.
+
+    Measured on the end-to-end run: four requirements froze a body separating
+    nothing over a sibling separating thousands of cells -- REQ-0001 at 0
+    against 7863, REQ-0021 at 0 against 4749, REQ-0121 at 0 against 3612 -- and
+    the run reported 14.6% blindness against a target of 10%. Re-choosing that
+    same corpus with separation ahead of the guard: **9.2%**, with the
+    threshold left exactly where it shipped.
+    """
+    from specflow import oracles_stage as O
+    from specflow import population as P
+    from specflow import variety as V
+
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: {"0": {}, "1": {}})
+    monkeypatch.setattr(V, "cells", lambda *a, **k: (
+        V.Cell(testpoint="TP-1", port="p", left="0", right="1"),))
+    monkeypatch.setattr(P, "characterise", lambda *a, **k: object())
+    #: `inert` convicts nobody and separates nothing; `sharp` convicts three of
+    #: seven, which is outside the guard, and separates the cell.
+    tables = {"REQ-1#0": {"TP-1": {"0": True, "1": True}},
+              "REQ-1#1": {"TP-1": {"0": True, "1": False}}}
+    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+        {k2: {"0": True} for k2 in flat},
+        {k2: tables.get(k2, {}) for k2 in flat}, {k2: {} for k2 in flat}))
+    monkeypatch.setattr(P, "tells", lambda obj, *a, **k: type(
+        "T", (), {"dissent_weighted": 0.0 if not obj else 3.4,
+                  "placement": 0.0})())
+
+    #: `tells` is handed the objections of the body being scored, so the inert
+    #: one arrives with an empty map and the sharp one with a conviction.
+    def tables2(flat, *a, **k):
+        return ({k2: {"0": True} for k2 in flat},
+                {k2: tables.get(k2, {}) for k2 in flat},
+                {k2: ({} if k2.endswith("#0") else {"d1": ("TP-1",)})
+                 for k2 in flat})
+    monkeypatch.setattr(O, "_population_tables", tables2)
+
+    held = {"REQ-1": O.RequirementOracle(req_uid="REQ-1", tp_uids=["TP-1"],
+                                         clause="c", source="inert")}
+    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="inert",
+                                     arm="generate", round_=0),
+                        O.CorpusBody(req_uid="REQ-1", source="sharp",
+                                     arm="resample", round_=0)]}
+    got = O._choose_bodies(
+        corpus=corpus, held=held, population=("a", "b"),
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={}, base="", transactional=False,
+        max_dissent_weighted=2.0)
+    assert got.get("REQ-1") is not None, (
+        "the inert body was kept: the guard still outranks separation")
+    assert got["REQ-1"].source == "sharp", got["REQ-1"].source
