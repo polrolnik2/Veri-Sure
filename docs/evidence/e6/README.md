@@ -68,3 +68,50 @@ threshold by the grade is gating on the control in slow motion.
     e6_score_map.py       score a chosen-body map with the run's own scorecard
     e6_check_rtl.py       judge a candidate RTL with the frozen check set and
                           with nothing else
+
+---
+
+# A design that does nothing passes the check set
+
+The first thing put through `e6_check_rtl.py` was a plumbing fixture: the
+contract's ports, every output tied to a constant, no behaviour at all
+(`stub.v`). It was meant to prove the harness elaborates and records traces.
+
+    elaborating stub.v against 122 frozen check(s)
+    482 testpoint trace(s) recorded
+    CHECK SET  14 pass, 0 FAIL, 108 abstain (never fired), of 122
+    EVERY CHECK THAT FIRED PASSED.
+
+**106 of the 122 checks name at least one of the 24 probes; 16 name none.**
+A check whose source names a signal the design does not expose ABSTAINS -- that
+is `base.probe_values` returning `None` and `decide` declining to convict
+against state the design never declared, which is the right behaviour and the
+reason the audit column reads `0/14` rather than convicting 82 checks against
+permanently-false terms.
+
+But it means the set's reach over an arbitrary design is **16 checks, not 122**,
+and it is the same cause as the audit denominator: the benchmark's control
+predates probes, so it too can only be judged on 14.
+
+## What this does and does not say about the triple
+
+It does not invalidate the blindness figure. That is measured over the run's
+own seven spec-derived designs, which are reference models declaring
+`PROBE_PORTS`, so all 122 checks decide against them and the denominator is
+real.
+
+It does bound what the figure GENERALISES to. A set that separates 91% of the
+disagreement cells among designs that expose the specification's named internal
+states separates far less among designs that do not, and nothing in the triple
+says so. `e6_check_rtl.py` is where that shows up, because it is the only
+instrument here that points the frozen set at RTL.
+
+## The probe contract
+
+`probe-contract.md` is generated from the run's own `probes.json`: the 24
+names, the note each carries, and the specification sentences that licensed it.
+Every name is the specification's own -- the probe stage was changed to use them
+rather than paraphrase -- so handing it to somebody writing the design is
+handing them a requirement, not a hint about another implementation. A design
+that exposes these 24 signals is judged by all 122 checks; one that does not is
+judged by 16.
