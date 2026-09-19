@@ -22,7 +22,8 @@ refuted overall still separates a pair at one testpoint, so marginal gain
 rewards it. That is the recorded way this metric was gamed, arriving through
 the per-testpoint predicate.
 """
-import json, sys
+import json
+import sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/Veri-Sure")
 from specflow import oracles_stage as OS
