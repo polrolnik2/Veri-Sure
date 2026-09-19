@@ -94,52 +94,70 @@ reviewer = SpecflowReviewer(
     oracles=oracles, contract=contract)
 
 rtl_path = OUT / "rtl.sv"
+GENERATE = False
 if START is not None:
     rtl_path.write_text(Path(START).read_text(encoding="utf-8"),
                         encoding="utf-8")
     print(f"starting from {START} ({len(rtl_path.read_text().splitlines())} lines)",
           flush=True)
 else:
-    ok, code = asyncio.run(RTLGenerator(cfg).chat(
-        input_spec=spec, testbench="", interface="",
-        rtl_path=str(rtl_path), contract_json=contract_json))
-    if not ok or not code.strip():
-        print("RTL generation produced nothing")
-        raise SystemExit(1)
-    rtl_path.write_text(code, encoding="utf-8")
-    print(f"generated rtl.sv ({len(code.splitlines())} lines)", flush=True)
+    GENERATE = True
 
 tb_text = describe_oracle(suite_dir=OUT / "suite",
                           refmodel_path=OUT / "ref_model.py",
                           testplan=json.loads(
                               (OUT / "specflow" / "testplan.json").read_text()),
                           max_chars=12000)
-remaining = TRIALS
-for rnd in range(ROUNDS):
-    is_pass, failing, sim_output = reviewer.review()
-    decided = reviewer.req_results or {}
-    bad = sorted(u for u, (r, _t) in decided.items()
-                 if getattr(r, "ok", None) is False)
-    quiet = sorted(u for u, (r, _t) in decided.items()
-                   if getattr(r, "ok", None) is None)
-    print(f"\nROUND {rnd}: {len(decided) - len(bad) - len(quiet)} pass, "
-          f"{len(bad)} FAIL, {len(quiet)} abstain of {len(decided)} check(s); "
-          f"{failing} failing testpoint(s)", flush=True)
-    if bad:
-        print(f"  failing: {', '.join(bad[:12])}", flush=True)
-    if is_pass or not remaining:
-        break
-    editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
-                       stimulus_stager=stager,
-                       requirements=load_requirement_views(OUT, contract),
-                       contract=contract)
-    _, repaired, used, _ = asyncio.run(editor.chat(
-        spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
-        sim_mismatch_cnt=failing, contract_json=contract_json,
-        max_trials=remaining, tb_text=tb_text, tb_clip_chars=12000))
-    remaining -= max(1, int(used))
-    print(f"  editor used {used} trial(s); {remaining} left", flush=True)
-    if repaired.strip():
-        rtl_path.write_text(repaired, encoding="utf-8")
+#: **ONE EVENT LOOP FOR THE WHOLE DRIVER.** `asyncio.run` per round closes the
+#: loop while the HTTP client from that round still has a finalizer queued, so
+#: every round but the last ended in a `RuntimeError: Event loop is closed`
+#: traceback from `httpx`'s pool teardown. Harmless in itself and exactly the
+#: kind of noise that hides a real one.
+async def _drive() -> None:
+    remaining = TRIALS
+    if GENERATE:
+        ok, code = await RTLGenerator(cfg).chat(
+            input_spec=spec, testbench="", interface="",
+            rtl_path=str(rtl_path), contract_json=contract_json)
+        if not ok or not code.strip():
+            print("RTL generation produced nothing")
+            raise SystemExit(1)
+        rtl_path.write_text(code, encoding="utf-8")
+        print(f"generated rtl.sv ({len(code.splitlines())} lines)", flush=True)
 
+    for rnd in range(ROUNDS):
+        is_pass, failing, sim_output = reviewer.review()
+        decided = reviewer.req_results or {}
+        bad = sorted(u for u, (r, _t) in decided.items()
+                     if getattr(r, "ok", None) is False)
+        quiet = sorted(u for u, (r, _t) in decided.items()
+                       if getattr(r, "ok", None) is None)
+        print(f"\nROUND {rnd}: {len(decided) - len(bad) - len(quiet)} pass, "
+              f"{len(bad)} FAIL, {len(quiet)} abstain of {len(decided)} "
+              f"check(s); {failing} failing testpoint(s)", flush=True)
+        if bad:
+            print(f"  failing: {', '.join(bad[:12])}", flush=True)
+        #: **ABSTENTIONS ARE NAMED, NOT COUNTED.** A check that decided last
+        #: round and abstains this one is the vacuity sign: the repair made it
+        #: stop firing rather than pass. Measured on the first run -- 3 -> 5
+        #: across one editor turn, with the design shrinking 518 -> 380 lines.
+        if quiet:
+            print(f"  abstain: {', '.join(quiet)}", flush=True)
+        if is_pass or not remaining:
+            break
+        editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
+                           stimulus_stager=stager,
+                           requirements=load_requirement_views(OUT, contract),
+                           contract=contract)
+        _, repaired, used, _ = await editor.chat(
+            spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
+            sim_mismatch_cnt=failing, contract_json=contract_json,
+            max_trials=remaining, tb_text=tb_text, tb_clip_chars=12000)
+        remaining -= max(1, int(used))
+        print(f"  editor used {used} trial(s); {remaining} left", flush=True)
+        if repaired.strip():
+            rtl_path.write_text(repaired, encoding="utf-8")
+
+
+asyncio.run(_drive())
 print(f"\nFINAL rtl.sv: {len(rtl_path.read_text().splitlines())} lines")
