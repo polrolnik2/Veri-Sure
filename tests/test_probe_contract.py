@@ -183,3 +183,92 @@ def test_no_other_site_refuses_a_probe() -> None:
             if nxt != "continue":
                 offenders.append(f"{path.relative_to(root)}:{n + 1} -> {nxt}")
     assert offenders == []
+
+
+def test_the_run_WRITES_DOWN_the_contract_it_is_working_to(tmp_path) -> None:
+    """`probes.augmented` folds the probe table into `contract["io"]` and every
+    stage below works to that object -- and the run used to throw it away. The
+    only `contract.json` on disk was the INPUT one, which declares none of them.
+
+    So the interface artifact a consumer reads disagreed with the interface the
+    checks were written against, and everything that scored a finished run
+    rebuilt the in-force contract by hand from `probes.json`. The tree has
+    already recorded what that costs: a run scored against a contract that was
+    not the one in force.
+    """
+    from specflow.probes import write_contract
+
+    contract = {"module_name": "m", "io": [
+        {"name": "q", "dir": "output", "width": 1},
+        {"name": "in_lrefill3", "dir": "probe", "width": 1},
+    ], "probes": ["in_lrefill3"]}
+    path = write_contract(tmp_path, contract)
+
+    assert path == tmp_path / "specflow" / "contract.json"
+    back = json.loads(path.read_text(encoding="utf-8"))
+    assert back["probes"] == ["in_lrefill3"]
+    #: The probe is in `io`, as a port of the interface, not only in a sidecar
+    #: list a reader has to know to go looking for.
+    assert {"name": "in_lrefill3", "dir": "probe", "width": 1} in back["io"]
+
+
+def test_a_probe_the_design_does_not_expose_is_a_CONFORMANCE_GAP() -> None:
+    """A probe is a `dir: "probe"` entry in the contract, so a design is
+    REQUIRED to expose it. A design that does not has not implemented its
+    interface -- that is a verdict of its own, and it is not the same event as
+    a design violating a requirement.
+
+    Measured with a module declaring the contract's ports and tying every
+    output to a constant: **14 pass, 0 FAIL, 108 abstain of 122**. A design
+    that does nothing at all, passing, because 106 of the 122 checks name a
+    probe it never declared and a check reading absent state abstains. Reported
+    as abstentions, that reads as the checks being unable to judge; reported as
+    conformance, it reads as the design not having an interface to judge.
+    """
+    from specflow.probes import declared_probes, not_exposed
+
+    contract = {"io": [
+        {"name": "q", "dir": "output", "width": 1},
+        {"name": "idle", "dir": "probe", "width": 1},
+        {"name": "cscl", "dir": "probe", "width": 1},
+    ], "probes": ["idle", "cscl"]}
+
+    assert declared_probes(contract) == ("idle", "cscl")
+    assert not_exposed(contract, ["q", "idle", "cscl"]) == ()
+    assert not_exposed(contract, ["q", "idle"]) == ("cscl",)
+    #: A design exposing none of them is the stub, and the gap is the whole set
+    #: rather than silence.
+    assert not_exposed(contract, ["q"]) == ("idle", "cscl")
+
+
+def test_declared_probes_reads_io_when_no_probes_list_is_carried() -> None:
+    """`augmented` writes both, but a hand-written contract may carry only the
+    `io` entries -- and the `io` entry is the one that makes it a port."""
+    from specflow.probes import declared_probes
+
+    assert declared_probes({"io": [
+        {"name": "q", "dir": "output"},
+        {"name": "idle", "dir": "probe"}]}) == ("idle",)
+
+
+def test_build_artifacts_WRITES_the_contract_on_both_probe_paths() -> None:
+    """A SOURCE-LEVEL PIN, and it is not belt-and-braces. A call site inside
+    `build_artifacts` is unreachable from any unit test here, and deleting one
+    has twice passed every behavioural test on this branch.
+
+    Both paths owe the file. The fresh path folds the table in after
+    `run_probes`; the REUSE path folds the same table in from `probes.json`
+    without calling the stage at all, and a resumed run that skipped it would
+    leave whichever contract was written last, or none.
+    """
+    import inspect
+
+    from specflow import integration
+
+    src = inspect.getsource(integration.build_artifacts)
+    assert src.count("write_contract(run_dir, contract)") == 2, (
+        "the contract is no longer written on both probe paths")
+    #: And it is written where the probes are actually in it -- after the fold,
+    #: not before.
+    fold = src.index('contract["probes"] = [str(e["name"]) for e in entries]')
+    assert src.index("write_contract(run_dir, contract)") > fold

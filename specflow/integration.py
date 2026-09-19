@@ -30,6 +30,7 @@ from eda_agent.contract_linter import probe_issues
 from .probes import orphans as probe_orphans
 from .probes import run_probes
 from .probes import write_artifacts as write_probes
+from .probes import write_contract
 from .refmodel.compose import choose_base, run_refmodel
 from .refmodel.compose import write_artifacts as write_refmodel
 from .refmodel.validate import validate_source
@@ -665,6 +666,10 @@ def build_artifacts(
             contract["io"] = list(contract.get("io") or []) + entries
             contract["probes"] = [str(e["name"]) for e in entries]
             contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
+            #: The reuse path folds the same table in, so it owes the same
+            #: file. Without this a resumed run leaves a `contract.json` from
+            #: whichever path wrote it last, or none at all.
+            write_contract(run_dir, contract)
             logger.info("probes: reusing %d probe(s) from %s",
                         len(entries), probes_path)
         elif entries:
@@ -720,6 +725,12 @@ def build_artifacts(
         if contract.get("probes"):
             contract_json = json.dumps(contract, indent=2, ensure_ascii=False)
             write_probes(run_dir, contract, probe_result)
+            #: **AND THE CONTRACT ITSELF, WITH THE PROBES IN IT.** Every stage
+            #: below here works to this object; until it was written down the
+            #: only contract on disk was the input one, which declares none of
+            #: them, so anything scoring the finished run had to rebuild the
+            #: in-force interface by hand from `probes.json`.
+            write_contract(run_dir, contract)
             # THE CONTRACT CHANGED, SO WHAT WAS COMPUTED AGAINST THE OLD ONE
             # MUST NOT BE REUSED. `_reuse` hands back a cached artifact that
             # still passes its gate, and no gate below here looks at probes --

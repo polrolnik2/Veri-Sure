@@ -30,7 +30,9 @@ from pathlib import Path
 sys.path.insert(0, "/home/user/Veri-Sure")
 
 from specflow.refmodel.oracles import RequirementOracle  # noqa: E402
-from specflow.refmodel.rtl_trace import decide_rtl, load_traces  # noqa: E402
+from specflow import probes  # noqa: E402
+from specflow.refmodel.rtl_trace import (decide_rtl, load_traces,  # noqa: E402
+                                         rows_from)
 from specflow.run import run_suite  # noqa: E402
 
 #: The run whose frozen set is being tried. One directory, so a candidate is
@@ -55,17 +57,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no such file: {cand}")
         return 2
 
-    contract = json.loads((run / "../contract.json").read_text()) \
-        if (run / "../contract.json").is_file() else None
-    if contract is None:
-        contract = json.loads(
-            Path("benchmarks/baselines/i2c_master_bit_ctrl/arm_a/"
-                 "contract.json").read_text())
-    pr = json.loads((run / "probes.json").read_text())["probes"]
-    contract["io"] = list(contract["io"]) + [
-        {"name": p["name"], "dir": "probe", "width": p.get("width", 1)}
-        for p in pr]
-    contract["probes"] = [p["name"] for p in pr]
+    #: **THE RUN'S OWN CONTRACT, PROBES INCLUDED.** Not the input contract plus
+    #: a reconstruction: `probes.write_contract` writes the interface the run
+    #: actually worked to, and reading anything else is how a run came to be
+    #: scored against a contract that was not the one in force.
+    cpath = run / "contract.json"
+    if not cpath.is_file():
+        print(f"no {cpath} -- this run predates the contract being written "
+              f"down. Re-run the pipeline, or the probes are not declared "
+              f"anywhere a design could be held to them.")
+        return 2
+    contract = json.loads(cpath.read_text())
 
     blob = json.loads((run / "oracles.json").read_text())
     oracles = [RequirementOracle(**{k: o[k] for k in
@@ -75,9 +77,21 @@ def main(argv: list[str] | None = None) -> int:
             for r in json.loads((run / "requirements.json").read_text()
                                 )["requirements"]}
 
-    out = run / ".." / "e6"
-    out.mkdir(parents=True, exist_ok=True)
     suite = run / "suite"
+    #: **A RUN SCORES ITS OWN TRACES OR IT SCORES NOTHING.** `load_traces`
+    #: reads every `*.trace.json` in `results/`, and the directory is shared by
+    #: every candidate ever put through this suite. A build that dies partway,
+    #: or two candidates run back to back, leaves the previous design's traces
+    #: to be decided as this one's -- a verdict about a design that is not the
+    #: one on the command line, which is the whole class of defect this file
+    #: exists to avoid.
+    results = suite / "results"
+    stale = sorted(results.glob("*.trace.json")) if results.is_dir() else []
+    if stale:
+        print(f"clearing {len(stale)} trace(s) from a previous candidate")
+        for f in results.iterdir():
+            if f.is_file():
+                f.unlink()
     print(f"elaborating {cand.name} against {len(oracles)} frozen check(s)",
           flush=True)
     outcome = run_suite(rtl_path=cand, hdl_toplevel=TOPLEVEL, suite_dir=suite,
@@ -90,6 +104,31 @@ def main(argv: list[str] | None = None) -> int:
 
     traces = load_traces(suite / "results")
     print(f"{len(traces)} testpoint trace(s) recorded", flush=True)
+
+    #: **CONFORMANCE BEFORE CORRECTNESS, AND IT IS ITS OWN VERDICT.** A probe is
+    #: a `dir: "probe"` entry in the contract, so a design is REQUIRED to expose
+    #: it. A design that does not is not a design the checks abstained on -- it
+    #: has not implemented its interface, and measuring its correctness before
+    #: saying so reports the gap as 108 quiet abstentions.
+    #:
+    #: Measured with a module that declares the contract's ports and ties every
+    #: output to a constant: 14 pass, 0 FAIL, 108 abstain -- a design that does
+    #: nothing at all, passing.
+    #: A probe the design does not declare is still a KEY in the recorded row
+    #: -- `Env.sample` writes `None` rather than raising, so the testpoint
+    #: survives to produce a verdict. So exposure is a non-`None` value
+    #: somewhere, never the key being present.
+    exposed = {n for tr in traces.values() for row in rows_from(tr)
+               for n, v in (row.get("outputs") or {}).items() if v is not None}
+    missing = probes.not_exposed(contract, exposed)
+    if missing:
+        declared = probes.declared_probes(contract)
+        print(f"\nNOT CONTRACT-CONFORMANT: {len(missing)} of {len(declared)} "
+              f"declared probe(s) are not exposed by this design.\n  "
+              + ", ".join(missing))
+        print("\nEvery check reading one of them can say nothing about this "
+              "design. Expose them as ports and re-run; the numbers below are "
+              "over the remainder and are NOT a verdict on the design.")
     results = decide_rtl(oracles, traces, contract)
     by_uid = {r.req_uid: r for r in results}
     src = {o.req_uid: o.source for o in oracles}

@@ -577,6 +577,93 @@ def run_probes(*, requirements: list[dict], contract: dict, contract_json: str,
     return doc, extra, result
 
 
+def write_contract(run_dir, contract: dict):
+    """`contract.json`, WITH the probe table, beside the stage artifacts.
+
+    **THE INTERFACE THE RUN IS ACTUALLY WORKING TO, WRITTEN DOWN.** `augmented`
+    folds the probe table into `contract["io"]` as `dir: "probe"` entries and
+    every stage downstream uses that object -- and then the run threw it away.
+    The only `contract.json` on disk was the INPUT one, which names none of
+    them, so the interface artifact a consumer reads disagreed with the
+    interface the checks were written against.
+
+    Everything that had to score a finished run therefore rebuilt the in-force
+    contract by hand, reading `probes.json` and appending `dir: "probe"` entries
+    itself -- five separate copies of the same reconstruction, and the tree has
+    already recorded what that costs: "a run came to be scored against a
+    contract that was not the one in force, and against a nine-design yardstick
+    that predates the probes 82 of its 96 checks read."
+
+    It is also what makes a probe an OBLIGATION rather than a convention. A
+    design is required to expose what its contract declares; `base.probe_values`
+    returning `None` for an undeclared probe reads as "this check cannot judge
+    this design" only because nothing ever told the design to expose it. With
+    the probes in the contract, a design that does not is not abstained from --
+    it does not implement its interface, and that is a verdict of its own.
+    """
+    from pathlib import Path as _Path
+
+    out_dir = _Path(run_dir) / "specflow"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "contract.json"
+    path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def in_force(run_dir, fallback: dict | None = None) -> dict:
+    """The contract a finished run was WORKING TO, read rather than rebuilt.
+
+    Nine separate drivers in this tree reconstructed it by loading the input
+    contract and appending `dir: "probe"` entries from `probes.json` -- nine
+    copies of a reconstruction that is only correct while it matches what
+    `augmented` did. `write_contract` makes that unnecessary for any run from
+    here on; `fallback` is for the runs that predate it, and the reconstruction
+    is done in ONE place instead of nine.
+    """
+    from pathlib import Path as _Path
+
+    run = _Path(run_dir)
+    for cand in (run / "specflow" / "contract.json", run / "contract.json"):
+        if cand.is_file():
+            return json.loads(cand.read_text(encoding="utf-8"))
+    if fallback is None:
+        raise FileNotFoundError(
+            f"no contract.json under {run}; this run predates the contract "
+            f"being written down, so pass the input contract as `fallback`")
+    doc = json.loads(json.dumps(fallback))
+    path = run / "specflow" / "probes.json"
+    entries = []
+    if path.is_file():
+        entries = (json.loads(path.read_text(encoding="utf-8"))
+                   .get("probes") or [])
+    doc["io"] = list(doc.get("io") or []) + list(entries)
+    doc["probes"] = [str(e["name"]) for e in entries]
+    return doc
+
+
+def declared_probes(contract: dict) -> tuple[str, ...]:
+    """The probe names this contract obliges a design to expose."""
+    named = [str(n) for n in (contract.get("probes") or []) if n]
+    if named:
+        return tuple(named)
+    return tuple(str(p.get("name")) for p in (contract.get("io") or [])
+                 if p.get("dir") == "probe" and p.get("name"))
+
+
+def not_exposed(contract: dict, exposes) -> tuple[str, ...]:
+    """Contract-declared probes `exposes` does not carry. The conformance gap.
+
+    `exposes` is whatever the design offers by name -- a reference model's
+    `PROBE_PORTS`, or the signals a simulated DUT resolves. Reported as its own
+    outcome, never folded into the checks that read them: a design failing to
+    implement its interface is not the same event as a design violating a
+    requirement, and the second cannot be measured until the first is ruled out.
+    """
+    have = {str(n) for n in (exposes or ())}
+    return tuple(n for n in declared_probes(contract) if n not in have)
+
+
 def write_artifacts(run_dir, contract: dict,
                     result: StageResult[ProbeOutput] | None,
                     error: str = ""):

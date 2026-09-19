@@ -43,6 +43,7 @@ import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import probes as P
 from . import variety as V
 from .refmodel.compose import choose_base
 from .refmodel.oracle_gen import RequirementOracle
@@ -232,11 +233,34 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
             judges += 1
             if any(ok is False for ok in per.values()):
                 convicted += 1
+        #: **THE GAP IS THE CONTROL'S, NOT THE CHECKS'.** A probe is a
+        #: `dir: "probe"` entry in the contract, so a design is REQUIRED to
+        #: expose it. The old note said "the control can judge N of M accepted
+        #: checks; the rest name state it does not expose" -- which reports the
+        #: control's missing interface as a limit of the CHECK SET. It is the
+        #: other way round: the checks name state the contract declares, and
+        #: the control predates probes and implements none of it.
+        #:
+        #: Measured by pointing the frozen set at a module that declares the
+        #: contract's ports and ties every output to a constant: 14 pass, 0
+        #: FAIL, 108 abstain of 122. A design that does nothing at all,
+        #: passing, on exactly this mechanism -- which is why the gap is named
+        #: as non-conformance rather than left to read as an abstention.
+        declared = P.declared_probes(contract)
+        missing = tuple(n for n in declared if n in cabs)
+        if missing:
+            notes.append(
+                f"the control is NOT contract-conformant: {len(missing)} of "
+                f"the {len(declared)} declared probe(s) are not exposed by it "
+                f"({', '.join(missing[:6])}"
+                f"{', ...' if len(missing) > 6 else ''}), so the "
+                f"{len(counted) - judges} check(s) reading them can say "
+                f"nothing about it")
         if judges < len(counted):
             notes.append(
-                f"the control can judge {judges} of {len(counted)} accepted "
-                f"check(s); the rest name state it does not expose, so the "
-                f"audit column is over that subset and says so")
+                f"audit is over the {judges} of {len(counted)} accepted "
+                f"check(s) the control can be judged on, and says so rather "
+                f"than reporting a rate over a denominator it does not have")
     else:
         notes.append("no control was supplied, so audit is absent, not 0%")
 
