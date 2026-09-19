@@ -119,6 +119,13 @@ def _strip_comments_keep_lines(text: str) -> str:
 _ATTR_PREFIX = r"(?:\(\*.*?\*\)\s*)*"
 _ALWAYS_RE = re.compile(rf"^\s*{_ATTR_PREFIX}(always_ff|always_comb|always_latch|always)\b")
 _ASSIGN_RE = re.compile(rf"^\s*{_ATTR_PREFIX}assign\b")
+#: A NET declaration carrying `=` is a continuous assignment and drives the
+#: net. Restricted to net types on purpose: `reg x = 0;` is an initial value,
+#: not a driver, and counting it would invent a second driver for every
+#: initialised register.
+_NET_DECL_ASSIGN_RE = re.compile(
+    rf"^\s*{_ATTR_PREFIX}(?:wire|tri|triand|trior|tri0|tri1|wand|wor|uwire)\b"
+    rf"[^;=]*?\b[A-Za-z_]\w*\s*=(?!=)")
 
 
 @dataclass(frozen=True)
@@ -246,7 +253,7 @@ def _parse_rtl_blocks_heuristic(rtl_text: str) -> list[RtlBlock]:
             i = end + 1
             continue
 
-        if _ASSIGN_RE.match(line):
+        if _ASSIGN_RE.match(line) or _NET_DECL_ASSIGN_RE.match(line):
             assign_idx += 1
             end = _find_statement_end(clean_lines, i)
             code = "\n".join(raw_lines[i : end + 1]) + "\n"
@@ -362,6 +369,27 @@ def _collect_writes(source: bytes, block_node: object) -> Set[str]:
         if lval is not None:
             writes |= _collect_idents(source, lval, skip_lvalues=False)
 
+    #: **AND THE DECLARATION FORM OF THE SAME THING.** `wire x = expr;` parses
+    #: as `net_decl_assignment`, whose target is a bare `simple_identifier`
+    #: rather than a `net_lvalue`, so it matched neither arm above and the net
+    #: came back with NO driver. `find_signal` reads drivers straight out of
+    #: `RtlBlock.writes`, so it told the RTL editor "driver_count: 0 -- its
+    #: driver was removed" about a net its own declaration drives, and the
+    #: editor added a second driver and put the net in contention.
+    #: ONLY WHEN IT CARRIES ONE. `wire w;` parses as a `net_decl_assignment`
+    #: too -- one bare `simple_identifier` child, no `=` -- and it DECLARES
+    #: without driving. Counting it made a plain declaration a driver and gave
+    #: every such net one more driver than it has, which is the same
+    #: miscount this fix exists to remove, pointed the other way.
+    for nd in _find_all_desc(block_node, "net_decl_assignment"):
+        kids = list(getattr(nd, "children", []))
+        if not any(getattr(c, "type", None) == "=" for c in kids):
+            continue
+        target = next((c for c in kids
+                       if getattr(c, "type", None) == "simple_identifier"), None)
+        if target is not None:
+            writes |= _collect_idents(source, target, skip_lvalues=False)
+
     # Procedural assignment targets.
     for an in _find_all_desc(block_node, "nonblocking_assignment") + _find_all_desc(block_node, "blocking_assignment"):
         lval = _find_first_desc(an, "variable_lvalue")
@@ -411,6 +439,23 @@ def _parse_rtl_blocks_treesitter(rtl_text: str) -> list[RtlBlock]:
 
     always_nodes = _find_all_desc(chosen, "always_construct")
     assign_nodes = _find_all_desc(chosen, "continuous_assign")
+    #: **A NET DECLARATION WITH AN INITIALISER IS A CONTINUOUS ASSIGNMENT.**
+    #: `wire [13:0] x = expr;` drives `x` exactly as `assign x = expr;` does,
+    #: and neither parser here looked for it -- the node is `net_declaration`
+    #: holding a `list_of_net_decl_assignments`, never `continuous_assign`.
+    #:
+    #: The RTL editor acted on that gap. `find_signal` reports drivers from
+    #: `RtlBlock.writes`, so it answered `driver_count: 0` for a signal a
+    #: declaration drove, with the note "its driver was removed" -- and the
+    #: editor believed it and added a SECOND driver, putting the net in
+    #: contention. Measured on one repair turn: `filt_reload` gained
+    #: `assign filt_reload = clk_cnt[15:2];` beside its own declaration, the
+    #: filter-counter reload went undefined, and two checks that had been
+    #: deciding stopped firing.
+    assign_nodes += [
+        n for n in _find_all_desc(chosen, "net_declaration")
+        if any(any(getattr(c, "type", None) == "=" for c in getattr(nd, "children", []))
+               for nd in _find_all_desc(n, "net_decl_assignment"))]
 
     items: list[tuple[int, str, object]] = []
     for n in always_nodes:
