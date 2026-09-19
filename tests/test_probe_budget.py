@@ -175,7 +175,13 @@ def test_eight_dependents_of_one_state_spend_one_shared_budget(monkeypatch) -> N
                                  tp_uids=["TP-0000"]) for u in uids}
     requirements = [{"uid": u, "text": "while in SREFILL4, busy is high",
                      "unit_kind": "behavioural"} for u in uids]
-    normalized = {u: _norm(opens_on=["in_srefill4"]) for u in uids}
+    #: `observable` is set because these requirements ARE behavioural --
+    #: their text is "while in SREFILL4, busy is high". A requirement
+    #: normalize says states no observable obligation is no longer staged
+    #: at all, so a fixture that leaves it empty is testing the skip rather
+    #: than the budget.
+    normalized = {u: _norm(opens_on=["in_srefill4"], observable=["busy"])
+                  for u in uids}
     normalized = {u: {**n, "activation": {**n["activation"],
                                           "text": "while in SREFILL4"}}
                   for u, n in normalized.items()}
@@ -239,7 +245,8 @@ def test_without_probes_the_budget_is_unchanged(monkeypatch) -> None:
         held=held, unexercised={u: "never fired" for u in uids},
         requirements=[{"uid": u, "text": "busy is high",
                        "unit_kind": "behavioural"} for u in uids],
-        normalized={u: _norm() for u in uids}, contract=plain,
+        normalized={u: _norm(observable=["busy"]) for u in uids},
+        contract=plain,
         testplan=[{"uid": "TP-0000", "covers": [f"{u}@1" for u in uids]}],
         stimulus_by_tp={"TP-0000": list(STEPS)}, witness=witness,
         port=None, base="step", attempts=3, budget=None, final=True)
