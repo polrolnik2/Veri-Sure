@@ -2042,6 +2042,11 @@ def run_oracle_stage(
     testplan: list[dict],
     stimulus_by_tp: dict[str, list[dict]],
     port: ModelPort,
+    #: The coverage model. A testpoint this stage stages needs a bin and a
+    #: check the same way it needs a testplan element -- without them a finished
+    #: run fails its own `gate_s3` and every `--reuse` re-buys S3.
+    bins: list[dict] | None = None,
+    checks: list[dict] | None = None,
     #: The variant author, when it should not be the oracle author. Variants are
     #: WRONG implementations of a requirement -- the must-fail leg of the vacuity
     #: check -- so the job is breadth, not the care an oracle needs, and paying
@@ -2646,6 +2651,7 @@ def run_oracle_stage(
                 requirements=requirements, normalized=normalized or {},
                 contract=contract, testplan=testplan,
                 stimulus_by_tp=stimulus_by_tp, witness=witness, port=port,
+                bins=bins, checks=checks,
                 base=base, attempts=staging_attempts, budget=staging_left,
                 prior=staging, final=(rounds == verifications))
             staging_left = max(0, staging_left - (len(stimulus_by_tp) - before))
@@ -4379,7 +4385,67 @@ def _staged_element(tp_uid: str, req_uid: str, req: dict, shape: dict, *,
             f"{ports}. It was staged because that check abstained on every "
             f"testpoint it already named."),
         "dimension": "D2_control_flow",
+        #: **STATED, NOT INHERITED FROM A MODEL DEFAULT.** `gate_s3` runs both
+        #: ways: a bin covering an element that does not declare `needs='bin'`
+        #: is "unwanted", and an element declaring it with no bin is an error.
+        #: The default only appears once the element is revalidated through
+        #: `TestplanElement`, so the in-memory dict this returns and the one on
+        #: disk disagreed -- and `_staged_coverage` mints against the
+        #: in-memory one.
+        "needs": ["bin", "check"],
     }
+
+
+def _staged_coverage(tp_uid: str, req_uid: str, req: dict, shape: dict, *,
+                     contract: dict, bins: list[dict], checks: list[dict],
+                     stimulus: str) -> None:
+    """The BIN and CHECK for a staged testpoint. Appends in place.
+
+    **THE SAME ORDERING DEFECT `_staged_element` FIXED ONE ARTIFACT UP.** That
+    docstring says it: "The staging loop appends to `testplan` AFTER S2's gate
+    has run, and nothing re-gates the artifact afterwards." S3 never got the
+    same treatment, so a finished run failed its OWN `gate_s3` -- measured on
+    the end-to-end run, **111 errors over a contiguous tail TP-0371..TP-0481,
+    exactly the 111 testpoints the stage had staged** -- and every `--reuse`
+    re-bought S3 and everything below it.
+
+    NOTHING HERE IS INVENTED, which is the rule `_staged_element` states and
+    the only thing that keeps a gate meaning anything. The bin's condition is
+    the NORMALIZED ACTIVATION -- the predicate under which the requirement
+    applies, already written. The check's `expr` is the NORMALIZED EXPECTATION
+    and its `signals` are the requirement's own `observable`, both likewise.
+    """
+    from .ids import PREFIX_BIN, PREFIX_CHECK, mint, next_index
+
+    at = f"{tp_uid}@1"
+    act = str((shape.get("activation") or {}).get("text") or "").strip()
+    bins.append({
+        "uid": mint(PREFIX_BIN,
+                    next_index([str(b.get("uid", "")) for b in bins],
+                               PREFIX_BIN)),
+        "rev": 1, "covers": [at],
+        "condition": act or stimulus or f"the scenario {req_uid} describes",
+        "disposition": None,
+    })
+    #: **A PROBE IS A LEGITIMATE COMPARISON SIGNAL.** `gate_s3` splits the
+    #: contract into outputs and "inputs", so a `dir: "probe"` entry reads as an
+    #: input and "a check must compare an output" rejects it. That predates
+    #: probes being part of the interface: the runtime samples a probe on BOTH
+    #: the DUT and the model and compares them, and 106 of this run's 122 frozen
+    #: checks read one.
+    comparable = {str(p.get("name")) for p in (contract.get("io") or [])
+                  if p.get("name") and p.get("dir") in ("output", "probe")}
+    signals = [o for o in (shape.get("observable") or ()) if o in comparable]
+    checks.append({
+        "uid": mint(PREFIX_CHECK,
+                    next_index([str(c.get("uid", "")) for c in checks],
+                               PREFIX_CHECK)),
+        "rev": 1, "covers": [at],
+        "expr": (str(shape.get("expectation") or "").strip()
+                 or str(req.get("text") or "").strip()
+                 or f"the behaviour {req_uid} describes"),
+        "signals": signals,
+    })
 
 
 def stage_unexercised(
@@ -4393,6 +4459,11 @@ def stage_unexercised(
     stimulus_by_tp: dict[str, list[dict]],
     witness: str,
     port,
+    #: The coverage model, so a staged testpoint gets its bin and check at the
+    #: moment it gets its testplan element. Optional so a direct caller that
+    #: has no coverage model still works; a run always has one.
+    bins: list[dict] | None = None,
+    checks: list[dict] | None = None,
     base: str = "step",
     attempts: int = STAGING_ATTEMPTS,
     budget: int | None = None,
@@ -4615,10 +4686,14 @@ def stage_unexercised(
                 [str(t.get("uid", "")) for t in testplan]
                 + list(stimulus_by_tp), PREFIX_TESTPLAN))
             stimulus_by_tp[tp_uid] = steps
+            _stim_text = _hint(req, shape, None, 0, reset_ports=reset_ports,
+                               saw=saw)
             testplan.append(_staged_element(
-                tp_uid, uid, req, shape,
-                stimulus=_hint(req, shape, None, 0, reset_ports=reset_ports,
-                               saw=saw)))
+                tp_uid, uid, req, shape, stimulus=_stim_text))
+            if bins is not None and checks is not None:
+                _staged_coverage(tp_uid, uid, req, shape, contract=contract,
+                                 bins=bins, checks=checks,
+                                 stimulus=_stim_text)
             added.append(tp_uid)
             if tp_uid not in oracle.tp_uids:
                 oracle.tp_uids.append(tp_uid)

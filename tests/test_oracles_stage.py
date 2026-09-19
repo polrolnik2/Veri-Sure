@@ -3351,3 +3351,87 @@ def test_a_requirement_with_NO_OBSERVABLE_is_never_staged(monkeypatch):
         attempts=1, budget=8)
     assert {k["requirement"]["uid"] for k in calls if k.get("requirement")} \
         == {"REQ-1"}, "an unexamined requirement was skipped as unobservable"
+
+
+def test_a_staged_testpoint_gets_a_BIN_and_a_CHECK_that_pass_S3s_gate(
+        monkeypatch):
+    """Three artifacts describe one testpoint, and staging wrote back two.
+
+    `_staged_element` already fixed this one artifact up, for S2, and says so:
+    "The staging loop appends to `testplan` AFTER S2's gate has run, and
+    nothing re-gates the artifact afterwards." S3 never got the same treatment.
+
+    Measured on the end-to-end run: its own `coverage_model.json` failed its own
+    `gate_s3` with **111 errors over a contiguous tail TP-0371..TP-0481** --
+    exactly the 111 testpoints the stage had staged -- so every `--reuse`
+    re-bought S3 and everything below it, and a smoke test of the RTL editor
+    loop burned 922 model calls regenerating a coverage model that was already
+    on disk.
+    """
+    from specflow import oracles_stage as O
+    from specflow import testcase_agent as TA
+    from specflow.s3_coverage import CoverageOutput, gate
+
+    monkeypatch.setattr(TA, "stimulus_for_scenario", lambda **kw: list(STIM["TP-0000"]))
+
+    contract = {"module_name": "m", "io": [
+        {"name": "a", "dir": "input", "width": 1},
+        {"name": "y", "dir": "output", "width": 1}]}
+    held = {"REQ-0001": O.RequirementOracle(req_uid="REQ-0001", tp_uids=[],
+                                            clause="c", source=GOOD)}
+    testplan: list[dict] = []
+    bins: list[dict] = []
+    checks: list[dict] = []
+    O.stage_unexercised(
+        held=held, unexercised={"REQ-0001": "never fired"},
+        requirements=[{"uid": "REQ-0001", "text": "y follows a"}],
+        normalized={"REQ-0001": {"activation": {"text": "when a rises"},
+                                 "observable": ["y"],
+                                 "expectation": "y follows a"}},
+        contract=contract, testplan=testplan, stimulus_by_tp={},
+        witness=WITNESS, port=None, bins=bins, checks=checks,
+        attempts=1, budget=4)
+
+    assert testplan, "nothing was staged, so this test proves nothing"
+    staged = {e["uid"] for e in testplan}
+    assert {b["covers"][0].split("@")[0] for b in bins} == staged
+    assert {c["covers"][0].split("@")[0] for c in checks} == staged
+
+    #: THE POINT: the artifact it produced passes the gate that refused the
+    #: real run's.
+    issues = gate(testplan, CoverageOutput.model_validate(
+        {"reasoning": "", "bins": bins, "checks": checks}), contract)
+    assert [i for i in issues if i.severity == "error"] == []
+
+
+def test_a_check_may_compare_a_PROBE(monkeypatch):
+    """`gate_s3` split the contract into outputs and everything-else, so a
+    `dir: "probe"` entry fell to "an input; a check must compare an output".
+
+    That predates probes being part of the interface. The runtime samples every
+    probe on BOTH the DUT and the reference model and compares them, and 106 of
+    one run's 122 frozen checks read one. Comparing a probe is comparing
+    something the design drives; comparing an input is comparing the stimulus
+    with itself, and only the second is the error this gate is for.
+    """
+    from specflow.s3_coverage import CoverageOutput, gate
+
+    contract = {"io": [{"name": "a", "dir": "input", "width": 1},
+                       {"name": "y", "dir": "output", "width": 1},
+                       {"name": "idle", "dir": "probe", "width": 1}]}
+    tp = [{"uid": "TP-0000", "covers": ["REQ-0001@1"],
+           "needs": ["bin", "check"]}]
+    cov = {"reasoning": "",
+           "bins": [{"uid": "BIN-0000", "covers": ["TP-0000@1"],
+                     "condition": "a rises"}],
+           "checks": [{"uid": "CHK-0000", "covers": ["TP-0000@1"],
+                       "expr": "the FSM leaves idle", "signals": ["idle"]}]}
+    issues = gate(tp, CoverageOutput.model_validate(cov), contract)
+    assert [i for i in issues if i.severity == "error"] == []
+
+    #: An INPUT is still refused -- that check compares the stimulus with
+    #: itself, which is the error this gate exists for.
+    cov["checks"][0]["signals"] = ["a"]
+    bad = gate(tp, CoverageOutput.model_validate(cov), contract)
+    assert any("must compare an output" in i.message
+               for i in bad if i.severity == "error")

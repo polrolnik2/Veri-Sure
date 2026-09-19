@@ -72,13 +72,21 @@ logger = logging.getLogger(__name__)
 def _persist_grown(
     run_dir: Path, testplan: list[dict], stimulus: dict | None,
     *, before: tuple[int, int],
+    bins: list[dict] | None = None, checks: list[dict] | None = None,
 ) -> None:
-    """Write back a testplan and stimulus a debug turn appended to.
+    """Write back a testplan, stimulus and coverage model a turn appended to.
 
     Only on growth, and only ever growth: `add_stimulus` appends and never
     edits, so a file that did not get longer has nothing to say. Silent when it
     cannot write -- losing the artifact is bad, failing a run that otherwise
     succeeded over a bookkeeping write is worse.
+
+    **THE COVERAGE MODEL GOES WITH THEM, AND DID NOT.** A staged testpoint got
+    a testplan element and a stimulus entry and no bin, so a finished run failed
+    its own `gate_s3` -- 111 errors on the end-to-end run, a contiguous tail
+    that is exactly the testpoints it staged -- and every `--reuse` re-bought
+    S3 and everything below it. Three artifacts describe one testpoint; writing
+    two of them back is what made the third disagree.
     """
     stimulus = stimulus or {}
     if (len(testplan), len(stimulus)) == before:
@@ -98,6 +106,16 @@ def _persist_grown(
                 {"tp_uid": uid, "stimulus_steps": steps}
                 for uid, steps in stimulus.items()
             ]}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        if bins is not None and checks is not None:
+            path = sf / "coverage_model.json"
+            doc = {}
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = {}
+            doc["bins"], doc["checks"] = list(bins), list(checks)
+            path.write_text(json.dumps(doc, indent=2, ensure_ascii=False)
+                            + "\n", encoding="utf-8")
     except OSError as exc:  # noqa: BLE001
         logger.warning("appended testpoints not persisted (%r)", exc)
 
@@ -994,6 +1012,9 @@ def build_artifacts(
             requirements=reqs, contract_json=contract_json,
             contract=contract, testplan=tps,
             stimulus_by_tp=stim_by_tp or {},
+            #: Mutated in place when the stage stages a testpoint, and written
+            #: back below. Without them a finished run fails its own `gate_s3`.
+            bins=bins, checks=checks,
             port=port, workdir=run_dir / "specflow",
             base=choose_base(contract),
             normalized=normalized_by_uid or None,
@@ -1049,7 +1070,8 @@ def build_artifacts(
     # and until this call the staged testpoints reached disk only after it
     # finished. a2-i2c staged 23 scenarios and lost every one of them that way.
     # Append-only and idempotent, so the second call after [D] still works.
-    _persist_grown(run_dir, tps, stim_by_tp, before=grown_before)
+    _persist_grown(run_dir, tps, stim_by_tp, before=grown_before,
+                   bins=bins, checks=checks)
 
     # The reference model is validated by executing it, so "re-gate rather than
     # trust" here means re-running G4 against the rendered source on disk.

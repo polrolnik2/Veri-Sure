@@ -134,10 +134,18 @@ def gate(testplan: list[dict], out: CoverageOutput, contract: dict | None) -> li
     issues += assure_testplan_to_checks(testplan, checks)
 
     ports = {str(p.get("name")) for p in ((contract or {}).get("io") or []) if p.get("name")}
+    #: **A PROBE IS A COMPARISON SIGNAL, NOT AN INPUT.** This split the
+    #: contract into outputs and everything-else, so a `dir: "probe"` entry fell
+    #: to the "an input; a check must compare an output" branch. That predates
+    #: probes being part of the interface: `Env._record` samples every probe on
+    #: BOTH the DUT and the reference model and compares them, and 106 of one
+    #: run's 122 frozen checks read one. Comparing a probe is comparing
+    #: something the design drives; comparing an input is comparing the
+    #: stimulus with itself, and only the second is the error this catches.
     outputs = {
         str(p.get("name"))
         for p in ((contract or {}).get("io") or [])
-        if p.get("name") and p.get("dir") == "output"
+        if p.get("name") and p.get("dir") in ("output", "probe")
     }
 
     for c in checks:
