@@ -26,3 +26,5 @@ ROUND 4: 92 pass, 26 FAIL, 4 abstain of 122 check(s); 29 failing testpoint(s)
 ROUND 5: 93 pass, 25 FAIL, 4 abstain of 122 check(s); 29 failing testpoint(s)
   failing: REQ-0002, REQ-0008, REQ-0014, REQ-0024, REQ-0025, REQ-0026, REQ-0034, REQ-0050, REQ-0064, REQ-0080, REQ-0083, REQ-0085
   abstain: REQ-0073, REQ-0089, REQ-0125, REQ-0128
+  editor used 1 trial(s); 20 left
+FINAL rtl.sv: 372 lines

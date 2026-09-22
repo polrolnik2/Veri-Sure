@@ -304,31 +304,34 @@ module i2c_master_bit_ctrl (
     // 10..14  bit command state machine
     // ------------------------------------------------------------------
     always @(posedge clk or negedge nReset)
-      if (!nReset) begin c_state<=ST_IDLE; cmd_ack<=0; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
-      else if (rst | al | al_set) begin c_state<=ST_IDLE; cmd_ack<=0; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
-      else begin
-        cmd_ack<=0;
-        if (tick) case (c_state)
-          ST_IDLE: begin sda_chk_r<=0; case(cmd)
-            I2C_CMD_START: begin c_state<=ST_START_A; scl_oen<=1; sda_oen<=1; end
-            I2C_CMD_STOP:  begin c_state<=ST_STOP_A;  scl_oen<=0; sda_oen<=0; end
-            I2C_CMD_READ:  begin c_state<=ST_RD_A;    scl_oen<=1; sda_oen<=1; end
-            I2C_CMD_WRITE: begin c_state<=ST_WR_A;    scl_oen<=1; sda_oen<=0; end
-            default: c_state<=ST_IDLE; endcase end
-          ST_START_A: begin c_state<=ST_START_B; scl_oen<=1; sda_oen<=0; end
-          ST_START_B: begin c_state<=ST_START_C; scl_oen<=0; sda_oen<=1; end
-          ST_START_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; end
-          ST_STOP_A: begin c_state<=ST_STOP_B; scl_oen<=1; sda_oen<=0; end
-          ST_STOP_B: if(s_scl) begin c_state<=ST_STOP_C; scl_oen<=1; sda_oen<=1; end
-          ST_STOP_C: begin c_state<=ST_IDLE; cmd_ack<=1; end
-          ST_RD_A: begin c_state<=ST_RD_B; scl_oen<=1; sda_oen<=1; end
-          ST_RD_B: if(s_scl) begin c_state<=ST_RD_C; scl_oen<=0; sda_oen<=1; end
-          ST_RD_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; end
-          ST_WR_A: begin c_state<=ST_WR_B; scl_oen<=1; sda_oen<=din; sda_chk_r<=din; end
-          ST_WR_B: if(s_scl) begin c_state<=ST_WR_C; scl_oen<=0; sda_oen<=din; end
-          ST_WR_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
-          default: begin c_state<=ST_IDLE; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
-        endcase
+      begin : fsm_block
+        reg din_latched;
+        if (!nReset) begin c_state<=ST_IDLE; cmd_ack<=0; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; din_latched<=0; end
+        else if (rst | al | al_set) begin c_state<=ST_IDLE; cmd_ack<=0; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; din_latched<=0; end
+        else begin
+          cmd_ack<=0;
+          if (tick) case (c_state)
+            ST_IDLE: begin sda_chk_r<=0; case(cmd)
+              I2C_CMD_START: begin c_state<=ST_START_A; scl_oen<=1; sda_oen<=1; end
+              I2C_CMD_STOP:  begin c_state<=ST_STOP_A;  scl_oen<=0; sda_oen<=0; end
+              I2C_CMD_READ:  begin c_state<=ST_RD_A;    scl_oen<=1; sda_oen<=1; end
+              I2C_CMD_WRITE: begin c_state<=ST_WR_A;    scl_oen<=1; sda_oen<=0; din_latched<=din; end
+              default: c_state<=ST_IDLE; endcase end
+            ST_START_A: begin c_state<=ST_START_B; scl_oen<=1; sda_oen<=0; end
+            ST_START_B: begin c_state<=ST_START_C; scl_oen<=0; sda_oen<=1; end
+            ST_START_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; end
+            ST_STOP_A: begin c_state<=ST_STOP_B; scl_oen<=1; sda_oen<=0; end
+            ST_STOP_B: if(s_scl) begin c_state<=ST_STOP_C; scl_oen<=1; sda_oen<=1; end
+            ST_STOP_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; end
+            ST_RD_A: begin c_state<=ST_RD_B; scl_oen<=1; sda_oen<=1; end
+            ST_RD_B: if(s_scl) begin c_state<=ST_RD_C; scl_oen<=0; sda_oen<=1; end
+            ST_RD_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; end
+            ST_WR_A: begin c_state<=ST_WR_B; scl_oen<=1; sda_oen<=din_latched; sda_chk_r<=din_latched; end
+            ST_WR_B: if(s_scl) begin c_state<=ST_WR_C; scl_oen<=0; sda_oen<=din_latched; end
+            ST_WR_C: begin c_state<=ST_IDLE; cmd_ack<=1; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
+            default: begin c_state<=ST_IDLE; scl_oen<=1; sda_oen<=1; sda_chk_r<=0; end
+          endcase
+        end
       end
 
     // ------------------------------------------------------------------
