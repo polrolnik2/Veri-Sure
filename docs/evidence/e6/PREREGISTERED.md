@@ -41,3 +41,49 @@ guard was demoted from a tier: **separation first, then the guards, then more
 separation.** Refutation moves to the bottom of the same key -- it breaks a tie
 between bodies that separate equally, and it no longer outranks separating at
 all.
+
+---
+
+## What runs 1 and 2 said, and the correction it forced
+
+    corpus   preference ON            preference OFF
+    run 1    6.5% blind, audit 0/15   1.4% blind, audit 1/14
+    run 2    9.9% blind, audit 0/14   6.1% blind, audit 0/13
+    run 3   24.4% blind, audit 0/13   9.2% blind, audit 0/14
+
+As pre-registered, the conviction under `refute_off` was **reported and not
+used to reverse the rule**. It was used to look at the check, which is a
+different thing: a control may REJECT an oracle, and reading what it rejected
+is how the rejection is worth anything.
+
+**REQ-0001, and it indicts the PLACEMENT rather than the rule.** Its six
+corpus bodies:
+
+    body  separates  refuted
+      #0      18242    yes
+      #1       5525    yes     <- chosen with refutation below separation
+      #2      10711    yes
+      #3          0    no
+      #4      15626    yes
+      #5       2601    no      <- chosen with refutation above it
+      
+Four of six convict all seven spec-derived designs, and the more over-strict
+the body, the more cells it "separates" -- because a refuted check closes cells
+BY convicting. A key that reads separation before refutation therefore reads
+over-strictness as reach, and picks the worst of the four.
+
+So the tier was wrong and removing the guard entirely was also wrong. The
+guard belongs exactly where this tree already moved the dissent guard:
+**separation first, then the guards, then more separation.**
+
+    placement                  run 1   run 2    run 3
+    tier (as shipped)           6.5%   9.91%   24.41%
+    guard (above how much)         *   7.91%    9.23%
+    tiebreak (below how much)   1.4%   6.13%    9.17%
+
+The guard gives up six hundredths of a point against the most permissive
+placement on run 3, and buys back the fifteen the tier was costing.
+
+**Decided on blindness and on this tree's own stated ordering, not on the
+audit column** -- the table above is reported because it is the cost of the
+rule, and the placement would be the same if the audit column were blank.

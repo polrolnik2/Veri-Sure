@@ -2488,19 +2488,24 @@ def test_a_tie_between_two_bodies_breaks_the_SAME_WAY_EVERY_RUN(monkeypatch):
     assert "order = sorted(" in src
 
 
-def test_a_refuted_body_is_passed_OVER_when_a_spared_one_exists(monkeypatch):
-    """A body the whole population convicts is the strongest golden-free
-    signal this stage has, and the chooser ignored it.
+def test_refutation_is_a_GUARD_over_how_much_and_not_over_whether(monkeypatch):
+    """**SEPARATION FIRST, THEN THE GUARDS, THEN MORE SEPARATION** -- the same
+    ordering, and the same place, the dissent guard was moved to.
 
-    Measured end to end: REQ-0001 and REQ-0047 each convicted all seven
-    spec-derived designs, each convicted the known-good control, and each had
-    sibling bodies the control SPARES -- three of them for REQ-0047. They were
-    chosen because they close cells, and they close cells BY convicting: a
-    check refuted overall can still separate a pair at one testpoint, so both
-    `placement` and marginal gain reward it. That is the recorded way this
-    metric was gamed -- "24 of them convict all seven designs, which score ~0
-    by objecting to everything" -- arriving through the per-testpoint
-    predicate instead.
+    It was a TIER (`tier = spared or per_req[uid]`), so a refuted body lost to
+    ANY body the population spares, whatever either separated -- blindness
+    24.41% on the corpus where that bound hardest, against 9.23% here.
+
+    And BELOW marginal separation is too far, which was tried: REQ-0001 then
+    froze a body convicting all seven designs AND the control over a sibling
+    the population spares. Four of its six corpus bodies convict all seven,
+    separating 18242 / 15626 / 10711 / 5525 cells against the spared sibling's
+    2601 -- the more over-strict the body, the more it "separates", because a
+    refuted check closes cells BY convicting. A rule reading separation before
+    refutation reads over-strictness as reach.
+
+    Blindness decided the placement and audit is reported beside it, fixed in
+    writing first -- `docs/evidence/e6/PREREGISTERED.md`.
     """
     from specflow import oracles_stage as O
     from specflow import population as P
@@ -2518,23 +2523,36 @@ def test_a_refuted_body_is_passed_OVER_when_a_spared_one_exists(monkeypatch):
     #: #1 spares them and separates one.
     folded = {"REQ-1#0": {"0": False, "1": False},
               "REQ-1#1": {"0": True, "1": False}}
-    tables = {"REQ-1#0": {"TP-1": {"0": True, "1": False},
-                          "TP-2": {"0": False, "1": True}},
-              "REQ-1#1": {"TP-1": {"0": True, "1": False}}}
-    monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
-        {k2: folded.get(k2, {}) for k2 in flat},
-        {k2: tables.get(k2, {}) for k2 in flat}, {k2: {} for k2 in flat}))
+    two = {"REQ-1#0": {"TP-1": {"0": True, "1": False},
+                       "TP-2": {"0": False, "1": True}},
+           "REQ-1#1": {"TP-1": {"0": True, "1": False}}}
 
-    corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="refuted",
-                                     arm="generate", round_=0),
-                        O.CorpusBody(req_uid="REQ-1", source="spared",
-                                     arm="repair", round_=1)]}
-    got = O._choose_bodies(
-        corpus=corpus, held={}, population=("a", "b"),
-        contract={"io": [{"name": "p", "dir": "output"}]},
-        stimulus_by_tp={}, base="", transactional=False)
-    assert got["REQ-1"].source == "spared", (
-        "the refuted body was taken because it closes more cells")
+    def _pick(tables):
+        monkeypatch.setattr(O, "_population_tables", lambda flat, *a, **k: (
+            {k2: folded.get(k2, {}) for k2 in flat},
+            {k2: tables.get(k2, {}) for k2 in flat}, {k2: {} for k2 in flat}))
+        corpus = {"REQ-1": [O.CorpusBody(req_uid="REQ-1", source="refuted",
+                                         arm="generate", round_=0),
+                            O.CorpusBody(req_uid="REQ-1", source="spared",
+                                         arm="repair", round_=1)]}
+        return O._choose_bodies(
+            corpus=corpus, held={}, population=("a", "b"),
+            contract={"io": [{"name": "p", "dir": "output"}]},
+            stimulus_by_tp={}, base="", transactional=False)["REQ-1"].source
+
+    #: Both separate something, so the guard decides and the spared body wins
+    #: even though the refuted one closes twice as many cells.
+    assert _pick(two) == "spared", (
+        "separating MORE beat the population convicting it outright")
+
+    #: But the guard may not prefer a check that decides NOTHING. A spared body
+    #: separating no cell loses to a refuted one that separates -- position one
+    #: is `bool(closes - covered)` and no guard sits above it. A guard against
+    #: over-strictness buying its safety with vacuity is the same defect
+    #: wearing its other sign.
+    inert = {"REQ-1#0": two["REQ-1#0"], "REQ-1#1": {}}
+    assert _pick(inert) == "refuted", (
+        "the guard preferred a body that tells no two readings apart")
 
 
 def test_a_requirement_whose_bodies_are_ALL_refuted_still_freezes_one(

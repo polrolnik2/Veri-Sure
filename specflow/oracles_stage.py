@@ -1453,23 +1453,52 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
     #: a tie broken by "the first one" would depend on how many bodies the
     #: requirement happens to have. `flat` is built in index order.
     live = set(alive)
-    #: **NOT REFUTED FIRST, THEN THE DISSENT GUARD, THEN SEPARATION.** A body
-    #: the whole population convicts is the strongest golden-free signal this
-    #: stage has, and `_rescue_from_corpus` already prefers away from it. This
-    #: did not, and the end-to-end run says what that cost: REQ-0001 and
-    #: REQ-0047 each convicted all seven designs, each convicted the
-    #: known-good control, and each had sibling bodies the control SPARES --
-    #: three of them for REQ-0047. They were chosen because they close cells.
+    #: **A TIE-BREAK, NOT A TIER, AND THE TIER WAS ANSWERING A BUG.** This read
+    #: `tier = spared or per_req[uid]`, so a body the whole population convicts
+    #: was beaten by ANY body it spares, whatever either one separated. It was
+    #: added because bodies were convicting every design and the control alike
+    #: -- and `refmodel/temporal.py`'s `Window.extent` says why they were:
+    #: `throughout` asserted over the row that ENDED its window, so "while A, B
+    #: holds" asked B to hold at the row where A stopped. REQ-0044's frozen
+    #: body asserts its own window's defining condition and failed 168 of 168.
     #:
-    #: They close cells BY convicting: a check refuted overall can still
-    #: separate a pair at one testpoint, so `placement` and marginal gain both
-    #: reward it. That is the recorded way this metric was gamed -- "24 of them
-    #: convict all seven designs, which score ~0 by objecting to everything" --
-    #: arriving through the per-testpoint predicate instead.
+    #: With the operator fixed the tier has nothing left to prevent, and what
+    #: it still does is discard separation. Measured on the corpus where it
+    #: bound hardest, at identical span 98.2%:
     #:
-    #: A PREFERENCE AND NEVER A REJECTION, for the reason the leg itself is
-    #: advisory: no spec-derived design is guaranteed correct, so a requirement
-    #: whose bodies are ALL refuted still freezes one.
+    #:     tier   blindness 24.4%   audit 0/13
+    #:     none   blindness  9.2%   audit 0/14
+    #:
+    #: **DECIDED ON BLINDNESS, WITH AUDIT REPORTED BESIDE IT AND FIXED IN
+    #: WRITING FIRST** (`docs/evidence/e6/PREREGISTERED.md`). Choosing a
+    #: ruleset by its audit column is gating on the grade in slow motion.
+    #:
+    #: So it takes the place the dissent guard was moved to for the same
+    #: reason: **separation first, then the guards, then more separation.** It
+    #: no longer outranks separating at all, and it still outranks separating
+    #: MORE -- which is the term a refuted body inflates, because it closes
+    #: cells BY convicting.
+    #:
+    #: **AND BELOW `len(closes - covered)` IS TOO FAR, WHICH WAS TRIED.** Put
+    #: there, REQ-0001 froze a body convicting all seven designs and the
+    #: control over a sibling the population spares: four of its six corpus
+    #: bodies convict all seven, separating 18242 / 15626 / 10711 / 5525 cells
+    #: against the spared sibling's 2601. The more over-strict the body, the
+    #: more it "separates", so a rule reading separation before refutation
+    #: reads over-strictness as reach. Swept over two corpora, blindness:
+    #:
+    #:     placement     run 2    run 3
+    #:     tier          9.91%   24.41%
+    #:     this guard    7.91%    9.23%
+    #:     below it      6.13%    9.17%
+    #:
+    #: The guard buys back everything the tier was costing and gives up six
+    #: hundredths of a point on run 3 to do it.
+    #:
+    #: A PREFERENCE AND NEVER A REJECTION either way -- no spec-derived design
+    #: is guaranteed correct, so a check convicting all of them may simply be
+    #: right where they are all wrong, and a requirement whose bodies are ALL
+    #: refuted still freezes one.
     refuted = set(variety.refuted_by_the_population(verdicts))
     per_req: dict[str, list[str]] = {}
     for key in flat:
@@ -1482,8 +1511,7 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
     covered: set = set()
     out: dict[str, RequirementOracle] = {}
     for uid in order:
-        spared = [k for k in per_req[uid] if k not in refuted]
-        tier = spared or per_req[uid]
+        tier = per_req[uid]
         #: A TIE IS NOT A REASON TO REPLACE A CHECK THAT ALREADY STOOD. The
         #: standing body wins an exact tie; otherwise `max` returns the first
         #: maximal element of an index-ordered list, which is the oldest draft.
@@ -1514,6 +1542,7 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
         #: after; on a second run's corpus, where no body convicted more than
         #: two designs, both rules read 5.7% at every value.
         pick = max(tier, key=lambda k: (bool(closes[k] - covered),
+                                        k not in refuted,
                                         tells[k].dissent_weighted
                                         <= max_dissent_weighted,
                                         len(closes[k] - covered),
