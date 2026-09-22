@@ -154,7 +154,27 @@ async def _drive() -> None:
             sim_mismatch_cnt=failing, contract_json=contract_json,
             max_trials=remaining, tb_text=tb_text, tb_clip_chars=12000)
         remaining -= max(1, int(used))
-        print(f"  editor used {used} trial(s); {remaining} left", flush=True)
+        #: **THE EDITOR'S CACHE RATE, WHICH NOTHING WAS READING.** `model.py`
+        #: accumulates `input_tokens_details.cached_tokens` into
+        #: `total_cached_tokens` -- the instrumentation exists and this driver
+        #: simply never asked for it, so the most token-expensive loop in the
+        #: system (the whole RTL and its traces on every turn, once per trial)
+        #: was the one with no usage recorded anywhere.
+        #:
+        #: The editor is well placed to cache: `to_responses_input` maps
+        #: `system` to `developer` every turn, `make_openai_model` sets
+        #: `prompt_cache_key=veri-sure:rtl-debug:<model>`, and agentscope
+        #: re-sends an append-only history, so each turn's prefix is the last
+        #: turn's whole context.
+        m = getattr(editor, "_model", None)
+        inp = int(getattr(m, "total_input_tokens", 0) or 0)
+        cac = int(getattr(m, "total_cached_tokens", 0) or 0)
+        if inp:
+            print(f"  editor used {used} trial(s); {remaining} left; "
+                  f"cache {cac:,}/{inp:,} = {100*cac/inp:.1f}%", flush=True)
+        else:
+            print(f"  editor used {used} trial(s); {remaining} left "
+                  f"(cached {cac:,}; input total not exposed)", flush=True)
         if repaired.strip():
             rtl_path.write_text(repaired, encoding="utf-8")
 
