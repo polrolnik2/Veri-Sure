@@ -2357,3 +2357,66 @@ def test_a_double_driver_inside_one_ifdef_arm_still_fires():
                     "`endif\n"
                     "endmodule\n")
     assert overdriven_signals(arm_and_body) == {"c"}
+
+
+# ------------------------------------------- the stall counter counts TRIALS
+
+
+def test_a_turn_that_spent_no_trial_is_not_a_stall():
+    """**READING A TAUTOLOGY AS A RESULT.** Only `commit` re-runs the reviewer,
+    so on a turn that did not commit the mismatch counts CANNOT have changed.
+    The stall counter ran after every agent turn anyway, so "no improvement"
+    was true by construction and the search was charged for a turn that
+    measured nothing -- and the turns it charged are exactly the ones the
+    prompt asks for first: `list_failing_requirements`, `explain`, `focus`,
+    `read_block`, `find_signal`.
+
+    Measured on the run that found it: six rounds, of which rounds 2, 3, 4 and
+    5 each ended after exactly TWO agent turns. Round 3 ended having made NO
+    commit at all. 19 commits over six rounds, 21 of a 40-trial budget never
+    spent.
+    """
+    from eda_agent.rtl_editor import _StallCounter
+
+    c = _StallCounter(100)
+    for _ in range(5):
+        c.observe(spent=0, last=100, best=100)
+    assert c.count == 0, "turns that ran no trial were counted as stalls"
+    c.observe(spent=1, last=100, best=100)
+    assert c.count == 1, "a trial that did not improve is a stall"
+
+
+def test_the_stall_counter_measures_against_the_BEST_not_the_last():
+    """With the rollback guard off an uphill step raises `last`, and comparing
+    to the previous value would score every deliberate valley crossing as a
+    stall -- precisely the search the guard was turned off to allow."""
+    from eda_agent.rtl_editor import _StallCounter
+
+    c = _StallCounter(100)
+    c.observe(spent=1, last=120, best=90)
+    assert c.count == 0, "an uphill step that found a better best was a stall"
+    c.observe(spent=2, last=95, best=90)
+    assert c.count == 1, "matching the best is not beating it"
+
+
+def test_the_stall_limit_is_not_inside_the_noise_of_its_own_search():
+    """**2 CUTS OFF A RECOVERY THIS LOOP DEMONSTRABLY MAKES.** On the run that
+    motivated this the agent committed #6 and #7 without improving and then #8
+    latched, taking passing requirements 85 -> 87. `RTLEditor`'s own comment
+    already said a limit tuned for a monotone search cuts a valley crossing off
+    before it gets anywhere; the number did not follow.
+
+    `RefModelEditor` deleted its equivalent outright, and the test that did so
+    justified leaving this one alone by saying it "counts outer rounds of up to
+    ten model calls each". It does not -- it counts agent TURNS, one per loop
+    iteration, which is why four of six rounds ended after two of them.
+    """
+    import inspect
+
+    from eda_agent.rtl_editor import RTLEditor
+
+    default = inspect.signature(RTLEditor.__init__).parameters[
+        "stall_rounds"].default
+    assert default >= 6, (
+        f"stall_rounds defaults to {default}; at 2 the counter, not the funded "
+        f"trial budget, is what ends the search")

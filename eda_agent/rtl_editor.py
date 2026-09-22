@@ -2183,6 +2183,50 @@ def _render_continue_debug_prompt(session: "_EditSession") -> str:
     )
 
 
+class _StallCounter:
+    """Consecutive TRIALS that failed to beat the best point seen.
+
+    **A TURN THAT SPENT NO TRIAL IS NOT A STALL, AND COUNTING IT WAS READING A
+    TAUTOLOGY AS A RESULT.** Only `commit` re-runs the reviewer, so on a turn
+    that did not commit the mismatch counts CANNOT have changed -- the "no
+    improvement" test is then true by construction, and the counter charges the
+    search for a turn that measured nothing. The turns it charged are exactly
+    the ones the prompt asks for first: `list_failing_requirements`, `explain`,
+    `focus`, `read_block`, `find_signal`.
+
+    Measured on the run that found it: six rounds, and rounds 2, 3, 4 and 5 each
+    ended after exactly TWO agent turns with the trial budget barely touched.
+    Round 3 ended having made NO commit at all -- two turns of reading, then
+    "not converging" over a mismatch count nothing had moved. 19 commits over
+    six rounds; 21 of a 40-trial budget never spent.
+
+    Improvement is measured against the BEST seen, not the previous value. With
+    the rollback guard off an uphill step raises `last`, and comparing to the
+    previous value would score every deliberate valley crossing as a stall --
+    precisely the search the guard was turned off to allow.
+
+    This is a class and not a closure so that it can be tested without an agent,
+    a session or a simulator.
+    """
+
+    def __init__(self, start_mismatch: int, spent: int = 0) -> None:
+        self.count = 0
+        self._reference = int(start_mismatch)
+        self._spent = int(spent)
+
+    def observe(self, *, spent: int, last: int, best: int | None) -> None:
+        """Record one agent turn. A turn that spent no trial is ignored."""
+        spent = int(spent)
+        if spent == self._spent:
+            return
+        self._spent = spent
+        reference = self._reference
+        improved = last < reference or (best is not None and best < reference)
+        self.count = 0 if improved else self.count + 1
+        self._reference = (min(reference, best) if best is not None
+                           else reference)
+
+
 class RTLEditor:
     def __init__(
         self,
@@ -2205,7 +2249,21 @@ class RTLEditor:
         # matching default and a case where losing history also hurt
         # convergence quality, independent of cost.
         memory_window: int = 0,
-        stall_rounds: int = 2,
+        #: Consecutive TRIALS that fail to beat the best point before giving
+        #: up. **WAS 2, AND 2 IS INSIDE THE NOISE OF ITS OWN SEARCH.** On the
+        #: run that motivated this the agent committed #6 and #7 without
+        #: improving and then #8 latched, taking passing requirements 85 -> 87
+        #: -- a recovery that a limit of 2 cuts off by construction. The
+        #: comment below already said so ("crossing a valley takes several
+        #: consecutive non-improving rounds by definition") and the number did
+        #: not follow.
+        #:
+        #: With stalls counted on trials rather than turns, this is a budget in
+        #: the same units as `max_trials`, and it should not be the binding
+        #: constraint on a search the caller has funded: six rounds of that run
+        #: spent 19 of 40 trials and every round after the first ended on this
+        #: counter, not on the budget.
+        stall_rounds: int = 6,
         #: None reads EDA_ROLLBACK_GUARD from the environment ("off"/"0"/"false"
         #: disable it); anything explicit wins over the environment. The guard
         #: stays ON by default -- a greedy filter is the right default, and this
@@ -2770,34 +2828,20 @@ class RTLEditor:
         # rolled-back action or a round where the model never acts both leave
         # it unchanged, so this naturally catches both failure modes).
         stall_count = 0
-        prev_mismatch_for_stall = int(sim_mismatch_cnt)
+        _stall = _StallCounter(
+            int(sim_mismatch_cnt),
+            spent=int(getattr(self._session, "action_calls", 0) or 0),
+        )
 
         def _update_stall_tracking() -> None:
-            """Count rounds that did not improve on the best point so far.
-
-            With the guard ON, `last_mismatch_cnt` only ever falls, so comparing
-            against the previous value and against the best are the same test.
-            With the guard OFF they are not: an uphill step raises
-            `last_mismatch_cnt`, and comparing to the previous value would score
-            every deliberate valley-crossing move as a stall -- ending the search
-            after `stall_rounds` uphill steps, which is precisely the search the
-            guard was turned off to allow. Measuring against the best instead
-            gives the loop N rounds to find something better than anything it has
-            seen, which is the question actually being asked.
-            """
-            nonlocal stall_count, prev_mismatch_for_stall
-            best = self._session.best_mismatch_cnt
-            reference = (
-                min(prev_mismatch_for_stall, best) if best is not None
-                else prev_mismatch_for_stall
+            """One agent turn, recorded. See `_StallCounter` for the rule."""
+            nonlocal stall_count
+            _stall.observe(
+                spent=int(getattr(self._session, "action_calls", 0) or 0),
+                last=self._session.last_mismatch_cnt,
+                best=self._session.best_mismatch_cnt,
             )
-            if self._session.last_mismatch_cnt < prev_mismatch_for_stall or (
-                best is not None and best < prev_mismatch_for_stall
-            ):
-                stall_count = 0
-            else:
-                stall_count += 1
-            prev_mismatch_for_stall = reference
+            stall_count = _stall.count
 
         _turn_start_iter = self._session.traj_iter + 1
         response = await self._agent(Msg("user", first_prompt, role="user"))
