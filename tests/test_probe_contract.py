@@ -360,3 +360,98 @@ def test_an_ACCEPTED_probe_table_still_lands_under_probes(tmp_path) -> None:
     assert [p["name"] for p in blob["probes"]] == ["idle"]
     assert blob["accepted"] is True
     assert blob["rejected"] == []
+
+
+def _entry(name, span, req="REQ-1", notes="a state"):
+    from specflow.probes import ProbeEntry
+    return ProbeEntry(name=name, notes=notes, licensed_by=[req], spans=[span])
+
+
+def test_one_unlicensed_probe_does_not_discard_the_LICENSED_ones() -> None:
+    """**THE LICENSING ARGUMENT IS PER PROBE, AND THE GATE WAS ALL-OR-NOTHING.**
+    Each probe carries its own `spans` and `licensed_by`, and the reason a
+    half-accepted table is refused -- "every stage below would be built on names
+    that failed their licensing" -- is an argument about the names that FAILED,
+    not the ones beside them.
+
+    Measured: two of four end-to-end runs lost their entire table this way. The
+    last nominated 27 probes and was refused after six repair rounds over one
+    error -- `write_sequence` quoting a paraphrase rather than a verbatim span
+    -- then authored its whole check set with no state term nameable, when 26 of
+    the 27 were licensed. Replaying that exact table through `salvage` keeps 26
+    and drops `write_sequence` alone.
+    """
+    from specflow.probes import ProbeOutput, gate, salvage
+
+    spec = ("The controller enters the idle state after reset. "
+            "During a WRITE command the controller releases SCL.")
+    reqs = [{"uid": "REQ-1", "text": "idle after reset"}]
+    contract = {"module_name": "m", "io": [{"name": "q", "dir": "output"}]}
+    out = ProbeOutput(probes=[
+        _entry("idle", "The controller enters the idle state after reset."),
+        #: A PARAPHRASE, not a quote -- these words are not in the text.
+        _entry("write_sequence",
+               "During a WRITE the controller lets SCL float high"),
+    ])
+    issues = gate(out, contract=contract, spec=spec, requirements=reqs)
+    assert [i for i in issues if i.severity == "error"], "the fixture no longer fails"
+
+    kept, dropped = salvage(out, issues, contract=contract, spec=spec,
+                            requirements=reqs)
+    assert kept is not None, "the licensed probe was discarded with the other"
+    assert [p.name for p in kept.probes] == ["idle"]
+    assert dropped == ["write_sequence"]
+
+
+def test_a_finding_that_names_no_probe_still_refuses_the_TABLE() -> None:
+    """A row can only be salvaged by dropping a row. A finding about the table
+    itself is attached to no index and cannot be repaired that way, so it must
+    refuse everything -- otherwise salvage becomes a way to ignore exactly the
+    errors it cannot fix.
+
+    The remainder here gates CLEANLY on its own, so nothing but this guard
+    stands between the table-level finding and a false accept. A fixture whose
+    remainder fails for some other reason does not exercise it.
+    """
+    from specflow.probes import ProbeOutput, gate, salvage
+    from specflow.schema import Issue
+
+    spec = ("The controller enters the idle state after reset. "
+            "During a WRITE command the controller releases SCL.")
+    reqs = [{"uid": "REQ-1", "text": "idle after reset"}]
+    contract = {"module_name": "m", "io": [{"name": "q", "dir": "output"}]}
+    out = ProbeOutput(probes=[
+        _entry("idle", "The controller enters the idle state after reset."),
+        _entry("write_sequence",
+               "During a WRITE the controller lets SCL float high"),
+    ])
+    #: The remainder after dropping index 1 is clean -- proven, not assumed.
+    only_first = ProbeOutput(probes=[out.probes[0]])
+    assert not [i for i in gate(only_first, contract=contract, spec=spec,
+                                requirements=reqs) if i.severity == "error"]
+
+    indexed = [i for i in gate(out, contract=contract, spec=spec,
+                               requirements=reqs) if i.severity == "error"]
+    assert indexed, "the fixture no longer produces a droppable finding"
+
+    kept, _ = salvage(out, indexed + [Issue("error", "probes.response",
+                                            "Parse Error: ...")],
+                      contract=contract, spec=spec, requirements=reqs)
+    assert kept is None, (
+        "a table-level finding was salvaged away by dropping a row")
+
+
+def test_salvaging_EVERY_probe_is_the_same_as_refusing_the_table() -> None:
+    """Dropping the last row leaves no table, and an empty table is the state
+    this whole path exists to avoid reporting as a success."""
+    from specflow.probes import ProbeOutput, gate, salvage
+
+    spec = "The controller enters the idle state after reset."
+    reqs = [{"uid": "REQ-1", "text": "idle"}]
+    contract = {"module_name": "m", "io": [{"name": "q", "dir": "output"}]}
+    out = ProbeOutput(probes=[_entry("only", "a paraphrase that is not present")])
+    issues = gate(out, contract=contract, spec=spec, requirements=reqs)
+    kept, dropped = salvage(out, issues, contract=contract, spec=spec,
+                            requirements=reqs)
+    assert kept is None
+    assert dropped == ["only"]

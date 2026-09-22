@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -563,6 +564,73 @@ def orphans(contract: dict, normalized: list) -> list[str]:
     return sorted(set(probe_names(contract)) - named)
 
 
+_PROBE_INDEX = re.compile(r"^(?:io|probes)\[(\d+)\]")
+
+
+def offending_probes(issues: list[Issue]) -> tuple[set[int], list[Issue]]:
+    """`(indices whose OWN entry errored, errors that name no entry)`.
+
+    Both the linter and this stage's own checks path their findings at an
+    index -- `io[4].spans`, `probes[7].name` -- and `entries` is built from
+    `out.probes` in order, so an index identifies the probe that failed.
+    Anything else is a finding about the TABLE and cannot be salvaged by
+    dropping a row.
+    """
+    bad: set[int] = set()
+    table: list[Issue] = []
+    for i in issues:
+        if i.severity != "error":
+            continue
+        m = _PROBE_INDEX.match(str(i.path or ""))
+        if m:
+            bad.add(int(m.group(1)))
+        else:
+            table.append(i)
+    return bad, table
+
+
+def salvage(out: ProbeOutput, issues: list[Issue], *, contract: dict, spec: str,
+            requirements: list[dict]) -> tuple[ProbeOutput | None, list[str]]:
+    """Drop the probes that fail THEIR OWN licensing; keep the rest.
+
+    **THE LICENSING ARGUMENT IS PER PROBE, AND THE GATE WAS ALL-OR-NOTHING.**
+    Each probe carries its own `spans` and `licensed_by`, and the reason a
+    half-accepted table is refused -- "every stage below would be built on names
+    that failed their licensing" -- is an argument about the names that failed,
+    not about the ones beside them.
+
+    Measured: two of four end-to-end runs lost their ENTIRE table this way. The
+    last one nominated 27 probes, was refused after six repair rounds over a
+    single error -- `write_sequence` quoting a paraphrase rather than a verbatim
+    span -- and authored its whole check set with no state term nameable, when
+    26 of the 27 were licensed.
+
+    Returns `(kept, dropped names)`, or `(None, ...)` when nothing can be
+    salvaged: a finding that names no entry, or a remainder that still does not
+    gate, or no probe left.
+    """
+    bad, table_level = offending_probes(issues)
+    if table_level or not bad:
+        return None, []
+    kept = ProbeOutput(
+        reasoning=out.reasoning,
+        probes=[p for n, p in enumerate(out.probes) if n not in bad],
+        aliases=list(out.aliases),
+        cross_constraints=list(out.cross_constraints),
+    )
+    dropped = [out.probes[n].name for n in sorted(bad)
+               if 0 <= n < len(out.probes)]
+    if not kept.probes:
+        return None, dropped
+    #: RE-GATED, never assumed. Dropping a row can invalidate what is left --
+    #: an alias pointing at a probe that is gone, a licensing requirement now
+    #: unnamed -- and the remainder has to pass the same gate the table did.
+    again = gate(kept, contract=contract, spec=spec, requirements=requirements)
+    if has_errors(again):
+        return None, dropped
+    return kept, dropped
+
+
 def run_probes(*, requirements: list[dict], contract: dict, contract_json: str,
                spec: str, port: ModelPort,
                max_repairs: int = 3) -> tuple[dict, list[dict],
@@ -586,11 +654,27 @@ def run_probes(*, requirements: list[dict], contract: dict, contract_json: str,
         max_repairs=max_repairs,
     )
     if not result.ok or not result.output.probes:
-        if result.output is not None and has_errors(result.issues):
+        #: **DROP THE ROWS THAT FAILED, NOT THE TABLE.** Each probe carries its
+        #: own licensing, so one paraphrased span does not unlicense the 26
+        #: beside it. Two of four end-to-end runs lost everything to this.
+        kept, dropped = (salvage(result.output, result.issues,
+                                 contract=contract, spec=spec,
+                                 requirements=requirements)
+                         if result.output is not None else (None, []))
+        if kept is not None:
+            logger.warning(
+                "probes: %d of %d probe(s) failed their own licensing and were "
+                "DROPPED; the remaining %d are accepted: %s",
+                len(dropped), len(result.output.probes), len(kept.probes),
+                ", ".join(dropped))
+            result = StageResult(kept, list(result.issues), result.rounds)
+        elif result.output is not None and has_errors(result.issues):
             logger.warning("probes: no usable probe table (%d issue(s)); the "
                            "contract is unchanged and every state term stays "
                            "unnameable", len(result.issues))
-        return contract, [], result
+            return contract, [], result
+        else:
+            return contract, [], result
 
     doc = augmented(contract, result.output)
     extra = cross_constraint_requirements(result.output, requirements)
