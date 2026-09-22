@@ -95,3 +95,42 @@ that costs.
 
 Before the operator fix, run 3 read audit 1/14 at the tier and 1/11 without it,
 and `CEILING.md` reported 23.3% as a floor no rule could pass.
+
+## The three corpora are a LOWER BOUND, not a prediction
+
+Runs 1-3 were **authored and repaired against the buggy operator semantics**
+and are re-scored here under the fixed ones. Every repair round those runs
+spent, every body the liveness and refutation legs pushed the author to
+relax, and every `_inert_where_it_should_decide` note they raised, was
+computed from verdicts an off-by-one had already corrupted. A corpus authored
+under correct semantics is a different corpus.
+
+So the table above says what the FIX is worth on fixed inputs. It does not say
+what the pipeline now produces, and only a fresh end-to-end run can.
+
+## What still convicts, and it is one testpoint
+
+Under the shipped placement, run 1 reads audit 1/14 on **REQ-0095**, "The READ
+command ends with cmd_ack", failing **1 of 59** testpoints:
+
+    e 4  cmd=8 ena=1  cmd_ack=1    <- the window opens here
+    e 5  cmd=0 ena=1  cmd_ack=0
+
+**The control acknowledged the command on the same edge it accepted it.** The
+check cannot see that, for two reasons that compose:
+
+  * `after` never tests `until` at the activation row -- deliberately, so that
+    "after A, until B" does not collapse when A and B can hold together;
+  * `after_activation=True` excludes that same row from the consequent search.
+
+So the release happened, at the activation, and both halves of the check look
+past it. The requirement states no cycle count, and `after_activation=True` is
+a claim that the effect cannot be simultaneous with the trigger -- a
+positional claim. `positional_claims()` screens `nexttime(`, `trace[i + 1]`,
+`rows[j + 1]` and `next_row` for exactly this and does NOT screen
+`after_activation=True`, though `eventually`'s own docstring calls it "`|=>`
+against `|->`".
+
+Recorded as the next candidate, not fixed here: it is an authoring-licence
+question rather than an operator bug, and a corpus authored under the fixed
+operators may not produce the shape at all.
