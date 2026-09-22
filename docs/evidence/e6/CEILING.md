@@ -44,3 +44,58 @@ controlled, a sub-10% figure is a property of the corpus a run happens to draw,
 not of the pipeline -- which is precisely what "reproducible" excludes.
 
 Run 1's corpus meets the target under ANY rule. Run 3's meets it under NONE.
+
+## CORRECTION: the ceiling above was my own rule, not the corpus
+
+Every ceiling in this file was swept with the REFUTATION PREFERENCE left on --
+`_choose_bodies` prefers, at every tier, a body the population does not
+unanimously convict. That rule is mine; it was added to fix an audit failure.
+Dropping it (`e6_refutation_cost.py`):
+
+    corpus   preference ON   preference OFF
+    run 1             5.7%             1.4%
+    run 2             9.0%             6.3%
+    run 3            23.3%             5.3%
+
+Run 3's "23.3% ceiling, thirteen points above target, unreachable by any rule"
+was that preference discarding 53% of the corpus. The corpus reaches 5.3%. I
+swept every parameter except the one rule I had introduced myself, then
+reported its cost as a property of the data.
+
+It was also already argued against: no spec-derived design is guaranteed
+correct, so a check convicting all seven may be right where all seven are
+wrong. "Convicting all of them is an okay check."
+
+## And it is a TRADE, so neither setting is reproducible
+
+                      blindness   audit      target
+    run 1  ON              5.7%    0/15      MET
+    run 1  OFF             1.4%    2/14      no
+    run 3  ON             23.3%    1/14      no
+    run 3  OFF             5.3%    1/11      no
+
+The preference buys audit on run 1 and buys NOTHING on run 3 while costing it
+eighteen points of blindness. No fixed setting satisfies both legs on both
+corpora, and choosing per-corpus by reading the audit column is gating on the
+grade.
+
+## What actually convicts the control
+
+On run 3, four checks convict it and they are one kind:
+
+    REQ-0042 [interface]   "The scl_oen output value 1 releases SCL so the
+                            external pull-up can drive it high..."
+    REQ-0005 [behavioural] "Driving scl_oen or sda_oen low pulls the
+                            corresponding I2C line low..."
+    REQ-0044 [interface]   "...driving sda_oen low drives the SDA line low."
+    REQ-0045 [interface]   "When sda_oen is 1, the SDA line is released..."
+
+These describe OPEN-DRAIN BUS SEMANTICS -- what happens to the external I2C
+line, which is not a module output and depends on pull-ups and other masters.
+The control is right to fail them; the checks over-claim. Only REQ-0005 is
+classified behavioural, which is why audit reads 1 and not 4.
+
+That is the same defect the RTL editor's floor is made of: checks written for
+text that states no obligation at the module boundary. Remove that class and
+audit goes to 0 WITHOUT the refutation preference, which would leave blindness
+at 1.4-5.3%. That -- not selection -- is the remaining work.
