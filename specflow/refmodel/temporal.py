@@ -78,6 +78,12 @@ class Window:
     the window. `closed` is False when the trace ended first, which is what
     makes "we never saw the end of this" reportable rather than silently a
     failure.
+
+    **`rows` IS NOT THE EXTENT THE REQUIREMENT GOVERNS**, and reading it as one
+    is an off-by-one that can only convict -- see `extent`, which is what the
+    invariant operators read. `rows` carries the boundary so that an
+    existential can be satisfied at it and so that `_discarded` can name it;
+    `extent` is the interior.
     """
 
     start: dict
@@ -104,6 +110,54 @@ class Window:
     @property
     def edge(self) -> int | None:
         return self.start.get("edge")
+
+    @property
+    def extent(self) -> list[dict]:
+        """The rows the window GOVERNS -- `rows` WITHOUT the closing row.
+
+        **THE CLOSING ROW IS THE BOUNDARY, NOT THE INTERIOR, AND ASSERTING AN
+        INVARIANT OVER IT IS AN OFF-BY-ONE THAT CAN ONLY CONVICT.** `after`
+        appends a row and then tests it for the close, so `rows` ends on the
+        first row at which the window's scope has ALREADY ENDED. For
+        `WHILE_ACTIVE` that row is one where the activation is false by
+        construction; for a predicate `until` it is the row the release fired
+        on. Either way the requirement does not govern there.
+
+        The proof needs no design, no population and no reference -- assert the
+        window's OWN defining condition and it fails:
+
+            trace  p = 1 0 0 0 1 1 0 1
+            after(trace, p == 0, until=WHILE_ACTIVE)  ->  rows [1, 2, 3, 4]
+            throughout(w, p == 0)  ->  (False, 4, "the invariant broke")
+
+        A check that asserts exactly the condition its own window is defined by
+        cannot be wrong about any design, so a FALSE there is the operator's
+        error and nothing else's -- and no design can escape it either, since
+        the verdict does not depend on what the design did. Measured on a real
+        corpus: the body frozen for REQ-0044 is literally that shape --
+        `after(sda_oen == 0, until=WHILE_ACTIVE)` then `throughout(sda_oen ==
+        0)` -- and it failed 168 of the 168 testpoints it decided against the
+        known-good control.
+
+        THE EXISTENTIAL OPERATORS KEEP `rows`, AND THE ASYMMETRY IS LTL'S. In
+        `A U B` the antecedent is not required where B holds, but B is required
+        to hold SOMEWHERE -- and the closing row is exactly where it may land.
+        So an invariant (`throughout`, `stable`, `never`) reads the extent and
+        an existential (`eventually`, `pulse`, `sequence`, `until`, `nth`)
+        reads the rows. Excluding the boundary from the second would make a
+        response that arrives precisely at the release read as absent, which is
+        the same defect pointed the other way.
+
+        An unclosed window ran to the end of the trace, so there is no boundary
+        row to drop and the extent is the rows. An aborted one is UNKNOWN at
+        every operator before this is ever reached.
+        """
+        return self.rows[:-1] if (self.closed and not self.aborted) else list(self.rows)
+
+    @property
+    def governed(self) -> list[dict]:
+        """`extent` without the activation row -- the `|=>` half of the extent."""
+        return self.extent[1:]
 
     @property
     def body(self) -> list[dict]:
@@ -571,7 +625,9 @@ def throughout(w: Window, holds: Pred, *, after_activation: bool = False,
     """
     if w.aborted:
         return _discarded(w)
-    rows = w.body if after_activation else w.rows
+    #: `extent`, NOT `rows` -- an invariant does not govern the boundary row.
+    #: See `Window.extent` for the design-free proof.
+    rows = w.governed if after_activation else w.extent
     if not rows:
         return None, w.edge, (
             f"{what} had no rows to hold over in the window opening at edge "
@@ -603,7 +659,8 @@ def stable(w: Window, port: str, *, after_activation: bool = False) -> Verdict:
     """
     if w.aborted:
         return _discarded(w)
-    rows = w.body if after_activation else w.rows
+    #: `extent` -- see `throughout`, which shares the reasoning exactly.
+    rows = w.governed if after_activation else w.extent
     if not rows:
         return None, w.edge, f"{port} had no rows to hold over"
     first = _val(rows[0], port)
@@ -723,7 +780,8 @@ def never(w: Window, holds: Pred, *, after_activation: bool = False,
     """
     if w.aborted:
         return _discarded(w)
-    rows = w.body if after_activation else w.rows
+    #: `extent` -- a prohibition does not govern the boundary row either.
+    rows = w.governed if after_activation else w.extent
     if not rows:
         return None, w.edge, (
             f"{what} had no rows to occur in, in the window opening at edge "

@@ -453,6 +453,16 @@ MEASURED: 96 frozen checks scored against KNOWN-GOOD RTL. Scoping every bare
 window to its activation convicted the correct design 15 times; running every
 bare window to the end convicted it 14 times, and swapped which ones. Choosing
 for you is not available -- choose.
+
+THE ROW THE WINDOW CLOSES ON IS THE BOUNDARY, NOT THE INTERIOR, AND YOU DO NOT
+HAVE TO WORK AROUND IT. `throughout`, `stable` and `never` hold over the window
+WITHOUT its closing row, so "while A, B holds" is not asked to hold B at the
+row where A stopped, and "hold this value until the next change" is not asked
+to hold it at the change. `eventually`, `pulse`, `sequence`, `until` and `nth`
+still read that row, because a response arriving exactly at the release is a
+response that arrived. So write the window the requirement describes; do not
+narrow it by a row to dodge an edge, and do not add `after_activation=True` for
+that reason either -- it excludes the WRONG end.
   eventually(w, holds)                  -> Verdict; holds at SOME row of w
   throughout(w, holds)                  -> Verdict; holds at EVERY row of w
   stable(w, port)                       -> Verdict; port never changes in w

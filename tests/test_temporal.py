@@ -859,3 +859,80 @@ def test_the_licence_is_the_requirements_own_words_and_is_generous():
                        "biu_read is asserted during miss evaluation",
                        ""):
         assert not licenses_a_cycle_count(unlicensed), unlicensed
+
+
+# --------------------------------------- the closing row is not the interior
+
+
+def _p(*vals):
+    """A trace carrying one output `p`, one row per edge."""
+    return [{"edge": i, "inputs": {}, "outputs": {"p": v}, "held": 1}
+            for i, v in enumerate(vals)]
+
+
+def _low(r):
+    return r["outputs"]["p"] == 0
+
+
+def test_a_window_does_not_govern_the_row_that_closed_it():
+    """**THE PROOF NEEDS NO DESIGN, NO POPULATION AND NO REFERENCE.** `after`
+    appends a row and then tests it for the close, so `rows` ends on the first
+    row at which the window's scope has already ended. Assert the window's OWN
+    defining condition over it and the answer is FALSE -- and a check asserting
+    exactly what its window is defined by cannot be wrong about any design, so
+    that FALSE is the operator's error and nothing else's.
+
+    Measured on a real corpus before the fix: the body frozen for REQ-0044 is
+    literally this shape, and it failed 168 of the 168 testpoints it decided
+    against the known-good control -- a verdict that could not have depended on
+    what any design did."""
+    ws = after(_p(1, 0, 0, 0, 1, 1, 0, 1), _low, until=WHILE_ACTIVE)
+    assert [r["edge"] for r in ws[0].rows] == [1, 2, 3, 4], "the boundary is carried"
+    assert [r["edge"] for r in ws[0].extent] == [1, 2, 3], "it is not governed"
+    assert worst([throughout(w, _low) for w in ws])[0] is True
+
+
+def test_never_and_stable_drop_the_boundary_row_too():
+    """All three invariants share the rule, because all three share the defect.
+    `stable` reading the boundary reports the very transition that ended the
+    window as an instability; `never` reports the release itself as the
+    forbidden thing occurring."""
+    ws = after(_p(1, 0, 0, 0, 1, 1, 0, 1), _low, until=WHILE_ACTIVE)
+    assert worst([stable(w, "p") for w in ws])[0] is True
+    assert worst([never(w, lambda r: r["outputs"]["p"] == 1) for w in ws])[0] is True
+
+
+def test_a_predicate_release_is_the_same_boundary_as_WHILE_ACTIVE():
+    """One rule, not two. "Hold the value from this change until the next one"
+    is the commonest predicate release there is, and at the next change the
+    value differs BY CONSTRUCTION -- so an inclusive boundary convicts every
+    design that ever moves the port. This is REQ-0005's shape, which failed
+    299 of 299 testpoints against the control."""
+    trace = _p(0, 0, 1, 1, 0, 0)
+    changed = edges(trace, "p", "change")
+    ws = after(trace, lambda r: r["edge"] in changed,
+               until=lambda r: r["edge"] in changed)
+    assert ws and any(w.closed for w in ws)
+    assert worst([throughout(w, lambda r, e=w.value("p"): r["outputs"]["p"] == e)
+                  for w in ws])[0] is not False
+
+
+def test_the_existential_operators_still_read_the_boundary_row():
+    """**AND THE ASYMMETRY IS LTL'S, NOT AN EXEMPTION.** In `A U B` the
+    antecedent is not required where B holds, but B is required to hold
+    somewhere -- and the closing row is exactly where it may land. Dropping the
+    boundary from `eventually` would read a response arriving precisely at the
+    release as absent, which is this same defect pointed the other way."""
+    trace = _p(1, 0, 0, 1)
+    w = after(trace, _low, until=WHILE_ACTIVE)[0]
+    assert [r["edge"] for r in w.rows] == [1, 2, 3]
+    assert eventually(w, lambda r: r["outputs"]["p"] == 1, strong=True)[0] is True
+
+
+def test_an_unclosed_window_has_no_boundary_to_drop():
+    """A window that ran to the end of the trace never met a release, so every
+    row it holds is governed. Dropping the last one there would silently shorten
+    a `TO_END` window by one."""
+    w = after(_p(1, 0, 0, 0), _low, until=TO_END)[0]
+    assert not w.closed
+    assert [r["edge"] for r in w.extent] == [1, 2, 3]
