@@ -403,6 +403,48 @@ def test_one_unlicensed_probe_does_not_discard_the_LICENSED_ones() -> None:
     assert dropped == ["write_sequence"]
 
 
+def test_what_REFERRED_to_a_dropped_probe_is_dropped_with_it() -> None:
+    """**AND THIS IS WHAT ACTUALLY THREW THE TABLE AWAY.** `salvage` dropped the
+    unlicensed probe and kept every cross-constraint and alias beside it, so the
+    re-gate it runs -- correctly -- reported `cross-constraint names probe
+    'write_sequence', which is not in this table` and the salvage returned None.
+    One paraphrased span, 26 licensed probes discarded, and the run authored
+    every check with no state term nameable.
+
+    A cross-constraint naming a dropped probe is not an independent claim that
+    outlives it: the probe's existence is what licensed it. (Aliases need no
+    such filter -- an alias names a declared PORT, and the gate refuses one
+    pointing anywhere else.)
+    """
+    from specflow.probes import CrossConstraint, ProbeOutput, gate, salvage
+
+    spec = ("The controller enters the idle state after reset. "
+            "During a WRITE command the controller releases SCL.")
+    reqs = [{"uid": "REQ-1", "text": "idle after reset"}]
+    contract = {"module_name": "m", "io": [{"name": "q", "dir": "output"}]}
+    out = ProbeOutput(
+        probes=[
+            _entry("idle", "The controller enters the idle state after reset."),
+            _entry("write_sequence",
+                   "During a WRITE the controller lets SCL float high"),
+        ],
+        cross_constraints=[CrossConstraint(
+            text="while writing, SCL is released", probe="write_sequence",
+            ports=["q"],
+            span="During a WRITE command the controller releases SCL.")],
+    )
+    issues = gate(out, contract=contract, spec=spec, requirements=reqs)
+    assert [i for i in issues if i.severity == "error"], "the fixture no longer fails"
+
+    kept, dropped = salvage(out, issues, contract=contract, spec=spec,
+                            requirements=reqs)
+    assert kept is not None, (
+        "the salvage was thrown away by a reference to the probe it dropped")
+    assert [p.name for p in kept.probes] == ["idle"]
+    assert dropped == ["write_sequence"]
+    assert kept.cross_constraints == [], "a dangling cross-constraint survived"
+
+
 def test_a_finding_that_names_no_probe_still_refuses_the_TABLE() -> None:
     """A row can only be salvaged by dropping a row. A finding about the table
     itself is attached to no index and cannot be repaired that way, so it must

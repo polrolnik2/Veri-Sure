@@ -605,6 +605,22 @@ def salvage(out: ProbeOutput, issues: list[Issue], *, contract: dict, spec: str,
     span -- and authored its whole check set with no state term nameable, when
     26 of the 27 were licensed.
 
+    **AND THE CROSS-CONSTRAINTS THAT NAMED IT GO WITH IT.** A cross-constraint
+    names a probe, and one naming a probe no longer in the table is not an
+    independent claim that outlives it -- the probe's existence is what
+    licensed it, and the gate says so: "cross-constraint names probe
+    'write_sequence', which is not in this table". Leaving them behind made the
+    RE-GATE below fail and threw the salvage away, which is the whole of what
+    this function exists to prevent. Measured on the run that found it: 27
+    probes nominated, one paraphrased span, six repair rounds, and the
+    remainder re-gated with exactly ONE error -- a dangling cross-constraint --
+    so all 26 licensed probes were discarded and the run authored every check
+    with no state term nameable.
+
+    Aliases are NOT filtered, because an alias names a DECLARED PORT and never
+    a probe -- the gate refuses one that points anywhere else -- so there is
+    nothing for a dropped probe to dangle from.
+
     Returns `(kept, dropped names)`, or `(None, ...)` when nothing can be
     salvaged: a finding that names no entry, or a remainder that still does not
     gate, or no probe left.
@@ -612,11 +628,13 @@ def salvage(out: ProbeOutput, issues: list[Issue], *, contract: dict, spec: str,
     bad, table_level = offending_probes(issues)
     if table_level or not bad:
         return None, []
+    gone = {out.probes[n].name for n in bad if 0 <= n < len(out.probes)}
     kept = ProbeOutput(
         reasoning=out.reasoning,
         probes=[p for n, p in enumerate(out.probes) if n not in bad],
         aliases=list(out.aliases),
-        cross_constraints=list(out.cross_constraints),
+        cross_constraints=[c for c in out.cross_constraints
+                           if c.probe not in gone],
     )
     dropped = [out.probes[n].name for n in sorted(bad)
                if 0 <= n < len(out.probes)]
