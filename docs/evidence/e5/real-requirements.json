@@ -34,8 +34,15 @@
         "end": 222,
         "quote": "It receives simple bit commands from the byte-level controller and translates them into timed SCL/SDA open-drain control sequences."
       },
-      "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module shall receive simple bit commands from the byte-level controller and translate them into timed SCL and SDA open-drain control sequences.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 90,
+          "quote": "Module `i2c_master_bit_ctrl` is the bit-level controller of the OpenCores I2C master core.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The i2c_master_bit_ctrl module receives simple bit commands from the byte-level controller and translates them into timed SCL/SDA open-drain control sequences.",
       "ports": [
         "cmd",
         "scl_oen",
@@ -45,7 +52,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0000"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -64,14 +73,14 @@
         "quote": "The module supports generation of I2C START and STOP conditions, single-bit WRITE cycles, single-bit READ cycles, bus-busy detection, arbitration-lost detection, slave clock stretching, multi-master clock synchronization, SDA/SCL input synchronization, and glitch filtering."
       },
       "spec_spans": [],
-      "text": "The module supports generation of I2C START and STOP conditions, single-bit WRITE and READ cycles, bus-busy and arbitration-lost detection, slave clock stretching, multi-master clock synchronization, and SDA/SCL input synchronization and glitch filtering.",
+      "text": "The i2c_master_bit_ctrl module supports generation of I2C START and STOP conditions, single-bit WRITE and READ cycles, bus-busy and arbitration-lost detection, slave clock stretching, multi-master clock synchronization, and synchronization and glitch filtering of the SCL and SDA inputs.",
       "ports": [
         "cmd",
-        "din",
-        "dout",
         "cmd_ack",
         "busy",
         "al",
+        "din",
+        "dout",
         "scl_i",
         "scl_o",
         "scl_oen",
@@ -109,11 +118,11 @@
           "role": "supporting"
         }
       ],
-      "text": "The external SCL and SDA lines are controlled using open-drain semantics.",
+      "text": "The module shall control the external SCL and SDA lines using open-drain semantics.",
       "ports": [
         "scl_o",
-        "sda_o",
         "scl_oen",
+        "sda_o",
         "sda_oen"
       ],
       "needs": [
@@ -141,7 +150,7 @@
         "quote": "The outputs `scl_o` and `sda_o` are constant low drive values, while `scl_oen` and `sda_oen` are active-low output-enable controls."
       },
       "spec_spans": [],
-      "text": "The outputs scl_o and sda_o provide constant low drive values, while scl_oen and sda_oen control the corresponding open-drain outputs as active-low output-enable signals.",
+      "text": "The module shall drive scl_o and sda_o constantly low and use scl_oen and sda_oen as active-low output-enable controls.",
       "ports": [
         "scl_o",
         "sda_o",
@@ -170,8 +179,15 @@
         "end": 867,
         "quote": "Driving the output-enable low pulls the corresponding I2C line low; releasing the output-enable high allows the external pull-up resistor to bring the line high."
       },
-      "spec_spans": [],
-      "text": "The SCL and SDA lines are pulled low when scl_oen and sda_oen, respectively, are low, and are released to external pull-up resistors when those output enables are high.",
+      "spec_spans": [
+        {
+          "start": 574,
+          "end": 705,
+          "quote": "The outputs `scl_o` and `sda_o` are constant low drive values, while `scl_oen` and `sda_oen` are active-low output-enable controls.",
+          "role": "supporting"
+        }
+      ],
+      "text": "Driving scl_oen or sda_oen low pulls the corresponding I2C line low, while driving the output-enable high releases the line for the external pull-up resistor to bring it high.",
       "ports": [
         "scl_oen",
         "sda_oen"
@@ -180,7 +196,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0004"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -224,7 +242,7 @@
         "quote": "It is commanded by the Byte Command Controller and directly controls the SCL and SDA line behavior."
       },
       "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module is commanded by the Byte Command Controller through cmd and directly controls SCL and SDA line behavior through scl_o, scl_oen, sda_o, and sda_oen.",
+      "text": "The i2c_master_bit_ctrl module receives commands through cmd from the Byte Command Controller and directly controls SCL and SDA through scl_o, scl_oen, sda_o, and sda_oen.",
       "ports": [
         "cmd",
         "scl_o",
@@ -255,7 +273,7 @@
         "quote": "This matches the specification’s architecture, where the Bit Command Controller performs actual START, STOP, read, and write bit-level signal generation, while the Byte Command Controller sequences byte-level operations."
       },
       "spec_spans": [],
-      "text": "The Bit Command Controller performs START, STOP, read, and write bit-level signal generation, while the Byte Command Controller sequences byte-level operations.",
+      "text": "The Bit Command Controller performs actual START, STOP, read, and write bit-level signal generation, while the Byte Command Controller sequences byte-level operations.",
       "ports": [],
       "needs": [
         "testplan",
@@ -276,22 +294,32 @@
       "kind": "function",
       "obligation": {
         "start": 1286,
-        "end": 1546,
-        "quote": "module i2c_master_bit_ctrl (\n    input             clk,      // system clock\n    input             rst,      // synchronous active high reset\n    input             nReset,   // asynchronous active low reset\n    input             ena,      // core enable signal"
+        "end": 1603,
+        "quote": "module i2c_master_bit_ctrl (\n    input             clk,      // system clock\n    input             rst,      // synchronous active high reset\n    input             nReset,   // asynchronous active low reset\n    input             ena,      // core enable signal\n\n    input      [15:0] clk_cnt,  // clock prescale value"
       },
-      "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module declares clk, rst, nReset, and ena as input ports.",
+      "spec_spans": [
+        {
+          "start": 1605,
+          "end": 1809,
+          "quote": "    input      [ 3:0] cmd,      // command (from byte controller)\n           cmd_ack,  // command complete acknowledge\n           busy,     // i2c bus busy\n           al,       // i2c bus arbitration lost",
+          "role": "supporting"
+        }
+      ],
+      "text": "The i2c_master_bit_ctrl module declares one-bit input ports clk, rst, nReset, and ena, and a 16-bit input port clk_cnt.",
       "ports": [
         "clk",
         "rst",
         "nReset",
-        "ena"
+        "ena",
+        "clk_cnt"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0010"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -305,39 +333,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 1548,
-        "end": 1603,
-        "quote": "    input      [15:0] clk_cnt,  // clock prescale value"
-      },
-      "spec_spans": [],
-      "text": "The module shall have a 16-bit input port named clk_cnt.",
-      "ports": [
-        "clk_cnt"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "interface"
-    },
-    {
-      "uid": "REQ-0011",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
         "start": 1605,
         "end": 1809,
         "quote": "    input      [ 3:0] cmd,      // command (from byte controller)\n           cmd_ack,  // command complete acknowledge\n           busy,     // i2c bus busy\n           al,       // i2c bus arbitration lost"
       },
       "spec_spans": [],
-      "text": "The module declares cmd as a 4-bit input command port and cmd_ack, busy, and al as 1-bit output status ports.",
+      "text": "The module interface declares a four-bit cmd input and one-bit cmd_ack, busy, and al outputs.",
       "ports": [
         "cmd",
         "cmd_ack",
@@ -358,7 +359,7 @@
       "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0012",
+      "uid": "REQ-0011",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -367,7 +368,7 @@
         "quote": "    input             din,\n           dout,"
       },
       "spec_spans": [],
-      "text": "The module declares din as an input data-bit port and dout as an output data-bit port.",
+      "text": "The module declares a one-bit input port named din and a one-bit output port named dout.",
       "ports": [
         "din",
         "dout"
@@ -386,7 +387,7 @@
       "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0013",
+      "uid": "REQ-0012",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -418,7 +419,7 @@
       "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0014",
+      "uid": "REQ-0013",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -426,8 +427,44 @@
         "end": 2249,
         "quote": "Input ports:\n    clk:System clock."
       },
+      "spec_spans": [
+        {
+          "start": 2250,
+          "end": 2319,
+          "quote": "All synchronous state updates are driven by the rising edge of `clk`.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The clk input is the system clock.",
+      "ports": [
+        "clk"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0014"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "interface"
+    },
+    {
+      "uid": "REQ-0014",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 2250,
+        "end": 2319,
+        "quote": "All synchronous state updates are driven by the rising edge of `clk`."
+      },
       "spec_spans": [],
-      "text": "The input port clk is the system clock.",
+      "text": "The i2c_master_bit_ctrl module performs all synchronous state updates on the rising edge of clk.",
       "ports": [
         "clk"
       ],
@@ -442,20 +479,21 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "interface"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0015",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 2250,
-        "end": 2319,
-        "quote": "All synchronous state updates are driven by the rising edge of `clk`."
+        "start": 2320,
+        "end": 2493,
+        "quote": "    rst:Synchronous active-high reset. When asserted, internal state, counters, filtered inputs, bus-status flags, and the command FSM are reset on the rising edge of `clk`."
       },
       "spec_spans": [],
-      "text": "All synchronous state updates occur on the rising edge of clk.",
+      "text": "When the active-high synchronous reset input rst is asserted, the i2c_master_bit_ctrl resets its internal state, counters, filtered inputs, bus-status flags, and command FSM on the rising edge of clk.",
       "ports": [
+        "rst",
         "clk"
       ],
       "needs": [
@@ -476,30 +514,20 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 2320,
-        "end": 2493,
-        "quote": "    rst:Synchronous active-high reset. When asserted, internal state, counters, filtered inputs, bus-status flags, and the command FSM are reset on the rising edge of `clk`."
+        "start": 2494,
+        "end": 2637,
+        "quote": "    nReset:Asynchronous active-low reset. When deasserted low, most sequential state elements are immediately initialized independent of `clk`."
       },
-      "spec_spans": [
-        {
-          "start": 2250,
-          "end": 2319,
-          "quote": "All synchronous state updates are driven by the rising edge of `clk`.",
-          "role": "supporting"
-        }
-      ],
-      "text": "When rst is asserted high, the internal state, counters, filtered inputs, bus-status flags, and command FSM are reset on the rising edge of clk.",
+      "spec_spans": [],
+      "text": "The i2c_master_bit_ctrl module shall asynchronously initialize its resettable sequential state elements when nReset is asserted low, independently of clk.",
       "ports": [
-        "rst",
-        "clk"
+        "nReset"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0015"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -513,14 +541,14 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 2494,
-        "end": 2637,
-        "quote": "    nReset:Asynchronous active-low reset. When deasserted low, most sequential state elements are immediately initialized independent of `clk`."
+        "start": 2638,
+        "end": 2706,
+        "quote": "    ena:Core enable signal. It gates normal timing/filter operation."
       },
       "spec_spans": [],
-      "text": "When nReset is low, most sequential state elements are initialized asynchronously and independently of clk.",
+      "text": "The ena input gates the controller's normal timing and input-filter operation.",
       "ports": [
-        "nReset"
+        "ena"
       ],
       "needs": [
         "testplan",
@@ -540,75 +568,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 2638,
-        "end": 2665,
-        "quote": "    ena:Core enable signal."
-      },
-      "spec_spans": [],
-      "text": "The ena input is the core enable signal.",
-      "ports": [
-        "ena"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "interface"
-    },
-    {
-      "uid": "REQ-0019",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 2666,
-        "end": 2706,
-        "quote": "It gates normal timing/filter operation."
-      },
-      "spec_spans": [
-        {
-          "start": 2638,
-          "end": 2665,
-          "quote": "    ena:Core enable signal.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The ena core enable signal gates normal timing and filter operation.",
-      "ports": [
-        "ena"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0018"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0020",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
         "start": 2707,
         "end": 2836,
         "quote": "When `ena` is low, the clock divider is reloaded and the input filter counter is reset, preventing normal bit-timing progression."
       },
       "spec_spans": [],
-      "text": "When ena is low, the clock divider is reloaded, the input filter counter is reset, and normal bit-timing progression is prevented.",
+      "text": "When ena is low, i2c_master_bit_ctrl reloads its clock divider and resets its input filter counter, preventing normal bit-timing progression.",
       "ports": [
         "ena"
       ],
@@ -626,7 +591,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0021",
+      "uid": "REQ-0019",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -635,7 +600,7 @@
         "quote": "    clk_cnt[15:0]:Clock prescale value. This value is loaded into the internal clock divider counter `cnt` to generate the `clk_en` tick used to advance the bit-level FSM."
       },
       "spec_spans": [],
-      "text": "The 16-bit clk_cnt input loads the internal clock-divider counter cnt to generate the clk_en tick that advances the bit-level FSM.",
+      "text": "The 16-bit clk_cnt input is loaded into the internal clock-divider counter cnt to generate clk_en ticks that advance the bit-level FSM.",
       "ports": [
         "clk_cnt"
       ],
@@ -653,7 +618,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0022",
+      "uid": "REQ-0020",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -669,7 +634,7 @@
           "role": "supporting"
         }
       ],
-      "text": "The clk_cnt input determines the SDA and SCL input filter sampling interval.",
+      "text": "The clk_cnt input is used to derive the SDA and SCL input-filter sampling interval through filter_cnt.",
       "ports": [
         "clk_cnt"
       ],
@@ -678,7 +643,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0021"
+        "REQ-0019"
       ],
       "supportive": [
         "text",
@@ -689,7 +654,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0023",
+      "uid": "REQ-0021",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -698,7 +663,7 @@
         "quote": "    cmd[3:0]:Bit-level command from the byte controller."
       },
       "spec_spans": [],
-      "text": "The cmd[3:0] input is the bit-level command from the byte controller.",
+      "text": "The 4-bit cmd input carries a bit-level command from the byte controller.",
       "ports": [
         "cmd"
       ],
@@ -716,7 +681,7 @@
       "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0024",
+      "uid": "REQ-0022",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -732,7 +697,7 @@
           "role": "supporting"
         }
       ],
-      "text": "When the bit-level command FSM is idle, the cmd input is decoded as the supported I2C_CMD_START command.",
+      "text": "When the bit-level controller FSM is idle, the cmd input is decoded as the supported I2C_CMD_START command.",
       "ports": [
         "cmd"
       ],
@@ -741,7 +706,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0023"
+        "REQ-0021"
       ],
       "supportive": [
         "text",
@@ -749,10 +714,10 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0025",
+      "uid": "REQ-0023",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -768,14 +733,16 @@
           "role": "supporting"
         }
       ],
-      "text": "The supported bit-level command list includes `I2C_CMD_STOP`.",
-      "ports": [],
+      "text": "The cmd input supports the I2C_CMD_STOP command.",
+      "ports": [
+        "cmd"
+      ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0024"
+        "REQ-0022"
       ],
       "supportive": [
         "text",
@@ -783,10 +750,10 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "scaffolding"
+      "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0026",
+      "uid": "REQ-0024",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -795,7 +762,7 @@
         "quote": "        - `I2C_CMD_WRITE`"
       },
       "spec_spans": [],
-      "text": "The bit-level command input cmd supports the I2C_CMD_WRITE command.",
+      "text": "The bit-level command input `cmd` includes the `I2C_CMD_WRITE` command.",
       "ports": [
         "cmd"
       ],
@@ -813,7 +780,7 @@
       "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0027",
+      "uid": "REQ-0025",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -822,7 +789,7 @@
         "quote": "        - `I2C_CMD_READ`\n        Any unsupported or idle command leaves the FSM in the idle state."
       },
       "spec_spans": [],
-      "text": "When the bit-level controller is idle, the command input cmd shall start the READ sequence for I2C_CMD_READ and shall leave the FSM idle for unsupported or idle commands.",
+      "text": "When the command FSM is idle, an I2C_CMD_READ value on cmd shall start the READ sequence, while an unsupported or idle cmd value shall leave the command FSM idle.",
       "ports": [
         "cmd"
       ],
@@ -840,7 +807,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0028",
+      "uid": "REQ-0026",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -848,10 +815,83 @@
         "end": 3465,
         "quote": "    din:Data bit to transmit during a WRITE operation."
       },
-      "spec_spans": [],
-      "text": "The din input is the data bit transmitted during a WRITE operation.",
+      "spec_spans": [
+        {
+          "start": 3466,
+          "end": 3609,
+          "quote": "Because SDA is driven through an active-low open-drain output enable, `din = 0` causes SDA to be driven low, while `din = 1` releases SDA high.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The din input provides the data bit transmitted during a WRITE operation.",
       "ports": [
         "din"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0027"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "interface"
+    },
+    {
+      "uid": "REQ-0027",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 3466,
+        "end": 3609,
+        "quote": "Because SDA is driven through an active-low open-drain output enable, `din = 0` causes SDA to be driven low, while `din = 1` releases SDA high."
+      },
+      "spec_spans": [
+        {
+          "start": 3411,
+          "end": 3465,
+          "quote": "    din:Data bit to transmit during a WRITE operation.",
+          "role": "supporting"
+        }
+      ],
+      "text": "During a WRITE operation, din = 0 shall cause SDA to be driven low through sda_oen, while din = 1 shall cause SDA to be released high through sda_oen.",
+      "ports": [
+        "din",
+        "sda_oen"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0026"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0028",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 3610,
+        "end": 3702,
+        "quote": "    scl_i:External I2C SCL line input from the pad or top-level tri-state/open-drain buffer."
+      },
+      "spec_spans": [],
+      "text": "The scl_i port receives the external I2C SCL line from the pad or top-level tri-state/open-drain buffer.",
+      "ports": [
+        "scl_i"
       ],
       "needs": [
         "testplan",
@@ -871,22 +911,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 3466,
-        "end": 3609,
-        "quote": "Because SDA is driven through an active-low open-drain output enable, `din = 0` causes SDA to be driven low, while `din = 1` releases SDA high."
+        "start": 3703,
+        "end": 3835,
+        "quote": "This input is synchronized, filtered, and used for clock stretching, clock synchronization, START/STOP detection, and read sampling."
       },
       "spec_spans": [
         {
-          "start": 3411,
-          "end": 3465,
-          "quote": "    din:Data bit to transmit during a WRITE operation.",
+          "start": 3610,
+          "end": 3702,
+          "quote": "    scl_i:External I2C SCL line input from the pad or top-level tri-state/open-drain buffer.",
           "role": "supporting"
         }
       ],
-      "text": "During a WRITE operation, din = 0 causes the active-low SDA output-enable control sda_oen to drive SDA low, whereas din = 1 causes sda_oen to release SDA high.",
+      "text": "The external I2C SCL line input scl_i is synchronized and filtered and used for clock stretching, clock synchronization, START/STOP detection, and read sampling.",
       "ports": [
-        "din",
-        "sda_oen"
+        "scl_i"
       ],
       "needs": [
         "testplan",
@@ -908,14 +947,14 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 3610,
-        "end": 3702,
-        "quote": "    scl_i:External I2C SCL line input from the pad or top-level tri-state/open-drain buffer."
+        "start": 3836,
+        "end": 3928,
+        "quote": "    sda_i:External I2C SDA line input from the pad or top-level tri-state/open-drain buffer."
       },
       "spec_spans": [],
-      "text": "The scl_i port is the external I2C SCL line input from the pad or top-level tri-state/open-drain buffer.",
+      "text": "The sda_i port is the external I2C SDA line input from the pad or top-level tri-state/open-drain buffer.",
       "ports": [
-        "scl_i"
+        "sda_i"
       ],
       "needs": [
         "testplan",
@@ -935,21 +974,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 3703,
-        "end": 3835,
-        "quote": "This input is synchronized, filtered, and used for clock stretching, clock synchronization, START/STOP detection, and read sampling."
+        "start": 3929,
+        "end": 4045,
+        "quote": "This input is synchronized, filtered, and used for START/STOP detection, arbitration checks, and read data sampling."
       },
       "spec_spans": [
         {
-          "start": 3610,
-          "end": 3702,
-          "quote": "    scl_i:External I2C SCL line input from the pad or top-level tri-state/open-drain buffer.",
+          "start": 3836,
+          "end": 3928,
+          "quote": "    sda_i:External I2C SDA line input from the pad or top-level tri-state/open-drain buffer.",
           "role": "supporting"
         }
       ],
-      "text": "The external SCL line input scl_i shall be synchronized and filtered and used for clock stretching, clock synchronization, START and STOP detection, and read-data sampling.",
+      "text": "The external SDA input sda_i is synchronized and filtered before being used for START and STOP detection, arbitration checks, and read-data sampling.",
       "ports": [
-        "scl_i"
+        "sda_i"
       ],
       "needs": [
         "testplan",
@@ -971,20 +1010,29 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 3836,
-        "end": 4045,
-        "quote": "    sda_i:External I2C SDA line input from the pad or top-level tri-state/open-drain buffer. This input is synchronized, filtered, and used for START/STOP detection, arbitration checks, and read data sampling."
+        "start": 4047,
+        "end": 4119,
+        "quote": "Output ports:\n    cmd_ack: One-clock-cycle command-complete acknowledge."
       },
-      "spec_spans": [],
-      "text": "The sda_i input is synchronized and filtered for use in START and STOP detection, arbitration checks, and read-data sampling.",
+      "spec_spans": [
+        {
+          "start": 4120,
+          "end": 4227,
+          "quote": "It is asserted for one `clk` cycle when the current bit-level START, STOP, READ, or WRITE command finishes.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The cmd_ack output asserts for one clk cycle when a bit-level START, STOP, READ, or WRITE command finishes.",
       "ports": [
-        "sda_i"
+        "cmd_ack"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0033"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -998,12 +1046,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 4047,
+        "start": 4120,
         "end": 4227,
-        "quote": "Output ports:\n    cmd_ack: One-clock-cycle command-complete acknowledge. It is asserted for one `clk` cycle when the current bit-level START, STOP, READ, or WRITE command finishes."
+        "quote": "It is asserted for one `clk` cycle when the current bit-level START, STOP, READ, or WRITE command finishes."
       },
-      "spec_spans": [],
-      "text": "The cmd_ack output shall be asserted for one clk cycle when a bit-level START, STOP, READ, or WRITE command finishes.",
+      "spec_spans": [
+        {
+          "start": 4047,
+          "end": 4119,
+          "quote": "Output ports:\n    cmd_ack: One-clock-cycle command-complete acknowledge.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The cmd_ack output is asserted for one clk cycle when the current bit-level START, STOP, READ, or WRITE command finishes.",
       "ports": [
         "cmd_ack"
       ],
@@ -1011,7 +1066,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0032"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -1029,15 +1086,8 @@
         "end": 4261,
         "quote": "    busy: I2C bus busy indicator."
       },
-      "spec_spans": [
-        {
-          "start": 4262,
-          "end": 4355,
-          "quote": "It is set after a START condition is detected and cleared after a STOP condition is detected.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The busy output indicates that the I2C bus is busy, is set after a START condition is detected, and is cleared after a STOP condition is detected.",
+      "spec_spans": [],
+      "text": "The busy output indicates whether the I2C bus is busy.",
       "ports": [
         "busy"
       ],
@@ -1045,16 +1095,14 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0035"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "interface"
     },
     {
       "uid": "REQ-0035",
@@ -1073,7 +1121,7 @@
           "role": "supporting"
         }
       ],
-      "text": "The busy I2C bus indicator is set after a START condition is detected and cleared after a STOP condition is detected.",
+      "text": "The busy output is set when an I2C START condition is detected and cleared when an I2C STOP condition is detected.",
       "ports": [
         "busy"
       ],
@@ -1102,7 +1150,7 @@
         "quote": "    al: Arbitration-lost indicator."
       },
       "spec_spans": [],
-      "text": "The al output is an arbitration-lost indicator.",
+      "text": "The al port is the arbitration-lost indicator.",
       "ports": [
         "al"
       ],
@@ -1136,9 +1184,13 @@
           "role": "supporting"
         }
       ],
-      "text": "The arbitration-lost indicator al is asserted when the controller releases SDA high but observes filtered SDA low during arbitration checking, or when a STOP condition occurs during an active command without being requested by the controller.",
+      "text": "The i2c_master_bit_ctrl controller shall assert al when it releases SDA high but observes filtered SDA low during arbitration checking, or when it detects a STOP condition during an active command that was not a requested STOP command.",
       "ports": [
-        "al"
+        "al",
+        "sda_oen",
+        "sda_i",
+        "scl_i",
+        "cmd"
       ],
       "needs": [
         "testplan",
@@ -1161,11 +1213,11 @@
       "kind": "function",
       "obligation": {
         "start": 4632,
-        "end": 4660,
-        "quote": "    dout: Received data bit."
+        "end": 4742,
+        "quote": "    dout: Received data bit. It captures the filtered SDA value on the rising edge of the filtered SCL signal."
       },
       "spec_spans": [],
-      "text": "The dout output represents the received data bit.",
+      "text": "The dout output captures the filtered SDA value on each rising edge of the filtered SCL signal.",
       "ports": [
         "dout"
       ],
@@ -1180,36 +1232,27 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "interface"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0039",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 4661,
-        "end": 4742,
-        "quote": "It captures the filtered SDA value on the rising edge of the filtered SCL signal."
+        "start": 4743,
+        "end": 4790,
+        "quote": "    output scl_o: Constant-low SCL drive value."
       },
-      "spec_spans": [
-        {
-          "start": 4632,
-          "end": 4660,
-          "quote": "    dout: Received data bit.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The dout output captures the filtered SDA value on the rising edge of the filtered SCL signal.",
+      "spec_spans": [],
+      "text": "The scl_o output remains at a constant low value.",
       "ports": [
-        "dout"
+        "scl_o"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0038"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -1223,19 +1266,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 4743,
+        "start": 4791,
         "end": 4883,
-        "quote": "    output scl_o: Constant-low SCL drive value. The module assigns this signal to `1'b0`; actual SCL line control is performed by `scl_oen`."
+        "quote": "The module assigns this signal to `1'b0`; actual SCL line control is performed by `scl_oen`."
       },
       "spec_spans": [
         {
-          "start": 4884,
-          "end": 4980,
-          "quote": "    scl_oen: Active-low SCL output enable for open-drain operation.\n        - `0`: drive SCL low",
+          "start": 4743,
+          "end": 4790,
+          "quote": "    output scl_o: Constant-low SCL drive value.",
           "role": "supporting"
         }
       ],
-      "text": "The module shall assign scl_o a constant low value, with scl_oen controlling the actual SCL line.",
+      "text": "The module assigns scl_o to 1'b0, while scl_oen controls the actual SCL line.",
       "ports": [
         "scl_o",
         "scl_oen"
@@ -1245,7 +1288,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0041"
+        "REQ-0039"
       ],
       "supportive": [
         "text",
@@ -1253,7 +1296,7 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "interface"
     },
     {
       "uid": "REQ-0041",
@@ -1265,7 +1308,7 @@
         "quote": "    scl_oen: Active-low SCL output enable for open-drain operation.\n        - `0`: drive SCL low"
       },
       "spec_spans": [],
-      "text": "The scl_oen output shall be an active-low open-drain SCL control such that scl_oen = 0 drives SCL low.",
+      "text": "The scl_oen output is an active-low SCL output-enable control that drives SCL low when set to 0.",
       "ports": [
         "scl_oen"
       ],
@@ -1288,11 +1331,11 @@
       "kind": "function",
       "obligation": {
         "start": 4981,
-        "end": 5190,
-        "quote": "        - `1`: release SCL so the external pull-up can drive it high\n    output sda_o: Constant-low SDA drive value. The module assigns this signal to `1'b0`; actual SDA line control is performed by `sda_oen`."
+        "end": 5097,
+        "quote": "        - `1`: release SCL so the external pull-up can drive it high\n    output sda_o: Constant-low SDA drive value."
       },
       "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module releases SCL so the external pull-up can drive it high when scl_oen is 1 and drives sda_o constantly low while sda_oen controls the SDA line.",
+      "text": "The scl_oen output value 1 releases SCL so the external pull-up can drive it high, and the sda_o output is a constant-low SDA drive value.",
       "ports": [
         "scl_oen",
         "sda_o"
@@ -1315,12 +1358,49 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
+        "start": 5098,
+        "end": 5190,
+        "quote": "The module assigns this signal to `1'b0`; actual SDA line control is performed by `sda_oen`."
+      },
+      "spec_spans": [
+        {
+          "start": 4981,
+          "end": 5097,
+          "quote": "        - `1`: release SCL so the external pull-up can drive it high\n    output sda_o: Constant-low SDA drive value.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The module assigns the sda_o output to 1'b0, while the sda_oen output controls the SDA line.",
+      "ports": [
+        "sda_o",
+        "sda_oen"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0042"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0044",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
         "start": 5191,
         "end": 5287,
         "quote": "    sda_oen: Active-low SDA output enable for open-drain operation.\n        - `0`: drive SDA low"
       },
       "spec_spans": [],
-      "text": "The sda_oen output drives the SDA line low when asserted low.",
+      "text": "The sda_oen output enable is active-low, and driving sda_oen low drives the SDA line low.",
       "ports": [
         "sda_oen"
       ],
@@ -1335,10 +1415,10 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0044",
+      "uid": "REQ-0045",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1354,7 +1434,7 @@
           "role": "supporting"
         }
       ],
-      "text": "When sda_oen is high, the SDA line is released so that the external pull-up can drive it high.",
+      "text": "When sda_oen is 1, the SDA line is released so that the external pull-up can drive it high.",
       "ports": [
         "sda_oen"
       ],
@@ -1363,7 +1443,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0043"
+        "REQ-0044"
       ],
       "supportive": [
         "text",
@@ -1371,10 +1451,10 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "interface"
     },
     {
-      "uid": "REQ-0045",
+      "uid": "REQ-0046",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1383,7 +1463,7 @@
         "quote": "Implementation details:\n\n1."
       },
       "spec_spans": [],
-      "text": "The specification introduces a numbered list of implementation details.",
+      "text": "The specification introduces implementation detail 1.",
       "ports": [],
       "needs": [
         "testplan",
@@ -1399,44 +1479,16 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0046",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 5386,
-        "end": 5460,
-        "quote": "Open-drain output model: The module never drives SCL or SDA high directly."
-      },
-      "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module must never directly drive the SCL or SDA lines high.",
-      "ports": [
-        "scl_o",
-        "sda_o"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
       "uid": "REQ-0047",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 5461,
+        "start": 5386,
         "end": 5516,
-        "quote": "It assigns both `scl_o` and `sda_o` to constant `1'b0`."
+        "quote": "Open-drain output model: The module never drives SCL or SDA high directly. It assigns both `scl_o` and `sda_o` to constant `1'b0`."
       },
       "spec_spans": [],
-      "text": "The module assigns both scl_o and sda_o to constant 1'b0 values.",
+      "text": "The i2c_master_bit_ctrl module shall assign the scl_o and sda_o outputs constant 1'b0 values and shall never drive SCL or SDA high directly.",
       "ports": [
         "scl_o",
         "sda_o"
@@ -1463,8 +1515,15 @@
         "end": 5638,
         "quote": "The line is pulled low when the corresponding output enable is asserted low, and released when the output enable is high."
       },
-      "spec_spans": [],
-      "text": "The I2C SCL and SDA lines are pulled low when their corresponding output-enable controls are asserted low and are released when those controls are high.",
+      "spec_spans": [
+        {
+          "start": 5386,
+          "end": 5516,
+          "quote": "Open-drain output model: The module never drives SCL or SDA high directly. It assigns both `scl_o` and `sda_o` to constant `1'b0`.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The I2C SCL and SDA lines are pulled low when their corresponding output-enable controls are low and released when those controls are high.",
       "ports": [
         "scl_oen",
         "sda_oen"
@@ -1473,7 +1532,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0047"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -1499,8 +1560,11 @@
           "role": "supporting"
         }
       ],
-      "text": "External pull-up resistors provide the high level for the I2C open-drain bus.",
-      "ports": [],
+      "text": "External pull-up resistors provide the high level on the I2C SCL and SDA lines when scl_oen and sda_oen release those lines.",
+      "ports": [
+        "scl_oen",
+        "sda_oen"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -1514,7 +1578,7 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "scaffolding"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0050",
@@ -1522,11 +1586,36 @@
       "kind": "function",
       "obligation": {
         "start": 5739,
-        "end": 6058,
-        "quote": "2. Clock divider and bit timing: The internal counter `cnt` generates `clk_en`. When reset is active, when the counter reaches zero, when the core is disabled, or when multi-master clock synchronization occurs, `cnt` is loaded from `clk_cnt` and `clk_en` is asserted. Otherwise, the counter decrements each clock cycle."
+        "end": 5741,
+        "quote": "2."
       },
       "spec_spans": [],
-      "text": "The internal counter cnt shall generate clk_en by loading clk_cnt and asserting clk_en when reset is active, cnt reaches zero, ena is low, or multi-master clock synchronization occurs, and otherwise decrementing cnt on each clock cycle.",
+      "text": "The list-number marker \"2.\" states no hardware requirement.",
+      "ports": [],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "scaffolding"
+    },
+    {
+      "uid": "REQ-0051",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 5742,
+        "end": 6058,
+        "quote": "Clock divider and bit timing: The internal counter `cnt` generates `clk_en`. When reset is active, when the counter reaches zero, when the core is disabled, or when multi-master clock synchronization occurs, `cnt` is loaded from `clk_cnt` and `clk_en` is asserted. Otherwise, the counter decrements each clock cycle."
+      },
+      "spec_spans": [],
+      "text": "The internal timing counter cnt shall reload from clk_cnt and assert the timing enable clk_en when reset is active, cnt reaches zero, ena is low, or multi-master clock synchronization occurs, and shall otherwise decrement on each clock cycle.",
       "ports": [
         "clk",
         "rst",
@@ -1548,7 +1637,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0051",
+      "uid": "REQ-0052",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1557,7 +1646,7 @@
         "quote": "If `slave_wait` is asserted, the counter holds its value and `clk_en` remains low, inserting wait states while SCL is stretched low."
       },
       "spec_spans": [],
-      "text": "The bit-level controller shall hold its timing counter and keep clk_en low while slave_wait is asserted.",
+      "text": "The timing counter `cnt` shall hold its value and the timing-enable signal `clk_en` shall remain low while the slave clock-stretching wait condition `slave_wait` is asserted, inserting wait states while SCL is held low.",
       "ports": [],
       "needs": [
         "testplan",
@@ -1573,7 +1662,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0052",
+      "uid": "REQ-0053",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1582,7 +1671,7 @@
         "quote": "3."
       },
       "spec_spans": [],
-      "text": "List-item marker 3 states no requirement.",
+      "text": "The third item in the implementation-details list states no requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -1598,7 +1687,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0053",
+      "uid": "REQ-0054",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1607,7 +1696,7 @@
         "quote": "Slave clock stretching: `slave_wait` is asserted when the master has just released SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low."
       },
       "spec_spans": [],
-      "text": "The controller shall assert slave_wait when it has released SCL high through scl_oen while the filtered SCL input derived from scl_i remains low.",
+      "text": "The controller shall assert its internal slave_wait condition when the controller has just released SCL high through scl_oen and the filtered SCL signal derived from scl_i remains low.",
       "ports": [
         "scl_oen",
         "scl_i"
@@ -1626,7 +1715,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0054",
+      "uid": "REQ-0055",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1642,7 +1731,7 @@
           "role": "supporting"
         }
       ],
-      "text": "A low filtered SCL input after the master releases SCL indicates that a slave or another bus participant is holding SCL low.",
+      "text": "An asserted slave_wait condition indicates that a slave or another bus participant is holding SCL low.",
       "ports": [
         "scl_oen",
         "scl_i"
@@ -1652,7 +1741,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0053"
+        "REQ-0054"
       ],
       "supportive": [
         "text",
@@ -1663,7 +1752,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0055",
+      "uid": "REQ-0056",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1679,14 +1768,16 @@
           "role": "supporting"
         }
       ],
-      "text": "While the slave-wait condition remains active because a bus participant holds SCL low, the bit-level controller shall pause its timing counter until SCL is released.",
-      "ports": [],
+      "text": "The timing counter remains paused while the bit-level controller is waiting for SCL to be released.",
+      "ports": [
+        "scl_i"
+      ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0054"
+        "REQ-0055"
       ],
       "supportive": [
         "text",
@@ -1697,7 +1788,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0056",
+      "uid": "REQ-0057",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1706,7 +1797,7 @@
         "quote": "4."
       },
       "spec_spans": [],
-      "text": "The numbered list item 4 marker states no hardware requirement.",
+      "text": "Numbered list item 4 states no requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -1722,7 +1813,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0057",
+      "uid": "REQ-0058",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1731,11 +1822,8 @@
         "quote": "Multi-master clock synchronization: `scl_sync` detects a falling edge on the filtered SCL input while this master has released SCL high."
       },
       "spec_spans": [],
-      "text": "The controller shall detect a falling edge on the filtered SCL input while the controller has released SCL high.",
-      "ports": [
-        "scl_i",
-        "scl_oen"
-      ],
+      "text": "The bit-level controller shall detect a falling edge on the filtered SCL signal while the controller has released SCL high.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
@@ -1750,7 +1838,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0058",
+      "uid": "REQ-0059",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1766,14 +1854,16 @@
           "role": "supporting"
         }
       ],
-      "text": "A falling edge on the filtered SCL input while this controller has released SCL high indicates that another master has forced SCL low.",
-      "ports": [],
+      "text": "A falling edge on the filtered SCL line while this controller has released SCL high indicates that another master has forced SCL low.",
+      "ports": [
+        "scl_i"
+      ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0057"
+        "REQ-0058"
       ],
       "supportive": [
         "text",
@@ -1784,7 +1874,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0059",
+      "uid": "REQ-0060",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1800,14 +1890,17 @@
           "role": "supporting"
         }
       ],
-      "text": "When another master forces SCL low after the module has released SCL high, the module reloads its timing counter and restarts its low-period timing to synchronize with the shared bus clock.",
-      "ports": [],
+      "text": "When another master forces the filtered SCL line low while this master has released SCL, the module reloads its timing counter and restarts low-period timing to synchronize with the shared bus clock.",
+      "ports": [
+        "scl_i",
+        "scl_oen"
+      ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0058"
+        "REQ-0059"
       ],
       "supportive": [
         "text",
@@ -1818,7 +1911,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0060",
+      "uid": "REQ-0061",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1827,7 +1920,7 @@
         "quote": "5."
       },
       "spec_spans": [],
-      "text": "The specification labels the following item as item 5 and states no hardware requirement.",
+      "text": "List item 5 states no requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -1843,7 +1936,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0061",
+      "uid": "REQ-0062",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1852,7 +1945,7 @@
         "quote": "Input synchronization and filtering: Raw `scl_i` and `sda_i` are first captured into two-stage registers `cSCL` and `cSDA`."
       },
       "spec_spans": [],
-      "text": "The controller shall capture the raw scl_i and sda_i inputs into two-stage synchronization registers.",
+      "text": "The controller shall capture the external SCL input scl_i and SDA input sda_i into two-stage synchronization registers before further processing.",
       "ports": [
         "scl_i",
         "sda_i"
@@ -1871,7 +1964,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0062",
+      "uid": "REQ-0063",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1879,23 +1972,14 @@
         "end": 7018,
         "quote": "A filter counter then controls when samples are shifted into `fSCL` and `fSDA`."
       },
-      "spec_spans": [
-        {
-          "start": 6815,
-          "end": 6938,
-          "quote": "Input synchronization and filtering: Raw `scl_i` and `sda_i` are first captured into two-stage registers `cSCL` and `cSDA`.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The input filter counter controls when synchronized SCL and SDA samples are shifted into the fSCL and fSDA sample histories.",
+      "spec_spans": [],
+      "text": "The input filter counter shall control when synchronized SCL and SDA samples are shifted into the fSCL and fSDA sample histories.",
       "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0061"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -1905,7 +1989,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0063",
+      "uid": "REQ-0064",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -1921,45 +2005,8 @@
           "role": "supporting"
         }
       ],
-      "text": "The filtered SCL signal sSCL and filtered SDA signal sSDA shall be generated by applying a majority function to their respective three-sample histories.",
+      "text": "The filtered SCL signal sSCL and filtered SDA signal sSDA are generated using majority logic over their respective three-sample histories.",
       "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0062"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0064",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 7131,
-        "end": 7190,
-        "quote": "This reduces the effect of short glitches on the I2C lines."
-      },
-      "spec_spans": [
-        {
-          "start": 7019,
-          "end": 7130,
-          "quote": "The filtered outputs `sSCL` and `sSDA` are generated using a majority function over the three-sample histories.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The three-sample majority filtering of the SCL and SDA input lines reduces the effect of short glitches.",
-      "ports": [
-        "scl_i",
-        "sda_i"
-      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -1980,12 +2027,49 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
+        "start": 7131,
+        "end": 7190,
+        "quote": "This reduces the effect of short glitches on the I2C lines."
+      },
+      "spec_spans": [
+        {
+          "start": 7019,
+          "end": 7130,
+          "quote": "The filtered outputs `sSCL` and `sSDA` are generated using a majority function over the three-sample histories.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The SCL and SDA input filtering reduces the effect of short glitches on the I2C lines.",
+      "ports": [
+        "scl_i",
+        "sda_i"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0064"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0066",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
         "start": 7192,
         "end": 7194,
         "quote": "6."
       },
       "spec_spans": [],
-      "text": "Item 6 of the implementation details list states no requirement.",
+      "text": "List item 6 states no requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2001,7 +2085,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0066",
+      "uid": "REQ-0067",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2010,35 +2094,7 @@
         "quote": "START and STOP detection: A START condition is detected when filtered SDA falls while filtered SCL is high: `sta_condition = ~sSDA & dSDA & sSCL`."
       },
       "spec_spans": [],
-      "text": "The controller shall detect an I2C START condition when filtered SDA is low, delayed filtered SDA is high, and filtered SCL is high.",
-      "ports": [
-        "scl_i",
-        "sda_i"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0067",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 7342,
-        "end": 7460,
-        "quote": "A STOP condition is detected when filtered SDA rises while filtered SCL is high: `sto_condition = sSDA & ~dSDA & sSCL`"
-      },
-      "spec_spans": [],
-      "text": "The bit-level controller shall detect an I2C STOP condition when filtered SDA rises from low to high while filtered SCL is high, represented by sto_condition = sSDA & ~dSDA & sSCL.",
+      "text": "The controller shall detect an I2C START condition when filtered SDA falls while filtered SCL is high.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2058,39 +2114,13 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 7462,
-        "end": 7464,
-        "quote": "7."
+        "start": 7342,
+        "end": 7460,
+        "quote": "A STOP condition is detected when filtered SDA rises while filtered SCL is high: `sto_condition = sSDA & ~dSDA & sSCL`"
       },
       "spec_spans": [],
-      "text": "List item 7 states no requirement.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "scaffolding"
-    },
-    {
-      "uid": "REQ-0069",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 7465,
-        "end": 7593,
-        "quote": "Bus busy tracking: The `busy` flag is set when a START condition is detected and remains set until a STOP condition is detected."
-      },
-      "spec_spans": [],
-      "text": "The busy output shall be set when filtered SDA falls while filtered SCL is high and shall remain set until filtered SDA rises while filtered SCL is high.",
+      "text": "The controller shall detect an I2C STOP condition when the filtered SDA signal rises from low to high while the filtered SCL signal is high.",
       "ports": [
-        "busy",
         "scl_i",
         "sda_i"
       ],
@@ -2108,17 +2138,57 @@
       "unit_kind": "behavioural"
     },
     {
+      "uid": "REQ-0069",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 7462,
+        "end": 7593,
+        "quote": "7. Bus busy tracking: The `busy` flag is set when a START condition is detected and remains set until a STOP condition is detected."
+      },
+      "spec_spans": [
+        {
+          "start": 7342,
+          "end": 7460,
+          "quote": "A STOP condition is detected when filtered SDA rises while filtered SCL is high: `sto_condition = sSDA & ~dSDA & sSCL`",
+          "role": "supporting"
+        }
+      ],
+      "text": "The `busy` output shall be set when an I2C START condition is detected and shall remain set until an I2C STOP condition is detected.",
+      "ports": [
+        "busy"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0068"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
       "uid": "REQ-0070",
       "rev": 1,
       "kind": "function",
       "obligation": {
         "start": 7595,
-        "end": 7597,
-        "quote": "8."
+        "end": 7778,
+        "quote": "8. Arbitration-lost detection: The `al` flag is asserted in two cases:\n    - During SDA arbitration checking, the module expects SDA to be released high but observes filtered SDA low."
       },
       "spec_spans": [],
-      "text": "The unit contains only the list-item number 8 and states no requirement.",
-      "ports": [],
+      "text": "The controller shall assert al when SDA arbitration checking is active, SDA is released high, and the filtered SDA signal is observed low.",
+      "ports": [
+        "al",
+        "sda_i",
+        "sda_oen"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -2130,27 +2200,39 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "scaffolding"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0071",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 7598,
-        "end": 7778,
-        "quote": "Arbitration-lost detection: The `al` flag is asserted in two cases:\n    - During SDA arbitration checking, the module expects SDA to be released high but observes filtered SDA low."
+        "start": 7779,
+        "end": 7886,
+        "quote": "    - A STOP condition is detected while the FSM is active and the current command is not a requested STOP."
       },
-      "spec_spans": [],
-      "text": "The module shall assert al when SDA arbitration checking expects SDA to be released high but the filtered SDA line is observed low.",
+      "spec_spans": [
+        {
+          "start": 7595,
+          "end": 7778,
+          "quote": "8. Arbitration-lost detection: The `al` flag is asserted in two cases:\n    - During SDA arbitration checking, the module expects SDA to be released high but observes filtered SDA low.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The i2c_master_bit_ctrl module shall assert al when a STOP condition is detected while its command FSM is active and the current command is not a requested STOP command.",
       "ports": [
-        "al"
+        "al",
+        "cmd",
+        "scl_i",
+        "sda_i"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0070"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -2164,30 +2246,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 7779,
-        "end": 7886,
-        "quote": "    - A STOP condition is detected while the FSM is active and the current command is not a requested STOP."
+        "start": 7887,
+        "end": 7976,
+        "quote": "    When arbitration is lost, the main FSM returns to idle and releases both SCL and SDA."
       },
-      "spec_spans": [
-        {
-          "start": 7598,
-          "end": 7778,
-          "quote": "Arbitration-lost detection: The `al` flag is asserted in two cases:\n    - During SDA arbitration checking, the module expects SDA to be released high but observes filtered SDA low.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The i2c_master_bit_ctrl module shall assert al when a STOP condition is detected while the bit-level FSM is active and the current command is not STOP.",
+      "spec_spans": [],
+      "text": "When the I2C bit-level controller loses arbitration, its command FSM shall return to the idle state and it shall release both SCL and SDA by setting scl_oen and sda_oen high.",
       "ports": [
-        "al",
-        "cmd"
+        "scl_oen",
+        "sda_oen"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0071"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -2201,49 +2274,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 7887,
-        "end": 7976,
-        "quote": "    When arbitration is lost, the main FSM returns to idle and releases both SCL and SDA."
-      },
-      "spec_spans": [
-        {
-          "start": 7779,
-          "end": 7886,
-          "quote": "    - A STOP condition is detected while the FSM is active and the current command is not a requested STOP.",
-          "role": "supporting"
-        }
-      ],
-      "text": "When the I2C controller loses arbitration, the controller returns its main state machine to idle and releases both SCL and SDA by setting scl_oen and sda_oen high.",
-      "ports": [
-        "scl_oen",
-        "sda_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0072"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0074",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
         "start": 7978,
         "end": 7980,
         "quote": "9."
       },
       "spec_spans": [],
-      "text": "Item 9 states no hardware requirement.",
+      "text": "List-item marker 9 states no hardware obligation.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2259,7 +2295,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0075",
+      "uid": "REQ-0074",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2268,9 +2304,11 @@
         "quote": "Read data sampling: `dout` captures the filtered SDA value on the rising edge of the filtered SCL signal."
       },
       "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl controller shall capture the filtered SDA value into dout on each rising edge of the filtered SCL signal.",
+      "text": "The dout output captures the filtered SDA value on each rising edge of the filtered SCL signal.",
       "ports": [
-        "dout"
+        "dout",
+        "scl_i",
+        "sda_i"
       ],
       "needs": [
         "testplan",
@@ -2286,7 +2324,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0076",
+      "uid": "REQ-0075",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2302,7 +2340,7 @@
           "role": "supporting"
         }
       ],
-      "text": "The dout output allows the byte controller to collect received bits during READ operations.",
+      "text": "The dout output allows the byte-level controller to collect received data bits during READ operations.",
       "ports": [
         "dout"
       ],
@@ -2311,8 +2349,33 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0075"
+        "REQ-0074"
       ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0076",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 8169,
+        "end": 8234,
+        "quote": "10. Command FSM: The FSM advances only when `clk_en` is asserted."
+      },
+      "spec_spans": [],
+      "text": "The command FSM advances only when the internal clock-enable signal clk_en is asserted.",
+      "ports": [],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -2326,69 +2389,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8169,
-        "end": 8172,
-        "quote": "10."
-      },
-      "spec_spans": [],
-      "text": "The numbered list marker \"10.\" states no requirement.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "scaffolding"
-    },
-    {
-      "uid": "REQ-0078",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 8173,
-        "end": 8234,
-        "quote": "Command FSM: The FSM advances only when `clk_en` is asserted."
-      },
-      "spec_spans": [],
-      "text": "The command FSM advances only when the internal clk_en signal is asserted.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0079",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
         "start": 8235,
         "end": 8337,
         "quote": "In the idle state, it decodes `cmd` and enters the corresponding START, STOP, READ, or WRITE sequence."
       },
       "spec_spans": [
         {
-          "start": 8173,
+          "start": 8169,
           "end": 8234,
-          "quote": "Command FSM: The FSM advances only when `clk_en` is asserted.",
+          "quote": "10. Command FSM: The FSM advances only when `clk_en` is asserted.",
           "role": "supporting"
         }
       ],
-      "text": "When the bit-level command FSM is idle, it decodes the cmd input and enters the corresponding START, STOP, READ, or WRITE sequence.",
+      "text": "When the bit-level command controller is idle, the module decodes cmd and enters the corresponding START, STOP, READ, or WRITE sequence.",
       "ports": [
         "cmd"
       ],
@@ -2397,7 +2410,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0078"
+        "REQ-0076"
       ],
       "supportive": [
         "text",
@@ -2408,7 +2421,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0080",
+      "uid": "REQ-0078",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2424,7 +2437,7 @@
           "role": "supporting"
         }
       ],
-      "text": "Each START, STOP, READ, and WRITE command sequence shall drive scl_oen, sda_oen, and the internal sda_chk signal according to the required I2C timing phase.",
+      "text": "The bit-level command FSM drives scl_oen and sda_oen according to the required I2C timing phase during each command sequence.",
       "ports": [
         "scl_oen",
         "sda_oen"
@@ -2434,7 +2447,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0079"
+        "REQ-0077"
       ],
       "supportive": [
         "text",
@@ -2445,7 +2458,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0081",
+      "uid": "REQ-0079",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2453,15 +2466,8 @@
         "end": 8538,
         "quote": "At the end of a command sequence, the FSM returns to idle and pulses `cmd_ack` for one clock cycle."
       },
-      "spec_spans": [
-        {
-          "start": 8338,
-          "end": 8438,
-          "quote": "Each sequence drives `scl_oen`, `sda_oen`, and `sda_chk` according to the required I2C timing phase.",
-          "role": "supporting"
-        }
-      ],
-      "text": "When a command sequence ends, the command FSM returns to the idle state and asserts cmd_ack for one clk cycle.",
+      "spec_spans": [],
+      "text": "At the end of each bit-level command sequence, the command FSM returns to the idle state and asserts cmd_ack for exactly one clock cycle.",
       "ports": [
         "cmd_ack"
       ],
@@ -2469,9 +2475,61 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0080"
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
       ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0080",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 8540,
+        "end": 8543,
+        "quote": "11."
+      },
+      "spec_spans": [],
+      "text": "The specification labels the following item as item 11.",
+      "ports": [],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "scaffolding"
+    },
+    {
+      "uid": "REQ-0081",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 8544,
+        "end": 8729,
+        "quote": "START command behavior: The START sequence releases SDA and SCL, then pulls SDA low while SCL is high to create a valid I2C START condition. It then pulls SCL low and asserts `cmd_ack`."
+      },
+      "spec_spans": [],
+      "text": "During a START command, the controller releases SDA and SCL, pulls SDA low while SCL is high to create an I2C START condition, then pulls SCL low and asserts cmd_ack.",
+      "ports": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -2485,12 +2543,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8540,
-        "end": 8543,
-        "quote": "11."
+        "start": 8731,
+        "end": 8734,
+        "quote": "12."
       },
       "spec_spans": [],
-      "text": "List item 11 is a numbered list marker and states no requirement.",
+      "text": "The specification labels this item as item 12 and states no hardware requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2510,16 +2568,15 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8544,
-        "end": 8729,
-        "quote": "START command behavior: The START sequence releases SDA and SCL, then pulls SDA low while SCL is high to create a valid I2C START condition. It then pulls SCL low and asserts `cmd_ack`."
+        "start": 8735,
+        "end": 8889,
+        "quote": "STOP command behavior: The STOP sequence drives SDA low, releases SCL high, then releases SDA high while SCL is high to create a valid I2C STOP condition."
       },
       "spec_spans": [],
-      "text": "The START-command sequence shall release SDA and SCL, pull SDA low while SCL is high to create an I2C START condition, then pull SCL low and assert cmd_ack.",
+      "text": "The STOP command sequence shall drive SDA low, release SCL high, and then release SDA high while SCL is high to create a valid I2C STOP condition.",
       "ports": [
         "scl_oen",
-        "sda_oen",
-        "cmd_ack"
+        "sda_oen"
       ],
       "needs": [
         "testplan",
@@ -2539,41 +2596,50 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8731,
-        "end": 8734,
-        "quote": "12."
+        "start": 8890,
+        "end": 8916,
+        "quote": "It then asserts `cmd_ack`."
       },
-      "spec_spans": [],
-      "text": "List item 12 states no hardware obligation.",
-      "ports": [],
+      "spec_spans": [
+        {
+          "start": 8735,
+          "end": 8889,
+          "quote": "STOP command behavior: The STOP sequence drives SDA low, releases SCL high, then releases SDA high while SCL is high to create a valid I2C STOP condition.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The STOP command sequence asserts cmd_ack after driving SDA low, releasing SCL high, and releasing SDA high while SCL is high.",
+      "ports": [
+        "cmd_ack"
+      ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0083"
+      ],
       "supportive": [
         "text",
         "ports",
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "scaffolding"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0085",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8735,
-        "end": 8889,
-        "quote": "STOP command behavior: The STOP sequence drives SDA low, releases SCL high, then releases SDA high while SCL is high to create a valid I2C STOP condition."
+        "start": 8918,
+        "end": 9012,
+        "quote": "13. READ command behavior: The READ sequence releases SDA so the slave can drive the data bit."
       },
       "spec_spans": [],
-      "text": "The STOP command sequence drives SDA low, releases SCL high, releases SDA high while SCL is high to create a valid I2C STOP condition, and then asserts cmd_ack.",
+      "text": "During a READ command, the controller releases SDA so that the slave can drive the data bit.",
       "ports": [
-        "sda_oen",
-        "scl_oen",
-        "cmd_ack"
+        "sda_oen"
       ],
       "needs": [
         "testplan",
@@ -2593,21 +2659,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 8890,
-        "end": 8916,
-        "quote": "It then asserts `cmd_ack`."
+        "start": 9013,
+        "end": 9079,
+        "quote": "SCL is released high for the sample window, then driven low again."
       },
       "spec_spans": [
         {
-          "start": 8735,
-          "end": 8889,
-          "quote": "STOP command behavior: The STOP sequence drives SDA low, releases SCL high, then releases SDA high while SCL is high to create a valid I2C STOP condition.",
+          "start": 8918,
+          "end": 9012,
+          "quote": "13. READ command behavior: The READ sequence releases SDA so the slave can drive the data bit.",
           "role": "supporting"
         }
       ],
-      "text": "The STOP command sequence asserts cmd_ack.",
+      "text": "During a READ command, the controller releases SCL high for the sample window and then drives SCL low again.",
       "ports": [
-        "cmd_ack"
+        "scl_oen"
       ],
       "needs": [
         "testplan",
@@ -2626,94 +2692,6 @@
     },
     {
       "uid": "REQ-0087",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 8918,
-        "end": 8921,
-        "quote": "13."
-      },
-      "spec_spans": [],
-      "text": "Item 13 states no technical obligation.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "scaffolding"
-    },
-    {
-      "uid": "REQ-0088",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 8922,
-        "end": 9012,
-        "quote": "READ command behavior: The READ sequence releases SDA so the slave can drive the data bit."
-      },
-      "spec_spans": [],
-      "text": "During a READ command, the controller shall release SDA so that the slave can drive the data bit.",
-      "ports": [
-        "sda_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0089",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 9013,
-        "end": 9079,
-        "quote": "SCL is released high for the sample window, then driven low again."
-      },
-      "spec_spans": [
-        {
-          "start": 8922,
-          "end": 9012,
-          "quote": "READ command behavior: The READ sequence releases SDA so the slave can drive the data bit.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The READ command sequence shall release SCL by setting scl_oen high for the sample window and then drive SCL low by setting scl_oen low.",
-      "ports": [
-        "scl_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0088"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0090",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2740,7 +2718,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0091",
+      "uid": "REQ-0088",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2748,15 +2726,96 @@
         "end": 9193,
         "quote": "The command ends with `cmd_ack`."
       },
+      "spec_spans": [],
+      "text": "The READ command ends by asserting cmd_ack.",
+      "ports": [
+        "cmd_ack"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0089",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 9195,
+        "end": 9198,
+        "quote": "14."
+      },
+      "spec_spans": [],
+      "text": "Item 14 is a numbered list marker and states no requirement.",
+      "ports": [],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "scaffolding"
+    },
+    {
+      "uid": "REQ-0090",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 9199,
+        "end": 9371,
+        "quote": "WRITE command behavior: The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again."
+      },
+      "spec_spans": [],
+      "text": "During a WRITE command, the controller drives SDA low when din is 0 or releases SDA when din is 1, releases SCL high, enables SDA arbitration checking during the SCL-high phase, and then pulls SCL low.",
+      "ports": [
+        "din",
+        "sda_oen",
+        "scl_oen"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0091",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 9372,
+        "end": 9404,
+        "quote": "The command ends with `cmd_ack`."
+      },
       "spec_spans": [
         {
-          "start": 9080,
-          "end": 9160,
-          "quote": "The sampled value is captured into `dout` by the SCL rising-edge sampling logic.",
+          "start": 9199,
+          "end": 9371,
+          "quote": "WRITE command behavior: The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again.",
           "role": "supporting"
         }
       ],
-      "text": "The READ command ends by asserting cmd_ack.",
+      "text": "The WRITE command ends with cmd_ack.",
       "ports": [
         "cmd_ack"
       ],
@@ -2780,12 +2839,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 9195,
-        "end": 9198,
-        "quote": "14."
+        "start": 9406,
+        "end": 9409,
+        "quote": "15."
       },
       "spec_spans": [],
-      "text": "The specification contains the list item numbered 14.",
+      "text": "Item 15 is a numbered list marker and states no requirement.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2805,102 +2864,12 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 9199,
-        "end": 9371,
-        "quote": "WRITE command behavior: The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again."
-      },
-      "spec_spans": [],
-      "text": "The WRITE command sequence sets SDA according to din, releases SCL high, enables SDA arbitration checking during the SCL-high phase, and then pulls SCL low.",
-      "ports": [
-        "din",
-        "scl_oen",
-        "sda_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0094",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 9372,
-        "end": 9404,
-        "quote": "The command ends with `cmd_ack`."
-      },
-      "spec_spans": [
-        {
-          "start": 9199,
-          "end": 9371,
-          "quote": "WRITE command behavior: The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The WRITE command ends with cmd_ack asserted.",
-      "ports": [
-        "cmd_ack"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0093"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0095",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 9406,
-        "end": 9409,
-        "quote": "15."
-      },
-      "spec_spans": [],
-      "text": "The numbered list marker \"15.\" states no requirement.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "scaffolding"
-    },
-    {
-      "uid": "REQ-0096",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
         "start": 9410,
         "end": 9782,
         "quote": "Reset behavior: On asynchronous reset `nReset = 0`, the FSM returns to idle, output enables are released high, command acknowledge is cleared, arbitration lost is cleared, busy is cleared, counters and filters are reset, and filtered SCL/SDA are initialized high. On synchronous reset `rst = 1`, the same logical reset behavior is applied on the next rising edge of `clk`."
       },
       "spec_spans": [],
-      "text": "When nReset is low, the i2c_master_bit_ctrl module shall asynchronously return its FSM to idle, release scl_oen and sda_oen high, clear cmd_ack, al, and busy, reset its counters and filters, and initialize filtered SCL and SDA high, and when rst is high, the module shall apply the same reset behavior on the next rising edge of clk.",
+      "text": "When nReset is low, the i2c_master_bit_ctrl asynchronously returns its command FSM to idle, releases scl_oen and sda_oen high, clears cmd_ack, al, and busy, resets its counters and filters, and initializes filtered SCL and SDA high, while rst high applies the same reset behavior on the next rising edge of clk.",
       "ports": [
         "nReset",
         "rst",
@@ -2925,7 +2894,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0097",
+      "uid": "REQ-0094",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2934,7 +2903,7 @@
         "quote": "Processing Flow:"
       },
       "spec_spans": [],
-      "text": "The specification includes a processing-flow section.",
+      "text": "The specification identifies the following section as the processing flow of the i2c_master_bit_ctrl module.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2950,7 +2919,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0098",
+      "uid": "REQ-0095",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2959,7 +2928,7 @@
         "quote": "The processing flow of `i2c_master_bit_ctrl` starts with reset and initialization."
       },
       "spec_spans": [],
-      "text": "The processing flow of the i2c_master_bit_ctrl module starts with reset and initialization.",
+      "text": "The processing flow of i2c_master_bit_ctrl begins with reset and initialization.",
       "ports": [],
       "needs": [
         "testplan",
@@ -2975,7 +2944,7 @@
       "unit_kind": "scaffolding"
     },
     {
-      "uid": "REQ-0099",
+      "uid": "REQ-0096",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -2991,18 +2960,17 @@
           "role": "supporting"
         }
       ],
-      "text": "When the asynchronous active-low reset nReset is asserted or the synchronous active-high reset rst is asserted on a rising edge of clk, the i2c_master_bit_ctrl module shall return to its known idle state.",
+      "text": "When the asynchronous active-low reset nReset is asserted or the synchronous active-high reset rst is asserted on a clock edge, the i2c_master_bit_ctrl module returns to a known idle state.",
       "ports": [
         "nReset",
-        "rst",
-        "clk"
+        "rst"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0100"
+        "REQ-0097"
       ],
       "supportive": [
         "text",
@@ -3013,7 +2981,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0100",
+      "uid": "REQ-0097",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -3029,13 +2997,120 @@
           "role": "supporting"
         }
       ],
-      "text": "When asynchronous active-low nReset is asserted or synchronous active-high rst is asserted on a clock edge, the command FSM resets to idle, cmd_ack clears, scl_oen and sda_oen are released high, arbitration checking is disabled, status flags including busy and al are cleared, counters are reset or reloaded, and the filtered SCL and SDA signals are initialized high.",
+      "text": "When asynchronous active-low reset nReset is asserted or synchronous active-high reset rst is asserted on a rising edge of clk, i2c_master_bit_ctrl resets its command FSM to idle, clears cmd_ack, busy, and al, releases scl_oen and sda_oen high, disables arbitration checking, resets or reloads its counters, and initializes the filtered SCL and SDA signals high.",
       "ports": [
+        "rst",
+        "nReset",
+        "clk",
         "cmd_ack",
-        "scl_oen",
-        "sda_oen",
         "busy",
-        "al"
+        "al",
+        "scl_oen",
+        "sda_oen"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0096"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0098",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 10344,
+        "end": 10417,
+        "quote": "After reset, the module continuously samples the external I2C bus inputs."
+      },
+      "spec_spans": [
+        {
+          "start": 10066,
+          "end": 10342,
+          "quote": "The command FSM is reset to `idle`, `cmd_ack` is cleared, the SCL and SDA output enables are released high, arbitration checking is disabled, status flags are cleared, counters are reset or reloaded, and the filtered SCL/SDA signals are initialized to the idle-high bus state.",
+          "role": "supporting"
+        }
+      ],
+      "text": "After reset, the i2c_master_bit_ctrl continuously samples the external SCL and SDA bus inputs.",
+      "ports": [
+        "scl_i",
+        "sda_i"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0097"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0099",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 10418,
+        "end": 10544,
+        "quote": "The raw `scl_i` and `sda_i` signals are first captured into two-stage registers `cSCL` and `cSDA` on the rising edge of `clk`."
+      },
+      "spec_spans": [],
+      "text": "The controller shall capture the raw scl_i and sda_i signals into the two-stage cSCL and cSDA registers on each rising edge of clk.",
+      "ports": [
+        "clk",
+        "scl_i",
+        "sda_i"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0100",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 10545,
+        "end": 10653,
+        "quote": "This capture stage reduces metastability risk before the bus signals are used by the rest of the controller."
+      },
+      "spec_spans": [
+        {
+          "start": 10418,
+          "end": 10544,
+          "quote": "The raw `scl_i` and `sda_i` signals are first captured into two-stage registers `cSCL` and `cSDA` on the rising edge of `clk`.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The two-stage capture of scl_i and sda_i into cSCL and cSDA reduces metastability risk before the captured bus signals are used by the controller.",
+      "ports": [
+        "clk",
+        "scl_i",
+        "sda_i"
       ],
       "needs": [
         "testplan",
@@ -3057,12 +3132,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10344,
-        "end": 10417,
-        "quote": "After reset, the module continuously samples the external I2C bus inputs."
+        "start": 10655,
+        "end": 10743,
+        "quote": "The captured SCL and SDA values are then passed through a digital input filtering stage."
       },
-      "spec_spans": [],
-      "text": "After reset, the i2c_master_bit_ctrl module continuously samples the external I2C bus inputs scl_i and sda_i.",
+      "spec_spans": [
+        {
+          "start": 10545,
+          "end": 10653,
+          "quote": "This capture stage reduces metastability risk before the bus signals are used by the rest of the controller.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The captured scl_i and sda_i signals are passed through a digital input filtering stage.",
       "ports": [
         "scl_i",
         "sda_i"
@@ -3071,7 +3153,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0100"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -3085,22 +3169,29 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10418,
-        "end": 10544,
-        "quote": "The raw `scl_i` and `sda_i` signals are first captured into two-stage registers `cSCL` and `cSDA` on the rising edge of `clk`."
+        "start": 10744,
+        "end": 10945,
+        "quote": "A filter counter, `filter_cnt`, derives its sampling interval from `clk_cnt >> 2`. Whenever this counter expires, new synchronized samples are shifted into the three-sample histories `fSCL` and `fSDA`."
       },
-      "spec_spans": [],
-      "text": "On each rising edge of clk, the module captures the raw scl_i and sda_i signals into two-stage synchronization registers.",
+      "spec_spans": [
+        {
+          "start": 10655,
+          "end": 10743,
+          "quote": "The captured SCL and SDA values are then passed through a digital input filtering stage.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The input filter counter shall derive its sampling interval from clk_cnt >> 2 and, whenever the interval expires, shift the synchronized SCL and SDA samples into the three-sample fSCL and fSDA histories.",
       "ports": [
-        "clk",
-        "scl_i",
-        "sda_i"
+        "clk_cnt"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0101"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -3114,24 +3205,20 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10545,
-        "end": 10653,
-        "quote": "This capture stage reduces metastability risk before the bus signals are used by the rest of the controller."
+        "start": 10946,
+        "end": 11056,
+        "quote": "The module then computes the filtered bus signals `sSCL` and `sSDA` using majority logic over these histories."
       },
       "spec_spans": [
         {
-          "start": 10418,
-          "end": 10544,
-          "quote": "The raw `scl_i` and `sda_i` signals are first captured into two-stage registers `cSCL` and `cSDA` on the rising edge of `clk`.",
+          "start": 10744,
+          "end": 10945,
+          "quote": "A filter counter, `filter_cnt`, derives its sampling interval from `clk_cnt >> 2`. Whenever this counter expires, new synchronized samples are shifted into the three-sample histories `fSCL` and `fSDA`.",
           "role": "supporting"
         }
       ],
-      "text": "The two-stage capture of scl_i and sda_i reduces metastability risk before the controller uses the captured bus signals.",
-      "ports": [
-        "clk",
-        "scl_i",
-        "sda_i"
-      ],
+      "text": "The module shall compute the filtered SCL signal and filtered SDA signal using majority logic over their respective three-sample histories.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
@@ -3152,23 +3239,20 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10655,
-        "end": 10743,
-        "quote": "The captured SCL and SDA values are then passed through a digital input filtering stage."
+        "start": 11057,
+        "end": 11153,
+        "quote": "These filtered signals are treated as the stable internal versions of the I2C SCL and SDA lines."
       },
       "spec_spans": [
         {
-          "start": 10545,
-          "end": 10653,
-          "quote": "This capture stage reduces metastability risk before the bus signals are used by the rest of the controller.",
+          "start": 10946,
+          "end": 11056,
+          "quote": "The module then computes the filtered bus signals `sSCL` and `sSDA` using majority logic over these histories.",
           "role": "supporting"
         }
       ],
-      "text": "The controller passes captured SCL and SDA input values through a digital input filtering stage.",
-      "ports": [
-        "scl_i",
-        "sda_i"
-      ],
+      "text": "The controller treats the majority-filtered SCL and SDA signals as the stable internal versions of the I2C SCL and SDA lines.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
@@ -3189,20 +3273,27 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10744,
-        "end": 10826,
-        "quote": "A filter counter, `filter_cnt`, derives its sampling interval from `clk_cnt >> 2`."
+        "start": 11155,
+        "end": 11247,
+        "quote": "The module also maintains delayed versions of the filtered bus signals in `dSCL` and `dSDA`."
       },
-      "spec_spans": [],
-      "text": "The internal filter counter derives its sampling interval from the value of clk_cnt shifted right by two bits.",
-      "ports": [
-        "clk_cnt"
+      "spec_spans": [
+        {
+          "start": 11057,
+          "end": 11153,
+          "quote": "These filtered signals are treated as the stable internal versions of the I2C SCL and SDA lines.",
+          "role": "supporting"
+        }
       ],
+      "text": "The i2c_master_bit_ctrl module maintains delayed versions of the filtered SCL and SDA bus signals in dSCL and dSDA.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0104"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -3216,19 +3307,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10827,
-        "end": 10945,
-        "quote": "Whenever this counter expires, new synchronized samples are shifted into the three-sample histories `fSCL` and `fSDA`."
+        "start": 11248,
+        "end": 11365,
+        "quote": "By comparing the current filtered values against the delayed values, the controller detects important I2C bus events."
       },
       "spec_spans": [
         {
-          "start": 10744,
-          "end": 10826,
-          "quote": "A filter counter, `filter_cnt`, derives its sampling interval from `clk_cnt >> 2`.",
+          "start": 11155,
+          "end": 11247,
+          "quote": "The module also maintains delayed versions of the filtered bus signals in `dSCL` and `dSDA`.",
           "role": "supporting"
         }
       ],
-      "text": "The module shifts new synchronized SCL and SDA samples into the three-sample histories fSCL and fSDA whenever the filter counter expires.",
+      "text": "The controller compares the current filtered SCL and SDA signals with their delayed versions to detect I2C bus events.",
       "ports": [],
       "needs": [
         "testplan",
@@ -3250,27 +3341,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 10946,
-        "end": 11056,
-        "quote": "The module then computes the filtered bus signals `sSCL` and `sSDA` using majority logic over these histories."
+        "start": 11366,
+        "end": 11452,
+        "quote": "A START condition is detected when SDA transitions from high to low while SCL is high."
       },
-      "spec_spans": [
-        {
-          "start": 10827,
-          "end": 10945,
-          "quote": "Whenever this counter expires, new synchronized samples are shifted into the three-sample histories `fSCL` and `fSDA`.",
-          "role": "supporting"
-        }
+      "spec_spans": [],
+      "text": "The controller shall detect an I2C START condition when the filtered SDA signal transitions from high to low while the filtered SCL signal is high.",
+      "ports": [
+        "scl_i",
+        "sda_i"
       ],
-      "text": "The module shall compute the filtered SCL signal sSCL and filtered SDA signal sSDA using majority logic over their respective three-sample histories.",
-      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0106"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -3284,27 +3369,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11057,
-        "end": 11153,
-        "quote": "These filtered signals are treated as the stable internal versions of the I2C SCL and SDA lines."
+        "start": 11453,
+        "end": 11538,
+        "quote": "A STOP condition is detected when SDA transitions from low to high while SCL is high."
       },
-      "spec_spans": [
-        {
-          "start": 10946,
-          "end": 11056,
-          "quote": "The module then computes the filtered bus signals `sSCL` and `sSDA` using majority logic over these histories.",
-          "role": "supporting"
-        }
+      "spec_spans": [],
+      "text": "The bit-level controller shall detect a STOP condition when the filtered SDA signal transitions from low to high while the filtered SCL signal is high.",
+      "ports": [
+        "scl_i",
+        "sda_i"
       ],
-      "text": "The filtered SCL signal sSCL and filtered SDA signal sSDA shall serve as the stable internal versions of the I2C SCL and SDA lines.",
-      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0107"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -3318,20 +3397,22 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11155,
-        "end": 11247,
-        "quote": "The module also maintains delayed versions of the filtered bus signals in `dSCL` and `dSDA`."
+        "start": 11539,
+        "end": 11633,
+        "quote": "Based on these detected conditions, the `busy` flag is set after START and cleared after STOP."
       },
       "spec_spans": [
         {
-          "start": 11057,
-          "end": 11153,
-          "quote": "These filtered signals are treated as the stable internal versions of the I2C SCL and SDA lines.",
+          "start": 11453,
+          "end": 11538,
+          "quote": "A STOP condition is detected when SDA transitions from low to high while SCL is high.",
           "role": "supporting"
         }
       ],
-      "text": "The module maintains delayed versions of the filtered SCL and SDA bus signals in dSCL and dSDA.",
-      "ports": [],
+      "text": "The busy output flag is set when an I2C START condition is detected and cleared when an I2C STOP condition is detected.",
+      "ports": [
+        "busy"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -3352,27 +3433,18 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11248,
-        "end": 11365,
-        "quote": "By comparing the current filtered values against the delayed values, the controller detects important I2C bus events."
+        "start": 11635,
+        "end": 11749,
+        "quote": "In parallel with bus-status detection, the module handles clock stretching and multi-master clock synchronization."
       },
-      "spec_spans": [
-        {
-          "start": 11155,
-          "end": 11247,
-          "quote": "The module also maintains delayed versions of the filtered bus signals in `dSCL` and `dSDA`.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The I2C controller detects bus events by comparing the current filtered SCL and SDA values with their delayed filtered values.",
+      "spec_spans": [],
+      "text": "The i2c_master_bit_ctrl module handles clock stretching and multi-master clock synchronization in parallel with bus-status detection.",
       "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0109"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -3386,15 +3458,14 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11366,
-        "end": 11452,
-        "quote": "A START condition is detected when SDA transitions from high to low while SCL is high."
+        "start": 11750,
+        "end": 11884,
+        "quote": "If the controller releases SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low, the module asserts `slave_wait`."
       },
       "spec_spans": [],
-      "text": "The controller shall detect an I2C START condition when filtered SDA transitions from high to low while filtered SCL is high.",
+      "text": "The controller shall assert slave_wait when scl_oen releases SCL high while the filtered SCL input remains low.",
       "ports": [
-        "scl_i",
-        "sda_i"
+        "scl_oen"
       ],
       "needs": [
         "testplan",
@@ -3414,50 +3485,54 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11453,
-        "end": 11538,
-        "quote": "A STOP condition is detected when SDA transitions from low to high while SCL is high."
+        "start": 11885,
+        "end": 11959,
+        "quote": "This indicates that a slave or another bus participant is holding SCL low."
       },
-      "spec_spans": [],
-      "text": "The controller detects a STOP condition when filtered SDA transitions from low to high while filtered SCL is high.",
-      "ports": [
-        "scl_i",
-        "sda_i"
+      "spec_spans": [
+        {
+          "start": 11750,
+          "end": 11884,
+          "quote": "If the controller releases SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low, the module asserts `slave_wait`.",
+          "role": "supporting"
+        }
       ],
+      "text": "The slave_wait indication means that a slave or another bus participant is holding SCL low.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0111"
+      ],
       "supportive": [
         "text",
         "ports",
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "behavioural"
+      "unit_kind": "scaffolding"
     },
     {
       "uid": "REQ-0113",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11539,
-        "end": 11633,
-        "quote": "Based on these detected conditions, the `busy` flag is set after START and cleared after STOP."
+        "start": 11960,
+        "end": 12058,
+        "quote": "While `slave_wait` is active, the timing counter is paused and the bit-level FSM does not advance."
       },
       "spec_spans": [
         {
-          "start": 11453,
-          "end": 11538,
-          "quote": "A STOP condition is detected when SDA transitions from low to high while SCL is high.",
+          "start": 11885,
+          "end": 11959,
+          "quote": "This indicates that a slave or another bus participant is holding SCL low.",
           "role": "supporting"
         }
       ],
-      "text": "The busy flag is set after an I2C START condition and cleared after an I2C STOP condition.",
-      "ports": [
-        "busy"
-      ],
+      "text": "The bit-level controller shall pause its timing counter and prevent its bit-level command FSM from advancing while slave_wait is active because a slave or another bus participant is holding SCL low.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
@@ -3478,13 +3553,16 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11635,
-        "end": 11749,
-        "quote": "In parallel with bus-status detection, the module handles clock stretching and multi-master clock synchronization."
+        "start": 12059,
+        "end": 12251,
+        "quote": "If SCL falls externally while this master has released it high, the module asserts `scl_sync`, reloads the timing counter, and synchronizes its local low-period timing to the shared bus clock."
       },
       "spec_spans": [],
-      "text": "The module handles clock stretching and multi-master clock synchronization in parallel with bus-status detection.",
-      "ports": [],
+      "text": "When the filtered SCL input falls while the master has released SCL through scl_oen, the controller reloads its timing counter and synchronizes its low-period timing to the shared bus clock.",
+      "ports": [
+        "scl_i",
+        "scl_oen"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -3496,23 +3574,20 @@
         "unit_kind",
         "supports"
       ],
-      "unit_kind": "scaffolding"
+      "unit_kind": "behavioural"
     },
     {
       "uid": "REQ-0115",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11750,
-        "end": 11884,
-        "quote": "If the controller releases SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low, the module asserts `slave_wait`."
+        "start": 12253,
+        "end": 12313,
+        "quote": "Bit-level timing is generated by the internal counter `cnt`."
       },
       "spec_spans": [],
-      "text": "The controller shall assert slave_wait when scl_oen releases SCL high while the filtered SCL input remains low.",
-      "ports": [
-        "scl_oen",
-        "scl_i"
-      ],
+      "text": "The internal counter cnt generates bit-level timing for the controller.",
+      "ports": [],
       "needs": [
         "testplan",
         "refmodel"
@@ -3531,20 +3606,22 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11885,
-        "end": 11959,
-        "quote": "This indicates that a slave or another bus participant is holding SCL low."
+        "start": 12314,
+        "end": 12407,
+        "quote": "This counter is loaded from the prescale input `clk_cnt` and decremented on each clock cycle."
       },
       "spec_spans": [
         {
-          "start": 11750,
-          "end": 11884,
-          "quote": "If the controller releases SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low, the module asserts `slave_wait`.",
+          "start": 12253,
+          "end": 12313,
+          "quote": "Bit-level timing is generated by the internal counter `cnt`.",
           "role": "supporting"
         }
       ],
-      "text": "An asserted slave_wait signal indicates that a slave or another bus participant is holding SCL low.",
-      "ports": [],
+      "text": "The internal timing counter cnt is loaded from the prescale input clk_cnt and decremented on each clock cycle.",
+      "ports": [
+        "clk_cnt"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -3565,19 +3642,19 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 11960,
-        "end": 12058,
-        "quote": "While `slave_wait` is active, the timing counter is paused and the bit-level FSM does not advance."
+        "start": 12408,
+        "end": 12515,
+        "quote": "When the counter expires, the module asserts `clk_en`, which acts as the timing enable for the command FSM."
       },
       "spec_spans": [
         {
-          "start": 11885,
-          "end": 11959,
-          "quote": "This indicates that a slave or another bus participant is holding SCL low.",
+          "start": 12314,
+          "end": 12407,
+          "quote": "This counter is loaded from the prescale input `clk_cnt` and decremented on each clock cycle.",
           "role": "supporting"
         }
       ],
-      "text": "While the i2c_master_bit_ctrl slave_wait condition is active, the timing counter shall remain paused and the bit-level command FSM shall not advance.",
+      "text": "When the internal timing counter expires, the module asserts clk_en as the timing enable for the command FSM.",
       "ports": [],
       "needs": [
         "testplan",
@@ -3599,15 +3676,84 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12059,
-        "end": 12251,
-        "quote": "If SCL falls externally while this master has released it high, the module asserts `scl_sync`, reloads the timing counter, and synchronizes its local low-period timing to the shared bus clock."
+        "start": 12516,
+        "end": 12593,
+        "quote": "The FSM only advances to the next bit-timing phase when `clk_en` is asserted."
+      },
+      "spec_spans": [
+        {
+          "start": 12408,
+          "end": 12515,
+          "quote": "When the counter expires, the module asserts `clk_en`, which acts as the timing enable for the command FSM.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The command FSM advances to the next bit-timing phase only when the internal clk_en timing-enable signal is asserted.",
+      "ports": [],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0117"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0119",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 12594,
+        "end": 12697,
+        "quote": "If the core is disabled through `ena`, the counter is reloaded and normal FSM timing does not progress."
+      },
+      "spec_spans": [
+        {
+          "start": 12516,
+          "end": 12593,
+          "quote": "The FSM only advances to the next bit-timing phase when `clk_en` is asserted.",
+          "role": "supporting"
+        }
+      ],
+      "text": "When ena is low, the internal timing counter is reloaded and normal bit-level FSM timing does not progress.",
+      "ports": [
+        "ena"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0118"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0120",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 12699,
+        "end": 12757,
+        "quote": "Arbitration checking is performed during write operations."
       },
       "spec_spans": [],
-      "text": "When the i2c_master_bit_ctrl module has released SCL high and the external SCL line falls, the module shall synchronize its local low-period timing to the shared bus clock by asserting its internal scl_sync indication and reloading its timing counter.",
+      "text": "The bit-level controller performs arbitration checking during write operations.",
       "ports": [
-        "scl_i",
-        "scl_oen"
+        "cmd"
       ],
       "needs": [
         "testplan",
@@ -3623,102 +3769,22 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0119",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 12253,
-        "end": 12313,
-        "quote": "Bit-level timing is generated by the internal counter `cnt`."
-      },
-      "spec_spans": [
-        {
-          "start": 12314,
-          "end": 12407,
-          "quote": "This counter is loaded from the prescale input `clk_cnt` and decremented on each clock cycle.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The module generates bit-level timing using its internal counter cnt.",
-      "ports": [],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0120"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0120",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 12314,
-        "end": 12407,
-        "quote": "This counter is loaded from the prescale input `clk_cnt` and decremented on each clock cycle."
-      },
-      "spec_spans": [
-        {
-          "start": 12253,
-          "end": 12313,
-          "quote": "Bit-level timing is generated by the internal counter `cnt`.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The internal timing counter cnt shall be loaded from the clk_cnt prescale input and decremented on each clock cycle.",
-      "ports": [
-        "clk_cnt",
-        "clk"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0119"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
       "uid": "REQ-0121",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12408,
-        "end": 12515,
-        "quote": "When the counter expires, the module asserts `clk_en`, which acts as the timing enable for the command FSM."
+        "start": 12758,
+        "end": 12838,
+        "quote": "When the FSM reaches the stable high phase of a WRITE bit, it asserts `sda_chk`."
       },
-      "spec_spans": [
-        {
-          "start": 12314,
-          "end": 12407,
-          "quote": "This counter is loaded from the prescale input `clk_cnt` and decremented on each clock cycle.",
-          "role": "supporting"
-        }
-      ],
-      "text": "The internal signal clk_en is asserted when the internal timing counter expires and serves as the timing enable for the command FSM.",
+      "spec_spans": [],
+      "text": "During the stable high phase of a WRITE bit, the bit-level controller asserts its internal SDA arbitration-check signal sda_chk.",
       "ports": [],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0120"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -3732,20 +3798,24 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12516,
-        "end": 12593,
-        "quote": "The FSM only advances to the next bit-timing phase when `clk_en` is asserted."
+        "start": 12839,
+        "end": 12983,
+        "quote": "If the controller expects SDA to be released high but the filtered SDA input is observed low, the module asserts the arbitration-lost flag `al`."
       },
       "spec_spans": [
         {
-          "start": 12408,
-          "end": 12515,
-          "quote": "When the counter expires, the module asserts `clk_en`, which acts as the timing enable for the command FSM.",
+          "start": 12758,
+          "end": 12838,
+          "quote": "When the FSM reaches the stable high phase of a WRITE bit, it asserts `sda_chk`.",
           "role": "supporting"
         }
       ],
-      "text": "The bit-level command FSM advances to its next timing phase only when the internal clk_en timing-enable signal is asserted.",
-      "ports": [],
+      "text": "The i2c_master_bit_ctrl module shall assert the arbitration-lost output al when it expects SDA to be released high but observes the filtered SDA input low.",
+      "ports": [
+        "al",
+        "sda_i",
+        "sda_oen"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -3766,14 +3836,15 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12594,
-        "end": 12697,
-        "quote": "If the core is disabled through `ena`, the counter is reloaded and normal FSM timing does not progress."
+        "start": 12984,
+        "end": 13134,
+        "quote": "The module also treats an unexpected STOP condition during an active command as arbitration lost, unless the current command is itself a STOP command."
       },
       "spec_spans": [],
-      "text": "When ena is low, the controller reloads its timing counter and prevents normal bit-level FSM timing from progressing.",
+      "text": "The module shall assert al when an unexpected I2C STOP condition occurs during an active command, except when the current command is a STOP command.",
       "ports": [
-        "ena"
+        "al",
+        "cmd"
       ],
       "needs": [
         "testplan",
@@ -3793,14 +3864,15 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12699,
-        "end": 12757,
-        "quote": "Arbitration checking is performed during write operations."
+        "start": 13135,
+        "end": 13217,
+        "quote": "When arbitration is lost, the FSM returns to `idle` and releases both SCL and SDA."
       },
       "spec_spans": [],
-      "text": "The bit-level controller performs arbitration checking during WRITE operations selected by the cmd input.",
+      "text": "When arbitration is lost, the bit-level command FSM returns to the idle state and releases both SCL and SDA by deasserting scl_oen and sda_oen.",
       "ports": [
-        "cmd"
+        "scl_oen",
+        "sda_oen"
       ],
       "needs": [
         "testplan",
@@ -3820,13 +3892,16 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12758,
-        "end": 12838,
-        "quote": "When the FSM reaches the stable high phase of a WRITE bit, it asserts `sda_chk`."
+        "start": 13219,
+        "end": 13278,
+        "quote": "Read data sampling is performed from the filtered SDA line."
       },
       "spec_spans": [],
-      "text": "The bit-level controller asserts its internal SDA arbitration-check enable during the stable high phase of a WRITE bit.",
-      "ports": [],
+      "text": "The controller performs read-data sampling from the filtered SDA signal.",
+      "ports": [
+        "dout",
+        "sda_i"
+      ],
       "needs": [
         "testplan",
         "refmodel"
@@ -3845,15 +3920,14 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12839,
-        "end": 12983,
-        "quote": "If the controller expects SDA to be released high but the filtered SDA input is observed low, the module asserts the arbitration-lost flag `al`."
+        "start": 13279,
+        "end": 13386,
+        "quote": "Whenever the filtered SCL signal has a rising edge, the module captures the filtered SDA value into `dout`."
       },
       "spec_spans": [],
-      "text": "The module shall assert the arbitration-lost output al when the controller expects SDA to be released high but the filtered SDA input is observed low.",
+      "text": "The module shall capture the filtered SDA value into dout whenever the filtered SCL signal has a rising edge.",
       "ports": [
-        "sda_i",
-        "al"
+        "dout"
       ],
       "needs": [
         "testplan",
@@ -3873,23 +3947,29 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 12984,
-        "end": 13134,
-        "quote": "The module also treats an unexpected STOP condition during an active command as arbitration lost, unless the current command is itself a STOP command."
+        "start": 13387,
+        "end": 13490,
+        "quote": "During READ operations, this sampled bit is used by the byte-level controller as the received data bit."
       },
-      "spec_spans": [],
-      "text": "The module shall assert the arbitration-lost flag al when a STOP condition occurs during an active command whose current command is not STOP.",
+      "spec_spans": [
+        {
+          "start": 13279,
+          "end": 13386,
+          "quote": "Whenever the filtered SCL signal has a rising edge, the module captures the filtered SDA value into `dout`.",
+          "role": "supporting"
+        }
+      ],
+      "text": "During READ operations, the filtered SDA bit captured in dout on each filtered SCL rising edge is provided to the byte-level controller as the received data bit.",
       "ports": [
-        "al",
-        "cmd",
-        "scl_i",
-        "sda_i"
+        "dout"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0126"
+      ],
       "supportive": [
         "text",
         "ports",
@@ -3903,12 +3983,120 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 13135,
-        "end": 13217,
-        "quote": "When arbitration is lost, the FSM returns to `idle` and releases both SCL and SDA."
+        "start": 13492,
+        "end": 13609,
+        "quote": "The command FSM remains in the `idle` state until a valid command is received and `clk_en` allows the FSM to advance."
+      },
+      "spec_spans": [
+        {
+          "start": 13610,
+          "end": 13701,
+          "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The command FSM remains in the idle state until the cmd input contains a valid command and the internal clk_en timing-enable signal allows the FSM to advance.",
+      "ports": [
+        "cmd"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0129"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0129",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 13610,
+        "end": 13701,
+        "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation."
+      },
+      "spec_spans": [
+        {
+          "start": 13492,
+          "end": 13609,
+          "quote": "The command FSM remains in the `idle` state until a valid command is received and `clk_en` allows the FSM to advance.",
+          "role": "supporting"
+        }
+      ],
+      "text": "When the i2c_master_bit_ctrl command FSM is idle, it decodes the cmd input as a START, STOP, READ, WRITE, or no-operation command.",
+      "ports": [
+        "cmd"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0128"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0130",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 13702,
+        "end": 13840,
+        "quote": "A recognized command moves the FSM into the corresponding command sequence, while an unsupported or idle command leaves the FSM in `idle`."
+      },
+      "spec_spans": [
+        {
+          "start": 13610,
+          "end": 13701,
+          "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The bit-level command FSM must enter the corresponding command sequence when the cmd input contains a recognized command and must remain in the idle state when cmd contains an unsupported or idle command.",
+      "ports": [
+        "cmd"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0129"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0131",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 13842,
+        "end": 13980,
+        "quote": "For a START command, the FSM releases SDA and SCL as needed, then pulls SDA low while SCL is high to generate a valid I2C START condition."
       },
       "spec_spans": [],
-      "text": "When the bit-level controller loses arbitration, its command FSM shall return to the idle state and it shall release SCL and SDA by setting scl_oen and sda_oen high.",
+      "text": "During a START command, the bit-level controller releases SDA and SCL as required and then pulls SDA low while SCL is high to generate an I2C START condition.",
       "ports": [
         "scl_oen",
         "sda_oen"
@@ -3927,125 +4115,33 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0129",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 13219,
-        "end": 13278,
-        "quote": "Read data sampling is performed from the filtered SDA line."
-      },
-      "spec_spans": [],
-      "text": "The controller performs read-data sampling from the filtered SDA signal.",
-      "ports": [
-        "sda_i",
-        "dout"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0130",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 13279,
-        "end": 13386,
-        "quote": "Whenever the filtered SCL signal has a rising edge, the module captures the filtered SDA value into `dout`."
-      },
-      "spec_spans": [],
-      "text": "The module shall capture the filtered SDA value into dout on every rising edge of the filtered SCL signal.",
-      "ports": [
-        "scl_i",
-        "sda_i",
-        "dout"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0131",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 13387,
-        "end": 13490,
-        "quote": "During READ operations, this sampled bit is used by the byte-level controller as the received data bit."
-      },
-      "spec_spans": [
-        {
-          "start": 13279,
-          "end": 13386,
-          "quote": "Whenever the filtered SCL signal has a rising edge, the module captures the filtered SDA value into `dout`.",
-          "role": "supporting"
-        }
-      ],
-      "text": "During READ operations, the sampled SDA bit in dout is provided to the byte-level controller as the received data bit.",
-      "ports": [
-        "dout"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0130"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
       "uid": "REQ-0132",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 13492,
-        "end": 13609,
-        "quote": "The command FSM remains in the `idle` state until a valid command is received and `clk_en` allows the FSM to advance."
+        "start": 13981,
+        "end": 14103,
+        "quote": "After that, it pulls SCL low, returns to `idle`, and asserts `cmd_ack` for one clock cycle to indicate command completion."
       },
       "spec_spans": [
         {
-          "start": 13610,
-          "end": 13701,
-          "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation.",
+          "start": 13842,
+          "end": 13980,
+          "quote": "For a START command, the FSM releases SDA and SCL as needed, then pulls SDA low while SCL is high to generate a valid I2C START condition.",
           "role": "supporting"
         }
       ],
-      "text": "The command FSM shall remain in the idle state until a valid command is received and the clock-enable condition permits the FSM to advance.",
+      "text": "After generating a START condition, the controller pulls SCL low, returns the command FSM to the idle state, and asserts cmd_ack for one clock cycle.",
       "ports": [
-        "cmd"
+        "scl_oen",
+        "cmd_ack"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
       "supports": [
-        "REQ-0133"
+        "REQ-0131"
       ],
       "supportive": [
         "text",
@@ -4060,29 +4156,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 13610,
-        "end": 13701,
-        "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation."
+        "start": 14105,
+        "end": 14266,
+        "quote": "For a STOP command, the FSM first ensures SDA is low, then releases SCL high. Once SCL is high, the FSM releases SDA high to generate a valid I2C STOP condition."
       },
-      "spec_spans": [
-        {
-          "start": 13492,
-          "end": 13609,
-          "quote": "The command FSM remains in the `idle` state until a valid command is received and `clk_en` allows the FSM to advance.",
-          "role": "supporting"
-        }
-      ],
-      "text": "When the bit-level command FSM is in its idle state, the module decodes the cmd input as a START, STOP, READ, WRITE, or no-operation command.",
+      "spec_spans": [],
+      "text": "During a STOP command, the bit-level controller drives SDA low, releases SCL high, and then releases SDA high while SCL is high to generate a valid I2C STOP condition.",
       "ports": [
-        "cmd"
+        "scl_oen",
+        "sda_oen"
       ],
       "needs": [
         "testplan",
         "refmodel"
       ],
-      "supports": [
-        "REQ-0132"
-      ],
+      "supports": [],
       "supportive": [
         "text",
         "ports",
@@ -4096,21 +4184,21 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 13702,
-        "end": 13840,
-        "quote": "A recognized command moves the FSM into the corresponding command sequence, while an unsupported or idle command leaves the FSM in `idle`."
+        "start": 14267,
+        "end": 14319,
+        "quote": "The FSM then returns to `idle` and pulses `cmd_ack`."
       },
       "spec_spans": [
         {
-          "start": 13610,
-          "end": 13701,
-          "quote": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation.",
+          "start": 14105,
+          "end": 14266,
+          "quote": "For a STOP command, the FSM first ensures SDA is low, then releases SCL high. Once SCL is high, the FSM releases SDA high to generate a valid I2C STOP condition.",
           "role": "supporting"
         }
       ],
-      "text": "The bit-level command FSM shall enter the corresponding command sequence when cmd is a recognized command and shall remain in idle when cmd is unsupported or idle.",
+      "text": "After completing a STOP command, the bit-level controller's FSM returns to the idle state and pulses cmd_ack.",
       "ports": [
-        "cmd"
+        "cmd_ack"
       ],
       "needs": [
         "testplan",
@@ -4132,17 +4220,14 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 13842,
-        "end": 14103,
-        "quote": "For a START command, the FSM releases SDA and SCL as needed, then pulls SDA low while SCL is high to generate a valid I2C START condition. After that, it pulls SCL low, returns to `idle`, and asserts `cmd_ack` for one clock cycle to indicate command completion."
+        "start": 14321,
+        "end": 14407,
+        "quote": "For a READ command, the FSM releases SDA so the external slave can drive the data bit."
       },
       "spec_spans": [],
-      "text": "For a START command, the bit-level controller releases SDA and SCL, pulls SDA low while SCL is high to generate an I2C START condition, then pulls SCL low and asserts cmd_ack for one clock cycle.",
+      "text": "During a READ command, the bit-level controller shall release SDA so that the external slave can drive the data bit.",
       "ports": [
-        "cmd",
-        "scl_oen",
-        "sda_oen",
-        "cmd_ack"
+        "sda_oen"
       ],
       "needs": [
         "testplan",
@@ -4162,15 +4247,52 @@
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 14105,
-        "end": 14182,
-        "quote": "For a STOP command, the FSM first ensures SDA is low, then releases SCL high."
+        "start": 14408,
+        "end": 14475,
+        "quote": "It releases SCL high for the read window, then pulls SCL low again."
+      },
+      "spec_spans": [
+        {
+          "start": 14321,
+          "end": 14407,
+          "quote": "For a READ command, the FSM releases SDA so the external slave can drive the data bit.",
+          "role": "supporting"
+        }
+      ],
+      "text": "During a READ command, the controller releases SCL high for the read window and then drives SCL low.",
+      "ports": [
+        "scl_oen"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ],
+      "supports": [
+        "REQ-0135"
+      ],
+      "supportive": [
+        "text",
+        "ports",
+        "unit_kind",
+        "supports"
+      ],
+      "unit_kind": "behavioural"
+    },
+    {
+      "uid": "REQ-0137",
+      "rev": 1,
+      "kind": "function",
+      "obligation": {
+        "start": 14476,
+        "end": 14567,
+        "quote": "The actual SDA value is captured separately into `dout` on the rising edge of filtered SCL."
       },
       "spec_spans": [],
-      "text": "During a STOP command, the FSM shall first drive SDA low and then release SCL high.",
+      "text": "The controller shall capture the filtered SDA value in dout on each rising edge of the filtered SCL signal.",
       "ports": [
-        "sda_oen",
-        "scl_oen"
+        "sda_i",
+        "scl_i",
+        "dout"
       ],
       "needs": [
         "testplan",
@@ -4186,59 +4308,23 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0137",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 14183,
-        "end": 14266,
-        "quote": "Once SCL is high, the FSM releases SDA high to generate a valid I2C STOP condition."
-      },
-      "spec_spans": [
-        {
-          "start": 14105,
-          "end": 14182,
-          "quote": "For a STOP command, the FSM first ensures SDA is low, then releases SCL high.",
-          "role": "supporting"
-        }
-      ],
-      "text": "During a STOP command, the FSM shall release SDA high once SCL is high to generate a valid I2C STOP condition.",
-      "ports": [
-        "sda_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0136"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
       "uid": "REQ-0138",
       "rev": 1,
       "kind": "function",
       "obligation": {
-        "start": 14267,
-        "end": 14319,
-        "quote": "The FSM then returns to `idle` and pulses `cmd_ack`."
+        "start": 14568,
+        "end": 14652,
+        "quote": "After the read bit cycle completes, the FSM returns to `idle` and asserts `cmd_ack`."
       },
       "spec_spans": [
         {
-          "start": 14183,
-          "end": 14266,
-          "quote": "Once SCL is high, the FSM releases SDA high to generate a valid I2C STOP condition.",
+          "start": 14476,
+          "end": 14567,
+          "quote": "The actual SDA value is captured separately into `dout` on the rising edge of filtered SCL.",
           "role": "supporting"
         }
       ],
-      "text": "After completing the STOP condition, the bit-level command FSM returns to idle and pulses cmd_ack.",
+      "text": "After the READ bit cycle completes, the FSM returns to the idle state and asserts cmd_ack.",
       "ports": [
         "cmd_ack"
       ],
@@ -4259,132 +4345,6 @@
     },
     {
       "uid": "REQ-0139",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 14321,
-        "end": 14407,
-        "quote": "For a READ command, the FSM releases SDA so the external slave can drive the data bit."
-      },
-      "spec_spans": [],
-      "text": "During a READ command, i2c_master_bit_ctrl releases SDA so the external slave can drive the data bit.",
-      "ports": [
-        "sda_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0140",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 14408,
-        "end": 14475,
-        "quote": "It releases SCL high for the read window, then pulls SCL low again."
-      },
-      "spec_spans": [
-        {
-          "start": 14321,
-          "end": 14407,
-          "quote": "For a READ command, the FSM releases SDA so the external slave can drive the data bit.",
-          "role": "supporting"
-        }
-      ],
-      "text": "During a READ command, the FSM releases SCL high for the read window and then drives SCL low again.",
-      "ports": [
-        "scl_oen"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0139"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0141",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 14476,
-        "end": 14567,
-        "quote": "The actual SDA value is captured separately into `dout` on the rising edge of filtered SCL."
-      },
-      "spec_spans": [],
-      "text": "The module shall capture the filtered SDA value into dout on each rising edge of the filtered SCL signal.",
-      "ports": [
-        "dout"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0142",
-      "rev": 1,
-      "kind": "function",
-      "obligation": {
-        "start": 14568,
-        "end": 14652,
-        "quote": "After the read bit cycle completes, the FSM returns to `idle` and asserts `cmd_ack`."
-      },
-      "spec_spans": [
-        {
-          "start": 14476,
-          "end": 14567,
-          "quote": "The actual SDA value is captured separately into `dout` on the rising edge of filtered SCL.",
-          "role": "supporting"
-        }
-      ],
-      "text": "After the READ bit cycle completes, the bit-level controller's FSM returns to the idle state and asserts cmd_ack.",
-      "ports": [
-        "cmd_ack"
-      ],
-      "needs": [
-        "testplan",
-        "refmodel"
-      ],
-      "supports": [
-        "REQ-0141"
-      ],
-      "supportive": [
-        "text",
-        "ports",
-        "unit_kind",
-        "supports"
-      ],
-      "unit_kind": "behavioural"
-    },
-    {
-      "uid": "REQ-0143",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4410,7 +4370,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0144"
+        "REQ-0140"
       ],
       "supportive": [
         "text",
@@ -4421,7 +4381,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0144",
+      "uid": "REQ-0140",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4430,7 +4390,7 @@
         "quote": "Because SDA uses active-low open-drain output enable semantics, `din = 0` causes SDA to be driven low, while `din = 1` releases SDA high."
       },
       "spec_spans": [],
-      "text": "During a WRITE operation, din = 0 causes sda_oen to drive SDA low, while din = 1 causes sda_oen to release SDA high.",
+      "text": "During a WRITE operation, din = 0 causes sda_oen to drive SDA low, while din = 1 causes sda_oen to release SDA so it is pulled high.",
       "ports": [
         "din",
         "sda_oen"
@@ -4449,7 +4409,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0145",
+      "uid": "REQ-0141",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4475,7 +4435,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0144"
+        "REQ-0140"
       ],
       "supportive": [
         "text",
@@ -4486,7 +4446,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0146",
+      "uid": "REQ-0142",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4502,7 +4462,7 @@
           "role": "supporting"
         }
       ],
-      "text": "During all command sequences, the module uses open-drain behavior for its SCL and SDA outputs.",
+      "text": "The module uses open-drain output behavior throughout all command sequences.",
       "ports": [
         "scl_o",
         "sda_o",
@@ -4514,7 +4474,7 @@
         "refmodel"
       ],
       "supports": [
-        "REQ-0147"
+        "REQ-0143"
       ],
       "supportive": [
         "text",
@@ -4525,7 +4485,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0147",
+      "uid": "REQ-0143",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4534,7 +4494,7 @@
         "quote": "The `scl_o` and `sda_o` outputs are constant low drive values, while `scl_oen` and `sda_oen` control whether the lines are actively pulled low or released."
       },
       "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module drives scl_o and sda_o constantly low while scl_oen and sda_oen control whether the corresponding I2C lines are pulled low or released.",
+      "text": "The module shall drive the scl_o and sda_o outputs constantly low while using scl_oen and sda_oen to control whether the corresponding I2C lines are actively pulled low or released.",
       "ports": [
         "scl_o",
         "sda_o",
@@ -4555,7 +4515,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0148",
+      "uid": "REQ-0144",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4583,7 +4543,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0149",
+      "uid": "REQ-0145",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4592,7 +4552,7 @@
         "quote": "When an output enable is high, the line is released and the external pull-up resistor brings it high."
       },
       "spec_spans": [],
-      "text": "When scl_oen or sda_oen is high, the corresponding SCL or SDA line is released and is brought high by the external pull-up resistor.",
+      "text": "When scl_oen or sda_oen is high, the corresponding SCL or SDA line is released and driven high by the external pull-up resistor.",
       "ports": [
         "scl_oen",
         "sda_oen"
@@ -4611,7 +4571,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0150",
+      "uid": "REQ-0146",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4620,7 +4580,7 @@
         "quote": "At the end of every START, STOP, READ, or WRITE sequence, `cmd_ack` is asserted for exactly one `clk` cycle."
       },
       "spec_spans": [],
-      "text": "The i2c_master_bit_ctrl module shall assert cmd_ack for exactly one clk cycle at the end of every START, STOP, READ, or WRITE sequence.",
+      "text": "The bit-level controller shall assert cmd_ack for exactly one clk cycle at the end of every START, STOP, READ, or WRITE sequence.",
       "ports": [
         "cmd_ack",
         "clk"
@@ -4639,7 +4599,7 @@
       "unit_kind": "behavioural"
     },
     {
-      "uid": "REQ-0151",
+      "uid": "REQ-0147",
       "rev": 1,
       "kind": "function",
       "obligation": {
@@ -4647,8 +4607,15 @@
         "end": 15713,
         "quote": "This acknowledge pulse allows the byte-level controller to determine that the current bit-level operation has completed and that the next bit command can be issued."
       },
-      "spec_spans": [],
-      "text": "The one-cycle cmd_ack pulse indicates that the current bit-level operation has completed and allows the byte-level controller to issue the next bit command.",
+      "spec_spans": [
+        {
+          "start": 15440,
+          "end": 15548,
+          "quote": "At the end of every START, STOP, READ, or WRITE sequence, `cmd_ack` is asserted for exactly one `clk` cycle.",
+          "role": "supporting"
+        }
+      ],
+      "text": "The one-cycle cmd_ack pulse indicates to the byte-level controller that the current bit-level operation has completed and that the next bit command can be issued.",
       "ports": [
         "cmd_ack"
       ],
@@ -4656,7 +4623,9 @@
         "testplan",
         "refmodel"
       ],
-      "supports": [],
+      "supports": [
+        "REQ-0146"
+      ],
       "supportive": [
         "text",
         "ports",
