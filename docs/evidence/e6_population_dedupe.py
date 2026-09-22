@@ -9,7 +9,8 @@ away from it -- even when it separates every DISTINCT reading cleanly.
 opinion five times"). This replays one run with one design PER CLUSTER and
 recomputes the cells, the refuted set and the achievable blindness.
 """
-import json, sys
+import json
+import sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/Veri-Sure")
 from specflow import oracles_stage as OS
