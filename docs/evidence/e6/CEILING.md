@@ -90,12 +90,36 @@ On run 3, four checks convict it and they are one kind:
     REQ-0044 [interface]   "...driving sda_oen low drives the SDA line low."
     REQ-0045 [interface]   "When sda_oen is 1, the SDA line is released..."
 
-These describe OPEN-DRAIN BUS SEMANTICS -- what happens to the external I2C
-line, which is not a module output and depends on pull-ups and other masters.
-The control is right to fail them; the checks over-claim. Only REQ-0005 is
-classified behavioural, which is why audit reads 1 and not 4.
+### CORRECTION: that was the wrong diagnosis, and reading the bodies says so
 
-That is the same defect the RTL editor's floor is made of: checks written for
-text that states no obligation at the module boundary. Remove that class and
-audit goes to 0 WITHOUT the refutation preference, which would leave blindness
-at 1.4-5.3%. That -- not selection -- is the remaining work.
+The paragraph that stood here read the requirement TEXT and concluded these
+describe open-drain bus semantics -- the external I2C line, not a module
+output -- so "the control is right to fail them; the checks over-claim". Then
+the bodies were read, and three of the four assert **only on real module
+outputs**. REQ-0044's, verbatim:
+
+    windows = after(trace, lambda r: r['outputs'].get('sda_oen') == 0,
+                    until=WHILE_ACTIVE)
+    worst([throughout(w, lambda r: r['outputs'].get('sda_oen') == 0)
+           for w in windows])
+
+That asserts the window's OWN defining condition. It cannot be wrong about any
+design -- and it failed 168 of 168. The defect was in `throughout`, not in the
+check: `after` appends a row and then tests it for the close, so `Window.rows`
+ends on the first row at which the window has ALREADY ended, and every
+invariant operator read `rows`. See `BOUNDARY.md`.
+
+With that fixed, on the same corpus and the same choice map:
+
+    preference OFF   before        after
+                     REQ-0005 [behavioural]     --
+                     REQ-0044 [interface]       --
+                     REQ-0042 [interface]   REQ-0042 [interface]
+                     REQ-0045 [interface]   REQ-0045 [interface]
+
+**The one behavioural conviction was a boundary artifact.** The survivors are
+`interface` units, which span and audit do not count. So the "remaining work"
+this file named -- a class of checks written for text that states no obligation
+at the module boundary -- was mostly an operator bug wearing that costume, and
+the remedy proposed here (removing the class) would have been a fix aimed at a
+symptom.
