@@ -164,3 +164,56 @@ check is wrong -- only that it asserts a timing the specification did not
 state. The honest disposition is an objection that buys a repair round, which
 is what the author needs to decide between "state the timing" and "tolerate
 either reading".
+
+
+---
+
+# A global probe advance removes all ten convictions, and proves nothing
+
+Reading golden's probes one edge EARLY -- every probe taking its next row's
+value, the inverse of `delay_probes` -- removes every conviction:
+
+    req        as recorded   probes advanced one edge
+    REQ-0034   CONVICTS      abstains
+    REQ-0035   CONVICTS      abstains
+    REQ-0053   CONVICTS      spares
+    REQ-0055   CONVICTS      spares
+    REQ-0058   CONVICTS      spares
+    REQ-0066   CONVICTS      abstains
+    REQ-0067   CONVICTS      abstains
+    REQ-0110   CONVICTS      abstains
+    REQ-0111   CONVICTS      abstains
+    REQ-0112   CONVICTS      abstains
+
+**SEVEN OF THE TEN ABSTAIN RATHER THAN SPARE, AND AN ABSTENTION IS NOT A
+VINDICATION.** It removes the conviction from the numerator and the check from
+the denominator at once. A check that stops deciding has not been shown to
+agree with the design; it has been shown to have lost its activation, which is
+what shifting twenty-four probes at once does.
+
+So this does NOT validate "a phase field in the probe contract would make six
+checks pass". It shows only that all ten convictions are sensitive to a uniform
+probe shift -- consistent with phase being broadly implicated, and far too
+blunt to attribute a cause. The intervention that would validate the fix shifts
+ONE probe, the one the specification's equation defines, and leaves the rest
+alone.
+
+## The `slave_wait` extent finding survives a confound check
+
+REQ-0053 and REQ-0055 SPARING under the global advance raised the worry that
+the extent measurement in RESIDUE.md was phase-confounded: it compares
+`scl_oen`, an OUTPUT that the shift does not touch, against `sscl`, a PROBE
+that it does. If golden's probes sat one edge behind its outputs, that
+comparison was misaligned.
+
+They do not, and it was not:
+
+                 advanced 0                  advanced 1
+      GOLDEN     254 asserted / 1696 not     272 / 1722    (13% -> 14%)
+      CANDIDATE  997 asserted /  101 not    1015 /   82    (91% -> 93%)
+
+One edge of shift moves golden from 13% to 14% and the candidate from 91% to
+93%. The gap is not phase. **Golden really does assert `slave_wait` on a
+narrower condition than the sentence's literal reading**, and REQ-0053 and
+REQ-0055 sparing under the global advance is a side effect of shifting the
+several other probes they read, not evidence about `slave_wait`.
