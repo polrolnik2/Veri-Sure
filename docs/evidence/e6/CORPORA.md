@@ -33,6 +33,10 @@ run recorded -- plus a sha256 of every file.
     full2    i2c_master_bit_ctrl   24 probes  7, all distinct   122 of 616 bodies
     full7    i2c_master_bit_ctrl   24 probes  7, all distinct   123 of 587 bodies
 
+    corpus   span     blindness   audit (digest-verified golden)
+    full2    0.9737   0.1454      16/45 = 0.3556   baseline
+                      0.1416       6/43 = 0.1395   under TRIPLE.md's two rules
+
 **"24 probes" IS NOT "THE SAME 24 PROBES."** `full7` declares
 `read_sample_window` and `write_stable_high_phase` where `full2` declares
 `filter_cnt_expired` and `filtered_scl_rise`. That is the `o1`..`o3` failure at
@@ -49,17 +53,70 @@ and it is sound: all seven of `full2`'s population members declare exactly its
 
     python3 docs/evidence/e6_verify_corpus.py <corpus-dir> [<golden-suite-dir>]
 
-Checks every file against its digest, cross-checks the probes, then re-scores.
-With a golden suite directory the audit column comes from an RTL control
-instead of the Python transliteration, which is the difference between a
-denominator of 14 checks and one of 37.
+Checks every file against its digest, cross-checks the probes, checks that the
+golden suite was DRIVEN BY THIS CORPUS'S STIMULUS, then re-scores. Span and
+blindness need no suite at all -- both are Python replays of the packed
+population. The audit column needs one.
+
+**IT WAS USED IN ANGER THE DAY AFTER IT WAS WRITTEN.** The container was
+reclaimed again, `/home/user/runs` went with it, and `full2` re-scored from its
+tarball in a cold container at span 0.9737 and blindness 0.1454 -- unchanged.
+That is the whole reason for the 792 KB.
 
 **A DIFFERENCE FROM THE RECORDED FIGURES IS EXPECTED AND IS NOT A FAILURE.**
 The recorded numbers were computed by the code of their day. `full2` re-scores
-today at span 0.9737 (unchanged), blindness 0.1454 against a recorded 0.1464 --
-the boundary fix -- and audit 0.2432 over 37 checks against a recorded 0.0000
-over 14. A re-score measures today's code against a frozen corpus, which is
-what freezing one is for.
+today at span 0.9737 (unchanged) and blindness 0.1454 against a recorded 0.1464
+-- the boundary fix. Audit is a bigger story; see below.
+
+### The gate that refuses a foreign suite
+
+`decide_rtl` looks a trace up by `tp_uid`, and every i2c run there has ever
+been mints `TP-0069` while regenerating the stimulus behind it. So scoring one
+run's checks against another run's traces does not fail -- the lookup succeeds
+and answers a different question. `stimulus_digest` over a corpus's own
+`stimulus_steps` reproduces the digest its traces carry, 482 of 482, so this is
+checkable offline, and the verifier checks it BEFORE printing an audit column
+and exits 1 rather than printing one it cannot stand behind.
+
+Negative control: `full7`'s corpus against `full2`'s golden suite. 442 traces
+share a `tp_uid`, **437 of them were driven by different stimulus**, and 40
+testpoints in the suite `full7` does not name at all. Refused.
+
+**This is not hypothetical -- it happened.** `rtl_trace.check_stimulus` has been
+in the tree all along and `decide_rtl` raises on a mismatch, but only when the
+caller passes `stimulus_by_tp`, and eighteen drivers under `docs/evidence/`
+never did. The audit figures this branch published were measured against a suite
+whose provenance was never asked; on a digest-verified control they are five
+times larger. `TRIPLE.md` carries the correction and the withdrawal.
+
+## Re-earning the audit column
+
+    python3 docs/evidence/e6_replay_corpus.py <corpus-dir> <rtl.v> <out-dir> \
+        [--toplevel NAME] [--include DIR] [--unwired] [--no-probes]
+
+Regenerates the suite from the packed testplan, stimulus, coverage model and
+contract, then runs an RTL through it. **This is the test of the claim that
+justifies leaving `suite/` out of a corpus**, and it passes: 482 testcases
+rendered, golden elaborates, 482 traces written, 16 of the 24 declared probes
+bound -- exactly the eight golden does not expose.
+
+It has to supply two switches the corpus could not record, because
+`integration.py`'s own `render_suite` call passes neither, and measuring which
+of them matters is how the first draft of that file got corrected:
+
+    trace_internals   NOTHING. It gates the `dut_internal` debug columns; the
+                      probe values `decide_rtl` reads live in `"dut"`, which
+                      `Env.finish` writes unconditionally. `--no-probes`
+                      re-scores identically.
+    bus_lines         TWO CONVICTIONS. Unwired, the stimulus drives `scl_i`,
+                      the DUT drives `scl_oen` and nothing connects them:
+                      14/45 unwired against 16/45 wired. Derived here from the
+                      contract by `bus_lines_from`, which is what it should
+                      always have been.
+
+`--include` is for a design that ``\`include``s a header -- the OpenCores i2c
+will not elaborate without `i2c_master_defines.v`, and a build error reads
+exactly like a defect in the design. A header is a library, not an oracle.
 
 ## Running the pipeline unattended
 
@@ -124,6 +181,7 @@ Three things to settle first, none of them technical:
   * **Private or public.** `private=True` above is the safe default and a
     deliberate one.
   * **What the card claims.** A dataset card that reports span / blindness /
-    audit without saying that audit is measured over 37 of 111 checks, and why,
-    would repeat in public the exact misreading this branch spent a session
-    correcting. `TRIPLE.md` and `PROBE-TRADE.md` are the text it should carry.
+    audit without saying that audit is measured over 45 of 111 checks, against
+    which control, and under whose stimulus, would repeat in public the exact
+    misreading this branch has now had to correct twice. `TRIPLE.md`,
+    `RESIDUE.md` and `PROBE-TRADE.md` are the text it should carry.

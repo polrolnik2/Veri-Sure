@@ -936,3 +936,79 @@ def test_an_unclosed_window_has_no_boundary_to_drop():
     w = after(_p(1, 0, 0, 0), _low, until=TO_END)[0]
     assert not w.closed
     assert [r["edge"] for r in w.extent] == [1, 2, 3]
+
+
+def _last_row_window():
+    """A window opening on the FINAL row of the trace, read with `|=>`.
+
+    `a` rises only at the last row, so `after(..., until=TO_END)` yields one
+    window whose `rows` is that row alone, `closed` False, and whose `body` --
+    what `after_activation=True` reads -- is EMPTY.
+    """
+    w = after(_t3((0, 0, 0, 0), (2, 0, 0, 0), (4, 1, 0, 0)), _a, until=TO_END)[0]
+    assert w.rows and not w.body and not w.closed
+    return w
+
+
+def test_a_strong_existential_over_ZERO_ROWS_abstains_rather_than_convicting():
+    """**A VERDICT OVER AN EMPTY EVIDENCE SET CANNOT BE A VIOLATION**, and four
+    operators returned one.
+
+    The invariant family already refuses here, in its own words: `throughout`,
+    `stable`, `never` and `pulse` answer "had no rows to hold over ... so
+    nothing was checked" and return UNKNOWN. `nexttime` says "nothing follows
+    the activation; the trace ends there". Four existentials did not --
+    `eventually`, `until`, `nth` and `sequence`, which are exactly
+    `_TAKES_STRONG` -- and convicted on zero observations.
+
+    This is not "the trace was short" as a matter of degree, which `strong` is
+    deliberately allowed to convict on; it is ZERO rows read. No reading of any
+    specification licenses a conviction from no samples, so the fix needs no
+    design, no population and no reference -- it is the module's own established
+    rule applied to the operators that missed it.
+
+    MEASURED: REQ-0061 convicts golden i2c on TP-0000 exactly here. Its window
+    opens at edge 28 of a 29-edge trace and `after_activation=True` leaves it
+    nothing to look at, and the verdict read "the obligation was never
+    discharged".
+    """
+    w = _last_row_window()
+    for name, call in (
+            ("eventually", lambda: eventually(w, _b, strong=True, after_activation=True)),
+            ("until", lambda: until(w, _b, _c, strong=True, after_activation=True)),
+            ("nth", lambda: nth(w, _b, 1, strong=True, after_activation=True)),
+            ("sequence", lambda: sequence(w, _b, _c, strong=True, after_activation=True)),
+    ):
+        ok, _, detail = call()
+        assert ok is None, f"{name} convicted on zero rows: {detail}"
+
+
+def test_the_invariant_family_ALREADY_abstains_over_zero_rows():
+    """The anchor the fix above is derived from, pinned so it cannot drift.
+
+    If one of these ever starts answering True or False over an empty read set,
+    the argument for the existential fix ("the module's own rule") stops being
+    true, and that must fail here rather than be discovered from a triple.
+    """
+    w = _last_row_window()
+    for name, call in (
+            ("throughout", lambda: throughout(w, _b, after_activation=True)),
+            ("stable", lambda: stable(w, "b", after_activation=True)),
+            ("never", lambda: never(w, _b, after_activation=True)),
+            ("pulse", lambda: pulse(w, "b", after_activation=True)),
+            ("nexttime", lambda: nexttime(w, _b, after_activation=True)),
+    ):
+        ok, _, detail = call()
+        assert ok is None, f"{name} answered {ok} over zero rows: {detail}"
+
+
+def test_a_strong_existential_over_ONE_ROW_still_convicts():
+    """**THE FIX MUST NOT BLANKET-ABSTAIN.** `strong=True` exists so that a
+    liveness claim can be violated at all -- "5 of 14 abstaining checks
+    abstained for exactly this reason" is why. One row of evidence is evidence,
+    so the same window read with `|->` rather than `|=>` still convicts.
+    """
+    w = _last_row_window()
+    assert w.rows and not w.body
+    ok, _, _ = eventually(w, _b, strong=True, after_activation=False)
+    assert ok is False

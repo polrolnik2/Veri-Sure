@@ -35,7 +35,7 @@ what turned the list below from documentation into work.
 Each was verified by running the operator, not by reading it. Pins live in
 `tests/test_temporal.py` under "SVA soundness fixes".
 
-### U1 · An empty row set returned `True` from `throughout` and `never`
+### U1 · An empty row set answered at all — `True` from the invariants, `False` from the existentials
 
 `after_activation=True` on a one-row window leaves `w.body` empty. `throughout`
 and `never` fell through their loops and returned `True`; `stable` already
@@ -44,7 +44,24 @@ returned `None`, and `eventually` returned `False`.
 An invariant that held over zero rows did not hold. This was a **vacuous pass in
 the module written to remove vacuous passes**, reachable by 39 of 110 oracles.
 
-**Now:** all four return `None` with a detail saying "no rows".
+**Then:** all four invariant operators returned `None` with a detail saying
+"no rows".
+
+**AND THE OTHER HALF OF THE SAME SENTENCE WENT UNFIXED FOR A MONTH.** "`and
+eventually` returned `False`" is recorded above as context and was left standing,
+so the module refused to call zero rows a pass and was content to call it a
+violation. A verdict over zero observations is neither.
+
+`eventually`, `until` and `sequence` -- hence `nth`, which delegates -- now
+return `None` from `_nothing_read` when the rows they read are empty, which is
+the same answer `pulse` and `nexttime` were already giving ("had no rows to pulse
+in", "nothing follows the activation; the trace ends there"). **This is not a
+retreat from `strong`**, whose whole purpose is that a liveness claim must be
+violable: that power is over a window that HAS rows and does not contain the
+response, and a one-row test pins that it still convicts there.
+
+Measured: REQ-0061 convicted golden i2c on TP-0000 from a window opening at edge
+28 of a 29-edge trace, with nothing after it to read.
 
 ### U2 · `pulse` counted a run that was already active
 

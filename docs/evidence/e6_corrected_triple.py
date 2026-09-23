@@ -85,7 +85,16 @@ def run(label, tr, keep):
                               clause=x.get("clause", ""), source=x["source"])
             for x in keep]
     v: dict = {}
-    for r in decide_rtl(held, tr, contract, transactional=True):
+    #: **`stimulus_by_tp` ARMS `decide_rtl`'s OWN REFUSAL, AND OMITTING IT COST
+    #: THIS FILE A HEADLINE.** The guard has been in `rtl_trace` all along and
+    #: is opt-in: without it, scoring one run's oracles against another run's
+    #: traces "succeeds, folds cleanly, and produces a conviction rate about a
+    #: scenario the oracles were never written for". Eighteen drivers under
+    #: `docs/evidence/` called `decide_rtl` and not one passed it, which is how
+    #: `audit 1/35 = 0.0286` was published against a suite whose provenance was
+    #: never checked. The honest figure on a digest-verified control is 6/43.
+    for r in decide_rtl(held, tr, contract, transactional=True,
+                        stimulus_by_tp=by_tp):
         if not r.broken and r.ok is not None:
             v.setdefault(r.req_uid, {})[r.tp_uid] = bool(r.ok)
     c = score(oracles=keep, normalized=normalized, stimulus_by_tp=by_tp,
@@ -96,7 +105,7 @@ def run(label, tr, keep):
           f"BLIND {c.blindness:.4f} {m(c.blindness < 0.20)}  "
           f"AUDIT {c.control_convicted_by}/{c.control_judges} "
           f"= {c.audit:.4f} {m(c.audit == 0)}", flush=True)
-    return c
+    return c, v
 
 
 fixed = [corrected(x) for x in oracles]
@@ -108,4 +117,17 @@ EQ = ("sta_condition", "sto_condition")
 run("baseline", traces, oracles)
 run("phase only", advance(traces, EQ), oracles)
 run("licence rule only", traces, fixed)
-run("both", advance(traces, EQ), fixed)
+_card, verdicts = run("both", advance(traces, EQ), fixed)
+
+#: **THE SCORECARD'S COUNT AND THE ENUMERATION DISAGREE, DELIBERATELY.**
+#: `score` counts only `unit_kind == "behavioural"` requirements, so a
+#: `scaffolding` check that convicts the control is a conviction the audit
+#: column does not report. Both are right about what they measure, and
+#: "n convictions left" is the wrong sentence unless it says which n.
+kind_of = {r["uid"]: str(r.get("unit_kind") or "?") for r in requirements}
+left = sorted(u for u, d in verdicts.items() if not all(d.values()))
+print(f"\nremaining convictions, enumerated directly: {len(left)}")
+for u in left:
+    where = sorted(t for t, ok in verdicts[u].items() if not ok)
+    print(f"  {u} [{kind_of.get(u, '?')}] on {len(where)} testpoint(s): "
+          f"{' '.join(where[:4])}{' ...' if len(where) > 4 else ''}")

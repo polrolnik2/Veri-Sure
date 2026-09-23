@@ -248,3 +248,100 @@ artifacts by a driver, because the gateway is budget-exhausted and neither the
 oracle stage nor the probe stage can be re-run to produce checks written this
 way from the start. `e6_corrected_triple.py` reproduces it with zero model
 calls.
+
+
+---
+
+# CORRECTION: every audit figure above was measured against a suite whose stimulus was never digest-checked
+
+The container was reclaimed again between sessions. `/home/user/runs` is gone --
+the fifth such loss on this branch -- and with it `recheck_run`, whose golden
+suite produced every audit figure above. The two committed corpora survived,
+which is what they were committed for, and `full2` re-scores from its tarball
+in a cold container at span 0.9737 / blindness 0.1454 unchanged.
+
+So the audit column had to be re-earned by running golden again. Doing that
+properly is what exposed the defect.
+
+## The guard existed. It is opt-in. Eighteen drivers never opted in.
+
+`rtl_trace.check_stimulus` has been in the tree all along, and `decide_rtl`
+RAISES on a mismatch -- but only when the caller passes `stimulus_by_tp`. Its
+own docstring:
+
+    THE FAILURE THIS EXISTS FOR IS SILENT. [...] scoring one run's oracles
+    against a trace set rendered from a different run's stimulus succeeds,
+    folds cleanly, and produces a conviction rate about a scenario the oracles
+    were never written for. It cost a full analysis to find, and it left no
+    evidence at all in the verdicts it produced.
+
+Eighteen drivers under `docs/evidence/` call `decide_rtl`. **Not one passed
+`stimulus_by_tp`.** The section above states "the stimulus is identical, 482
+testpoints" -- a COUNT, which is the same wrong test as the containment check
+already retracted for `o1`..`o3` one section up. `full2`'s corpus digest-matches
+its own regenerated suite 482 of 482; the figures above came from a suite that
+was never asked.
+
+## The triple, re-measured on a digest-verified control
+
+`e6_replay_corpus.py` regenerates the suite from the corpus -- which is the
+`CORPORA.md` claim that `suite/` need not be packed, now tested -- and runs
+golden through it. `e6_verify_corpus.py` refuses to print an audit column
+unless every trace's `stimulus_digest` matches the corpus's own stimulus, and
+both drivers now pass `stimulus_by_tp` so the library's refusal is armed too.
+
+    configuration          span            blindness       audit  (was)
+    baseline               0.9737 MET      0.1454 MET      16/45 = 0.3556  (9/37  = 0.2432)
+    phase only             0.9737 MET      0.1454 MET       7/43 = 0.1628  (2/35  = 0.0571)
+    licence rule only      0.9737 MET      0.1416 MET      15/45 = 0.3333  (8/37  = 0.2162)
+    **both**               0.9737 MET      0.1416 MET     **6/43 = 0.1395**  (1/35 = 0.0286)
+
+**`1/35 = 0.0286` IS WITHDRAWN.** The honest figure for both rules on a
+digest-verified control is **6 of 43 = 0.1395**, five times larger.
+
+What reproduces is the rules' RELATIVE effect, and it reproduces closely: span
+unmoved to four places, blindness improved by the licence rule alone, and the
+two together cutting audit by a factor of 2.55 (against 8.5 on the unverified
+suite). Neither rule reads the audit column, so nothing about their derivation
+is affected -- only the size of the residue they leave.
+
+## Two switches, and only one of them mattered
+
+`render_suite` takes `trace_internals` and `bus_lines`; `integration.py`'s call
+site passes neither, so both were candidates for the gap. Measured:
+
+    trace_internals=[] vs all 24   identical -- same 24 probe keys in `"dut"`,
+                                   same 16 bound, audit 16/45 either way
+    bus_lines unwired vs wired     14/45 = 0.3111  vs  16/45 = 0.3556
+
+`trace_internals` gates the `dut_internal` debug columns, not the probes;
+`Env.finish` writes `"dut"` unconditionally and says why. So the first draft of
+`e6_replay_corpus.py` was wrong about it and says so now. `bus_lines` is real
+and worth two convictions, and neither switch moves the DENOMINATOR -- so
+neither explains 37 -> 45. Nor does trace coverage: random 75% / 50% / 25%
+subsamples of the 482 traces all report the same 47 requirements judged. The
+denominator gap is a property of the foreign suite's stimulus CONTENT, and the
+suite that produced it no longer exists to decompose it further.
+
+## What was hidden, not wrong
+
+`RESIDUE.md` decomposes ten convictions of golden. All ten still convict under
+the corpus's own stimulus. **Seven more join them**, invisible before because
+that suite's stimulus never made them decidable:
+
+    REQ-0061 0069 0096 0100 0102 0113 0128
+
+So the residue document is incomplete rather than mistaken. The seven cluster
+tightly: reset and two-stage-synchronizer requirements, three of them carrying
+no temporal operator at all, and `REQ-0061`/`REQ-0102` are the same sentence
+minted twice -- as are `REQ-0096`/`REQ-0100`. All seven fail on `TP-0000`.
+
+## Against the target, as it stands today
+
+    target     span > 90%      blindness < 20%     audit = 0
+    baseline   97.4%  MET      14.5%  MET          35.6%  NOT MET
+    both rules 97.4%  MET      14.2%  MET          14.0%  NOT MET
+
+Span and blindness are met. Audit is not, and it is worse than this branch
+believed by a factor of five. That is the direction honesty runs in here, and
+the correction was available at the cost of one keyword argument.

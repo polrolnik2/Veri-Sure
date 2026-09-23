@@ -93,6 +93,53 @@ def unknown_ports(rows: list[dict]) -> dict[str, int]:
     return bad
 
 
+def over_width_ports(rows: list[dict], contract: dict) -> dict[str, int]:
+    """Ports whose recorded value does not FIT the width the contract declares.
+
+    **THE THIRD WAY A VALUE ARRIVES UNCOMPARABLE, AND THE ONLY ONE THAT LOOKS
+    LIKE A NUMBER.** `unknown_ports` catches a missing port (`None`) and a
+    4-state X (a string). This catches a perfectly good integer that is the
+    wrong QUANTITY: the contract declares `fscl` a 1-bit flag, golden binds a
+    3-bit filter register of the same name, and `row["outputs"]["fscl"] == 1` is
+    then False for six of its eight values. The check convicts a correct design
+    for a comparison that was never about the same thing.
+
+    MEASURED on golden i2c under `full2`'s own stimulus -- five of the sixteen
+    probes that bind exceed their declared width:
+
+        cscl  csda        declared 1, observed 0..3   two-stage synchronizers
+        fscl  fsda        declared 1, observed 0..7   three-sample histories
+        filter_cnt        declared 1, observed 0..3   the filter counter
+
+    and nineteen ports stay inside their declaration, so this is not a blanket
+    objection to the contract's widths -- it is five named quantities.
+
+    and REQ-0102's verdict reads "expected (1, 1), observed (3, 3)" -- the whole
+    failure, printed, in a check nobody wrote wrong.
+
+    THE GUARD ALREADY EXISTED ON THE OTHER PATH. `Env.sample` refuses a sample
+    wider than `PROBE_WIDTHS` declares, so the Python reference-model route has
+    been protected since the width guard landed; the RTL TRACE route, which is
+    the one the audit column is measured on, had nothing. One defect, two paths,
+    guarded once.
+
+    A declared width of 0 or a missing one is not a claim, so it is not
+    enforced. Booleans are excluded for the same reason `unknown_ports`
+    excludes them -- `isinstance(True, int)`.
+    """
+    widths = {str(e.get("name")): int(e.get("width") or 0)
+              for e in (contract.get("io") or []) if e.get("name")}
+    bad: dict[str, int] = {}
+    for row in rows:
+        for port, value in (row.get("outputs") or {}).items():
+            w = widths.get(port, 0)
+            if w < 1 or isinstance(value, bool) or not isinstance(value, int):
+                continue
+            if value > (1 << w) - 1 or value < 0:
+                bad[port] = bad.get(port, 0) + 1
+    return bad
+
+
 def check_stimulus(traces_by_tp: dict[str, dict],
                    stimulus_by_tp: dict[str, list]) -> dict[str, str]:
     """Which testpoints' traces were NOT driven by the stimulus given.
@@ -171,6 +218,19 @@ def decide_rtl(
                 f"name were not recorded from this stimulus -- {sample}"
                 + (" ..." if len(wrong) > 3 else ""))
 
+    #: **WIDTH IS A PROPERTY OF THE DESIGN, NOT OF ONE TESTPOINT, SO IT IS
+    #: DECIDED ONCE OVER THE WHOLE RECORDING.** A 3-bit `fscl` reads 0 or 1 on
+    #: plenty of testpoints and 0..7 on others. Asking per testpoint would make
+    #: the same check abstain where the register happened to go high and convict
+    #: where it happened not to -- a verdict that depends on the stimulus rather
+    #: than on whether the quantity is comparable at all. One value above the
+    #: declared width anywhere proves the signal is wider than declared for this
+    #: design, and it is refused everywhere.
+    wide_anywhere: dict[str, int] = {}
+    for _t in traces_by_tp.values():
+        for _p, _n in over_width_ports(rows_from(_t, side=side), contract).items():
+            wide_anywhere[_p] = wide_anywhere.get(_p, 0) + _n
+
     out: list[OracleResult] = []
     #: **EVERY RECORDED TRACE, NOT THE ONES `tp_uids` NAMES -- AND THIS HAD TO
     #: MOVE WITH THE STAGE'S SCOPE OR NEITHER SHOULD HAVE MOVED.** The oracle
@@ -210,13 +270,27 @@ def decide_rtl(
                 rows = transactional_view(rows)
             result = decide(oracle, rows)
             blind = {p: n for p, n in unknown_ports(rows).items() if p in reads}
-            if result.ok is False and not result.broken and blind:
-                named = ", ".join(f"{p} on {n} row(s)" for p, n in sorted(blind.items()))
+            #: **A VALUE OF THE WRONG WIDTH IS AS UNCOMPARABLE AS A MISSING
+            #: ONE**, and it is the case that looks like data -- see
+            #: `over_width_ports`. Folded in here rather than into `rows_from`,
+            #: which is a pure reshape and must stay one: anything it invented
+            #: would be a fact about the adapter.
+            wide = {p: n for p, n in wide_anywhere.items() if p in reads}
+            if result.ok is False and not result.broken and (blind or wide):
+                why = []
+                if blind:
+                    why.append("could not resolve " + ", ".join(
+                        f"{p} on {n} row(s)" for p, n in sorted(blind.items())))
+                if wide:
+                    why.append("recorded " + ", ".join(
+                        f"{p} wider than its declared width on {n} row(s)"
+                        for p, n in sorted(wide.items())))
                 result = OracleResult(
                     oracle.req_uid, ok=None, edge=result.edge, rows=rows,
-                    detail=(f"the check failed, but the trace could not resolve "
-                            f"{named} -- so this is not evidence about the "
-                            f"design. Original detail: {result.detail}"))
+                    detail=(f"the check failed, but the trace "
+                            f"{' and '.join(why)} -- so this is not evidence "
+                            f"about the design. Original detail: "
+                            f"{result.detail}"))
             # WHICH testpoint's trace produced this. `decide` judges a row list
             # and has no idea where it came from, so without stamping it here
             # `_worst` folds several testpoints into one result that cannot say

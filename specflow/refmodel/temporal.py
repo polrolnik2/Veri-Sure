@@ -451,6 +451,39 @@ def _discarded(w: Window) -> Verdict:
     return (None, edge, f"the attempt was aborted at edge {edge}")
 
 
+def _nothing_read(w: Window, what: str) -> Verdict:
+    """UNKNOWN over an EMPTY read set -- nothing was seen, so nothing was wrong.
+
+    **A VERDICT OVER ZERO OBSERVATIONS CANNOT BE A VIOLATION, AND FOUR
+    OPERATORS RETURNED ONE.** This is not `strong`'s deliberate power to convict
+    on a trace that ran out -- that one reads rows and finds the response absent
+    from them. This is reading NO rows: a window opening on the final row of a
+    trace, read with `after_activation=True`, hands the operator an empty list.
+
+    THE RULE IS THE MODULE'S OWN, applied where it was missing. The invariant
+    family already refuses here and says so in its messages -- `throughout`,
+    `stable` and `never` report "had no rows to hold over ... so nothing was
+    checked", `pulse` "had no rows to pulse in", `nexttime` "nothing follows the
+    activation; the trace ends there". `eventually`, `until` and `sequence`
+    (hence `nth`, which delegates) did not, and convicted instead. So the fix
+    needs no design, no population and no reference: it makes four operators
+    agree with five.
+
+    MEASURED, on golden i2c under `full2`'s own stimulus: REQ-0061's window
+    opens at edge 28 of a 29-edge trace and its verdict read "the obligation was
+    never discharged" over nothing at all.
+    """
+    #: The message does NOT name a cause. `after` always includes the
+    #: activation row, so in practice the read set is empty because
+    #: `after_activation=True` excluded the only row there was -- but a caller
+    #: that builds a Window directly can hand over an empty `rows`, and a
+    #: verdict that asserts which of the two happened would sometimes be wrong
+    #: about it.
+    return None, w.edge, (
+        f"{what} had no rows to occur in: the window opening at edge {w.edge} "
+        f"holds none of the rows this operator reads, so nothing was checked")
+
+
 #: `strong` IS REQUIRED, AND THAT IS THE WHOLE OF THE MECHANISM.
 #:
 #: It is a claim about the REQUIREMENT -- does it oblige a response, so that
@@ -793,6 +826,8 @@ def eventually(w: Window, holds: Pred, *, strong: bool,
     if w.aborted:
         return _discarded(w)
     rows = w.body if after_activation else w.rows
+    if not rows:
+        return _nothing_read(w, what)
     for row in rows:
         if holds(row):
             return True, row.get("edge"), f"{what} occurred"
@@ -1101,6 +1136,8 @@ def sequence(w: Window, *steps: Pred, strong: bool,
     if not steps:
         return None, w.edge, "no steps given, so there is nothing to decide"
     rows = w.body if after_activation else w.rows
+    if not rows:
+        return _nothing_read(w, what)
     at = 0
     for n, step in enumerate(steps):
         while at < len(rows) and not step(rows[at]):
@@ -1149,7 +1186,10 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool,
     """
     if w.aborted:
         return _discarded(w)
-    for row in (w.body if after_activation else w.rows):
+    rows = w.body if after_activation else w.rows
+    if not rows:
+        return _nothing_read(w, what)
+    for row in rows:
         if release(row):
             return True, row.get("edge"), (
                 f"{what} held until the release at edge {row.get('edge')}")

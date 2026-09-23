@@ -80,3 +80,61 @@ and it is invisible from inside the population: every member reads the sentence
 the same way, so the disagreement is never a cell, and blindness and span both
 report success on exactly the requirements where a correct design would be
 convicted.
+
+
+---
+
+# CORRECTION: ten is a SUBSET of seventeen
+
+Everything above was measured against `recheck_run`'s golden suite, whose
+stimulus provenance was never digest-checked. That suite went with a container
+reclaim; `full2`'s corpus did not, and re-running golden through a suite
+regenerated from the corpus itself -- digest-verified against its own stimulus,
+482 of 482 -- convicts **seventeen** requirements, not ten.
+
+    still convicting   all ten above, every one
+    NEW                REQ-0061 0069 0096 0100 0102 0113 0128
+
+So no part of the decomposition above is withdrawn. It is INCOMPLETE, and the
+reason is the one `TRIPLE.md` now records: `decide_rtl`'s stimulus guard is
+opt-in and eighteen evidence drivers never armed it.
+
+## The seven have a shape of their own
+
+    REQ-0061  behavioural  eventually   "capture the raw scl_i and sda_i inputs into
+                                         two-stage synchronization registers"
+    REQ-0102  behavioural  (no operator) the SAME sentence, minted again
+    REQ-0096  behavioural  (no operator) nReset -> FSM to idle, release both oen,
+                                         clear cmd_ack/al/busy, reset counters
+    REQ-0100  behavioural  (no operator) the same reset obligation, minted again
+    REQ-0113  behavioural  eventually   busy set after START, cleared after STOP
+    REQ-0069  behavioural  (no operator) busy set on SDA fall while SCL high, held
+                                         until SDA rise while SCL high
+    REQ-0128  behavioural  throughout   arbitration lost -> FSM idle, release both
+
+Two facts about this set, neither of which is a check defect:
+
+**Four of the seven are two requirements minted twice.** REQ-0061/REQ-0102 are
+the same obligation about the synchronizer; REQ-0096/REQ-0100 are the same
+obligation about reset. A duplicated requirement convicts twice and is counted
+twice in the audit column, so the residue's SIZE overstates the number of
+distinct disagreements -- five, not seven.
+
+**Three carry no temporal operator at all.** A check with no window asserts at
+an instant, which is the defect `temporal.py`'s own preamble opens with: "the
+fault is the joint assumption that the two halves hold at one instant". Three
+of the five distinct disagreements are that shape.
+
+And all seven fail on **`TP-0000`** -- the one testpoint, not spread across the
+482. A reset or synchronizer obligation evaluated on the first testpoint of a
+run is being asked about the rows where the trace begins, which is where a
+two-stage synchronizer has nothing yet to synchronise from. That is a lead, not
+a finding: it is the third mechanism proposed for this residue and the first two
+were measured and refuted.
+
+## What this changes about the ceiling
+
+The audit column on a digest-verified control is 16 of 45 at baseline and 6 of
+43 under both rules of `TRIPLE.md`. Of the 6, four causes are named above and
+in the sections before; `REQ-0058` remains open, and is still the only member of
+the residue with no proposed mechanism that survived measurement.

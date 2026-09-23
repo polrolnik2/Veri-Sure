@@ -11,7 +11,8 @@ import pytest
 
 from specflow.refmodel.oracles import RequirementOracle, transactional_view
 from specflow.refmodel.rtl_trace import (SIDES, decide_rtl, load, load_traces,
-                                         rows_from, unknown_ports)
+                                         over_width_ports, rows_from,
+                                         unknown_ports)
 
 CONTRACT = {"io": [{"name": "cmd", "dir": "input", "width": 1},
                    {"name": "busy", "dir": "output", "width": 1},
@@ -301,3 +302,107 @@ def test_the_witness_driver_runs_THE_SAME_TAIL_as_the_simulator():
         "the effect of the final step is still being cut off")
     assert all(r["inputs"]["d"] == 1 for r in rep.rows[-SETTLE_EDGES:]), (
         "the tail must HOLD the last stimulus, not return to idle")
+
+
+# ------------------------------------------------- the declared-width guard
+
+
+def test_over_width_ports_names_a_value_that_does_not_FIT_its_declaration():
+    """**THE THIRD WAY A VALUE ARRIVES UNCOMPARABLE, AND IT LOOKS LIKE DATA.**
+
+    `unknown_ports` catches `None` and a 4-state X. This catches a perfectly
+    good integer of the wrong QUANTITY: the contract declares a 1-bit flag and
+    the design binds a multi-bit register of the same name.
+
+    MEASURED on golden i2c under `full2`'s own stimulus, over all 482 traces --
+    five of the sixteen probes that bind exceed their declared width:
+    `cscl`/`csda` observed 0..3 against a declared 1, `fscl`/`fsda` 0..7,
+    `filter_cnt` 0..3. Nineteen other ports stay inside theirs.
+    """
+    t = _trace((0, 1, 3, 0, 0), (1, 1, 1, 0, 0), (2, 1, 2, 0, 0))
+    assert over_width_ports(rows_from(t), CONTRACT) == {"busy": 2}
+    assert over_width_ports(rows_from(_trace((0, 1, 1, 0, 0))), CONTRACT) == {}
+
+
+def test_a_width_the_contract_does_not_declare_is_not_enforced():
+    """A missing or zero width is not a claim, so there is nothing to violate --
+    the guard must not invent a bound the contract never stated."""
+    t = _trace((0, 1, 7, 0, 0))
+    assert over_width_ports(rows_from(t), {"io": [{"name": "busy",
+                                                  "dir": "output"}]}) == {}
+    assert over_width_ports(rows_from(t), {"io": []}) == {}
+
+
+def test_a_conviction_resting_on_an_OVER_WIDTH_value_is_downgraded():
+    """**ONE DEFECT, TWO PATHS, AND IT WAS GUARDED ON ONE.** `Env.sample`
+    refuses a sample wider than `PROBE_WIDTHS` declares, so the Python
+    reference-model route has been protected since the width guard landed. The
+    RTL TRACE route -- the one the audit column is actually measured on -- had
+    nothing, and REQ-0102 convicts golden with the failure printed in its own
+    verdict: "expected (1, 1), observed (3, 3)".
+    """
+    t = _trace((0, 1, 3, 0, 0))
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
+    assert res.ok is None
+    assert "wider than its declared width" in res.detail
+    assert "busy" in res.detail
+
+
+def test_an_IN_WIDTH_value_still_convicts():
+    """**THE GUARD MUST NOT BLANKET-ABSTAIN.** A 1-bit port carrying 0 where the
+    check wants 1 is a real disagreement and stays one."""
+    t = _trace((0, 1, 0, 0, 0))
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
+    assert res.ok is False
+
+
+def test_the_width_guard_is_scoped_to_the_ports_the_CHECK_READS():
+    """Same scoping as the unknown-value guard, and for the same reason: a
+    whole testpoint must not fall silent because some port the check never
+    mentions was recorded wide."""
+    t = _trace((0, 1, 0, 0, 0))
+    t["edges"][0]["dut"]["cmd_ack"] = 3          # wide, and never read below
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
+    assert res.ok is False
+
+
+def test_width_is_decided_once_over_the_WHOLE_recording():
+    """**WIDTH IS A PROPERTY OF THE DESIGN, NOT OF ONE TESTPOINT.**
+
+    A 3-bit `fscl` reads 0 or 1 on plenty of testpoints and 0..7 on others.
+    Asking per testpoint makes the same check abstain where the register
+    happened to go high and convict where it happened not to -- a verdict that
+    depends on the stimulus rather than on whether the quantity is comparable.
+    One value above the declared width anywhere settles it for every testpoint.
+    """
+    narrow = _trace((0, 1, 0, 0, 0))                    # busy never exceeds 1
+    wide = _trace((0, 1, 3, 0, 0))                      # ...but does here
+    wide["tp_uid"] = "TP-0001"
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    o = RequirementOracle(req_uid="REQ-0001", clause="c", source=src,
+                          tp_uids=["TP-0000", "TP-0001"])
+    [res] = decide_rtl([o], {"TP-0000": narrow, "TP-0001": wide}, CONTRACT)
+    assert res.ok is None, res.detail
+    assert "wider than its declared width" in res.detail
+    # And with the wide testpoint absent, the same narrow trace still convicts:
+    [only_narrow] = decide_rtl([_oracle(src)], {"TP-0000": narrow}, CONTRACT)
+    assert only_narrow.ok is False
