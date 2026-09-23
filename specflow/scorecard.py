@@ -204,6 +204,29 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
             f"{len(rows_by_design)} design(s) replayed: fewer than two is not a "
             f"population, so there are no disagreement cells and blindness is "
             f"reported as absent rather than as 0%")
+    #: **A POPULATION THAT AGREES EVERYWHERE IS A BROKEN INPUT, NOT A CLEAN
+    #: MEASUREMENT, AND THIS SAID NOTHING.** Two or more designs and zero
+    #: disagreement cells is either designs that are identical or a contract
+    #: with no outputs. Both are defects upstream; neither is a suite that
+    #: cannot be blind.
+    #:
+    #: Measured on the run that found it: a resumed run replayed ONE recorded
+    #: witness for all seven population members and wrote seven byte-identical
+    #: files. The card reported `population 7` and `0/0 cells = n/a` on
+    #: adjacent lines and remarked on neither, so a span and an audit were
+    #: published over an instrument that had silently become a constant.
+    #:
+    #: The distinct-source count is what names it: 7 designs and 1 distinct
+    #: source is a sentence a reader can act on, where "0 cells" is not.
+    elif not cells:
+        distinct = len({str(src) for src in (population or [])})
+        notes.append(
+            f"{len(rows_by_design)} design(s) replayed and they disagree "
+            f"NOWHERE, which no real population does -- {distinct} distinct "
+            f"source(s) among {len(population or ())}, and "
+            f"{len(outputs)} declared output(s). Blindness has no denominator "
+            f"and is absent; span and audit beside it were computed against "
+            f"this same population and should be read as provisional")
 
     _v, by_tp, _obj = _population_tables(
         held, list(population or []), contract, stimulus_by_tp, base=base,

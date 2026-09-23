@@ -179,3 +179,40 @@ def test_blindness_is_scored_against_the_population_the_RUN_built():
         __import__("specflow.integration", fromlist=["x"]).build_artifacts)
     assert "population=list(_population_on_disk(run_dir) or population_sources)" \
         in body, "the scorecard must prefer the run's own population"
+
+
+def test_a_population_that_agrees_everywhere_is_NAMED_not_reported_as_absent(
+        monkeypatch):
+    """**SEVEN DESIGNS AND ZERO DISAGREEMENT IS A BROKEN INPUT, NOT A CLEAN
+    MEASUREMENT.** There was a note for "fewer than two is not a population"
+    and none for a population of seven that disagrees nowhere, so the card
+    printed `population 7` and `0/0 cells = n/a` on adjacent lines and remarked
+    on neither.
+
+    Measured on the run that found it: a resumed run replayed ONE recorded
+    witness for all seven members -- `ResumePort` is keyed by `(stage,
+    round_)` and `conforming_implementation` passes `stage=WITNESS_STAGE` for
+    every member -- and wrote seven byte-identical files, 8748 bytes, one
+    distinct md5. A span of 94.2% and an audit of 1/12 were then published over
+    an instrument that had silently become a constant.
+    """
+    from specflow import oracles_stage as O
+    from specflow import scorecard as SC
+    from specflow import variety as V
+
+    monkeypatch.setattr(O, "_population_rows",
+                        lambda *a, **k: {str(i): {} for i in range(7)})
+    monkeypatch.setattr(O, "_population_tables", lambda *a, **k: ({}, {}, {}))
+    monkeypatch.setattr(V, "cells", lambda *a, **k: ())
+
+    same = "def step(self, i):\n    return {}\n"
+    card = SC.score(
+        oracles=[], normalized=[], stimulus_by_tp={},
+        contract={"module_name": "m", "io": [{"name": "q", "dir": "output"}]},
+        population=[same] * 7, requirements=[])
+    assert card.blindness is None, "blindness cannot have a denominator here"
+    joined = " ".join(card.notes)
+    assert "disagree NOWHERE" in joined, (
+        "a degenerate population was reported as an ordinary absent blindness")
+    assert "1 distinct source(s) among 7" in joined, (
+        "the note does not name what makes it degenerate")
