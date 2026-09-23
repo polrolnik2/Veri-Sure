@@ -29,6 +29,8 @@ functional input on the I2C design and a substring rule would silently drop it.
 
 from __future__ import annotations
 
+from .schema import Issue
+
 # Exact names only. A token rule would swallow `clk_cnt`, `clk_div`, `clken`.
 CLOCK_NAMES = frozenset({
     "clk", "clock", "clk_i", "i_clk", "clki", "sysclk", "sys_clk", "aclk",
@@ -186,3 +188,89 @@ def pinned_inputs(contract: dict) -> dict[str, int]:
         name: idle_value(name, by_name.get(name))
         for name in (*clocks, *resets)
     }
+
+
+def stimulus_diversity(contract: dict,
+                       stimulus_by_tp: dict[str, list[dict]]) -> list[Issue]:
+    """Inputs the stimulus barely exercises. Reporting, never a gate.
+
+    **COVERAGE IS NOT EXERCISE, AND NOTHING ELSE HERE DISTINGUISHES THEM.** A
+    requirement is covered when a testpoint names it and its check runs. That
+    says nothing about whether the testpoint drove the design into the
+    situation the requirement is about, and a suite can be complete by the
+    first measure while leaving a whole dimension of the design untouched.
+
+    Measured on `i2c_master_bit_ctrl`: `clk_cnt` is the 16-bit prescale value
+    loaded into the divider that generates `clk_en`, the tick the bit-level FSM
+    advances on. **342 of 422 testpoints drive it to 0 for the whole trace**,
+    where the divider reloads to zero and `clk_en` fires every cycle. On those
+    traces the known-good design's `clk_en` is 100% high across 13,178 edges --
+    it pauses nothing, because there is nothing to pause -- so a requirement
+    about PAUSING the timing counter cannot be distinguished from its violation
+    on four fifths of the suite. One such check convicts that design.
+
+    Clocks and resets are excluded: `pinned_inputs` owns them and they are
+    SUPPOSED to be held.
+
+    Two shapes are reported, and neither blocks:
+
+      * an input held at ONE value across the ENTIRE suite -- a dimension the
+        run never varies at all;
+      * an input whose suite exercises FEW OF THE VALUES IT COULD HAVE, which
+        is where a degenerate configuration hides.
+
+    **FLATNESS ALONE IS THE WRONG TEST AND THE FIRST VERSION USED IT.** Holding
+    one value per testpoint is ordinary and often correct: a testpoint that
+    issues one command drives `cmd` flat, and on this module `cmd` is flat on
+    449 of 482 testpoints while the suite exercises all 16 values of its 4-bit
+    range. Reporting that is noise. `clk_cnt` is flat on 480 of 482 AND the
+    suite exercises 6 distinct values of a 16-bit port. The discriminator is
+    the second number, normalised by what was REACHABLE -- a suite of N
+    testpoints cannot show more than `min(2**width, N)` distinct values however
+    well it is written.
+    """
+    owned = set(pinned_inputs(contract))
+    widths = {str(p.get("name")): int(p.get("width") or 1)
+              for p in (contract.get("io") or []) if p.get("name")}
+    driven = [n for n in input_names(contract) if n not in owned]
+    if not driven or not stimulus_by_tp:
+        return []
+
+    seen: dict[str, set] = {n: set() for n in driven}
+    flat: dict[str, int] = {n: 0 for n in driven}
+    total = 0
+    for steps in stimulus_by_tp.values():
+        if not steps:
+            continue
+        total += 1
+        for name in driven:
+            here = {s[name] for s in steps
+                    if isinstance(s, dict) and name in s}
+            seen[name] |= here
+            if len(here) <= 1:
+                flat[name] += 1
+    if not total:
+        return []
+
+    out: list[Issue] = []
+    for name in sorted(driven):
+        values, held, width = seen[name], flat[name], widths.get(name, 1)
+        if len(values) <= 1:
+            out.append(Issue(
+                "warning", f"stimulus.{name}",
+                f"`{name}` is driven to a single value "
+                f"({sorted(values)[0] if values else 'nothing'}) across all "
+                f"{total} testpoint(s); every behaviour that depends on it "
+                f"varying is unexercised, and a requirement about one cannot "
+                f"be told from its violation"))
+        else:
+            reachable = min(2 ** width, total)
+            if width > 1 and held > total // 2 and len(values) * 4 < reachable:
+                out.append(Issue(
+                    "warning", f"stimulus.{name}",
+                    f"`{name}` is {width} bits wide and the suite exercises "
+                    f"{len(values)} distinct value(s) of the {reachable} it "
+                    f"could reach across {total} testpoint(s), holding one "
+                    f"value on {held} of them; a behaviour that only another "
+                    f"value of it selects is unexercised"))
+    return out
