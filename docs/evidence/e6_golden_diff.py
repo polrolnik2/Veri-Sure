@@ -52,8 +52,25 @@ GOLDEN = Path("benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/"
 #: The candidates are self-contained and need neither; passing the directory
 #: for every design keeps the two elaborations otherwise identical.
 INCLUDES = (Path("benchmarks/chipverilog/Des/i2c"),)
-RUN = Path(sys.argv[1])
-CANDIDATES = [Path(p) for p in sys.argv[2:]]
+#: **FLAGS AND THEIR VALUES ARE NOT CANDIDATES.** Taking every remaining
+#: argument as an RTL path put `--population` and its directory into the
+#: candidate list, and each was dutifully "run" -- producing a row of zeroes
+#: and "422 testpoint(s) golden recorded and this did not", which reads as a
+#: design that recorded nothing rather than as an argument that is not a design.
+_FLAGS_WITH_VALUES = ("--population",)
+_argv, _skip = [], False
+for _i, _a in enumerate(sys.argv[1:]):
+    if _skip:
+        _skip = False
+        continue
+    if _a in _FLAGS_WITH_VALUES:
+        _skip = True
+        continue
+    if _a.startswith("--"):
+        continue
+    _argv.append(_a)
+RUN = Path(_argv[0])
+CANDIDATES = [Path(q) for q in _argv[1:]]
 TOP = "i2c_master_bit_ctrl"
 
 contract = json.loads((RUN / "contract.json").read_text())
@@ -95,34 +112,6 @@ def record(rtl: Path) -> dict[str, list[dict]]:
     return rows
 
 
-def cells(a: list[dict], b: list[dict]) -> tuple[int, int, int]:
-    """`(differing cells, compared cells, row-count delta)`.
-
-    **A PER-TESTPOINT FLAG SATURATES AND CANNOT SHOW MOVEMENT.** One differing
-    edge anywhere in a several-hundred-edge recording sets it, so two designs
-    at wildly different distances from golden both read ~98%. The cell -- one
-    (edge, declared output) pair -- is the resolution at which a repair that
-    fixed half a testpoint is visible.
-
-    Rows are compared over the common prefix and the length difference is
-    reported separately rather than folded in: a recording that ends early is a
-    different fact from one that disagrees, and adding them would let a design
-    that stops responding score as closer.
-    """
-    n = min(len(a), len(b))
-    bad = 0
-    for ra, rb in zip(a[:n], b[:n]):
-        oa, ob = ra.get("outputs") or {}, rb.get("outputs") or {}
-        bad += sum(1 for p in outputs if oa.get(p) != ob.get(p))
-    return bad, n * len(outputs), abs(len(a) - len(b))
-
-
-def differs(a: list[dict], b: list[dict]) -> bool:
-    """Any edge where the two recordings disagree on a declared output."""
-    bad, _total, delta = cells(a, b)
-    return bool(bad or delta)
-
-
 def step(rows: list[dict], port: str) -> list[tuple[int, object]]:
     """`(edge, value)` for `port`, as a step function over the recording.
 
@@ -147,6 +136,42 @@ def at(steps: list[tuple[int, object]], edge: int) -> object:
         else:
             hi = mid - 1
     return out
+
+
+def cells(a: list[dict], b: list[dict]) -> tuple[int, int, int]:
+    """`(differing cells, compared cells, row-count delta)`, EDGE-ALIGNED.
+
+    **A PER-TESTPOINT FLAG SATURATES AND CANNOT SHOW MOVEMENT.** One differing
+    edge anywhere in a several-hundred-edge recording sets it, so two designs
+    at wildly different distances from golden both read ~98%. The cell -- one
+    (edge, declared output) pair -- is the resolution at which a repair that
+    fixed half a testpoint is visible.
+
+    **AND IT IS ALIGNED BY `edge`, NOT BY ROW INDEX, WHICH THIS GOT WRONG.**
+    `transactional_view` collapses runs of identical samples, so two designs
+    that behave identically can still have different row counts and row 7 is
+    not the same instant in both. Zipping them compared unrelated instants and
+    disagreed with the constrained/under-determined split computed beside it --
+    17969 against 19034 on the same pair, which is how the defect was found.
+
+    The length difference is reported separately rather than folded in: a
+    recording that ends early is a different fact from one that disagrees, and
+    adding them would let a design that stops responding score as closer.
+    """
+    asteps = {p: step(a, p) for p in outputs}
+    bsteps = {p: step(b, p) for p in outputs}
+    bad = 0
+    for r in a:
+        e = int(r.get("edge", 0))
+        bad += sum(1 for p in outputs
+                   if at(asteps[p], e) != at(bsteps[p], e))
+    return bad, len(a) * len(outputs), abs(len(a) - len(b))
+
+
+def differs(a: list[dict], b: list[dict]) -> bool:
+    """Any edge where the two recordings disagree on a declared output."""
+    bad, _total, delta = cells(a, b)
+    return bool(bad or delta)
 
 
 POP_DIR = None
