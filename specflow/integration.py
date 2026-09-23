@@ -30,6 +30,7 @@ from eda_agent.contract_linter import probe_issues
 from .probes import orphans as probe_orphans
 from .probes import run_probes
 from .probes import write_artifacts as write_probes
+from .ports import stimulus_diversity
 from .probes import fold_in
 from .probes import write_contract
 from .refmodel.compose import choose_base, run_refmodel
@@ -1247,6 +1248,18 @@ def build_artifacts(
             logger.info("scorecard: %s", line)
     except Exception as exc:  # noqa: BLE001
         logger.warning("scorecard: not computed (%r)", exc)
+
+    # COVERAGE IS NOT EXERCISE. Measured HERE rather than beside the other
+    # stimulus diagnostics because `stim_by_tp` is only final after [O]'s own
+    # staging loop has appended to it -- reporting earlier would describe a
+    # suite the run did not use. From `stim_by_tp` and the contract alone: no
+    # model, no design, no reference. See `ports.stimulus_diversity`.
+    try:
+        for issue in stimulus_diversity(contract, stim_by_tp or {}):
+            stim_issues.append(issue)
+            logger.warning("stimulus: %s", issue.message)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stimulus diversity: not computed (%r)", exc)
 
     # Written on the way out of every build, successful or not: a run that
     # failed at S3 still spent whatever it spent, and a cache that stopped

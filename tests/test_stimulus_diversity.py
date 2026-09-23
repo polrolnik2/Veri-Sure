@@ -84,3 +84,32 @@ def test_the_reachable_bound_is_the_testpoint_count_not_the_width():
         clk_cnt=[0, 1, 2, 3, 4, 5, 6, 7], cmd=list(range(8)), din=[0, 1]))
     assert [i.path for i in got] == [], (
         "8 distinct values over 8 testpoints is everything it could reach")
+
+
+def test_the_build_actually_calls_it():
+    """A SOURCE-LEVEL PIN, because a behavioural one needs model calls.
+
+    `build_artifacts` cannot run in a unit test -- it is the whole pipeline --
+    so nothing behavioural would notice this call being deleted. A call site
+    inside a stage has twice been removed on this branch without failing a
+    single test, which is why the plan asks for a stage-level or source-level
+    pin specifically.
+
+    It must be called AFTER the oracle stage: `[O]`'s own staging loop appends
+    testpoints to `stim_by_tp`, so measuring earlier describes a suite the run
+    did not use.
+    """
+    import inspect
+
+    from specflow import integration
+
+    src = inspect.getsource(integration)
+    assert "stimulus_diversity(contract, stim_by_tp" in src, (
+        "the build must call it, or it is a library function nobody runs")
+    called = src.index("stimulus_diversity(contract, stim_by_tp")
+    staged = src.index("grown_before = (len(tps)")
+    assert called > staged, (
+        "it must run after [O] has finished appending testpoints, or it "
+        "measures a suite the run did not use")
+    assert "stim_issues.append(issue)" in src, (
+        "the issues have to reach the artifact, not only the log")
