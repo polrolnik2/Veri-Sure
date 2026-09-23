@@ -191,6 +191,39 @@ if POP_DIR is not None:
     print(f"  {len(pop_rows)} design(s) replayed\n", flush=True)
 
 
+def per_port_and_onset(g: list[dict], c: list[dict], tp: str
+                       ) -> tuple[dict[str, int], int | None, int | None]:
+    """`(defect cells per port, first constrained-differing edge, last edge)`.
+
+    **A CELL COUNT CANNOT TELL ONE STRUCTURAL CHANGE FROM THOUSANDS OF
+    INDEPENDENT ERRORS, AND THEY MEAN OPPOSITE THINGS.** A state machine that
+    shifts by a cycle mismatches every sample after the shift, so one defect
+    bills as thousands of cells; a genuinely scattered regression bills the
+    same total across many ports and many onsets. The onset edge separates
+    them: if the repaired design diverges EARLIER in a testpoint than the one
+    it replaced, it changed when the machine does something, not what it does
+    at one instant.
+    """
+    gsteps = {q: step(g, q) for q in outputs}
+    csteps = {q: step(c, q) for q in outputs}
+    psteps = {d: {q: step(rows.get(tp) or [], q) for q in outputs}
+              for d, rows in pop_rows.items()}
+    by_port: dict[str, int] = {}
+    onset = last = None
+    for r in g:
+        e = int(r.get("edge", 0))
+        for q in outputs:
+            if at(gsteps[q], e) == at(csteps[q], e):
+                continue
+            vals = {at(psteps[d][q], e) for d in psteps if psteps[d][q]}
+            if len(vals) != 1:
+                continue            # under-determined: not a defect
+            by_port[q] = by_port.get(q, 0) + 1
+            onset = e if onset is None else min(onset, e)
+            last = e if last is None else max(last, e)
+    return by_port, onset, last
+
+
 def split_by_constraint(g: list[dict], c: list[dict], tp: str) -> tuple[int, int]:
     """`(defect cells, slack cells)` over the edges golden recorded.
 
@@ -219,6 +252,11 @@ def split_by_constraint(g: list[dict], c: list[dict], tp: str) -> tuple[int, int
                 slack += 1
     return defect, slack
 
+
+#: `candidate -> {testpoint: first constrained-differing edge}`, so the two
+#: candidates can be compared on WHEN they leave golden rather than only on
+#: how much.
+ONSETS: dict[str, dict[str, int]] = {}
 
 print(f"running GOLDEN ({GOLDEN.name}) -- path only, never read", flush=True)
 gold = record(GOLDEN)
@@ -250,6 +288,36 @@ for cand in CANDIDATES:
         print(f"  of the differences, {d_sum} sit where ALL spec-derived "
               f"designs agree (DEFECT) and {s_sum} where they do not "
               f"(under-determined) = {100 * d_sum / max(1, tot2):.1f}% defect")
+        ports: dict[str, int] = {}
+        onsets: dict[str, int] = {}
+        touched = 0
+        for tp in shared:
+            bp, on, _last = per_port_and_onset(gold[tp], got[tp], tp)
+            for q, n in bp.items():
+                ports[q] = ports.get(q, 0) + n
+            if on is not None:
+                onsets[tp] = on
+                touched += 1
+        print("  defect cells by port: " + ", ".join(
+            f"{q}={ports.get(q, 0)}" for q in outputs))
+        med = (sorted(onsets.values())[len(onsets) // 2] if onsets else "-")
+        print(f"  {touched} testpoint(s) carry a defect; median onset edge {med}")
+        ONSETS[cand.name] = onsets
     if missing:
         print(f"  {len(missing)} testpoint(s) golden recorded and this did not")
     print(flush=True)
+
+
+#: **EARLIER ONSET IS A TIMING CHANGE; SAME ONSET WITH MORE CELLS IS NOT.**
+if len(ONSETS) == 2:
+    (n1, a), (n2, b) = ONSETS.items()
+    both = sorted(set(a) & set(b))
+    earlier = sum(1 for tp in both if b[tp] < a[tp])
+    later = sum(1 for tp in both if b[tp] > a[tp])
+    same = len(both) - earlier - later
+    print(f"\nONSET, {n2} against {n1}, over {len(both)} testpoint(s) both "
+          f"fail:\n  diverges EARLIER {earlier}   later {later}   same {same}")
+    only2 = sorted(set(b) - set(a))
+    only1 = sorted(set(a) - set(b))
+    print(f"  testpoints newly carrying a defect: {len(only2)}   "
+          f"no longer carrying one: {len(only1)}")
