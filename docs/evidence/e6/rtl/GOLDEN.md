@@ -147,3 +147,40 @@ These figures are the OLD editor loop, whose rounds ended after two agent turns
 because the stall counter charged it for turns that ran no trial. A loop that
 was cut off before it could attempt anything hard is not evidence about what
 the editor can do. `rtldbg4` re-runs it with that fixed.
+
+
+---
+
+# CORRECTION: the damage is in the FIRST repairs, not in the silencing
+
+Three repaired designs, measured the same way:
+
+    design                       latched   defect cells   scl_oen   sda_oen
+    candidate-start.v (none)           -          17385      2441      1155
+    rtldbg3-final.v (old loop)         8          24151      6038      4209
+    rtldbg4-partial.v (stall fix)      8          24477      6046      4148
+    rtldbg5-partial.v (+ latch fix)    4          24384      6079      4076
+
+**ALL THREE LAND IN THE SAME PLACE.** `rtldbg5` refused the edit that silences
+REQ-0089 and REQ-0125 six separate times and is as far from golden as
+`rtldbg3`, which took it at round 2 and never looked back.
+
+So the story written one revision ago -- that the anti-silencing guard blocks
+exactly the edit the golden measurement condemns -- is WRONG. Two facts pointed
+the same way and were assembled into a cause. The silencing route is not what
+moves the design.
+
+**AND THE REAL ANSWER IS WORSE.** `rtldbg5` carries the full damage after FOUR
+latched commits. The divergence is in the earliest repairs, the ones that take
+the passing count from 86 to 88, and `scl_oen` (2441 -> ~6050) and `sda_oen`
+(1155 -> ~4100) move that far whichever commits are latched.
+
+The check set rewards, from the first repair, a change that moves the module
+boundary 40% further from correct. Nothing about which commits are banked
+changes that -- the stall fix, the baseline fix and the gradient all leave it
+where it was.
+
+What this does NOT say: that the editor cannot do better given more budget.
+`rtldbg5` died at 17 commits of 90 inside round 0. What it says is that the
+first two latched repairs already cost what the whole of `rtldbg3` cost, so the
+cost is not paid by a late or subtle move that a better latch rule could refuse.
