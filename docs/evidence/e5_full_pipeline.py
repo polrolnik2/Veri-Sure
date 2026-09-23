@@ -39,7 +39,25 @@ from specflow.integration import build_artifacts  # noqa: E402
 from specflow.model_io import PortSettings  # noqa: E402
 
 TASK = Path("benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl")
-OUT = Path(sys.argv[1])
+#: **RESUME, RATHER THAN RE-BUY WHAT IS ALREADY ON DISK.** `build_artifacts`
+#: has carried both switches for a while and this driver passed neither, so
+#: every run after a fix re-ran S1, probes, S2 and S3 to rebuild artifacts that
+#: were already there and still passing their gates.
+#:
+#:   --reuse   skip a STAGE whose artifact is on disk and still gates clean.
+#:   --resume  replay individual recorded CALLS within a stage that has to
+#:             re-run, so an interrupted fan-out costs only what it never
+#:             reached. NOT a cache -- it is keyed by (stage, round) and does
+#:             not check the prompt, so it is only valid over UNCHANGED inputs
+#:             in the SAME run directory. A changed prompt needs a fresh --out.
+#:
+#: The pairing matters: reuse alone still re-buys a whole interrupted fan-out,
+#: and resume alone still re-runs stages that never needed to.
+FLAGS = {a for a in sys.argv[1:] if a.startswith("--")}
+REUSE = "--reuse" in FLAGS
+RESUME = "--resume" in FLAGS
+_pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+OUT = Path(_pos[0])
 #: **SEVEN, NOT THREE, AND THE SWEEP SAYS WHY.** Refutation requires the check
 #: to convict EVERY member, so a bigger population makes unanimity both rarer
 #: and stronger: on the probe run's own frozen 96, over the wide replay scope,
@@ -53,21 +71,21 @@ OUT = Path(sys.argv[1])
 #: More readings means fewer good checks lost to a coincidence of three, and
 #: more of the design space in the blindness denominator. Nine buys nothing
 #: over seven here and costs 69% more replay.
-POP = int(sys.argv[2]) if len(sys.argv) > 2 else 7
+POP = int(_pos[1]) if len(_pos) > 1 else 7
 #: **FORTY, NOT TWELVE.** A cell check is taken when it separates strictly
 #: more than the body it would replace, so the budget is how many requirements
 #: get the chance. At 12 the leg authored 12 and adopted 6; at 40 it authored
 #: 40 and adopted 5 more, and the run's blindness went 49.1% -> 20.4%.
-CELLS = int(sys.argv[3]) if len(sys.argv) > 3 else 40
+CELLS = int(_pos[2]) if len(_pos) > 2 else 40
 #: SET-LEVEL repair attempts. The default is 2 and nothing ever passed it --
 #: `build_artifacts` did not forward `repair_attempts` at all until this run.
 #: Over-strictness is what needs the extra round: at the wide scope 47 of 96
 #: frozen checks are refuted by the whole population, and each attempt costs
 #: about one call per still-rejected check.
-ATTEMPTS = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+ATTEMPTS = int(_pos[3]) if len(_pos) > 3 else 3
 #: ONE EXTRA FIRST DRAFT PER REQUIREMENT, kept in the corpus and never held --
 #: the pool `_choose_bodies` selects from. One call per requirement.
-DRAFTS = int(sys.argv[5]) if len(sys.argv) > 5 else 1
+DRAFTS = int(_pos[4]) if len(_pos) > 4 else 1
 
 spec = (TASK / "description.txt").read_text(encoding="utf-8")
 #: **A REAL CONTRACT, AND THE FIRST RUNS DID NOT USE ONE.** They reused
@@ -92,6 +110,8 @@ control_source = CONTROL.read_text() if CONTROL.is_file() else None
 print(f"spec {len(spec)} bytes; population {POP}; cell budget {CELLS}; "
       f"repair attempts {ATTEMPTS}; extra drafts {DRAFTS}; "
       f"control {'loaded for the audit column' if control_source else 'ABSENT'}")
+print(f"reuse={REUSE} (skip stages already on disk)  "
+      f"resume={RESUME} (replay recorded calls within a stage that re-runs)")
 print(f"out {OUT}\n", flush=True)
 
 built = build_artifacts(
@@ -111,6 +131,8 @@ built = build_artifacts(
     oracle_repair_attempts=ATTEMPTS,
     oracle_extra_drafts=DRAFTS,
     audit_control=control_source,
+    reuse=REUSE,
+    resume_calls=RESUME,
     #: OFF. Correspondence is priced at ~half the stage and its label does not
     #: predict convicting the control; this run is not buying it.
     correspondence=False,
