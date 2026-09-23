@@ -2420,3 +2420,99 @@ def test_the_stall_limit_is_not_inside_the_noise_of_its_own_search():
     assert default >= 6, (
         f"stall_rounds defaults to {default}; at 2 the counter, not the funded "
         f"trial budget, is what ends the search")
+
+
+# ------------------------------------ the latch baseline, and the gradient
+
+
+def test_a_rollback_does_not_move_the_latch_baseline():
+    """**THE BASELINE IS THE ACCEPTED DESIGN, NOT THE LAST SIMULATION.** The
+    rollback path writes the old RTL back and does NOT re-review, so
+    `req_results` still describes the FAILED design -- and `req_before` was
+    read from it, judging the next commit against the attempt just thrown away.
+
+    Measured on the run that found it:
+
+        #2  LATCH   86 -> 88     the accepted RTL is now at 88
+        #6  roll    88 -> 86     thrown away
+        #7  LATCH   86 -> 88     "before" is the DISCARDED 86
+
+    so #7 banked a design that only recovered ground the accepted one already
+    held, and the passing count sat at 88 for 25 commits while the loop churned
+    83/86/88 latching recoveries.
+
+    The two halves of one decision disagreed, which is the tell:
+    `prev_mismatch_cnt` comes from `last_mismatch_cnt`, which the rollback path
+    correctly leaves alone.
+    """
+    import inspect
+
+    from eda_agent.rtl_editor import _EditSession
+
+    assert "_accepted_req_split" in _EditSession.__dataclass_fields__, (
+        "the accepted design's requirement split is not held anywhere")
+    src = inspect.getsource(_EditSession)
+    #: The baseline is READ from the cache, never from the live results.
+    assert "req_before = self._accepted_req_split" in src
+    #: And NO rollback path may write it. There are six `write_rtl(
+    #: old_file_content)` sites in this session and an earlier version of this
+    #: test sliced from the first one, so a mutant that moved the baseline on
+    #: the requirement-ratchet rollback at the fourth site survived. Every site
+    #: is checked, from the restore to the `return` that ends that path.
+    lines = src.splitlines()
+    sites = [n for n, ln in enumerate(lines)
+             if "write_rtl(old_file_content)" in ln]
+    assert len(sites) >= 4, f"only {len(sites)} rollback site(s) found"
+    for n in sites:
+        tail = lines[n:]
+        end = next((i for i, ln in enumerate(tail)
+                    if ln.strip().startswith("return result")), len(tail))
+        seg = "\n".join(tail[:end])
+        assert "_accepted_req_split" not in seg, (
+            f"the rollback at source line {n + 1} moved the baseline it is "
+            f"supposed to leave alone")
+
+
+def test_the_gradient_latches_a_real_repair_that_tips_no_requirement():
+    """A requirement with thirty failing testpoints and one with a single
+    failing testpoint both count zero, so an edit clearing ninety-nine of them
+    without tipping any requirement over the line was worth nothing:
+
+        #14   178 -> 79 failing testpoints   passing 88 -> 88   DISCARDED
+        #21   105 -> 48 failing testpoints   passing 88 -> 88   DISCARDED
+         #9   105 -> 180 failing testpoints  passing 86 -> 88   LATCHED
+
+    A 56% reduction in wrongness thrown away; a near-doubling banked.
+    """
+    import inspect
+
+    from eda_agent.rtl_editor import _EditSession
+
+    src = inspect.getsource(_EditSession)
+    i = src.index("gradient = (")
+    body = src[i:src.index("if len(ok1) <= len(ok0) and not gradient:")]
+    assert "len(ok1) == len(ok0)" in body, "the gradient is not held at equal passing"
+    assert "int(sim_mismatch_cnt) < int(prev_mismatch_cnt)" in body, (
+        "the gradient does not require the failing count to FALL")
+
+
+def test_silencing_cannot_buy_the_gradient():
+    """**DEFECT #93 SURVIVES THE CHANGE, WHICH IS WHY IT IS SAFE.** A
+    failing-count ratchet cannot tell FAILING -> PASSING from FAILING -> DARK,
+    so un-exercising a check reads as progress -- measured on run 8 round 21,
+    where `dout <= sSDA` -> `dout <= dSDA` cut failing by one purely by making
+    REQ-0009 go dark.
+
+    A silencing puts that requirement in `dark1`, so the guard below is
+    non-empty and the gradient clause is closed. The gradient is reachable only
+    by a design that lost no evidence at all.
+    """
+    import inspect
+
+    from eda_agent.rtl_editor import _EditSession
+
+    src = inspect.getsource(_EditSession)
+    i = src.index("gradient = (")
+    body = src[i:src.index("if len(ok1) <= len(ok0) and not gradient:")]
+    assert "not ((bad0 | ok0) & dark1)" in body, (
+        "a check that went dark could buy a latch on the gradient")

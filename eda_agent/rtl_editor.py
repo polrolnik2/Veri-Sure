@@ -577,6 +577,12 @@ class _EditSession:
     #: `commit` judges on.
     best_passing: int | None = None
     best_rtl: str | None = None
+    #: The requirement split of the ACCEPTED design, `(passing, failing,
+    #: uncovered)`. Held here rather than re-derived from `req_results`,
+    #: because the rollback path restores the old RTL without re-reviewing, so
+    #: `req_results` describes the design that was just discarded. Updated only
+    #: where the accepted RTL changes; a rollback must not move it.
+    _accepted_req_split: tuple[set, set, set] | None = None
 
     is_done: bool = False
     action_calls: int = 0
@@ -1852,8 +1858,34 @@ class _EditSession:
         result = self._base_result()
         prev_mismatch_cnt = int(self.last_mismatch_cnt)
         prev_fail_time = self.last_fail_time
-        # Snapshot the requirement picture BEFORE `review()` overwrites it.
-        req_before = self._req_split()
+        #: **THE BASELINE IS THE ACCEPTED DESIGN, NOT THE LAST SIMULATION.**
+        #: This read `self._req_split()`, which reports whatever `req_results`
+        #: last held -- and the rollback path writes the old RTL back WITHOUT
+        #: re-reviewing, so after any failed commit `req_results` still
+        #: describes the FAILED design. The next commit was then judged against
+        #: the attempt that had just been thrown away.
+        #:
+        #: Measured on the run that found it:
+        #:
+        #:     #2  LATCH   86 -> 88      the accepted RTL is now at 88
+        #:     #6  roll    88 -> 86      thrown away
+        #:     #7  LATCH   86 -> 88      "before" is the DISCARDED 86
+        #:
+        #: so #7 banked a design that only recovered ground the accepted one
+        #: already held, and the passing count sat at 88 for 25 commits while
+        #: the loop churned 83/86/88 latching recoveries.
+        #:
+        #: And the two halves of one decision disagreed: `prev_mismatch_cnt`
+        #: comes from `last_mismatch_cnt`, which the rollback path correctly
+        #: leaves alone, so the FAILING-testpoint baseline was right while the
+        #: REQUIREMENT baseline was stale -- in the same comparison.
+        #:
+        #: Cached rather than re-simulated: a rollback restores a design this
+        #: session has already measured, and paying for a second review of it
+        #: would charge a trial's cost for a number already known.
+        req_before = self._accepted_req_split
+        if req_before is None:
+            req_before = self._accepted_req_split = self._req_split()
         is_syntax_correct, syntax_output = check_syntax(self.rtl_path)
         result["is_syntax_correct"] = is_syntax_correct
         result["syntax_output"] = syntax_output
@@ -2004,7 +2036,35 @@ class _EditSession:
                 "silenced": sorted(bad0 & dark1),
                 "went_dark_from_passing": sorted(ok0 & dark1),
             }
-            if len(ok1) <= len(ok0):
+            #: **PASSING JUDGES, BUT A COARSE JUDGE DISCARDS REAL REPAIRS.**
+            #: A requirement with thirty failing testpoints and one with a
+            #: single failing testpoint both count zero, so an edit clearing
+            #: ninety-nine of them without tipping any requirement over the
+            #: line is worth nothing. Measured on the run that found it:
+            #:
+            #:     #14   178 -> 79 failing testpoints   passing 88 -> 88   DISCARDED
+            #:     #21   105 -> 48 failing testpoints   passing 88 -> 88   DISCARDED
+            #:      #9   105 -> 180 failing testpoints  passing 86 -> 88   LATCHED
+            #:
+            #: A 56% reduction in wrongness thrown away; a near-doubling
+            #: banked.
+            #:
+            #: **AND THE ANTI-SILENCING ARGUMENT SURVIVES INTACT, WHICH IS THE
+            #: WHOLE REASON THIS IS SAFE.** Defect #93 is that a failing-count
+            #: ratchet cannot tell FAILING -> PASSING from FAILING -> DARK, so
+            #: un-exercising a check reads as progress -- measured on run 8
+            #: round 21, where `dout <= sSDA` -> `dout <= dSDA` cut failing by
+            #: one purely by making REQ-0009 go dark. A silencing puts that
+            #: requirement in `dark1`, so `silenced` is non-empty and this
+            #: clause is closed. The gradient is reachable only by a design
+            #: that lost no evidence at all.
+            gradient = (
+                req_before is not None and req_after is not None
+                and len(ok1) == len(ok0)
+                and not ((bad0 | ok0) & dark1)
+                and int(sim_mismatch_cnt) < int(prev_mismatch_cnt)
+            )
+            if len(ok1) <= len(ok0) and not gradient:
                 # REVERTING IS A POLICY, NOT A LAW. A greedy filter is a good
                 # default and is also, exactly, a hill-climber: a repair needing
                 # several parts to land together has to pass through a worse
@@ -2020,6 +2080,7 @@ class _EditSession:
                     if new_fail_time is not None:
                         self.last_fail_time = int(new_fail_time)
                     result["is_action_executed"] = True
+                    self._accepted_req_split = req_after
                     result["kept_despite_no_improvement"] = True
                     result["accept_reason"] = (
                         f"KEPT WITHOUT IMPROVING (rollback guard off): passing "
@@ -2054,8 +2115,13 @@ class _EditSession:
                       f"{sim_mismatch_cnt}, for direction only.)"
                 )
                 return result
+            self._accepted_req_split = req_after
             result["accept_reason"] = (
-                f"LATCHED: passing requirements {len(ok0)} -> {len(ok1)}"
+                (f"LATCHED ON THE GRADIENT: passing requirements held at "
+                 f"{len(ok1)} with nothing silenced, and failing testpoints "
+                 f"{prev_mismatch_cnt} -> {sim_mismatch_cnt}"
+                 if gradient else
+                 f"LATCHED: passing requirements {len(ok0)} -> {len(ok1)}")
                 + (f", repairing {', '.join(sorted(bad0 & ok1))}" if bad0 & ok1 else "")
                 + (f"; but {', '.join(sorted(ok0 & bad1))} BROKE" if ok0 & bad1 else "")
                 + (f"; and {', '.join(sorted(bad0 & dark1))} went dark rather "
