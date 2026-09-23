@@ -500,6 +500,69 @@ def strong_not_stated(source: str) -> list[str]:
 _INVARIANTS = ("throughout", "stable", "never")
 
 
+def hand_rolled_window(source: str) -> bool:
+    """Does this check build its own window by indexing the trace?
+
+    **A CHECK THAT SCANS `range()` OVER TRACE INDICES IS WRITING ITS OWN
+    `after`, AND EVERY GUARANTEE THIS MODULE OFFERS PASSES IT BY.** `extent`,
+    `governed` and `body` fix where a window's boundaries fall; a hand-rolled
+    loop is not subject to them, and a later correction to them will not reach
+    it either.
+
+    Measured on the frozen i2c set: 17 of 122 checks scan `range()` over trace
+    indices without ever calling `after` -- 14% of the set outside every window
+    rule the module enforces. REQ-0135 is what that costs when one
+    of them gets it wrong: it sets `end` to the first row where
+    `start_sequence` is false, then searches `range(scl_low, end)` for `idle`,
+    which excludes that row -- and `idle` and `start_sequence` being mutually
+    exclusive, `idle` first becomes true exactly there. Over every START window
+    in the suite, `idle` was found inside the search range 0 times and only at
+    the excluded row 184 of 184 on one design and 236 of 236 on another. The
+    check cannot pass for any design that returns to idle when the sequence
+    ends.
+
+    That is `Window.extent`'s defect with the sign reversed -- `after` once
+    INCLUDED the closing row in an invariant, this EXCLUDES the closing row
+    where the evidence lives -- and the fix for the first does not reach the
+    second.
+
+    **REPORTING, NOT A VERDICT.** A hand-rolled scan can be perfectly correct,
+    and some requirements need something `after` cannot express. What this says
+    is that the check is UNGUARDED, which is a fact about the check and not an
+    accusation. Text only: an AST walk, no design and no trace.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False                   # a non-compiling body is another gate's
+    #: A COMPREHENSION IS A LOOP. `any(f(trace[j]) for j in range(a, b))`
+    #: scans exactly as `for j in range(a, b)` does, and checking only
+    #: `ast.For` missed REQ-0150 -- which uses `range(start, end)` in one place
+    #: and `range(start, end + 1)` in another, its author managing the boundary
+    #: by hand in two directions within one body.
+    scans = False
+    for node in ast.walk(tree):
+        iters = []
+        if isinstance(node, ast.For):
+            iters = [node.iter]
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp,
+                               ast.DictComp)):
+            iters = [c.iter for c in node.generators]
+        for it in iters:
+            if isinstance(it, ast.Call) and getattr(it.func, "id", None) == "range":
+                scans = True
+        if scans:
+            break
+    if not scans:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if (getattr(node.func, "id", None) == "after"
+                    or getattr(node.func, "attr", None) == "after"):
+                return False
+    return True
+
+
 def unbounded_invariant(source: str) -> list[str]:
     """Invariant operators applied to a window that runs to END OF TRACE.
 

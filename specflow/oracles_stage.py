@@ -54,6 +54,7 @@ from .refmodel import trust
 from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
 from .refmodel import oracle_gen
+from .refmodel.temporal import hand_rolled_window
 from .refmodel.oracle_gen import run_cell_gen, run_oracle_gen
 from .refmodel.oracles import (RequirementOracle, decide, replay,
                                transactional_view, well_formed)
@@ -3592,6 +3593,21 @@ def run_oracle_stage(
                    },
                    # What the designs said without being allowed to decide.
                    "instrument_notes": disagreements,
+                   # CHECKS OUTSIDE EVERY WINDOW RULE `temporal` ENFORCES.
+                   # A check that scans `range()` over trace indices writes its
+                   # own `after`, so `extent`, `governed` and `body` do not
+                   # apply to it and a later correction to them will not reach
+                   # it. Measured on i2c: 17 of 122, two of them among the ten
+                   # that convict a known-good design, and REQ-0135 shows the
+                   # cost -- it searches a range that excludes the row its own
+                   # boundary lands on, so `idle` was found inside the range 0
+                   # times and only at the excluded row 184 of 184 on one
+                   # design and 236 of 236 on another. Reported, never gated:
+                   # a hand-rolled scan can be right, and some requirements
+                   # need what `after` cannot express.
+                   "hand_rolled_windows": sorted(
+                       {o.req_uid for o in (trusted or ())
+                        if hand_rolled_window(getattr(o, "source", "") or "")}),
                    "unsatisfiable_by_the_control": sorted(
                        u for u, d in disagreements.items() if "control" in d),
                    # HOW MUCH OF THAT THE TIGHTENING LOOP CREATED. Measured
