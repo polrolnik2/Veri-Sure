@@ -68,3 +68,54 @@ only `full2` and `full7` carry a complete set.
 it today, is not measuring what the target means by it.** Fixing that makes the
 number worse. That is the direction honesty runs in here, and it is why the
 remaining work is to lower a real 24.3% rather than to preserve a nominal 0.
+
+
+---
+
+# CORRECTION: o1..o3 are a DIFFERENT instrument and cannot be re-scored
+
+The section above says `o3` "would move the same way under the same
+substitution". That was a guess presented as a prediction, and it is wrong in a
+way that matters more than the guess.
+
+I ran the substitution on `o3` and `o2` using `full2`'s contract, on the
+strength of every req_uid and tp_uid being contained in full2's. The numbers
+that came back -- o3 span 0.842, blindness **0.9972**, audit 4/13 -- are
+INVALID and are retracted. The cause:
+
+    run        population declares
+    full2      24 probes
+    full7      24 probes
+    e6/myrun   24 probes
+    o1         17 probes
+    o2         17 probes
+    o3         17 probes
+
+`o1`..`o3` ran against a contract declaring **17** probes. Replaying one of
+their population members under full2's 24-probe contract reports all 24
+`unavailable`, so every probe-reading check abstains and blindness goes to
+99.7% by construction. Shared requirement and testpoint uids do not make two
+runs the same instrument, and containment was the wrong test.
+
+Their own contract is not on disk -- `o1`..`o3` kept only `scorecard.json`,
+`oracles.json`, `witness.py`, `population/` and `agent_io/` -- so the
+substitution cannot be done for them at all.
+
+## What this says about o3's recorded triple
+
+`o3`'s 97.5% / 3.5% / 0.0% stands as what ITS run measured, and it is not
+comparable to `full2`'s. It is a different probe contract, hence a different
+population, a different corpus and a different control relationship. Its
+`audit = 0 of 15` is over a control that exposes none of ITS 17 probes, so the
+same criticism applies -- but the correction it would need is not the one
+computed here, and I have no way to compute it.
+
+## What is re-scorable, and what is not
+
+    run       own contract   stimulus matches a suite with golden traces   re-scorable
+    full2     (shared)       yes                                           YES  -- done
+    full7     yes            no (its own stimulus, digest differs)         needs a suite run
+    o1..o3    NO             n/a                                           NO
+
+So `full2` is the only run re-scored here, and **97.4% / 14.5% / 24.3% is the
+only honest triple on the board.** It misses two of the three targets.
