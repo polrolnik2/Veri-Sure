@@ -198,40 +198,68 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
         notes.append("no requirement states an observable obligation, so span "
                      "has no denominator and is reported as absent")
 
-    #: **ONE CHECK PER REQUIREMENT, AND IT USED TO COLLAPSE THE REST IN
-    #: SILENCE.** This map is keyed by `req_uid`, so a caller passing two
+    #: **KEYED BY BODY, NOT BY REQUIREMENT -- AND IT USED TO COLLAPSE THE REST
+    #: IN SILENCE.** This map was keyed by `req_uid`, so a caller passing two
     #: bodies for one requirement kept only the LAST and was told nothing. A
     #: sweep admitting extra corpus bodies read as 122, 241 and 349 checks and
     #: was 122 every time -- blindness APPEARED to rise and `effective_size` to
     #: fall as separators were added, which is not how adding separators
     #: behaves, and that impossibility is the only reason the collapse was
-    #: caught.
+    #: caught. "Fill the pool, then select" could not be MEASURED here at all.
     #:
-    #: The model is the limit, not the map: blindness over a set with more than
-    #: one check per requirement is not computable here at all, so "fill the
-    #: pool, then select" cannot be MEASURED by this function. Fixing that
-    #: means keying by a per-body identity while span and the denominator keep
-    #: counting requirements -- a change to the headline numbers that wants a
-    #: real run to validate, which is why this reports rather than repairs.
+    #: **A ONE-BODY-PER-REQUIREMENT SET SCORES EXACTLY AS BEFORE**, which is
+    #: every figure recorded on this branch. The first body keeps the bare uid
+    #: so the keys in `_population_tables`'s tables and in the logs stay
+    #: readable -- that part is a READABILITY choice and nothing depends on it,
+    #: a mutant suffixing every key passes the whole suite. The NUMBERS are the
+    #: compatibility claim, and `test_a_ONE_BODY_SET_IS_SCORED_EXACTLY_AS_BEFORE`
+    #: is where it is pinned.
+    #:
+    #: WHICH COLUMNS COUNT BODIES AND WHICH COUNT REQUIREMENTS:
+    #:
+    #:   span       REQUIREMENTS. It asks what share of the specification has a
+    #:              check at all, and two checks for one requirement do not
+    #:              cover more of it than one does.
+    #:   audit      REQUIREMENTS. A requirement convicts the control when ANY
+    #:              of its bodies does -- rejections union, which is the rule
+    #:              the whole set is read by.
+    #:   blindness  BODIES, because a cell is separated by a CHECK and a second
+    #:              body is a second chance to separate it. This is the column
+    #:              the collapse was destroying.
+    #:   eff_size   BODIES, as distinct verdict vectors -- which is exactly the
+    #:              measure that says whether a second body is a separator or a
+    #:              duplicate.
     bodies = [o for o in (oracles or []) if o.get("source")]
-    held = {str(o["req_uid"]): RequirementOracle(
-        req_uid=str(o["req_uid"]), tp_uids=list(o.get("tp_uids") or []),
-        clause=str(o.get("clause") or ""), source=str(o["source"]))
-        for o in bodies}
-    dropped = len(bodies) - len(held)
-    if dropped:
+    held: dict[str, RequirementOracle] = {}
+    req_of: dict[str, str] = {}
+    seen_uid: dict[str, int] = {}
+    for o in bodies:
+        uid = str(o["req_uid"])
+        n = seen_uid.get(uid, 0)
+        seen_uid[uid] = n + 1
+        key = uid if n == 0 else f"{uid}#{n}"
+        held[key] = RequirementOracle(
+            req_uid=uid, tp_uids=list(o.get("tp_uids") or []),
+            clause=str(o.get("clause") or ""), source=str(o["source"]))
+        req_of[key] = uid
+    extra = len(held) - len(seen_uid)
+    if extra:
         notes.append(
-            f"{len(bodies)} check bodies were supplied for {len(held)} "
-            f"requirement(s) and {dropped} were DISCARDED: this scorecard "
-            f"keys checks by requirement, so only the last body for each "
-            f"survives. Every figure below describes {len(held)} checks, not "
-            f"{len(bodies)}, and blindness in particular cannot be read as a "
-            f"property of the larger set")
+            f"{len(held)} check bodies over {len(seen_uid)} requirement(s): "
+            f"{extra} requirement(s)' worth of ADDITIONAL bodies are carried. "
+            f"span and audit count requirements ({len(seen_uid)}); blindness "
+            f"and effective_size count bodies ({len(held)}), because a cell is "
+            f"separated by a check and a second body is a second chance to "
+            f"separate it")
     #: A check for a requirement with no observable is not counted in the
     #: numerator either -- the denominator's rule has to apply to both ends or
     #: it is not a rate. On the probe run this removes nothing: all 16 such
     #: requirements were abandoned.
-    counted = {u for u in held if u in denominator}
+    #: **REQUIREMENTS, NOT BODIES.** span asks what share of the specification
+    #: is covered, and the audit rate is over requirements the control can be
+    #: judged on -- a requirement with three bodies is still one requirement in
+    #: both.
+    counted = {u for u in set(req_of.values()) if u in denominator}
 
     base = choose_base(contract)
     outputs = [str(p.get("name")) for p in (contract.get("io") or [])
@@ -305,8 +333,17 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
         else:
             crows, cabs = _rows_for(audit_control, contract, stimulus_by_tp,
                                     base=base, transactional=transactional)
-            per_check = _verdicts(
-                {u: o for u, o in held.items() if u in counted}, crows, cabs)
+            #: Replayed per BODY and folded to requirements, because a
+            #: requirement convicts the control when ANY of its bodies does --
+            #: rejections union.
+            per_body = _verdicts(
+                {k: o for k, o in held.items() if req_of[k] in counted},
+                crows, cabs)
+            per_check = {}
+            for k, per in per_body.items():
+                dest = per_check.setdefault(req_of[k], {})
+                for tp, ok in per.items():
+                    dest[tp] = dest.get(tp, True) and ok
         for uid, per in per_check.items():
             if not per:
                 continue

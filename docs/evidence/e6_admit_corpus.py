@@ -10,6 +10,25 @@ raise audit.
 well-formedness only, the same mechanical screen the pipeline already applies.
 The point is to measure the trade, not to pick the winner.
 
+## THIS DRIVER'S EARLIER NUMBERS WERE MEASURING NOTHING
+
+`POOL.md` records the sweep reading 122, 241 and 349 checks and being 122 every
+time, because `score` keyed checks by `req_uid` and a second body for a
+requirement silently replaced the first. So the rows it produced were not
+"122 / 241 / 349 checks" but "122 checks, with the accepted body swapped for a
+corpus alternative", and blindness RISING as separators were added is what gave
+it away. `score` now keys by body -- span and audit still count requirements,
+blindness and `effective_size` count bodies -- so the question this file was
+written to ask is answerable for the first time.
+
+Two things had to be fixed here as well, and both are the same bug one level out:
+
+  * the audit fold keyed by `req_uid` and OVERWROTE, so with several bodies per
+    requirement the verdict was whichever body `decide_rtl` returned last.
+    Rejections union: a requirement convicts when any of its bodies does.
+  * `decide_rtl` was called without `stimulus_by_tp`, leaving its stimulus
+    refusal disarmed -- the defect that cost this branch a published figure.
+
 Golden is RUN and never read.
 """
 import json
@@ -73,22 +92,30 @@ def run(label, keep):
                               clause=x.get("clause", ""), source=x["source"])
             for x in keep]
     v: dict = {}
-    for r in decide_rtl(held, traces, contract, transactional=True):
-        if not r.broken and r.ok is not None:
-            v.setdefault(r.req_uid, {})[r.tp_uid] = bool(r.ok)
+    for r in decide_rtl(held, traces, contract, transactional=True,
+                        stimulus_by_tp=by_tp):
+        if r.broken or r.ok is None:
+            continue
+        #: **UNION, NOT OVERWRITE.** Several bodies now share a `req_uid`, and a
+        #: requirement convicts the control when ANY of them does -- the rule the
+        #: whole set is read by. Overwriting gives whichever body came last.
+        per = v.setdefault(r.req_uid, {})
+        per[r.tp_uid] = per.get(r.tp_uid, True) and bool(r.ok)
     c = score(oracles=keep, normalized=normalized, stimulus_by_tp=by_tp,
               contract=contract, population=population,
               requirements=requirements, audit_verdicts=v, audit_absent=absent)
     m = lambda ok: "MET" if ok else "no "  # noqa: E731
     print(f"  {label:22} bodies {len(keep):4}  SPAN {c.span:.4f} {m(c.span > 0.90)}  "
-          f"BLIND {c.blindness:.4f} {m(c.blindness < 0.20)}  "
+          f"BLIND {c.blindness:.4f} {m(c.blindness < 0.10)}  "
           f"AUDIT {c.control_convicted_by}/{c.control_judges} = {c.audit:.4f}  "
           f"eff_size {c.effective_size}", flush=True)
 
 
 print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
       f"{len(corpus)} requirements; accepted {len(oracles)}\n")
-print("target: span > 0.90, blindness < 0.20, audit = 0\n")
+#: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
+#: exists to move, so it is measured against < 0.10.
+print("target: span > 0.90, blindness < 0.10, audit = 0\n")
 for label, lim in (("accepted only", 0), ("+1 body each", 1),
                    ("+2 bodies each", 2), ("all well-formed", None)):
     run(label, admitted(lim))
