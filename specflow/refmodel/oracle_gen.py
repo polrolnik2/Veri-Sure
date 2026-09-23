@@ -463,25 +463,6 @@ still read that row, because a response arriving exactly at the release is a
 response that arrived. So write the window the requirement describes; do not
 narrow it by a row to dodge an edge, and do not add `after_activation=True` for
 that reason either -- it excludes the WRONG end.
-A SPECIFICATION WRITES AN EQUATION, NOT A SCHEDULE, AND A PROBE IS NOT OBLIGED
-TO BE A WIRE. When the text says `sto_condition = sSDA & ~dSDA & sSCL`, it
-states what the condition IS and says nothing about whether the design offers
-it in the same cycle or registers it from that cycle. Both are faithful
-implementations. So do NOT assert that a probe is already high at the very edge
-its defining transition occurs, unless the requirement states the timing --
-"immediately", "on the next clock", "within N cycles". Give the response the
-window it needs: `after(trace, transition, until=...)` and `eventually(w,
-probe_is_high, strong=True)` allows either reading, where reading the probe at
-the trigger row admits only one.
-
-Measured on `i2c_master_bit_ctrl`. Where the specification's own formula holds,
-the known-good design asserts the probe ONE EDGE LATER 499 times out of 499
-and the spec-derived population asserts it on the SAME edge 22 out of 22. Five
-checks written the tight way convicted the known-good design, and correcting
-only those two probes' phase moved the audit column from 24.3% to 5.7% with
-span and blindness unchanged to four decimal places. It is the single largest
-avoidable source of false convictions measured on this branch.
-
   eventually(w, holds)                  -> Verdict; holds at SOME row of w
   throughout(w, holds)                  -> Verdict; holds at EVERY row of w
   stable(w, port)                       -> Verdict; port never changes in w
@@ -976,7 +957,32 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
               "the number of checks that pass because they CANNOT FAIL doubled. "
               "The default with an override is the form that did neither.\n\n"
               "A probe is never an input. You cannot drive one; the design has "
-              "to be driven into the situation through its real inputs.")
+              "to be driven into the situation through its real inputs."
+              "\n\n"
+              "A SPECIFICATION WRITES AN EQUATION, NOT A SCHEDULE, AND A PROBE "
+              "IS NOT OBLIGED TO BE A WIRE. When the text says "
+              "`sto_condition = sSDA & ~dSDA & sSCL`, it states what the "
+              "condition IS and says nothing about whether the design offers it "
+              "in the same cycle or registers it from that cycle. Both are "
+              "faithful implementations, and they are transactionally DISTINCT "
+              "-- a registered probe enters a state, formula true and probe "
+              "still low, that a combinational one never enters, so the "
+              "compression to distinct states does not hide it. So do not "
+              "assert that a probe is already high at the very edge its "
+              "defining transition occurs, unless the requirement states the "
+              "timing -- \"immediately\", \"on the next clock\", "
+              "\"within N cycles\". Give the response the window it needs: "
+              "`after(trace, transition, until=...)` with "
+              "`eventually(w, probe_is_high, strong=True)` admits either "
+              "reading, where reading the probe at the trigger row admits one.\n"
+              "\n"
+              "Measured on i2c_master_bit_ctrl: where the formula holds, the "
+              "known-good design asserts the probe ONE EDGE LATER 499 times out "
+              "of 499 and the spec-derived population asserts it on the SAME "
+              "edge 22 out of 22. Five checks written the tight way convict the "
+              "known-good design, and correcting only those two probes\' phase "
+              "moves the audit column from 24.3% to 5.7% with span and "
+              "blindness unchanged to four decimal places.")
     blocks = [
         ("system", SYSTEM),
         ("contract_json", contract_json),
