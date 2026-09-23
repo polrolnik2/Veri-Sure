@@ -1,6 +1,6 @@
 """Testpoints where a candidate's RECORDED BEHAVIOUR differs from golden's.
 
-    e6_golden_diff.py <run-dir> <rtl> [<rtl> ...]
+    e6_golden_diff.py <run-dir> <rtl> [<rtl> ...] [--population <dir>]
 
 An independent yardstick for the RTL editor, and deliberately not the check
 set's: it asks whether the design MOVED TOWARD the reference, where the
@@ -16,6 +16,26 @@ recording, which is the same thing any other design produces.
 exposes none of it, so comparing on probes would report every testpoint as
 differing and say nothing. The honest comparison is the module boundary both
 designs actually have.
+
+**AND A RAW COUNT OF DIFFERENCES IS THE WRONG NUMBER, WHICH IS WHY
+`--population` EXISTS.** A spec-admissible design SHOULD differ from golden
+wherever the specification leaves the behaviour open; counting those measures
+conformance to golden's arbitrary choices, not correctness. Earlier work here
+quoted the raw form -- "261 of 348 testpoints differing" -- and this module
+already records why that is weak: "on a 32-bit port two spec-derived designs
+differ almost everywhere ... stratify set blindness by port width, or do not
+quote it".
+
+The seven independently written spec-derived designs are the instrument for
+it. Where they ALL agree on a `(testpoint, port)`, seven readings of the spec
+pin that behaviour and a candidate differing from golden there is a defect.
+Where they disagree, `variety.cells` already calls that a cell -- the spec is
+under-determined and differing is not evidence of anything.
+
+One caveat, stated rather than hidden: the mask comes from Python replays of
+the population and the difference from RTL-to-RTL recordings. The mask answers
+"do independent readings of the spec agree here", which does not depend on the
+substrate; the measurement is like-for-like.
 """
 import json
 import sys
@@ -85,6 +105,78 @@ def differs(a: list[dict], b: list[dict]) -> bool:
     return bool(bad or delta)
 
 
+def step(rows: list[dict], port: str) -> list[tuple[int, object]]:
+    """`(edge, value)` for `port`, as a step function over the recording.
+
+    ROWS ARE NOT COMPARABLE BY INDEX. `transactional_view` collapses runs of
+    identical samples, so two designs that behave identically can still have
+    different row counts and row 7 is not the same instant in both. The `edge`
+    number is the instant; this indexes by it and the reader holds the last
+    value at or before the edge it asks about.
+    """
+    return [(int(r.get("edge", 0)), (r.get("outputs") or {}).get(port))
+            for r in rows]
+
+
+def at(steps: list[tuple[int, object]], edge: int) -> object:
+    """The value in force at `edge`; None before the recording starts."""
+    lo, hi, out = 0, len(steps) - 1, None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if steps[mid][0] <= edge:
+            out = steps[mid][1]
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return out
+
+
+POP_DIR = None
+if "--population" in sys.argv:
+    POP_DIR = Path(sys.argv[sys.argv.index("--population") + 1])
+pop_rows: dict[str, dict[str, list[dict]]] = {}
+if POP_DIR is not None:
+    from specflow import oracles_stage as _OS
+    from specflow.refmodel.compose import choose_base as _base
+    sources = [q.read_text() for q in sorted(POP_DIR.glob("*.py"))]
+    stim = json.loads((RUN / "stimulus.json").read_text())
+    sbt = {t["tp_uid"]: t["stimulus_steps"] for t in stim["testpoints"]}
+    print(f"replaying {len(sources)} spec-derived design(s) for the "
+          f"constrained/under-determined mask", flush=True)
+    pop_rows = _OS._population_rows(sources, contract, sbt,
+                                    base=_base(contract), transactional=True)
+    print(f"  {len(pop_rows)} design(s) replayed\n", flush=True)
+
+
+def split_by_constraint(g: list[dict], c: list[dict], tp: str) -> tuple[int, int]:
+    """`(defect cells, slack cells)` over the edges golden recorded.
+
+    CONSTRAINED means every spec-derived design agrees on that port at that
+    edge -- seven independent readings of the specification pin the value, so a
+    candidate differing from golden there is a defect. Where they disagree the
+    specification is under-determined and differing is not evidence of
+    anything, which is the whole reason a raw difference count is the wrong
+    number.
+    """
+    defect = slack = 0
+    gsteps = {p: step(g, p) for p in outputs}
+    csteps = {p: step(c, p) for p in outputs}
+    psteps = {d: {p: step(rows.get(tp) or [], p) for p in outputs}
+              for d, rows in pop_rows.items()}
+    for r in g:
+        e = int(r.get("edge", 0))
+        for p in outputs:
+            gv, cv = at(gsteps[p], e), at(csteps[p], e)
+            if gv == cv:
+                continue
+            vals = {at(psteps[d][p], e) for d in psteps if psteps[d][p]}
+            if len(vals) == 1:
+                defect += 1
+            else:
+                slack += 1
+    return defect, slack
+
+
 print(f"running GOLDEN ({GOLDEN.name}) -- path only, never read", flush=True)
 gold = record(GOLDEN)
 print(f"  {len(gold)} testpoint(s) recorded\n", flush=True)
@@ -105,6 +197,16 @@ for cand in CANDIDATES:
           f"golden = {100 * len(diff) / max(1, len(shared)):.1f}%")
     print(f"  {bad} of {tot} (edge, output) cell(s) differ = "
           f"{100 * bad / max(1, tot):.2f}%   row-count delta {delta}")
+    if pop_rows:
+        d_sum = s_sum = 0
+        for tp in shared:
+            d, sl = split_by_constraint(gold[tp], got[tp], tp)
+            d_sum += d
+            s_sum += sl
+        tot2 = d_sum + s_sum
+        print(f"  of the differences, {d_sum} sit where ALL spec-derived "
+              f"designs agree (DEFECT) and {s_sum} where they do not "
+              f"(under-determined) = {100 * d_sum / max(1, tot2):.1f}% defect")
     if missing:
         print(f"  {len(missing)} testpoint(s) golden recorded and this did not")
     print(flush=True)
