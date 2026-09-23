@@ -143,12 +143,33 @@ Python control. Eight remain unexposed and are the familiar list -- `cnt_zero`,
 `active_command`, the four `*_sequence` probes, plus full7's own
 `write_stable_high_phase` and `read_sample_window`.
 
-**BLINDNESS DOES NOT REPRODUCE AND I CANNOT ACCOUNT FOR IT.** 0.2450 recorded
-against 0.2896 here, on a cell count that matches exactly (29392). The
-population is replayed in Python by `score`, which the width guard does not
-touch -- it lives in the cocotb runtime -- so the obvious explanation is wrong.
-The testpoint count also differs by one (442 traces against 443 rendered
-tests). Recorded as unexplained rather than attributed.
+**BLINDNESS DOES NOT REPRODUCE, AND THE CAUSE IS THE BOUNDARY FIX** -- not the
+width guard, and not the harness.
+
+    full2 scorecard written   2026-09-19 04:41
+    full7 scorecard written   2026-09-22 18:05
+    a11aa4d boundary fix      2026-09-22 18:58
+
+Both recorded scorecards PREDATE `a11aa4d`, "An invariant was being asserted
+over the row that ENDED its window" -- full7's by 53 minutes. A re-score runs
+today's `temporal.py`, where `throughout`, `stable` and `never` read `extent`
+and `governed` instead of `rows` and `body`. So the two numbers were computed
+by different instruments and the difference is the fix, working.
+
+    run     blindness recorded -> re-scored   invariant-operator checks
+    full2   0.1464 -> 0.1454   (-0.001)       16 of 122   (13%)
+    full7   0.2450 -> 0.2896   (+0.045)       22 of 123   (18%)
+
+full7 is the more exposed corpus and moves far more, which is the consistent
+direction -- though 18% against 13% does not by itself account for a delta
+forty times larger, so the density is corroboration and not a proof.
+
+**The trade is the finding.** The boundary fix removes convictions that came
+from asserting an invariant over the row that ended its window -- good for
+audit -- and every conviction it removes is also a separation lost, so
+blindness RISES. On full7 that is +4.5 points of blindness bought with
+however many spurious convictions. Span was unmoved (0.9820 both ways), so it
+is paid for out of blindness alone.
 
 ## The two honest triples
 
