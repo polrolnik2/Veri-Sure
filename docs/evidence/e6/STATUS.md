@@ -32,6 +32,11 @@ an equation, not a schedule, so `sta_condition`/`sto_condition` may be registere
 and **`|->` NOT `|=>`** (`after_activation=True` demoted wherever the requirement
 carries no sequence word and licenses no cycle count -- 28 of 122 matched).
 
+`LAST-CONVICTION.md` is the detail on the one that remains, including why closing
+it from here would be grade-gating, and the measured comparison against the
+symmetric form of the phase rule (which is worse: 2/35 = 0.0571, because
+abstention costs the denominator five checks).
+
 ## What remains, and why
 
     REQ-0055 [behavioural]  the last counted conviction
@@ -107,7 +112,8 @@ the goal asks for.
    that `ProbeEntry` carries one. That WIDENS the audit denominator instead of
    shrinking it -- today all six are refused, which is right and is still a loss
    of reach.
-2. **Re-run normalize**, and read `OBSERVABLE-LICENCE.md` first. 34% of forms
+2. **Re-run normalize**, and read `OBSERVABLE-LICENCE.md` and
+   `LAST-CONVICTION.md` first. 34% of forms
    name an observable the requirement's words do not license, and REQ-0055 is one
    of them. This is the only route to audit = 0 identified.
 3. **Re-run the oracle stage** from those artifacts, so checks are authored under

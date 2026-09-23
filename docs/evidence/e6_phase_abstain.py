@@ -27,6 +27,25 @@ This measures what that rule costs, beside what the choosing rule costs, so the
 difference between "abstain" and "pick the later reading" is a number rather than
 an argument.
 
+## THE FIRST VERSION OF THIS FILE REPORTED A NUMBER THAT WAS WRONG, AND WHY
+
+It called `oracles.decide` directly to get its verdicts instead of going through
+`decide_rtl`, and so bypassed everything `decide_rtl` does: the unknown-port
+downgrade, BOTH halves of the width guard, and the per-requirement fold. It
+reported audit 15/43 = 0.3488 -- worse than the 9/42 baseline -- with REQ-0096,
+REQ-0100 and REQ-0102 convicting on 477 to 482 testpoints each, which is exactly
+the width problem with the guard removed.
+
+**A driver that re-implements a guarded path loses the guards**, which is the same
+mistake as the eighteen drivers that called `decide_rtl` without `stimulus_by_tp`
+and so left its stimulus refusal disarmed. Verdicts now come from `decide_rtl`;
+`phase_sensitive` is used ONLY to answer whether a check's verdict depends on a
+probe's schedule, which is a property of the check and not of the guard.
+
+Requirement granularity, like the rest of this branch: `decide_rtl` folds its
+results with `_worst`, so a conviction belongs to a requirement rather than to a
+testpoint, and a flagged requirement's conviction is dropped wholesale.
+
 Golden is RUN and never read.
 """
 import json
@@ -38,7 +57,7 @@ from specflow.probes import declared_probes  # noqa: E402
 from specflow.refmodel.oracle_gen import RequirementOracle  # noqa: E402
 from specflow.refmodel.oracles import decide as decide_one  # noqa: E402
 from specflow.refmodel.oracles import ports_read, transactional_view  # noqa: E402
-from specflow.refmodel.rtl_trace import load_traces, rows_from  # noqa: E402
+from specflow.refmodel.rtl_trace import decide_rtl, load_traces, rows_from  # noqa: E402
 from specflow.refmodel.temporal import phase_sensitive  # noqa: E402
 from specflow.scorecard import score  # noqa: E402
 
@@ -64,40 +83,50 @@ held = [RequirementOracle(req_uid=x["req_uid"], tp_uids=list(x["tp_uids"]),
                           clause=x.get("clause", ""), source=x["source"])
         for x in oracles]
 
+#: **VERDICTS FROM `decide_rtl`, AND FROM NOWHERE ELSE.** Every guard lives in
+#: there. `stimulus_by_tp` arms its stimulus refusal as well.
 verdicts: dict = {}
+for r in decide_rtl(held, traces, contract, transactional=True,
+                    stimulus_by_tp=by_tp):
+    if not r.broken and r.ok is not None:
+        verdicts.setdefault(r.req_uid, {})[r.tp_uid] = bool(r.ok)
+
+#: **SENSITIVITY IS A PROPERTY OF THE CHECK**, asked of the recorded rows and
+#: answered by the shipped instrument. Asked only where the check convicts,
+#: because this driver computes the audit column and a pass that would flip
+#: matters for blindness, which comes from `score`'s own population replay and is
+#: not touched here. Stated as a limit rather than left as an optimisation.
+convicting = {u for u, d in verdicts.items() if not all(d.values())}
 flagged: dict = {}
 for o in held:
-    reads = ports_read(o, contract)
-    #: Only the probes this check READS can move its verdict, and asking about
-    #: the others costs a replay each for nothing. `phase_sensitive` replays the
-    #: check once per probe.
-    mine = [p for p in probes if p in reads]
+    if o.req_uid not in convicting:
+        continue
+    mine = [p for p in probes if p in ports_read(o, contract)]
+    if not mine:
+        continue
     for tp, t in traces.items():
         rows = transactional_view(rows_from(t, side="dut"))
         try:
             r = decide_one(o, rows)
         except Exception:  # noqa: BLE001
             continue
-        if r.broken or r.ok is None:
+        if r.broken or r.ok is not False:
             continue
-        #: **ASKED ONLY OF A CONVICTION, AND THE SCOPE IS THE REASON.** This
-        #: driver computes the AUDIT column, where only convictions count. A
-        #: PASS whose phase-sensitivity would flip it is equally not evidence,
-        #: and it matters for BLINDNESS -- but blindness here comes from
-        #: `score`'s own population replay, which this does not touch, so
-        #: flagging passes would cost 50x the replays and change no number
-        #: reported below. Stated rather than left as an optimisation, because
-        #: "the rule was applied to convictions only" is a limit on the result.
-        if mine and r.ok is False:
-            hit = phase_sensitive(lambda rw, _o=o: decide_one(_o, rw), rows,
-                                  mine, text_of.get(o.req_uid, ""))
-            if hit:
-                flagged.setdefault(o.req_uid, set()).update(hit)
-                continue          # abstains on this testpoint
-        verdicts.setdefault(o.req_uid, {})[tp] = bool(r.ok)
+        hit = phase_sensitive(lambda rw, _o=o: decide_one(_o, rw), rows, mine,
+                              text_of.get(o.req_uid, ""))
+        if hit:
+            flagged.setdefault(o.req_uid, set()).update(hit)
+            break
 
-print(f"checks whose CONVICTION depends on a probe's SCHEDULE somewhere: "
-      f"{len(flagged)} of {len(oracles)}")
+#: The conviction is dropped, not the check: it keeps every testpoint on which it
+#: passed, so this costs separations only where it actually objected.
+for u in flagged:
+    verdicts[u] = {tp: ok for tp, ok in verdicts[u].items() if ok}
+    if not verdicts[u]:
+        del verdicts[u]
+
+print(f"requirements convicting the control                 {len(convicting)}")
+print(f"  ...whose conviction depends on a probe's SCHEDULE  {len(flagged)}")
 for u in sorted(flagged):
     print(f"  {u}  on {sorted(flagged[u])}")
 
