@@ -138,3 +138,61 @@ was not.
 
 The width mismatch is the proof that this is about names and not about
 conformance: name identity was achieved and meaning identity was not.
+
+
+---
+
+# MEASURED: the width guard, run through the pipeline
+
+`Env.sample` now refuses a probe binding wider than the contract declares. Re-run
+against golden, with `PROBE_WIDTHS` present:
+
+    width-REFUSED 6 probe(s):
+      cscl        declared 1  found 2
+      csda        declared 1  found 2
+      filter_cnt  declared 1  found 14
+      fscl        declared 1  found 3
+      fsda        declared 1  found 3
+      idle        declared 1  found 18
+
+Six, not the five predicted from the value ranges. `idle` binds an EIGHTEEN-bit
+signal and `filter_cnt` a fourteen-bit one -- both read as a constant 0 through
+the old path, which is why the range table showed `idle` as `[0]` and called it
+"differs" rather than naming it a mis-binding. A value range cannot tell a
+constant signal from a wide one sampled wrongly; the declared width can.
+
+## The audit column, all three states of the instrument
+
+    frozen 122-check set vs GOLDEN      pass   FAIL   abstain   decided   AUDIT
+    probes unbound                        26      4        92        30   13.3%
+    case-bound, no width guard            32     15        75        47   31.9%
+    case-bound + WIDTH GUARD              29     10        83        39   25.6%
+
+The guard removed five convictions -- REQ-0061, REQ-0096, REQ-0100, REQ-0102,
+REQ-0128 -- and eight decided checks. Those five were convicting golden on a
+quantity they did not mean.
+
+## The seven, reproduced mechanically
+
+    **PASSES HERE AND FAILS ON GOLDEN: 7**
+    REQ-0035, REQ-0053, REQ-0066, REQ-0067, REQ-0110, REQ-0111, REQ-0112
+
+One revision ago these seven were derived BY HAND, by scrubbing the ten
+against a list of probes I judged suspect. The guard, applied in the pipeline
+with no list and no judgement, returns exactly the same seven. A hand-scrub and
+a mechanical rule agreeing on the same set is the difference between a claim
+and a measurement.
+
+These seven still pay an editor to move away from correct behaviour, and none
+of them now rests on a mis-bound probe.
+
+## What is left in the audit column
+
+Ten convictions of golden survive the guard: REQ-0034, 0035, 0053, 0055, 0058,
+0066, 0067, 0110, 0111, 0112. Of those, **one has a known mechanical shape** --
+REQ-0034 is `throughout` over a window running to the end of the trace, which
+convicts any trace carrying a second transaction. Gating that shape would leave
+**9 of 38 = 23.7%**.
+
+The other nine have no mechanical explanation yet. They are the real audit
+residue, and no instrument fix reaches them.
