@@ -57,15 +57,32 @@ def record(rtl: Path) -> dict[str, list[dict]]:
             for tp, t in load_traces(results).items()}
 
 
+def cells(a: list[dict], b: list[dict]) -> tuple[int, int, int]:
+    """`(differing cells, compared cells, row-count delta)`.
+
+    **A PER-TESTPOINT FLAG SATURATES AND CANNOT SHOW MOVEMENT.** One differing
+    edge anywhere in a several-hundred-edge recording sets it, so two designs
+    at wildly different distances from golden both read ~98%. The cell -- one
+    (edge, declared output) pair -- is the resolution at which a repair that
+    fixed half a testpoint is visible.
+
+    Rows are compared over the common prefix and the length difference is
+    reported separately rather than folded in: a recording that ends early is a
+    different fact from one that disagrees, and adding them would let a design
+    that stops responding score as closer.
+    """
+    n = min(len(a), len(b))
+    bad = 0
+    for ra, rb in zip(a[:n], b[:n]):
+        oa, ob = ra.get("outputs") or {}, rb.get("outputs") or {}
+        bad += sum(1 for p in outputs if oa.get(p) != ob.get(p))
+    return bad, n * len(outputs), abs(len(a) - len(b))
+
+
 def differs(a: list[dict], b: list[dict]) -> bool:
     """Any edge where the two recordings disagree on a declared output."""
-    if len(a) != len(b):
-        return True
-    for ra, rb in zip(a, b):
-        oa, ob = ra.get("outputs") or {}, rb.get("outputs") or {}
-        if any(oa.get(p) != ob.get(p) for p in outputs):
-            return True
-    return False
+    bad, _total, delta = cells(a, b)
+    return bool(bad or delta)
 
 
 print(f"running GOLDEN ({GOLDEN.name}) -- path only, never read", flush=True)
@@ -78,8 +95,16 @@ for cand in CANDIDATES:
     shared = sorted(set(gold) & set(got))
     diff = [tp for tp in shared if differs(gold[tp], got[tp])]
     missing = sorted(set(gold) - set(got))
+    bad = tot = delta = 0
+    for tp in shared:
+        b, t, d = cells(gold[tp], got[tp])
+        bad += b
+        tot += t
+        delta += d
     print(f"  {len(diff)} of {len(shared)} shared testpoint(s) DIFFER from "
           f"golden = {100 * len(diff) / max(1, len(shared)):.1f}%")
+    print(f"  {bad} of {tot} (edge, output) cell(s) differ = "
+          f"{100 * bad / max(1, tot):.2f}%   row-count delta {delta}")
     if missing:
         print(f"  {len(missing)} testpoint(s) golden recorded and this did not")
     print(flush=True)
