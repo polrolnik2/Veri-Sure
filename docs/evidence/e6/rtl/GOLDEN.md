@@ -184,3 +184,62 @@ What this does NOT say: that the editor cannot do better given more budget.
 `rtldbg5` died at 17 commits of 90 inside round 0. What it says is that the
 first two latched repairs already cost what the whole of `rtldbg3` cost, so the
 cost is not paid by a late or subtle move that a better latch rule could refuse.
+
+
+---
+
+# The abstentions were hiding convictions
+
+The audit column against golden was measured once before at **4 of 30**, and
+that number was wrong in a way that flattered the check set. 92 of 122 checks
+abstained on golden, and an abstention was read as "this check has nothing to
+say here". For 17 of them it meant something else: **the check could not read
+the signal it judges.**
+
+`probes.py` emits probe names lower-cased. Verilog is case-sensitive. The
+design spells its internal state in camel case, so `Env.sample("dscl")` looked
+up a handle that does not exist, returned `None`, and every check reading that
+probe abstained -- silently, with no error anywhere, on every testpoint.
+
+With case-insensitive binding in `tb/runtime.py`, the run now states what it
+rebound rather than succeeding quietly. Eight probes, each an exact case
+variant of one name, so no `casefold()` collision is possible:
+
+    cscl -> cSCL    csda -> cSDA      (captured)
+    dscl -> dSCL    dsda -> dSDA      (delayed)
+    fscl -> fSCL    fsda -> fSDA      (filtered)
+    sscl -> sSCL    ssda -> sSDA      (synchronised)
+
+## What that did to the audit column
+
+    frozen 122-check set vs GOLDEN     pass    FAIL    abstain
+    probes unbound                       26       4         92
+    probes case-bound                    32      15         75
+
+**AUDIT vs golden: 4/30 = 13.3%  ->  15/47 = 31.9%.**
+
+Of the 17 abstentions that collapsed, **11 came back as convictions**. The
+newly-convicting checks are REQ-0053, 0055, 0061, 0066, 0067, 0096, 0100,
+0102, 0110, 0111, 0112 -- every one of them a probe-reading check about the
+input synchroniser and the START/STOP detector, which is exactly the region the
+probes name. The binding did not create the convictions; it stopped hiding
+them.
+
+This cuts the other way from how a fix normally reads. Making more of the set
+decide made the set look WORSE, and that is the honest direction: a check that
+abstains because it cannot see is not a check that spares the design.
+
+## Ten checks reward moving away from correct behaviour
+
+Against `rtldbg5-partial.v` (88 pass, 31 FAIL):
+
+    **PASSES HERE AND FAILS ON GOLDEN: 10**
+    REQ-0035, 0053, 0061, 0066, 0067, 0096, 0100, 0110, 0111, 0112
+
+Ten of the fifteen checks that convict golden PASS on the repaired design.
+These are not merely wrong; they are the gradient the editor climbs. An editor
+optimising the passing count is being paid, by these ten, to move the design
+away from correct behaviour -- which is what the cell measurement above
+records as `scl_oen` going 2441 -> 6050 and `sda_oen` 1155 -> 4100.
+
+All ten read a probe. All ten were invisible before the binding landed.
