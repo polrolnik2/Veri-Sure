@@ -77,3 +77,64 @@ internal state judgeable on a design that does not carry that state as a
 signal.** Until that exists, span above 90% and audit at 0 are not jointly
 reachable on this instrument, and no selection rule over these 122 bodies
 changes it -- selection cannot add a property no member has.
+
+
+---
+
+# CORRECTION: the tree already holds the opposite framing, and I skipped it
+
+The section above says the silences are "a fact about **any** design outside the
+population's factoring". That states one reading of a disputed point as if it
+were settled. `scorecard.py` holds the other, and it was written first:
+
+    **THE GAP IS THE CONTROL'S, NOT THE CHECKS'.** A probe is a `dir: "probe"`
+    entry in the contract, so a design is REQUIRED to expose it. [...] It is
+    the other way round: the checks name state the contract declares, and the
+    control predates probes and implements none of it.
+
+On that reading the 75 silences are golden's NON-CONFORMANCE, not the set's
+narrowness, and `audit = 1/12` has a cause I also got wrong: I wrote that the
+control "transliterates golden and shares its factoring". It does not. **The
+control predates probes and implements none of them** -- which the tree says
+plainly and I inferred around.
+
+The same note records a measurement sharper than anything here: point the frozen
+set at a module that declares the contract's ports and ties EVERY OUTPUT TO A
+CONSTANT -- **14 pass, 0 FAIL, 108 abstain of 122.** A design that does nothing
+is convicted by nothing.
+
+## What survives both framings
+
+Contract-conformance decides who is at fault for the SILENCES. It does not
+touch these:
+
+1. **All 15 convictions of golden read a probe; 0 of the 16 port-only checks
+   convict it, and all 16 decide.** That is a property of the check set,
+   measured, and it holds whoever is non-conformant.
+
+2. **Five probes bind a same-named signal carrying a different quantity.**
+   `fSCL` matches by name modulo case, binds, and holds a three-bit shift
+   register where the check expects a one-bit level. **Conformance cannot
+   repair this**: a design may declare a probe named `fscl` and still mean
+   something else, and nothing in the pipeline checks the meaning. A
+   `dir: "probe"` entry obliges a NAME and a WIDTH; the check depends on a
+   QUANTITY. That gap is the contract's, not the control's and not golden's.
+
+3. `audit = 1/12` is audit over twelve checks of a hundred and twenty-three
+   however the twelve came about, and the scorecard already prints that caveat
+   rather than reporting a rate over a denominator it does not have.
+
+## Why "the probes are spec-derived" does not close the gap
+
+A probe is a NAME-BASED observability obligation, not a meaning-based one. The
+specification names the concept "filtered SCL"; the probe stage mints the
+identifier `fscl`; binding is `getattr(dut, "fscl")`, a symbol-table lookup.
+
+Golden HAS the concept -- a three-bit shift register holding the last samples,
+with the level derived from it. What it lacks is a one-bit signal NAMED `fscl`
+meaning that level. So spec-derivation of the probe transfers to a design that
+was handed the contract and to no other. The population was handed it. Golden
+was not.
+
+The width mismatch is the proof that this is about names and not about
+conformance: name identity was achieved and meaning identity was not.
