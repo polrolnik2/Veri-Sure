@@ -66,3 +66,61 @@ def test_it_carries_the_measurement(prefix):
 
 def test_it_offers_the_operator_that_admits_both_readings(prefix):
     assert "eventually" in prefix and "until=" in prefix
+
+
+def test_the_normalized_window_is_a_reading_not_a_fact(prefix):
+    """Normalization may propose the window. It may not impose it.
+
+    `gate_one` asks whether the response parsed, whether there is one block,
+    whether `clk` is in the window and whether the port names are declared. It
+    never asks whether the window is licensed by the requirement's own words,
+    and `oracle_gen`'s own comment names the result: "a wrong window arrives as
+    an instruction and departs as the author's defect."
+
+    Measured on i2c: `effect_follows` is True on 52 requirements and unlicensed
+    by the text on 39 of them; 27 of those reached a shipped check and two
+    convict a known-good design.
+    """
+    assert "OVERRULE IT" in prefix, "the requirement's words beat the block"
+    assert "START THERE" in prefix, (
+        "the block is still the starting point -- one window per requirement "
+        "rather than one per author's taste is what makes neighbouring checks "
+        "comparable, and that reason survives")
+    assert "TRANSCRIBE IT" not in prefix
+    assert "JUDGEMENT, NOT A FACT" in prefix
+
+
+def test_it_names_effect_follows_and_gives_the_test(prefix):
+    """The field that carries |=> vs |-> is the one worth re-reading."""
+    assert "effect_follows" in prefix
+    assert "after_activation=False" in prefix, (
+        "an author told the block may be wrong, without being told what right "
+        "looks like, rewrites windows nothing objected to")
+    assert "39 of those" in prefix, (
+        "the measurement has to travel with the instruction; a rule with no "
+        "evidence behind it is the first thing dropped")
+
+
+def test_it_says_which_change_to_record(prefix):
+    assert "say in your reasoning which" in prefix, (
+        "a departure from the block that is not recorded cannot be reviewed")
+
+
+def test_the_effect_follows_paragraph_names_no_design():
+    """MY addition to the shared briefing, specifically.
+
+    `SYSTEM` carries deliberate worked examples drawn from one design -- the
+    `sda_i` open-drain case, the `cmd_ack` trigger case -- and those are not in
+    question here; `test_counting_guidance_is_general_and_names_no_design`
+    scopes neutrality to the block that was once overfitted. This pins only the
+    paragraph added with the effect_follows measurement, which cites a count
+    and must not cite a port.
+    """
+    from specflow.refmodel.oracle_gen import SYSTEM
+
+    i = SYSTEM.index("THIS BLOCK IS A JUDGEMENT, NOT A FACT")
+    para = SYSTEM[i:SYSTEM.index("So `effect_follows` in particular", i)]
+    assert "39 of those" in para, "the measurement must be here"
+    for token in ("sda_i", "scl_i", "cmd_ack", "slave_wait", "al`", "i2c"):
+        assert token not in para, (
+            f"{token!r} makes a general rule look like one design's problem")

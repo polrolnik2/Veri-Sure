@@ -1326,9 +1326,12 @@ def test_counting_guidance_is_general_and_names_no_design():
 
     Two things gated the requirement class the operators were built for. The
     `sustains` paragraph opened with "When it is present", and the older rule
-    says "You are not inventing a window, you are copying one" -- so with
-    `sustains: []` the author holds the tool and an instruction against
-    reaching for it.
+    said "You are not inventing a window, you are copying one" -- so with
+    `sustains: []` the author held the tool and an instruction against reaching
+    for it. That instruction is now "START THERE, AND LET THE REQUIREMENT'S OWN
+    WORDS OVERRULE IT" (see `test_the_normalized_window_is_a_reading_not_a_fact`),
+    which weakens the bind without removing it: the author still starts from the
+    block, so the permission below is still what licenses the arithmetic.
 
     Normalization is RIGHT to leave it empty in that case: it can only quote a
     phrase naming the port's own duration, and a spec often states the number
@@ -1362,7 +1365,11 @@ def test_counting_guidance_is_general_and_names_no_design():
         assert token not in block, f"{token!r} overfits the prompt to one design"
 
     # And the rule it is an opening in must still stand, elsewhere.
-    assert "not inventing a window, you are copying one" in SYSTEM
+    assert "LET\nTHE REQUIREMENT'S OWN WORDS OVERRULE IT" in SYSTEM or \
+           "OVERRULE IT" in SYSTEM, (
+        "the author must still be pointed at the normalized block first, or "
+        "`sustains: []` stops meaning anything and every author invents a "
+        "window from taste")
 
 
 

@@ -498,12 +498,36 @@ def test_a_repair_round_is_told_the_window_may_be_wrong():
 
 
 def test_generation_keeps_the_transcribe_default():
-    """The default is not the defect. Copying the normalized window is what
-    makes neighbouring requirements' checks comparable rather than one window
-    per author's taste, so it stays -- and only a round with something to answer
-    is told the window is open to question."""
+    """The normalized block is where you START; it is not what binds you.
+
+    This used to pin "TRANSCRIBE IT ... you are not inventing a window, you are
+    copying one", on the ground that one window per requirement rather than one
+    per author's taste is what makes neighbouring checks comparable. That is
+    still the reason to start there, and it is NOT a reason to be bound.
+
+    Normalization is a faithfulness judgement and nothing downstream checks it:
+    `gate_one` asks whether the response parsed, whether there is one block,
+    whether `clk` is in the window and whether the port names are declared, and
+    stops. Measured on i2c: `activation.effect_follows` -- the `|=>` versus
+    `|->` decision -- is True on 52 requirements, and on 39 of those the
+    requirement's own text carries no sequence word and licenses no cycle count;
+    27 of the unlicensed ones reached a shipped check and two convict a
+    known-good design. `oracle_gen`'s own comment already named the shape of it:
+    "a wrong window arrives as an instruction and departs as the author's
+    defect."
+
+    So the default survives as a STARTING POINT and the requirement's own words
+    overrule it. `<window_authority>` stays repair-only: that block answers a
+    specific objection, and a generation round has none to weigh.
+    """
     gen = _generation_prompt()
-    assert "TRANSCRIBE IT" in gen, "the default must survive"
+    assert "OVERRULE IT" in gen, (
+        "the author must be told the words beat the block")
+    assert "START THERE" in gen, (
+        "and must still be told to start from the block, or comparability goes")
+    assert "TRANSCRIBE IT" not in gen, (
+        "the binding form is what let an unlicensed window ship as the "
+        "author's defect")
     assert "<window_authority>" not in gen, (
         "a generation round has no objection to weigh and must not be invited "
         "to second-guess the window")

@@ -552,10 +552,31 @@ five-edge level is one row carrying `held: 5`; a hand-written scan that counts
 ROWS calls it a one-edge glitch, which inverts exactly the distinction the
 requirement is about.
 
-THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW. TRANSCRIBE IT.
-`activation.inputs` and `activation.opens_on` are what OPENS it;
-`activation.until` is what CLOSES it; `activation.aborts_on` is what DISCARDS
-it. You are not inventing a window, you are copying one.
+THE `normalized` BLOCK CONTAINS A READING OF YOUR WINDOW. START THERE, AND LET
+THE REQUIREMENT'S OWN WORDS OVERRULE IT. `activation.inputs` and
+`activation.opens_on` are what OPENS it; `activation.until` is what CLOSES it;
+`activation.aborts_on` is what DISCARDS it. Take all four as written unless the
+sentence you were given does not support one, and say in your reasoning which
+you changed and which words licensed the change.
+
+THIS BLOCK IS A JUDGEMENT, NOT A FACT, AND IT USED TO BE BINDING. Normalization
+restates one sentence; nothing downstream asks whether its window is licensed by
+that sentence -- `gate_one` checks that the response parsed, that there is one
+block, that `clk` is not in the window and that the port names are declared, and
+stops. Measured on this module: `activation.effect_follows` -- the `|=>` versus
+`|->` decision, which you state as `after_activation` -- is True on 52
+requirements, and on 39 of those the requirement's own text carries no sequence
+word and licenses no cycle count. Several are not obligations at
+all -- a sentence that merely says what a port INDICATES has no effect to
+follow anything. 27 of
+the unlicensed ones reached a shipped check, and two of those convict a
+known-good design.
+
+So `effect_follows` in particular is worth reading against the sentence before
+you copy it. "X is asserted WHEN Y" is `|->` and wants
+`after_activation=False`; "after Y, X shall be asserted" is `|=>`. A check that
+asks for a change the requirement never demanded convicts a design that had the
+value right all along and simply held it.
 
 A DURATION OR AN OCCURRENCE COUNT IS NOT A WINDOW YOU INVENT -- see
 COUNTS AND DURATIONS below, which is the one place a number may enter
