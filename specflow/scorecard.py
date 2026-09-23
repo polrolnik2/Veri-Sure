@@ -132,8 +132,35 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
           stimulus_by_tp: dict, contract: dict, population: list[str],
           requirements: list[dict] | None = None,
           audit_control: str | None = None,
+          audit_verdicts: dict | None = None,
+          audit_absent=None,
           transactional: bool = True) -> Scorecard:
-    """The triple, from artifacts a completed run wrote. No model calls."""
+    """The triple, from artifacts a completed run wrote. No model calls.
+
+    **THE AUDIT COLUMN IS ONLY AS GOOD AS WHAT THE CONTROL CAN BE JUDGED ON,
+    AND A ZERO OVER A DENOMINATOR OF FOURTEEN IS NOT A ZERO.** `audit_control`
+    is a Python transliteration replayed here, and the one in this tree exposes
+    NONE of the 24 declared probes, so 102 of 117 accepted checks abstain on it
+    by construction. Four recorded runs report `audit = 0.0` over 14, 15, 17
+    and 17 checks of 111, 117, 113 and 103.
+
+    `audit_verdicts` takes the same column from an instrument this function
+    cannot run: per-check, per-testpoint verdicts for a control the CALLER
+    evaluated -- in particular a control that is RTL, judged by `decide_rtl`
+    after a real simulation, which the simulator dependency keeps out of a pure
+    scoring function. Measured on this module, RTL as the control is judged on
+    41 checks where the Python transliteration manages 14.
+
+    Widening the denominator makes the reported rate WORSE and that is the
+    point: the column then says something about the check set rather than
+    about the control's missing interface. `audit_absent` is the declared
+    probes that control does NOT expose -- the same sense as `replay`'s
+    `unavailable`, which the conformance note below reads.
+
+    **STILL REPORTED, NEVER ACTED ON.** This is the one place the control is
+    read, and nothing computed here returns to a stage that could gate on it.
+    A control may REJECT an oracle; it may never REPAIR one.
+    """
     forms = (list(normalized.values()) if isinstance(normalized, dict)
              else list(normalized or []))
     minted = len(forms)
@@ -245,12 +272,17 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
                            if n == d)]
 
     judges = convicted = 0
-    if audit_control:
-        crows, cabs = _rows_for(audit_control, contract, stimulus_by_tp,
-                                base=base, transactional=transactional)
-        for uid, per in _verdicts(
-                {u: o for u, o in held.items() if u in counted},
-                crows, cabs).items():
+    if audit_verdicts is not None or audit_control:
+        if audit_verdicts is not None:
+            per_check = {u: dict(v) for u, v in audit_verdicts.items()
+                         if u in counted}
+            cabs = tuple(audit_absent or ())
+        else:
+            crows, cabs = _rows_for(audit_control, contract, stimulus_by_tp,
+                                    base=base, transactional=transactional)
+            per_check = _verdicts(
+                {u: o for u, o in held.items() if u in counted}, crows, cabs)
+        for uid, per in per_check.items():
             if not per:
                 continue
             judges += 1
