@@ -34,13 +34,13 @@ run recorded -- plus a sha256 of every file.
     full7    i2c_master_bit_ctrl   24 probes  7, all distinct   123 of 587 bodies
 
     corpus   span     blindness   audit (digest-verified golden)
-    full2    0.9737   0.1457      11/44 = 0.2500   baseline
-                      0.1416       3/42 = 0.0714   under TRIPLE.md's two rules
+    full2    0.9737   0.1457       9/42 = 0.2143   baseline
+                      0.1416       1/40 = 0.0250   under TRIPLE.md's two rules
 
 Those are today's code against a frozen corpus. The same corpus read 16/45 and
-6/43 a few hours earlier, before the two fixes in `UNCOMPARABLE.md` -- which is
-what a re-runnable corpus is FOR: the numbers move because the code moves, and
-the corpus holds still so you can tell which.
+6/43 earlier the same day, then 11/44 and 3/42, then this -- once for each fix in
+`UNCOMPARABLE.md`. That is what a re-runnable corpus is FOR: the numbers move
+because the code moves, and the corpus holds still so you can tell which.
 
 **"24 probes" IS NOT "THE SAME 24 PROBES."** `full7` declares
 `read_sample_window` and `write_stable_high_phase` where `full2` declares
@@ -102,8 +102,8 @@ times larger. `TRIPLE.md` carries the correction and the withdrawal.
 Regenerates the suite from the packed testplan, stimulus, coverage model and
 contract, then runs an RTL through it. **This is the test of the claim that
 justifies leaving `suite/` out of a corpus**, and it passes: 482 testcases
-rendered, golden elaborates, 482 traces written, 16 of the 24 declared probes
-bound -- exactly the eight golden does not expose.
+rendered, golden elaborates, 482 traces and 482 verdict records written, 16 of
+the 24 declared probes bound -- exactly the eight golden does not expose.
 
 It has to supply two switches the corpus could not record, because
 `integration.py`'s own `render_suite` call passes neither, and measuring which

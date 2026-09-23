@@ -96,6 +96,33 @@ not a reading -- which is word for word what `EFFECT-FOLLOWS.md` concluded about
 
 Two fields, two defaults, one cause.
 
+## SELECTION CANNOT REACH THIS, AND THAT IS MEASURED
+
+The obvious repair for a refused check is the one `TRIPLE.md` uses for the
+`TO_END`-invariant shape: drop it and re-serve the requirement from its own
+corpus of superseded bodies. **It cannot work here.** Every corpus body was
+authored against the same normalized form, so every one is told to read the same
+port -- and every one does:
+
+    requirement   observable                        bodies   reading it
+    REQ-0055      cmd_ack                                4        4
+    REQ-0061      cscl, csda                             5        5
+    REQ-0066      sta_condition                          3        3
+    REQ-0102      cscl, csda                             3        3
+    REQ-0110      sta_condition, sto_condition           3        3
+    REQ-0111      sta_condition                          3        3
+    REQ-0112      sto_condition                          3        3
+
+**Twenty-four bodies, zero deviations.** Generate, resample, cell and repair arms
+alike.
+
+So this is not a selection problem and not an authoring-variety problem. The
+plan's measured "69% identical among sound pairs" for resampling understates what
+happens to this field: on the port the check reads, agreement is total. The pool
+is perfectly obedient to a field nothing licence-checks, which is why filling the
+pool deeper cannot help and why the fix has to be upstream, in `normalize` --
+where it costs a model call and cannot be projected from stored artifacts.
+
 ## What this does NOT propose
 
 **No gate, and deliberately.** 34% of forms is the same order as the 75% that

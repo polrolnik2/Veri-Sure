@@ -419,3 +419,56 @@ a time, where no gate downstream of the loop can see it.
 refuses, re-serve each requirement from the earliest corpus body the gate
 accepts, and report what it costs. Two of the three have a usable alternative;
 `REQ-0046` has none and loses its check.
+
+
+---
+
+# The triple with all three library fixes, on a digest-verified control
+
+Three fixes now, not two: the zero-evidence refusal and BOTH halves of the width
+guard -- the value test, and the declaration test that catches a wide register
+reading zero. `UNCOMPARABLE.md` has all of them. The golden suite was regenerated
+so its traces carry the `widths` map the declaration test reads.
+
+    configuration          span            blindness       audit
+    baseline               0.9737 MET      0.1457 MET       9/42 = 0.2143
+    phase only             0.9737 MET      0.1457 MET       1/40 = 0.0250
+    licence rule only      0.9737 MET      0.1416 MET       9/42 = 0.2143
+    **both rules**         **0.9737 MET**  **0.1416 MET**  **1/40 = 0.0250**
+
+    remaining convictions, enumerated
+      REQ-0055 [behavioural]  TP-0004
+      REQ-0058 [scaffolding]  TP-0000
+
+## Against the target
+
+    target     span > 90%      blindness < 20%     audit = 0
+    measured   97.4%   MET     14.2%   MET         2.5%   NOT MET
+
+**And 0.0250 is lower than the 0.0286 this document withdrew**, on a control
+whose stimulus is digest-verified and whose denominator is 40 rather than 35. So
+the withdrawal did not cost the result; it cost a wrong reason for it. The
+earlier figure was right by accident about the size and wrong about which
+convictions were left: it named REQ-0055 and REQ-0058, and those ARE the two that
+remain -- while five more convictions it never saw at all were removed in between
+by fixes it had no idea were needed.
+
+## REQ-0055's cause is now named, and it is not reachable from here
+
+`OBSERVABLE-LICENCE.md` has it in full. The requirement says the controller shall
+"pause its timing counter"; `normalize` set `observable: ['cmd_ack']`; the check
+asserted `cmd_ack == 0` and golden has it high at the activation row. `cmd_ack` is
+not a timing counter.
+
+**And selection cannot reach it.** All four of REQ-0055's corpus bodies read
+`cmd_ack`, as do all 24 bodies across the seven requirements with an unlicensed
+observable that convict -- zero deviations, across generate, resample, cell and
+repair arms alike. The pool is perfectly obedient to a field nothing
+licence-checks, so filling it deeper cannot help. The fix is upstream in
+`normalize`, which costs a model call and cannot be projected from stored
+artifacts.
+
+REQ-0058 remains the one conviction on this branch with no mechanism that
+survived measurement, and it is `scaffolding`, so the audit column does not count
+it. Both facts are worth keeping together: it is not counted, and it is not
+explained.

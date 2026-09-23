@@ -133,9 +133,15 @@ def main() -> int:
     outcome = run_suite(rtl_path=rtl, hdl_toplevel=toplevel, suite_dir=suite,
                         refmodel_path=refmodel, trace=False,
                         include_dirs=[str(d) for d in includes])
-    results = sorted((suite / "results").glob("*.json"))
+    #: `results/` holds TWO files per testpoint -- `{tp}.json`, the verdict
+    #: record, and `{tp}.trace.json`, the recording. Globbing `*.json` counts
+    #: both, and an earlier version of this line reported 964 "trace files" for
+    #: 482 traces.
+    results = sorted((suite / "results").glob("*.trace.json"))
+    records = sorted(f for f in (suite / "results").glob("*.json")
+                     if not f.name.endswith(".trace.json"))
     print(f"\nbuild_ok    {outcome.build_ok}")
-    print(f"results     {len(results)} trace file(s)")
+    print(f"results     {len(results)} trace(s), {len(records)} record(s)")
     if not outcome.build_ok:
         print((outcome.build_log or "")[-1500:])
         return 1
