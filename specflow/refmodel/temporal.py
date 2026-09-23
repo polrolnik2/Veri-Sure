@@ -608,6 +608,89 @@ def licenses_a_cycle_count(requirement_text: str) -> bool:
     return bool(_STATES_A_COUNT.search(requirement_text or ""))
 
 
+def delay_probes(trace: list[dict], probes) -> list[dict]:
+    """`trace` with every named probe holding its PREVIOUS row's value.
+
+    The instrument for `phase_sensitive`. Ports are untouched: the stimulus and
+    the declared outputs are what the specification fixes, and only the probes
+    -- the internal state whose schedule it leaves open -- are shifted.
+    """
+    names = tuple(probes or ())
+    out: list[dict] = []
+    for i, row in enumerate(trace):
+        outputs = dict(row.get("outputs") or {})
+        prev = (trace[i - 1].get("outputs") or {}) if i else {}
+        for n in names:
+            if n in outputs:
+                outputs[n] = prev.get(n) if i else None
+        out.append({**row, "outputs": outputs})
+    return out
+
+
+def phase_sensitive(decide, trace: list[dict], probes,
+                    requirement_text: str = "") -> list[str]:
+    """Probes whose SCHEDULE this check's verdict depends on. Empty if none.
+
+    **THE SPECIFICATION WRITES AN EQUATION, NOT A SCHEDULE.** "sto_condition =
+    sSDA & ~dSDA & sSCL" says what the condition IS and never says whether it
+    is available in the same cycle or registered from it. Both are faithful
+    readings, and a design is free to pick either.
+
+    Measured on the frozen i2c set: where that formula holds, the known-good
+    design asserts the probe ONE EDGE LATER 499 times out of 499, and the
+    spec-derived population asserts it on the SAME edge 22 times out of 22.
+    Unanimous in both directions. Five checks -- REQ-0066, 0067, 0110, 0111,
+    0112 -- convict the known-good design for it, each reporting that the
+    transition happened and the probe was not yet high. All five are correct
+    about what they observed and wrong about what it means.
+
+    No binding guard reaches this: the name matches, the width matches, the
+    quantity matches, and the value is right one edge later. Nor can the
+    POPULATION reveal it -- every member was handed the same contract, so every
+    member computes the condition combinationally, the population agrees, and
+    the cell is never a disagreement cell. Blindness cannot see it and span
+    cannot see it.
+
+    **ONE PROBE AT A TIME, AND THAT IS THE WHOLE INSTRUMENT.** Delaying every
+    probe together finds nothing, because a check of this shape reads its
+    trigger from probes too (`ssda`, `dsda`, `sscl`) -- shifting trigger and
+    condition by the same amount preserves their relative timing and no verdict
+    moves. Measured: 20 checks flagged that way and NONE of the five. Delaying
+    each probe alone breaks exactly the relation the check depends on, and
+    catches all five, each flipping on the probe the diagnosis named.
+
+    Licensed where the requirement states a timing -- the same rule
+    `correspondence` already applies to cycle counts, and
+    `licenses_a_cycle_count` is that rule. A sentence saying "immediately" or
+    "on the next clock" may depend on the schedule; one saying "when" may not.
+
+    Design-free: any runnable trace serves, the way `oracle_liveness` uses any
+    runnable design. A probe whose replay raises is skipped, and an abstention
+    is never a flip -- a check that said nothing convicted nobody.
+    """
+    if licenses_a_cycle_count(requirement_text):
+        return []
+
+    def _ok(v):
+        return v[0] if isinstance(v, tuple) else getattr(v, "ok", v)
+
+    try:
+        base = _ok(decide(trace))
+    except Exception:  # noqa: BLE001
+        return []                      # a check that cannot run is another gate's
+    if base is None:
+        return []
+    out: list[str] = []
+    for name in (probes or ()):
+        try:
+            got = _ok(decide(delay_probes(trace, (name,))))
+        except Exception:  # noqa: BLE001
+            continue
+        if got is not base:
+            out.append(name)
+    return sorted(out)
+
+
 def eventually(w: Window, holds: Pred, *, strong: bool,
                after_activation: bool = False,
                what: str = "the expected response") -> Verdict:

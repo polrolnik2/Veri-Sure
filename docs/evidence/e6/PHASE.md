@@ -93,3 +93,74 @@ cleared BY `sta_condition`/`sto_condition`, so a registered condition clears
 
 REQ-0053 and REQ-0055 are about `slave_wait`; REQ-0058 about `scl_oen` against
 a synchronisation postponement. No shared mechanism established.
+
+
+---
+
+# An instrument for it, and two corrections it forced
+
+`temporal.phase_sensitive(decide, trace, probes, requirement_text)` replays a
+check against copies of the trace in which one probe holds its previous value,
+and returns the probes whose schedule the verdict depends on. Licensed where
+the requirement states a timing, which is `correspondence`'s existing rule for
+cycle counts applied to probe reads. Design-free: any runnable trace serves,
+the way `oracle_liveness` uses any runnable design.
+
+## Correction 1: delaying every probe together finds nothing
+
+The obvious instrument -- shift all probes, see if the verdict moves -- flags
+**20 of 122 checks and NONE of the five.** A check of this shape reads its
+TRIGGER from probes as well (`ssda`, `dsda`, `sscl`), so shifting trigger and
+condition by the same amount preserves their relative timing and no verdict
+moves. The instrument was measuring nothing and its unit tests passed, because
+a hand-built two-signal trace does not have that structure.
+
+**One probe at a time** breaks exactly the relation the check depends on:
+
+    FLAGGED by single-probe delay: 31 of 122
+      of the 9 residual convictions: REQ-0035, 0066, 0067, 0110, 0111, 0112
+      of the five phase cases:       all five
+
+        REQ-0066 flips on  ssda, sta_condition
+        REQ-0067 flips on  ssda, sto_condition
+        REQ-0110 flips on  dsda, ssda, sta_condition
+        REQ-0111 flips on  ssda, sta_condition
+        REQ-0112 flips on  ssda, sto_condition
+
+Each flips on the probe the diagnosis named. **Six of the nine residual
+convictions, caught by a rule that never reads golden.**
+
+## Correction 2: the first run of it silently measured nothing
+
+The first attempt reported `0 of 122` flagged. Three separate faults, each
+hidden by the next:
+
+1. The harness hand-built trace rows keyed on `index`; the real shape keys on
+   `edge`. Every `decide` raised `KeyError`.
+2. `phase_sensitive` swallows a raising check -- deliberately, since a check
+   that cannot run is another gate's business -- so all 122 failures read as
+   "not phase-sensitive". **That is the same "degrades rather than raises"
+   pattern this branch spent the morning removing from `_frozen_oracles`, and
+   I wrote it into a new instrument the same day.**
+3. Fixing the shape gave `0` again from a different cause: the substrate was a
+   live editor's results directory, holding 51 traces of a run in progress
+   rather than 422.
+
+The fix for (1) is to use `rtl_trace.rows_from`, the pipeline's own reshape,
+rather than reconstructing it. For (3), a dedicated substrate directory. For
+(2) the swallow stays -- it is right for the pipeline -- but a measurement
+harness must assert that `decide` ran before trusting a negative.
+
+## What it does NOT establish
+
+25 of the 31 flagged checks do not convict golden. That is not a false positive
+rate: a check may depend on a probe's schedule and still agree with golden,
+because golden happens to share that probe's phase. The screen is about the
+claim the check makes, not about whether the claim has been cashed.
+
+Whether 31 of 122 should be REFUSED is not settled here. Refusing them costs
+span, and unlike the `TO_END` shape there is no design-free argument that the
+check is wrong -- only that it asserts a timing the specification did not
+state. The honest disposition is an objection that buys a repair round, which
+is what the author needs to decide between "state the timing" and "tolerate
+either reading".
