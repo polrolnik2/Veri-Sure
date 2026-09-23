@@ -34,8 +34,13 @@ run recorded -- plus a sha256 of every file.
     full7    i2c_master_bit_ctrl   24 probes  7, all distinct   123 of 587 bodies
 
     corpus   span     blindness   audit (digest-verified golden)
-    full2    0.9737   0.1454      16/45 = 0.3556   baseline
-                      0.1416       6/43 = 0.1395   under TRIPLE.md's two rules
+    full2    0.9737   0.1457      11/44 = 0.2500   baseline
+                      0.1416       3/42 = 0.0714   under TRIPLE.md's two rules
+
+Those are today's code against a frozen corpus. The same corpus read 16/45 and
+6/43 a few hours earlier, before the two fixes in `UNCOMPARABLE.md` -- which is
+what a re-runnable corpus is FOR: the numbers move because the code moves, and
+the corpus holds still so you can tell which.
 
 **"24 probes" IS NOT "THE SAME 24 PROBES."** `full7` declares
 `read_sample_window` and `write_stable_high_phase` where `full2` declares
@@ -181,7 +186,7 @@ Three things to settle first, none of them technical:
   * **Private or public.** `private=True` above is the safe default and a
     deliberate one.
   * **What the card claims.** A dataset card that reports span / blindness /
-    audit without saying that audit is measured over 45 of 111 checks, against
+    audit without saying that audit is measured over 44 of 111 checks, against
     which control, and under whose stimulus, would repeat in public the exact
     misreading this branch has now had to correct twice. `TRIPLE.md`,
     `RESIDUE.md` and `PROBE-TRADE.md` are the text it should carry.

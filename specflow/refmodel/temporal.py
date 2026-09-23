@@ -36,8 +36,9 @@ by running out of trace returns UNKNOWN here, once, and says so in wording
 `truncated()` already recognises.
 
 THIS IS AN SVA-SHAPED VOCABULARY, NOT SVA. `docs/sva-divergence.md` is the
-complete list of where the two differ -- five places that were defects and are
-now fixed, and ten that are deliberate. Read it before "correcting" an operator
+complete list of where the two differ -- six places that were defects and are
+now fixed (one of them, U1b, in the trace adapter rather than here), and ten
+that are deliberate. Read it before "correcting" an operator
 toward SVA semantics: the abstentions especially are choices, not oversights,
 and SVA's answer in several of them is a vacuous pass this pipeline refuses.
 """

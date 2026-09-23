@@ -53,6 +53,7 @@ def _clear():
 
     runtime._WIDTH_REFUSED.clear()
     runtime._CASE_BOUND.clear()
+    runtime._SAMPLED_WIDTH.clear()
 
 
 def test_a_wider_signal_is_refused_not_sampled():
@@ -164,3 +165,52 @@ def test_the_generated_model_carries_the_widths():
     assert "PROBE_WIDTHS = {'fscl': 1, 'wide': 3}" in src, (
         "the generated model must define PROBE_WIDTHS; without it the runtime "
         "guard reads None and every wider signal binds again")
+
+
+def test_the_sampled_width_is_recorded_even_when_the_refusal_is_INERT():
+    """**AND THAT IS THE CASE THAT MATTERS**, because it is the one on disk.
+
+    The refusal above needs `PROBE_WIDTHS` on the reference model. An artifact
+    frozen before that existed has none -- `full2`'s `ref_model.py` does not
+    define it, and its 482-testpoint golden replay recorded `width_refused: {}`
+    -- so the refusal is inert and the TRACE is the only place the width can
+    survive to reach `rtl_trace.declared_width_gap`.
+
+    Recorded for every sampled signal, not only refused ones, because the
+    consumer decides by declaration and needs the fact rather than this module's
+    verdict about it.
+    """
+    from specflow.tb import runtime
+
+    _clear()
+
+    class _NoWidths:
+        pass
+
+    dut = _Dut()
+    dut.idle = _Handle(18, 0)
+    env = _env(dut, _NoWidths())
+    assert env.sample("idle") == 0, (
+        "with no PROBE_WIDTHS the refusal must stay inert and sample as before")
+    assert runtime._WIDTH_REFUSED == {}
+    assert runtime._SAMPLED_WIDTH["idle"] == 18, (
+        "without this the 18-bit register reading 0 is indistinguishable from a "
+        "flag that is low, and REQ-0100 convicts the known-good design for it")
+    _clear()
+
+
+def test_a_signal_with_no_length_records_no_width():
+    """`len()` is not defined on every handle, and inventing a width for one
+    that cannot report it would be this module guessing."""
+    from specflow.tb import runtime
+
+    _clear()
+
+    class _Bare:
+        value = 1
+
+    dut = _Dut()
+    dut.flag = _Bare()
+    assert _env(dut, _Ref()).sample("flag") == 1
+    assert "flag" not in runtime._SAMPLED_WIDTH
+    _clear()

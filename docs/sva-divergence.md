@@ -33,7 +33,9 @@ what turned the list below from documentation into work.
 ## Part 1 — divergences that were DEFECTS, now fixed
 
 Each was verified by running the operator, not by reading it. Pins live in
-`tests/test_temporal.py` under "SVA soundness fixes".
+`tests/test_temporal.py` under "SVA soundness fixes" -- except U1b, whose subject
+is the trace adapter rather than an operator, and whose pins are in
+`tests/test_rtl_trace.py` and `tests/test_probe_width_binding.py`.
 
 ### U1 · An empty row set answered at all — `True` from the invariants, `False` from the existentials
 
@@ -62,6 +64,25 @@ response, and a one-row test pins that it still convicts there.
 
 Measured: REQ-0061 convicted golden i2c on TP-0000 from a window opening at edge
 28 of a 29-edge trace, with nothing after it to read.
+
+### U1b · A value of the wrong QUANTITY decided, on the trace path only
+
+Not a temporal-operator defect, recorded here because it reaches a verdict the
+same way U1 did: through a comparison that was never about one thing.
+
+`Env.sample` has refused a probe binding wider than `PROBE_WIDTHS` declares since
+the width guard landed, so the Python reference-model path was protected. The RTL
+TRACE path -- the one every audit figure on this branch is measured on -- had
+nothing, and `decide_rtl` compared a 2-bit synchronizer against a flag:
+REQ-0102's verdict reads "expected (1, 1), observed (3, 3)".
+
+**Now:** `rtl_trace.over_width_ports` refuses a recorded value that does not fit
+its declared width, and `declared_width_gap` refuses a port the SIMULATOR reports
+wider than declared -- which is the only way to catch a wide register that reads
+zero, and `idle` on the known-good i2c design is an 18-bit one reading 0 on all
+482 testpoints. Both fold into the abstention `decide_rtl` already produced for a
+missing port or a 4-state X. Six ports refused on that design, eighteen
+unaffected.
 
 ### U2 · `pulse` counted a run that was already active
 

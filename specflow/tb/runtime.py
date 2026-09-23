@@ -63,6 +63,23 @@ DEFAULT_UNTIL_TIMEOUT = 2000
 #: would succeed and read a different quantity, which is worse than not binding.
 _WIDTH_REFUSED: dict[str, tuple] = {}
 
+#: **THE WIDTH OF EVERY SIGNAL ACTUALLY SAMPLED, SO THE TRACE-SIDE GUARD CAN
+#: REFUSE BY DECLARATION AND NOT ONLY BY VALUE.**
+#:
+#: `rtl_trace.over_width_ports` catches a value that does not fit its declared
+#: width, which is everything it CAN catch from a trace alone. It cannot catch a
+#: wide register that happens to read 0: measured on the known-good i2c design,
+#: `idle` is an 18-bit register declared `width: 1`, reads 0 on every one of 482
+#: testpoints, and REQ-0100 convicts the design for `idle` not being 1. A flag
+#: that is low and an 18-bit register that is zero are the same number.
+#:
+#: The simulator knows -- `len(handle)` is how the refusal below already works --
+#: so recording it costs one integer per signal and turns an undetectable case
+#: into a detectable one. Recorded for EVERY sampled signal, not only refused
+#: ones, because the consumer is deciding by declaration and needs the fact
+#: rather than this module's verdict about it.
+_SAMPLED_WIDTH: dict[str, int] = {}
+
 #: `probe name -> the differently-cased signal it actually bound to`. Recorded
 #: so a run states which names needed the fallback instead of silently
 #: succeeding, and so a reader can tell a real binding from a lucky one.
@@ -868,6 +885,14 @@ class Env:
                         break
         if handle is None:
             return None
+        #: RECORDED BEFORE THE REFUSAL BELOW, AND WHETHER OR NOT IT FIRES. The
+        #: refusal needs `PROBE_WIDTHS` on the reference model; an artifact
+        #: frozen before that existed has none, so the refusal is inert and the
+        #: trace is then the only place the fact can survive.
+        try:
+            _SAMPLED_WIDTH.setdefault(signal, int(len(handle)))
+        except TypeError:
+            pass
         #: **A BINDING THAT READS A DIFFERENT QUANTITY IS WORSE THAN NO BINDING.**
         #: Probe rule 4 reuses the specification's own identifier lower-cased
         #: (`cSCL` -> `cscl`) while every probe is obliged to be a BOOLEAN, so a
@@ -1266,6 +1291,12 @@ class Env:
                 # `stimulus_digest`.
                 "stimulus_digest": stimulus_digest(self._driven),
                 "signals": self.trace_internals,
+                #: **THE WIDTH THE SIMULATOR REPORTED FOR EACH SAMPLED SIGNAL.**
+                #: `rtl_trace` refuses a port whose declared width this
+                #: exceeds -- which is the only way to catch a wide register
+                #: that reads 0, and `idle` on the known-good i2c design is an
+                #: 18-bit one that reads 0 on all 482 testpoints.
+                "widths": dict(sorted(_SAMPLED_WIDTH.items())),
                 "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
                 "edges": edges,
             }, indent=2, ensure_ascii=False, default=str) + "\n",

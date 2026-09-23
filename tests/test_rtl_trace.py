@@ -10,9 +10,9 @@ import json
 import pytest
 
 from specflow.refmodel.oracles import RequirementOracle, transactional_view
-from specflow.refmodel.rtl_trace import (SIDES, decide_rtl, load, load_traces,
-                                         over_width_ports, rows_from,
-                                         unknown_ports)
+from specflow.refmodel.rtl_trace import (SIDES, decide_rtl, declared_width_gap,
+                                         load, load_traces, over_width_ports,
+                                         rows_from, unknown_ports)
 
 CONTRACT = {"io": [{"name": "cmd", "dir": "input", "width": 1},
                    {"name": "busy", "dir": "output", "width": 1},
@@ -406,3 +406,60 @@ def test_width_is_decided_once_over_the_WHOLE_recording():
     # And with the wide testpoint absent, the same narrow trace still convicts:
     [only_narrow] = decide_rtl([_oracle(src)], {"TP-0000": narrow}, CONTRACT)
     assert only_narrow.ok is False
+
+
+def test_declared_width_gap_catches_a_WIDE_REGISTER_THAT_READS_ZERO():
+    """**THE CASE NO VALUE-BASED TEST CAN SEE**, and it is the last behavioural
+    conviction of the known-good i2c design that has a mechanical cause.
+
+    `idle` is declared `width: 1`, is an 18-bit register on that design, and
+    reads 0 on every one of 482 testpoints. A flag that is low and an 18-bit
+    register that is zero are the same number, so `over_width_ports` reports
+    nothing -- and REQ-0100 convicts the design for `idle` not being 1.
+
+    `Env.finish` records `len(handle)` per sampled signal, so the fact reaches
+    the verdict.
+    """
+    t = _trace((0, 1, 0, 0, 0))
+    t["widths"] = {"busy": 18, "cmd_ack": 1}
+    assert over_width_ports(rows_from(t), CONTRACT) == {}, (
+        "the value test must see nothing here -- that is the whole point")
+    assert declared_width_gap(t, CONTRACT) == {"busy": (1, 18)}
+
+
+def test_a_trace_with_no_widths_map_yields_nothing():
+    """A trace predating the `widths` map cannot answer, and counting it as
+    agreement is the assumption this exists to refuse -- the same rule
+    `unknown_ports` follows for a trace predating `stimulus_digest`."""
+    assert declared_width_gap(_trace((0, 1, 0, 0, 0)), CONTRACT) == {}
+    assert declared_width_gap({"widths": "not a map"}, CONTRACT) == {}
+    assert declared_width_gap({"widths": {"busy": "wide"}}, CONTRACT) == {}
+
+
+def test_a_conviction_on_a_zero_reading_WIDE_port_is_downgraded():
+    """End to end: the value test sees nothing, the declaration test refuses,
+    and the conviction becomes an abstention."""
+    t = _trace((0, 1, 0, 0, 0))
+    t["widths"] = {"busy": 18}
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
+    assert res.ok is None, res.detail
+    assert "wider than its declared width" in res.detail
+
+
+def test_a_port_sampled_AT_its_declared_width_still_convicts():
+    """**THE GUARD MUST NOT BLANKET-ABSTAIN**, and a `widths` map that agrees
+    with the contract is the common case: it must change nothing."""
+    t = _trace((0, 1, 0, 0, 0))
+    t["widths"] = {"busy": 1, "cmd_ack": 1}
+    src = ("def decide(trace):\n"
+           "    for row in trace:\n"
+           "        if row['outputs']['busy'] != 1:\n"
+           "            return (False, row['edge'], 'busy was not 1')\n"
+           "    return (True, None, 'ok')\n")
+    [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
+    assert res.ok is False

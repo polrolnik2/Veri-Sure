@@ -345,3 +345,77 @@ minted twice -- as are `REQ-0096`/`REQ-0100`. All seven fail on `TP-0000`.
 Span and blindness are met. Audit is not, and it is worse than this branch
 believed by a factor of five. That is the direction honesty runs in here, and
 the correction was available at the cost of one keyword argument.
+
+
+---
+
+# The triple after today's two library fixes
+
+`UNCOMPARABLE.md` has both in full: a strong existential convicting over ZERO
+rows, and a value of the wrong QUANTITY convicting because the RTL trace path
+had no width guard where the Python path has had one for weeks. Neither reads
+the audit column, neither removes or rewrites a check, and each turns a
+conviction that rested on nothing into an abstention.
+
+Measured on `full2` against its own digest-verified golden suite:
+
+    configuration          span            blindness       audit
+    baseline               0.9737 MET      0.1457 MET      11/44 = 0.2500
+    phase only             0.9737 MET      0.1457 MET       3/42 = 0.0714
+    licence rule only      0.9737 MET      0.1416 MET      11/44 = 0.2500
+    **both**               0.9737 MET      0.1416 MET     **3/42 = 0.0714**
+
+against 16/45, 7/43, 15/45 and 6/43 before the fixes. Span unmoved to four
+places; blindness up three ten-thousandths at baseline and unmoved with the
+rules applied.
+
+## What is left, enumerated
+
+    REQ-0055 [behavioural] TP-0004   slave_wait EXTENT -- characterised, open
+    REQ-0100 [behavioural] TP-0000   reset: eleven ports asserted at one instant
+    REQ-0128 [behavioural] TP-0000   `throughout` over an unbounded TO_END window
+    REQ-0058 [scaffolding] TP-0000   cause still not found
+
+The scorecard reports 3 because `REQ-0058` is `scaffolding` and falls outside
+the set it counts. Both figures are right about what they measure, and "three
+convictions left" is the wrong sentence unless it says which three.
+
+## And the licence rule's audit effect was ABSORBED, not lost
+
+Before the fixes it removed one conviction alone (15/45 against 16/45). After
+them it removes none (11/44 either way) while keeping its entire blindness gain.
+So the conviction it appeared to be buying was an artifact of one of the two
+defects, and its real contribution is to blindness -- which is where it was
+already the only correction on this branch that moved blindness and audit the
+same way. The phase rule is untouched and remains the large lever: 11 to 3.
+
+## REQ-0128 is a check TODAY'S PIPELINE WOULD NOT HAVE SHIPPED
+
+`well_formed` refuses an invariant asserted over a window opened `until=TO_END`,
+with the objection already worded in-tree -- "everything after the first
+activation is inside it ... and the first such gap convicts, whatever the design
+did". It is blocking today. `full2` froze BEFORE it landed, so its set still
+carries three such bodies: `REQ-0034`, `REQ-0046` and `REQ-0128`. Two of the
+three convict golden and one does not, which is what applying a rule uniformly
+looks like.
+
+**And the corpus says the repair loop introduced the shape.**
+
+    REQ-0034   round 0 generate  bounded      round 2 repair  UNBOUNDED  -> accepted UNBOUNDED
+               round 0 resample  bounded
+               round 1 repair    bounded
+    REQ-0128   round 0 generate  bounded      round 0 resample UNBOUNDED -> accepted UNBOUNDED
+               round 1 repair    bounded
+    REQ-0046   every body UNBOUNDED                                      -> no alternative
+
+REQ-0034's round-1 repair is bounded and its round-2 repair is not, and the
+liveness note driving that round reads: "the state this check waits for WAS
+REACHED on its own stimulus and the check did not decide ... make the window open
+on `sta_condition`." **Pressure to make a check DECIDE produced a window that can
+only convict** -- the vacuity/over-strictness trade arriving one repair round at
+a time, where no gate downstream of the loop can see it.
+
+`e6_unbounded_rule.py` measures the regeneration: drop what `well_formed`
+refuses, re-serve each requirement from the earliest corpus body the gate
+accepts, and report what it costs. Two of the three have a usable alternative;
+`REQ-0046` has none and loses its check.

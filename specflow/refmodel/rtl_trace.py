@@ -140,6 +140,42 @@ def over_width_ports(rows: list[dict], contract: dict) -> dict[str, int]:
     return bad
 
 
+def declared_width_gap(trace: dict, contract: dict) -> dict[str, tuple[int, int]]:
+    """Ports the SIMULATOR reported wider than the contract declares.
+
+    **THE ONLY WAY TO CATCH A WIDE REGISTER THAT READS ZERO.**
+    `over_width_ports` decides from values, which is everything a trace alone
+    could tell -- and a flag that is low and an 18-bit register that is zero are
+    the same number. Measured on the known-good i2c design: `idle` is declared
+    `width: 1`, is an 18-bit register, reads 0 on every one of 482 testpoints,
+    and REQ-0100 convicts the design for `idle` not being 1. No value-based test
+    can see that.
+
+    `Env.finish` now records `len(handle)` per sampled signal into the trace's
+    `widths` map, so the fact is available where the verdict is computed. A trace
+    without one predates this and yields nothing, which is the same answer
+    `unknown_ports` gives for a trace predating `stimulus_digest`: unverifiable
+    and verified are different facts.
+
+    Returns `port -> (declared, sampled)`.
+    """
+    widths = trace.get("widths")
+    if not isinstance(widths, dict):
+        return {}
+    declared = {str(e.get("name")): int(e.get("width") or 0)
+                for e in (contract.get("io") or []) if e.get("name")}
+    out: dict[str, tuple[int, int]] = {}
+    for port, sampled in widths.items():
+        d = declared.get(str(port), 0)
+        try:
+            got = int(sampled)
+        except (TypeError, ValueError):
+            continue
+        if d >= 1 and got > d:
+            out[str(port)] = (d, got)
+    return out
+
+
 def check_stimulus(traces_by_tp: dict[str, dict],
                    stimulus_by_tp: dict[str, list]) -> dict[str, str]:
     """Which testpoints' traces were NOT driven by the stimulus given.
@@ -230,6 +266,15 @@ def decide_rtl(
     for _t in traces_by_tp.values():
         for _p, _n in over_width_ports(rows_from(_t, side=side), contract).items():
             wide_anywhere[_p] = wide_anywhere.get(_p, 0) + _n
+        #: **AND BY DECLARATION, WHERE THE TRACE RECORDS WHAT THE SIMULATOR
+        #: REPORTED.** A wide register reading 0 is invisible to the value test
+        #: above -- `idle` on the known-good i2c design is 18 bits, declared 1,
+        #: and reads 0 on all 482 testpoints. Counted as every row of that trace,
+        #: because the whole recording of that port is the wrong quantity rather
+        #: than some rows of it.
+        _n_rows = len(_t.get("edges") or [])
+        for _p in declared_width_gap(_t, contract):
+            wide_anywhere[_p] = wide_anywhere.get(_p, 0) + _n_rows
 
     out: list[OracleResult] = []
     #: **EVERY RECORDED TRACE, NOT THE ONES `tp_uids` NAMES -- AND THIS HAD TO
