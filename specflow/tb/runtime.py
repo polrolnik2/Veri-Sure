@@ -58,6 +58,11 @@ _INTERNALS: list[str] = [
 #: design that never responds from hanging the suite, not to police latency.
 DEFAULT_UNTIL_TIMEOUT = 2000
 
+#: `probe name -> (declared width, the width actually found)`. A probe whose
+#: handle is WIDER than the contract declares is not bound at all: the binding
+#: would succeed and read a different quantity, which is worse than not binding.
+_WIDTH_REFUSED: dict[str, tuple] = {}
+
 #: `probe name -> the differently-cased signal it actually bound to`. Recorded
 #: so a run states which names needed the fallback instead of silently
 #: succeeding, and so a reader can tell a real binding from a lucky one.
@@ -863,6 +868,30 @@ class Env:
                         break
         if handle is None:
             return None
+        #: **A BINDING THAT READS A DIFFERENT QUANTITY IS WORSE THAN NO BINDING.**
+        #: Probe rule 4 reuses the specification's own identifier lower-cased
+        #: (`cSCL` -> `cscl`) while every probe is obliged to be a BOOLEAN, so a
+        #: design carrying the specification's signal AT ITS REAL WIDTH binds and
+        #: is then sampled as if it were the predicate. On the known-good i2c
+        #: design `fscl` is declared `width: 1` -- beside a span of its own
+        #: contract entry reading "the three-sample histories `fSCL` and `fSDA`"
+        #: -- and binds a three-bit register reading 0..7. Three of the fifteen
+        #: checks convicting that design convict it on such a read.
+        #:
+        #: Refusing yields `None`, which is the SAME outcome as an absent
+        #: signal: the check abstains and the record says why. It does not
+        #: invent a value, truncate one, or guess which bit was meant.
+        declared = getattr(self.ref, "PROBE_WIDTHS", None)
+        if isinstance(declared, dict) and signal in declared:
+            try:
+                found = len(handle)
+            except TypeError:
+                found = None
+            if found is not None and found > int(declared[signal]):
+                _WIDTH_REFUSED.setdefault(
+                    signal, (int(declared[signal]), int(found)))
+                _CASE_BOUND.pop(signal, None)
+                return None
         return _plain(handle.value)
 
     def expect(self, stim: dict) -> dict:
@@ -1192,6 +1221,11 @@ class Env:
             #: run SAYS the fallback fired rather than quietly succeeding --
             #: a binding a reader cannot see is one nobody can check.
             "case_bound": dict(sorted(_CASE_BOUND.items())),
+            #: Probes NOT bound because the design carries that name at a wider
+            #: width than the contract declares. An abstention with a stated
+            #: cause, rather than a sampled value from the wrong quantity.
+            "width_refused": {k: list(v) for k, v
+                              in sorted(_WIDTH_REFUSED.items())},
             "checks_invoked": sorted(set(self.sb.invoked)),
             "checks_failed": sorted(set(self.sb.failed)),
             "signals_failed": sorted(

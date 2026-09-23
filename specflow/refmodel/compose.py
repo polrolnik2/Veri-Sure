@@ -108,6 +108,32 @@ def probe_ports(contract: dict) -> list[str]:
     return probe_names(contract)
 
 
+def probe_widths(contract: dict) -> dict:
+    """`probe name -> declared width`, for the runtime to bind against.
+
+    **A PROBE ENTRY OBLIGES A NAME AND A WIDTH; A CHECK DEPENDS ON A QUANTITY,
+    AND NOTHING WAS COMPARING THE TWO.** Probe rule 4 says to reuse the
+    specification's own identifier lower-cased (`cSCL` -> `cscl`), while
+    `probe_block` obliges every probe to be a BOOLEAN. So the stage mints a
+    one-bit predicate and names it after whatever the specification called the
+    state -- which on a design carrying that signal, by that name, at a wider
+    width, binds successfully and reads a different quantity.
+
+    Measured on the known-good i2c design: `fscl` is declared `width: 1` with
+    `spans: ["the three-sample histories `fSCL` and `fSDA`"]` in the SAME
+    contract entry, and binds a three-bit shift register reading 0..7 where the
+    check expects 0 or 1. `filter_cnt` is declared `width: 1` beside a span
+    reading "A filter counter, `filter_cnt`, derives its sampling interval".
+    Five probes bind this way and three of the fifteen checks convicting that
+    design do so on one of them.
+
+    Emitted so `Env.sample` can refuse such a binding instead of sampling it.
+    """
+    return {str(p["name"]): int(p.get("width") or 1)
+            for p in (contract.get("io") or [])
+            if p.get("dir") == "probe" and p.get("name")}
+
+
 def probe_block(contract: dict, base: str) -> str:
     """What the witness author is told about probes. Empty when there are none.
 
@@ -182,6 +208,7 @@ def render(out: RefModelOutput, contract: dict) -> str:
         "class Model(RefModel):\n"
         f"    OUTPUT_PORTS = {output_ports(contract)!r}\n"
         f"    PROBE_PORTS = {probe_ports(contract)!r}\n"
+        f"    PROBE_WIDTHS = {probe_widths(contract)!r}\n"
         f"    LATENCY_CYCLES = {latency_cycles(contract)}\n\n"
         + body
         + "\n"
