@@ -23,15 +23,26 @@ from specflow.refmodel.oracle_gen import RequirementOracle  # noqa: E402
 from specflow.refmodel.rtl_trace import decide_rtl, load_traces  # noqa: E402
 from specflow.scorecard import score  # noqa: E402
 
+#: Where the run's OWN oracles and population live.
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else
            "/tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/full2/specflow")
-GOLD = Path("/tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/recheck_run")
+#: Where the contract, stimulus, normalized forms and requirements live. The
+#: guard-placement runs o1..o3 select from the same corpus over the same
+#: module, so they share these with `full2` -- verified, not assumed: every
+#: req_uid and every tp_uid of all three is contained in full2's.
+SHARED = Path(sys.argv[2]) if len(sys.argv) > 2 else SRC
+#: The directory holding a suite whose traces were produced by GOLDEN under
+#: THIS run's own stimulus. Sharing one across runs is only valid when the
+#: contract and stimulus are identical -- o1..o3 look compatible by uid and are
+#: not, because they declare 17 probes where full2 declares 24.
+GOLD = Path(sys.argv[3]) if len(sys.argv) > 3 else Path(
+    "/tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/recheck_run")
 
 oracles = json.loads((SRC / "oracles.json").read_text())["oracles"]
-_n = json.loads((SRC / "normalized.json").read_text())
+_n = json.loads((SHARED / "normalized.json").read_text())
 normalized = _n["normalized"] if isinstance(_n, dict) else _n
-requirements = json.loads((SRC / "requirements.json").read_text())["requirements"]
-_s = json.loads((SRC / "stimulus.json").read_text())
+requirements = json.loads((SHARED / "requirements.json").read_text())["requirements"]
+_s = json.loads((SHARED / "stimulus.json").read_text())
 stimulus = _s["testpoints"] if isinstance(_s, dict) else _s
 contract = json.loads((GOLD / "contract.json").read_text())
 population = [p.read_text() for p in sorted((SRC / "population").glob("*.py"))]

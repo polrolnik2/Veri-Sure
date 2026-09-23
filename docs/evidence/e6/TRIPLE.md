@@ -119,3 +119,48 @@ computed here, and I have no way to compute it.
 
 So `full2` is the only run re-scored here, and **97.4% / 14.5% / 24.3% is the
 only honest triple on the board.** It misses two of the three targets.
+
+
+---
+
+# full7, re-scored on its OWN instrument
+
+`full7` carries a complete instrument of its own -- contract, stimulus,
+testplan, `ref_model.py`, a 443-test suite and a 7-member distinct population.
+An earlier note here said it "needs a suite run"; it does not, it needed
+looking in `full7/specflow/suite` rather than `full7/suite`. Golden was run
+through that suite (442 traces) and the run re-scored against it.
+
+    column      as the run recorded it      re-scored with an RTL control
+    ---------   -------------------------   -----------------------------
+    SPAN        0.9820  (109 of 111)        0.9820  (109 of 111)
+    BLINDNESS   0.2450                      0.2896
+    AUDIT       0.0667  -- 1 of 15          **0.3600 -- 18 of 50**
+
+Span reproduces to four places. The audit denominator goes **15 -> 50**,
+because golden exposes 16 of full7's 24 declared probes against 0 for the
+Python control. Eight remain unexposed and are the familiar list -- `cnt_zero`,
+`active_command`, the four `*_sequence` probes, plus full7's own
+`write_stable_high_phase` and `read_sample_window`.
+
+**BLINDNESS DOES NOT REPRODUCE AND I CANNOT ACCOUNT FOR IT.** 0.2450 recorded
+against 0.2896 here, on a cell count that matches exactly (29392). The
+population is replayed in Python by `score`, which the width guard does not
+touch -- it lives in the cocotb runtime -- so the obvious explanation is wrong.
+The testpoint count also differs by one (442 traces against 443 rendered
+tests). Recorded as unexplained rather than attributed.
+
+## The two honest triples
+
+    run     span     blindness   audit            audit denominator
+    full2   97.4%    14.5%       24.3%            37 of 111
+    full7   98.2%    29.0%       36.0%            50 of 109
+
+    target  > 90%    < 10%       = 0
+
+Span is met on both. **Blindness and audit are met on neither**, and the
+audit column is worse on the instrument whose control can see more of the set
+-- full7's golden exposes 16 of 24 probes where full2's exposes 10, and full7's
+audit is correspondingly higher at 36.0%. That direction is consistent: the
+more of a check set a real design can be judged on, the more of it convicts
+that design.
