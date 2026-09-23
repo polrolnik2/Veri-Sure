@@ -217,3 +217,72 @@ One edge of shift moves golden from 13% to 14% and the candidate from 91% to
 narrower condition than the sentence's literal reading**, and REQ-0053 and
 REQ-0055 sparing under the global advance is a side effect of shifting the
 several other probes they read, not evidence about `slave_wait`.
+
+
+---
+
+# VALIDATED: the one-probe test, and what it does to the triple
+
+The global advance proved nothing because it shifted all twenty-four probes and
+broke activations. The targeted version shifts **two** -- `sta_condition` and
+`sto_condition`, the only probes the specification writes an equation for --
+and leaves the other twenty-two alone:
+
+    req        baseline    sta/sto advanced
+    REQ-0066   CONVICTS    spares      <-- validates
+    REQ-0067   CONVICTS    spares      <-- validates
+    REQ-0110   CONVICTS    spares      <-- validates
+    REQ-0111   CONVICTS    spares      <-- validates
+    REQ-0112   CONVICTS    spares      <-- validates
+    REQ-0034   CONVICTS    abstains
+    REQ-0035   CONVICTS    abstains
+    REQ-0053   CONVICTS    CONVICTS
+    REQ-0055   CONVICTS    CONVICTS
+    REQ-0058   CONVICTS    CONVICTS
+
+**Exactly the five diagnosed as phase SPARE, and nothing else does.** The two
+extent cases and the unexplained one still convict, which is what the diagnosis
+predicted and what a blunt intervention could not have shown.
+
+## The triple under it
+
+    target: span > 0.90, blindness < 0.20, audit = 0
+
+    configuration                  span             blindness        audit
+    baseline                       0.9737 MET       0.1454 MET       9/37 = 0.2432
+    phase-correct sta/sto          0.9737 MET       0.1454 MET       2/35 = 0.0571
+    phase-correct + TO_END gate    0.9474 MET       0.1454 MET       2/34 = 0.0588
+
+**AUDIT 24.3% -> 5.7%, AT NO COST TO SPAN OR BLINDNESS.** Both hold to four
+decimal places. This is the first change measured on this branch that moves one
+column without paying in another -- the boundary fix bought audit with
+blindness, selection buys it with span, and this buys it with neither, because
+it corrects a misreading rather than removing a check.
+
+The two survivors are REQ-0053 and REQ-0055: the `slave_wait` sentence that
+admits both a level and an event. That is a specification ambiguity, not a
+pipeline defect, and it is the whole of the remaining audit column.
+
+## The TO_END gate is a net loss on this corpus
+
+Applying it costs 2.6 points of span and moves audit by +0.0017 -- it removes
+three checks and one denominator entry, and REQ-0034 was already abstaining
+under the phase correction. It remains right as a rule (a check that convicts
+every trace with a second event is broken however it scores here), but on this
+corpus it is not what closes the column, and shipping it should not be
+justified by the audit figure.
+
+## What this makes the remaining work
+
+    cause                       checks   convictions after phase correction
+    probe PHASE                      6   0   -- validated
+    `throughout` over TO_END         1   0   -- abstains; gate exists
+    `slave_wait` EXTENT              2   2   -- OPEN, a specification question
+    cause not found                  1   0   -- abstains
+
+Closing `slave_wait` is a question about what the sentence means, not a
+mechanical fix: does "assert slave_wait when it has released SCL high while
+filtered SCL remains low" describe a LEVEL that holds whenever the lines are in
+that state, or an EVENT the controller enters and holds? The population reads
+it as a level in every one of its bodies; golden reads it as an event. Deciding
+that is authoring work, and it is 2 convictions of 35.
