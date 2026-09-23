@@ -1,0 +1,159 @@
+{
+  "checks": {
+    "accepted": 122,
+    "corpus_bodies": 616,
+    "corpus_requirements": 152
+  },
+  "contract": {
+    "declared_probes": 24,
+    "module": "i2c_master_bit_ctrl",
+    "ports": 17,
+    "probe_names": [
+      "active_command",
+      "clk_en",
+      "cnt_zero",
+      "cscl",
+      "csda",
+      "dscl",
+      "dsda",
+      "filter_cnt",
+      "filter_cnt_expired",
+      "filtered_scl_rise",
+      "fscl",
+      "fsda",
+      "idle",
+      "read_sequence",
+      "scl_sync",
+      "sda_chk",
+      "slave_wait",
+      "sscl",
+      "ssda",
+      "sta_condition",
+      "start_sequence",
+      "sto_condition",
+      "stop_sequence",
+      "write_sequence"
+    ]
+  },
+  "files": {
+    "contract.json": {
+      "bytes": 25457,
+      "sha256": "b7c92c776df5cebda5bc119632a82f0a62b8f9c9c2c3565e1db49d58a27cd619"
+    },
+    "coverage_model.json": {
+      "bytes": 226656,
+      "sha256": "b3b4db3860de4641f6afabc9ac57b565b5abc3d1e392c40264194d4125425072"
+    },
+    "normalized.json": {
+      "bytes": 305989,
+      "sha256": "9ff2321f2e8e827b8e7b47386828eff8dea694ddd7995680474a9e29d690ed26"
+    },
+    "oracles.json": {
+      "bytes": 2034894,
+      "sha256": "fb0d281929e9bce8a72397190b1654e703bf04c5f52382818d92e8d659b55278"
+    },
+    "population/0.py": {
+      "bytes": 7631,
+      "sha256": "4d1818ce04185a61237f322a5c8865d284646fef1d853873bb94216d5e087268"
+    },
+    "population/1.py": {
+      "bytes": 8378,
+      "sha256": "a7556e644cbdfb5768c16363dacec1aeafd5f13e6aea2cbc917ec2a203ce1fce"
+    },
+    "population/2.py": {
+      "bytes": 10348,
+      "sha256": "a27128069076fae040cf0ed65fc6b33bc560924cb695db1a1fc5a22ee90728f4"
+    },
+    "population/3.py": {
+      "bytes": 9154,
+      "sha256": "31fbd00030fcecac6b03155a7412aaf331f6cce66498cd99641b99d92c6143fd"
+    },
+    "population/4.py": {
+      "bytes": 8720,
+      "sha256": "543f55c448445fadf3e01e0a1b9331ffba9accd00c0a290994d3ba58cfa913dd"
+    },
+    "population/5.py": {
+      "bytes": 9005,
+      "sha256": "0b4a7b2e3f8b9bfbd89e4fe968696d01b6b3dbd236aeb0b28023669b1ec5b589"
+    },
+    "population/6.py": {
+      "bytes": 9070,
+      "sha256": "37e340ebf38a1fcc55ea50322fbabd5c5d74984188d901cad15cf754d8bc3300"
+    },
+    "probes.json": {
+      "bytes": 23255,
+      "sha256": "5008c234df77b0d61216db04fa9f1063cb21d6ac250a0fc093c663254eb2496a"
+    },
+    "ref_model.py": {
+      "bytes": 8684,
+      "sha256": "1ea9b10c973f47c749c59664aaa6c9c172bc411d0509d5db75685d04f881cee9"
+    },
+    "requirements.json": {
+      "bytes": 123140,
+      "sha256": "b5b2aed4ba088f1f180964c6c25447a1243c94726369ae235cb2839cac828d6c"
+    },
+    "scorecard.json": {
+      "bytes": 525,
+      "sha256": "4c4d697ea0eb7ec95f912793add6d393a4c1b3da6da97edc3566e02eea51301b"
+    },
+    "stimulus.json": {
+      "bytes": 442116,
+      "sha256": "70dc877b77c52404164b27a1a17898172054dbc1c0a2a1eb92d4be3aeb595103"
+    },
+    "testplan.json": {
+      "bytes": 485770,
+      "sha256": "0bb2fd16864ba4ac8b28070983e11534eeaf8abdff6da47dffa0fa7c7ee94b0f"
+    }
+  },
+  "missing": [],
+  "name": "full2",
+  "packed_at": "2026-09-23T21:16:22+00:00",
+  "population": {
+    "distinct": 7,
+    "members": 7,
+    "probe_ports": [
+      "active_command",
+      "clk_en",
+      "cnt_zero",
+      "cscl",
+      "csda",
+      "dscl",
+      "dsda",
+      "filter_cnt",
+      "filter_cnt_expired",
+      "filtered_scl_rise",
+      "fscl",
+      "fsda",
+      "idle",
+      "read_sequence",
+      "scl_sync",
+      "sda_chk",
+      "slave_wait",
+      "sscl",
+      "ssda",
+      "sta_condition",
+      "start_sequence",
+      "sto_condition",
+      "stop_sequence",
+      "write_sequence"
+    ],
+    "probe_ports_identical_across_members": true
+  },
+  "probe_agreement": {
+    "only_in_contract": [],
+    "only_in_population": [],
+    "population_matches_contract": true
+  },
+  "recorded_scorecard": {
+    "audit": 0.0,
+    "blindness": 0.14640852762815926,
+    "cells": 26549,
+    "control_convicted_by": 0,
+    "control_judges": 14,
+    "effective_size": 100,
+    "population": 7,
+    "span": 0.9736842105263158,
+    "trusted": 111
+  },
+  "source": "/tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/full2/specflow"
+}
