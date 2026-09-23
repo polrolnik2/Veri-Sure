@@ -198,10 +198,35 @@ def score(*, oracles: list[dict], normalized: list[dict] | dict,
         notes.append("no requirement states an observable obligation, so span "
                      "has no denominator and is reported as absent")
 
+    #: **ONE CHECK PER REQUIREMENT, AND IT USED TO COLLAPSE THE REST IN
+    #: SILENCE.** This map is keyed by `req_uid`, so a caller passing two
+    #: bodies for one requirement kept only the LAST and was told nothing. A
+    #: sweep admitting extra corpus bodies read as 122, 241 and 349 checks and
+    #: was 122 every time -- blindness APPEARED to rise and `effective_size` to
+    #: fall as separators were added, which is not how adding separators
+    #: behaves, and that impossibility is the only reason the collapse was
+    #: caught.
+    #:
+    #: The model is the limit, not the map: blindness over a set with more than
+    #: one check per requirement is not computable here at all, so "fill the
+    #: pool, then select" cannot be MEASURED by this function. Fixing that
+    #: means keying by a per-body identity while span and the denominator keep
+    #: counting requirements -- a change to the headline numbers that wants a
+    #: real run to validate, which is why this reports rather than repairs.
+    bodies = [o for o in (oracles or []) if o.get("source")]
     held = {str(o["req_uid"]): RequirementOracle(
         req_uid=str(o["req_uid"]), tp_uids=list(o.get("tp_uids") or []),
         clause=str(o.get("clause") or ""), source=str(o["source"]))
-        for o in (oracles or []) if o.get("source")}
+        for o in bodies}
+    dropped = len(bodies) - len(held)
+    if dropped:
+        notes.append(
+            f"{len(bodies)} check bodies were supplied for {len(held)} "
+            f"requirement(s) and {dropped} were DISCARDED: this scorecard "
+            f"keys checks by requirement, so only the last body for each "
+            f"survives. Every figure below describes {len(held)} checks, not "
+            f"{len(bodies)}, and blindness in particular cannot be read as a "
+            f"property of the larger set")
     #: A check for a requirement with no observable is not counted in the
     #: numerator either -- the denominator's rule has to apply to both ends or
     #: it is not a rate. On the probe run this removes nothing: all 16 such
