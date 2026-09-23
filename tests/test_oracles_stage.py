@@ -3453,3 +3453,49 @@ def test_a_check_may_compare_a_PROBE(monkeypatch):
     bad = gate(tp, CoverageOutput.model_validate(cov), contract)
     assert any("must compare an output" in i.message
                for i in bad if i.severity == "error")
+
+
+def test_the_population_is_not_built_through_a_RESUME_port(tmp_path):
+    """**ONE RECORDED WITNESS REPLAYED SEVEN TIMES IS NOT A POPULATION.**
+    `ResumePort` replays a recorded response keyed by `(stage, round_)`, and
+    every member asks under the same key -- `conforming_implementation` passes
+    `stage=WITNESS_STAGE` for all of them. A resumed run therefore wrote seven
+    byte-identical designs.
+
+    Measured on the run that found it: all 7 files 8748 bytes, ONE distinct
+    md5, `cells` 0, and the scorecard reporting `BLINDNESS 0/0 = n/a` beside
+    `population 7`. A degenerate population cannot disagree with itself, so the
+    instrument blindness is measured with had quietly become a constant, and
+    the run reported a span and an audit over it as though nothing were wrong.
+
+    The premise of resume -- same key, same answer -- is exactly false for a
+    population, whose whole value is that independent readings of one
+    specification differ. Nothing is lost by refusing it: the loop already
+    resumes from `{i}.py` on disk, per member.
+    """
+    from specflow import oracles_stage as O
+
+    seen = []
+
+    class _Inner:
+        def complete(self, *, stage, round_, prompt):
+            seen.append("inner")
+            return ""
+
+    class _Resume:
+        """Stands in for `ResumePort`: replays, and exposes `.inner`."""
+
+        def __init__(self, inner):
+            self.inner = inner
+
+        def complete(self, *, stage, round_, prompt):
+            seen.append("REPLAYED")
+            return "recorded"
+
+    inner = _Inner()
+    O._population(size=3, requirements=[{"uid": "REQ-1", "text": "t"}],
+                  contract_json='{"module_name": "m", "io": []}',
+                  port=_Resume(inner), workdir=tmp_path, run_dir=None)
+    assert "REPLAYED" not in seen, (
+        "the population was generated through the resume port, so every "
+        "member would replay one recorded witness")

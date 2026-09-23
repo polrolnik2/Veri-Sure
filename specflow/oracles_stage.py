@@ -3961,6 +3961,24 @@ def _population(
         return ()
     root = (Path(run_dir) / "specflow" / "population"
             if run_dir is not None else Path(workdir) / "population")
+    #: **CALL-LEVEL RESUME IS WRONG HERE AND ONLY HERE, AND IT COST A WHOLE
+    #: RUN.** `ResumePort` replays a recorded response keyed by `(stage,
+    #: round_)`, and every member below asks under the same key --
+    #: `conforming_implementation` passes `stage=WITNESS_STAGE` for all of
+    #: them. So a resumed run replayed ONE recorded witness seven times and
+    #: wrote seven byte-identical designs.
+    #:
+    #: Measured on the run that found it: all 7 files 8748 bytes, one distinct
+    #: md5, `cells` 0, and the scorecard reporting `BLINDNESS 0/0 = n/a` beside
+    #: `population 7`. A degenerate population cannot disagree with itself, so
+    #: the instrument blindness is measured with had quietly become a constant.
+    #:
+    #: The premise of resume is that the same key deserves the same answer.
+    #: That is exactly false for a population, whose entire value is that
+    #: independent readings of one specification differ. And nothing is lost by
+    #: refusing it: this loop already resumes from `{i}.py` on disk, which is
+    #: per member and cannot collapse them.
+    gen_port = getattr(port, "inner", port)
     out: list[str] = []
     for i in range(size):
         held_path = root / f"{i}.py"
@@ -3976,7 +3994,7 @@ def _population(
         try:
             source, _issues = conforming_implementation(
                 requirements=requirements, contract_json=contract_json,
-                port=port, workdir=root / f"_gen{i}")
+                port=gen_port, workdir=root / f"_gen{i}")
         except Exception as exc:  # noqa: BLE001
             logger.info("population member %d not produced (%r)", i, exc)
             continue
