@@ -492,6 +492,65 @@ def strong_not_stated(source: str) -> list[str]:
     return sorted(set(out))
 
 
+#: The operators that assert an INVARIANT -- true at every governed row --
+#: as opposed to the existentials, which need one witness. Only these are
+#: damaged by an unbounded window: `eventually` over a window that runs long
+#: has more chances to find its witness, while `throughout` over one has more
+#: chances to be broken.
+_INVARIANTS = ("throughout", "stable", "never")
+
+
+def unbounded_invariant(source: str) -> list[str]:
+    """Invariant operators applied to a window that runs to END OF TRACE.
+
+    **`until=TO_END` OPENS A WINDOW THAT NEVER CLOSES.** With the default
+    `overlap=False` the scan resumes past the window's end, so everything after
+    the FIRST activation is one window and later activations open nothing --
+    they are already inside it. An invariant asserted there is asserted from
+    the first trigger to the end of the run, across every gap the requirement
+    permits, which is strictly more than "after E, P holds while S" ever said.
+
+    Measured on the frozen i2c set. REQ-0034 opens at the first filtered START
+    or STOP and requires `busy == expected` to the end of trace, so a
+    legitimate STOP clearing `busy` convicts. REQ-0128 is the same shape
+    against `al`, so a design that correctly RECOVERS from arbitration loss
+    fails it. Both convict the known-good design. Three of 122 checks carry
+    the shape.
+
+    Text only -- an AST walk, no design and no trace -- so it is admissible
+    anywhere in the loop. Returns the invariant operator names, so the
+    objection can quote them.
+
+    NOT a claim that the requirement is wrong. A requirement may genuinely
+    oblige something forever, and then the check must say so about a window it
+    opened ONCE. The refusal asks the author which of the two they meant,
+    which is a question about the specification and not about any design.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []                      # a non-compiling body is another gate's
+    unbounded: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+        if name != "after":
+            continue
+        for kw in node.keywords:
+            if kw.arg != "until":
+                continue
+            if (getattr(kw.value, "id", None) == "TO_END"
+                    or getattr(kw.value, "attr", None) == "TO_END"):
+                for target in ast.walk(tree):
+                    if isinstance(target, ast.Call):
+                        got = (getattr(target.func, "id", None)
+                               or getattr(target.func, "attr", None))
+                        if got in _INVARIANTS:
+                            unbounded.add(got)
+    return sorted(unbounded)
+
+
 #: A row named by POSITION rather than by order. `trace[i + 1]`, `next_row`,
 #: `rows[j + 1]` and `nexttime` are the only constructs in this vocabulary that
 #: do it: every other operator quantifies over the window (`eventually`,

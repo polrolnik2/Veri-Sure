@@ -106,3 +106,57 @@ That model is `ref_model.py`, the pipeline's OWN spec-derived artifact -- not
 golden and not a known-good design -- so it is in-family and no constraint was
 broken. It is still a second opinion an editor can anchor on, and a brief that
 means to exclude silver references should say so about those fields by name.
+
+
+---
+
+# CORRECTION: the mechanism of shape 2 is not what either of us said
+
+The editor reported REQ-0034 as *"`after(...)` opens one window PER START/STOP
+event, each checked all the way to the end of the trace"*, and I verified the
+source shape, the census and the convictions -- but not the window semantics --
+and repeated it.
+
+`after` takes `overlap=False` by DEFAULT, and the scan for the next activation
+resumes past the previous window's end. With `until=TO_END` the first window
+runs to the end of the trace, so the scan resumes past the end and **there is
+exactly one window**. Later activations open nothing; they are already inside
+it. A test asserting "one window per activation" is what caught this:
+
+    after(trace, sta == 1, until=TO_END)  over  sta = 1 0 0 0 1 0
+      -> 1 window, not 2
+
+**The conclusion survives and the reason does not.** The shape still convicts a
+trace the requirement permits, for a simpler cause: the window never CLOSES.
+
+    trace  sta = 1 0 0 0 1 0
+           busy= 1 1 1 0 1 1
+
+The requirement is "after a START, busy is high until the transaction ends".
+This trace starts, is busy, ends at index 3, starts again, is busy again --
+exactly what the requirement describes. One window opens at index 0 and runs to
+index 5, so the legitimate idle gap at index 3 falls inside it and `throughout`
+returns False. No design, no population, no reference.
+
+So the defect is not "one window per event". It is **an invariant asserted over
+a window with no closing condition**, which claims the invariant from the first
+trigger to the end of the run rather than for the situation the requirement
+describes.
+
+## What shipped
+
+`temporal.unbounded_invariant(source)` -- an AST walk, no design and no trace --
+returns the invariant operators (`throughout`, `stable`, `never`) applied to a
+window opened with `until=TO_END`. `well_formed` refuses such an oracle and
+names the operator, which buys it a repair round rather than letting it convict.
+
+Existentials are deliberately NOT flagged: `eventually` over a long window has
+MORE chances to find its witness, so an unbounded window cannot convict there.
+
+The objection offers the legitimate reading rather than banning it -- a
+requirement that genuinely obliges something for the rest of the run keeps
+`TO_END` and says so in the clause, so the claim is visible rather than
+incidental.
+
+On the frozen i2c set it flags exactly REQ-0034, REQ-0046 and REQ-0128 -- the
+same three the hand census found.

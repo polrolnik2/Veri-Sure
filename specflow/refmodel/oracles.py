@@ -26,7 +26,7 @@ cocotb, so a generated model runs in a plain interpreter.
 
 from __future__ import annotations
 
-from .temporal import strong_not_stated
+from .temporal import strong_not_stated, unbounded_invariant
 
 import ast
 from collections.abc import Sequence
@@ -733,6 +733,25 @@ def well_formed(
                 "a violation of it, and strong=False when it describes a "
                 "condition, where running out of trace means only that you "
                 "stopped looking.")
+    #: **`until=TO_END` OPENS A WINDOW THAT NEVER CLOSES**, so an invariant
+    #: asserted there holds from the first activation to the end of the run,
+    #: across every gap the requirement permits. Refused
+    #: here, with the operator named, rather than left to convict: REQ-0034 and
+    #: REQ-0128 carry this shape on the frozen i2c set and both convict the
+    #: known-good design.
+    unbounded = unbounded_invariant(oracle.source)
+    if unbounded:
+        ops = "`, `".join(unbounded)
+        return (f"`{ops}` is asserted over a window opened with "
+                "`until=TO_END`, which never closes: everything after the "
+                "first activation is inside it. So the invariant is claimed "
+                "from that trigger to the end of the run, across every gap the "
+                "requirement permits -- and the first such gap convicts, "
+                "whatever the design did. Close the window on whatever ends "
+                "the situation the requirement describes. If the requirement "
+                "really does oblige this for the rest of the run, keep "
+                "`TO_END` and say so in the clause, so the claim is visible "
+                "rather than incidental.")
     if not oracle.tp_uids:
         return "the oracle names no testpoint to replay"
     known = {str(tp.get("uid")) for tp in testplan}
