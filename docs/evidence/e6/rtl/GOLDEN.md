@@ -243,3 +243,78 @@ away from correct behaviour -- which is what the cell measurement above
 records as `scl_oen` going 2441 -> 6050 and `sda_oen` 1155 -> 4100.
 
 All ten read a probe. All ten were invisible before the binding landed.
+
+
+---
+
+# CORRECTION: the binding matched the NAME, not the QUANTITY
+
+The section above says the eight case-insensitive bindings are unambiguous
+because no `casefold()` collision is possible among them. That is true about
+NAMES and it does not establish what it was used to establish. Reading the
+recorded traces of golden and of a candidate under the same stimulus:
+
+    probe          GOLDEN values        CANDIDATE values
+    cscl           0,1,2,3              0,1
+    csda           0,1,2,3              0,1
+    filter_cnt     0,1,2                0,1
+    fscl           0..7                 0,1
+    fsda           0..7                 0,1
+
+`fSCL` in golden is a THREE-BIT filter shift register. The probe named
+`fscl` means "the filtered SCL level", one bit. The binding found a signal
+spelled the same way and bound a different quantity to it. A check asserting
+`fscl == 1` reads 7 and convicts.
+
+Eight further probes bind to NOTHING on golden and read null on every edge:
+
+    active_command  cnt_zero  filter_cnt_expired  filtered_scl_rise
+    read_sequence   start_sequence  stop_sequence  write_sequence
+
+These are spec-named internal abstractions. The population implements them as
+signals because the probe stage asked for them; golden computes them inline and
+has no such signal to bind.
+
+## What that does to the audit column
+
+    frozen set                                              122
+      read a probe UNBOUND on golden                         75   undecidable there
+      read a WIDTH-MISMATCHED probe                          12   decide a different quantity
+      either                                                 81
+
+    silent on golden                                         75
+      of which read an unbound probe                         69
+      silent for any other reason                             6
+
+    DECIDED on golden                                        47
+      of which read a width-mismatched probe                  6
+      CLEAN DENOMINATOR                                      41
+
+Of the 15 checks convicting golden, 3 read a width-mismatched probe (REQ-0061,
+REQ-0096, REQ-0102). So the defensible figure is:
+
+**AUDIT vs golden = 12 of 41 = 29.3%**, not the 31.9% claimed above and not the
+13.3% claimed before the binding landed.
+
+Of the 10 checks that pass on `rtldbg5-partial` and fail on golden, 3 are
+suspect for the same reason (REQ-0061, REQ-0096, REQ-0100). **Seven survive:
+REQ-0035, 0053, 0066, 0067, 0110, 0111, 0112.** Those seven still pay the
+editor to move away from correct behaviour and none of them rests on a
+mis-bound probe.
+
+## The structural finding, which is the larger one
+
+**69 of the 75 silences are one mechanism.** Not stimulus, not window shape,
+not an unlucky trace -- the check reads a probe that a correct design has no
+signal for.
+
+Probes name internal state the SPECIFICATION mentions, and the population
+factors its internals to match because the probe stage told it to. Any design
+that computes those quantities inline is unjudgeable by 61% of the set. This
+is not a property of golden; it is a property of every design outside the
+population's factoring.
+
+That is what `audit = 1/12` on `full10` was measuring. Not "audit is nearly
+zero" -- **audit over twelve checks of a hundred and twenty-three**, because
+the control shares golden's factoring and most of the set goes silent on it.
+A target of audit = 0 met on that denominator is met on a tenth of the set.
