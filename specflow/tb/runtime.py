@@ -58,6 +58,11 @@ _INTERNALS: list[str] = [
 #: design that never responds from hanging the suite, not to police latency.
 DEFAULT_UNTIL_TIMEOUT = 2000
 
+#: `probe name -> the differently-cased signal it actually bound to`. Recorded
+#: so a run states which names needed the fallback instead of silently
+#: succeeding, and so a reader can tell a real binding from a lucky one.
+_CASE_BOUND: dict[str, str] = {}
+
 
 
 @dataclass
@@ -831,6 +836,32 @@ class Env:
         """
         handle = getattr(self.dut, signal, None)
         if handle is None:
+            #: **THE PIPELINE RENAMES THE THING IT THEN CANNOT FIND.** A probe
+            #: is lower-cased by rule -- "`cSCL` -> `cscl`, because a probe
+            #: becomes a port of the generated module" -- and Verilog is
+            #: case-sensitive, so a probe can never bind to a design that
+            #: spells the signal the way the specification does. A generated
+            #: design declares the lower-cased port and matches; an
+            #: independently written one, or a reference, does not.
+            #:
+            #: Measured on the known-good i2c design: 92 of 122 checks
+            #: abstained on it, so the audit was taken over 30 of the set,
+            #: and the checks reading a probe -- 106 of 122 -- could say
+            #: nothing about the one design whose correctness is not in
+            #: question.
+            #:
+            #: EXACT MATCH STILL WINS, and this only runs when there is no
+            #: exact one. A design carrying BOTH `cscl` and `cSCL` keeps the
+            #: exact binding; ambiguity among case variants resolves to the
+            #: first in sorted order and is recorded rather than guessed at.
+            want = signal.casefold()
+            for name in sorted(dir(self.dut)):
+                if name.casefold() == want:
+                    handle = getattr(self.dut, name, None)
+                    if handle is not None:
+                        _CASE_BOUND.setdefault(signal, name)
+                        break
+        if handle is None:
             return None
         return _plain(handle.value)
 
@@ -1157,6 +1188,10 @@ class Env:
         record = {
             "tp_uid": self.tp_uid,
             "status": status,
+            #: Which declared names bound only by ignoring case. Reported so a
+            #: run SAYS the fallback fired rather than quietly succeeding --
+            #: a binding a reader cannot see is one nobody can check.
+            "case_bound": dict(sorted(_CASE_BOUND.items())),
             "checks_invoked": sorted(set(self.sb.invoked)),
             "checks_failed": sorted(set(self.sb.failed)),
             "signals_failed": sorted(
