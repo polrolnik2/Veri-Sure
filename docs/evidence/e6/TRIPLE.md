@@ -185,3 +185,66 @@ audit column is worse on the instrument whose control can see more of the set
 audit is correspondingly higher at 36.0%. That direction is consistent: the
 more of a check set a real design can be judged on, the more of it convicts
 that design.
+
+
+---
+
+# Both of today's corrections, applied as RULES
+
+Neither reads the audit column. Choosing what to change by whether it convicts
+the control is gating on the grade; both rules below come from the
+requirement's own words and are applied uniformly to every check that matches,
+including the ones that convict nothing.
+
+  1. **PHASE.** The specification writes an equation, not a schedule, so a
+     design may offer a condition combinationally or register it. Applied by
+     reading the control's `sta_condition` and `sto_condition` one edge early
+     -- the two probes whose equation the specification states.
+  2. **`|->` NOT `|=>`.** `after_activation=True` claims the effect FOLLOWS
+     the trigger. Demoted to False on every check whose requirement text
+     carries no sequence word and licenses no cycle count, which is
+     `correspondence`'s existing licence test applied to the flag. It matched
+     **28 of 122**.
+
+    configuration          span            blindness       audit
+    baseline               0.9737 MET      0.1454 MET      9/37 = 0.2432
+    phase only             0.9737 MET      0.1454 MET      2/35 = 0.0571
+    licence rule only      0.9737 MET      0.1416 MET      8/37 = 0.2162
+    **both**               **0.9737 MET**  **0.1416 MET**  **1/35 = 0.0286**
+
+Span is unmoved to four decimal places. **Blindness IMPROVES** under the
+licence rule -- a check that no longer demands strictly-after decides where it
+previously abstained -- which is the first correction measured on this branch
+that moves audit and blindness the same way.
+
+## The scorecard says 1 and there are 2
+
+Enumerating the convictions directly under both corrections gives **REQ-0055
+and REQ-0058**. The scorecard reports `1/35` because REQ-0058 is
+`unit_kind: scaffolding` and falls outside the set it counts. Both figures are
+right about what they measure, and "one conviction left" is not: **two checks
+still convict the known-good design, one of which the audit column does not
+count.**
+
+    REQ-0055 [behavioural]  TP-0017 edge 7   the invariant broke, window opened at edge 6
+    REQ-0058 [scaffolding]  TP-0011 edge 5   scl_oen changed from released before
+                                             synchronization postponement was observed
+
+REQ-0055 is the one the degenerate-stimulus finding bears on: it asserts the
+timing counter is paused, and TP-0017 drives `clk_cnt = 0`, where there is
+nothing to pause and the known-good design's `clk_en` free-runs. REQ-0058
+remains unexplained -- two hypotheses measured and both refuted.
+
+## What this does and does not claim
+
+It does NOT claim the pipeline reaches audit = 0. It claims that two rules
+derived from requirement text, applied uniformly and without reading the grade,
+take the audit column from 24.3% to 2.9% on this corpus at no cost to span and
+a small gain in blindness -- and that what remains is two checks with named,
+separate causes rather than an undifferentiated residue.
+
+It is also a PROJECTION, not a run: the corrections are applied to stored
+artifacts by a driver, because the gateway is budget-exhausted and neither the
+oracle stage nor the probe stage can be re-run to produce checks written this
+way from the start. `e6_corrected_triple.py` reproduces it with zero model
+calls.
