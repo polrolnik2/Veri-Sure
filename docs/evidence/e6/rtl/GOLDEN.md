@@ -52,14 +52,43 @@ loop.
 `scl_o` and `sda_o` read 0 in both: constant-driven open-drain outputs, with
 nothing to get wrong.
 
-## Why the loop cannot see any of this
+## The boundary IS guarded, and the guard approved the regression
 
-The editor commits against a reviewer scored on PASSING-REQUIREMENT COUNT, and
-106 of the 122 requirements read a probe. The eight declared outputs enter its
-objective only through the 16 checks that read them. So a commit that repairs
-probe-visible internal state while shifting the module boundary registers as
-unambiguous progress -- and the rollback guard cannot catch it, because it
-gates on the same count. Nothing in the loop watches the boundary.
+**AN EARLIER VERSION OF THIS FILE SAID "NOTHING IN THE LOOP WATCHES THE
+BOUNDARY". THAT WAS WRONG AND THE MEASUREMENT THAT DISPROVES IT IS BELOW.** It
+came from counting the checks that read ONLY declared outputs -- 16 of 122 --
+when a check reading a probe AND `scl_oen` guards `scl_oen` perfectly well.
+
+    port        checks reading it
+    scl_oen                    47
+    cmd_ack                    42
+    al                         42
+    sda_oen                    35
+    busy                       12
+    dout                       11
+    scl_o                      10
+    sda_o                      10
+
+And what those guards said across the same repair:
+
+    port       guards   before p/f/a   after p/f/a   fixed   broken
+    scl_oen        47        30/15/2       34/ 9/4       4        0
+    sda_oen        35        22/11/2       26/ 7/2       4        0
+    cmd_ack        42        26/16/0       31/11/0       5        0
+    al             42        29/11/2       33/ 7/2       4        0
+
+**On the two ports the design moved 2.5x and 3.6x further from golden, the 47
+and 35 checks guarding them got strictly happier -- failures 15 -> 9 and
+11 -> 7 -- and NOT ONE check that passed before started failing.**
+
+So the defect is not an absent guard. It is 47 checks that watch `scl_oen`,
+fire, and are satisfied by a design measurably worse on exactly that port. A
+guard that does not discriminate is worse than no guard, because it reports
+success.
+
+Two abstentions appeared on `scl_oen` (2 -> 4): checks that decided before and
+decide no longer. That is the vacuity sign, and it moved the wrong way at the
+same time.
 
 ## Why the raw difference is not the number
 
