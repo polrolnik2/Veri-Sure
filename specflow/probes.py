@@ -233,11 +233,31 @@ class ProbeEntry(BaseModel):
     licensed_by: list[str] = Field(default_factory=list)
     spans: list[str] = Field(default_factory=list)
     config_gated: ConfigGated | None = None
+    #: **A PROBE IS NOT OBLIGED TO BE ONE BIT, AND FORCING IT WAS MEASURABLY
+    #: WRONG.** This was pinned to 1 with "width is not the model's to choose",
+    #: which is right about inventing a width and wrong about reporting one the
+    #: specification states. The i2c specification says "the three-sample
+    #: histories `fSCL` and `fSDA`" and "a filter counter, `filter_cnt`" -- and
+    #: the stage minted `fscl`, `fsda` and `filter_cnt` at width 1, beside its
+    #: own `spans` quoting those very phrases.
+    #:
+    #: The cost, measured against the known-good design: `fSCL` and `fSDA` bind
+    #: 3-bit registers reading 0..7, `cSCL`/`cSDA` 2-bit, `filter_cnt` 14-bit
+    #: and `idle` 18-bit, where the check expects 0 or 1. Before the runtime
+    #: width guard those bound silently and convicted; after it they refuse to
+    #: bind and 83 of 122 checks abstain on that design, up from 75. Either way
+    #: the quantity the specification names is unreadable.
+    #:
+    #: So: DEFAULT 1, and state a wider one only when the specification states
+    #: it. A width the model invents is still not the model's to choose, and
+    #: `contract_linter.probe_issues` owns the check.
+    width: int = 1
 
     def as_io(self) -> dict:
-        """The `contract["io"]` entry. Width is not the model's to choose."""
+        """The `contract["io"]` entry."""
         entry = {
-            "name": self.name, "dir": "probe", "width": 1,
+            "name": self.name, "dir": "probe",
+            "width": max(1, int(self.width or 1)),
             "notes": self.notes,
             "licensed_by": list(self.licensed_by),
             "spans": list(self.spans),

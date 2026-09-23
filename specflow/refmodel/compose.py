@@ -153,16 +153,42 @@ def probe_block(contract: dict, base: str) -> str:
     if not named:
         return ""
     listed = ", ".join(
-        f"`{p['name']}` ({p.get('notes') or 'see the specification'})"
+        f"`{p['name']}`"
+        + (f" [{int(p.get('width') or 1)} bits]" if int(p.get("width") or 1) > 1
+           else "")
+        + f" ({p.get('notes') or 'see the specification'})"
         for p in named
     )
+    #: **A WIDE PROBE IS A VALUE AND A ONE-BIT PROBE IS A SITUATION, AND THE
+    #: BRIEFING HAS TO SAY WHICH.** This said "maintain each one as a BOOLEAN
+    #: ATTRIBUTE" unconditionally, while `ProbeEntry` pinned every width to 1 --
+    #: so the pair agreed, and both were wrong wherever the specification names
+    #: a value. On i2c the stage minted `fscl` and `fsda` (the three-sample
+    #: histories), `filter_cnt` (a counter) and `cscl`/`csda` (two-stage
+    #: registers) as booleans, and those five are exactly the probes that bind a
+    #: wider signal on a design written from the specification rather than from
+    #: this contract.
+    wide = [p for p in named if int(p.get("width") or 1) > 1]
+    shape = (
+        "Maintain each one as a BOOLEAN ATTRIBUTE on the model -- "
+        "`self.in_lrefill3 = (self.state == 'LREFILL3')` -- readable at any "
+        "time after a dispatch call."
+    )
+    if wide:
+        shape = (
+            "Each probe listed WITHOUT a bit count is a situation: maintain it "
+            "as a BOOLEAN ATTRIBUTE on the model -- "
+            "`self.in_lrefill3 = (self.state == 'LREFILL3')`. Each probe listed "
+            "WITH one names a value that many bits wide -- "
+            + ", ".join(f"`{p['name']}`" for p in wide)
+            + " -- and carries that value as an INTEGER attribute, not a flag. "
+            "Both are readable at any time after a dispatch call."
+        )
     return (
         f"The interface also declares PROBES: {listed}.\n"
         "A probe is a specification term made observable, and it is how a check "
-        "names a moment this interface has no port for. Maintain each one as a "
-        "BOOLEAN ATTRIBUTE on the model -- "
-        "`self.in_lrefill3 = (self.state == 'LREFILL3')` -- readable at any time "
-        f"after a dispatch call. Do NOT return them from `{base}`: they are "
+        f"names a moment this interface has no port for. {shape} "
+        f"Do NOT return them from `{base}`: they are "
         "observation points, not outputs, and the output dict must contain "
         "exactly the output ports above. A probe being False most of the time is "
         "correct; the obligation is that it is readable and that it means what "
