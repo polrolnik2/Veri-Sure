@@ -42,7 +42,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, "/home/user/Veri-Sure")
-from specflow.refmodel.rtl_trace import load_traces, rows_from  # noqa: E402
+from specflow.refmodel.rtl_trace import (load_traces,  # noqa: E402
+                                        rows_from, unknown_ports)
 from specflow.run import run_suite  # noqa: E402
 
 GOLDEN = Path("benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/"
@@ -73,8 +74,25 @@ def record(rtl: Path) -> dict[str, list[dict]]:
                     trace=False, include_dirs=INCLUDES)
     if not getattr(out, "ok", True):
         print(f"  (suite reported not-ok for {rtl.name}; traces still read)")
-    return {tp: rows_from(t, side="dut")
+    rows = {tp: rows_from(t, side="dut")
             for tp, t in load_traces(results).items()}
+    #: **AN UNRESOLVED PORT READS AS 100% DIFFERING AND IS NOT A DIFFERENCE.**
+    #: `Env.sample` returns None for a port the design does not expose, so a
+    #: naming mismatch between golden and the rendered suite would silently
+    #: inflate every count here -- the whole measurement, reported as a
+    #: behavioural gap. Named per design, not summed away.
+    bad: dict[str, int] = {}
+    for tp_rows in rows.values():
+        for port, n in unknown_ports(tp_rows).items():
+            if port in outputs:
+                bad[port] = bad.get(port, 0) + n
+    if bad:
+        named = ", ".join(f"{k} on {v} row(s)" for k, v in sorted(bad.items()))
+        print(f"  UNRESOLVED on this design: {named} -- every cell on those "
+              f"ports counts as differing and is NOT evidence", flush=True)
+    else:
+        print(f"  all {len(outputs)} declared output(s) resolved", flush=True)
+    return rows
 
 
 def cells(a: list[dict], b: list[dict]) -> tuple[int, int, int]:
