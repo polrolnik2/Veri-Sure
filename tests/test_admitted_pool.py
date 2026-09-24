@@ -109,3 +109,53 @@ def test_the_pool_of_an_EMPTY_corpus_is_exactly_trusted():
                                  clause="c", source=GOOD)]
     pool = admitted_pool(OracleSet(trusted=trusted, corpus={}), CONTRACT, PLAN)
     assert [o.source for o in pool] == [GOOD]
+
+
+# ------------------------------------------- the pipeline's own call site
+
+
+def test_build_artifacts_takes_admit_pool_and_defaults_it_OFF():
+    """**A SOURCE-LEVEL PIN, AND THAT IS DELIBERATE.**
+
+    A call site inside `build_artifacts` "has twice been deleted on this branch
+    without failing a single behavioural test" -- `integration.py` says so about
+    another one. So this asserts the parameter reaches
+    `oracles_stage.admitted_pool` in the source, not merely that the keyword
+    exists.
+
+    OFF by default: every recorded figure on this branch was computed over one
+    body per requirement, and switching this on silently would change what
+    `blindness` NAMES in all of them rather than extending it.
+    """
+    import inspect
+    import re
+
+    from specflow import integration
+
+    sig = inspect.signature(integration.build_artifacts)
+    assert "admit_pool" in sig.parameters
+    assert sig.parameters["admit_pool"].default is False, (
+        "on by default would retroactively change what every recorded blindness "
+        "figure on this branch means")
+
+    src = inspect.getsource(integration.build_artifacts)
+    call = re.search(r"card = _scorecard\.score\((.*?)\n        \)", src, re.S)
+    assert call, "cannot find the scorecard.score call"
+    assert "admitted_pool" in src, (
+        "admit_pool is accepted and never reaches oracles_stage.admitted_pool, "
+        "so the pool cannot be scored however the caller sets it")
+    #: The conditional spans three lines AND contains parenthesised calls, so a
+    #: non-greedy match to the first `)` or the first newline stops inside it.
+    #: Two earlier versions of this did exactly that and failed on correct code,
+    #: which was the test being wrong rather than the source. Bounded on the
+    #: statement that follows instead.
+    chooser = re.search(r"_scored = \((.*?)\n        if ", src, re.S)
+    assert chooser, "cannot find the statement choosing the scored set"
+    assert "admit_pool" in chooser.group(1), (
+        "the set handed to the scorecard must be chosen BY admit_pool; found: "
+        + " ".join(chooser.group(1).split())[:160])
+    assert "trusted" in chooser.group(1), (
+        "and it must fall back to oracle_set.trusted when admit_pool is off")
+    assert "oracles=[" in call.group(1) and "_scored" in call.group(1), (
+        "the scorecard must score the chosen set, not oracle_set.trusted "
+        "directly -- otherwise the parameter is inert")

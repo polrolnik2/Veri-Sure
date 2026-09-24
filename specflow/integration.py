@@ -442,6 +442,27 @@ def build_artifacts(
     #: requirement with no alternative for any of them. See
     #: `every_requirement_gets_one_body_and_only_repair_adds_more`.
     demote_faithfulness: bool = True,
+    #: **SCORE THE POOL, NOT ONE BODY PER REQUIREMENT.**
+    #:
+    #: The oracle stage accepts one body per requirement and RETAINS the rest;
+    #: `POOL.md` records that `scorecard.score` keyed checks by `req_uid` and so
+    #: could not score the rest at all. It no longer does, and
+    #: `oracles_stage.admitted_pool` hands over `trusted` plus every other corpus
+    #: body the gates accept -- the plan's "fill the pool, then select", expressed
+    #: by the pipeline instead of by a driver.
+    #:
+    #: Measured on `full2` against golden under its own stimulus: 122 bodies give
+    #: span 0.9737 / blindness 0.1416 / audit 1 of 40; 333 give span 0.9737
+    #: (unmoved -- a second body for an already-covered requirement covers no new
+    #: requirement) / blindness 0.0526 / audit 4 of 45. `FRONTIER.md` maps that
+    #: trade and `COVER.md` the greedy cover that takes audit back to 1 of 38 at
+    #: the same span and blindness.
+    #:
+    #: **OFF BY DEFAULT, AND DELIBERATELY.** Every recorded figure on this branch
+    #: was computed over one body per requirement, and switching this on silently
+    #: would change what `blindness` NAMES in all of them rather than extending
+    #: it. A caller wanting the pool says so here.
+    admit_pool: bool = False,
     #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
     #: sources. A check convicting every one of them is rejected before freeze.
     #:
@@ -1229,13 +1250,45 @@ def build_artifacts(
     # and set arithmetic, so it costs no model call; never fatal, because a
     # measurement that cannot be taken must not take the build down.
     try:
+        from . import oracles_stage as _oracles_stage
         from . import scorecard as _scorecard
 
+        #: **THE SET THE SCORECARD SEES: `trusted`, OR THE POOL.**
+        #:
+        #: The stage accepts one body per requirement and RETAINS the rest, and
+        #: until `scorecard.score` stopped keying by `req_uid` the rest could not
+        #: be scored at all -- `POOL.md` records that limit. With `admit_pool`,
+        #: `oracles_stage.admitted_pool` hands over `trusted` plus every other
+        #: corpus body the gates accept, which is the plan's "fill the pool, then
+        #: select" expressed by the pipeline rather than by a driver.
+        #:
+        #: Measured on `full2` against golden run under its own stimulus:
+        #:
+        #:     bodies   span            blindness       audit
+        #:        122   0.9737 MET      0.1416          1/40 = 0.0250
+        #:        333   0.9737 MET      0.0526 MET      4/45 = 0.0889
+        #:
+        #: Span does not move -- a second body for an already-covered requirement
+        #: covers no new requirement -- blindness falls 9 points, and audit rises
+        #: because rejections union. `FRONTIER.md` maps that trade.
+        #:
+        #: **OFF BY DEFAULT, AND DELIBERATELY.** Every recorded figure on this
+        #: branch was computed over one body per requirement, and turning this on
+        #: silently would change what `blindness` names in all of them rather
+        #: than extending it.
+        _scored = (_oracles_stage.admitted_pool(oracle_set, contract, tps or [])
+                   if (admit_pool and oracle_set) else
+                   (oracle_set.trusted if oracle_set else []))
+        if admit_pool and oracle_set:
+            logger.info("scorecard: scoring the POOL -- %d bodies over %d "
+                        "requirement(s), from %d accepted",
+                        len(_scored), len({o.req_uid for o in _scored}),
+                        len(oracle_set.trusted))
         card = _scorecard.score(
             oracles=[
                 {"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),
                  "clause": o.clause, "source": o.source}
-                for o in (oracle_set.trusted if oracle_set else [])],
+                for o in _scored],
             normalized=list((normalized_by_uid or {}).values()),
             requirements=list(reqs or []),
             stimulus_by_tp=stim_by_tp or {},
