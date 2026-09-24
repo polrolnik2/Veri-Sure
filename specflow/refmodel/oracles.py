@@ -26,7 +26,8 @@ cocotb, so a generated model runs in a plain interpreter.
 
 from __future__ import annotations
 
-from .temporal import strong_not_stated, unbounded_invariant
+from .temporal import (both_readings, strong_not_stated,
+                       unbounded_invariant)
 
 import ast
 from collections.abc import Sequence
@@ -739,6 +740,22 @@ def well_formed(
     #: here, with the operator named, rather than left to convict: REQ-0034 and
     #: REQ-0128 carry this shape on the frozen i2c set and both convict the
     #: known-good design.
+    #: **ONE PROPERTY UNDER TWO CONTRADICTORY SEMANTICS IS THE CONJUNCTION OF
+    #: TWO READINGS**, so the body is strictly stronger than either and no
+    #: requirement states both -- `effect_follows` is one decision. Same standing
+    #: as the `TO_END` refusal below: provable from the source, no design and no
+    #: reference, and about what the body must do to ANY design.
+    doubled = both_readings(oracle.source)
+    if doubled:
+        ops = "`, `".join(doubled)
+        return (f"`{ops}` is asserted over the same window BOTH with "
+                "`after_activation=True` and with `False`, so the body reports a "
+                "failure if EITHER reading fails and is strictly stronger than "
+                "either one alone. `effect_follows` is a single decision about "
+                "the requirement -- does the effect follow the trigger? -- and "
+                "no requirement states both answers. Pick the reading the "
+                "requirement's own words license and assert it once.")
+
     unbounded = unbounded_invariant(oracle.source)
     if unbounded:
         ops = "`, `".join(unbounded)

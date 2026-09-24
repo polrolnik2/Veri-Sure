@@ -54,6 +54,12 @@ from typing import Callable
 #: Operators whose `strong` must be stated.
 _TAKES_STRONG = frozenset({"eventually", "sequence", "until", "nth"})
 
+#: Operators taking `after_activation` -- the `|->` / `|=>` choice. Every one of
+#: them, because the kwarg was a TypeError on six of eight once and that is what
+#: `test_every_window_operator_accepts_after_activation` exists for.
+_TAKES_AFTER = frozenset({"eventually", "throughout", "stable", "pulse", "never",
+                          "nexttime", "sequence", "until", "nth"})
+
 #: A predicate over one trace row. A row is a STATE, not a clock edge:
 #: consecutive edges with identical inputs AND outputs collapse into one entry
 #: carrying `held`, the number of edges it lasted. `edge` is its first edge and
@@ -595,6 +601,74 @@ def hand_rolled_window(source: str) -> bool:
                     or getattr(node.func, "attr", None) == "after"):
                 return False
     return True
+
+
+def both_readings(source: str) -> list[str]:
+    """Operators asserting one property under BOTH `|->` AND `|=>`. Over-strict.
+
+    **A CHECK THAT COMPUTES A PROPERTY TWICE UNDER CONTRADICTORY SEMANTICS AND
+    REPORTS THE FAILING ONE IS STRICTLY STRONGER THAN EITHER READING, AND NO
+    REQUIREMENT STATES BOTH.** `effect_follows` is ONE decision -- the whole
+    premise of the field -- so a body calling the same operator on the same window
+    with `after_activation=True` and again with `False` has not transcribed a
+    reading, it has taken the conjunction of two.
+
+    The worked case, verbatim from a frozen body:
+
+        full_window = throughout(window, low, after_activation=False)
+        if full_window[0] is False:
+            results.append(full_window)      # keeps the |-> failure
+            continue
+        # The normalized activation says the effect follows the trigger; check
+        # the post-trigger states using the corresponding temporal semantics.
+        after_trigger = throughout(window, low, after_activation=True)
+
+    It reaches the `|=>` reading its own comment says normalize asked for only when
+    the stricter one has already passed, so the verdict is `FAIL if EITHER fails`.
+
+    **PROVABLE FROM THE SOURCE, WITH NO DESIGN AND NO REFERENCE** -- which is the
+    same standing as `unbounded_invariant`, whose objection is likewise about what
+    the body must do to ANY design rather than about what it did to one.
+
+    An earlier reading of this refused to act on the shape because its population
+    on `full2` is 2 bodies and both convict the known-good design, which looked
+    indistinguishable from gating on the grade. That test was applied
+    inconsistently: the `TO_END` refusal that ships matched 3 bodies of which 2
+    convict, and "3 of which 2 convict" is not a different kind of evidence from
+    "2 of which 2 convict". What separates a structural refusal from grade-gating
+    is whether its STATEMENT needs the grade, and neither of these does.
+
+    It does NOT lower the audit column on `full2`: REQ-0055's remaining corpus body
+    convicts for an unrelated reason, and REQ-0061's convicts either way. Shipped
+    because the shape is wrong, not because it buys a number.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    seen: dict[tuple[str, str], set[bool]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = (f.id if isinstance(f, ast.Name)
+                else f.attr if isinstance(f, ast.Attribute) else None)
+        if name not in _TAKES_AFTER or not node.args:
+            continue
+        flag = None
+        for kw in node.keywords:
+            if (kw.arg == "after_activation"
+                    and isinstance(kw.value, ast.Constant)
+                    and isinstance(kw.value.value, bool)):
+                flag = kw.value.value
+        if flag is None:
+            continue
+        w = node.args[0]
+        #: Keyed on the WINDOW expression as written. Two calls on different
+        #: windows are two claims about two situations, which is not this.
+        key = (name, w.id if isinstance(w, ast.Name) else ast.dump(w))
+        seen.setdefault(key, set()).add(flag)
+    return sorted({k[0] for k, flags in seen.items() if len(flags) > 1})
 
 
 def unbounded_invariant(source: str) -> list[str]:
