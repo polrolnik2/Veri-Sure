@@ -49,6 +49,7 @@ from pathlib import Path
 from . import reachability, variety
 from .model_io import ModelPort
 from .refmodel import correspondence, freeze
+from .refmodel import latency as _latency
 from .refmodel import liveness as _L
 from .refmodel import trust
 from .refmodel import variants as variants_mod
@@ -174,7 +175,8 @@ def _retain(corpus: dict[str, list[CorpusBody]],
 
 def admitted_pool(oracle_set: "OracleSet", contract: dict,
                   testplan: list[dict], *,
-                  refuse_hand_rolled: bool = True) -> list[RequirementOracle]:
+                  refuse_hand_rolled: bool = True,
+                  refuse=None) -> list[RequirementOracle]:
     """`trusted` PLUS every other corpus body the gates accept. The POOL.
 
     **THE STAGE ACCEPTS ONE BODY PER REQUIREMENT AND RETAINS THE REST, AND UNTIL
@@ -202,6 +204,11 @@ def admitted_pool(oracle_set: "OracleSet", contract: dict,
     every future correction to them -- and the census is 29 of 241 bodies with 26
     convicting nothing, so it is not a rule shaped by the grade. Measured: audit
     8/47 -> 4/45 at the same blindness to four places.
+
+    `refuse(uid, body) -> str` drops a corpus body it names a reason for --
+    `refmodel.latency.refuser`, which `build_artifacts` passes: a superseded
+    draft that rests on an unstated latency must not reach the shipped set by
+    the back door after the stage made its author rewrite it.
 
     ADMISSION ONLY, never the accepted body. `trusted` is passed through
     unfiltered even when it is hand-rolled, because the accepted set was frozen
@@ -233,6 +240,8 @@ def admitted_pool(oracle_set: "OracleSet", contract: dict,
                 req_uid=uid, tp_uids=list(anchor_oracle.tp_uids),
                 clause=anchor_oracle.clause, source=src)
             if well_formed(cand, contract, testplan) is not None:
+                continue
+            if refuse is not None and refuse(uid, cand):
                 continue
             seen.add((uid, src))
             out.append(cand)
@@ -1730,14 +1739,14 @@ def _population_objections(held: dict, population: Sequence[str], contract: dict
 #:
 #: `malformed:` is not here either: it means there is no normalized form to
 #: write a check against, which no other body of the same requirement fixes.
-_RESCUABLE = ("over-strict:", "unreached:")
+_RESCUABLE = ("over-strict:", "unreached:", _latency.PREFIX)
 
 
 def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
                         reasons_for: dict, witness: str,
                         population: Sequence[str],
                         contract: dict, stimulus_by_tp: dict, base: str,
-                        transactional: bool) -> dict:
+                        transactional: bool, refuse=None) -> dict:
     """The best body a discarded requirement already has, or nothing.
 
     **A DISCARD IS ABOUT A BODY, AND A DISPOSITION IS ABOUT A REQUIREMENT.**
@@ -1798,6 +1807,12 @@ def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
         tps = list(standing.tp_uids) if standing else []
         clause = standing.clause if standing else ""
         for i, body in enumerate(bodies):
+            #: `latency:` is rescuable ONLY by a body that does not rest on the
+            #: same unstated latency -- a hard filter, not a preference, or the
+            #: rescue would re-admit the defect it was discarded for.
+            if refuse is not None and refuse(uid, RequirementOracle(
+                    req_uid=uid, tp_uids=tps, clause=clause, source=body.source)):
+                continue
             key = f"{uid}#{i}"
             flat[key] = RequirementOracle(
                 req_uid=key, tp_uids=tps, clause=clause, source=body.source)
@@ -2387,6 +2402,15 @@ def run_oracle_stage(
             contract_json=contract_json, port=port, workdir=workdir,
             run_dir=run_dir)
 
+    #: **A LATENCY THE REQUIREMENT NEVER STATED** -- `refmodel/latency.py`. The
+    #: substrate is the WITNESS, a spec-derived design this stage already
+    #: holds; any runnable design serves, the way liveness uses one. Built once;
+    #: it replays a testpoint the first time a check asks for it.
+    _late = _latency.refuser(
+        witness, contract, stimulus_by_tp, normalized or {},
+        {str(r.get("uid") or ""): str(r.get("text") or "") for r in requirements},
+        base=base, transactional=transactional)
+
     # GENERATED ONCE, FROM THE WITNESS, AND THEN NEVER AGAIN.
     #
     # A variant is a wrong implementation of ONE requirement, and the
@@ -2941,6 +2965,28 @@ def run_oracle_stage(
             why = _cannot_fail(detail)
             rejected[uid] = quotable[uid] = why
             repairs.setdefault(uid, []).append(why)
+        #: **AND A CHECK THAT READS THE RESPONSE ON THE ROW OF ITS CAUSE.** The
+        #: requirement says "after", "while", or gives an equation; a design
+        #: that registers the response implements it faithfully, and this check
+        #: convicts that design. Measured on `full2`'s pool against the
+        #: known-good i2c design: every body of the five requirements that
+        #: convicted it on probe timing is flagged, and dropping flagged bodies
+        #: (no repair) moves audit 10/41 -> 5/35 with blindness 9.35%.
+        #:
+        #: BLOCKS AND BUYS A REPAIR ROUND, because the defect is fixable by the
+        #: party that wrote it -- open a window on the condition and require the
+        #: response within it -- and a check rewritten that way still separates
+        #: every design that is wrong rather than late. Excusing it at decision
+        #: time instead was measured four ways and cost blindness every time
+        #: (`docs/evidence/e7/PHASE-RULE.md`): an excuse cannot rewrite a check.
+        if _late is not None:
+            for uid in sorted(held):
+                if uid in rejected:
+                    continue
+                why = _late(uid, held[uid])
+                if why:
+                    rejected[uid] = quotable[uid] = why
+                    repairs.setdefault(uid, []).append(why)
         # AND THE OTHER SIGN OF THE SAME DEFECT. `dead_now` rejects a check
         # nothing can move; this rejects one that convicts every spec-derived
         # design there is. The stage has always blocked the first and never the
@@ -3413,7 +3459,8 @@ def run_oracle_stage(
         corpus=corpus, held=held, blocked=set(rejected) | set(abandoned),
         reasons_for={**abandoned, **rejected},
         witness=witness, population=population, contract=contract,
-        stimulus_by_tp=stimulus_by_tp, base=base, transactional=transactional)
+        stimulus_by_tp=stimulus_by_tp, base=base, transactional=transactional,
+        refuse=_late)
     for uid, body in rescued.items():
         held[uid] = body
         rejected.pop(uid, None)
@@ -3434,6 +3481,11 @@ def run_oracle_stage(
         max_dissent_weighted=max_dissent_weighted)
     for uid, body in chosen_bodies.items():
         if uid in rejected or uid in abandoned:
+            continue
+        #: A body chosen from the corpus has not been through the loop's
+        #: gates; the latency one is cheap to ask again and must not be
+        #: bypassed by a swap.
+        if _late is not None and _late(uid, body):
             continue
         held[uid] = body
     if chosen_bodies:

@@ -106,3 +106,40 @@ def fragile(oracle: RequirementOracle, raw_rows_by_tp: Mapping[str, list[dict]],
                     f"or accept it on that row or the next. Late reading: "
                     f"{late.detail}")
     return ""
+
+
+def refuser(witness: str, contract: dict, stimulus_by_tp: Mapping[str, list],
+            normalized_by_uid: Mapping[str, dict], text_by_uid: Mapping[str, str],
+            *, base: str, transactional: bool = True):
+    """`why(uid, oracle) -> str`: `fragile` against one substrate design.
+
+    The substrate is replayed once per testpoint and cached, because the same
+    trace serves every check that names it. `stimulus_by_tp` is read at CALL
+    time, so testpoints the stage stages after this was built are replayed when
+    first asked for. `None` when there is no substrate to replay.
+    """
+    if not (witness or "").strip():
+        return None
+    from .oracles import replay
+
+    cache: dict[str, list] = {}
+
+    def rows(tps):
+        out = {}
+        for tp in tps:
+            if tp not in cache:
+                steps = stimulus_by_tp.get(tp)
+                try:
+                    cache[tp] = (list(replay(witness, contract, steps, base=base).rows)
+                                 if steps else [])
+                except Exception:  # noqa: BLE001
+                    cache[tp] = []
+            out[tp] = cache[tp]
+        return out
+
+    def why(uid: str, oracle: RequirementOracle) -> str:
+        shape = normalized_by_uid.get(uid) or {}
+        return fragile(oracle, rows(oracle.tp_uids), shape.get("observable") or [],
+                       str(text_by_uid.get(uid) or ""), transactional=transactional)
+
+    return why

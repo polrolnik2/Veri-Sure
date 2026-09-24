@@ -1342,7 +1342,23 @@ def build_artifacts(
         #: branch was computed over one body per requirement, and turning this on
         #: silently would change what `blindness` names in all of them rather
         #: than extending it.
-        _scored = (_oracles_stage.admitted_pool(oracle_set, contract, tps or [])
+        #: **THE LATENCY GATE AT ADMISSION TOO.** The stage makes an author
+        #: rewrite a check that reads a response on the row of its cause; the
+        #: superseded draft stays in the corpus, and without this the pool would
+        #: re-admit it and the cover could ship it. Same substrate the stage
+        #: used: the witness it wrote to disk.
+        _refuse = None
+        _wpath = run_dir / "specflow" / "witness.py"
+        if admit_pool and oracle_set and _wpath.is_file():
+            from .refmodel import latency as _latency
+            _refuse = _latency.refuser(
+                _wpath.read_text(encoding="utf-8"), contract, stim_by_tp or {},
+                normalized_by_uid or {},
+                {str(r.get("uid") or ""): str(r.get("text") or "")
+                 for r in (reqs or [])},
+                base=choose_base(contract))
+        _scored = (_oracles_stage.admitted_pool(oracle_set, contract, tps or [],
+                                                refuse=_refuse)
                    if (admit_pool and oracle_set) else
                    (oracle_set.trusted if oracle_set else []))
         if admit_pool and oracle_set:

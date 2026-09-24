@@ -142,6 +142,10 @@ _DISCARD_PREFIX: tuple[tuple[str, str], ...] = (
     # no opinion for it to contradict, so this case disappears; until then the
     # oracle is the thing that cannot be trusted, which is ORACLE_INVALID.
     ("disagreed:", "ORACLE_INVALID"),
+    # The check reads a response on the row of its cause, where the requirement
+    # states no latency -- `refmodel/latency.py`. Wrong about timing, fixable by
+    # its author: the same routing as `over-strict:`.
+    ("latency:", "ORACLE_INVALID"),
 )
 
 
