@@ -95,6 +95,28 @@ EXIST_ONLY = "--licence-existential-only" in sys.argv
 #: hand-rolled bodies were frozen before the detector existed and dropping one
 #: with no replacement costs its requirement's span outright.
 NO_HAND_ROLLED = "--no-hand-rolled" in sys.argv
+#: **`--min-placement P` ALONE, WITHOUT `max_convictions`.** Every earlier
+#: measurement of `placement` stacked it on a conviction threshold, and
+#: `SELECT.md` shows that threshold is the leg that destroys blindness: it drops
+#: the checks convicting MANY designs, which are the best separators
+#: (`effective_size` 273 -> 141). Placement is a different predicate -- WHERE a
+#: check's objections land relative to where the population SPLITS -- and it has
+#: never been measured on its own here.
+#:
+#: It is the leg that bears on the residue. Three of the four remaining
+#: convictions object to golden on testpoints where the spec-derived designs may
+#: agree: REQ-0051 asserts `clk_en == 0` on a testpoint driving `clk_cnt = 0`,
+#: where divide-by-one leaves the design no freedom; REQ-0116 checks a definition;
+#: REQ-0118 reads raw `scl_i` where every design filters. A check objecting where
+#: the population agrees scores ~0 and separates no pair, which is the objection
+#: `population.py` records for this leg.
+#:
+#: Population-only, so it reads no audit column. Applied to OBJECTORS ONLY, the
+#: refinement `population.py` measured: "a check that objects NOWHERE scores
+#: exactly 0 -- the same score as one that objects EVERYWHERE", and a flat floor
+#: discards both.
+MIN_PLACEMENT = (float(sys.argv[sys.argv.index("--min-placement") + 1])
+                 if "--min-placement" in sys.argv else None)
 EXISTENTIAL = frozenset({"eventually", "pulse", "nexttime", "sequence", "until",
                          "nth"})
 SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
@@ -216,10 +238,51 @@ def advance(tr, probes):
     return out
 
 
+def _placement_filter(keep, tr):
+    """Drop objectors whose `placement` is below the floor. Population-only."""
+    from specflow import population as P
+    from specflow.oracles_stage import _population_rows, _population_tables
+    from specflow.refmodel.compose import choose_base
+
+    base = choose_base(contract)
+    outs = [str(q.get("name")) for q in (contract.get("io") or [])
+            if q.get("dir") == "output" and q.get("name")]
+    rows_by_design = _population_rows(population, contract, by_tp, base=base,
+                                      transactional=True)
+    shape = P.characterise(rows_by_design, outs)
+    held, req_of, n = {}, {}, {}
+    for b in keep:
+        uid = str(b["req_uid"])
+        i = n.get(uid, 0)
+        n[uid] = i + 1
+        key = uid if i == 0 else f"{uid}#{i}"
+        held[key] = RequirementOracle(
+            req_uid=uid, tp_uids=list(b.get("tp_uids") or []),
+            clause=str(b.get("clause") or ""), source=str(b["source"]))
+        req_of[key] = (uid, b)
+    _v, _t, objections = _population_tables(
+        held, population, contract, by_tp, base=base, transactional=True)
+    out, dropped = [], 0
+    for key in held:
+        obj = objections.get(key, {})
+        if any(obj.values()) and P.tells(obj, shape).placement < MIN_PLACEMENT:
+            dropped += 1
+            continue
+        out.append(req_of[key][1])
+    print(f"      placement>={MIN_PLACEMENT}: dropped {dropped} objector(s) of "
+          f"{len(keep)}", flush=True)
+    return out
+
+
 def run(label, keep):
     if RULES:
         keep = [demote(x) for x in keep]
     tr = advance(traces, EQ) if RULES else traces
+    if MIN_PLACEMENT is not None:
+        keep = _placement_filter(keep, tr)
+        if not keep:
+            print(f"  {label:22} empty after the placement floor")
+            return
     held = [RequirementOracle(req_uid=x["req_uid"], tp_uids=list(x["tp_uids"]),
                               clause=x.get("clause", ""), source=x["source"])
             for x in keep]
@@ -249,6 +312,7 @@ print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
       + ("   [licence" + (" (existentials only)" if EXIST_ONLY else "")
          + " + phase rules APPLIED]" if RULES else "")
       + ("   [hand-rolled bodies REFUSED at admission]" if NO_HAND_ROLLED else "")
+      + (f"   [placement >= {MIN_PLACEMENT}]" if MIN_PLACEMENT is not None else "")
       + "\n")
 #: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
 #: exists to move, so it is measured against < 0.10.
