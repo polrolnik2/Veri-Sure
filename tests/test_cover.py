@@ -70,3 +70,31 @@ def test_build_artifacts_wires_the_cover_into_what_it_scores():
     assert unlink < ship < score
     assert "for o in _scored]" in src[score:score + 400]
     assert "ship_cover and admit_pool" in src[unlink:ship]
+
+
+def test_a_transport_failure_in_normalize_stops_the_build():
+    """A 429 that exhausted normalize's retries used to leave the run planning
+    S2 with NO normalized forms, and its records were replayed by resume."""
+    import openai
+
+    from specflow.integration import _transport_failure
+    from specflow.model_io import NoChoicesError
+
+    assert _transport_failure(NoChoicesError("x", body={"code": 429}))
+    wrapped = RuntimeError("fan-out item failed")
+    wrapped.__cause__ = NoChoicesError("x")
+    assert _transport_failure(wrapped)
+    import httpx
+    assert _transport_failure(openai.APIConnectionError(
+        request=httpx.Request("POST", "https://x")))
+    #: A content failure keeps the old behaviour: the run continues.
+    assert not _transport_failure(ValueError("could not parse the form"))
+    assert not _transport_failure(KeyError("observable"))
+    src = inspect.getsource(integration.build_artifacts)
+    at = src.index('logger.warning("normalize: not produced (%r)", exc)')
+    assert "if _transport_failure(exc):" in src[at - 900:at]
+    #: The same rule at every stage that swallowed a failure as a warning.
+    for marker in ('"probes: interrupted by a transport failure',
+                   '"stimulus: interrupted by a transport failure',
+                   '"oracles: interrupted by a transport failure'):
+        assert marker in src, marker

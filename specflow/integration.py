@@ -346,6 +346,29 @@ def _population_on_disk(run_dir: Path) -> list[str]:
     return out
 
 
+def _transport_failure(exc: BaseException) -> bool:
+    """Did the NETWORK fail, as opposed to the model or a gate?
+
+    The OpenAI SDK's own errors (connection, timeout, rate limit, 5xx) and a
+    200 reply carrying no choices -- anywhere in the cause chain, because a
+    fan-out wraps what its worker raised.
+    """
+    from .model_io import NoChoicesError
+
+    try:
+        import openai
+        sdk: tuple = (openai.APIError,)
+    except ImportError:  # pragma: no cover
+        sdk = ()
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, (NoChoicesError, *sdk)):
+            return True
+        exc = exc.__cause__ or exc.__context__
+        seen += 1
+    return False
+
+
 def _ship_cover(run_dir: Path, pool: list, population: list[str],
                 contract: dict, stimulus_by_tp: dict) -> list | None:
     """Cut the admitted pool to its cover and write `specflow/shipped.json`.
@@ -790,6 +813,12 @@ def build_artifacts(
                 requirements=reqs, contract=contract, contract_json=contract_json,
                 spec=spec, port=port, max_repairs=max_repairs)
         except Exception as exc:  # noqa: BLE001
+            #: Latching a NETWORK failure as "no probes" left a run probe-free
+            #: until someone noticed; see normalize below for the same rule.
+            if _transport_failure(exc):
+                raise RuntimeError(
+                    f"probes: interrupted by a transport failure ({exc!r}); "
+                    f"re-run with reuse and resume") from exc
             logger.warning("probes: not produced (%r) -- continuing without "
                            "them, so every state term stays unnameable; "
                            "re-run with reuse=False to try again", exc)
@@ -906,6 +935,19 @@ def build_artifacts(
     except _Reused:
         pass
     except Exception as exc:  # noqa: BLE001
+        #: **A TRANSPORT FAILURE IS NOT "COULD NOT BE NORMALIZED".** Never
+        #: fatal is right when the MODEL could not produce a form; it is wrong
+        #: when the NETWORK could not deliver one. Measured: an upstream 429
+        #: exhausted normalize's retries on two runs, each carried on into S2
+        #: with no normalized form for any requirement, and the S2 records it
+        #: wrote were then REPLAYED by call-level resume -- keyed by stage and
+        #: round, never by prompt -- into the next attempt, after normalize had
+        #: succeeded. Stopping here costs one resume; continuing costs a run.
+        if _transport_failure(exc):
+            raise RuntimeError(
+                f"normalize: interrupted by a transport failure ({exc!r}); "
+                f"stopping rather than planning every later stage without "
+                f"normalized forms -- re-run with reuse and resume") from exc
         logger.warning("normalize: not produced (%r)", exc)
     else:
         write_normalized(run_dir, normalized, norm_results, requirements=reqs)
@@ -1052,6 +1094,13 @@ def build_artifacts(
                     max_repairs=max_repairs,
                 )
         except Exception as exc:  # noqa: BLE001
+            #: `default_stimulus` is a fallback for a stage that could not
+            #: produce stimulus, not for one the network interrupted -- that
+            #: would freeze the generic sweep in as this run's suite.
+            if _transport_failure(exc):
+                raise RuntimeError(
+                    f"stimulus: interrupted by a transport failure ({exc!r}); "
+                    f"re-run with reuse and resume") from exc
             stim_issues = [Issue("warning", "stimulus", f"not generated: {exc!r}")]
         else:
             stim_issues = (list(st.issues) + stimulus_diagnostics(st.output)
@@ -1148,6 +1197,13 @@ def build_artifacts(
         # instead: the process still finishes and still writes its artifacts,
         # which is what makes a failure diagnosable, but `ok` is false and the
         # reason names the call that killed it.
+        #: And a transport failure stops the build HERE rather than after the
+        #: reference model: the gate would fail it anyway, and the longest stage
+        #: in the pipeline is not worth running against no oracle set.
+        if _transport_failure(exc):
+            raise RuntimeError(
+                f"oracles: interrupted by a transport failure ({exc!r}); "
+                f"re-run with reuse and resume") from exc
         oracle_stage_failed = repr(exc)
         logger.error("oracles: stage did not complete (%r) -- the refmodel gate "
                      "will FAIL, because a model with no oracle set has not "
