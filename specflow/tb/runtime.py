@@ -639,6 +639,15 @@ class Env:
             handle = getattr(self.dut, name, None)
             if handle is not None:
                 self._drive(name, self.idle.get(name, 0))
+        #: AND RECORD WHAT WAS DRIVEN. `_record` bundles `self._inputs`, which
+        #: still held the step before this reset, so every reset row claimed
+        #: the previous vector while the pins carried the idle one --
+        #: `oracles.replay` records the idle vector, so the population saw the
+        #: truth and only an RTL trace disagreed. Measured on or1200_sb: a
+        #: pass-through check convicted the known-good pass-through design on
+        #: those rows for values no pin held. Emptied rather than set, so
+        #: `_bundle` reads every input off the DUT -- the pins are the truth.
+        self._inputs = {}
         for name, _ in handles:
             self._drive(name, 1 - inactive_value(name))
         # Only for a whole-design reset -- see the docstring. A selective reset

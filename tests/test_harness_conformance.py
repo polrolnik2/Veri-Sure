@@ -558,6 +558,44 @@ def test_a_MID_SEQUENCE_reset_is_recorded_and_leaves_no_hole(tmp_path):
 
 
 @needs_verilator
+def test_a_reset_row_records_the_inputs_the_DUT_WAS_DRIVEN_with(tmp_path):
+    """While reset is held every functional input is driven to its idle value,
+    and the recorded row must say so -- not repeat the previous step's vector.
+
+    `reset()` drives the idle values but `_record` bundled `self._inputs`,
+    which still held the step BEFORE the reset. So the trace claimed `d=1`
+    on rows where the pin carried 0. `oracles.replay` records the idle vector
+    there, so every check screened on the population saw the truth and the
+    RTL trace alone disagreed with it -- measured on or1200_sb: a pass-through
+    check convicted the known-good pass-through design on the reset rows of
+    TP-0033 ("dcsb_cyc_i=1 but sbbiu_cyc_o=0") for a value no pin ever held.
+    """
+    src = FIXTURES / "reg1"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    testplan, bins, checks = _plan(contract)
+    suite = tmp_path / "suite"
+    steps = [{"inputs": {"d": 1}, "hold": 2},
+             {"reset": True},
+             {"inputs": {"d": 1}, "hold": 2}]
+    render_suite(testplan=testplan, bins=bins, checks=checks, contract=contract,
+                 out_dir=suite, stimulus_by_tp={"TP-0000": steps})
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    edges = json.loads((suite / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))["edges"]
+    reset_rows = [e for e in edges if e["step"] == 1]
+    assert reset_rows
+    assert all(e["inputs"].get("d") == 0 for e in reset_rows), (
+        "a reset row recorded the previous step's inputs rather than the idle "
+        f"values the DUT was driven with: {[e['inputs'] for e in reset_rows]}")
+    after = [e for e in edges if e["step"] == 2]
+    assert after and after[-1]["inputs"].get("d") == 1
+
+
+@needs_verilator
 def test_a_trace_says_what_stimulus_it_is_a_recording_OF(tmp_path):
     """Without this a consumer can only match on `tp_uid`, which every run
     reuses -- see `stimulus_digest`."""
