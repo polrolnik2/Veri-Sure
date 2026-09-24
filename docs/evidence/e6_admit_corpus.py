@@ -42,6 +42,7 @@ blindness" from "the rules buy audit".
 
 Golden is RUN and never read.
 """
+import ast
 import json
 import re
 import sys
@@ -56,6 +57,28 @@ from specflow.refmodel.temporal import licenses_a_cycle_count  # noqa: E402
 from specflow.scorecard import score  # noqa: E402
 
 RULES = "--rules" in sys.argv
+#: **THE LICENCE RULE HAS THE WRONG SIGN FOR INVARIANT OPERATORS**, and
+#: `--licence-existential-only` is the corrected form. Measured on the 241-body
+#: pool: the flat rule demotes 55 bodies, 21 of them invariants, and 4 of the 8
+#: bodies convicting golden are invariants it demoted.
+#:
+#: WHY, FROM THE MODULE'S OWN SEMANTICS. `after_activation=True` excludes the
+#: activation row in BOTH families -- but `throughout`/`stable`/`never` read
+#: `governed` rather than `extent`, so excluding it makes an invariant LAXER,
+#: while `eventually`/`pulse`/`sequence`/`until`/`nth` read `body` rather than
+#: `rows`, so excluding it makes an existential STRICTER.
+#:
+#: The licence rule's purpose is "do not claim the effect FOLLOWS the trigger
+#: when the requirement's words do not license it". For an existential, claiming
+#: `|=>` IS excluding the activation row, so demoting to False withdraws the
+#: claim. For an invariant it is the reverse: INCLUDING the activation row is the
+#: extra claim -- that the property already holds at the instant the trigger
+#: fires -- and the requirement licenses that no more than it licensed the other.
+#: So the faithful translation is to demote existentials and leave invariants
+#: alone.
+EXIST_ONLY = "--licence-existential-only" in sys.argv
+EXISTENTIAL = frozenset({"eventually", "pulse", "nexttime", "sequence", "until",
+                         "nth"})
 SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
                  r"thereafter|next)\b", re.I)
 EQ = ("sta_condition", "sto_condition")
@@ -105,15 +128,55 @@ def admitted(limit: int | None) -> list[dict]:
     return out
 
 
+def _existential_sites(src: str) -> list[tuple[int, int]]:
+    """`(lineno, col_offset)` of each `True` that is an `after_activation`
+    keyword on an EXISTENTIAL operator call.
+
+    Located by AST and replaced by POSITION rather than by regex, because the
+    operator name and its keyword are routinely on different lines and a regex
+    spanning them would also match the invariant calls in between.
+    `ast.unparse` would do it too and would discard every comment in the body,
+    which is evidence about what the author meant.
+    """
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = (f.id if isinstance(f, ast.Name)
+                else f.attr if isinstance(f, ast.Attribute) else None)
+        if name not in EXISTENTIAL:
+            continue
+        for kw in node.keywords:
+            if (kw.arg == "after_activation"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True):
+                out.append((kw.value.lineno, kw.value.col_offset))
+    return out
+
+
 def demote(x: dict) -> dict:
-    """`TRIPLE.md`'s licence rule, unchanged."""
+    """`TRIPLE.md`'s licence rule; `--licence-existential-only` for the fix."""
     t = str(text_of.get(x["req_uid"], ""))
     if SEQ.search(t) or licenses_a_cycle_count(t):
         return x
-    out = re.sub(r"after_activation\s*=\s*True", "after_activation=False",
-                 x["source"])
+    src = x["source"]
+    if EXIST_ONLY:
+        lines = src.splitlines(keepends=True)
+        for ln, col in sorted(_existential_sites(src), reverse=True):
+            i = ln - 1
+            if 0 <= i < len(lines) and lines[i][col:col + 4] == "True":
+                lines[i] = lines[i][:col] + "False" + lines[i][col + 4:]
+        out = "".join(lines)
+    else:
+        out = re.sub(r"after_activation\s*=\s*True", "after_activation=False",
+                     src)
     out = re.sub(r"^(\s*follows\s*=\s*)True", r"\1False", out, flags=re.M)
-    return {**x, "source": out} if out != x["source"] else x
+    return {**x, "source": out} if out != src else x
 
 
 def advance(tr, probes):
@@ -163,7 +226,8 @@ def run(label, keep):
 text_of = {r["uid"]: str(r.get("text") or "") for r in requirements}
 print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
       f"{len(corpus)} requirements; accepted {len(oracles)}"
-      + ("   [licence + phase rules APPLIED]" if RULES else "") + "\n")
+      + ("   [licence" + (" (existentials only)" if EXIST_ONLY else "")
+         + " + phase rules APPLIED]" if RULES else "") + "\n")
 #: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
 #: exists to move, so it is measured against < 0.10.
 print("target: span > 0.90, blindness < 0.10, audit = 0\n")
