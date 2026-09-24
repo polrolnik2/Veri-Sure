@@ -112,6 +112,9 @@ def main() -> int:
     written = corpus / "specflow" / "shipped.json"
     if written.is_file():
         shutil.move(str(written), corpus / "shipped.json")
+    #: And drop the scaffold: a corpus with a `specflow/` inside it reads to
+    #: `e7_score_run.py` as a RUN directory, and it would look in there.
+    shutil.rmtree(corpus / "specflow", ignore_errors=True)
     print(f"{module}: {len(trusted)} accepted, pool {len(pool)}, shipped "
           f"{len(shipped) if shipped else 'NONE (no population)'}", flush=True)
 
