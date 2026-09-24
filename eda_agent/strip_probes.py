@@ -99,3 +99,47 @@ def traces_agree(before: dict, after: dict, real_ports: list[str]) -> list[str]:
                     bad.append(f"{tp} edge {i} {port}: "
                                f"{ob.get(port)!r} -> {oa.get(port)!r}")
     return bad
+
+
+def deliverable(rtl: str, contract: dict) -> str | None:
+    """The shippable module: the reference NAME and INTERFACE, probes unconnected.
+
+    The alternative to `strip_probes` that edits nothing. The verified design is
+    kept byte-for-byte under `<top>__probed`, and a wrapper carrying the
+    contract's non-probe ports -- exactly the black-box interface the
+    specification describes -- instantiates it with every probe output left
+    unconnected. An unconnected output cannot change any other output, so the
+    shipped behaviour is the verified behaviour BY CONSTRUCTION, where deleting
+    drivers needs `traces_agree` to show it. Measured: ChipVerilog's interface
+    gate refused a generated i2c_master_bit_ctrl for its 24 probe ports
+    ("extra: active_command, clk_en, ...") before any equivalence ran.
+
+    `None` when the module header cannot be found exactly once, or the contract
+    carries parameters this does not forward -- shipping the probed module then
+    fails the interface gate visibly rather than a guessed wrapper failing it
+    subtly.
+    """
+    top = str(contract.get("module_name") or "")
+    if not top or contract.get("parameters"):
+        return None
+    header = re.compile(r"\bmodule\s+" + re.escape(top) + r"\b")
+    if len(header.findall(rtl)) != 1:
+        return None
+    ports = [p for p in (contract.get("io") or [])
+             if p.get("dir") in ("input", "output", "inout") and p.get("name")]
+    if not ports:
+        return None
+    inner = f"{top}__probed"
+
+    def decl(p: dict) -> str:
+        w = int(p.get("width") or 1)
+        rng = f" [{w - 1}:0]" if w > 1 else ""
+        return f"    {p['dir']} wire{rng} {p['name']}"
+
+    wrapper = (
+        f"\n\n// Shipped interface: the contract's ports, probes left unconnected.\n"
+        f"module {top} (\n" + ",\n".join(decl(p) for p in ports) + "\n);\n"
+        f"    {inner} u_probed (\n"
+        + ",\n".join(f"        .{p['name']}({p['name']})" for p in ports)
+        + "\n    );\nendmodule\n")
+    return header.sub(f"module {inner}", rtl, count=1) + wrapper

@@ -165,6 +165,15 @@ async def _drive() -> None:
 
 t0 = time.time()
 asyncio.run(_drive())
+#: **THE SHIPPED MODULE HAS THE REFERENCE INTERFACE.** The contract makes every
+#: probe a port, so the repaired rtl.sv carries them; `deliverable` wraps it
+#: under the specification's own interface with probes unconnected, and that
+#: is what a grader compiles. See `eda_agent/strip_probes.deliverable`.
+from eda_agent.strip_probes import deliverable  # noqa: E402
+
+shipped_rtl = deliverable(rtl_path.read_text(encoding="utf-8"), contract)
+if shipped_rtl:
+    (OUT / "rtl_deliverable.sv").write_text(shipped_rtl, encoding="utf-8")
 SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
