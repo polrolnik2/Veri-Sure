@@ -14,8 +14,9 @@ def decide(trace):
     return (True, None, "") if seen else (None, None, "no STOP")
 '''
 
-#: The same obligation with a window: busy low on the STOP row or the next.
-WINDOWED = '''
+#: The same obligation with a window: busy low on the STOP row or the next --
+#: tolerant of one clock and not of two.
+ONE_ROW = '''
 def decide(trace):
     seen = False
     for i, r in enumerate(trace):
@@ -25,6 +26,18 @@ def decide(trace):
             if r["outputs"]["busy"] != 0 and nxt["outputs"]["busy"] != 0:
                 return (False, r["edge"], "busy never cleared after STOP")
     return (True, None, "") if seen else (None, None, "no STOP")
+'''
+
+#: The obligation as the gate asks for it: busy clears at some row at or after
+#: STOP, before the trace ends.
+WINDOWED = '''
+def decide(trace):
+    for i, r in enumerate(trace):
+        if r["outputs"]["stop"] == 1:
+            if not any(x["outputs"]["busy"] == 0 for x in trace[i:]):
+                return (False, r["edge"], "busy never cleared after STOP")
+            return (True, None, "")
+    return (None, None, "no STOP")
 '''
 
 
@@ -49,6 +62,23 @@ def test_a_same_row_check_is_flagged():
 
 def test_a_windowed_check_is_not():
     assert L.fragile(_o(WINDOWED), ROWS, ["busy"], "busy is cleared after STOP") == ""
+
+
+def test_one_clock_of_tolerance_is_not_enough_for_a_two_stage_design():
+    """`din` -> `sda_oen` on the i2c reference is two clocks: a check allowing
+    exactly one is still fragile, and says which lag broke it."""
+    assert L.fragile(_o(ONE_ROW), ROWS, ["busy"], "busy is cleared after STOP",
+                     lags=(1,)) == ""
+    why = L.fragile(_o(ONE_ROW), ROWS, ["busy"], "busy is cleared after STOP")
+    assert "2 clocks later" in why
+
+
+def test_every_testpoint_is_searched_not_only_the_checks_own():
+    """The check's own TP-0 never exposes the lag; another testpoint does."""
+    quiet = {"TP-0": _raw([0, 0, 0, 0, 0], [1, 1, 1, 1, 1]),
+             "TP-9": _raw([0, 0, 1, 0, 0], [1, 1, 0, 0, 0])}
+    why = L.fragile(_o(SAME_ROW), quiet, ["busy"], "busy is cleared after STOP")
+    assert "TP-9" in why
 
 
 def test_a_stated_latency_licenses_the_same_row():

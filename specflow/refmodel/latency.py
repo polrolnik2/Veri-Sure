@@ -70,12 +70,25 @@ def observed_names(oracle: RequirementOracle, observable: Sequence[str]) -> list
 def fragile(oracle: RequirementOracle, raw_rows_by_tp: Mapping[str, list[dict]],
             observable: Sequence[str], requirement_text: str, *,
             testpoints: Sequence[str] | None = None,
-            transactional: bool = True) -> str:
+            transactional: bool = True, lags: Sequence[int] = (1, 2),
+            max_passing: int = 40) -> str:
     """Why this check rests on an unstated latency, or `""` if it does not.
 
-    Replays on `testpoints` (default: the check's own `tp_uids`) only where the
-    check PASSES as recorded; a testpoint it fails or abstains on says nothing
-    about latency. Never raises.
+    **EVERY TESTPOINT, NOT THE CHECK'S OWN TWO.** A check is decided on every
+    testpoint the stimulus has, so testing it only on its `tp_uids` (median ~2)
+    missed most of what it will be judged on: there the triggering event often
+    never occurs with a value that exposes a lag. Measured on `full2` against
+    golden with its probes bound: tested on its own testpoints the gate flagged
+    55 of 440 bodies; tested on every passing testpoint, 194 -- among them every
+    `dout`-on-the-edge, `cmd_ack`-inside-the-sequence and `din`-to-`sda_oen`
+    check that convicts the known-good design.
+
+    So: the check's own testpoints first, then every other testpoint in sorted
+    order, stopping after `max_passing` on which it PASSES as recorded (a
+    testpoint it fails or abstains on says nothing about latency). On each, the
+    observables are delayed by each of `lags` clocks -- one AND two, because a
+    registered design with a registered output stage answers two clocks late
+    (`din` -> `sda_oen` on the i2c reference). Never raises.
     """
     if licensed(requirement_text):
         return ""
@@ -83,28 +96,44 @@ def fragile(oracle: RequirementOracle, raw_rows_by_tp: Mapping[str, list[dict]],
     if not names:
         return ""
     view = transactional_view if transactional else (lambda rows: rows)
-    for tp in (testpoints if testpoints is not None else oracle.tp_uids):
+    order = (list(testpoints) if testpoints is not None else
+             list(dict.fromkeys([*oracle.tp_uids, *sorted(raw_rows_by_tp)])))
+    passing = 0
+    for tp in order:
         raw = raw_rows_by_tp.get(tp)
         if not raw:
             continue
         try:
             if decide(oracle, view(raw)).ok is not True:
                 continue
-            late = decide(oracle, view(lagged(raw, names)))
         except Exception:  # noqa: BLE001 -- a check that cannot run is another gate's
             continue
-        if late.ok is False:
-            return (f"{PREFIX} this check passes on {tp} but FAILS when "
-                    f"{', '.join(names)} arrive one clock later -- which is "
-                    f"exactly what a design that registers "
-                    f"{'them' if len(names) > 1 else 'it'} records. The "
-                    f"requirement states no latency, so that design is a "
-                    f"faithful implementation and the check must not convict "
-                    f"it. Do not read the response on the same row as the "
-                    f"condition that causes it: open a window on the condition "
-                    f"and require the response within it (e.g. `eventually`), "
-                    f"or accept it on that row or the next. Late reading: "
-                    f"{late.detail}")
+        passing += 1
+        if passing > max_passing:
+            break
+        moved = raw
+        for k in range(1, max(lags) + 1):
+            moved = lagged(moved, names)
+            if k not in lags:
+                continue
+            try:
+                late = decide(oracle, view(moved))
+            except Exception:  # noqa: BLE001
+                break
+            if late.ok is False:
+                return (f"{PREFIX} this check passes on {tp} but FAILS when "
+                        f"{', '.join(names)} arrive{'s' if len(names) == 1 else ''} "
+                        f"{k} clock{'s' if k > 1 else ''} later -- which is "
+                        f"exactly what a design that registers "
+                        f"{'them' if len(names) > 1 else 'it'} records. The "
+                        f"requirement states no latency, so that design is a "
+                        f"faithful implementation and the check must not convict "
+                        f"it. Do not read the response on the row of the "
+                        f"condition that causes it, or on the next one: open a "
+                        f"window on the condition and require the response "
+                        f"within it (`eventually`, closing at the next "
+                        f"occurrence of the condition or the end of the "
+                        f"transaction). Late reading: {late.detail}")
     return ""
 
 
@@ -124,9 +153,10 @@ def refuser(witness: str, contract: dict, stimulus_by_tp: Mapping[str, list],
 
     cache: dict[str, list] = {}
 
-    def rows(tps):
-        out = {}
-        for tp in tps:
+    class _Rows(Mapping):
+        """Every testpoint of the stimulus, the substrate replayed on first read."""
+
+        def __getitem__(self, tp):
             if tp not in cache:
                 steps = stimulus_by_tp.get(tp)
                 try:
@@ -134,12 +164,19 @@ def refuser(witness: str, contract: dict, stimulus_by_tp: Mapping[str, list],
                                  if steps else [])
                 except Exception:  # noqa: BLE001
                     cache[tp] = []
-            out[tp] = cache[tp]
-        return out
+            return cache[tp]
+
+        def __iter__(self):
+            return iter(list(stimulus_by_tp))
+
+        def __len__(self):
+            return len(stimulus_by_tp)
+
+    rows = _Rows()
 
     def why(uid: str, oracle: RequirementOracle) -> str:
         shape = normalized_by_uid.get(uid) or {}
-        return fragile(oracle, rows(oracle.tp_uids), shape.get("observable") or [],
+        return fragile(oracle, rows, shape.get("observable") or [],
                        str(text_by_uid.get(uid) or ""), transactional=transactional)
 
     return why
