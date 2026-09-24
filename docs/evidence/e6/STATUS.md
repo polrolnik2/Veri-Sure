@@ -12,6 +12,30 @@ withdrawal and the reason.
 
 (Blindness was relaxed from < 10% to < 20% by the owner mid-session.)
 
+## THE BEST CONFIGURATION MEASURED
+
+    333 bodies, licence rule (existentials only), phase rule,
+    hand-rolled bodies refused at admission
+
+      SPAN       0.9737   MET
+      BLINDNESS  0.0526   MET       (the ORIGINAL < 10% bar, not the relaxed one)
+      AUDIT      4/45 = 0.0889   NOT MET
+
+Reproduce with
+
+    python3 docs/evidence/e6_admit_corpus.py <corpus-dir> <golden-suite-dir> \
+        --rules --licence-existential-only --no-hand-rolled
+
+Every rule in it reads the requirement's own words or the spec-derived population,
+and none reads the audit column. `DEPTH-RESIDUE.md` decomposes what remains: four
+of the five causes behind the residual convictions live in `normalize`, the
+stimulus stage and S1, none of which can be re-run without model access.
+
+`FRONTIER.md` has the whole depth sweep; the short version is that depth buys
+blindness and costs audit, the conviction threshold buys audit and costs blindness
+and span, and only the phase rule and the hand-rolled refusal improve a column at
+no cost to another.
+
 ## TWO OF THREE TARGETS ARE MET AT ONCE, ON THE ORIGINAL BARS
 
 `scorecard.score` stopped keying checks by `req_uid`, so the plan's central
@@ -29,6 +53,7 @@ harder. `POOL-DEPTH.md` has the full sweep and what it overturns.
 
     target            span > 90%    blindness < 10%    audit = 0
     all well-formed   97.4%  MET    5.9%   MET         38.5%  NOT MET
+    best measured     97.4%  MET    5.3%   MET          8.9%  NOT MET
 
 So the remaining gap is ENTIRELY the audit column, on both the accepted set and
 the deep pool. Whether selection takes it back without giving up span or
