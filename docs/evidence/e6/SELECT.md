@@ -88,3 +88,72 @@ reported for whatever the criterion picks; it is not consulted in picking.
 
 Reproduce: `docs/evidence/e6_select.py <corpus-dir> <golden-suite-dir>`.
 No model calls. Golden is RUN and never read.
+
+
+---
+
+# The floor preserves span exactly, and costs blindness. Both for structural reasons.
+
+`e6_floor.py` applies the threshold and, where it would empty a requirement, keeps
+that requirement's best body instead -- fewest population convictions, then highest
+`placement`, then source order. All population-only. On the 476-body pool with the
+licence rule applied and the phase rule on the control:
+
+    ruleset              kept  floored  classes  accepted
+    t=0                   221       39        0  (none)
+    t=1                   228       33        0  (none)
+    t=2                   256       26        0  (none)
+    t=3                   263       24        0  (none)
+    t=4                   270       22        0  (none)
+    ...every placement floor tried            0  (none)
+
+    chosen: t=4, 22 requirements floored
+      SPAN      0.9737  MET
+      BLINDNESS 0.2191  NOT MET
+      AUDIT     5/43 = 0.1163  NOT MET
+      eff_size  141
+
+**SPAN IS PRESERVED EXACTLY**, 0.9737, which is what the floor was for and it
+works by construction: every requirement that had a body still has one.
+
+## Blindness gets WORSE, and the plan predicted the mechanism
+
+0.2191, against 0.0586 for the same pool unselected and 0.1416 for the 122-body
+accepted set. **More bodies, more blindness** -- which was the signature of the
+collapse bug, and this time it is real and has a different cause.
+
+`max_convictions = t` drops the checks that convict MANY designs, and a check
+convicting 5 of 7 designs separates a great many pairs. So the threshold removes
+separators preferentially:
+
+> selecting for predictable soundness is selecting for blindness, the same
+> predicate read twice
+
+`effective_size` says it directly: 273 distinct verdict vectors in the unselected
+pool, **141** after the threshold. Half the separating power, removed by the leg
+whose job is soundness.
+
+## And the floor cannot accept a class, by construction
+
+Every row accepts ZERO designs, including `t=0`. That is not a tuning failure. A
+requirement is floored only when ALL its bodies convict more than `t` designs; the
+floor then admits the least-bad one, **which still convicts**. So the floor
+re-injects exactly the convictions the threshold excluded, and 22-39 such bodies
+are enough to reject all seven designs.
+
+So the floor trades in one direction only: it buys span, and pays in blindness and
+in class acceptance. `SELECT.md`'s global threshold trades the other way -- one
+class at `t=2`, and 21 points of span.
+
+## The three-way tension, stated
+
+    configuration                       span      blindness   audit        classes
+    pool 476, unselected                0.9737 v  0.0586 v    0.3846       0
+    pool + t=2, no floor                0.7632    --          --           1
+    pool + licence + floor t=4          0.9737 v  0.2191      0.1163       0
+    accepted 122 + phase + licence      0.9737 v  0.1416      0.0250       --
+
+**No configuration measured here meets all three targets.** Depth buys blindness
+and costs audit; the conviction threshold buys audit and costs blindness and span;
+the floor buys back span and gives up the blindness the depth bought. The rules
+are not independent levers, and each one's gain is another's loss on this corpus.
