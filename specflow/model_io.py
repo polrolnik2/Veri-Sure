@@ -781,6 +781,37 @@ def _retryable(exc: BaseException) -> bool:
     return _policy.retryable(exc)
 
 
+class NoChoicesError(RuntimeError):
+    """A 200 reply carrying no choices -- an upstream failure reported in-band.
+
+    OpenRouter relays a provider error as HTTP 200 with `choices: null` and an
+    `error` object beside it. The SDK parses that into `choices=None`, and
+    `choices[0]` then raised `TypeError` -- which the retry policy files as
+    permanent ("an event shape the SDK cannot parse"). Measured on the first two
+    runs through that router: one of ~97 S1 boundary calls came back this way
+    and took the whole build down in S1, twice.
+
+    `body` is the in-band error, so `stream_policy.retryable` classifies it by
+    its code the way it classifies a 500's: permanent codes stay permanent,
+    everything else is resent.
+    """
+
+    def __init__(self, message: str, body: dict | None = None):
+        super().__init__(message)
+        self.body = body
+
+
+def _no_choices(response) -> None:
+    """Raise `NoChoicesError` when a completion came back with no choices."""
+    if getattr(response, "choices", None):
+        return
+    extra = getattr(response, "model_extra", None) or {}
+    err = getattr(response, "error", None) or extra.get("error")
+    raise NoChoicesError(
+        f"the gateway answered with no choices; in-band error: {err!r}",
+        body=err if isinstance(err, dict) else None)
+
+
 @dataclass
 class ApiPort:
     """The HTTP path: one blocking chat completion per stage round.
@@ -1275,6 +1306,7 @@ class ApiPort:
                     **kwargs,
                 )
                 if not cfg.stream:
+                    _no_choices(response)
                     return response, (response.choices[0].message.content or "").strip()
                 # Reassemble, and keep the usage record: it arrives in a final
                 # chunk that carries no choices, which is why `include_usage` is

@@ -232,3 +232,45 @@ def test_chat_completions_non_streaming_still_works(tmp_path, monkeypatch):
     _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
     assert text == "ok"
     assert chat.calls == 1
+
+
+class _NullChoices(_Chat):
+    """Answers `null_times` times with a 200 carrying NO choices and an in-band
+    error -- OpenRouter's shape for a provider failure -- then answers."""
+
+    def __init__(self, null_times, error):
+        super().__init__(None, fail_times=0, stream=False)
+        self.null_times, self.error = null_times, error
+
+    def create(self, **kw):
+        if self.calls < self.null_times:
+            self.calls += 1
+            return type("R", (), {"choices": None, "usage": None,
+                                  "model_extra": {"error": self.error}})()
+        return super().create(**kw)
+
+
+def test_a_reply_with_no_choices_is_resent_not_filed_as_a_type_error(
+        tmp_path, monkeypatch):
+    """`choices[0]` on `None` raised TypeError, which the policy files as
+    permanent, and one such reply among ~97 S1 calls killed two builds."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(1, {"code": 502, "message": "upstream error"})
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok"
+    assert chat.calls == 2
+
+
+def test_a_permanent_in_band_error_is_still_permanent(tmp_path, monkeypatch):
+    from specflow.model_io import NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(99, {"code": "context_length_exceeded"})
+    port = _port(tmp_path, 3)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    with pytest.raises(NoChoicesError):
+        port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert chat.calls == 1
