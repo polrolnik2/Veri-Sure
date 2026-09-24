@@ -60,6 +60,36 @@ def _split_shared_prefix(prompt: str) -> tuple[str, str] | None:
     return shared + _PREFIX_SENTINEL, rest.lstrip("\n")
 
 
+def _chat_messages(prompt: str, developer_role_prefix: bool = True) -> list[dict]:
+    """`/chat/completions` messages: the shared prefix as its OWN message.
+
+    `developer_role_prefix` was applied to the Responses body only, so a stage on
+    the default chat flavour still sent one flat `user` string -- the shape
+    `PortSettings.developer_role_prefix` measured at 0% cached. Measured again
+    through OpenRouter on `openai/gpt-6-luna` (flex), three real S1 boundary
+    prompts sharing a 99% prefix, sent one after another under one
+    `prompt_cache_key`:
+
+        one `user` message                        cached 0, 0, 0
+        `system` (prefix) + `user` (suffix)       cached 0, 3933/4000, 3933/4000
+
+    and across the first 1,047 calls of five fresh runs, 1.5% of prompt tokens
+    were read from cache while ~98% were WRITTEN -- every call paid to store a
+    prefix no later call could find. The router keys its routing on the leading
+    message, so a flat string whose tail differs is a new destination each time.
+
+    `system` rather than `developer`: the chat schema every compatible gateway
+    accepts. A prompt with no `shared_block` sentinel -- a whole-artifact stage
+    -- goes out exactly as before.
+    """
+    split = _split_shared_prefix(prompt) if developer_role_prefix else None
+    if split is None:
+        return [{"role": "user", "content": prompt}]
+    shared, rest = split
+    return [{"role": "system", "content": shared},
+            {"role": "user", "content": rest}]
+
+
 class PendingResponse(Exception):
     """Raised by `FilePort` when the prompt has been emitted but no response
     exists yet. The CLI turns this into a clean exit, not a traceback: it is the
@@ -1302,7 +1332,8 @@ class ApiPort:
             try:
                 response = self._client().chat.completions.create(
                     model=cfg.model,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=_chat_messages(
+                        prompt, self.settings.developer_role_prefix),
                     **kwargs,
                 )
                 if not cfg.stream:

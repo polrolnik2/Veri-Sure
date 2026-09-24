@@ -274,3 +274,28 @@ def test_a_permanent_in_band_error_is_still_permanent(tmp_path, monkeypatch):
     with pytest.raises(NoChoicesError):
         port._chat_call(_chat_cfg(stream=False), {}, "prompt")
     assert chat.calls == 1
+
+
+def test_the_chat_path_sends_the_shared_prefix_as_its_own_message(tmp_path, monkeypatch):
+    """`developer_role_prefix` reached the Responses body only; the chat flavour
+    sent one flat `user` string, which the router could not cache across items
+    (1.5% cached over 1,047 calls). A prompt with the sentinel must go out as
+    `system` + `user`; one without it, unchanged."""
+    from specflow.model_io import _PREFIX_SENTINEL
+
+    seen = []
+
+    class _Capture(_Chat):
+        def create(self, **kw):
+            seen.append(kw["messages"])
+            return super().create(**kw)
+
+    chat = _Capture(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 0)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    port._chat_call(_chat_cfg(stream=False), {}, "SPEC" + _PREFIX_SENTINEL + "\nITEM")
+    port._chat_call(_chat_cfg(stream=False), {}, "no boundary here")
+    assert seen[0] == [{"role": "system", "content": "SPEC" + _PREFIX_SENTINEL},
+                       {"role": "user", "content": "ITEM"}]
+    assert seen[1] == [{"role": "user", "content": "no boundary here"}]
