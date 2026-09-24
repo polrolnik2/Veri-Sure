@@ -10,22 +10,23 @@ Golden is RUN and never read.
 ## With `TRIPLE.md`'s two rules applied at every depth
 
     bodies   span            blindness       audit            eff_size
-       122   0.9737 MET      0.1416          1/40  = 0.0250          --
+       122   0.9737 MET      0.1416          1/40  = 0.0250         100
        241   0.9737 MET      0.0518 MET      6/44  = 0.1364         165
        349   0.9737 MET      0.0513 MET      8/47  = 0.1702         206
        476   0.9737 MET      0.0477 MET     11/50  = 0.2200         267
 
-**PROVENANCE, because it is not uniform.** The 122 row is
-`e6_corrected_triple.py`; its `effective_size` under these rules was not recorded
-and is left blank rather than guessed. The 241, 349 and 476 rows were measured by a
-scratch driver, and `e6_admit_corpus.py --rules` exists so the whole table
-reproduces from a committed path -- that run is the reproduction, and any figure it
-contradicts is wrong here and gets corrected rather than defended.
+**REPRODUCED FROM A COMMITTED PATH, ALL FOUR ROWS.** The 241/349/476 rows were
+first measured by a scratch driver and `e6_admit_corpus.py --rules` reproduces
+every figure to four places. The 122 row additionally cross-checks
+`e6_corrected_triple.py` -- a different driver, the same 0.1416 and the same
+1/40 = 0.0250 -- which is the first time either of those has been confirmed by an
+independent path.
 
-One bug worth recording because it reached a printed table: the scratch driver's
-`limit=0` appended a body before testing the limit, so its "accepted only (122)"
-row was the 241-body result under a wrong label. The committed driver special-cases
-zero and does not have it.
+One bug is recorded because it reached a printed table before the reproduction
+caught it: the scratch driver's `limit=0` appended a body before testing the limit,
+so its "accepted only (122)" row was the 241-body result under a wrong label. The
+committed driver special-cases zero and does not have it, which is why the
+reproduction was worth running rather than assuming.
 
 **SPAN IS PINNED AT 0.9737 THROUGHOUT.** A second body for a requirement that
 already had one covers no new requirement, so depth is free in that column.
