@@ -323,3 +323,28 @@ def test_a_rate_limit_that_never_lifts_still_ends(tmp_path, monkeypatch):
     with pytest.raises(NoChoicesError):
         port._chat_call(_chat_cfg(stream=False), {}, "prompt")
     assert chat.calls == RATE_LIMIT_RETRIES + 3
+
+
+def test_a_finish_reason_error_is_a_transport_failure_and_is_resent(tmp_path, monkeypatch):
+    """`finish_reason: "error"` with empty content reached the empty-content
+    check as a token-budget RuntimeError; normalize swallowed it and the run went
+    on with no normalized forms."""
+    from specflow.integration import _transport_failure
+    from specflow.model_io import NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    class _ErrThenOk(_Chat):
+        def create(self, **kw):
+            if self.calls == 0:
+                self.calls += 1
+                msg = type("M", (), {"content": ""})()
+                ch = type("C", (), {"message": msg, "finish_reason": "error"})()
+                return type("R", (), {"choices": [ch], "usage": None, "model_extra": {}})()
+            return super().create(**kw)
+
+    chat = _ErrThenOk(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    _r, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok" and chat.calls == 2
+    assert _transport_failure(NoChoicesError("finish_reason='error'"))

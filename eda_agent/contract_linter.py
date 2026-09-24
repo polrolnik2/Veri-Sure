@@ -283,6 +283,74 @@ def _collapse(text: str) -> str:
     return " ".join((text or "").split())
 
 
+_WORD_NUMBER = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve "
+    "thirteen fourteen fifteen sixteen".split())}
+_NUM = r"(\d+|" + "|".join(_WORD_NUMBER) + r")"
+#: NOT "register": a one-bit flip-flop is a register too ("reg
+#: outstanding_store"), so the word says nothing about width.
+_MULTIBIT_KIND = r"(?:counter|histor(?:y|ies)|vector|bus|field)"
+#: Words that end a noun phrase: "eight bits THROUGH core_txd" is a count of
+#: bits over time, not the width of `core_txd`.
+_NOT_IN_PHRASE = ("through", "into", "from", "to", "on", "in", "at", "of", "by",
+                  "with", "for", "over", "via", "and", "or", "the", "a", "an")
+
+
+def _name_pattern(name: str) -> str:
+    """`name` as the spec writes it: backticked, or bare only if it looks like
+    an identifier. A bare English word -- `shift`, `go`, `ld` -- matches prose
+    ("8-bit shift register sr"), so it has to be quoted to count."""
+    n = re.escape(name)
+    if re.search(r"[_\d]", name):
+        return rf"`?{n}`?(?![\w])"
+    return rf"`{n}`"
+
+
+def _as_count(token: str) -> int:
+    t = token.lower()
+    return int(t) if t.isdigit() else _WORD_NUMBER[t]
+
+
+def stated_width(spec: str, name: str) -> int | None:
+    """The width the specification STATES for identifier `name`, or None.
+
+    Only statements tied to the name itself count: a bit range written against
+    it (`wire [67:0] fifo_dat_i`, `clk_cnt[15:0]`), "N-bit ... `name`", or
+    "N-sample histories `fSCL` and `fSDA`". Case-insensitive, because a probe
+    is the lower-cased spec identifier. A width stated for a NEIGHBOUR in the
+    same sentence -- "`sSCL` ... over the three-sample histories" -- is not one.
+    """
+    flat = _collapse(spec)
+    n = re.escape(name)
+    nm = _name_pattern(name)
+    for pat in (rf"\[\s*(\d+)\s*:\s*(\d+)\s*\]\s*`?{n}`?(?![\w])",
+                rf"(?<![\w])`?{n}`?\s*\[\s*(\d+)\s*:\s*(\d+)\s*\]"):
+        m = re.search(pat, flat, re.I)
+        if m:
+            return abs(int(m.group(1)) - int(m.group(2))) + 1
+    #: "8-bit shift register `sr`": the hyphenated ADJECTIVE, then at most three
+    #: words of the same noun phrase -- no preposition, no article.
+    stop = "|".join(_NOT_IN_PHRASE)
+    m = re.search(rf"\b{_NUM}-bit\s+(?:(?!(?:{stop})\b)[\w-]+\s+){{0,3}}{nm}",
+                  flat, re.I)
+    if m:
+        return _as_count(m.group(1))
+    m = re.search(rf"\b{_NUM}[- ]sample\s+histor(?:y|ies)\s+"
+                  rf"(?:`?\w+`?\s*(?:,|and)\s*)*{nm}", flat, re.I)
+    if m:
+        return _as_count(m.group(1))
+    return None
+
+
+def names_a_multibit_quantity(spec: str, name: str) -> bool:
+    """Does the specification call `name` a counter, register, history, ...?"""
+    flat = _collapse(spec)
+    nm = _name_pattern(name)
+    return bool(re.search(
+        rf"\b{_MULTIBIT_KIND},?\s+{nm}|(?<![\w]){nm}\s+{_MULTIBIT_KIND}\b",
+        flat, re.I))
+
+
 def probe_issues(entries: list[dict], spec: str = "") -> list[ContractIssue]:
     """Every rule a `dir: "probe"` entry must satisfy. The linter owns them all.
 
@@ -317,13 +385,46 @@ def probe_issues(entries: list[dict], spec: str = "") -> list[ContractIssue]:
         # inventing one is exactly the defect that broke ten checks through
         # `cmd`; and the witness holds the state as a string while the RTL holds
         # it as an integer, so only a boolean means the same thing on both sides.
+        #
+        # **UNLESS THE SPECIFICATION STATES THE WIDTH, AND THEN THAT WIDTH.**
+        # "One bit, always" forced a REDEFINITION whenever the spec names a wider
+        # quantity: the i2c stage minted `fscl` as "the sample being shifted
+        # into the fSCL history" beside its own span "three-sample histories
+        # `fSCL`", and or1200_sb minted `fifo_dat_i` as "a one-bit indication"
+        # beside "`wire [67:0] fifo_dat_i`". Each is a signal the spec never
+        # defines, under the NAME of one it does -- so it binds to the real,
+        # wider quantity in any design built without this contract, and the
+        # width guard then makes every check reading it unjudgeable there.
+        #
+        # So: a stated width is the width. An UNSTATED width is still refused
+        # -- inventing an encoding is the original defect -- and a one-bit
+        # predicate may not take the name of a counter or register the spec
+        # sizes nowhere: "Say `cnt_nonzero`, not `cnt`", now enforced.
         w = _as_int(p.get("width", 1))
-        if w != 1:
+        stated = stated_width(spec, name) if spec else None
+        if stated is not None and w != stated:
             issues.append(ContractIssue(
                 "error", f"{path}.width",
-                f"probe {name!r} has width {p.get('width')!r}; a probe is a "
-                f"one-bit predicate, because a wider one would need an encoding "
-                f"the specification does not state"))
+                f"probe {name!r} has width {p.get('width')!r}, but the "
+                f"specification states `{name}` is {stated} bits; declare it at "
+                f"{stated} bits, or name the one-bit predicate you mean something "
+                f"else (e.g. `{name}_nonzero`) -- a predicate must not borrow the "
+                f"name of a wider quantity"))
+        elif stated is None and w != 1:
+            issues.append(ContractIssue(
+                "error", f"{path}.width",
+                f"probe {name!r} has width {p.get('width')!r}; the specification "
+                f"states no width for `{name}`, and a wider probe would need an "
+                f"encoding it does not state -- declare a one-bit predicate"))
+        elif (stated is None and w == 1 and spec
+              and names_a_multibit_quantity(spec, name)):
+            issues.append(ContractIssue(
+                "error", f"{path}.name",
+                f"probe {name!r} is one bit, but the specification calls "
+                f"`{name}` a counter/register/history of unstated width; a "
+                f"one-bit predicate must be named for what it tests "
+                f"(e.g. `{name}_nonzero`, `{name}_expired`), not after the "
+                f"quantity -- say `cnt_nonzero`, not `cnt`"))
 
         # Some requirement has to want it. A probe nothing licenses is a signal
         # the pipeline invented, and it would still be implemented in the RTL.

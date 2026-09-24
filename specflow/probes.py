@@ -106,10 +106,16 @@ RULES, and each of them is refused by a gate rather than merely requested:
    specification for each span (ignoring only line wrapping) and rejects any it
    cannot find.
 
-3. ONE BIT, ALWAYS. Never a state vector or a counter value. A wider signal
-   would need an encoding the specification does not state, and inventing one is
-   how ten checks were previously made unfalsifiable. Say `cnt_nonzero`, not
-   `cnt`.
+3. ONE BIT, UNLESS THE SPECIFICATION STATES THE WIDTH. Never a state vector
+   or a counter value whose width the specification does not give: that would
+   need an encoding it does not state, and inventing one is how ten checks were
+   previously made unfalsifiable. Say `cnt_nonzero`, not `cnt` -- a one-bit
+   predicate is NAMED FOR WHAT IT TESTS, never after a counter, history or
+   vector the specification names. But when the specification states the width
+   of the quantity you are naming -- "the three-sample histories `fSCL` and
+   `fSDA`", "`wire [67:0] fifo_dat_i`" -- expose THAT quantity at THAT width
+   (`"width": 3`), quote the span that states it, and do not redefine the name
+   as a one-bit signal the specification never describes.
 
 4. WHEN THE SPECIFICATION NAMES THE STATE, USE ITS NAME. Lower-cased, because
    a probe becomes a port of the generated module, but otherwise the
@@ -186,8 +192,11 @@ Reply with ONE JSON object and nothing else:
      "notes": "the FSM is in the state the specification calls LREFILL3",
      "licensed_by": ["REQ-0017", "REQ-0018"],
      "spans": ["...verbatim specification text...", "...another phrasing..."],
+     "width": 1,
      "config_gated": null}
   ],
+  (`width` is 1 unless the specification STATES the width of the quantity the
+  probe names -- rule 3 -- and then it is exactly that width.)
   "aliases": [
     {"term": "saved_addr_r", "port": "saved_addr",
      "why": "the specification assigns the output directly from this register"}

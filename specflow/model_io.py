@@ -848,8 +848,24 @@ def _rate_limited(exc: BaseException) -> bool:
 
 
 def _no_choices(response) -> None:
-    """Raise `NoChoicesError` when a completion came back with no choices."""
-    if getattr(response, "choices", None):
+    """Raise `NoChoicesError` when a completion came back with no choices --
+    or with a choice whose `finish_reason` is `"error"`.
+
+    The second is the same upstream failure in a different envelope: a choice
+    with empty content and `finish_reason: "error"`. It used to reach the
+    empty-content check below the retry loop as a RuntimeError about token
+    budgets ("raise max_tokens or lower the reasoning effort"), which is the
+    wrong diagnosis AND not a transport failure -- so normalize swallowed it as
+    "not produced" and the run carried on with no normalized forms.
+    """
+    choices = getattr(response, "choices", None)
+    if choices and getattr(choices[0], "finish_reason", None) == "error":
+        extra = getattr(response, "model_extra", None) or {}
+        err = getattr(response, "error", None) or extra.get("error")
+        raise NoChoicesError(
+            f"the gateway answered finish_reason='error'; in-band error: {err!r}",
+            body=err if isinstance(err, dict) else None)
+    if choices:
         return
     extra = getattr(response, "model_extra", None) or {}
     err = getattr(response, "error", None) or extra.get("error")
@@ -1372,6 +1388,9 @@ class ApiPort:
                             parts.append(delta.content)
                         finish = getattr(choice, "finish_reason", None) or finish
                 text = "".join(parts).strip()
+                if finish == "error":
+                    raise NoChoicesError(
+                        "the stream ended with finish_reason='error'")
                 return _StreamedResponse(text, usage_obj, finish, cfg.model), text
             except Exception as exc:  # noqa: BLE001
                 if not _retryable(exc):
