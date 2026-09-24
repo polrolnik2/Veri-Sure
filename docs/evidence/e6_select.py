@@ -22,13 +22,23 @@ COLUMN.** Picking `t` and `p` because they give `audit = 0` is gating on the
 grade and is barred, however the rule is worded -- the bar is about what a choice
 is DETERMINED by. So the criterion is the plan's own primary metric:
 
-    minimise the number of equivalence CLASSES the set accepts, and break ties
-    on higher span.
+    keep the configurations that accept EXACTLY ONE equivalence class, and among
+    those take the highest span.
 
-Classes come from `PopulationShape.cluster`, which is single-link clustering on
-pair distance among the spec-derived designs. Target: one class. The audit column
-is computed afterwards for whatever that criterion picked, and reported -- never
-consulted.
+**EXACTLY ONE, NOT FEWEST -- AND THE FIRST VERSION OF THIS FILE SAID FEWEST.**
+The grid answered it in one run: `pool, unselected` and eight of the seventeen
+rows accept ZERO designs, so "fewest" ranked total over-constriction first. The
+plan is explicit and I had not read it closely enough: "Accepting exactly one
+class is a success only if the correct design is in it -- otherwise it is the
+screened set's failure wearing a good number", and "None, or one excluding the
+correct design => over-constricted".
+
+Classes come from `PopulationShape.cluster`, single-link clustering on pair
+distance among the spec-derived designs. The audit column is computed afterwards
+for whatever the criterion picked, and reported -- never consulted. Whether the
+CONTROL is in the accepted class is exactly what `audit = 0` says, so that half of
+the plan's success test is the reported number rather than an input to the
+choice.
 
 `min_placement`'s sign matters and the recorded result had it backwards:
 `population.py` carries the retraction. `placement < 0.0017` "keeps the 126 t=0
@@ -215,9 +225,14 @@ def span_of(keys) -> float:
 
 print(f"  {'ruleset':30} {'kept':>5} {'span*':>7} {'classes':>8}  accepted")
 rows = []
+#: **WIDENED AROUND t=2, WHICH THE FIRST RUN SHOWED IS THE ONLY ONE-CLASS ROW.**
+#: That is not threshold-picking by the grade: the class count is population-only
+#: and the audit column has not been looked at for any row here.
 grid = [(None, None)] + [(t, None) for t in (0, 1, 2, 3, 4, 5, 6)] \
-    + [(4, p) for p in (0.0, 0.05, 0.1, 0.143, 0.2, 0.3)] \
-    + [(6, p) for p in (0.1, 0.143, 0.2)]
+    + [(2, p) for p in (0.0, 0.05, 0.1, 0.143, 0.2, 0.3)] \
+    + [(1, p) for p in (0.1, 0.143)] \
+    + [(3, p) for p in (0.1, 0.143, 0.2)] \
+    + [(4, p) for p in (0.143, 0.2, 0.3)]
 for t, p in grid:
     if t is None:
         keep_keys, label = set(held), "pool, unselected"
@@ -233,7 +248,11 @@ for t, p in grid:
     classes = len({shape.cluster[d] for d in accepted_names
                    if d in shape.cluster})
     sp = span_of(keep_keys)
-    rows.append((classes, -sp, label, frozenset(keep_keys)))
+    #: **ONE CLASS IS THE TARGET; ZERO IS THE OPPOSITE FAILURE.** Sorting on
+    #: `classes` alone put the eight rows that accept NO design first.
+    #: `(classes != 1, classes, -span)` keeps the one-class rows at the front,
+    #: orders the rest by how far they are from one, and breaks ties on span.
+    rows.append(((classes != 1), classes, -sp, label, frozenset(keep_keys)))
     print(f"  {label:30} {len(keep_keys):5} {sp:7.4f} {classes:8}  "
           f"{''.join(accepted_names) or '(none)'}", flush=True)
 
@@ -245,8 +264,12 @@ if not rows:
     print("\nno configuration kept anything")
     raise SystemExit(1)
 rows.sort()
-classes, negsp, label, keep_keys = rows[0]
-print(f"\nFEWEST CLASSES ({classes}), TIE-BROKEN ON SPAN: {label}")
+_miss, classes, negsp, label, keep_keys = rows[0]
+if classes != 1:
+    print(f"\n**NO CONFIGURATION ACCEPTS EXACTLY ONE CLASS.** The closest is "
+          f"{label} at {classes}; zero accepted designs is total "
+          f"over-constriction, not success.")
+print(f"\nCHOSEN ({classes} class(es)), TIE-BROKEN ON SPAN: {label}")
 print("scoring it with the RTL audit column ...", flush=True)
 bodies = [b for b, k in zip(everything, held) if k in keep_keys]
 c = card_for(bodies)
@@ -256,7 +279,8 @@ print(f"  BLINDNESS   {c.blindness:.4f}  "
       f"{'MET' if (c.blindness or 1) < 0.10 else 'NOT MET'}")
 print(f"  AUDIT       {c.control_convicted_by}/{c.control_judges} = "
       f"{c.audit:.4f}  {'MET' if c.audit == 0 else 'NOT MET'}")
-print(f"  classes accepted {classes} of {shape.effective_size()}   "
+print(f"  classes accepted {classes} of {shape.effective_size()}  "
+      f"(target 1)   "
       f"effective_size {c.effective_size}")
 for n in c.notes:
     print(f"  note: {str(n)[:150]}")

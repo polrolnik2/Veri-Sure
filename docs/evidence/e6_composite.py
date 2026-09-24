@@ -21,8 +21,11 @@ row adds to the one above it.
                              one edge early -- the two probes the specification
                              writes an equation for
     4  + selection           `max_convictions` and `min_placement`, thresholds
-                             chosen by FEWEST CLASSES ACCEPTED, a population-only
-                             criterion
+                             chosen by ACCEPTING EXACTLY ONE CLASS at the highest
+                             span -- a population-only criterion. NOT "fewest
+                             classes": zero accepted designs is total
+                             over-constriction, which the first version of this
+                             ranked first.
 
 Every rule reads the requirement's text or the spec-derived population. None
 reads the audit column, and the threshold in step 4 is not chosen by it either.
@@ -195,7 +198,7 @@ def legs(key, t, p):
 
 print(f"\n  {'ruleset':30} {'kept':>5} {'span*':>7} {'classes':>8}  accepted")
 grid = [(t, None) for t in (0, 1, 2, 3, 4, 5, 6)] \
-    + [(t, p) for t in (4, 6) for p in (0.05, 0.1, 0.143, 0.2)]
+    + [(t, p) for t in (1, 2, 3) for p in (0.05, 0.1, 0.143, 0.2)]
 ranked = []
 for t, p in grid:
     keep = {k for k in held if not legs(k, t, p)}
@@ -205,7 +208,8 @@ for t, p in grid:
              if not any(_verd.get(k, {}).get(d) is False for k in keep)]
     classes = len({shape.cluster[d] for d in names if d in shape.cluster})
     sp = len({req_of[k] for k in keep} & denom) / len(denom) if denom else 0.0
-    ranked.append((classes, -sp, f"t={t}"
+    #: One class is the TARGET; zero is total over-constriction. See e6_select.
+    ranked.append(((classes != 1), classes, -sp, f"t={t}"
                    + (f", placement>={p}" if p is not None else ""),
                    frozenset(keep)))
     print(f"  t={t}{f', placement>={p}' if p is not None else '':<14} "
@@ -214,9 +218,13 @@ for t, p in grid:
 
 if ranked:
     ranked.sort()
-    classes, _negsp, label, keep = ranked[0]
-    print(f"\nFEWEST CLASSES ({classes} of {shape.effective_size()}), "
-          f"TIE-BROKEN ON SPAN: {label}")
+    _miss, classes, _negsp, label, keep = ranked[0]
+    if classes != 1:
+        print(f"\n**NO CONFIGURATION ACCEPTS EXACTLY ONE CLASS**; the closest "
+              f"is {label} at {classes}. Zero accepted designs is total "
+              f"over-constriction, not success.")
+    print(f"\nCHOSEN ({classes} of {shape.effective_size()} class(es), target "
+          f"1), TIE-BROKEN ON SPAN: {label}")
     chosen = [b for b, k in zip(fixed, held) if k in keep]
     c = card(chosen, adv)
     show("4  + selection", c)
