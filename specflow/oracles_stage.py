@@ -4036,7 +4036,7 @@ def _population(
     as a missing witness leaves over-strictness unbounded rather than failing
     the run.
     """
-    from .refmodel.conform import conforming_implementation
+    from .refmodel.conform import WITNESS_STAGE, conforming_implementation
 
     if size < 2:
         #: One design contradicting a check is an ordinary disagreement. The
@@ -4062,7 +4062,8 @@ def _population(
     #: refusing it: this loop already resumes from `{i}.py` on disk, which is
     #: per member and cannot collapse them.
     gen_port = getattr(port, "inner", port)
-    out: list[str] = []
+    by_index: dict[int, str] = {}
+    missing: list[int] = []
     for i in range(size):
         held_path = root / f"{i}.py"
         if held_path.is_file():
@@ -4072,20 +4073,41 @@ def _population(
             #: check reading the missing port abstain, and the cost is charged
             #: to the stimulus loop rather than to this.
             if held.strip() and _ports_agree(held, contract_json):
-                out.append(held)
+                by_index[i] = held
                 continue
+        missing.append(i)
+
+    def _one(i: int) -> str:
         try:
             source, _issues = conforming_implementation(
                 requirements=requirements, contract_json=contract_json,
-                port=gen_port, workdir=root / f"_gen{i}")
+                port=gen_port, workdir=root / f"_gen{i}",
+                stage=f"{WITNESS_STAGE}_pop{i}")
         except Exception as exc:  # noqa: BLE001
             logger.info("population member %d not produced (%r)", i, exc)
-            continue
-        if not source:
-            continue
-        held_path.parent.mkdir(parents=True, exist_ok=True)
-        held_path.write_text(source, encoding="utf-8")
-        out.append(source)
+            return ""
+        if source:
+            held_path = root / f"{i}.py"
+            held_path.parent.mkdir(parents=True, exist_ok=True)
+            held_path.write_text(source, encoding="utf-8")
+        return source or ""
+
+    #: **CONCURRENTLY, AND IT IS SAFE TO BE.** Members are independent by
+    #: design -- same prompt, separate workdir, and now a separate record name
+    #: -- so the serial loop bought nothing but wall clock: seven full-strength
+    #: generations one after another, each minutes long on a reasoning model.
+    #: Kept in INDEX order, not completion order, so `out` is the list a serial
+    #: run would have built and the population holds still across re-entries.
+    if missing:
+        import concurrent.futures as _cf
+
+        from .stage import fanout_workers
+        with _cf.ThreadPoolExecutor(
+                max_workers=max(1, min(len(missing), fanout_workers()))) as pool:
+            for i, src in zip(missing, pool.map(_one, missing)):
+                if src:
+                    by_index[i] = src
+    out: list[str] = [by_index[i] for i in sorted(by_index)]
     if len(out) < 2:
         logger.warning(
             "oracles: population of %d requested, %d produced -- the "

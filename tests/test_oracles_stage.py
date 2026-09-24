@@ -379,8 +379,11 @@ def test_the_witness_is_recorded_apart_from_the_reference_model():
     from specflow.refmodel import compose, conform
 
     assert conform.WITNESS_STAGE != compose.STAGE
-    assert "stage=WITNESS_STAGE" in inspect.getsource(
-        conform.conforming_implementation)
+    #: The witness records under WITNESS_STAGE by default; a population member
+    #: passes its own `witness_pop<i>` so concurrent members do not collide.
+    sig = inspect.signature(conform.conforming_implementation)
+    assert sig.parameters["stage"].default == conform.WITNESS_STAGE
+    assert "stage=stage" in inspect.getsource(conform.conforming_implementation)
     assert "stage" in inspect.signature(compose.generate_model).parameters
 
 
@@ -2661,10 +2664,12 @@ def test_the_stage_can_build_its_own_population(tmp_path, monkeypatch):
     from specflow.refmodel import conform
 
     calls = []
+    stages = []
 
-    def _gen(*, requirements, contract_json, port, workdir):
+    def _gen(*, requirements, contract_json, port, workdir, stage):
         calls.append(workdir)
-        return f"# design {len(calls)}\n", []
+        stages.append(stage)
+        return f"# design {Path(workdir).name}\n", []
 
     monkeypatch.setattr(conform, "conforming_implementation", _gen)
     monkeypatch.setattr(O, "_ports_agree", lambda *_a, **_k: True)
@@ -2688,6 +2693,11 @@ def test_the_stage_can_build_its_own_population(tmp_path, monkeypatch):
     got = O._population(size=3, workdir=tmp_path / "c", **kw)
     assert len(got) == 3 and len(set(got)) == 3
     assert len({str(w) for w in calls[-3:]}) == 3
+    #: Members run CONCURRENTLY, so each records under its own stage name --
+    #: one shared name had seven members overwrite one record -- and the list
+    #: comes back in INDEX order however they finished.
+    assert sorted(stages[-3:]) == ["witness_pop0", "witness_pop1", "witness_pop2"]
+    assert got == ("# design _gen0\n", "# design _gen1\n", "# design _gen2\n")
 
 
 def test_a_partly_built_population_is_not_used(tmp_path, monkeypatch):
@@ -2697,11 +2707,9 @@ def test_a_partly_built_population_is_not_used(tmp_path, monkeypatch):
     from specflow import oracles_stage as O
     from specflow.refmodel import conform
 
-    n = {"i": 0}
-
-    def _flaky(*, requirements, contract_json, port, workdir):
-        n["i"] += 1
-        return ("# only the first\n", []) if n["i"] == 1 else ("", [])
+    def _flaky(*, requirements, contract_json, port, workdir, stage):
+        return (("# only the first\n", []) if stage.endswith("pop0")
+                else ("", []))
 
     monkeypatch.setattr(conform, "conforming_implementation", _flaky)
     monkeypatch.setattr(O, "_ports_agree", lambda *_a, **_k: True)

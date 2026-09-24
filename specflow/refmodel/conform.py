@@ -52,6 +52,7 @@ def conforming_implementation(
     #: `contract` cannot state) can ground the witness the same way the
     #: reference model can.
     domain_notes: str = "",
+    stage: str = WITNESS_STAGE,
 ) -> tuple[str, list[Issue]]:
     """Generate one implementation of the design. Returns `(source, issues)`.
 
@@ -89,7 +90,11 @@ def conforming_implementation(
         # Recorded apart from the reference model. Same prompt, different
         # artifact, and `model_io` keys records by stage name -- sharing one
         # would make each overwrite the other's prompt and response.
-        stage=WITNESS_STAGE,
+        # A population member passes its own `witness_pop<i>`, so members
+        # generated CONCURRENTLY do not write the same record files either; the
+        # leading segment still reads `witness`, which is what
+        # `PortSettings.for_stage` keys full strength on.
+        stage=stage,
         domain_notes=domain_notes,
     )
     return (source if result.ok else ""), list(result.issues)
