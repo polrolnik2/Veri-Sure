@@ -856,6 +856,15 @@ class Env:
         first state with `got={'<port>': None}` -- which names the missing port
         instead of a traceback that names cocotb's `handle.py`.
         """
+        #: A DOTTED PATH walks into a child instance -- `bit_controller.c_state`.
+        #: Used only by `trace_internals` for an audit-side binding of a
+        #: reference design's internals (`docs/evidence/e7_bind_golden.py`); no
+        #: port or probe name contains a dot, so nothing else can take this path.
+        if "." in signal:
+            handle = self.dut
+            for part in signal.split("."):
+                handle = getattr(handle, part, None) if handle is not None else None
+            return None if handle is None else _plain(handle.value)
         handle = getattr(self.dut, signal, None)
         if handle is None:
             #: **THE PIPELINE RENAMES THE THING IT THEN CANNOT FIND.** A probe

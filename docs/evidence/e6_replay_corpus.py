@@ -105,10 +105,15 @@ def main() -> int:
           f"bus_lines={[b.get('input') for b in lines]}")
 
     suite = out / "suite"
+    #: `--internals a,b.c`: EXTRA signals of the design under test to record
+    #: per edge (`dut_internal`), dotted for a child instance. Only for an
+    #: audit-side binding of a reference design's internals to the contract's
+    #: probes -- `e7_bind_golden.py` -- and never read by a verdict directly.
+    extra = [n for a in [_opt("--internals", "")] for n in a.split(",") if n]
     manifest = render_suite(
         testplan=testplan, bins=bins, checks=checks, contract=contract,
         out_dir=suite, stimulus_by_tp=by_tp or None,
-        trace_internals=probes, bus_lines=lines)
+        trace_internals=list(dict.fromkeys(list(probes) + extra)), bus_lines=lines)
     n_cases = len(getattr(manifest, "testcases", None) or
                   getattr(manifest, "cases", None) or [])
     print(f"rendered    {n_cases or '?'} testcase(s) -> {suite}")
