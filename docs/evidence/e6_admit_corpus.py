@@ -29,9 +29,21 @@ Two things had to be fixed here as well, and both are the same bug one level out
   * `decide_rtl` was called without `stimulus_by_tp`, leaving its stimulus
     refusal disarmed -- the defect that cost this branch a published figure.
 
+## `--rules` APPLIES `TRIPLE.md`'S TWO RULES AT EVERY DEPTH
+
+Without it the sweep measures depth alone. With it, the licence rule (`|=>`
+demoted to `|->` where the requirement's words carry no sequence word and license
+no cycle count) is applied to every body and the phase rule (the control's
+`sta_condition`/`sto_condition` read one edge early) to the control. Both are
+derived from the specification, both applied uniformly, neither reads the audit
+column -- and they are the only levers measured on this branch that cost neither
+span nor blindness. Running the sweep both ways is what separates "depth buys
+blindness" from "the rules buy audit".
+
 Golden is RUN and never read.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,7 +52,13 @@ from specflow.probes import declared_probes  # noqa: E402
 from specflow.refmodel.oracle_gen import RequirementOracle  # noqa: E402
 from specflow.refmodel.oracles import well_formed  # noqa: E402
 from specflow.refmodel.rtl_trace import decide_rtl, load_traces  # noqa: E402
+from specflow.refmodel.temporal import licenses_a_cycle_count  # noqa: E402
 from specflow.scorecard import score  # noqa: E402
+
+RULES = "--rules" in sys.argv
+SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
+                 r"thereafter|next)\b", re.I)
+EQ = ("sta_condition", "sto_condition")
 
 SRC, GOLD = Path(sys.argv[1]), Path(sys.argv[2])
 blob = json.loads((SRC / "oracles.json").read_text())
@@ -87,12 +105,43 @@ def admitted(limit: int | None) -> list[dict]:
     return out
 
 
+def demote(x: dict) -> dict:
+    """`TRIPLE.md`'s licence rule, unchanged."""
+    t = str(text_of.get(x["req_uid"], ""))
+    if SEQ.search(t) or licenses_a_cycle_count(t):
+        return x
+    out = re.sub(r"after_activation\s*=\s*True", "after_activation=False",
+                 x["source"])
+    out = re.sub(r"^(\s*follows\s*=\s*)True", r"\1False", out, flags=re.M)
+    return {**x, "source": out} if out != x["source"] else x
+
+
+def advance(tr, probes):
+    """`TRIPLE.md`'s phase rule, unchanged."""
+    out = {}
+    for tp, t in tr.items():
+        edges = [dict(e) for e in (t.get("edges") or [])]
+        duts = [dict(e.get("dut") or {}) for e in edges]
+        for i, e in enumerate(edges):
+            d = dict(duts[i])
+            nxt = duts[i + 1] if i + 1 < len(duts) else {}
+            for n in probes:
+                if n in d:
+                    d[n] = nxt.get(n)
+            e["dut"] = d
+        out[tp] = {**t, "edges": edges}
+    return out
+
+
 def run(label, keep):
+    if RULES:
+        keep = [demote(x) for x in keep]
+    tr = advance(traces, EQ) if RULES else traces
     held = [RequirementOracle(req_uid=x["req_uid"], tp_uids=list(x["tp_uids"]),
                               clause=x.get("clause", ""), source=x["source"])
             for x in keep]
     v: dict = {}
-    for r in decide_rtl(held, traces, contract, transactional=True,
+    for r in decide_rtl(held, tr, contract, transactional=True,
                         stimulus_by_tp=by_tp):
         if r.broken or r.ok is None:
             continue
@@ -111,8 +160,10 @@ def run(label, keep):
           f"eff_size {c.effective_size}", flush=True)
 
 
+text_of = {r["uid"]: str(r.get("text") or "") for r in requirements}
 print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
-      f"{len(corpus)} requirements; accepted {len(oracles)}\n")
+      f"{len(corpus)} requirements; accepted {len(oracles)}"
+      + ("   [licence + phase rules APPLIED]" if RULES else "") + "\n")
 #: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
 #: exists to move, so it is measured against < 0.10.
 print("target: span > 0.90, blindness < 0.10, audit = 0\n")
