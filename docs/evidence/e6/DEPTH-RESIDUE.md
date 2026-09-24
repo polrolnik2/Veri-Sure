@@ -121,6 +121,63 @@ that improves the audit column at no cost to the other two.
       BLINDNESS  0.0526   MET
       AUDIT      4/45 = 0.0889   NOT MET
 
-The refusal removed exactly the convictions the decomposition attributed to it and
-left exactly the ones it attributed to upstream stages -- which is the falsifiable
-half of a decomposition and the reason for writing one.
+## The decomposition's prediction, checked
+
+Re-run at that exact configuration, 9 bodies convict over FOUR counted
+requirements -- and they are precisely the four the decomposition attributed to
+upstream stages:
+
+    REQ-0051 (#1, #2)              degenerate stimulus
+    REQ-0055 (accepted, #1, #2)    normalize's observable
+    REQ-0116#1                     definition checked as an obligation
+    REQ-0118 (#1, #2)              see below
+    REQ-0058 (accepted)            hand-rolled -- but `scaffolding`, so uncounted
+
+`REQ-0064` and `REQ-0109`, the two hand-rolled CORPUS bodies, are gone. `REQ-0058`
+survives because it is the ACCEPTED body and the refusal applies at admission only
+-- a deliberate choice, since dropping an accepted body with no replacement costs
+its requirement's span outright.
+
+The censuses corroborate at the larger pool: `reads-over-width` 82 of 333 bodies
+with **0 convicting**, which is the width guard working at scale, and
+`TO_END-invariant` 3 with 0.
+
+## REQ-0118 is the probe-width problem wearing a different face
+
+    requirement  "When the module has released SCL high and the EXTERNAL SCL LINE
+                  FALLS, the module shall synchronise..."
+    TP-0091      36 edges; the window opens at edge 12 with 23 rows after it
+    golden       scl_sync = 0 on EVERY row; scl_oen released throughout;
+                 scl_i dips low for exactly ONE edge at 12, and again at 15
+
+**Those are glitches, and golden's three-sample majority filter is right to reject
+them** -- which is what REQ-0064 says the filter is for. The check reads the RAW
+`scl_i` where the requirement means the FILTERED line.
+
+And the filtered line is not readable: `fscl` is one of the six probes the width
+guard refuses, declared 1 bit against a 3-bit register. So the signal the
+requirement is about is unavailable, the author read the raw input instead, and the
+raw input glitches. The cause is the probe stage minting `fscl` at width 1 --
+upstream, and `probes.py` already records it: "the stage minted `fscl`, `fsda` and
+`filter_cnt` at width 1, beside its own `spans` quoting those very phrases".
+
+A truncation hypothesis was tried first and is refuted: the window has 23 rows
+after it and the trace is 36 edges, against a median of 33 and a minimum of 20
+across all 482 testpoints.
+
+## So all four counted convictions are attributed to a stage
+
+    REQ-0051   stimulus stage      clk_cnt = 0 on the testpoint; the obligation
+                                   is unobservable under divide-by-one
+    REQ-0055   normalize           observable: ['cmd_ack'] for "timing counter"
+    REQ-0116   S1 / normalize      a definition given an obligation's check
+    REQ-0118   probe stage         `fscl` minted at width 1, so the filtered line
+                                   the requirement is about cannot be read
+
+**None of the four is a defect in a check, in the design, or in any gate.** Each
+is a defect in a stage that produced the inputs a check was authored against, and
+none of those stages can be re-run without model access.
+
+That is the complete answer to whether `audit = 0` is reachable from stored
+artifacts: it is not, and the reason is now four named stage defects rather than a
+residue.
