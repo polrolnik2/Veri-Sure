@@ -12,7 +12,31 @@ withdrawal and the reason.
 
 (Blindness was relaxed from < 10% to < 20% by the owner mid-session.)
 
-## The measurement, on a digest-verified control
+## TWO OF THREE TARGETS ARE MET AT ONCE, ON THE ORIGINAL BARS
+
+`scorecard.score` stopped keying checks by `req_uid`, so the plan's central
+direction -- "fill the pool, then select" -- became measurable. Admitting every
+well-formed corpus body beside the accepted set:
+
+    config             bodies   span            blindness       audit
+    accepted only         122   0.9737 MET      0.1457          9/42 = 0.2143
+    all well-formed       476   0.9737 MET      0.0586 MET     20/52 = 0.3846
+
+**Blindness 14.6% -> 5.9%, under the ORIGINAL 10% bar, at no cost to span.**
+`effective_size` goes 99 -> 273, so the added bodies are separators rather than
+copies. Audit rises, and must: rejections union, so a bigger set constricts
+harder. `POOL-DEPTH.md` has the full sweep and what it overturns.
+
+    target            span > 90%    blindness < 10%    audit = 0
+    all well-formed   97.4%  MET    5.9%   MET         38.5%  NOT MET
+
+So the remaining gap is ENTIRELY the audit column, on both the accepted set and
+the deep pool. Whether selection takes it back without giving up span or
+blindness is measured by `e6_select.py`, whose threshold is chosen by fewest
+equivalence classes accepted -- a population-only criterion -- with the audit
+column reported afterwards and never consulted.
+
+## The measurement on the ACCEPTED set, on a digest-verified control
 
 `full2`'s frozen artifacts, re-scored by today's code against golden RTL run
 through a suite REGENERATED FROM THE CORPUS, whose 482 traces digest-match the

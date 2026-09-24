@@ -38,6 +38,22 @@ both sides of a pair separates neither. The corrected leg is a MINIMUM, and its
 threshold has never been measured on a run's own testpoints. That is what the
 sweep below is for.
 
+## ONE POPULATION REPLAY FOR THE WHOLE SWEEP, AND `score` ONLY FOR THE WINNER
+
+A first version of this file called `score` -- and so `_population_tables` --
+once per grid row: seventeen replays of 476 bodies over 7 designs and 482
+testpoints, which is hours. `_population_tables`'s own docstring says why that is
+the wrong shape: "each used to replay the population for itself. With the scope
+widened to every testpoint that is 3 x 499 replays per instrument per round; done
+once it is 3 x 499 for all of them."
+
+So the population is replayed ONCE, and the sweep's only job -- picking the
+configuration by CLASSES ACCEPTED -- needs nothing but that table and
+`shape.cluster`. Blindness and audit are not computed per row and are not what
+the choice is made on. The chosen configuration is then scored by
+`scorecard.score` with the RTL audit column, so the headline triple comes from the
+shipped function rather than from anything reimplemented here.
+
 Golden is RUN and never read.
 """
 import json
@@ -181,51 +197,66 @@ def legs(key: str, t: int, p: float | None) -> str:
     return ""
 
 print("target: span > 0.90, blindness < 0.10, audit = 0")
-print("selection criterion: FEWEST CLASSES ACCEPTED, then higher span. "
-      "The audit column is reported, never consulted.\n")
-print(f"  {'ruleset':28} {'kept':>5} {'span':>7} {'blind':>7} "
-      f"{'classes':>8} {'eff':>4}  audit")
+print("criterion: FEWEST CLASSES ACCEPTED, then higher span. The audit column "
+      "is\n           reported for the winner and never consulted.\n")
 
-results = []
+#: span's denominator, the same rule `score` uses: requirements that are
+#: behavioural AND state an observable obligation.
+obs = {str(n.get("req_uid") or n.get("uid")) for n in normalized
+       if (n.get("observable") or [])}
+kinds = {r["uid"]: str(r.get("unit_kind") or "") for r in requirements}
+denom = {u for u in obs if kinds.get(u) == "behavioural"}
+
+
+def span_of(keys) -> float:
+    covered = {req_of[k] for k in keys} & denom
+    return len(covered) / len(denom) if denom else 0.0
+
+
+print(f"  {'ruleset':30} {'kept':>5} {'span*':>7} {'classes':>8}  accepted")
+rows = []
 grid = [(None, None)] + [(t, None) for t in (0, 1, 2, 3, 4, 5, 6)] \
     + [(4, p) for p in (0.0, 0.05, 0.1, 0.143, 0.2, 0.3)] \
     + [(6, p) for p in (0.1, 0.143, 0.2)]
 for t, p in grid:
     if t is None:
-        keep_keys = set(held)
-        label = "pool, unselected"
+        keep_keys, label = set(held), "pool, unselected"
     else:
         keep_keys = {k for k in held if not legs(k, t, p)}
         label = f"t={t}" + (f", placement>={p}" if p is not None else "")
-    bodies = [b for b, k in zip(everything, held) if k in keep_keys]
-    if not bodies:
-        print(f"  {label:28} {'0':>5}  (empty set, nothing to score)")
+    if not keep_keys:
+        print(f"  {label:30} {0:>5}   (empty set)")
         continue
-    c = card_for(bodies)
-    #: **THE SELECTION CRITERION, AND IT READS ONLY THE POPULATION.** A design is
-    #: accepted when no kept check convicts it -- rejections union -- and its
-    #: class is its `PopulationShape.cluster`, single-link on pair distance.
-    #: `Scorecard.accepted_designs` is a COUNT, so the names are recomputed from
-    #: the same table rather than taken from it.
     accepted_names = [d for d in sorted(rows_by_design)
                       if not any(_verd.get(k, {}).get(d) is False
                                  for k in keep_keys)]
     classes = len({shape.cluster[d] for d in accepted_names
                    if d in shape.cluster})
-    results.append((classes, -(c.span or 0), label, c))
-    print(f"  {label:28} {len(bodies):5} {c.span:7.4f} "
-          f"{(c.blindness if c.blindness is not None else float('nan')):7.4f} "
-          f"{classes:8} {c.effective_size:4}  "
-          f"{c.control_convicted_by}/{c.control_judges} = {c.audit:.4f}",
-          flush=True)
+    sp = span_of(keep_keys)
+    rows.append((classes, -sp, label, frozenset(keep_keys)))
+    print(f"  {label:30} {len(keep_keys):5} {sp:7.4f} {classes:8}  "
+          f"{''.join(accepted_names) or '(none)'}", flush=True)
 
-if results:
-    results.sort()
-    classes, negspan, label, c = results[0]
-    print(f"\nFEWEST CLASSES, TIE-BROKEN ON SPAN: {label}")
-    print(f"  span {c.span:.4f}  blindness {c.blindness:.4f}  "
-          f"classes {classes}  audit {c.control_convicted_by}/"
-          f"{c.control_judges} = {c.audit:.4f}")
-    print(f"  span {'MET' if c.span > 0.90 else 'no'},  "
-          f"blindness {'MET' if (c.blindness or 1) < 0.10 else 'no'},  "
-          f"audit {'MET' if c.audit == 0 else 'no'}")
+print("\n  span* is requirements covered over the behavioural-observable "
+      "denominator,\n  computed here to rank the grid; the winner's span below "
+      "comes from `score`.")
+
+if not rows:
+    print("\nno configuration kept anything")
+    raise SystemExit(1)
+rows.sort()
+classes, negsp, label, keep_keys = rows[0]
+print(f"\nFEWEST CLASSES ({classes}), TIE-BROKEN ON SPAN: {label}")
+print("scoring it with the RTL audit column ...", flush=True)
+bodies = [b for b, k in zip(everything, held) if k in keep_keys]
+c = card_for(bodies)
+print(f"\n  bodies      {len(bodies)} of {len(everything)}")
+print(f"  SPAN        {c.span:.4f}  {'MET' if c.span > 0.90 else 'NOT MET'}")
+print(f"  BLINDNESS   {c.blindness:.4f}  "
+      f"{'MET' if (c.blindness or 1) < 0.10 else 'NOT MET'}")
+print(f"  AUDIT       {c.control_convicted_by}/{c.control_judges} = "
+      f"{c.audit:.4f}  {'MET' if c.audit == 0 else 'NOT MET'}")
+print(f"  classes accepted {classes} of {shape.effective_size()}   "
+      f"effective_size {c.effective_size}")
+for n in c.notes:
+    print(f"  note: {str(n)[:150]}")
