@@ -51,11 +51,29 @@ contrast passes with `sto_condition` alone moved; moving its trigger `ssda`
 the other way ALSO passes it, which is the leak -- a shifted trigger relocates
 the activation rather than testing a schedule.
 
-## What is being measured next
+## The grouped variant, measured
 
-The normalized form already separates the two roles: `observable` is what a
+The normalized form separates the two roles: `observable` is what a
 requirement asserts, `activation.opens_on`/`until` is what opens its window.
 REQ-0110 observes `[sta_condition, sto_condition]`; REQ-0067 observes
-`[sto_condition]` and triggers on `ssda`/`sscl`. The next variant shifts the
-asserted probes TOGETHER, and separately the trigger probes together, and
-exonerates only on a pass.
+`[sto_condition]` and triggers on `ssda`/`sscl`. So: shift the asserted probes
+TOGETHER, separately the trigger probes together, +/-1, PASS exonerates.
+
+    rule                                            blind     audit
+    grouped, shift reads None past the trace end    11.7%      7/39
+    grouped, shift CLAMPED at the trace ends         9.98%     7/39
+
+Clamping matters -- a shifted probe reading `None` on the last row made a check
+comparing every row fail there for a reason that has nothing to do with phase
+-- and it brings blindness just inside the target. Audit does not move:
+REQ-0035, 0051, 0055, 0058, 0067, 0069, 0110, 0112 still convict golden, so on
+some golden traces those checks fail under EVERY admissible shift. Not wired.
+
+## Where this leaves the phase question
+
+Every one of these checks was authored before the oracle author's prompt said
+"A SPECIFICATION WRITES AN EQUATION, NOT A SCHEDULE" and told it to give a
+probe's response an `eventually` window rather than read it at the trigger row.
+`full2` cannot measure that authoring rule; the fresh runs are the first that
+can. The decision-time rule stays available (`decide(..., phase_groups=...)`)
+as a backstop if their residue is phase-shaped.
