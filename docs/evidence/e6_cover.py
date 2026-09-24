@@ -227,16 +227,38 @@ print(f"greedy cover: {len(kept)} body(ies) reach the pool's entire separated se
 have = {req_of[k]["req_uid"] for k in kept}
 convicts_of = {k: sum(1 for x in (_v.get(k) or {}).values() if x is False)
                for k in held}
-added = 0
+#: **AND THE FLOOR RESTORES ONLY A BODY THAT SEPARATES SOMETHING.**
+#: `--floor-must-separate` makes that explicit. A body separating no disagreement
+#: cell adds no discriminating power to the set -- the plan's own rule for reading
+#: any addition, "admitting or authoring more checks is worth nothing if they
+#: cluster with the ones already there" -- and the Ruleset's `min_decides` already
+#: encodes that a check deciding nowhere is not evidence.
+#:
+#: IT COSTS SPAN BY DEFINITION, because span counts requirements that HAVE a check
+#: and not requirements whose check discriminates. The cost is reported, and the
+#: census below is what says whether the rule is a rule or a single case wearing
+#: one: a criterion matching exactly the requirement that convicts is
+#: indistinguishable from gating on the grade, which LAST-CONVICTION.md refused.
+FLOOR_MUST_SEPARATE = "--floor-must-separate" in sys.argv
+added, declined = 0, []
 for key in held:
     uid = req_of[key]["req_uid"]
     if uid in have:
         continue
     best = min((k for k in held if req_of[k]["req_uid"] == uid),
                key=lambda k: (-len(sep_of.get(k, ())), convicts_of.get(k, 0), k))
+    if FLOOR_MUST_SEPARATE and not sep_of.get(best):
+        declined.append(uid)
+        have.add(uid)
+        continue
     kept.append(best)
     have.add(uid)
     added += 1
+if FLOOR_MUST_SEPARATE:
+    print(f"floor DECLINED {len(declined)} requirement(s) whose best body "
+          f"separates no cell at all:")
+    print(f"  {' '.join(sorted(declined)[:24])}"
+          + (" ..." if len(declined) > 24 else ""))
 print(f"span floor: {added} requirement(s) had no body in the cover, "
       f"best contributor restored\n")
 
