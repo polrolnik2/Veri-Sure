@@ -172,6 +172,73 @@ def _retain(corpus: dict[str, list[CorpusBody]],
     members.append(body)
 
 
+def admitted_pool(oracle_set: "OracleSet", contract: dict,
+                  testplan: list[dict], *,
+                  refuse_hand_rolled: bool = True) -> list[RequirementOracle]:
+    """`trusted` PLUS every other corpus body the gates accept. The POOL.
+
+    **THE STAGE ACCEPTS ONE BODY PER REQUIREMENT AND RETAINS THE REST, AND UNTIL
+    `scorecard.score` STOPPED KEYING BY `req_uid` THE REST COULD NOT BE SCORED AT
+    ALL.** `POOL.md` records that limit; it is gone, and this is the function that
+    makes the plan's "fill the pool, then select" expressible by the pipeline
+    rather than reconstructed by a driver.
+
+    Measured on `full2`, against golden run under the corpus's own stimulus:
+
+        bodies   span            blindness       audit
+           122   0.9737 MET      0.1416          1/40 = 0.0250
+           333   0.9737 MET      0.0526 MET      4/45 = 0.0889
+
+    **Span does not move**, to four places, because a second body for a
+    requirement that already had one covers no new requirement. Blindness falls by
+    9 points because a cell is separated by a CHECK and a second body is a second
+    chance to separate it. Audit rises because rejections union -- 333 bodies are
+    333 chances to convict a correct design where 122 are 122 -- and that trade is
+    the frontier `FRONTIER.md` maps.
+
+    `refuse_hand_rolled` drops a body that builds its own window with `range()`
+    over trace indices. `HAND-ROLLED-WINDOWS.md` argued it on window semantics
+    alone -- such a body is outside the reach of `extent`, `governed`, `body` and
+    every future correction to them -- and the census is 29 of 241 bodies with 26
+    convicting nothing, so it is not a rule shaped by the grade. Measured: audit
+    8/47 -> 4/45 at the same blindness to four places.
+
+    ADMISSION ONLY, never the accepted body. `trusted` is passed through
+    unfiltered even when it is hand-rolled, because the accepted set was frozen
+    before the detector existed and dropping a body with no replacement costs its
+    requirement's span outright.
+    """
+    from .refmodel.oracles import well_formed
+    from .refmodel.temporal import hand_rolled_window
+
+    out = list(oracle_set.trusted)
+    seen = {(o.req_uid, o.source) for o in out}
+    by_uid = {o.req_uid: o for o in out}
+    for uid, members in sorted((oracle_set.corpus or {}).items()):
+        anchor_oracle = by_uid.get(uid)
+        if anchor_oracle is None:
+            #: A requirement with no accepted body has no `tp_uids` to give a
+            #: corpus body, and inventing one would be this function deciding
+            #: where a check applies. Skipped, and it costs nothing: such a
+            #: requirement contributes to span either way only through a body
+            #: the stage accepted.
+            continue
+        for m in members:
+            src = str(m.source or "")
+            if not src or (uid, src) in seen:
+                continue
+            if refuse_hand_rolled and hand_rolled_window(src):
+                continue
+            cand = RequirementOracle(
+                req_uid=uid, tp_uids=list(anchor_oracle.tp_uids),
+                clause=anchor_oracle.clause, source=src)
+            if well_formed(cand, contract, testplan) is not None:
+                continue
+            seen.add((uid, src))
+            out.append(cand)
+    return out
+
+
 @dataclass(frozen=True)
 class OracleSet:
     """What the stage decided, for every requirement it was given."""
