@@ -67,6 +67,17 @@ global filter -- which is what made it destroy separators in `SELECT.md`
 (`effective_size` 273 -> 141). Separation is fixed by the first key before the
 second is consulted.
 
+## The tie-break, measured: it moves `effective_size` and not the audit column
+
+Adding "fewest population convictions" as the floor's second key moved
+`effective_size` 106 -> 105 and left audit at **1/38, the same two convictions**.
+So the tie-break is correct -- it prefers the less over-strict body where separation
+is equal, and it cannot cost a cell -- and it does not reach REQ-0055.
+
+The reason is informative: the floor only applies to requirements with NO body in
+the cover, and REQ-0055's body is IN the cover. It is kept because it separates
+cells, not because a floor put it back.
+
 ## What remains, and it is one requirement
 
 REQ-0055: `normalize` set `observable: ['cmd_ack']` for a
