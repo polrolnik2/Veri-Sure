@@ -2,7 +2,7 @@
 
     e6_autorun.py <run-dir> --spec <spec.txt> --contract <contract.json>
                   [--control <ref_model.py>] [--reuse] [--resume]
-                  [--population N] [--no-preflight]
+                  [--population N] [--no-preflight] [--admit-pool]
 
 **FOUR RUNS' ARTIFACTS WENT WITH A CONTAINER RECLAIM ON THIS BRANCH, AND EVERY
 NUMBER TAKEN FROM THEM HAD TO BE RECOMPUTED OR WITHDRAWN.** Three more --
@@ -164,6 +164,14 @@ def main() -> int:
             enable_probes=True,
             stimulus_agent=True,
             demote_faithfulness=True,
+            #: **`--admit-pool` SCORES THE POOL AND NOT ONE BODY PER
+            #: REQUIREMENT.** Without it the stage freezes one body each and
+            #: blindness reads 0.1416; with it, 0.0526 at the same span, because
+            #: a cell is separated by a CHECK and a second body is a second
+            #: chance to separate it. Off unless asked, because every recorded
+            #: figure on this branch was computed the other way and switching it
+            #: silently would change what `blindness` NAMES in all of them.
+            admit_pool="--admit-pool" in FLAGS,
             population_size=int(_opt("--population", 7)),
             audit_control=control_source,
             reuse="--reuse" in FLAGS,
