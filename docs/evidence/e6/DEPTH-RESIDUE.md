@@ -178,6 +178,20 @@ across all 482 testpoints.
 is a defect in a stage that produced the inputs a check was authored against, and
 none of those stages can be re-run without model access.
 
-That is the complete answer to whether `audit = 0` is reachable from stored
-artifacts: it is not, and the reason is now four named stage defects rather than a
-residue.
+## CORRECTION: `audit = 0` IS reachable from stored artifacts, alone
+
+The sentence above was wrong and `FRONTIER.md` has the measurement. A
+population-only `placement >= 0.05` filter on the accepted set drops 29 of 122
+objectors and **not one survivor convicts golden: 0 of 29**.
+
+What is not reachable is `audit = 0` TOGETHER WITH the other two. The filter costs
+span 0.9737 -> 0.7456 and blindness 0.1500 -> 0.2296, because at that depth a
+dropped objector is a requirement's only body; a best-placed floor restores span
+exactly and hands the audit column back with it, flooring 29 requirements of the
+29 the filter emptied.
+
+The four stage defects are why the filter has to be so aggressive: they are the
+convictions it has to reach past. Fixing them upstream is what would let a gentler
+filter -- or none -- reach the same audit column while span and blindness hold.
+That is the claim the evidence supports, and it is narrower than the one this
+document made.

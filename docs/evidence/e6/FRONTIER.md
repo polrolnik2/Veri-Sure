@@ -101,3 +101,65 @@ Reproduce the whole table with
     python3 docs/evidence/e6_admit_corpus.py <corpus-dir> <golden-suite-dir> --rules
 
 and without `--rules` for the depth-only half.
+
+
+---
+
+# EVERY PAIR OF TARGETS IS REACHABLE. THE TRIPLE IS NOT.
+
+All rules below are population-only or derived from the requirement's own words.
+None reads the audit column, which is computed afterwards.
+
+    configuration                              span      blindness   audit
+    333 bodies, rules, no hand-rolled          0.9737 v  0.0526 v    0.0889
+    441 bodies, rules, no hand-rolled          0.9737 v  0.0477 v    0.1458
+    122 bodies, rules, placement >= 0.05       0.7456    0.2296      0.0000 v
+    122 bodies, + best-placed floor            0.9737 v  0.1500      0.0250
+    441 bodies, + best-placed floor            0.9737 v  0.1093      0.0952
+
+    span + blindness   MET together   333 bodies, no placement filter
+    span + audit       0.0250, the closest to 0 with span held
+    audit = 0          MET alone      122 bodies + placement, span 0.7456
+
+**So `audit = 0` IS reachable by a grade-blind rule**, and an earlier version of
+`DEPTH-RESIDUE.md` was wrong to say it needed model access. What needs model
+access is reaching it WITH the other two.
+
+## Why the floor gives the audit back, exactly
+
+`--placement-floor` keeps each emptied requirement's best-PLACED body, which is
+the plan's stated offset and is not the floor `SELECT.md` rejected (that one
+ranked by fewest convictions and re-admitted the least-bad objector). It preserves
+span perfectly -- 0.9737 in every row, by construction.
+
+And at 122 bodies it floors **29 requirements of the 29 the filter emptied**, so
+the set is identical to the unfiltered one and the audit column returns to 1/40.
+A requirement whose only body is a low-placement objector has nothing else to
+offer; the floor can only hand that body back.
+
+Depth is what gives it something else to offer -- floored requirements fall
+29 -> 20 -> 18 -> 17 as the pool grows -- and blindness improves with it
+(0.1500 -> 0.1093). But it never reaches 10%, because placement has already
+removed the separators that would have got it there, and the audit column does not
+return to 0 either, because the surviving objectors include the four whose causes
+are upstream.
+
+## The one sentence this whole frontier reduces to
+
+**The checks that convict golden are also the checks that separate the
+population**, and every rule measured here trades between those two facts:
+
+    depth                admits separators        and objectors      blindness down, audit up
+    max_convictions      removes objectors        and separators     audit down, blindness up
+    placement            removes agree-objectors  and their span     audit to 0, span down
+    best-placed floor    restores span            and its objectors  span up, audit up
+
+Only two levers escape the trade, and both are corrections rather than selections:
+the PHASE rule and the HAND-ROLLED refusal, which remove convictions that were
+never evidence about the design in the first place.
+
+**That is the shape of the answer.** More corrections of that kind -- each removing
+a conviction that is an artifact rather than a disagreement -- move the frontier
+outward without paying. `DEPTH-RESIDUE.md` names four more, and all four are
+defects in `normalize`, the stimulus stage, S1 and the probe stage. Fixing them is
+how the triple is met, and none of those stages can be re-run without model access.
