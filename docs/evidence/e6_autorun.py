@@ -121,6 +121,18 @@ def pack(run_dir: Path, tag: str) -> None:
               flush=True)
 
 
+def _rate_limited_chain(exc: BaseException) -> bool:
+    """A 429 anywhere in the cause chain: the gateway is up, just busy."""
+    from specflow.model_io import _rate_limited
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if _rate_limited(exc):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
 def _answered(run_dir: Path) -> int:
     """How many model calls this run has had answered so far."""
     io = Path(run_dir) / "agent_io"
@@ -218,7 +230,12 @@ def main() -> int:
         #: between: a shared, rate-limited gateway fails a multi-hour run a
         #: few times an hour while it keeps advancing, and a lifetime budget
         #: would kill that run for being long rather than for being stuck.
+        #: A 429 gets its own, much larger budget: it says the gateway is UP
+        #: and busy, and the last calls of a stage lose that race to the other
+        #: runs' full worker pools -- dc_fsm's final two stimulus calls failed
+        #: three resumes running while every other run advanced.
         retries = int(_opt("--transport-retries", 6))
+        limited_retries = int(_opt("--rate-limit-retries", 36))
         reuse, resume = "--reuse" in FLAGS, "--resume" in FLAGS
         attempt, answered = 0, _answered(run_dir)
         while True:
@@ -229,12 +246,13 @@ def main() -> int:
                 now = _answered(run_dir)
                 if now > answered:
                     attempt, answered = 0, now
-                if attempt == retries or not _transport_failure(exc):
+                budget = limited_retries if _rate_limited_chain(exc) else retries
+                if attempt >= budget or not _transport_failure(exc):
                     raise
                 wait = min(600, 60 * 2 ** attempt)
                 attempt += 1
                 print(f"\ntransport failure ({exc!r:.200}); resuming in {wait}s "
-                      f"(attempt {attempt} of {retries} without progress)", flush=True)
+                      f"(attempt {attempt} of {budget} without progress)", flush=True)
                 _time.sleep(wait)
                 reuse = resume = True
         print(f"\nbuild ok={getattr(result, 'ok', None)} "
