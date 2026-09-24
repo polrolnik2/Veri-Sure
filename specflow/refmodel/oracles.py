@@ -30,6 +30,7 @@ from .temporal import (both_readings, strong_not_stated,
                        unbounded_invariant)
 
 import ast
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -389,8 +390,30 @@ def transactional_view(rows: list[dict]) -> list[dict]:
     return out
 
 
+def shift_probe(trace: list[dict], name: str, by: int) -> list[dict]:
+    """`trace` with probe `name` read `by` rows later (+1) or earlier (-1).
+
+    Only the one probe moves; ports and every other probe stay where they were
+    recorded. **CLAMPED AT THE ENDS**, holding the boundary row's own value:
+    reading `None` there made a check that compares every row fail on the last
+    one, for a reason that has nothing to do with phase, and so blocked exactly
+    the exoneration the shift exists to test.
+    """
+    out: list[dict] = []
+    last = len(trace) - 1
+    for i, row in enumerate(trace):
+        outputs = dict(row.get("outputs") or {})
+        if name in outputs:
+            j = min(max(i + by, 0), last)
+            outputs[name] = (trace[j].get("outputs") or {}).get(name)
+        out.append({**row, "outputs": outputs})
+    return out
+
+
 def decide(oracle: RequirementOracle, trace: list[dict], *,
-           unavailable: Sequence[str] = ()) -> OracleResult:
+           unavailable: Sequence[str] = (),
+           phase_free: Sequence[str] = (),
+           phase_groups: Sequence[Sequence[str]] = ()) -> OracleResult:
     """Run one oracle over one trace. Never raises.
 
     `ok` is True, False, or **None -- the clause's scenario never occurred**.
@@ -473,6 +496,51 @@ def decide(oracle: RequirementOracle, trace: list[dict], *,
             oracle.req_uid, ok=None, rows=trace,
             broken=f"decide() returned {verdict!r}, expected (ok, edge, detail)",
         )
+    #: **A CONVICTION THAT A PROBE'S UNSTATED SCHEDULE CAN UNDO IS NOT
+    #: EVIDENCE.** `phase_free` names probes whose timing the contract does not
+    #: fix -- a `dir: "probe"` entry carries a name and a width, never a phase,
+    #: and a specification that writes `sta_condition = ~sSDA & dSDA & sSCL`
+    #: admits a design that computes it combinationally and one that registers
+    #: it. If the SAME check PASSES on the same trace with one such probe it
+    #: reads taken one row earlier or later, the conviction rests on a schedule
+    #: the specification never stated, and it is reported as an abstention.
+    #:
+    #: PASSES, not "stops failing". Shifting a probe that a check reads as its
+    #: trigger usually just loses the activation, and an abstention is not a
+    #: vindication (`_worst`, PHASE.md) -- counting it as one was measured to
+    #: leak real separations: blindness 5.9% -> 16.0% on `full2`.
+    #:
+    #: Applied to EVERY design the same way -- population, golden, candidate --
+    #: by every caller that passes the contract's probes. It reads no design but
+    #: the one being judged.
+    #: `phase_groups` moves each GROUP of probes together -- the probes a
+    #: requirement asserts on, or the ones that open its window -- where
+    #: `phase_free` moves one probe at a time. See `docs/evidence/e7/PHASE-RULE.md`
+    #: for why the unit matters: a check asserting two registered conditions
+    #: passes only when both move, and a moved TRIGGER relocates the activation.
+    if ok is False and (phase_free or phase_groups):
+        src = oracle.source or ""
+        groups = [tuple(sorted(g)) for g in (phase_groups or ()) if g]
+        groups += [(n,) for n in sorted(set(phase_free or ()))]
+        for group in groups:
+            read = tuple(n for n in group
+                         if n and re.search(rf"\b{re.escape(n)}\b", src))
+            if not read:
+                continue
+            for by in (1, -1):
+                moved = trace
+                for name in read:
+                    moved = shift_probe(moved, name, by)
+                alt = decide(oracle, moved, unavailable=unavailable)
+                if alt.ok is True:
+                    return OracleResult(
+                        oracle.req_uid, ok=None, edge=edge, rows=trace,
+                        detail=(f"the check fails as recorded and PASSES with "
+                                f"probe(s) {', '.join(read)} read one row "
+                                f"{'later' if by == 1 else 'earlier'}; the "
+                                f"contract does not fix when a probe is "
+                                f"sampled, so this is not evidence about the "
+                                f"design. Original detail: {detail}"))
     return OracleResult(oracle.req_uid, ok=ok, edge=edge, detail=detail, rows=trace)
 
 
