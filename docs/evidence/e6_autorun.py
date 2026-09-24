@@ -3,6 +3,7 @@
     e6_autorun.py <run-dir> --spec <spec.txt> --contract <contract.json>
                   [--control <ref_model.py>] [--reuse] [--resume]
                   [--population N] [--no-preflight] [--admit-pool] [--cover]
+                  [--transport-retries N]
 
 **FOUR RUNS' ARTIFACTS WENT WITH A CONTAINER RECLAIM ON THIS BRANCH, AND EVERY
 NUMBER TAKEN FROM THEM HAD TO BE RECOMPUTED OR WITHDRAWN.** Three more --
@@ -166,7 +167,12 @@ def main() -> int:
         control_source = (Path(control).read_text(encoding="utf-8")
                           if control and Path(control).is_file() else None)
 
-        result = build_artifacts(
+        import time as _time
+
+        from specflow.integration import _transport_failure
+
+        def _build(reuse: bool, resume: bool):
+            return build_artifacts(
             run_dir=run_dir,
             spec=Path(spec_path).read_text(encoding="utf-8"),
             contract_json=Path(contract_path).read_text(encoding="utf-8"),
@@ -192,9 +198,30 @@ def main() -> int:
             ship_cover="--cover" in FLAGS,
             population_size=int(_opt("--population", 7)),
             audit_control=control_source,
-            reuse="--reuse" in FLAGS,
-            resume_calls="--resume" in FLAGS,
+            reuse=reuse,
+            resume_calls=resume,
         )
+
+        #: **A TRANSPORT FAILURE IS RESUMED, NOT REPORTED.** The pipeline now
+        #: stops on one rather than degrading the run, and resuming it is the
+        #: same run over the same inputs -- exactly what `reuse` + `resume`
+        #: exist for -- so an operator re-typing the command adds nothing but
+        #: latency. Bounded, and backing off, so a gateway that is down stays a
+        #: failure this reports instead of a loop.
+        retries = int(_opt("--transport-retries", 6))
+        reuse, resume = "--reuse" in FLAGS, "--resume" in FLAGS
+        for attempt in range(retries + 1):
+            try:
+                result = _build(reuse, resume)
+                break
+            except Exception as exc:  # noqa: BLE001
+                if attempt == retries or not _transport_failure(exc):
+                    raise
+                wait = min(600, 60 * 2 ** attempt)
+                print(f"\ntransport failure ({exc!r:.200}); resuming in {wait}s "
+                      f"(attempt {attempt + 1} of {retries})", flush=True)
+                _time.sleep(wait)
+                reuse = resume = True
         print(f"\nbuild ok={getattr(result, 'ok', None)} "
               f"stage={getattr(result, 'stage', None)}", flush=True)
         rc = 0 if getattr(result, "ok", False) else 1
