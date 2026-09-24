@@ -26,6 +26,7 @@ built on it can be judged on coverage rather than on the numbers it would produc
 
 Golden is RUN and never read.
 """
+import ast
 import json
 import re
 import sys
@@ -41,6 +42,13 @@ from specflow.refmodel.temporal import (hand_rolled_window,  # noqa: E402
 
 SRC, GOLD = Path(sys.argv[1]), Path(sys.argv[2])
 LIMIT = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else 1
+#: The same two admission/rule switches `e6_admit_corpus.py` carries, so the
+#: decomposition can be checked against the configuration it is a decomposition
+#: OF rather than against a different one.
+NO_HAND_ROLLED = "--no-hand-rolled" in sys.argv
+EXIST_ONLY = "--licence-existential-only" in sys.argv
+EXISTENTIAL = frozenset({"eventually", "pulse", "nexttime", "sequence", "until",
+                         "nth"})
 blob = json.loads((SRC / "oracles.json").read_text())
 oracles, corpus = blob["oracles"], (blob.get("corpus") or {})
 requirements = json.loads((SRC / "requirements.json").read_text())["requirements"]
@@ -60,14 +68,45 @@ SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
 WIDE = ("cscl", "csda", "fscl", "fsda", "filter_cnt", "idle")
 
 
+def _existential_sites(src):
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = (f.id if isinstance(f, ast.Name)
+                else f.attr if isinstance(f, ast.Attribute) else None)
+        if name not in EXISTENTIAL:
+            continue
+        for kw in node.keywords:
+            if (kw.arg == "after_activation"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True):
+                out.append((kw.value.lineno, kw.value.col_offset))
+    return out
+
+
 def demote(x):
     t = text_of.get(x["req_uid"], "")
     if SEQ.search(t) or licenses_a_cycle_count(t):
         return x
-    out = re.sub(r"after_activation\s*=\s*True", "after_activation=False",
-                 x["source"])
+    src = x["source"]
+    if EXIST_ONLY:
+        lines = src.splitlines(keepends=True)
+        for ln, col in sorted(_existential_sites(src), reverse=True):
+            i = ln - 1
+            if 0 <= i < len(lines) and lines[i][col:col + 4] == "True":
+                lines[i] = lines[i][:col] + "False" + lines[i][col + 4:]
+        out = "".join(lines)
+    else:
+        out = re.sub(r"after_activation\s*=\s*True", "after_activation=False",
+                     src)
     out = re.sub(r"^(\s*follows\s*=\s*)True", r"\1False", out, flags=re.M)
-    return {**x, "source": out} if out != x["source"] else x
+    return {**x, "source": out} if out != src else x
 
 
 def advance(tr, probes):
@@ -120,6 +159,8 @@ def pool(limit):
                                   clause=a.get("clause", ""), source=src)
             if well_formed(o, contract, plan) is not None:
                 continue
+            if NO_HAND_ROLLED and hand_rolled_window(src):
+                continue
             n += 1
             out.append((f"{uid}#{n}", {**a, "source": src}, "corpus"))
             if limit is not None and n >= limit:
@@ -130,7 +171,8 @@ def pool(limit):
 entries = [(k, demote(b), o) for k, b, o in pool(LIMIT)]
 adv = advance(traces, ("sta_condition", "sto_condition"))
 print(f"pool: {len(entries)} bodies (+{LIMIT} corpus body per requirement), "
-      f"licence + phase rules applied\n", flush=True)
+      f"licence{' (existentials only)' if EXIST_ONLY else ''} + phase rules"
+      + (", hand-rolled REFUSED" if NO_HAND_ROLLED else "") + "\n", flush=True)
 
 #: **PER BODY, NOT PER REQUIREMENT.** `decide_rtl` folds by `req_uid`, so a
 #: requirement with several bodies reports one verdict and the body that produced

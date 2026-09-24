@@ -98,3 +98,29 @@ express.
 So `audit = 0` is not reachable offline on this corpus, and that is now a
 decomposition rather than an assertion: every conviction has a named cause, and
 four of the five causes live in a stage that cannot be re-run without model access.
+
+## The one offline lever, applied -- and the decomposition's prediction held
+
+`--no-hand-rolled` refuses a body that builds its own window, at admission:
+
+    bodies   span            blindness       audit           (without the refusal)
+       122   0.9737 MET      0.1500          1/40 = 0.0250   1/40 = 0.0250
+       235   0.9737 MET      0.0595 MET      4/43 = 0.0930   6/44 = 0.1364
+    ** 333   0.9737 MET      0.0526 MET      4/45 = 0.0889   8/47 = 0.1702 **
+       441   0.9737 MET      0.0477 MET      7/48 = 0.1458  11/50 = 0.2200
+
+**AUDIT HALVES AT +2 BODIES AND BLINDNESS DOES NOT MOVE** -- 0.0526 to four places
+either way. Besides the phase rule, this is the only lever measured on this branch
+that improves the audit column at no cost to the other two.
+
+    best joint configuration measured
+      333 bodies, licence rule (existentials only), phase rule,
+      hand-rolled bodies refused at admission
+
+      SPAN       0.9737   MET
+      BLINDNESS  0.0526   MET
+      AUDIT      4/45 = 0.0889   NOT MET
+
+The refusal removed exactly the convictions the decomposition attributed to it and
+left exactly the ones it attributed to upstream stages -- which is the falsifiable
+half of a decomposition and the reason for writing one.
