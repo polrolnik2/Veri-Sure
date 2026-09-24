@@ -117,6 +117,20 @@ NO_HAND_ROLLED = "--no-hand-rolled" in sys.argv
 #: discards both.
 MIN_PLACEMENT = (float(sys.argv[sys.argv.index("--min-placement") + 1])
                  if "--min-placement" in sys.argv else None)
+#: **`--placement-floor` KEEPS EACH REQUIREMENT'S BEST-PLACED BODY WHEN THE FLOOR
+#: WOULD EMPTY IT**, so span is preserved by construction.
+#:
+#: This is the plan's stated offset -- "more distinct checks per requirement means
+#: selection can drop a bad check WITHOUT DROPPING THE REQUIREMENT" -- and it is
+#: NOT the floor `SELECT.md` measured and rejected. That one ranked by fewest
+#: population convictions, a soundness proxy, and so re-admitted the least-bad
+#: OBJECTOR and handed back the blindness (0.0477 -> 0.2191, effective_size
+#: 273 -> 141). Ranking by PLACEMENT ranks by separating power instead, which is
+#: the direction blindness wants.
+#:
+#: Population-only either way: placement reads the check's own verdicts and which
+#: testpoints split, and nothing here reads the audit column.
+PLACEMENT_FLOOR = "--placement-floor" in sys.argv
 EXISTENTIAL = frozenset({"eventually", "pulse", "nexttime", "sequence", "until",
                          "nth"})
 SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
@@ -262,15 +276,37 @@ def _placement_filter(keep, tr):
         req_of[key] = (uid, b)
     _v, _t, objections = _population_tables(
         held, population, contract, by_tp, base=base, transactional=True)
+    score_of, kept_by_req = {}, {}
     out, dropped = [], 0
     for key in held:
+        uid = req_of[key][0]
         obj = objections.get(key, {})
-        if any(obj.values()) and P.tells(obj, shape).placement < MIN_PLACEMENT:
+        pl = P.tells(obj, shape).placement if any(obj.values()) else None
+        score_of[key] = pl
+        kept_by_req.setdefault(uid, [])
+        if pl is not None and pl < MIN_PLACEMENT:
             dropped += 1
             continue
+        kept_by_req[uid].append(key)
         out.append(req_of[key][1])
+    floored = 0
+    if PLACEMENT_FLOOR:
+        for uid, kept_keys in kept_by_req.items():
+            if kept_keys:
+                continue
+            #: Highest placement, then source order. A requirement with no
+            #: surviving body keeps its best-PLACED one -- not its least
+            #: convicting, which is the floor SELECT.md rejected.
+            cands = sorted(
+                ((-(score_of[k] if score_of[k] is not None else -1.0), k)
+                 for k in held if req_of[k][0] == uid))
+            if cands:
+                out.append(req_of[cands[0][1]][1])
+                floored += 1
     print(f"      placement>={MIN_PLACEMENT}: dropped {dropped} objector(s) of "
-          f"{len(keep)}", flush=True)
+          f"{len(keep)}"
+          + (f", floored {floored} requirement(s)" if PLACEMENT_FLOOR else ""),
+          flush=True)
     return out
 
 
@@ -313,6 +349,7 @@ print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
          + " + phase rules APPLIED]" if RULES else "")
       + ("   [hand-rolled bodies REFUSED at admission]" if NO_HAND_ROLLED else "")
       + (f"   [placement >= {MIN_PLACEMENT}]" if MIN_PLACEMENT is not None else "")
+      + ("   [floor: best-placed body per requirement]" if PLACEMENT_FLOOR else "")
       + "\n")
 #: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
 #: exists to move, so it is measured against < 0.10.
