@@ -1,6 +1,7 @@
 """Regenerate a suite from a packed corpus and RUN AN RTL THROUGH IT.
 
     e6_replay_corpus.py <corpus-dir> <rtl.v> <out-dir> [--toplevel NAME]
+                        [--include DIR] [--extra CHILD.v]
 
 `e6_verify_corpus.py` re-scores span and blindness from a corpus alone, because
 both are Python replays of the stored population. **THE AUDIT COLUMN IS NOT**:
@@ -128,11 +129,19 @@ def main() -> int:
     for i, a in enumerate(sys.argv):
         if a == "--include" and i + 1 < len(sys.argv):
             includes.append(Path(sys.argv[i + 1]))
-    print(f"running     {rtl.name} as {toplevel} ... (this takes a while)",
-          flush=True)
+    #: **A CHILD IS A LIBRARY, LIKE A HEADER.** `i2c_master_byte_ctrl`
+    #: instantiates `i2c_master_bit_ctrl`; ChipVerilog supplies such children
+    #: to every candidate, and without one the golden design cannot elaborate.
+    #: `--extra FILE` supplies it to the simulator and to nothing else.
+    extras = [Path(sys.argv[i + 1]) for i, a in enumerate(sys.argv)
+              if a == "--extra" and i + 1 < len(sys.argv)]
+    print(f"running     {rtl.name} as {toplevel}"
+          f"{' with ' + ', '.join(e.name for e in extras) if extras else ''}"
+          f" ... (this takes a while)", flush=True)
     outcome = run_suite(rtl_path=rtl, hdl_toplevel=toplevel, suite_dir=suite,
                         refmodel_path=refmodel, trace=False,
-                        include_dirs=[str(d) for d in includes])
+                        include_dirs=[str(d) for d in includes],
+                        extra_sources=[str(e) for e in extras])
     #: `results/` holds TWO files per testpoint -- `{tp}.json`, the verdict
     #: record, and `{tp}.trace.json`, the recording. Globbing `*.json` counts
     #: both, and an earlier version of this line reported 964 "trace files" for
