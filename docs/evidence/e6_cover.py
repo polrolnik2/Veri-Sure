@@ -211,16 +211,29 @@ while remaining:
 print(f"greedy cover: {len(kept)} body(ies) reach the pool's entire separated set")
 
 #: **SPAN FLOOR.** A requirement whose bodies all became redundant still needs one,
-#: or the set covers less of the specification than the pool did. Its best single
-#: contributor, which is population-only.
+#: or the set covers less of the specification than the pool did.
+#:
+#: "Best" is TWO population-only keys, and the second is not decoration: the first
+#: leaves ties -- among 91 floored requirements many bodies separate the same
+#: number of cells, and `max` then takes whichever came first, which is source
+#: order. Breaking the tie on FEWEST POPULATION CONVICTIONS prefers the less
+#: over-strict body where separation is already equal, so it cannot cost a cell.
+#:
+#: This is `max_convictions` used as a tie-break INSIDE a requirement, never as a
+#: global filter -- which is what made it destroy separators in `SELECT.md`
+#: (`effective_size` 273 -> 141). Here separation is fixed by the first key before
+#: this one is consulted, so it can only choose among bodies that separate
+#: equally. And it reads the spec-derived designs, not the control.
 have = {req_of[k]["req_uid"] for k in kept}
+convicts_of = {k: sum(1 for x in (_v.get(k) or {}).values() if x is False)
+               for k in held}
 added = 0
 for key in held:
     uid = req_of[key]["req_uid"]
     if uid in have:
         continue
-    best = max((k for k in held if req_of[k]["req_uid"] == uid),
-               key=lambda k: len(sep_of.get(k, ())))
+    best = min((k for k in held if req_of[k]["req_uid"] == uid),
+               key=lambda k: (-len(sep_of.get(k, ())), convicts_of.get(k, 0), k))
     kept.append(best)
     have.add(uid)
     added += 1
