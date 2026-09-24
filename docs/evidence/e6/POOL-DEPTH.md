@@ -59,3 +59,48 @@ is the other half, and it is measured in `SELECT.md` rather than assumed here.
 
 Reproduce: `docs/evidence/e6_admit_corpus.py <corpus-dir> <golden-suite-dir>`.
 No model calls. Golden is RUN and never read.
+
+
+---
+
+# Both rules ON the deep pool: blindness 0.0477, and audit halves but not to zero
+
+`TRIPLE.md`'s two rules -- the licence rule (`|=>` demoted to `|->` where the
+requirement's words carry no sequence word) and the phase rule (the control's
+`sta_condition`/`sto_condition` read one edge early) -- applied to all 476 bodies,
+with no selection at all:
+
+    configuration                              span      blindness   audit
+    pool 476, no rules                         0.9737 v  0.0586 v    20/52 = 0.3846
+    pool 476 + licence + phase                 0.9737 v  0.0477 v    11/50 = 0.2200
+    accepted 122 + licence + phase             0.9737 v  0.1416      1/40  = 0.0250
+
+**Blindness 0.0477 is the lowest figure measured on this branch**, and span is
+unmoved to four places. The rules cost neither column: they are the only levers
+here that do not trade.
+
+**But the phase rule's effect SHRINKS with depth.** On the accepted set it takes
+audit 9/42 -> 1/40, a factor of 9. On the pool it takes 20/52 -> 11/50, a factor of
+1.75. The convictions it removes are the same phase-shaped ones either way; what
+changes is everything ELSE the pool admits. The accepted set had already been
+screened once by the oracle stage, and 354 extra bodies bring in convicting checks
+of many other shapes, which no single rule addresses.
+
+## Which is the tension, stated plainly
+
+    best blindness measured   0.0477   at audit 0.2200
+    best audit measured       0.0250   at blindness 0.1416
+
+**Depth strictly raises audit risk, because 476 bodies are 476 chances to convict
+the control and 122 are 122.** Rejections union; there is no way to admit more
+objectors and convict a correct design less. So low blindness and `audit = 0` pull
+against each other structurally, and the only grade-blind instrument for
+suppressing the extra convictions is a soundness filter -- which removes
+separators preferentially and gives the blindness straight back
+(`effective_size` 273 -> 141, measured in `SELECT.md`).
+
+That is not a tuning gap. It is the over-strictness/vacuity trade the whole
+project is about, arriving as a frontier rather than as a defect:
+
+    span is met everywhere -- 0.9737 in every configuration above
+    blindness < 10% and audit = 0 have NOT been met together by any rule here
