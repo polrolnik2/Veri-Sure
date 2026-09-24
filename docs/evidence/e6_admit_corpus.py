@@ -53,7 +53,8 @@ from specflow.probes import declared_probes  # noqa: E402
 from specflow.refmodel.oracle_gen import RequirementOracle  # noqa: E402
 from specflow.refmodel.oracles import well_formed  # noqa: E402
 from specflow.refmodel.rtl_trace import decide_rtl, load_traces  # noqa: E402
-from specflow.refmodel.temporal import licenses_a_cycle_count  # noqa: E402
+from specflow.refmodel.temporal import (hand_rolled_window,  # noqa: E402
+                                        licenses_a_cycle_count)
 from specflow.scorecard import score  # noqa: E402
 
 RULES = "--rules" in sys.argv
@@ -77,6 +78,23 @@ RULES = "--rules" in sys.argv
 #: So the faithful translation is to demote existentials and leave invariants
 #: alone.
 EXIST_ONLY = "--licence-existential-only" in sys.argv
+#: **`--no-hand-rolled` REFUSES A BODY THAT BUILDS ITS OWN WINDOW, AT ADMISSION.**
+#: `HAND-ROLLED-WINDOWS.md`: a check that indexes the trace by `range()` is
+#: writing its own `after`, so `extent`, `governed`, `body` and every future
+#: correction to them pass it by -- "14% of the check set is outside the reach of
+#: every window-semantics guarantee the temporal module offers, and nothing
+#: reports it". REQ-0135 is the worked example of what that costs: `idle` first
+#: becomes true exactly at the row its search range excludes, 184 of 184 windows.
+#:
+#: Census on the 241-body pool: 29 bodies hand-roll, 3 of which convict golden.
+#: So the rule's population is 26 bodies that have no bearing on the audit column
+#: -- it is a rule about window semantics that happens to remove convictions, not
+#: a rule selected by them.
+#:
+#: Refused at ADMISSION and not at selection, because the accepted set's own
+#: hand-rolled bodies were frozen before the detector existed and dropping one
+#: with no replacement costs its requirement's span outright.
+NO_HAND_ROLLED = "--no-hand-rolled" in sys.argv
 EXISTENTIAL = frozenset({"eventually", "pulse", "nexttime", "sequence", "until",
                          "nth"})
 SEQ = re.compile(r"\b(after|then|subsequently|following|in response to|once|"
@@ -120,6 +138,8 @@ def admitted(limit: int | None) -> list[dict]:
             o = RequirementOracle(req_uid=uid, tp_uids=list(base["tp_uids"]),
                                   clause=base.get("clause", ""), source=src)
             if well_formed(o, contract, plan):
+                continue
+            if NO_HAND_ROLLED and hand_rolled_window(src):
                 continue
             out.append(cand)
             extra += 1
@@ -227,7 +247,9 @@ text_of = {r["uid"]: str(r.get("text") or "") for r in requirements}
 print(f"corpus: {sum(len(v) for v in corpus.values())} bodies over "
       f"{len(corpus)} requirements; accepted {len(oracles)}"
       + ("   [licence" + (" (existentials only)" if EXIST_ONLY else "")
-         + " + phase rules APPLIED]" if RULES else "") + "\n")
+         + " + phase rules APPLIED]" if RULES else "")
+      + ("   [hand-rolled bodies REFUSED at admission]" if NO_HAND_ROLLED else "")
+      + "\n")
 #: The ORIGINAL bar, not the relaxed one: blindness is the column this sweep
 #: exists to move, so it is measured against < 0.10.
 print("target: span > 0.90, blindness < 0.10, audit = 0\n")
