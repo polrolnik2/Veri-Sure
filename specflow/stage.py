@@ -143,6 +143,27 @@ def gate_failures_block(issues: list[Issue]) -> str:
 #: better than 4 -- but 8's token cost is well outside it. So: 4.
 FANOUT_WORKERS = 4
 
+#: **THAT MEASUREMENT WAS ON A 3-SECOND MODEL, AND THE TRADE INVERTS ON A
+#: 200-SECOND ONE.** The cost of more workers is parallel calls racing a COLD
+#: cache write -- which `WARMUP_ITEMS` already removes: the pool opens only
+#: after the prefix has been written serially. Measured on `openai/gpt-6-luna`
+#: at `xhigh` through OpenRouter's flex endpoint, normalize calls take 158-268s
+#: each (4.8-9.4k reasoning tokens) and every call after warm-up read 12,917 of
+#: ~13,300 prompt tokens from cache at 4 workers. At that latency 4 workers is
+#: ~2.5 hours for one stage of one module; the wall clock is the constraint and
+#: the cache is not. `SPECFLOW_FANOUT_WORKERS` sets it per process, default
+#: unchanged.
+def fanout_workers() -> int:
+    """`SPECFLOW_FANOUT_WORKERS` if it names a positive integer, else the default."""
+    import os
+
+    try:
+        n = int(os.environ.get("SPECFLOW_FANOUT_WORKERS", "") or FANOUT_WORKERS)
+    except ValueError:
+        return FANOUT_WORKERS
+    return n if n >= 1 else FANOUT_WORKERS
+
+
 #: Items run one at a time before the pool opens. A cold prefix is not cached
 #: until a response has been written, and concurrent calls race that write:
 #: measured, 3 of 8 parallel calls on a cold prefix reported `cached=0`, while
@@ -159,7 +180,7 @@ def run_fanout(
     items: Iterable,
     run_one: Callable[[object], object],
     *,
-    workers: int = FANOUT_WORKERS,
+    workers: int | None = None,
     warmup: int = WARMUP_ITEMS,
 ) -> list:
     """Run `run_one` over `items`, warming the prompt cache before parallelising.
@@ -189,7 +210,8 @@ def run_fanout(
         results[i] = run_one(item)
 
     if tail:
-        with _cf.ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        n = workers if workers is not None else fanout_workers()
+        with _cf.ThreadPoolExecutor(max_workers=max(1, n)) as pool:
             futures = {
                 pool.submit(run_one, item): len(head) + i
                 for i, item in enumerate(tail)
