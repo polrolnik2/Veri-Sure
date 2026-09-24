@@ -78,6 +78,44 @@ The reason is informative: the floor only applies to requirements with NO body i
 the cover, and REQ-0055's body is IN the cover. It is kept because it separates
 cells, not because a floor put it back.
 
+## `--floor-must-separate`: a real rule, and a bad trade
+
+The floor restores a requirement's best contributor. REQ-0055's best contributor
+separates NO CELL UNIQUELY -- dropping every REQ-0055 body costs 0 of 24,819 cells
+-- so requiring the floor to restore only a body that separates something looked
+like the way to drop it grade-blind. Measured:
+
+    floor DECLINED 57 requirement(s) whose best body separates no cell at all
+    cover + floor-must-separate   68 bodies
+      SPAN       0.5351   NOT MET
+      BLINDNESS  0.0595   MET
+      AUDIT      1/17 = 0.0588   NOT MET
+
+**It declines 57 requirements, so it is a rule and not one case wearing one** --
+and it costs 44 points of span for nothing on the audit column, because REQ-0055
+separates cells NON-UNIQUELY. "Its removal costs the union no cell" and "it
+separates no cell" are different properties, and only the first is true of it.
+
+## THE WALL, STATED EXACTLY
+
+Span requires every requirement to HAVE a check. Audit requires no accepted check
+to convict the control. A requirement whose every available body convicts is
+therefore unsatisfiable on both at once -- and REQ-0055 is that requirement:
+
+    REQ-0055 (accepted), REQ-0055#1, REQ-0055#2   all three convict golden
+
+So `audit = 0` together with `span > 90%` needs REQ-0055 to have a non-convicting
+body, and **the corpus contains none**. Dropping it by hand reaches all three --
+span 110 of 114 = 0.9649, blindness 0.0595 unchanged because it separates nothing
+uniquely, audit 0 of 37 -- but no grade-blind rule selects it without also dropping
+the ~50 other requirements whose bodies are equally redundant, which is the 0.5351
+above.
+
+**Authoring one non-convicting body for REQ-0055 is what closes the goal**, and
+that is `normalize` plus the oracle stage: `observable: ['cmd_ack']` is wrong for a
+requirement about a timing counter, and every body in the corpus was authored
+against it. Both need model access.
+
 ## What remains, and it is one requirement
 
 REQ-0055: `normalize` set `observable: ['cmd_ack']` for a
