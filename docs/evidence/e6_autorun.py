@@ -121,6 +121,12 @@ def pack(run_dir: Path, tag: str) -> None:
               flush=True)
 
 
+def _answered(run_dir: Path) -> int:
+    """How many model calls this run has had answered so far."""
+    io = Path(run_dir) / "agent_io"
+    return sum(1 for _ in io.glob("*_response.txt")) if io.is_dir() else 0
+
+
 def main() -> int:
     if not POSITIONAL:
         print(__doc__.strip().splitlines()[2])
@@ -208,18 +214,27 @@ def main() -> int:
         #: exist for -- so an operator re-typing the command adds nothing but
         #: latency. Bounded, and backing off, so a gateway that is down stays a
         #: failure this reports instead of a loop.
+        #: The budget counts CONSECUTIVE failures with no call answered in
+        #: between: a shared, rate-limited gateway fails a multi-hour run a
+        #: few times an hour while it keeps advancing, and a lifetime budget
+        #: would kill that run for being long rather than for being stuck.
         retries = int(_opt("--transport-retries", 6))
         reuse, resume = "--reuse" in FLAGS, "--resume" in FLAGS
-        for attempt in range(retries + 1):
+        attempt, answered = 0, _answered(run_dir)
+        while True:
             try:
                 result = _build(reuse, resume)
                 break
             except Exception as exc:  # noqa: BLE001
+                now = _answered(run_dir)
+                if now > answered:
+                    attempt, answered = 0, now
                 if attempt == retries or not _transport_failure(exc):
                     raise
                 wait = min(600, 60 * 2 ** attempt)
+                attempt += 1
                 print(f"\ntransport failure ({exc!r:.200}); resuming in {wait}s "
-                      f"(attempt {attempt + 1} of {retries})", flush=True)
+                      f"(attempt {attempt} of {retries} without progress)", flush=True)
                 _time.sleep(wait)
                 reuse = resume = True
         print(f"\nbuild ok={getattr(result, 'ok', None)} "
