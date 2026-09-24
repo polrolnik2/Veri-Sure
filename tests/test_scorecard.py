@@ -177,8 +177,12 @@ def test_blindness_is_scored_against_the_population_the_RUN_built():
     assert 'specflow" / "population"' in src, src
     body = inspect.getsource(
         __import__("specflow.integration", fromlist=["x"]).build_artifacts)
-    assert "population=list(_population_on_disk(run_dir) or population_sources)" \
+    #: Computed once and handed to BOTH the cover and the scorecard, so the set
+    #: the run ships is cut against the same designs its card is scored on.
+    assert "_population = list(_population_on_disk(run_dir) or population_sources)" \
         in body, "the scorecard must prefer the run's own population"
+    assert "population=_population," in body
+    assert "_ship_cover(run_dir, _scored, _population," in body
 
 
 def test_a_population_that_agrees_everywhere_is_NAMED_not_reported_as_absent(

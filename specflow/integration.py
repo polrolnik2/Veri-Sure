@@ -346,6 +346,63 @@ def _population_on_disk(run_dir: Path) -> list[str]:
     return out
 
 
+def _ship_cover(run_dir: Path, pool: list, population: list[str],
+                contract: dict, stimulus_by_tp: dict) -> list | None:
+    """Cut the admitted pool to its cover and write `specflow/shipped.json`.
+
+    Keys match `scorecard.score`'s -- the first body of a requirement keeps the
+    bare uid, later ones `uid#n` -- so the card and the file name the same body
+    the same way. `None`, and nothing written, when there is no population to
+    cover against; the caller then ships the pool, which is the only choice that
+    does not invent a reason to drop a body.
+    """
+    from . import cover as _cover
+    from .refmodel.compose import choose_base
+
+    held: dict = {}
+    req_of: dict[str, str] = {}
+    body_of: dict = {}
+    seen: dict[str, int] = {}
+    for o in pool:
+        if not o.source:
+            continue
+        uid = str(o.req_uid)
+        n = seen.get(uid, 0)
+        seen[uid] = n + 1
+        key = uid if n == 0 else f"{uid}#{n}"
+        held[key], req_of[key], body_of[key] = o, uid, o
+    got = _cover.select(held, req_of, population, contract, stimulus_by_tp,
+                        base=choose_base(contract))
+    if got is None:
+        logger.warning("cover: no population to cover against -- shipping "
+                       "the whole pool (%d bodies)", len(held))
+        return None
+    shipped = [body_of[k] for k in got.kept]
+    if got.separated_by_cover != got.separated_by_pool:
+        #: Cannot happen by construction; if it ever does, the claim the
+        #: module docstring makes is false and a run must say so.
+        logger.warning("cover: separates %d cells where the pool separates %d",
+                       got.separated_by_cover, got.separated_by_pool)
+    (Path(run_dir) / "specflow" / "shipped.json").write_text(json.dumps({
+        "rule": "greedy set cover over population disagreement cells, "
+                "then one body per requirement the cover emptied",
+        "pool": len(held), "shipped": len(shipped),
+        "greedy": got.greedy, "floored": got.floored,
+        "cells": got.cells, "separated_by_pool": got.separated_by_pool,
+        "separated_by_cover": got.separated_by_cover,
+        "keys": list(got.kept),
+        "oracles": [{"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),
+                     "clause": o.clause, "source": o.source}
+                    for o in shipped],
+    }, indent=2) + "\n", encoding="utf-8")
+    logger.info("cover: shipping %d of %d bodies (%d greedy + %d floor) over "
+                "%d requirement(s); %d of %d cells separated, as by the pool",
+                len(shipped), len(held), got.greedy, got.floored,
+                len({o.req_uid for o in shipped}), got.separated_by_cover,
+                got.cells)
+    return shipped
+
+
 def build_artifacts(
     *,
     run_dir: Path,
@@ -463,6 +520,15 @@ def build_artifacts(
     #: would change what `blindness` NAMES in all of them rather than extending
     #: it. A caller wanting the pool says so here.
     admit_pool: bool = False,
+    #: **SHIP THE COVER OF THE POOL, NOT THE POOL.** With `admit_pool`, run
+    #: `cover.select` over the admitted bodies and write the kept ones to
+    #: `specflow/shipped.json`, which is then the set the scorecard scores and
+    #: the set `_frozen_oracles` hands the RTL loop. Population-only: the cover
+    #: keeps every cell the pool separates (blindness identical), restores one
+    #: body per requirement it emptied (span identical), and can only lower
+    #: audit, because a subset of objectors cannot convict more. Needs no model
+    #: call, so a finished run gets it by re-entering with `reuse`.
+    ship_cover: bool = False,
     #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
     #: sources. A check convicting every one of them is rejected before freeze.
     #:
@@ -1284,6 +1350,15 @@ def build_artifacts(
                         "requirement(s), from %d accepted",
                         len(_scored), len({o.req_uid for o in _scored}),
                         len(oracle_set.trusted))
+        _population = list(_population_on_disk(run_dir) or population_sources)
+        _shipped_path = run_dir / "specflow" / "shipped.json"
+        #: A stale selection must never outlive the pool it was cut from: a
+        #: re-entry without `ship_cover`, or one whose cover cannot be taken,
+        #: leaves NO shipped set rather than last run's.
+        _shipped_path.unlink(missing_ok=True)
+        if ship_cover and admit_pool and oracle_set and _scored:
+            _scored = _ship_cover(run_dir, _scored, _population, contract,
+                                  stim_by_tp or {}) or _scored
         card = _scorecard.score(
             oracles=[
                 {"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),
@@ -1293,7 +1368,7 @@ def build_artifacts(
             requirements=list(reqs or []),
             stimulus_by_tp=stim_by_tp or {},
             contract=contract,
-            population=list(_population_on_disk(run_dir) or population_sources),
+            population=_population,
             audit_control=audit_control,
         )
         _scorecard.write(run_dir, card)

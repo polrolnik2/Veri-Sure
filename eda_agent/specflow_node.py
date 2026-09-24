@@ -329,11 +329,22 @@ class SpecflowReviewer:
         # -- and reading the wrong testpoint's waveform is worse than reading
         # none, because it looks like data. Same pairing the trace already gets.
         self.vcd_by_tp = self._waves_by_tp()
+        #: **FOLDED PER REQUIREMENT, BECAUSE A SET MAY HOLD SEVERAL BODIES OF
+        #: ONE.** `decide_rtl` answers once per BODY. A dict comprehension keyed
+        #: on `req_uid` kept whichever body came LAST -- so a shipped pool with a
+        #: failing body followed by a passing one reported the requirement met,
+        #: and the editor was told a violated requirement held. Rejections
+        #: union: `_worst` is the fold every other path here already uses.
+        from specflow.refmodel.oracles import _worst
+        by_req: dict[str, list] = {}
+        for r in results:
+            by_req.setdefault(r.req_uid, []).append(r)
         # Paired with the trace it judged, because `explain` reads simulator
         # TIME out of it -- an `OracleResult.edge` is a row index, and feeding
         # an index to a filter over nanosecond timestamps collapses the VCD
         # window to the start of the run with no error anywhere.
-        return {r.req_uid: (r, traces.get(r.tp_uid) or {}) for r in results}
+        return {u: (r, traces.get(r.tp_uid) or {})
+                for u, r in ((u, _worst(u, rs)) for u, rs in by_req.items())}
 
     def _waves_by_tp(self) -> dict:
         """`{tp_uid: wave.vcd}` for whatever this run dumped.
@@ -369,9 +380,17 @@ def _frozen_oracles(run_dir: Path | str) -> list:
     its testpoint verdict, and only the per-requirement surface goes quiet --
     which is the state every run was in before this was wired.
     """
+    #: **THE SHIPPED SET WHEN THE RUN SHIPPED ONE.** `build_artifacts(
+    #: ship_cover=True)` writes `shipped.json` -- the cover of the admitted pool
+    #: -- and that, not the one-body-per-requirement `oracles`, is the set the
+    #: run's scorecard scored. Repairing a design against a different set from
+    #: the one that was scored would measure the editor against checks nobody
+    #: reported on.
     try:
         from specflow.refmodel.oracles import RequirementOracle
-        data = json.loads((Path(run_dir) / "specflow" / "oracles.json")
+        root = Path(run_dir) / "specflow"
+        shipped = root / "shipped.json"
+        data = json.loads((shipped if shipped.is_file() else root / "oracles.json")
                           .read_text(encoding="utf-8"))
     except (OSError, ValueError, ImportError):
         return []

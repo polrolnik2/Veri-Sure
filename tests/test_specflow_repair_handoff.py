@@ -366,6 +366,27 @@ def test_the_reviewer_decides_the_frozen_oracles_on_the_recording(tmp_path):
     assert trace["tp_uid"] == "TP-0000"
 
 
+def test_two_bodies_of_one_requirement_fold_to_the_failing_one(tmp_path):
+    """A set that ships SEVERAL bodies per requirement must union rejections.
+
+    Keyed on `req_uid`, the last body's verdict overwrote the first's, so a
+    failing body followed by a passing one read as a met requirement -- in
+    either order the requirement is violated, because one of its checks says so.
+    """
+    from specflow.refmodel.oracles import RequirementOracle
+    strict = ("def decide(trace):\n"
+              "    return all(r['outputs']['busy'] == 0 for r in trace)\n")
+    lax = "def decide(trace):\n    return True\n"
+    contract = {"io": [{"name": "busy", "dir": "output", "width": 1}]}
+    _write_trace(tmp_path / "results", "TP-0000", [0, 1, 0])
+    mk = lambda s: RequirementOracle(req_uid="REQ-0001", clause="c",  # noqa: E731
+                                     source=s, tp_uids=["TP-0000"])
+    for order in ([mk(strict), mk(lax)], [mk(lax), mk(strict)]):
+        result, _ = _reviewer(tmp_path, order, contract)._decide_requirements()[
+            "REQ-0001"]
+        assert result.ok is False
+
+
 def test_no_oracles_costs_the_requirement_surface_and_not_the_run(tmp_path):
     """A backend with no frozen set still returns its testpoint verdict.
 

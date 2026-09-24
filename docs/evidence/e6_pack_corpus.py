@@ -51,7 +51,12 @@ from pathlib import Path
 
 FILES = ("contract.json", "requirements.json", "normalized.json",
          "testplan.json", "stimulus.json", "coverage_model.json",
-         "probes.json", "oracles.json", "ref_model.py", "scorecard.json")
+         "probes.json", "oracles.json", "ref_model.py", "scorecard.json",
+         #: The set the run SHIPPED (`build_artifacts(ship_cover=True)`), and
+         #: the gates' own records, so a frozen run says what it decided and
+         #: not only what it was given.
+         "shipped.json", "witness.py", "s1_gate.json", "refmodel_gate.json",
+         "variants.json", "exercised.json")
 
 
 def sha256(path: Path) -> str:
