@@ -299,3 +299,27 @@ def test_the_chat_path_sends_the_shared_prefix_as_its_own_message(tmp_path, monk
     assert seen[0] == [{"role": "system", "content": "SPEC" + _PREFIX_SENTINEL},
                        {"role": "user", "content": "ITEM"}]
     assert seen[1] == [{"role": "user", "content": "no boundary here"}]
+
+
+def test_a_rate_limit_is_waited_out_beyond_the_ordinary_budget(tmp_path, monkeypatch):
+    """An in-band 429 killed a build 17 minutes in: the ordinary budget (three
+    tries) was spent before the upstream window reopened."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    err = {"message": "rate-limited upstream", "code": 429,
+           "metadata": {"error_type": "rate_limit_exceeded"}}
+    chat = _NullChoices(6, err)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok" and chat.calls == 7
+
+
+def test_a_rate_limit_that_never_lifts_still_ends(tmp_path, monkeypatch):
+    from specflow.model_io import RATE_LIMIT_RETRIES, NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(999, {"code": 429})
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    with pytest.raises(NoChoicesError):
+        port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert chat.calls == RATE_LIMIT_RETRIES + 3

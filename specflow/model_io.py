@@ -28,6 +28,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -831,6 +832,21 @@ class NoChoicesError(RuntimeError):
         self.body = body
 
 
+#: Resends a rate limit gets on top of the ordinary budget -- see `_chat_call`.
+RATE_LIMIT_RETRIES = 8
+
+
+def _rate_limited(exc: BaseException) -> bool:
+    """An HTTP 429, or a 429 relayed in-band as a reply with no choices."""
+    if getattr(exc, "status_code", None) == 429 or type(exc).__name__ == "RateLimitError":
+        return True
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+        return body.get("code") == 429 or meta.get("error_type") == "rate_limit_exceeded"
+    return False
+
+
 def _no_choices(response) -> None:
     """Raise `NoChoicesError` when a completion came back with no choices."""
     if getattr(response, "choices", None):
@@ -1326,7 +1342,9 @@ class ApiPort:
         """
         attempts = max(0, self.settings.stream_retries) + 1
         last: Exception | None = None
-        for attempt in range(attempts):
+        limited = 0
+        attempt = 0
+        while attempt < attempts:
             if attempt:
                 time.sleep(min(30.0, 4.0 * (2 ** (attempt - 1))))
             try:
@@ -1359,6 +1377,20 @@ class ApiPort:
                 if not _retryable(exc):
                     raise
                 last = exc
+                #: **A RATE LIMIT IS WAITED OUT, NOT COUNTED AS A FAILURE.** It
+                #: says nothing about the request, only about when to send it,
+                #: and the ordinary budget (three tries, 4-8s apart) is gone
+                #: before any upstream window reopens. Measured: five runs at
+                #: 16 workers each on the flex endpoint drew an in-band 429
+                #: ("temporarily rate-limited upstream") and one build died on
+                #: it 17 minutes in. Its own budget, backing off to two minutes
+                #: with jitter so parallel workers do not return in lockstep.
+                if _rate_limited(exc) and limited < RATE_LIMIT_RETRIES:
+                    limited += 1
+                    time.sleep(min(120.0, 5.0 * 2 ** (limited - 1))
+                               + random.uniform(0.0, 3.0))
+                    continue
+                attempt += 1
         raise last  # type: ignore[misc]
 
     # ------------------------------------------------------------------- call
