@@ -136,8 +136,9 @@ Three things it does that a driver script did not:
 **It preflights.** One four-token call decides whether the gateway answers, and
 it refuses to start if not. Discovering `429 BUDGET_EXCEEDED` after S1 is
 discovering it having paid for S1. It also applies the two environment
-corrections this project keeps re-learning: the base URL needs its `/v1` suffix
-and the model name must drop its `openai/` prefix.
+corrections this project keeps re-learning: the base URL needs its `/v1` suffix,
+and the model name and `OPENAI_EXTRA_BODY` go out exactly as the pipeline will
+send them -- it once stripped an `openai/` prefix, which OpenRouter requires.
 
 **It packs on completion, and on failure.** A run that died at the oracle stage
 still spent what it spent, and its S1, probe, S2 and S3 artifacts are exactly

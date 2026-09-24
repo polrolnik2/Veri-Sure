@@ -2,7 +2,7 @@
 
     e6_autorun.py <run-dir> --spec <spec.txt> --contract <contract.json>
                   [--control <ref_model.py>] [--reuse] [--resume]
-                  [--population N] [--no-preflight] [--admit-pool]
+                  [--population N] [--no-preflight] [--admit-pool] [--cover]
 
 **FOUR RUNS' ARTIFACTS WENT WITH A CONTAINER RECLAIM ON THIS BRANCH, AND EVERY
 NUMBER TAKEN FROM THEM HAD TO BE RECOMPUTED OR WITHDRAWN.** Three more --
@@ -66,10 +66,23 @@ def preflight() -> str | None:
         return "OPENAI_BASE_URL is unset"
     if not base.endswith("/v1"):
         base += "/v1"
-    model = (os.environ.get("OPENAI_MODEL") or "").split("/", 1)[-1]
+    #: **THE MODEL AND THE EXTRA BODY EXACTLY AS THE PIPELINE SENDS THEM.**
+    #: This used to strip an `openai/` prefix, which one gateway needed -- and
+    #: which OpenRouter REQUIRES, so the preflight answered 400 for a model the
+    #: pipeline would have reached, or 200 for one it would not. A preflight
+    #: that tests a different request from the run's tests nothing. The extra
+    #: body carries the provider routing (e.g. the flex endpoint), which is the
+    #: other half of "does this gateway answer the request we are about to pay
+    #: for".
+    model = os.environ.get("OPENAI_MODEL") or ""
+    try:
+        extra = json.loads(os.environ.get("OPENAI_EXTRA_BODY") or "{}")
+    except ValueError:
+        return "OPENAI_EXTRA_BODY is not valid JSON"
     req = urllib.request.Request(
         base + "/chat/completions",
-        data=json.dumps({"model": model, "max_tokens": 4,
+        data=json.dumps({**(extra if isinstance(extra, dict) else {}),
+                         "model": model, "max_tokens": 64,
                          "messages": [{"role": "user", "content": "ping"}]}).encode(),
         headers={"Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY', '')}",
                  "Content-Type": "application/json"})
@@ -172,6 +185,11 @@ def main() -> int:
             #: figure on this branch was computed the other way and switching it
             #: silently would change what `blindness` NAMES in all of them.
             admit_pool="--admit-pool" in FLAGS,
+            #: **`--cover` SHIPS THE COVER OF THE POOL** -- `specflow/cover.py`.
+            #: Population-only and model-free, so a finished run gets it by
+            #: re-entering with `--reuse --no-preflight`: blindness and span
+            #: held exactly, audit free only to fall.
+            ship_cover="--cover" in FLAGS,
             population_size=int(_opt("--population", 7)),
             audit_control=control_source,
             reuse="--reuse" in FLAGS,
