@@ -180,3 +180,52 @@ def test_the_cover_can_leave_out_every_body_the_population_refutes():
     assert "R1" in kept.kept, "without the switch the floor keeps R1's only body"
     assert strict.refuted == ("R1",)
     assert "R1" not in strict.kept and "R2" in strict.kept
+
+
+# ------------------------------------------------------- the settle tail
+
+
+def _rows(tail_from: int, n: int, *, fire: int) -> list[dict]:
+    """`n` rows; `a` rises at row `fire`; `b` never does; rows from
+    `tail_from` on are settle rows."""
+    out = []
+    for k in range(n):
+        r = {"edge": k, "inputs": {}, "outputs": {"a": int(k >= fire), "b": 0}}
+        if k >= tail_from:
+            r["tail"] = True
+        out.append(r)
+    return out
+
+
+def test_a_strong_obligation_OPENED_IN_THE_TAIL_is_cut_off_not_failed():
+    from specflow.refmodel import temporal as T
+
+    def verdicts(rows):
+        ws = T.after(rows, lambda r: r["outputs"]["a"] == 1, until=T.TO_END)
+        assert len(ws) == 1
+        w = ws[0]
+        return (T.eventually(w, lambda r: r["outputs"]["b"] == 1, strong=True)[0],
+                T.sequence(w, lambda r: r["outputs"]["a"] == 1,
+                           lambda r: r["outputs"]["b"] == 1, strong=True)[0],
+                T.until(w, lambda r: r["outputs"]["a"] == 1,
+                        lambda r: r["outputs"]["b"] == 1, strong=True)[0])
+
+    assert verdicts(_rows(tail_from=6, n=10, fire=7)) == (None, None, None), (
+        "opened after the stimulus ended and still pending when the rows ran out")
+    assert verdicts(_rows(tail_from=6, n=10, fire=3)) == (False, False, False), (
+        "opened while the stimulus drove: the tail was its room, and it lapsed")
+
+
+def test_a_state_is_a_tail_state_only_if_it_BEGINS_in_the_tail():
+    from specflow.refmodel.oracles import transactional_view
+
+    rows = _rows(tail_from=4, n=8, fire=6)
+    view = transactional_view(rows)
+    assert [bool(r.get("tail")) for r in view] == [False, True]
+    assert view[1]["first_edge"] == 6
+
+
+def test_the_replay_marks_exactly_the_settle_rows():
+    steps = [{"inputs": {"go": 1, "done_i": 0}, "hold": 3}]
+    rep = replay(SAMPLED, CONTRACT, steps, base="step", settle_edges=5)
+    assert [bool(r.get("tail")) for r in rep.rows] == [False] * 3 + [True] * 5

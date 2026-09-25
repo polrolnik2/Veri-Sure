@@ -55,7 +55,8 @@ def rows_from(trace: dict, *, side: str = "dut") -> list[dict]:
     return [
         {"edge": e["edge"],
          "inputs": dict(e.get("inputs") or {}),
-         "outputs": dict(e.get(side) or {})}
+         "outputs": dict(e.get(side) or {}),
+         **({"tail": True} if e.get("tail") else {})}
         for e in trace.get("edges") or []
     ]
 

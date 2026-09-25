@@ -119,6 +119,26 @@ class Window:
         return self.start.get("edge")
 
     @property
+    def opened_in_tail(self) -> bool:
+        """Did this window open AFTER the stimulus ended, in the settle rows?
+
+        **THE SETTLE TAIL IS ROOM FOR A RESPONSE, NOT A NEW SCENARIO.** It runs
+        on past the last step, holding its inputs, so an effect of the last
+        stimulus is recorded. Holding them also re-issues whatever the last step
+        presented: a command still asserted after its acknowledge starts again,
+        and the recording stops part way through it. A STRONG obligation that
+        opened there and is still pending when the rows run out was never given
+        the room the tail exists to give -- the recording ended, the design did
+        not fail. Measured on i2c_master_bit_ctrl's golden replay: ten
+        convictions of the known-good design were exactly this (a second STOP,
+        a restarted WRITE, a `busy` due one edge after the last row).
+
+        An obligation opened while the stimulus was driving still gets the
+        whole tail and is judged as before.
+        """
+        return bool(self.start.get("tail"))
+
+    @property
     def extent(self) -> list[dict]:
         """The rows the window GOVERNS -- `rows` WITHOUT the closing row.
 
@@ -907,11 +927,16 @@ def eventually(w: Window, holds: Pred, *, strong: bool,
         if holds(row):
             return True, row.get("edge"), f"{what} occurred"
     if not w.closed:
-        if strong:
+        if strong and not w.opened_in_tail:
             return False, w.edge, (
                 f"{what} never occurred, and the window opening at edge "
                 f"{w.edge} ran to the end of trace -- the obligation was never "
                 f"discharged")
+        if strong:
+            return None, w.edge, (
+                f"{what} had not occurred when the recording ended, and the "
+                f"window opened at edge {w.edge}, after the stimulus had "
+                f"ended -- the recording stopped, the obligation did not lapse")
         return None, w.edge, (
             f"{what} had not occurred by the end of trace, and the window "
             f"opened at edge {w.edge} never closed")
@@ -1218,7 +1243,7 @@ def sequence(w: Window, *steps: Pred, strong: bool,
         while at < len(rows) and not step(rows[at]):
             at += 1
         if at >= len(rows):
-            if not w.closed and not strong:
+            if not w.closed and (not strong or w.opened_in_tail):
                 return None, w.edge, (
                     f"{what} reached step {n + 1} of {len(steps)} and the "
                     f"window opening at edge {w.edge} ran to the end of trace")
@@ -1272,7 +1297,7 @@ def until(w: Window, holds: Pred, release: Pred, *, strong: bool,
             return False, row.get("edge"), (
                 f"{what} broke at edge {row.get('edge')}, before any release, "
                 f"in the window opening at edge {w.edge}")
-    if strong:
+    if strong and not (w.opened_in_tail and not w.closed):
         return False, w.edge, (
             f"{what} held, but the release never occurred in the window "
             f"opening at edge {w.edge}")

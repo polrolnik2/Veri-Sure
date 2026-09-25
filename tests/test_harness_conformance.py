@@ -849,6 +849,8 @@ def test_a_testpoint_RUNS_ON_past_its_last_stimulus_step(tmp_path):
     assert len(edges) >= stimulus_edges + SETTLE_EDGES, (
         f"no settle tail: {len(edges)} recorded edges for {stimulus_edges} "
         f"edges of stimulus plus a {SETTLE_EDGES}-edge tail")
+    assert [bool(e.get("tail")) for e in edges[-SETTLE_EDGES - 1:]] == \
+        [False] + [True] * SETTLE_EDGES, "the trace must say which rows no step drove"
     assert all(e["inputs"]["d"] == 1 for e in edges[-SETTLE_EDGES:]), (
         "the tail must HOLD the last stimulus, not return to idle -- driving "
         "back to idle is itself a stimulus event")

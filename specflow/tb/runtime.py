@@ -497,6 +497,8 @@ class Env:
         self.settle_edges: int = SETTLE_EDGES
         #: The tail runs once, even if `finish` is called twice.
         self._finished_tail: bool = False
+        #: Index of the first settle row in `_trace`, once the tail has run.
+        self._tail_from: int | None = None
         #: Declared ports the DUT does not expose. A verdict, not a crash.
         self.missing_ports: list[str] = []
         #: Stimulus values a port could not hold. Also a verdict, not a crash.
@@ -1284,6 +1286,9 @@ class Env:
         self._finished_tail = True
         if self._clk() is None:
             return
+        #: Where the settle rows begin, so the trace can say which rows no
+        #: stimulus step drove -- see `temporal.Window.opened_in_tail`.
+        self._tail_from = len(self._trace)
         for _ in range(self.settle_edges):
             await self._edge(self._inputs)
 
@@ -1341,6 +1346,8 @@ class Env:
         for i, t in enumerate(self._trace):
             row = {"edge": i, "step": t[2], "inputs": t[3],
                    "dut": t[0], "model": t[1]}
+            if self._tail_from is not None and i >= self._tail_from:
+                row["tail"] = True
             # The edge -> simulator-time lookup every VCD consumer needs.
             if len(t) > 4 and t[4] is not None:
                 row["t"] = t[4]

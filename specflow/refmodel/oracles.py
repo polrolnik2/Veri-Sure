@@ -333,8 +333,9 @@ def replay(
             merged = dict(out)
             if probes:
                 merged.update(probe_values(ref, probes))
+            #: A SETTLE ROW, and it says so -- see `temporal.Window.opened_in_tail`.
             rows.append({"edge": len(rows), "inputs": dict(state),
-                         "outputs": merged})
+                         "outputs": merged, "tail": True})
     return Replay(rows, notes, "", absent)
 
 
@@ -390,6 +391,10 @@ def transactional_view(rows: list[dict]) -> list[dict]:
             "inputs": dict(row["inputs"]),
             "outputs": dict(row["outputs"]),
         })
+        #: A state that BEGINS in the settle tail began after the stimulus
+        #: ended; one that runs on into it from a driven row did not.
+        if row.get("tail"):
+            out[-1]["tail"] = True
     for row in out:
         del row["_key"]
     return out
