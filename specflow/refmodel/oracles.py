@@ -283,9 +283,14 @@ def replay(
                 "inputs": dict(state),
                 "outputs": merged,
             })
-            if until and out.get(str(until.get("port"))) == until.get("value"):
-                reached = True
-                break
+            if until:
+                #: The row as recorded -- output, probe, or the input itself --
+                #: which is what the simulator's `Env._sampled_value` reads.
+                port = str(until.get("port"))
+                seen = merged.get(port) if port in merged else state.get(port)
+                if seen == until.get("value"):
+                    reached = True
+                    break
         if until and not reached and not exhausted:
             # Stated, never blamed. Checked against the known-correct control on
             # this run's own stimulus: 23 of 60 scenarios never fire their

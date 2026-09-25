@@ -217,6 +217,9 @@ def main() -> int:
             #: re-entering with `--reuse --no-preflight`: blindness and span
             #: held exactly, audit free only to fall.
             ship_cover="--cover" in FLAGS,
+            #: `--keep-refuted` restores the pool the cover was cut from before
+            #: population-refuted bodies were left out.
+            exclude_refuted="--keep-refuted" not in FLAGS,
             stop_before_oracles="--stop-before-oracles" in FLAGS,
             population_size=int(_opt("--population", 7)),
             audit_control=control_source,

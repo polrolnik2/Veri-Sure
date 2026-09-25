@@ -56,7 +56,8 @@ from .refmodel import variants as variants_mod
 from .refmodel import verdict as V
 from .refmodel import oracle_gen
 from .refmodel.temporal import hand_rolled_window
-from .refmodel.oracle_gen import run_cell_gen, run_oracle_gen
+from .refmodel.oracle_gen import (run_cell_gen, run_oracle_gen,
+                                   samples_before_edge_source)
 from .refmodel.oracles import (RequirementOracle, decide, replay,
                                transactional_view, well_formed)
 from .schema import Issue
@@ -2856,7 +2857,8 @@ def run_oracle_stage(
         if want_correspondence and fresh:
             reviews.update(correspondence.review(
                 fresh, by_uid, port=port, normalized=normalized,
-                spec=spec, contract=contract, round_=rounds - 1, fanout=fanout))
+                spec=spec, contract=contract, round_=rounds - 1, fanout=fanout,
+                preponed=samples_before_edge_source(witness)))
             for o in fresh:
                 _reviewed[o.req_uid] = o.hash or o.source
             _carried = dict(reviews)

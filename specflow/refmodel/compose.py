@@ -34,34 +34,22 @@ logger = logging.getLogger(__name__)
 
 STAGE = "refmodel"
 
-_COMPLETION_WORDS = {"valid", "ready", "ack", "done", "busy", "complete"}
-
-
 def choose_base(contract: dict) -> str:
-    """R0. `step` for sequential designs, `evaluate` otherwise.
+    """R0. `step` for every clocked design, `evaluate` for a combinational one.
 
-    Mirrors `contract_linter._has_completion_signal` (`:55-71`): a multi-cycle
-    output or a handshake port means the model needs state, because a single
-    input vector no longer determines the output on its own.
+    **A REGISTERED OUTPUT IS STATE ONCE A ROW IS READ BEFORE ITS EDGE.** This
+    used to route a sequential, single-cycle, handshake-free design to
+    `evaluate`, on the argument that "a registered output is still a pure
+    function of the previous input, so `evaluate` plus a latency of 1 models it
+    without state". That was true only while rows were sampled AFTER the edge,
+    where the register already holds f(this row's inputs). Sampled as an
+    assertion samples -- see `RefModel.outputs` -- the register shows f(the
+    previous row's inputs), which no stateless function of this row can give.
     """
     clocking = contract.get("clocking") or {}
     if not clocking.get("is_sequential"):
         return "evaluate"
-
-    timing = contract.get("timing") or {}
-    for spec in timing.values():
-        if isinstance(spec, dict) and int(spec.get("latency_cycles") or 0) > 1:
-            return "step"
-
-    for port in contract.get("io") or []:
-        name = str(port.get("name") or "").lower()
-        if any(w in name.split("_") or w == name for w in _COMPLETION_WORDS):
-            return "step"
-
-    # Sequential but single-cycle and handshake-free: a registered output is
-    # still a pure function of the previous input, so `evaluate` plus a latency
-    # of 1 models it without state.
-    return "evaluate"
+    return "step"
 
 
 def _tokens(debugger) -> dict[str, int]:
@@ -170,10 +158,15 @@ def probe_block(contract: dict, base: str) -> str:
     #: wider signal on a design written from the specification rather than from
     #: this contract.
     wide = [p for p in named if int(p.get("width") or 1) > 1]
+    #: WHERE a probe is set decides which side of the edge it reads. In the
+    #: sampled-edge form `outputs` sets it, so it shows the same instant as
+    #: the outputs -- see `RefModel.outputs`.
+    when = ("Set every one in `outputs`, from the current state and `i`, so it "
+            "shows the same instant the outputs do."
+            if base == "step" else "Readable at any time after a dispatch call.")
     shape = (
         "Maintain each one as a BOOLEAN ATTRIBUTE on the model -- "
-        "`self.in_lrefill3 = (self.state == 'LREFILL3')` -- readable at any "
-        "time after a dispatch call."
+        "`self.in_lrefill3 = (self.state == 'LREFILL3')`. " + when
     )
     if wide:
         shape = (
@@ -183,13 +176,13 @@ def probe_block(contract: dict, base: str) -> str:
             "WITH one names a value that many bits wide -- "
             + ", ".join(f"`{p['name']}`" for p in wide)
             + " -- and carries that value as an INTEGER attribute, not a flag. "
-            "Both are readable at any time after a dispatch call."
+            + when
         )
     return (
         f"The interface also declares PROBES: {listed}.\n"
         "A probe is a specification term made observable, and it is how a check "
         f"names a moment this interface has no port for. {shape} "
-        f"Do NOT return them from `{base}`: they are "
+        f"Do NOT return them from `{'outputs' if base == 'step' else base}`: they are "
         "observation points, not outputs, and the output dict must contain "
         "exactly the output ports above. A probe being False most of the time is "
         "correct; the obligation is that it is readable and that it means what "
@@ -327,8 +320,10 @@ def generate_model(
             + "\n</requirements>",
             "<contract_json>\n" + contract_json.rstrip() + "\n</contract_json>",
             f"The dispatch method for this design is `{base}` "
-            f"(chosen from the contract, not negotiable). "
-            f"Output ports that must all be written: {output_ports(contract)}.",
+            f"(chosen from the contract, not negotiable)"
+            + (": write it as `outputs(self, i)` and `advance(self, i)`, and do "
+               "not define `step`. " if base == "step" else ". ")
+            + f"Output ports that must all be written: {output_ports(contract)}.",
         ]
         block = probe_block(contract, base)
         if block:

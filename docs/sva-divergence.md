@@ -308,16 +308,27 @@ is a normalisation field and not a rule in this module.
 Pins: `tests/test_temporal.py` under "`disable iff`: aborts_on";
 `tests/test_normalize.py` for the schema and the gate.
 
-### D10 · Sampling is post-edge on both sides; SVA samples preponed
+### D10 · Sampling is preponed on both sides -- CLOSED for sampled-edge models
 
-`replay` records after `model.step()`. `Env` samples after `RisingEdge` plus
-`Timer(1, "step")` (`tb/runtime.py:591`) — one simulator time step, deliberately,
-because a read in the same delta as the edge returns the previous cycle's value.
-SVA samples in the preponed region, i.e. *before* the edge.
+**Was:** `replay` recorded after `model.step()` and `Env` sampled after
+`RisingEdge` plus `Timer(1, "step")` -- post-edge on both sides, while SVA
+samples in the preponed region, *before* the edge.
 
-**Why it matters beyond trivia:** the reference-model trace and the DUT trace
-share a convention, which is what lets the same frozen check decide against
-either one. An assertion ported to real SVA would see different values.
+**Now:** a model written as `outputs(i)` + `advance(i)` (`RefModel.outputs`,
+required of every newly generated clocked model) is recorded the way SVA
+samples it. `replay` records `outputs()` before `advance()`; `Env._edge` lets
+the inputs land, wires the bus, reads every output and probe, and only then
+clocks. A registered value changes in the row after the edge that loads it; a
+combinational output sits beside the inputs it answers. Traces carry
+`"sampling": "preponed"`. A model written as one `step` keeps the post-edge
+recording, so every artifact before the change still decides as it did.
+
+**Why it was closed rather than documented:** the post-edge recording pairs a
+state with the inputs that CAUSED it, never records a combinational ack that
+coincides with leaving a state, and the prompts never said which it was. The
+checks read rows the SVA way; on or1200_dc_fsm's golden replay that mismatch
+was the largest class of checks convicting the known-good design, and seven
+population models from one prompt split three ways on the question.
 
 ---
 

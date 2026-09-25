@@ -220,9 +220,14 @@ Reply with ONE JSON object and nothing else:
   "clause": "the sentence of the requirement this variant breaks, verbatim",
   "methods": {
     "_tick": "def _tick(self, i):\n    ...the whole method, changed...",
-    "step":  "def step(self, i):\n    ...only if you changed this one too..."
+    "advance": "def advance(self, i):\n    ...only if you changed this one too..."
   }
 }
+
+If the conforming implementation defines `outputs` and `advance`, keep that
+form: change those methods or their helpers, and do not add a `step` -- the
+base class drives the two in order, and a `step` of your own would change when
+every row is sampled, not the clause you were asked to break.
 
 Fewer methods is better, and the smallest change that breaks the clause
 observably is the right one. Sending the whole module instead of `methods` WILL

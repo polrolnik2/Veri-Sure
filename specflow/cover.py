@@ -59,6 +59,10 @@ class Cover:
     cells: int
     separated_by_pool: int
     separated_by_cover: int
+    #: Bodies left out BEFORE the cover because every spec-derived design that
+    #: decides them is convicted -- see `select`'s `exclude_refuted`. Empty
+    #: unless asked for.
+    refuted: tuple[str, ...] = ()
 
 
 def separation(cells: Sequence, by_tp: Mapping[str, Mapping]) -> dict[str, frozenset]:
@@ -119,13 +123,26 @@ def greedy_cover(order: Sequence[str], sep_of: Mapping[str, frozenset],
 
 def select(held: Mapping, req_of: Mapping[str, str], population: Sequence[str],
            contract: dict, stimulus_by_tp: dict, *, base: str,
-           transactional: bool = True) -> Cover | None:
+           transactional: bool = True,
+           exclude_refuted: bool = False) -> Cover | None:
     """The cover of `held` (body key -> `RequirementOracle`) over `population`.
 
     `None` when there is no population to cover against -- fewer than two
     designs, or two that agree everywhere. Then no body can be shown redundant,
     and shipping the pool unchanged is the only answer that does not invent a
     reason to drop something.
+
+    `exclude_refuted` takes every body `variety.refuted_by_the_population` names
+    out of the pool before the cover is cut, so none of them can ship -- not the
+    one the stage flagged, and not a sibling draft of the same requirement the
+    cover would otherwise reach for. The stage's own leg only ADVISES a repair,
+    on the argument that N readings from one prompt may share a bug. Measured
+    against the hand-bound golden replay, that argument lost where it could be
+    settled: on or1200_dc_fsm the known-good design fails 15 of the 17 bodies
+    the population refutes, and leaving them all out takes the hand-bound audit
+    from 20 of 49 to 7 of 38 (i2c_master_bit_ctrl: 38 of 84 to 22 of 68). What
+    it costs is span and, where a refuted body separated designs on some
+    testpoint, cells -- which is why it is a switch the run records.
     """
     from .oracles_stage import _population_rows, _population_tables
 
@@ -142,12 +159,15 @@ def select(held: Mapping, req_of: Mapping[str, str], population: Sequence[str],
     verdicts, by_tp, _obj = _population_tables(
         dict(held), list(population), contract, stimulus_by_tp, base=base,
         transactional=transactional)
-    sep_of = separation(cells, by_tp)
+    refuted = (tuple(sorted(V.refuted_by_the_population(verdicts)))
+               if exclude_refuted else ())
+    order = [k for k in held if k not in set(refuted)]
+    sep_of = {k: v for k, v in separation(cells, by_tp).items() if k in set(order)}
     convictions = {k: sum(1 for x in (verdicts.get(k) or {}).values()
-                          if x is False) for k in held}
-    kept, chosen = greedy_cover(list(held), sep_of, req_of, convictions)
+                          if x is False) for k in order}
+    kept, chosen = greedy_cover(order, sep_of, req_of, convictions)
     pool = set().union(*sep_of.values()) if sep_of else set()
     mine = set().union(*(sep_of.get(k, frozenset()) for k in kept))
     return Cover(kept=tuple(kept), greedy=chosen, floored=len(kept) - chosen,
                  cells=len(cells), separated_by_pool=len(pool),
-                 separated_by_cover=len(mine))
+                 separated_by_cover=len(mine), refuted=refuted)

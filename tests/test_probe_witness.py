@@ -155,7 +155,10 @@ def test_the_prompt_names_every_probe_and_its_meaning() -> None:
     assert "BOOLEAN ATTRIBUTE" in block
     # The obligation must be stated as an attribute and explicitly NOT as an
     # output, or the model returns its probes and they enter the output dict.
-    assert "Do NOT return them from `step`" in block
+    #: A clocked model is written as `outputs` + `advance`; probes are set in
+    #: `outputs`, so they read the same side of the edge the outputs do.
+    assert "Do NOT return them from `outputs`" in block
+    assert "Set every one in `outputs`" in block
 
     assert probe_block(CONTROL, "step") == ""
 

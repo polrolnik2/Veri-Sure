@@ -53,9 +53,12 @@ def test_the_prompt_cannot_carry_an_implementation():
     more key; a named signature makes that a visible change to a function.
     """
     params = set(inspect.signature(build_prompt).parameters)
+    #: `preponed` is a bool naming the row convention -- nothing a design's
+    #: behaviour could travel in.
     assert params == {"requirement", "contract_json", "contract",
                       "normalized", "spec", "siblings", "issues", "previous",
-                      "rows", "gap"}
+                      "rows", "gap", "preponed"}
+    assert build_prompt.__annotations__.get("preponed") in (bool, "bool")
     assert not (params & {"source", "model", "trace", "behaviour",
                           "stimulus_by_tp", "testpoints", "verdict",
                           "population", "designs", "cell"})

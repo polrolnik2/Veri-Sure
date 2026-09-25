@@ -599,6 +599,9 @@ def build_prompt(
     spec: str = "",
     contract: dict | None = None,
     siblings: dict[str, dict] | None = None,
+    #: Which side of the edge rows are sampled on -- the author was told the
+    #: same, by `oracle_gen.row_semantics`.
+    preponed: bool = True,
 ) -> str:
     """Texts only. There is no parameter a design could arrive through.
 
@@ -665,7 +668,9 @@ def build_prompt(
     # doing it once already: SYSTEM alone is ~471 tokens, under the 1024-token
     # floor below which NOTHING caches, measured at 12% against 65-83% for
     # every other fan-out.
-    shared: list[tuple[str, str]] = [("system", SYSTEM)]
+    from .oracle_gen import row_semantics
+    shared: list[tuple[str, str]] = [("system", SYSTEM),
+                                     ("rows", row_semantics(preponed))]
     if spec.strip():
         shared.append(("specification", spec))
     if contract:
@@ -699,6 +704,7 @@ def review_one(
     contract: dict | None = None,
     siblings: dict[str, dict] | None = None,
     round_: int = 0,
+    preponed: bool = True,
 ) -> Review:
     """One call. Never raises: a reviewer that cannot answer does not reject.
 
@@ -711,7 +717,8 @@ def review_one(
             stage=f"{STAGE}_{oracle.req_uid or 'unknown'}", round_=round_,
             prompt=build_prompt(requirement=requirement, oracle=oracle,
                                 normalized=normalized, spec=spec,
-                                contract=contract, siblings=siblings))
+                                contract=contract, siblings=siblings,
+                                preponed=preponed))
     except Exception as exc:  # noqa: BLE001
         return Review(reasoning=f"{PARSE_ERROR}{exc!r}")
     out = parse_response(reply)
@@ -730,6 +737,7 @@ def review(
     contract: dict | None = None,
     round_: int = 0,
     fanout: bool = True,
+    preponed: bool = True,
 ) -> dict[str, Review]:
     """`{req_uid: Review}` over the oracles given. One call each."""
     norm = normalized or {}
@@ -745,7 +753,8 @@ def review(
         return review_one(
             oracle, requirements[oracle.req_uid], port=port,
             normalized=norm.get(oracle.req_uid), spec=spec,
-            contract=contract, siblings=sibs, round_=round_)
+            contract=contract, siblings=sibs, round_=round_,
+            preponed=preponed)
 
     done = run_fanout(wanted, one) if fanout else [one(o) for o in wanted]
     return {o.req_uid: r for o, r in zip(wanted, done)}

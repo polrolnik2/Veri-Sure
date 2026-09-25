@@ -62,6 +62,41 @@ class RefModel:
         """Combinational: inputs -> outputs, no state."""
         raise NotImplementedError
 
+    # -- the sampled-edge form: what an assertion sees, then the edge ------
+    #
+    # **A ROW IS ONE CLOCK EDGE AS AN ASSERTION SAMPLES IT.** The inputs
+    # present at the edge, and every output and probe as it stands at that
+    # edge BEFORE the edge takes effect -- the value SVA reads in the preponed
+    # region. A registered output or a state therefore changes in the row
+    # AFTER the edge that updates it; a combinational output answers the
+    # inputs of its own row.
+    #
+    # WHY IT IS TWO METHODS. `step` used to be one call that advanced and
+    # returned "the outputs", and nothing said which side of the edge those
+    # were. Seven models written from one prompt answered it three ways --
+    # outputs from the pre-edge state and probes from the post-edge one; both
+    # post-edge; and one OR-ing a before and an after value of each ack "so
+    # the ack is visible" -- while the simulator sampled a fourth: the
+    # post-edge state beside the inputs that caused it, where a
+    # combinational ack that coincides with leaving a state is never
+    # recorded at all. Measured on or1200_dc_fsm, that pairing is the
+    # largest single cause of checks convicting the known-good design. Split,
+    # the question cannot be answered two ways: `outputs` cannot see the
+    # edge it precedes.
+
+    def outputs(self, inputs: dict) -> dict:
+        """Everything a row shows at this edge, before it takes effect.
+
+        Registered outputs as they stand; combinational outputs computed from
+        that state and `inputs`. Sets every probe attribute the same way. Must
+        not change any state -- `advance` does that.
+        """
+        raise NotImplementedError
+
+    def advance(self, inputs: dict) -> None:
+        """Take the edge: update state from the current state and `inputs`."""
+        raise NotImplementedError
+
     def step(self, inputs: dict) -> dict:
         """Sequential: advance ONE clock edge and return the outputs.
 
@@ -77,7 +112,21 @@ class RefModel:
 
         Default delegates to `evaluate` so a combinational model can be driven
         through either entry point without the caller special-casing it.
+
+        A model written in the sampled-edge form (`outputs` + `advance`) is
+        driven here, so every caller of `step` -- the simulator runtime, the
+        replay, the generation gate -- gets the same row without knowing which
+        form the model took. The probes are captured between the two calls,
+        because an attribute read after `step` returns shows the state AFTER
+        the edge, which is the next row's.
         """
+        if samples_before_edge(self):
+            out = self.outputs(inputs)
+            self._sampled_probes = {
+                str(n): getattr(self, str(n), None)
+                for n in (getattr(self, "PROBE_PORTS", None) or ())}
+            self.advance(inputs)
+            return out
         return self.evaluate(inputs)
 
     # -- helpers available to generated fragments -------------------------
@@ -98,6 +147,19 @@ class RefModel:
         value = int(value) & ((1 << int(width)) - 1)
         sign = 1 << (int(width) - 1)
         return (value ^ sign) - sign
+
+
+def samples_before_edge(ref: object) -> bool:
+    """Is `ref` written in the sampled-edge form (`outputs` + `advance`)?
+
+    Decided by what the class implements, the way the runtime already decides
+    `step` against `evaluate`, so an artifact written before the form existed
+    keeps the convention it was written and checked under.
+    """
+    cls = type(ref)
+    return (getattr(cls, "outputs", RefModel.outputs) is not RefModel.outputs
+            and getattr(cls, "advance", RefModel.advance) is not RefModel.advance
+            and getattr(cls, "step", RefModel.step) is RefModel.step)
 
 
 def probe_names(contract: dict) -> list[str]:
@@ -148,6 +210,16 @@ def probe_values(ref: object, names: list[str] | tuple[str, ...]) -> dict:
     a separate one: it declares none of them, so none of them is available.
     """
     declared = set(getattr(ref, "PROBE_PORTS", None) or ())
+    #: THE VALUE AT THE EDGE, for a model in the sampled-edge form: `step`
+    #: captured it between `outputs` and `advance`. The attribute itself
+    #: already shows the state after the edge.
+    sampled = getattr(ref, "_sampled_probes", None)
+    sampled = sampled if isinstance(sampled, dict) else None
+    #: **A WIDE PROBE IS A VALUE.** This collapsed every probe to 0/1, so a
+    #: 3-bit filter history read 1 in every replay row while the simulator
+    #: recorded 0..7 for the same quantity -- two recordings of one design
+    #: disagreeing on every check that reads it.
+    widths = getattr(ref, "PROBE_WIDTHS", None) or {}
     out: dict = {}
     for name in names or ():
         if str(name) not in declared:
@@ -155,6 +227,11 @@ def probe_values(ref: object, names: list[str] | tuple[str, ...]) -> dict:
             #: an abstention, so the check is not judged against a fiction.
             out[str(name)] = None
             continue
-        value = getattr(ref, name, None)
-        out[str(name)] = 1 if value else 0
+        value = (sampled.get(str(name)) if sampled is not None
+                 else getattr(ref, name, None))
+        width = int(widths.get(str(name), 1) or 1) if isinstance(widths, dict) else 1
+        if width > 1 and isinstance(value, (int, bool)):
+            out[str(name)] = int(value) & ((1 << width) - 1)
+        else:
+            out[str(name)] = 1 if value else 0
     return out

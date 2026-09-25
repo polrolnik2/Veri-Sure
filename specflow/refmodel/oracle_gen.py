@@ -864,7 +864,68 @@ Reply with ONE JSON object and nothing else:
 """
 
 
-def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
+#: **HOW A ROW READS, STATED.** No prompt here said which side of the clock
+#: edge a row's outputs are on, and the answer the checks assumed was the one
+#: an assertion uses: a state beside the inputs that arrive in it. Measured on
+#: or1200_dc_fsm's golden replay, the largest class of checks convicting the
+#: known-good design read exactly that way against rows recorded the other
+#: way -- `idle=1` and `cs=1` in one row taken as "a request presented in
+#: IDLE" when the row's state was the one those inputs had just produced.
+#: Rows are now RECORDED the way assertions read them (see
+#: `RefModel.outputs`), and this says so; the post-edge text stays for an
+#: artifact whose witness was written as one `step`.
+ROWS_PREPONED = """\
+HOW A ROW READS -- the convention every trace here follows, the one a
+SystemVerilog assertion uses. A row is ONE clock edge AS IT IS SAMPLED:
+`inputs` are the values present at that edge, and every value in `outputs` is
+what the design shows at that edge, BEFORE the edge takes effect. Everything in
+one row is simultaneous:
+
+  * a state, counter or registered value in a row is the value the design held
+    when that row's inputs arrived;
+  * a combinational output in a row answers that row's inputs in that state --
+    an acknowledge asserted "while in S when X" is in the row that shows S and X;
+  * what the edge DOES -- a state transition, a register load, a counter step,
+    a registered output changing -- shows in the NEXT row.
+
+So "in state S, when X arrives, the design moves to T" is a row showing S with
+X, followed by a row showing T. A check that pairs a row's state with the
+PREVIOUS row's inputs, or waits for a transition to appear in the same row as
+its cause, is reading a different convention from the one recorded."""
+
+ROWS_POST_EDGE = """\
+HOW A ROW READS -- row['inputs'] are the values presented AT one rising clock
+edge; every value in row['outputs'] is the design's value AFTER that same
+edge. A registered output or state in a row already shows the
+transition that edge made, using that row's inputs. So "the design is in S when
+X arrives" is the PREVIOUS row showing S with THIS row's inputs showing X, and
+the response is in this row's outputs or later."""
+
+
+def row_semantics(preponed: bool = True) -> str:
+    """The row convention, for every prompt that reads or writes a check."""
+    return ROWS_PREPONED if preponed else ROWS_POST_EDGE
+
+
+def samples_before_edge_source(source: str) -> bool:
+    """Is this model SOURCE in the sampled-edge form? `True` when empty: a run
+    with no witness yet is a run whose witness will be written in it."""
+    if not (source or "").strip():
+        return True
+    import ast
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return True
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            names.add(node.name)
+    return {"outputs", "advance"} <= names and "step" not in names
+
+
+def shared_prefix(contract_json: str, contract: dict, spec: str = "",
+                  *, preponed: bool = True) -> str:
     """Byte-identical across every requirement of one node.
 
     It contains the SYSTEM prompt, the contract, the port lists and the SPEC --
@@ -1016,6 +1077,7 @@ def shared_prefix(contract_json: str, contract: dict, spec: str = "") -> str:
               "blindness unchanged to four decimal places.")
     blocks = [
         ("system", SYSTEM),
+        ("rows", row_semantics(preponed)),
         ("contract_json", contract_json),
         ("declared_ports", declared),
     ]
@@ -1337,6 +1399,8 @@ def build_prompt(
     #: `str` here would undo the signature-level refusal of the design under
     #: test. See `CellBrief`.
     gap: "CellBrief | None" = None,
+    #: Which side of the edge the rows are sampled on -- see `row_semantics`.
+    preponed: bool = True,
 ) -> str:
     """Compose the prompt. No parameter can carry the DESIGN UNDER TEST.
 
@@ -1384,7 +1448,7 @@ def build_prompt(
     if gap is not None:
         parts.append(gap.text)
     return compose(
-        shared_prefix(contract_json, contract, spec),
+        shared_prefix(contract_json, contract, spec, preponed=preponed),
         "\n\n".join(parts),
         issues=issues,
         previous=previous,
@@ -1556,6 +1620,8 @@ def run_oracle_gen(
     if only is not None:
         wanted = [r for r in wanted if str(r.get("uid") or "") in only]
     seeds = feedback or {}
+    #: The witness's form says how its rows -- and the suite's -- are sampled.
+    preponed = samples_before_edge_source(conforming_source)
 
     def one(req: dict) -> StageResult[OracleOutput]:
         uid = str(req.get("uid") or "")
@@ -1579,6 +1645,7 @@ def run_oracle_gen(
                 spec=spec, siblings=pool,
                 issues=issues or seeds.get(uid),
                 previous=previous or (standing or {}).get(uid),
+                preponed=preponed,
             ),
             parse=parse_response,
             gate=lambda out: gate_one(
@@ -1645,6 +1712,8 @@ def run_cell_gen(
     included, because deciding what a gate-failing check IS belongs to the
     stage that can record it.
     """
+    preponed = samples_before_edge_source(conforming_source)
+
     def one(t: dict) -> StageResult[OracleOutput]:
         req = t["requirement"]
         uid = str(req.get("uid") or "")
@@ -1663,7 +1732,7 @@ def run_cell_gen(
                 normalized=(normalized or {}).get(uid),
                 spec=spec, siblings=siblings or {},
                 issues=issues, previous=previous,
-                gap=t["brief"],
+                gap=t["brief"], preponed=preponed,
             ),
             parse=parse_response,
             gate=lambda out: gate_one(

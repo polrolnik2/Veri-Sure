@@ -14,14 +14,16 @@ the specification hold on a design that is known to be correct? A check the
 GOLDEN RTL fails is over-strict, and that is a defect in the check, discovered
 without a model in the loop and without a single model call.
 
-SAMPLING AGREES ON BOTH SIDES, WHICH IS WHAT MAKES THIS SOUND. `oracles.replay`
-records outputs after `model.step()`; `Env` samples after `RisingEdge` plus
-`Timer(1, "step")` (`tb/runtime.py:591`), one simulator time step, deliberately,
-because a read in the same delta as the edge returns the previous cycle's value.
-Both are post-edge, so a check does not silently mean something different
-depending on which side it is decided against. (SVA samples PREPONED, i.e.
-before the edge -- see `docs/sva-divergence.md`, D10. That difference matters
-only if these checks are ever emitted as real SVA.)
+SAMPLING AGREES ON BOTH SIDES, WHICH IS WHAT MAKES THIS SOUND, and the model's
+form decides which side of the edge both read on. A model written as
+`outputs` + `advance` (`RefModel.outputs`) is sampled the way SVA samples,
+PREPONED: `oracles.replay` records `outputs()` before `advance()`, and `Env`
+reads the DUT after its inputs settle and before the `RisingEdge`
+(`Env._edge`). A model written as one `step` keeps the older post-edge
+recording on both sides: after `model.step()`, and after `RisingEdge` plus
+`Timer(1, "step")`. Every trace says which in its `sampling` field, so a check
+does not silently mean something different depending on which side it is
+decided against. See `docs/sva-divergence.md`, D10.
 """
 
 from __future__ import annotations

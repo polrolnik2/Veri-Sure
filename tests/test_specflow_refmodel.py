@@ -93,6 +93,14 @@ def test_multicycle_contract_chooses_step():
     assert choose_base(c) == "step"
 
 
+def test_a_SINGLE_CYCLE_registered_contract_chooses_step():
+    """Read before its edge, a register shows f(the PREVIOUS row's inputs),
+    which no stateless function of this row can give."""
+    c = dict(CONTRACT_OBJ, clocking={"is_sequential": True},
+             timing={"sum": {"latency_cycles": 1}})
+    assert choose_base(c) == "step"
+
+
 def test_handshake_contract_chooses_step():
     c = dict(
         CONTRACT_OBJ,
@@ -356,14 +364,17 @@ def test_a_correct_sequential_model_is_not_called_non_deterministic(tmp_path):
     each re-asking a strong model to fix something that was not wrong.
     """
     stateful = (
-        "def step(self, i):\n"
+        "def outputs(self, i):\n"
         "    o = {p: None for p in self.OUTPUT_PORTS}\n"
-        "    self._n = getattr(self, '_n', 0) + 1\n"
-        "    o['sum'] = self._n & 1\n"        # depends on accumulated state
+        "    o['sum'] = getattr(self, '_n', 0) & 1\n"   # depends on accumulated state
         "    o['cout'] = (i['a'] & i['b']) & 1\n"
         "    return o\n"
+        "\n"
+        "def advance(self, i):\n"
+        "    self._n = getattr(self, '_n', 0) + 1\n"
     )
-    res, _ = run(out(stateful, covers={"REQ-0000": ["step"]}, base="step"),
+    res, _ = run(out(stateful, covers={"REQ-0000": ["outputs", "advance"]},
+                     base="step"),
                  tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
     assert res.ok, [i.message for i in res.issues]
 
@@ -382,14 +393,17 @@ def test_a_genuinely_non_deterministic_model_still_blocks(tmp_path):
     # parity, so both runs agree and the test passes for the wrong reason. A
     # threshold on the running count cannot alias that way.
     leaky = (
-        "def step(self, i):\n"
+        "def outputs(self, i):\n"
         "    o = {p: None for p in self.OUTPUT_PORTS}\n"
-        "    type(self)._calls = getattr(type(self), '_calls', 0) + 1\n"
-        "    o['sum'] = 1 if type(self)._calls > 8 else 0\n"
+        "    o['sum'] = 1 if getattr(type(self), '_calls', 0) > 8 else 0\n"
         "    o['cout'] = 0\n"
         "    return o\n"
+        "\n"
+        "def advance(self, i):\n"
+        "    type(self)._calls = getattr(type(self), '_calls', 0) + 1\n"
     )
-    res, _ = run(out(leaky, covers={"REQ-0000": ["step"]}, base="step"),
+    res, _ = run(out(leaky, covers={"REQ-0000": ["outputs", "advance"]},
+                     base="step"),
                  tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
     assert not res.ok
     assert any("not deterministic" in i.message for i in res.issues)
@@ -446,3 +460,44 @@ def test_domain_notes_reach_the_generator_and_the_witness(tmp_path):
                    domain_notes="OR32_RFE opcode is 6'b001001 in if_insn[31:26].")
     assert "domain_notes" in noted_port.prompts[0]
     assert "OR32_RFE opcode is 6'b001001" in noted_port.prompts[0]
+
+
+# ------------------------------------------------- the sampled-edge form (G4)
+
+
+def test_a_CLOCKED_model_written_as_one_step_is_rejected_at_generation(tmp_path):
+    """One `step` decides for itself which side of the edge its outputs are on,
+    and seven models from one prompt decided three ways. Generation requires
+    the form that cannot."""
+    legacy = (
+        "def step(self, i):\n"
+        "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+        "    o['sum'] = 0\n"
+        "    o['cout'] = 0\n"
+        "    return o\n"
+    )
+    res, _ = run(out(legacy, covers={"REQ-0000": ["step"]}, base="step"),
+                 tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
+    assert not res.ok
+    assert any(i.path == "refmodel.form" for i in res.issues)
+
+
+def test_an_OUTPUTS_that_advances_the_state_is_rejected(tmp_path):
+    """`outputs` reads the edge; a model advancing inside it is the post-edge
+    reading again under the other method's name."""
+    sneaky = (
+        "def outputs(self, i):\n"
+        "    self._n = getattr(self, '_n', 0) + 1\n"
+        "    o = {p: None for p in self.OUTPUT_PORTS}\n"
+        "    o['sum'] = self._n & 1\n"
+        "    o['cout'] = 0\n"
+        "    return o\n"
+        "\n"
+        "def advance(self, i):\n"
+        "    pass\n"
+    )
+    res, _ = run(out(sneaky, covers={"REQ-0000": ["outputs", "advance"]},
+                     base="step"),
+                 tmp_path, contract=SEQ_CONTRACT, reqs=SEQ_REQS)
+    assert not res.ok
+    assert any("outputs() changed" in i.message for i in res.issues)

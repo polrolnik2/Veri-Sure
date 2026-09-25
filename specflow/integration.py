@@ -371,7 +371,8 @@ def _transport_failure(exc: BaseException) -> bool:
 
 
 def _ship_cover(run_dir: Path, pool: list, population: list[str],
-                contract: dict, stimulus_by_tp: dict) -> list | None:
+                contract: dict, stimulus_by_tp: dict, *,
+                exclude_refuted: bool = False) -> list | None:
     """Cut the admitted pool to its cover and write `specflow/shipped.json`.
 
     Keys match `scorecard.score`'s -- the first body of a requirement keeps the
@@ -396,7 +397,8 @@ def _ship_cover(run_dir: Path, pool: list, population: list[str],
         key = uid if n == 0 else f"{uid}#{n}"
         held[key], req_of[key], body_of[key] = o, uid, o
     got = _cover.select(held, req_of, population, contract, stimulus_by_tp,
-                        base=choose_base(contract))
+                        base=choose_base(contract),
+                        exclude_refuted=exclude_refuted)
     if got is None:
         logger.warning("cover: no population to cover against -- shipping "
                        "the whole pool (%d bodies)", len(held))
@@ -408,9 +410,12 @@ def _ship_cover(run_dir: Path, pool: list, population: list[str],
         logger.warning("cover: separates %d cells where the pool separates %d",
                        got.separated_by_cover, got.separated_by_pool)
     (Path(run_dir) / "specflow" / "shipped.json").write_text(json.dumps({
-        "rule": "greedy set cover over population disagreement cells, "
-                "then one body per requirement the cover emptied",
+        "rule": ("no body the whole population refutes; then " if exclude_refuted
+                 else "")
+                + "greedy set cover over population disagreement cells, "
+                  "then one body per requirement the cover emptied",
         "pool": len(held), "shipped": len(shipped),
+        "refuted_excluded": list(got.refuted),
         "greedy": got.greedy, "floored": got.floored,
         "cells": got.cells, "separated_by_pool": got.separated_by_pool,
         "separated_by_cover": got.separated_by_cover,
@@ -553,6 +558,13 @@ def build_artifacts(
     #: audit, because a subset of objectors cannot convict more. Needs no model
     #: call, so a finished run gets it by re-entering with `reuse`.
     ship_cover: bool = False,
+    #: **NO BODY THE WHOLE POPULATION REFUTES SHIPS.** With `ship_cover`, the
+    #: cover is cut from the pool minus every body that convicts each
+    #: spec-derived design deciding it -- see `cover.select`. The stage still
+    #: only ADVISES a repair of those; this is where they stop. On by default:
+    #: measured against the hand-bound golden replay it is the largest single
+    #: fall in audit on this branch, and it reads no reference.
+    exclude_refuted: bool = True,
     #: Stop after stimulus, before the oracle stage: every artifact [O] reads
     #: (contract, requirements, normalized forms, testplan, coverage, stimulus)
     #: is on disk, and a later `--reuse` run starts at [O]. For holding runs at
@@ -1444,7 +1456,8 @@ def build_artifacts(
         _shipped_path.unlink(missing_ok=True)
         if ship_cover and admit_pool and oracle_set and _scored:
             _scored = _ship_cover(run_dir, _scored, _population, contract,
-                                  stim_by_tp or {}) or _scored
+                                  stim_by_tp or {},
+                                  exclude_refuted=exclude_refuted) or _scored
         card = _scorecard.score(
             oracles=[
                 {"req_uid": o.req_uid, "tp_uids": list(o.tp_uids),

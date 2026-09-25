@@ -90,8 +90,11 @@ def test_there_is_no_parameter_a_design_could_arrive_through():
     import inspect
 
     taken = set(inspect.signature(C.build_prompt).parameters)
+    #: `preponed` is a bool naming the row convention -- nothing a design's
+    #: behaviour could travel in.
     assert taken == {"requirement", "oracle", "normalized", "spec", "contract",
-                     "siblings"}
+                     "siblings", "preponed"}
+    assert C.build_prompt.__annotations__.get("preponed") in (bool, "bool")
     assert not (taken & {"model", "witness", "trace", "replay", "verdict",
                          "design", "rows"})
 

@@ -54,6 +54,10 @@ CASES = {
     "unreset_reg": "a register the design never resets -- the shape of golden "
                    "i2c's `dout`, and the one place a previous testpoint's "
                    "state can survive into the next",
+    "reg1_sampled": "reg1 with its model in the sampled-edge form: the row "
+                    "is read before the edge, so q shows the PREVIOUS row's d",
+    "mealy_ack": "a combinational acknowledge on the edge that leaves a state "
+                 "-- invisible to a post-edge recording -- plus a wide probe",
 }
 
 
@@ -75,6 +79,22 @@ STIMULUS = {
         {"inputs": {"ena": 1, "prescale": 6, "go": 1},
          "until": {"port": "done", "value": 1}, "timeout": 200},
         {"inputs": {"ena": 1, "prescale": 6, "go": 0}, "hold": 4},
+    ],
+    "reg1_sampled": [
+        {"inputs": {"d": 3}, "hold": 2},
+        {"inputs": {"d": 9}, "hold": 1},
+        {"inputs": {"d": 0}, "hold": 1},
+        {"inputs": {"d": 15}, "hold": 3},
+    ],
+    "mealy_ack": [
+        {"inputs": {"go": 0, "done_i": 0}, "hold": 2},
+        {"inputs": {"go": 1, "done_i": 0}, "hold": 1},
+        {"inputs": {"go": 0, "done_i": 0}, "hold": 2},
+        {"inputs": {"go": 0, "done_i": 1},
+         "until": {"port": "ack", "value": 1}, "timeout": 10},
+        {"inputs": {"go": 1, "done_i": 0}, "hold": 1},
+        {"inputs": {"go": 0, "done_i": 1}, "hold": 1},
+        {"inputs": {"go": 0, "done_i": 0}, "hold": 2},
     ],
 }
 
@@ -835,3 +855,91 @@ def test_a_testpoint_RUNS_ON_past_its_last_stimulus_step(tmp_path):
     assert any(e["dut"]["q"] == 1 for e in edges), (
         "d=1 was driven on the last step and q never followed; the effect is "
         "still being cut off")
+
+
+# ------------------------------------------------- the sampled-edge convention
+
+
+def _trace(name: str, tmp_path: Path) -> dict:
+    src, contract, suite, _ = _build(name, tmp_path)
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"], suite_dir=suite,
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    return json.loads((suite / "results" / "TP-0000.trace.json")
+                      .read_text(encoding="utf-8"))
+
+
+@needs_verilator
+def test_a_COMBINATIONAL_ack_is_recorded_beside_the_inputs_it_answers(tmp_path):
+    """Read before the edge, the ack that coincides with leaving BUSY is in the
+    row showing BUSY and done_i; the transition shows in the NEXT row.
+
+    Recorded after the edge -- the only convention before this -- that row
+    showed IDLE with done_i and ack=0, and no row ever showed the ack. On
+    or1200_dc_fsm the stimulus then held biudata_valid past completion to make
+    the ack appear, and checks read those stale rows as protocol events.
+    """
+    t = _trace("mealy_ack", tmp_path)
+    assert t["sampling"] == "preponed"
+    edges = t["edges"]
+    acks = [k for k, e in enumerate(edges) if e["dut"]["ack"] == 1]
+    assert len(acks) == 2, [(e["inputs"], e["dut"]) for e in edges]
+    for k in acks:
+        row, nxt = edges[k], edges[k + 1]
+        assert row["inputs"]["done_i"] == 1
+        assert row["dut"]["busy"] == 1 and row["dut"]["in_busy"] == 1
+        assert nxt["dut"]["busy"] == 0, "the edge's transition belongs to the NEXT row"
+        assert nxt["dut"]["count"] == row["dut"]["count"] + 1
+        assert nxt["dut"]["done_count"] == nxt["dut"]["count"], "a wide probe is a value"
+    for e in edges:
+        assert e["dut"] == e["model"], f"edge {e['edge']}: {e['dut']} vs {e['model']}"
+
+
+@needs_verilator
+def test_an_UNTIL_step_ends_with_the_edge_that_showed_the_value(tmp_path):
+    """The design is already BUSY when done_i arrives, so the ack shows on the
+    step's first edge and the step is that one edge -- done_i is not held into
+    a fresh state that has nothing outstanding."""
+    edges = _trace("mealy_ack", tmp_path)["edges"]
+    until_rows = [e for e in edges if e["step"] == 3]
+    assert len(until_rows) == 1, [(e["inputs"], e["dut"]) for e in until_rows]
+    assert until_rows[0]["dut"]["ack"] == 1
+
+
+@needs_verilator
+def test_a_REGISTERED_output_shows_the_previous_row_s_input(tmp_path):
+    t = _trace("reg1_sampled", tmp_path)
+    assert t["sampling"] == "preponed"
+    rows = [e for e in t["edges"] if e["step"] >= 0]
+    assert rows
+    for prev, row in zip(rows, rows[1:]):
+        assert row["dut"]["q"] == prev["inputs"]["d"], (prev, row)
+        assert row["dut"] == row["model"]
+
+
+@needs_verilator
+@pytest.mark.parametrize("name", ["mealy_ack", "reg1_sampled"])
+def test_the_REPLAY_records_the_rows_the_simulator_records(name, tmp_path):
+    """Screening decides a check on `oracles.replay`; scoring decides it on the
+    simulator. The same model, the same stimulus: the same rows, row for row,
+    probes included -- or a check passes its gate meaning one thing and is
+    judged meaning another."""
+    from specflow.refmodel.oracles import replay
+
+    t = _trace(name, tmp_path)
+    src = FIXTURES / name
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    steps = STIMULUS[name]
+    rep = replay((src / "ref_model.py").read_text(encoding="utf-8"), contract,
+                 steps, base="step")
+    assert not rep.error, rep.error
+    sim = [e for e in t["edges"] if e["step"] >= 0]
+    assert len(sim) == len(rep.rows), (len(sim), len(rep.rows))
+    functional = [p["name"] for p in contract["io"]
+                  if p.get("dir") == "input" and p["name"] not in ("clk", "rst_n")]
+    for a, b in zip(sim, rep.rows):
+        assert a["dut"] == b["outputs"], (a["edge"], a["dut"], b["outputs"])
+        assert {k: a["inputs"][k] for k in functional} == \
+               {k: b["inputs"][k] for k in functional}

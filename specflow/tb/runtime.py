@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from ..ports import idle_value, inactive_value, is_clock, is_reset
-from specflow.refmodel.base import probe_values
+from specflow.refmodel.base import probe_values, samples_before_edge
 
 #: Internal signals to record per edge, from `SPECFLOW_TRACE_INTERNALS`.
 #:
@@ -525,6 +525,13 @@ class Env:
         #: them. The comparison runs at `finish()` over the whole trace.
         self._registered: dict[str, list[str]] = {}
         self._finished = False
+        #: **WHICH SIDE OF THE EDGE A ROW IS SAMPLED ON**, decided by the
+        #: model's form and never by a switch -- see `RefModel.outputs`. A
+        #: model in the sampled-edge form is recorded the way an assertion
+        #: samples: inputs settled, every output and probe read, THEN the
+        #: edge. One written as a single `step` keeps the post-edge recording
+        #: it was written and checked against.
+        self.preponed: bool = samples_before_edge(model)
 
     def _clk(self):
         """The clock handle, found by name classification rather than literally.
@@ -682,18 +689,10 @@ class Env:
         # `None` -- which every transactional comparison then reads as a
         # mismatch on a correct design.
         for _ in range(cycles):
-            await self.tick(1)
-            self._expected = self._advance_model({})
-            await self._settled()
-            self._apply_bus()
-            self._record()
+            await self._edge({})
         for name, _ in handles:
             self._drive(name, inactive_value(name))
-        await self.tick(1)
-        self._expected = self._advance_model({})
-        await self._settled()
-        self._apply_bus()
-        self._record()
+        await self._edge({})
 
     # -- driving -----------------------------------------------------------
 
@@ -818,12 +817,7 @@ class Env:
             return
 
         async def one_edge() -> None:
-            await self.tick(1)
-            if stim is not None:
-                self._expected = self._advance_model(stim)
-            await self._settled()
-            self._apply_bus()
-            self._record()
+            await self._edge(stim)
 
         if until:
             # Run until the design says it is done. `timeout` bounds it so a
@@ -835,7 +829,15 @@ class Env:
             handle = getattr(self.dut, port, None) if port else None
             for _ in range(budget):
                 await one_edge()
-                if handle is not None and _plain(handle.value) == want:
+                if self.preponed:
+                    #: THE VALUE THE EDGE SAW. The step ends with the edge at
+                    #: which the design showed it -- a synchronous driver that
+                    #: sees an ack at an edge changes its inputs after that
+                    #: edge -- so a combinational ack is answered on the edge
+                    #: it is presented, not one input-vector later.
+                    if self._sampled_value(port) == want:
+                        break
+                elif handle is not None and _plain(handle.value) == want:
                     break
             else:
                 self.timeouts.append(
@@ -846,6 +848,46 @@ class Env:
 
         for _ in range(latency_free_hold):
             await one_edge()
+
+    async def _edge(self, stim: dict | None) -> None:
+        """One recorded clock edge, DUT and model together, in the model's
+        sampling convention (`self.preponed`).
+
+        PREPONED: let the inputs land, wire the bus from the enable the design
+        shows NOW, let that settle, then read every output and probe and take
+        the model's row -- all before the edge -- and only then clock. The
+        row is what the edge sees, so a combinational output is recorded
+        beside the inputs it answers and a registered one changes in the row
+        after the edge that loads it.
+
+        POST-EDGE (a model written as one `step`): clock, advance the model,
+        let the edge's updates land, wire, read -- the recording every artifact
+        before the sampled-edge form was checked against.
+        """
+        if self.preponed:
+            await self._settled()
+            self._apply_bus()
+            await self._settled()
+            if stim is not None:
+                self._expected = self._advance_model(stim)
+            self._record()
+            await self.tick(1)
+            return
+        await self.tick(1)
+        if stim is not None:
+            self._expected = self._advance_model(stim)
+        await self._settled()
+        self._apply_bus()
+        self._record()
+
+    def _sampled_value(self, port: str):
+        """`port` as the last recorded row saw it: output, probe or input."""
+        if not self._trace:
+            return None
+        row = self._trace[-1]
+        if port in row[0]:
+            return row[0][port]
+        return (row[3] or {}).get(port)
 
     async def _settled(self) -> None:
         """Let this edge's non-blocking updates land before anything samples.
@@ -981,7 +1023,7 @@ class Env:
         from ..refmodel.base import RefModel
 
         bundle = self._bundle(stim)
-        if type(self.ref).step is not RefModel.step:
+        if type(self.ref).step is not RefModel.step or self.preponed:
             return self.ref.step(bundle)
         return self.ref.evaluate(bundle)
 
@@ -1243,11 +1285,7 @@ class Env:
         if self._clk() is None:
             return
         for _ in range(self.settle_edges):
-            await self.tick(1)
-            self._expected = self._advance_model(self._inputs)
-            await self._settled()
-            self._apply_bus()
-            self._record()
+            await self._edge(self._inputs)
 
     async def finish(self) -> None:
         """Write this testpoint's record, then assert once.
@@ -1325,6 +1363,9 @@ class Env:
                 #: 18-bit one that reads 0 on all 482 testpoints.
                 "widths": dict(sorted(_SAMPLED_WIDTH.items())),
                 "outputs": list(getattr(self.ref, "OUTPUT_PORTS", []) or []),
+                #: Which side of each edge the rows were read on -- see
+                #: `Env.preponed`. A consumer never has to infer it.
+                "sampling": "preponed" if self.preponed else "post-edge",
                 "edges": edges,
             }, indent=2, ensure_ascii=False, default=str) + "\n",
             encoding="utf-8",

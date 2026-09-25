@@ -70,26 +70,48 @@ from a document; it is not a unit of hardware, and shaping the model around
 sentences leaves nowhere to put execution order, reset priority, or the state
 that several requirements share.
 
-You write the whole class body, including the dispatch:
+You write the whole class body, including the dispatch. A CLOCKED design (base
+`step`) is written as TWO methods, and a combinational one (base `evaluate`) as
+one:
 
-    def step(self, i):       # or evaluate(self, i) -- see `base` below
+    def outputs(self, i):    # base `step`: what the design shows AT this edge
         o = {p: None for p in self.OUTPUT_PORTS}
-        ...
+        ...                  # from the CURRENT state and `i`; set every probe
         return o
 
-`i` is a dict of input port values (plain ints); return the output dict. You own
-the order things happen in, which is the point.
+    def advance(self, i):    # base `step`: take the edge
+        ...                  # update state from the current state and `i`
 
-HOW THE TESTBENCH CALLS YOU -- this was not stated before, and a model written
-against the wrong assumption is wrong in a way no gate here used to catch:
+    def evaluate(self, i):   # base `evaluate` only: inputs -> outputs, no state
+        ...
 
-  * ONE `step(i)` call is ONE clock edge. Not one transaction, not one command,
-    not one bus phase. If the design takes 26 clocks to finish a START, your
-    model takes 26 `step` calls to finish it.
+`i` is a dict of input port values (plain ints). You own the order things happen
+in, which is the point. Do NOT define `step` -- the base class calls `outputs`
+then `advance`, once per clock edge.
+
+HOW THE TESTBENCH CALLS YOU -- a model written against the wrong assumption is
+wrong in a way no gate can catch:
+
+  * ONE edge is ONE `outputs(i)` call followed by ONE `advance(i)` call. Not one
+    transaction, not one command, not one bus phase. If the design takes 26
+    clocks to finish a START, your model takes 26 edges to finish it.
   * `i` holds the input values present AT that edge. They do not change during
-    the call and you do not get to see the future.
-  * You keep your own state between calls; nothing is reset between them except
-    by `reset()` or by the reset inputs you are given.
+    the edge and you do not get to see the future.
+  * `outputs(i)` IS WHAT AN ASSERTION SAMPLES AT THE EDGE, BEFORE THE EDGE TAKES
+    EFFECT. A registered output, a counter, an FSM state: its value as it
+    stands now, NOT what this edge will load into it -- the edge's update shows
+    in the NEXT call. A combinational output (one the specification defines as
+    an equation of the present state and inputs, or asserts "while"/"when" a
+    condition holds in a state): computed from the current state and `i`, so a
+    combinational acknowledge that coincides with leaving a state IS visible in
+    the row where the state is left. `outputs` must not change any state --
+    only the probe attributes it sets.
+  * `advance(i)` makes the transition this edge makes, from the same current
+    state and the same `i`. It returns nothing and sets nothing a row shows
+    except through state that the next `outputs` call reads.
+  * You keep your own state between edges; nothing is reset between them except
+    by `reset()` or by the reset inputs you are given. A synchronous reset is a
+    transition like any other: `advance` makes it, the next `outputs` shows it.
   * `evaluate(i)` is the combinational form: no state, no edges, inputs to
     outputs.
 
@@ -135,9 +157,9 @@ Reply with ONE JSON object and nothing else:
 
 {
   "reasoning": "...",
-  "base": "evaluate",
-  "source": "def evaluate(self, i):\\n    o = {p: None for p in self.OUTPUT_PORTS}\\n    o['sum'] = (i['a'] ^ i['b']) & 1\\n    o['cout'] = (i['a'] & i['b']) & 1\\n    return o\\n",
-  "covers": {"REQ-0000": ["evaluate"], "REQ-0001": ["evaluate"]},
+  "base": "step",
+  "source": "def reset(self):\\n    self.q = 0\\n\\ndef outputs(self, i):\\n    o = {p: None for p in self.OUTPUT_PORTS}\\n    o['q'] = self.q\\n    o['match'] = int(self.q == i['d'])\\n    return o\\n\\ndef advance(self, i):\\n    self.q = 0 if i['rst'] else self.mask(i['d'], 4)\\n",
+  "covers": {"REQ-0000": ["advance"], "REQ-0001": ["outputs"]},
   "underdetermined": []
 }
 

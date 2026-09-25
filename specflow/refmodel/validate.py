@@ -276,6 +276,15 @@ def _behavioural_checks(
                 )
                 break
 
+    # -- check 3e: in the sampled-edge form, `outputs` READS the edge and
+    # changes nothing. A model that advanced inside `outputs` would be the
+    # post-edge reading again, wearing the other method's name.
+    from .base import samples_before_edge
+    if samples_before_edge(model) and vectors:
+        why = _outputs_mutates(model_cls, vectors)
+        if why:
+            issues.append(Issue("error", "ref_model.py.outputs", why))
+
     # -- check 3c: a COMBINATIONAL model must carry no state at all.
     #
     # The sequence check above cannot see this: a model that counts its own calls
@@ -402,6 +411,54 @@ def _behavioural_checks(
     return issues
 
 
+def _outputs_mutates(model_cls, vectors: list[dict]) -> str:
+    """Why `outputs` changes state on some edge of `vectors`, or `""`.
+
+    Probe attributes are exempt -- `outputs` is where they are set.
+    """
+    import copy
+    m = model_cls()
+    try:
+        m.reset()   # as the testbench does before the first edge
+    except Exception:  # noqa: BLE001 -- behavioural checks above report a raising reset
+        pass
+    exempt = set(getattr(model_cls, "PROBE_PORTS", None) or ()) | {"_sampled_probes"}
+
+    def state() -> dict:
+        try:
+            return copy.deepcopy({k: v for k, v in vars(m).items() if k not in exempt})
+        except Exception:  # noqa: BLE001 -- an uncopyable attribute is not this check's business
+            return {}
+
+    for k, inputs in enumerate(vectors):
+        before = state()
+        try:
+            m.outputs(dict(inputs))
+        except Exception as exc:  # noqa: BLE001
+            return f"outputs() raised on inputs {inputs!r}: {exc!r}"
+        after = state()
+        if before != after:
+            moved = sorted(n for n in set(before) | set(after)
+                           if before.get(n, object()) != after.get(n, object()))
+            return (f"outputs() changed {moved} on edge {k} (inputs {inputs!r}); it "
+                    f"must only READ the state -- the edge's update belongs in "
+                    f"advance(), and shows in the next outputs() call")
+        try:
+            m.advance(dict(inputs))
+        except Exception as exc:  # noqa: BLE001
+            return f"advance() raised on inputs {inputs!r}: {exc!r}"
+    return ""
+
+
+def _defined_methods(source: str) -> set[str]:
+    """Top-level function names in a generated class body."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    return {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+
 def validate(
     *,
     out,
@@ -427,6 +484,23 @@ def validate(
             Issue("error", "refmodel.base",
                   f"answered {out.base!r} but the contract requires {expected_base!r}")
         )
+
+    # check 9: a clocked model is written in the sampled-edge form. A `step`
+    # of its own decides for itself which side of the edge its outputs are
+    # on, and seven models from one prompt decided three ways -- see
+    # `RefModel.outputs`. Generation only: `validate_source` re-certifies
+    # artifacts written before the form existed, under the convention they
+    # were written in.
+    if expected_base == "step":
+        defined = _defined_methods(out.source)
+        if "step" in defined or not {"outputs", "advance"} <= defined:
+            issues.append(
+                Issue("error", "refmodel.form",
+                      "a clocked model defines `outputs(self, i)` -- every "
+                      "output and probe AT the edge, from the current state "
+                      "and i, changing no state -- and `advance(self, i)` -- "
+                      "the transition the edge makes -- and does NOT define "
+                      f"`step`; this source defines {sorted(defined & {'step', 'outputs', 'advance'}) or 'none of them'}"))
 
     if any(i.severity == "error" for i in issues):
         # Executing a model that failed a static check risks running code that
