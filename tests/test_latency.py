@@ -146,19 +146,52 @@ def test_admitted_pool_drops_a_refused_corpus_body():
     assert all("not cleared at STOP" not in o.source for o in refused)
 
 
-def test_the_stage_gates_rescues_and_swaps_through_the_same_refuser():
+def test_the_stage_asks_labels_and_prefers_but_never_discards_on_latency():
     """SOURCE-LEVEL PINS -- a call site inside `run_oracle_stage` has been
-    deleted on this branch without failing a behavioural test more than once."""
+    deleted on this branch without failing a behavioural test more than once.
+
+    ADVISORY: the finding buys a repair round (`quotable`) and a label, and a
+    rescue or swap only PREFERS a body without it. It blocked until the luna6
+    runs measured ~20 points of span for 0-13 points of audit."""
     import inspect
 
     from specflow import integration, oracles_stage as S
     stage = inspect.getsource(S.run_oracle_stage)
     assert "_late = _latency.refuser(" in stage
     fold = stage.index("why = _late(uid, held[uid])")
-    assert "rejected[uid] = quotable[uid] = why" in stage[fold:fold + 200]
+    tail = stage[fold:fold + 300]
+    assert "quotable[uid] = labels[uid] = why" in tail
+    assert "rejected[uid]" not in tail, "the latency finding must not block"
     assert stage.index("for uid, detail in dead_now.items():") < fold
-    assert "refuse=_late)" in stage
-    assert "if _late is not None and _late(uid, body):" in stage
-    assert S._latency.PREFIX in S._RESCUABLE
+    assert "prefer_not=_late)" in stage
+    assert "and not _late(uid, held[uid])" in stage
     build = inspect.getsource(integration.build_artifacts)
-    assert "refuse=_refuse)" in build
+    assert "refuse=_refuse" not in build
+    assert "latency.refuser(" not in build
+
+
+def test_a_rescue_takes_a_latency_fragile_body_only_when_nothing_else_decides(
+        monkeypatch):
+    from types import SimpleNamespace
+
+    from specflow import oracles_stage as S
+
+    def _tables(flat, designs, *a, **k):
+        # every candidate decides on the witness; no population refutation
+        return ({key: {"w": True} for key in flat}, {}, {})
+
+    monkeypatch.setattr(S, "_population_tables", _tables)
+    common = dict(held={}, blocked={"REQ-1"},
+                  reasons_for={"REQ-1": "unreached: never reached"},
+                  witness="w", population=(), contract={}, stimulus_by_tp={},
+                  base="step", transactional=True)
+    def late(uid, o):
+        return "latency: late" if "LATE" in o.source else ""
+
+    both = {"REQ-1": [SimpleNamespace(source="def decide(t): return 1  # OK"),
+                      SimpleNamespace(source="def decide(t): return 1  # LATE")]}
+    got = S._rescue_from_corpus(corpus=both, prefer_not=late, **common)
+    assert "OK" in got["REQ-1"].source, "the body without the finding is preferred"
+    only = {"REQ-1": [SimpleNamespace(source="def decide(t): return 1  # LATE")]}
+    got = S._rescue_from_corpus(corpus=only, prefer_not=late, **common)
+    assert "LATE" in got["REQ-1"].source, "a finding never costs the requirement"

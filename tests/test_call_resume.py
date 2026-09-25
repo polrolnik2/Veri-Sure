@@ -116,3 +116,30 @@ def test_resumable_returns_a_ResumePort_wrapping_the_inner_port(tmp_path):
     port = resumable(inner, tmp_path)
     assert isinstance(port, ResumePort)
     assert port.inner is inner
+
+
+def test_a_VERIFIED_resume_replays_only_the_question_it_was_asked(tmp_path):
+    """Re-running from a stage whose rules changed: the same `(stage, round)`
+    may now quote a different objection, and the old answer must not be handed
+    to a prompt it never answered. An unchanged prompt still replays."""
+    inner = _Counting()
+    port = resumable(inner, tmp_path, verify_prompt=True)
+    _record(tmp_path, "oracle_REQ-0006_fix1", 0, "old answer")
+    (tmp_path / "oracle_REQ-0006_fix1_r0_prompt.txt").write_text(
+        "objection A", encoding="utf-8")
+    _record(tmp_path, "oracle_REQ-0007", 0, "same question")
+    (tmp_path / "oracle_REQ-0007_r0_prompt.txt").write_text(
+        "unchanged", encoding="utf-8")
+
+    assert port.complete(stage="oracle_REQ-0006_fix1", round_=0,
+                         prompt="objection B") == "fresh"
+    assert port.complete(stage="oracle_REQ-0007", round_=0,
+                         prompt="unchanged") == "same question"
+    assert inner.calls == [("oracle_REQ-0006_fix1", 0)]
+
+
+def test_a_verified_resume_with_no_recorded_prompt_calls(tmp_path):
+    inner = _Counting()
+    port = resumable(inner, tmp_path, verify_prompt=True)
+    _record(tmp_path, "oracle_REQ-0008", 0, "orphaned answer")
+    assert port.complete(stage="oracle_REQ-0008", round_=0, prompt="p") == "fresh"

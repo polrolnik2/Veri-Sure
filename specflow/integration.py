@@ -637,7 +637,10 @@ def build_artifacts(
     #: stage whose artifact still passes its gate, which does not imply the
     #: inputs are unchanged, and a stage the gate REJECTS must regenerate with
     #: a real call rather than replay the answer that produced the rejection.
-    resume_calls: bool = False,
+    #: `"verified"` replays a recording only when its prompt is byte-identical
+    #: to the one being sent -- for re-running from a stage whose rules
+    #: changed, where the same `(stage, round)` may be asked something new.
+    resume_calls: bool | str = False,
     divide_s1: bool = True,
     fanout: bool = True,
     judge: bool = True,
@@ -692,7 +695,8 @@ def build_artifacts(
     # So the caller states the precondition ResumePort actually needs -- same
     # run, unchanged inputs -- and nothing infers it.
     if resume_calls:
-        port = resumable(port, run_dir / "agent_io")
+        port = resumable(port, run_dir / "agent_io",
+                         verify_prompt=resume_calls == "verified")
     contract = json.loads(contract_json) if contract_json.strip() else {}
 
     # Set once a stage regenerates: everything downstream must regenerate too,
@@ -1398,23 +1402,12 @@ def build_artifacts(
         #: branch was computed over one body per requirement, and turning this on
         #: silently would change what `blindness` names in all of them rather
         #: than extending it.
-        #: **THE LATENCY GATE AT ADMISSION TOO.** The stage makes an author
-        #: rewrite a check that reads a response on the row of its cause; the
-        #: superseded draft stays in the corpus, and without this the pool would
-        #: re-admit it and the cover could ship it. Same substrate the stage
-        #: used: the witness it wrote to disk.
-        _refuse = None
-        _wpath = run_dir / "specflow" / "witness.py"
-        if admit_pool and oracle_set and _wpath.is_file():
-            from .refmodel import latency as _latency
-            _refuse = _latency.refuser(
-                _wpath.read_text(encoding="utf-8"), contract, stim_by_tp or {},
-                normalized_by_uid or {},
-                {str(r.get("uid") or ""): str(r.get("text") or "")
-                 for r in (reqs or [])},
-                base=choose_base(contract))
-        _scored = (_oracles_stage.admitted_pool(oracle_set, contract, tps or [],
-                                                refuse=_refuse)
+        #: **NO LATENCY FILTER AT ADMISSION.** The stage's latency finding is
+        #: advisory -- a repair round and a label, never a discard (see the
+        #: fold in `run_oracle_stage`) -- so admission does not drop a corpus
+        #: body for it either. Dropping here was the same trade measured there:
+        #: ~20 points of span for 0-13 points of audit.
+        _scored = (_oracles_stage.admitted_pool(oracle_set, contract, tps or [])
                    if (admit_pool and oracle_set) else
                    (oracle_set.trusted if oracle_set else []))
         if admit_pool and oracle_set:

@@ -1,7 +1,7 @@
 """Run the pipeline unattended, and PACK THE RESULT BEFORE ANYTHING CAN EAT IT.
 
     e6_autorun.py <run-dir> --spec <spec.txt> --contract <contract.json>
-                  [--control <ref_model.py>] [--reuse] [--resume]
+                  [--control <ref_model.py>] [--reuse] [--resume | --resume-verified]
                   [--population N] [--no-preflight] [--admit-pool] [--cover]
                   [--transport-retries N]
 
@@ -33,7 +33,10 @@ at all, where a budget failure is irrelevant.
 
 `--reuse` reads each stage's artifact from the run directory and re-runs only
 what is missing or invalidated. `--resume` additionally replays recorded model
-responses. **`--resume` COLLAPSED A POPULATION ONCE**: `ResumePort` keys on
+responses; `--resume-verified` replays one only when the prompt it answered is
+byte-identical to the one being sent, which is what re-running from a stage
+whose rules changed needs (a repair round may quote a different objection
+under the same `(stage, round)`). **`--resume` COLLAPSED A POPULATION ONCE**: `ResumePort` keys on
 `(stage, round_)` and every population member shares `WITNESS_STAGE`, so one
 recorded witness was replayed seven times and `full10`'s seven "designs" were
 one design with seven names -- cells 0, blindness n/a. The fix is in
@@ -236,7 +239,11 @@ def main() -> int:
         #: three resumes running while every other run advanced.
         retries = int(_opt("--transport-retries", 6))
         limited_retries = int(_opt("--rate-limit-retries", 36))
-        reuse, resume = "--reuse" in FLAGS, "--resume" in FLAGS
+        reuse = "--reuse" in FLAGS
+        #: `--resume-verified` replays a recording only when its prompt is
+        #: byte-identical -- for re-running from a stage whose rules changed.
+        resume = ("verified" if "--resume-verified" in FLAGS
+                  else "--resume" in FLAGS)
         attempt, answered = 0, _answered(run_dir)
         while True:
             try:
@@ -254,7 +261,7 @@ def main() -> int:
                 print(f"\ntransport failure ({exc!r:.200}); resuming in {wait}s "
                       f"(attempt {attempt} of {budget} without progress)", flush=True)
                 _time.sleep(wait)
-                reuse = resume = True
+                reuse, resume = True, resume or True
         print(f"\nbuild ok={getattr(result, 'ok', None)} "
               f"stage={getattr(result, 'stage', None)}", flush=True)
         rc = 0 if getattr(result, "ok", False) else 1

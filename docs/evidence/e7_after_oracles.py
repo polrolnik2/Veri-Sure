@@ -5,15 +5,16 @@
 `build_artifacts` ships the cover (`shipped.json`) and scores it only after the
 reference-model stage, the longest one in the pipeline, and the figures do not
 depend on it. This computes the same set with the pipeline's own functions --
-`admitted_pool` with the latency refuser `build_artifacts` passes, then
-`_ship_cover` -- so it is the set the run will ship, not a re-derivation, and
+`admitted_pool` exactly as `build_artifacts` admits (the latency finding is
+advisory, so nothing is dropped for it), then `_ship_cover` -- so it is the
+set the run will ship, not a re-derivation, and
 then scores it against golden exactly as `e7_module.py` does:
 
     1  a corpus directory from the run's specflow/ artifacts, with the run's
        WITNESS standing in as the lock-step model the testbench runtime needs
        to record a trace (it advances beside the DUT and never reaches a
        verdict -- `decide_rtl` reads the DUT side)
-    2  shipped.json, by `admitted_pool(refuse=latency.refuser(...))` and
+    2  shipped.json, by `admitted_pool(...)` and
        `integration._ship_cover`
     3  golden replayed through a suite regenerated from this run's own
        testplan, stimulus and contract (`e6_replay_corpus.py`)
@@ -39,8 +40,6 @@ from run_chipverilog import child_sources, find_task, submodules  # noqa: E402
 
 from specflow.integration import _ship_cover  # noqa: E402
 from specflow.oracles_stage import admitted_pool  # noqa: E402
-from specflow.refmodel import latency  # noqa: E402
-from specflow.refmodel.compose import choose_base  # noqa: E402
 from specflow.refmodel.oracle_gen import RequirementOracle  # noqa: E402
 
 COPY = ("contract.json", "requirements.json", "normalized.json", "testplan.json",
@@ -86,8 +85,6 @@ def main() -> int:
     contract = _load(corpus / "contract.json")
     reqs = _load(corpus / "requirements.json")
     reqs = reqs["requirements"] if isinstance(reqs, dict) else reqs
-    _n = _load(corpus / "normalized.json")
-    normalized = {n["req_uid"]: n for n in (_n["normalized"] if isinstance(_n, dict) else _n)}
     _t = _load(corpus / "testplan.json")
     plan = _t if isinstance(_t, list) else (_t.get("elements") or [])
     _s = _load(corpus / "stimulus.json")
@@ -99,11 +96,9 @@ def main() -> int:
                for x in blob.get("oracles") or []]
     cmap = {u: [_Body(u, m.get("source") or "") for m in ms]
             for u, ms in (blob.get("corpus") or {}).items()}
-    refuse = latency.refuser(
-        witness.read_text(encoding="utf-8"), contract, by_tp, normalized,
-        {str(r.get("uid") or ""): str(r.get("text") or "") for r in reqs},
-        base=choose_base(contract))
-    pool = admitted_pool(_Set(trusted, cmap), contract, plan, refuse=refuse)
+    #: As `build_artifacts` admits: the latency finding is advisory, so no
+    #: corpus body is dropped for it.
+    pool = admitted_pool(_Set(trusted, cmap), contract, plan)
     population = [p.read_text() for p in sorted((corpus / "population").glob("*.py"))]
     #: `_ship_cover` writes `<run_dir>/specflow/shipped.json`; give it that
     #: layout inside the corpus and move the file beside the rest.

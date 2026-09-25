@@ -230,20 +230,32 @@ class ResumePort:
     and a changed prompt needs a fresh `root`. Stated rather than guarded
     because the guard would be a hash comparison that silently re-ran
     everything the day a prompt gained a timestamp.
+
+    **`verify_prompt` IS THAT GUARD, OPT-IN, FOR RE-RUNNING FROM A CHANGED
+    STAGE.** When a rule inside a stage changes, the same `(stage, round_)`
+    can be asked a different question -- a repair round quoting a different
+    objection -- and replaying the old answer would hand the stage a reply to
+    a prompt it never sent. With it set, a recording is replayed only when the
+    prompt it answered is byte-identical to the one being sent; otherwise the
+    call is made. Its failure mode is the safe one: a prompt that differs for
+    an irrelevant reason costs a call, never a wrong answer.
     """
 
     root: Path
     inner: ModelPort
+    verify_prompt: bool = False
 
     def complete(self, *, stage: str, round_: int, prompt: str) -> str:
-        _, response_path = _paths(Path(self.root), stage, round_)
+        prompt_path, response_path = _paths(Path(self.root), stage, round_)
         if response_path.exists():
             recorded = response_path.read_text(encoding="utf-8")
             # An empty recording is a call that STARTED and did not finish --
             # the prompt was written, the process died. Re-running it is
             # correct; returning "" would hand the stage a parse failure and
             # blame the model for a reclaim.
-            if recorded.strip():
+            asked = (prompt_path.read_text(encoding="utf-8")
+                     if self.verify_prompt and prompt_path.exists() else None)
+            if recorded.strip() and (not self.verify_prompt or asked == prompt):
                 logger.debug("%s r%d: resumed from %s", stage, round_,
                              response_path.name)
                 return recorded
@@ -1598,9 +1610,10 @@ def make_port(kind: str, root: Path, stats: object | None = None,
     return kinds[kind](root=Path(root))  # type: ignore[abstract]
 
 
-def resumable(port: ModelPort, root: Path) -> ResumePort:
+def resumable(port: ModelPort, root: Path, *,
+              verify_prompt: bool = False) -> ResumePort:
     """Wrap any port so an interrupted fan-out resumes instead of restarting."""
-    return ResumePort(root=Path(root), inner=port)
+    return ResumePort(root=Path(root), inner=port, verify_prompt=verify_prompt)
 
 
 def record_fixture(root: Path, stage: str, round_: int, meta: dict) -> None:

@@ -1746,7 +1746,7 @@ def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
                         reasons_for: dict, witness: str,
                         population: Sequence[str],
                         contract: dict, stimulus_by_tp: dict, base: str,
-                        transactional: bool, refuse=None) -> dict:
+                        transactional: bool, prefer_not=None) -> dict:
     """The best body a discarded requirement already has, or nothing.
 
     **A DISCARD IS ABOUT A BODY, AND A DISPOSITION IS ABOUT A REQUIREMENT.**
@@ -1802,21 +1802,23 @@ def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
         return {}
     flat: dict[str, RequirementOracle] = {}
     owner: dict[str, str] = {}
+    #: Bodies `prefer_not` names a reason for -- the advisory latency finding.
+    #: Taken only when nothing else of that requirement decides, exactly like a
+    #: body the population refutes: a preference between bodies costs nothing,
+    #: a discard costs the requirement its check.
+    disfavoured: set[str] = set()
     for uid, bodies in candidates.items():
         standing = held.get(uid)
         tps = list(standing.tp_uids) if standing else []
         clause = standing.clause if standing else ""
         for i, body in enumerate(bodies):
-            #: `latency:` is rescuable ONLY by a body that does not rest on the
-            #: same unstated latency -- a hard filter, not a preference, or the
-            #: rescue would re-admit the defect it was discarded for.
-            if refuse is not None and refuse(uid, RequirementOracle(
-                    req_uid=uid, tp_uids=tps, clause=clause, source=body.source)):
-                continue
             key = f"{uid}#{i}"
             flat[key] = RequirementOracle(
                 req_uid=key, tp_uids=tps, clause=clause, source=body.source)
             owner[key] = uid
+            if prefer_not is not None and prefer_not(uid, RequirementOracle(
+                    req_uid=uid, tp_uids=tps, clause=clause, source=body.source)):
+                disfavoured.add(key)
 
     #: One pass for the witness and one for the population, rather than one per
     #: candidate: at the wide replay scope that is the difference between a
@@ -1851,7 +1853,7 @@ def _rescue_from_corpus(*, corpus: dict, held: dict, blocked: set,
         body = RequirementOracle(
             req_uid=uid, tp_uids=list(oracle.tp_uids),
             clause=oracle.clause, source=oracle.source)
-        if key in refuted:
+        if key in refuted or key in disfavoured:
             fallback.setdefault(uid, body)
             continue
         out[uid] = body
@@ -2973,20 +2975,38 @@ def run_oracle_stage(
         #: convicted it on probe timing is flagged, and dropping flagged bodies
         #: (no repair) moves audit 10/41 -> 5/35 with blindness 9.35%.
         #:
-        #: BLOCKS AND BUYS A REPAIR ROUND, because the defect is fixable by the
-        #: party that wrote it -- open a window on the condition and require the
-        #: response within it -- and a check rewritten that way still separates
-        #: every design that is wrong rather than late. Excusing it at decision
-        #: time instead was measured four ways and cost blindness every time
-        #: (`docs/evidence/e7/PHASE-RULE.md`): an excuse cannot rewrite a check.
+        #: **ADVISORY: IT BUYS A REPAIR ROUND AND A LABEL, AND IT DOES NOT
+        #: BLOCK.** The author is told -- open a window on the condition and
+        #: require the response within it -- because a check rewritten that way
+        #: still separates every design that is wrong rather than late. A check
+        #: still fragile after the last round ships, carrying the finding as a
+        #: label in `faithfulness_labels`.
+        #:
+        #: It blocked until the frozen luna6 runs measured the trade (offline:
+        #: the refused bodies put back and the cover re-cut,
+        #: `docs/evidence/e7/LUNA6-AFTER-ORACLES.md`):
+        #:
+        #:     module     span (blocking -> advisory)   blind          audit, bound golden
+        #:     bit_ctrl   74.1% -> 94.0%                39.3 -> 13.3   45% -> 54%
+        #:     dc_fsm     71.2% -> 93.8%                 2.3 ->  1.0   41% -> 42%
+        #:     fpu        81.0% -> 92.9%                 0.0 ->  0.0   65% -> 78%
+        #:
+        #: Authors did not produce a lag-robust rewrite in two attempts, so
+        #: blocking cost ~20 points of span for 0-13 points of audit that
+        #: stayed at 25-78% either way. Excusing the lag at decision time is
+        #: still out -- measured four ways, it cost blindness every time
+        #: (`docs/evidence/e7/PHASE-RULE.md`).
         if _late is not None:
             for uid in sorted(held):
-                if uid in rejected:
+                if uid in rejected or uid in quotable:
                     continue
                 why = _late(uid, held[uid])
                 if why:
-                    rejected[uid] = quotable[uid] = why
+                    quotable[uid] = labels[uid] = why
                     repairs.setdefault(uid, []).append(why)
+                elif str(labels.get(uid, "")).startswith(_latency.PREFIX):
+                    #: Repaired: the label named the body it no longer holds.
+                    labels.pop(uid)
         # AND THE OTHER SIGN OF THE SAME DEFECT. `dead_now` rejects a check
         # nothing can move; this rejects one that convicts every spec-derived
         # design there is. The stage has always blocked the first and never the
@@ -3460,11 +3480,14 @@ def run_oracle_stage(
         reasons_for={**abandoned, **rejected},
         witness=witness, population=population, contract=contract,
         stimulus_by_tp=stimulus_by_tp, base=base, transactional=transactional,
-        refuse=_late)
+        prefer_not=_late)
     for uid, body in rescued.items():
         held[uid] = body
         rejected.pop(uid, None)
         abandoned.pop(uid, None)
+        _still_late = _late(uid, body) if _late is not None else ""
+        if _still_late:
+            labels[uid] = _still_late
     if rescued:
         logger.info(
             "oracles: %d requirement(s) rescued from their own corpus -- a "
@@ -3483,10 +3506,16 @@ def run_oracle_stage(
         if uid in rejected or uid in abandoned:
             continue
         #: A body chosen from the corpus has not been through the loop's
-        #: gates; the latency one is cheap to ask again and must not be
-        #: bypassed by a swap.
-        if _late is not None and _late(uid, body):
+        #: gates. The latency finding is advisory, so it only stops a swap
+        #: that would REPLACE a body without the finding by one with it --
+        #: a preference that cannot cost the requirement its check.
+        if (_late is not None and uid in held and _late(uid, body)
+                and not _late(uid, held[uid])):
             continue
+        if _late is not None and _late(uid, body):
+            labels[uid] = _late(uid, body)
+        elif str(labels.get(uid, "")).startswith(_latency.PREFIX):
+            labels.pop(uid)
         held[uid] = body
     if chosen_bodies:
         logger.info(
