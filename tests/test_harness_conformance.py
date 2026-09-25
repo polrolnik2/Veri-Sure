@@ -752,6 +752,44 @@ def test_the_bus_pairing_is_a_CONVENTION_that_is_returned_and_never_applied():
 
 
 @needs_verilator
+def test_the_FIRST_edge_of_a_step_samples_the_wired_line_not_the_raw_stimulus(
+        tmp_path):
+    """`drive` wrote each stimulus input straight to its pin, and the wire was
+    only re-applied after the step's first edge. So on that edge a design
+    pulling the line low sampled the RAW stimulus value -- high -- while the
+    trace recorded the wired one. Measured on i2c_master_bit_ctrl's golden
+    replay: four convictions of the known-good design rested on a value the
+    design sampled and the trace never showed (REQ-0062, 0094, 0095, 0096).
+
+    Here the DUT holds `oen` low across a step boundary with the stimulus
+    re-driving `bus_i=1`; `seen <= ~req_n & bus_i` exposes what was sampled.
+    """
+    src = FIXTURES / "activelow_io"
+    contract = json.loads((src / "contract.json").read_text(encoding="utf-8"))
+    lines = [{"input": "bus_i", "oen": "oen"}]
+    testplan, bins, checks = _plan(contract)
+    steps = [{"inputs": {"req_n": 1, "bus_i": 1}, "hold": 4},
+             {"inputs": {"req_n": 0, "bus_i": 1}, "hold": 4},
+             {"inputs": {"req_n": 0, "bus_i": 1}, "hold": 4}]
+    render_suite(testplan=testplan, bins=bins, checks=checks,
+                 contract=contract, out_dir=tmp_path / "suite",
+                 stimulus_by_tp={"TP-0000": steps}, bus_lines=lines)
+    outcome = run_suite(rtl_path=src / "dut.sv",
+                        hdl_toplevel=contract["module_name"],
+                        suite_dir=tmp_path / "suite",
+                        refmodel_path=src / "ref_model.py",
+                        coverage=False, trace=False)
+    assert outcome.build_ok, outcome.build_log
+    edges = json.loads((tmp_path / "suite" / "results" / "TP-0000.trace.json")
+                       .read_text(encoding="utf-8"))["edges"]
+    third = [e for e in edges if e["step"] == 2]
+    assert third and all(e["dut"].get("oen") == 0 for e in third)
+    assert all(e["dut"].get("seen") == 0 for e in third), (
+        "the design sampled the line high while it was pulling it low: "
+        f"{[(e['edge'], e['inputs'].get('bus_i'), e['dut']) for e in third]}")
+
+
+@needs_verilator
 def test_a_testpoint_RUNS_ON_past_its_last_stimulus_step(tmp_path):
     """An effect is not simultaneous with its cause, so the recording must not
     stop at the last driven value.

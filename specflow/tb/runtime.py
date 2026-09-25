@@ -746,6 +746,15 @@ class Env:
                     self.missing_ports.append(name)
                 continue
             self._drive(name, value)
+        #: RE-WIRE BEFORE THE STEP'S FIRST EDGE. The loop above wrote the raw
+        #: stimulus onto every pin, bus lines included, and `_apply_bus` only
+        #: ran after that edge -- so a design pulling the line low sampled it
+        #: HIGH on the first edge of every step while the trace recorded the
+        #: wired value. Measured on i2c_master_bit_ctrl's golden replay: four
+        #: convictions of the known-good design (REQ-0062, 0094, 0095, 0096)
+        #: rested on a value the design sampled and the trace never showed.
+        if self.bus_lines:
+            self._apply_bus()
         await self.settle(inputs, hold=hold, until=until, timeout=timeout)
 
     def _drive(self, name: str, value) -> None:
