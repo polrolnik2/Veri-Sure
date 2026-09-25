@@ -24,6 +24,7 @@ INTERNALS = [
     "slave_wait",     # reg,        L179 -- clock-stretch wait flag
     "scl_sync",       # wire,       L204 -- multi-master clock-sync detect
     "sda_chk",        # reg,        L177 -- SDA arbitration-check enable
+    "nReset", "rst", "ena",  # top-level inputs, read by the cnt reload term (L208-L214)
 ]
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,13 @@ PROBES = {
 
     # Counter reached zero: the reference's own `~|cnt` reload condition (L214).
     "cnt_zero": _bind(lambda c: c == 0, "cnt"),
+
+    # Counter (re)loaded: the reference's own reload branch
+    # `rst || ~|cnt || !ena || scl_sync` (L214-L218, cnt <= clk_cnt), taken only
+    # while nReset is high -- an asynchronous reset clears cnt instead (L210).
+    # Sampled at the edge, it is true exactly on the edges that load cnt.
+    "cnt_reload": _bind(lambda n, r, c, e, s_: bool(n) and bool(r or c == 0 or not e or s_),
+                        "nReset", "rst", "cnt", "ena", "scl_sync"),
 
     # Filter counter expired: the reference's own `~|filter_cnt`, which reloads
     # it (L257) and shifts fSCL/fSDA (L272).

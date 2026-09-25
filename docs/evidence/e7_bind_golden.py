@@ -54,6 +54,10 @@ def main() -> int:
     contract = json.loads((corpus / "contract.json").read_text())
     declared = {p["name"]: int(p.get("width") or 1) for p in contract.get("io") or []
                 if p.get("dir") == "probe"}
+    #: A binding may cover the probes of several runs of one module -- each run
+    #: mints its own -- so only the ones this contract declares are applied.
+    probes = {k: v for k, v in probes.items() if k in declared}
+    unbound = {k: v for k, v in unbound.items() if k in declared}
     missing = sorted(set(declared) - set(probes) - set(unbound))
     if missing:
         print(f"binding does not account for probe(s): {missing}")
