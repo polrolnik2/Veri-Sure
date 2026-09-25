@@ -55,6 +55,19 @@ class RefModel:
     #: combinational. Used by the testbench to align sampling, not by the model.
     LATENCY_CYCLES: int = 0
 
+    def __init__(self) -> None:
+        """A fresh model starts in its reset state.
+
+        The simulator resets before the first edge, but the replay and the
+        generation gate construct a model and drive it straight away. A model
+        in the sampled-edge form keeps its state where `reset` puts it and
+        reads it in `outputs`, so without this every such model raised on its
+        first edge outside the simulator -- measured on or1200_dc_fsm's
+        population: three of seven spent a repair round adding a lazy
+        `hasattr` guard for it.
+        """
+        self.reset()
+
     def reset(self) -> None:
         """Return to the post-reset state. Sequential models override."""
 

@@ -229,3 +229,21 @@ def test_the_replay_marks_exactly_the_settle_rows():
     steps = [{"inputs": {"go": 1, "done_i": 0}, "hold": 3}]
     rep = replay(SAMPLED, CONTRACT, steps, base="step", settle_edges=5)
     assert [bool(r.get("tail")) for r in rep.rows] == [False] * 3 + [True] * 5
+
+
+def test_a_fresh_model_starts_in_its_RESET_state():
+    """The replay and the gate drive a model without the simulator's reset;
+    state kept only in `reset` must still be there on the first edge."""
+    class M(RefModel):
+        OUTPUT_PORTS = ["q"]
+
+        def reset(self):
+            self.q = 3
+
+        def outputs(self, i):
+            return {"q": self.q}
+
+        def advance(self, i):
+            self.q = i["d"]
+
+    assert M().step({"d": 1}) == {"q": 3}
