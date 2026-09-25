@@ -74,6 +74,12 @@ INTERNALS = [
     "enable_trigger",          # L71
     "NaN_out_trigger",         # L72
     "SNaN_trigger",            # L73
+    # Wide registers named by later runs' probe sets (L78-L85).
+    "NaN_output_0",            # L78  reg [62:0]
+    "NaN_output",              # L79  reg [62:0]
+    "inf_round_down",          # L81  reg [62:0]
+    "out_inf",                 # L82  reg [62:0]
+    "out_0", "out_1", "out_2", # L83-L85 reg [63:0]
 ]
 
 
@@ -218,6 +224,25 @@ PROBES = {
     #   it selects the generated quiet NaN {exp_2047, 2'b01, opa[49:0]} at L206.
     #   It is NOT "an SNaN is present" (that is SNaN_input, L168).
     "snan_trigger": _reg("SNaN_trigger"),
+
+    # --- constants and wide pipeline registers (later runs' probe sets) --------
+    # L76-L77, L80: `wire` constants, hard-coded rather than recorded (a constant
+    # wire may be optimised out of the simulation).
+    "exp_2047": lambda s: 0b11111111111,          # L76  11'b11111111111
+    "exp_2046": lambda s: 0b11111111110,          # L77  11'b11111111110
+    "mantissa_max": lambda s: (1 << 52) - 1,      # L80  52'b1...1
+    # L205: NaN_output_0 <= a_NaN ? {exp_2047,1'b1,opa[50:0]} : {exp_2047,1'b1,opb[50:0]}
+    "nan_output_0": _reg("NaN_output_0"),
+    # L206: NaN_output <= SNaN_trigger ? {exp_2047,2'b01,opa[49:0]} : NaN_output_0
+    "nan_output": _reg("NaN_output"),
+    # L207: inf_round_down <= {exp_2046, mantissa_max}
+    "inf_round_down": _reg("inf_round_down"),
+    # L208: out_inf <= inf_round_down_trigger ? inf_round_down : {exp_2047, 52'b0}
+    "out_inf": _reg("out_inf"),
+    # L209-L211: the three output pipeline copies; `out <= out_2` at L233.
+    "out_0": _reg("out_0"),
+    "out_1": _reg("out_1"),
+    "out_2": _reg("out_2"),
 }
 
 #: probe name -> one-sentence reason it has NO counterpart in the reference.
