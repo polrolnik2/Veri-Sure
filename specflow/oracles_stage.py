@@ -1260,8 +1260,15 @@ def _population_rows(population: Sequence[str], contract: dict,
 def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                   stimulus_by_tp: dict, testplan: list[dict],
                   by_uid: dict, normalized: dict | None, budget: int,
-                  base: str, transactional: bool) -> tuple[list[dict], tuple]:
+                  base: str, transactional: bool,
+                  ignore_refuted: bool = False) -> tuple[list[dict], tuple]:
     """The blind cells worth authoring at, heaviest port first.
+
+    `ignore_refuted`: a cell separated only by a body the whole population
+    refutes is BLIND to a run that will not ship that body. Measured on
+    or1200_dc_fsm's first sampled-edge run: leaving the refuted bodies out took
+    blindness 4.9% -> 73.6%, so nearly every cell the set appeared to separate
+    was separated by a check that fails every reading somewhere.
 
     A CELL IS A LOCATION. `(testpoint, port, two design names)` where readings
     of the specification come apart and no held check separates them --
@@ -1301,6 +1308,11 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     verdicts = _population_verdicts_by_tp(
         held, population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
+    if ignore_refuted:
+        gone = set(variety.refuted_by_the_population(_population_verdicts(
+            held, population, contract, stimulus_by_tp, base=base,
+            transactional=transactional)))
+        verdicts = {k: v for k, v in verdicts.items() if k not in gone}
     blind = variety.blind_at(all_cells, verdicts)
     if not blind:
         return [], all_cells
@@ -2597,7 +2609,7 @@ def run_oracle_stage(
             population=population, held=held, contract=contract,
             stimulus_by_tp=stimulus_by_tp, testplan=testplan, by_uid=by_uid,
             normalized=normalized, budget=cell_budget, base=base,
-            transactional=transactional)
+            transactional=transactional, ignore_refuted=refuted_excluded)
         cell_report["targets"] = len(targets)
         logger.info("oracles: %d blind cell(s) to author at", len(targets))
         cell_bodies = list(run_cell_gen(

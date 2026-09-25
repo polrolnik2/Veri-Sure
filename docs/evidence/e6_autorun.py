@@ -222,6 +222,12 @@ def main() -> int:
             exclude_refuted="--keep-refuted" not in FLAGS,
             stop_before_oracles="--stop-before-oracles" in FLAGS,
             population_size=int(_opt("--population", 7)),
+            #: **`--cell-budget N` AUTHORS AT N BLIND CELLS** -- one check per
+            #: requirement, anchored on a place two spec-derived designs
+            #: disagree and no shippable check separates them (see
+            #: `oracles_stage._cell_targets`). The bodies join the pool the
+            #: cover is cut from.
+            cell_budget=int(_opt("--cell-budget", 0)),
             audit_control=control_source,
             reuse=reuse,
             resume_calls=resume,

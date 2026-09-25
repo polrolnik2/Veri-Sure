@@ -311,3 +311,34 @@ def test_the_repair_round_PASSES_the_rows_and_the_build_passes_the_switch():
     assert "_witness_failure_rows(" in stage
     build = inspect.getsource(integration.build_artifacts)
     assert "refuted_excluded=bool(ship_cover and admit_pool and exclude_refuted)" in build
+
+
+def test_a_cell_only_a_REFUTED_body_separates_is_a_target_when_refuted_bodies_do_not_ship():
+    """Two designs differ on `busy` after `go`. The only held check passes one
+    design on that testpoint and fails both elsewhere -- it separates the cell
+    while being refuted. A run that will not ship it must still author there."""
+    import inspect
+
+    from specflow import oracles_stage
+
+    other = SAMPLED.replace('self.state = int(bool(i["go"]))', "self.state = 0")
+    population = [SAMPLED, other]
+    stim = {"TP-0": [{"inputs": {"go": 1, "done_i": 0}, "hold": 3}],
+            "TP-1": [{"inputs": {"go": 0, "done_i": 0}, "hold": 2}]}
+    src = ("def decide(trace):\n"
+           "    b = [r['outputs']['busy'] for r in trace]\n"
+           "    if any(r['inputs']['go'] for r in trace):\n"
+           "        return (1 in b, None, str(b))\n"
+           "    return (False, trace[0]['edge'], 'no request')\n")
+    held = {"R1": RequirementOracle(req_uid="R1", tp_uids=["TP-0", "TP-1"],
+                                    clause="", source=src)}
+    plan = [{"uid": "TP-0", "covers": ["R2@1"]}, {"uid": "TP-1", "covers": ["R2@1"]}]
+    by_uid = {"R2": {"uid": "R2", "text": "busy rises after go"}}
+    kw = dict(population=population, held=held, contract=CONTRACT,
+              stimulus_by_tp=stim, testplan=plan, by_uid=by_uid, normalized={},
+              budget=4, base="step", transactional=True)
+    seen, _ = oracles_stage._cell_targets(**kw)
+    told, _ = oracles_stage._cell_targets(**kw, ignore_refuted=True)
+    assert seen == [], "R1 separates the cell, so without the switch it is not blind"
+    assert [t["requirement"]["uid"] for t in told] == ["R2"]
+    assert "ignore_refuted=refuted_excluded" in inspect.getsource(oracles_stage.run_oracle_stage)
