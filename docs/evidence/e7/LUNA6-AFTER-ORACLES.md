@@ -138,3 +138,55 @@ convention and the tail, which every design and golden meet alike.
 
 dc_fsm and bit_ctrl are re-running from their oracle stage on luna6's upstream
 artifacts (`/home/user/runs/luna8`) to measure these.
+
+## Oracle-stage re-runs on luna6's upstream (`/home/user/runs/luna8`, `luna9`, `luna10`)
+
+Each re-runs ONLY the oracle stage, on luna6's contract, requirements,
+testplan and stimulus, so the change in the figures is the oracle-stage and
+testbench change alone. "removed" is the pipeline default (no
+population-refuted body ships); "kept" re-cuts the same pool with them.
+
+    dc_fsm                      span     blind    audit (name)  audit (bound)
+    luna6 as shipped            71.2%     2.3%    2/9           20/49 = 40.8%
+    luna8  sampled rows, removed 77.5%   49.6%    1/7            5/55 =  9.1%
+    luna8                  kept 92.5%     4.4%    1/9           18/68 = 26.5%
+    luna9  + witness-row repair 82.5%    73.6%    1/9            5/62 =  8.1%
+    luna9                  kept 91.2%     4.9%    1/10          14/69 = 20.3%
+    luna10 + cells (60), removed 87.5%    0.7%    1/8            8/63 = 12.7%
+    luna10                 kept 93.8%     0.7%    1/9           14/68 = 20.6%
+
+    bit_ctrl                    span     blind    audit (name)  audit (bound)
+    luna6 as shipped            74.1%    39.3%    11/36         38/84 = 45.2%
+    luna8  sampled rows, removed 86.2%   52.8%    9/36          25/93 = 26.9%
+    luna8                  kept 94.8%    29.5%    14/40         51/106 = 48.1%
+
+**Sampled rows took the convention noise out of the population.** dc_fsm's
+disagreement cells fell from 20,862 to 1,194: the seven designs now differ
+only where they read the spec differently.
+
+**Refutation became exact.** Among shipped bodies every deciding design fails,
+golden fails 13 of 16 on dc_fsm (luna8) and 36 of 36 on bit_ctrl. "All but
+one" is NOT clean: at 6 of 7, bit_ctrl has 8 golden convictions and 3 passes.
+
+**Refuted bodies were carrying the blindness figure.** Leaving them out took
+dc_fsm's blindness to 49.6-73.6%: nearly every cell the set appeared to
+separate was separated only by a check that fails every reading somewhere.
+Authoring at those cells (`--cell-budget 60`; 8 targets, one per requirement
+owning a blind testpoint) closed it: 0.7% with them left out, span 87.5%.
+
+**Witness-row repair engages but does not change the pool much.** Authors
+shown the witness failing their check rewrote it (e.g. a trigger that opened
+in IDLE), but most refuted bodies in the pool are superseded drafts, which the
+exclusion already handles.
+
+**dc_fsm's remaining 8 hand-bound convictions** (luna10, removed): 5 on one
+testpoint whose stimulus flips `tagcomp_miss` from 1 to 0 between accepting a
+load and the BIU word arriving -- golden decides on the second CLOAD cycle and
+takes the hit path; 3 checks failed by 6 of 7 designs; 3 by none (e.g. a
+cache-inhibited load's `biu_read` demanded in the first CLOAD cycle, where
+golden raises it one cycle later). The stimulus is luna6's, authored before the
+specification reached every stage.
+
+**bit_ctrl here still runs on luna6's contract**, which gives `cmd` no encoding,
+so every design guessed what 4 and 8 mean; luna7's contract imports them from
+`i2c_master_defines.v`.
