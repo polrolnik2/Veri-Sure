@@ -208,6 +208,175 @@ def _latency_prose_conflicts(obj: dict, timing: Any, outputs) -> list[ContractIs
     return issues
 
 
+#: Sentence shapes that STATE a number of clock edges, or state that there is
+#: none. `specflow.refmodel.temporal.licenses_a_cycle_count` plus the phrasings
+#: specifications use for a one-edge register and for a combinational path.
+_STATES_TIMING_RE = re.compile(
+    r"\b(immediately|next (clock|cycle|edge)|same (clock|cycle|edge)"
+    r"|one[- ]clock|single (clock|cycle)|one[- ]cycle|following (clock|cycle)"
+    r"|within [\w-]+ (clock|cycle)|after (one|a|1|two|2) (clock|cycle)"
+    r"|\d+\s*(clock|cycle)s?|(clock|cycle) after|cycle-accurate|on the very next"
+    r"|combinational(ly)?|asynchronous(ly)?|without (any )?delay"
+    r"|directly (forward|return|reflect|connect|drive|pass)\w*)\b", re.I)
+
+_SPEC_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_REFERS_BACK_RE = re.compile(r"\s*(This|That|It|These|Such|The same)\b")
+
+
+def unlicensed_latencies(timing: Any, spec: str) -> list[ContractIssue]:
+    """A `latency_cycles` the specification never states. PROVENANCE, not form.
+
+    `LATENCY_DEFINITION` already says to give the field only when the spec
+    states the count, and nothing checked it. Measured on the luna6
+    `fpu_exceptions` contract: `latency_cycles: 1` on all seven outputs of a
+    block the spec describes with stage-0/1/2 output registers. The witness,
+    the seven spec-derived designs, the stimulus and the checks all inherited
+    it -- stimulus pulsed `enable` for one cycle, and golden, which needs it
+    held for several, was convicted by 37 checks.
+
+    A latency is licensed when a sentence naming the output -- or the next one,
+    when it refers back ("This ACK ... is asserted in the cycle after") --
+    states a cycle count or a combinational path. Generous by design: the
+    rule exists to stop a value being INVENTED, not to parse the right one.
+    """
+    issues: list[ContractIssue] = []
+    if not isinstance(timing, dict) or not (spec or "").strip():
+        return issues
+    sentences = [x for x in _SPEC_SENTENCE_RE.split(spec) if x.strip()]
+    for out, tinfo in sorted(timing.items()):
+        if not isinstance(tinfo, dict) or _as_int(tinfo.get("latency_cycles")) is None:
+            continue
+        pat = re.compile(rf"(?<![\w`]){re.escape(str(out))}(?![\w])")
+        #: The next sentence counts only when it refers BACK ("This ACK is
+        #: asserted in the cycle after ..."); otherwise it is about something else.
+        near = [x + (" " + sentences[i + 1] if i + 1 < len(sentences)
+                     and _REFERS_BACK_RE.match(sentences[i + 1]) else "")
+                for i, x in enumerate(sentences) if pat.search(x)]
+        if any(_STATES_TIMING_RE.search(x) for x in near):
+            continue
+        issues.append(ContractIssue(
+            "error", f"timing.{out}.latency_cycles",
+            f"The specification states no latency for {out} -- no sentence naming it "
+            f"gives a cycle count or a combinational path. Omit latency_cycles: an "
+            f"omitted latency says the spec does not determine it, a guessed one is "
+            f"read downstream as a requirement every design and check must meet. If "
+            f"the spec describes registered stages without a count, say so in notes."))
+    return issues
+
+
+#: Encoded values a contract can invent: a binary word of three or more digits,
+#: a sized Verilog literal, a hexadecimal constant.
+_LITERAL_RE = re.compile(r"(?<![\w'])(?:\d+'[bBhHdDoO][0-9a-fA-F_xXzZ]+|0[xX][0-9a-fA-F]+|[01]{3,})(?![\w'])")
+
+
+def _literal_value(tok: str) -> str:
+    t = tok.replace("_", "").lower()
+    if "'" in t:
+        base, digits = t.split("'", 1)[1][0], t.split("'", 1)[1][1:]
+        radix = {"b": 2, "h": 16, "d": 10, "o": 8}[base]
+        try:
+            return str(int(digits, radix))
+        except ValueError:
+            return t
+    if t.startswith("0x"):
+        return str(int(t, 16))
+    return t  # a bare binary word stays textual: '0100' is not '100'
+
+
+def invented_literals(obj: dict, spec: str) -> list[ContractIssue]:
+    """An encoded value in the contract's prose that the specification does not
+    contain. PROVENANCE, not form.
+
+    Measured on the luna6 `i2c_master_bit_ctrl` contract: "Assume conventional
+    OpenCores command encodings: NOP=0000, START=0001, STOP=0010, READ=0100,
+    WRITE=1000." The spec names the symbols and gives no values; the author
+    supplied them from memory and swapped READ and WRITE, so every READ/WRITE
+    testpoint drove the other command. Values a shared constants header supplies
+    arrive through `encoding.enrich_contract`, with provenance, not through prose.
+    """
+    issues: list[ContractIssue] = []
+    if not (spec or "").strip():
+        return issues
+    in_spec = {_literal_value(m.group(0)) for m in _LITERAL_RE.finditer(spec)}
+    for path, text in _prose_strings(obj):
+        #: `test_plan` proposes stimulus -- a data byte to drive is a choice of
+        #: test, not a claim about the design, and inventing one is the job.
+        if (path.startswith(("$.contract_sva", "$.encoding", "$.io", "$.test_plan"))
+                or ".encoding" in path):
+            continue
+        bad = sorted({m.group(0) for m in _LITERAL_RE.finditer(text)
+                      if _literal_value(m.group(0)) not in in_spec})
+        if bad:
+            issues.append(ContractIssue(
+                "error", path.lstrip("$."),
+                f"{', '.join(bad[:6])} {'does' if len(bad) == 1 else 'do'} not appear in "
+                f"the specification. Do not supply an encoding, constant or reset value "
+                f"the spec does not state -- name it as unstated instead. A value "
+                f"invented here becomes a requirement every downstream stage shares."))
+    return issues
+
+
+def strip_unsourced(obj: dict, spec: str) -> list[str]:
+    """DELETE what the author generated and the specification does not state.
+
+    Mutates `obj`; returns one line per deletion, for the log. Not a repair
+    round: a re-ask can only swap one generated value for another, so a
+    `latency_cycles` no sentence licenses is removed from its entry and a prose
+    sentence carrying an encoded value the spec does not contain is removed from
+    its string (the string, when nothing else is left of it). The only values a
+    contract carries beyond the spec's own are the ones `specflow.encoding`
+    imports verbatim from the design's shared defines header.
+    """
+    notes: list[str] = []
+    timing = obj.get("timing")
+    for issue in unlicensed_latencies(timing, spec):
+        out = issue.path.split(".")[1]
+        tinfo = timing.get(out) if isinstance(timing, dict) else None
+        if isinstance(tinfo, dict) and "latency_cycles" in tinfo:
+            notes.append(f"timing.{out}.latency_cycles={tinfo.pop('latency_cycles')!r} "
+                         f"deleted: the specification states no latency for {out}")
+    if not (spec or "").strip():
+        return notes
+    in_spec = {_literal_value(m.group(0)) for m in _LITERAL_RE.finditer(spec)}
+
+    def invented(text: str) -> list[str]:
+        return [m.group(0) for m in _LITERAL_RE.finditer(text)
+                if _literal_value(m.group(0)) not in in_spec]
+
+    def scrub(node: Any, path: str) -> Any:
+        if isinstance(node, str):
+            if not invented(node):
+                return node
+            kept = [x for x in _SPEC_SENTENCE_RE.split(node) if x.strip() and not invented(x)]
+            notes.append(f"{path.lstrip('$.')}: deleted {', '.join(sorted(set(invented(node))))} "
+                         f"(not in the specification)")
+            return " ".join(kept) if kept else None
+        if isinstance(node, dict):
+            for k in list(node):
+                if path == "$" and k in ("contract_sva", "encoding", "io", "test_plan"):
+                    continue
+                if k == "encoding":
+                    continue
+                v = scrub(node[k], f"{path}.{k}")
+                if v is None:
+                    node[k] = ""
+                else:
+                    node[k] = v
+            return node
+        if isinstance(node, list):
+            out = []
+            for i, v in enumerate(node):
+                w = scrub(v, f"{path}[{i}]")
+                if w is not None:
+                    out.append(w)
+            node[:] = out
+            return node
+        return node
+
+    scrub(obj, "$")
+    return notes
+
+
 _DIRECTIONS = ("input", "output", "inout")
 
 
@@ -726,6 +895,9 @@ def lint_contract_json(
     issues.extend(probe_issues(probes, spec or ""))
 
     issues.extend(_latency_prose_conflicts(obj, timing, outputs))
+    if spec:
+        issues.extend(unlicensed_latencies(timing, spec))
+        issues.extend(invented_literals(obj, spec))
 
     # Guidance is optional but helps downstream. Flag missing keys as warnings.
     guidance = obj.get("guidance")

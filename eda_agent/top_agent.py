@@ -11,7 +11,7 @@ from typing import Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
-from .contract_linter import (lint_contract_json, prototype_ports,
+from .contract_linter import (lint_contract_json, strip_unsourced, prototype_ports,
                               render_contract_issues)
 from .config import OpenAIConfig
 from .model import UsageBreakdown, get_model_usage
@@ -57,6 +57,24 @@ _LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
         "— they want a variable shift, so write a shift.",
     ),
 ]
+
+
+def _unsourced_deleted(contract_json: str, spec: str) -> str:
+    """The contract with every value the spec does not state DELETED.
+
+    Applied to each architect output before the lint gate, so a generated
+    encoding or latency is removed rather than sent back to be regenerated --
+    see `contract_linter.strip_unsourced`.
+    """
+    try:
+        obj = json.loads(contract_json)
+    except Exception:  # noqa: BLE001 -- the lint gate reports unparsable JSON
+        return contract_json
+    notes = strip_unsourced(obj, spec)
+    if not notes:
+        return contract_json
+    logger.info("contract: deleted what the spec does not state: %s", "; ".join(notes))
+    return json.dumps(obj, indent=2) + "\n"
 
 
 def _augment_lint_excerpt(excerpt: str) -> str:
@@ -560,7 +578,8 @@ class TopAgent:
                 "`io` with a direction.")
 
         contract = await architect.chat(primed, golden_tb_path=golden_tb_path)
-        contract_json = contract.model_dump_json(indent=2, exclude_none=True) + "\n"
+        contract_json = _unsourced_deleted(
+            contract.model_dump_json(indent=2, exclude_none=True) + "\n", spec)
 
         for repair_idx in range(max(0, int(max_repairs)) + 1):
             issues, _obj = lint_contract_json(contract_json, spec)
@@ -584,7 +603,8 @@ class TopAgent:
                 lint_errors=lint_report,
                 golden_tb_path=golden_tb_path,
             )
-            contract_json = revised.model_dump_json(indent=2, exclude_none=True) + "\n"
+            contract_json = _unsourced_deleted(
+                revised.model_dump_json(indent=2, exclude_none=True) + "\n", spec)
 
         # THE PORT ENCODING, from a shared constants header if the design ships
         # one. This is the same class of information `golden_tb_path` already

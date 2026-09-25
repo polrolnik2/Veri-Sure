@@ -319,7 +319,13 @@ def symbols_in_spec(spec: str, port: str, names: set[str]) -> set[str]:
     if m is None:
         return set()
     nxt = _PORT_ENTRY.search(spec, m.end())
-    para = spec[m.end():nxt.start() if nxt else len(spec)]
+    end = nxt.start() if nxt else len(spec)
+    #: AND AT THE FIRST BLANK LINE. The LAST entry of a port list has no next
+    #: entry, so it used to run to the end of the document -- on
+    #: i2c_master_byte_ctrl `sda_oen` swallowed the whole processing-flow
+    #: section and was handed the I2C_CMD_* encoding of a bus it never carries.
+    blank = re.search(r"\n[ \t]*\n", spec[m.end():end])
+    para = spec[m.end():m.end() + blank.start() if blank else end]
     return {n for n in names if re.search(rf"\b{re.escape(n)}\b", para)}
 
 

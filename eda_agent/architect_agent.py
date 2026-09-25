@@ -42,12 +42,19 @@ Goal: turn an ambiguous natural-language spec into a precise, testable "contract
 that other agents (Verifier, Coder, Debugger, Formal) will follow.
 
 Principles:
-- Be concrete: define timing/latency, reset behavior, and edge semantics when possible.
-- If the spec is ambiguous, pick the smallest reasonable assumption and record it explicitly.
+- Be concrete exactly as far as the specification is: state timing, reset behavior and edge
+  semantics where the spec states them, and no further.
+- NEVER GENERATE A VALUE THE SPECIFICATION DOES NOT GIVE: no encoding, opcode or command value,
+  no constant, no reset value, no latency. Where the spec leaves something open, say it is
+  unstated. Symbolic constants the spec names (e.g. `CMD_START`) are imported by the pipeline
+  from the design's shared defines header -- do not write their values yourself.
 - Never change the interface unless the spec (or golden testbench) demands it.
 - Keep the contract compact and machine-usable.
 - IMPORTANT: In contract-only mode, downstream agents will treat the contract as the ONLY source of truth.
-  Therefore, the contract must be complete (interface, timing, corner cases) and internally consistent.
+  Therefore, the contract must be complete about what the spec states, explicit about what it
+  leaves open, and internally consistent. A value you supply that the spec does not state becomes a
+  requirement every downstream agent enforces -- measured: a guessed one-cycle latency on a
+  multi-stage block, and command encodings recalled from memory with two of them swapped.
 
 Toolchain note:
 - The simulation harness uses Verilator. When adding verifier guidance, prefer procedural checks or simple assertions
@@ -67,7 +74,8 @@ The contract will be consumed by:
 Requirements:
 1) Output MUST be a single valid JSON object (no extra text).
 2) Write everything in English.
-3) Prefer facts from the spec. If ambiguous, add an explicit assumption.
+3) State only what the spec states. Where it is silent, write that it is unstated; never fill the
+   gap with a value (encoding, constant, reset value, latency).
 4) If <golden_testbench> is provided, treat its interface/timing expectations as ground truth and align the contract to it.
 
 What to include (keep it compact):
@@ -94,10 +102,9 @@ What to include (keep it compact):
 - timing: per-output latency, for the outputs whose latency the SPECIFICATION
   determines. Omit the entry otherwise.
 {latency_definition}
-  State the MINIMUM latency the function inherently needs — do not add pipeline
-  stages the behaviour does not require. Prose suggesting a
-  pipeline is a permission, not a requirement — it never overrides an interface
-  that cannot signal completion.
+  If the spec describes registered stages without giving their number, OMIT
+  latency_cycles and describe the stages in `notes` -- do not reduce them to a
+  count of your own.
 - functional_summary: 3-8 bullets describing behavior precisely
 - corner_cases: 3-8 bullets (overflows, resets, illegal inputs, boundary indices, etc.)
 - test_plan: 5-10 bullets of directed tests the Verifier should include

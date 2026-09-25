@@ -247,6 +247,11 @@ def test_the_SPEC_chooses_which_symbols_belong_to_a_port():
     # not bleed across port entries.
     assert symbols_in_spec(spec, "din", names) == set()
     assert symbols_in_spec(spec, "nosuchport", names) == set()
+    # Nor past the end of the port list: the LAST entry stops at a blank line.
+    # On i2c_master_byte_ctrl `sda_oen` is last, and the processing-flow prose
+    # after it issues I2C_CMD_* -- which belong to no port of that module.
+    byte = (BENCH / "i2c_master_byte_ctrl/description.txt").read_text()
+    assert symbols_in_spec(byte, "sda_oen", names) == set()
 
 
 def test_enrichment_touches_only_the_ports_the_spec_enumerates():
