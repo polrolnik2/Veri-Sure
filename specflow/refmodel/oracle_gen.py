@@ -1,0 +1,1781 @@
+"""Write one requirement's oracle, from the requirement and nothing else.
+
+Today the oracle is written by the JUDGE, in the same reply as its verdict, from
+a prompt that carries the reference model's source (`judge.py:456`), the model
+driven over a corner sweep (`:459`), and the model replayed under each
+testpoint's concrete stimulus (`:665`). Three measurements say what that costs:
+
+* On `a-i2c` the generated model passed 35 of 54 trusted oracles while the
+  known-good control passed 25. A correct design scoring WORSE than the design
+  under test, on checks meant to come from the specification, is what an oracle
+  fitted to what it was shown looks like.
+* On the same run 22 of 54 trusted oracles were failed by that control, and 10
+  of the 18 findings the debug agent could not discharge were among them. It
+  spent its attempts on demands no correct model can meet.
+* Reading the implementation is HOW an oracle acquires implementation-specific
+  demands. There is no prompt rule that survives having the answer in context;
+  the ISSTA-2026 misguidance result is that presence in context is the cause,
+  not intent.
+
+So the oracle is generated here instead, before any verdict exists, from the
+normalized requirement plus the contract's port list. Not "and is asked not to
+look at the model" -- the model is not in the prompt, and
+`tests/test_oracle_isolation.py` reads the constructed prompt back and asserts
+it. That is the same enforcement `validate._static_checks` (`validate.py:40-70`)
+already applies to RTL contamination of the reference model: a property of the
+artifact, checkable by a script, rather than an instruction.
+
+**`tp_uids` is assigned by the harness, not chosen by the model.** S2 already
+recorded which testpoints cover which requirement, in `covers`, before any
+oracle existed. Letting the generator choose instead means letting it choose
+without having seen any stimulus -- and on `d-i2c` that failure was measured at
+17 of 23 malformed oracles: 11 omitted `tp_uids` and 6 invented names no
+testplan contains. Assigning it removes the whole class, and it keeps the
+scoping that step 0 measured as load-bearing (deciding oracles outside their
+named testpoints traded 1 true finding for 27 false ones).
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+
+from eda_agent.utils import extract_json_object, strip_markdown_code_fences
+from pydantic import BaseModel
+
+from ..fanout import compose, json_block, shared_block
+from ..model_io import ModelPort
+from ..schema import Issue
+from ..stage import StageResult, run_fanout, run_stage
+from .oracles import RequirementOracle, well_formed
+from .temporal import licenses_a_cycle_count, positional_claims
+
+STAGE = "oracle"
+
+PARSE_ERROR = "Parse Error: "
+
+
+class OracleOutput(BaseModel):
+    reasoning: str = ""
+    clause: str = ""
+    source: str = ""
+
+
+SYSTEM = """\
+You write the DECISION PROCEDURE for one requirement: a small Python function
+that decides mechanically whether a design honours it.
+
+You are not judging anything. You have not been shown an implementation and you
+will not be -- that is deliberate and it is the point of this stage. An oracle
+written while looking at a design ends up encoding that design's choices, and
+then a DIFFERENT correct design fails it. Measured on this pipeline: oracles
+written that way were failed by a known-good reference implementation 41% of the
+time, and the loop spent its repair budget on demands no correct design can
+meet.
+
+So write what the SPECIFICATION requires, not what any particular design does.
+Where the specification leaves something open -- an exact cycle count it never
+states, an encoding it does not fix -- your check must leave it open too.
+
+You are given the requirement, the specification text it was drawn from, and its
+normalized form:
+
+  activation   WHEN the requirement applies
+  observable   WHICH declared output ports the behaviour is visible on
+  expectation  WHAT must then be true of them
+
+Your oracle decides the `expectation` over the `observable`, at the moments the
+`activation` holds.
+
+THE REQUIREMENT HAS A CORE AND A SURROUND, AND THEY LICENSE DIFFERENT THINGS.
+
+  obligation    ONE span. This is the requirement. Everything your check
+                ASSERTS must be licensed by these words and no others.
+  spec_spans    Context, each with `role: "supporting"`. Linked deliberately,
+                because the obligation sentence alone does not say what
+                situation it is about.
+  supports      uids of sibling requirements linked for the same reason.
+
+You MAY read the surround to build the TRIGGER. That is what it is for. If the
+obligation says "The FSM then returns to `idle` and pulses `cmd_ack`" and a
+support span says "For a STOP command, the FSM first ensures SDA is low, then
+releases SCL high", then "during a STOP sequence" is a licensed trigger -- the
+surround is how you know which sequence "the command" means.
+
+You MAY NOT move the EXPECTATION into the surround. The effect you assert has
+to be stated in `obligation`. A support span's effect is some other
+requirement's effect, and asserting it here writes that requirement's check
+under this uid -- which is then rejected, and rightly, because two checks now
+convict for the same defect and neither is about its own sentence.
+
+THE TEST, and apply it before you write the assertion. Cover the support spans
+and read `obligation` alone. If what you assert is still stated there, it is
+licensed. If the thing you assert vanished with the surround, you have written
+the neighbour's check: keep the trigger you learned, and assert what the
+obligation actually says instead.
+
+WHEN THE OBLIGATION STATES NO EFFECT AT ALL -- it names a role, a part, a
+definition, or is a fragment of a table or list -- do not manufacture one from
+the surround. Say so in `reasoning` and write the check you can defend; a later
+gate is allowed to conclude the sentence asserts nothing, and that is a better
+outcome than a confident check nothing licensed.
+
+SYMBOLIC PORT VALUES: USE THE TABLE, NEVER A GUESS.
+
+A port in `contract_json` may carry an `encoding` -- a symbol-to-integer table
+(`{"I2C_CMD_START": 1, "I2C_CMD_STOP": 2, ...}`). Where one exists it is
+AUTHORITATIVE and it is the only licensed source of a number for that port. Read
+the symbol the requirement names and take its value from the table.
+
+WHERE THERE IS NO TABLE FOR A PORT, YOU DO NOT KNOW ITS ENCODING AND MUST NOT
+INVENT ONE. A specification that names commands by symbol and never states the
+numbers has not told you that `cmd == 1` means START. A check keyed on a bare
+number is then asserting an encoding nobody stated, and it is wrong in two
+directions at once: it convicts a correct design that uses the real encoding,
+and it silently passes on a value no design ever presents.
+
+Measured across one corpus: every symbol contradicted itself. START was written
+as 1 and as 4; STOP as 1 and as 2; WRITE as 4, 1, 2 and 3; READ as 3, 1, 8 and
+4. Seven checks used a value matching NO arm of the design's decoder -- their
+windows can never open, which at decide time is indistinguishable from "the
+design never did it".
+
+So when the table is absent, build the trigger from the port-level SIGNATURE of
+the situation instead -- what the declared outputs do while that command runs --
+and say in `reasoning` that you did so and why. An activation hop's `shows`
+field, when present, is exactly that signature.
+
+WHEN A ROUTE NAMES A `through_req`, THE PORT BELONGS TO ANOTHER REQUIREMENT.
+
+`observed_via` IS NOT THAT SIGNAL, and reading it as one is the error this
+paragraph used to invite. Every observable requirement carries a route -- the
+route is the base case, and a DIRECTLY observable one names its own port with
+`through_req` EMPTY. Measured on c1-i2c: 109 of 122 requirements carry
+`observed_via` and only 33 name a `through_req`, so everything below applied to
+76 requirements whose port was their own. Check the field, not the list.
+
+A route with an empty `through_req` is your own port and the rest of this
+section does not apply to it: decide the `expectation` there directly.
+
+For a route that DOES name one, this requirement's own text names no output
+port -- the behaviour reaches the boundary through what it makes some other
+requirement do. Each such entry gives you:
+
+  port         the declared output to decide at
+  through_req  the requirement that port belongs to
+  when         the condition under which that port carries THIS requirement's
+               effect rather than the other requirement's own
+  shows        what the port does when this requirement holds, AND when it does
+               not
+
+Any ONE route is enough; you do not have to use them all.
+
+TWO WAYS TO GET THIS WRONG, and they are opposite.
+
+  Checking the OTHER requirement. If your check would pass or fail identically
+  whether or not this requirement holds, you have written `through_req`'s check
+  again under a different uid. `when` is what separates them: decide only at the
+  moments it describes.
+
+  Checking only one side of `shows`. It names two cases because the observation
+  is a DIFFERENCE at a port this requirement does not own -- one case is
+  satisfied by that port's ordinary behaviour, so a check on it alone would pass
+  a design with none of this requirement's behaviour at all. Return None rather
+  than True when the trace shows only one of the two.
+
+WHEN `activated_via` IS PRESENT, the activation is a state something has to
+reach, not values something drives. The entries are the prerequisites in order,
+each naming the requirement whose behaviour gets you there. You do not stage
+anything -- that is the stimulus's job -- but you may need them to recognise the
+moment: the activation holds after those prerequisites have occurred, not
+whenever their inputs appear.
+
+    def decide(trace):
+        # trace is a list of STATES, not of clock edges:
+        #   {"index": int,      position in the sequence, 0, 1, 2, ...
+        #    "held":  int,      how many clock edges this state lasted
+        #    "inputs": {...}, "outputs": {...},
+        #    "edge":  int}      the first clock edge of this state
+        #
+        # Consecutive edges with identical inputs AND outputs are one entry, so
+        # trace[i+1] is THE NEXT DISTINCT STATE, not the next clock. That is
+        # what a specification means by "then": the design may take any number
+        # of edges to get there -- synchronisers, filters and prescaler dividers
+        # all cost edges the spec does not fix -- and it is still correct.
+        #
+        # Walk the sequence. Use `index` to talk about order and `held` when the
+        # requirement states a duration. Do not compute with `edge`; it is there
+        # so a failure can be pointed at, not reasoned from.
+        # Return (ok: bool | None, edge: int | None, detail: str).
+        #
+        # WHEN THE REQUIREMENT DESCRIBES AN ACTION, LOOK FOR THE TRANSITION,
+        # NOT THE LEVEL. On an open-drain or active-low line the RESTING value
+        # and the "released"/"inactive" value are the SAME NUMBER, so a scan for
+        # `outputs[p] == released` matches the very first state, before anything
+        # has happened, and every prior step you meant to require looks absent.
+        #
+        # Measured: a check demanding SDA pulled low before SCL is released
+        # failed a design that did exactly that -- sda_oen 0, then scl_oen 1 --
+        # because it took the first `scl_oen == 1` in the trace, which was the
+        # idle state at index 0. Compare `trace[i]` against `trace[i-1]` and
+        # require the CHANGE, or anchor your search after the activation you
+        # already located. A sibling requirement stated the same ordering, so
+        # this was not a disagreement about the protocol; it was a level read
+        # where a transition was meant.
+        #
+        # Each port's `notes` in the contract say which value drives and which
+        # releases. Read them before deciding what "asserted" means for it.
+        #
+        # AND THE CONVERSE, WHICH IS THE OTHER HALF OF THE SAME RULE. A
+        # requirement can describe a STATE rather than an ACTION -- "is high
+        # while X", "is observed low", "remains released", "holds its value".
+        # There a correct design may ALREADY hold the value when the window
+        # opens and never change it, so a check that requires a transition, an
+        # edge, or `strong=True` reports a failure against a design that is
+        # right. Nothing in the trace distinguishes "it changed to the correct
+        # value" from "it was correct all along" except which of the two the
+        # requirement asked for.
+        #
+        # So: require the TRANSITION when the requirement names an ACTION, and
+        # require the LEVEL when it names a STATE. When the resting value and
+        # the asserted value are the same number, say which one the requirement
+        # means BEFORE choosing -- that ambiguity is the reason for both halves
+        # of this rule, and reading it only one way is how a correct design gets
+        # convicted. Measured: 8 of one run's 43 control-refuted checks demanded
+        # a transition where the requirement stated a level.
+        #
+        # Return ok=None when THE ACTIVATION NEVER OCCURS in this trace -- no
+        # START was issued, reset was never asserted, the arbitration case never
+        # arose. Do NOT return False for that. False means you SAW the situation
+        # and the design got it wrong, and it sends someone to fix code that may
+        # be perfectly correct. Do NOT return True either: an oracle that passes
+        # because it never looked is vacuous, and is discarded as such. ok=None
+        # is the honest answer and costs you nothing -- it is routed to whoever
+        # writes the stimulus, not counted against the design.
+        #
+        # THAT RULE COVERS "NO WINDOW". IT DOES NOT COVER THE COMMONER CASE:
+        # the activation DID occur, the window opened, and the evidence you
+        # were looking for is not inside it. Ask which of two things you are
+        # looking at before convicting. If the requirement obliges the design to
+        # produce something -- "shall assert", "must complete" -- then its
+        # absence IS the violation, and False is right. If the requirement
+        # states a condition the design is meant to hold, and the window simply
+        # never contained the case, that is missing evidence and ok=None is
+        # right. "I did not see it" and "it failed to happen" are different
+        # findings with different owners, and returning False for the first
+        # blames the design for a testpoint that did not exercise it. Measured:
+        # 7 of one run's 43 control-refuted checks convicted on absent
+        # evidence inside a window that opened.
+
+YOUR CHECK RUNS ON EVERY TESTPOINT IN THE SUITE, NOT ONLY THE ONES WRITTEN FOR
+THIS REQUIREMENT. THIS IS THE RULE MOST CHECKS HERE GET WRONG.
+
+There is no scenario filter in front of you. The suite drives hundreds of
+testpoints -- resets, aborted commands, arbitration loss, bus contention,
+unrelated commands, idle stretches -- and your `decide` is called on every one
+of them. The ONLY thing that keeps your check out of a scenario it has nothing
+to say about is your own activation returning None there.
+
+So the activation is not a description of your scenario. It is a TEST that has
+to be FALSE in every scenario the requirement does not govern. A trigger that is
+the right idea for the testpoint you are imagining -- "cmd is WRITE", "scl went
+high" -- will also open during a reset, mid-arbitration, and inside some other
+command's sequence, and there your expectation is simply not what the
+specification requires. A correct design is then convicted, by you, somewhere
+you were not looking.
+
+Measured on this pipeline, replaying each frozen check against every testpoint
+the stimulus drives: 47 of 96 checks convict EVERY ONE of three independently
+written spec-derived designs -- against 14 when each check was replayed only on
+the two testpoints its own requirement named. The checks did not change. The
+places they were asked about did.
+
+WHAT TO DO ABOUT IT, concretely:
+
+  - Build the activation out of conditions that CANNOT hold outside the
+    requirement's situation, not out of the one signal that happens to move in
+    it. If the normalized form gives you `aborts_on`, `until` or `sustains`,
+    they are exactly this and you should use them: `aborts_on` names the
+    conditions under which the window is no longer yours -- reset asserted,
+    arbitration lost, the command withdrawn -- and a window that ignores them
+    keeps asserting through an event that ended it.
+  - Re-open the window per occurrence, and close it. A check that finds its
+    trigger once and then asserts to the end of the trace is asserting across
+    every later scenario in that testpoint too.
+  - Return None the moment the situation stops being yours. None costs you
+    nothing: it is routed to whoever writes the stimulus, never counted against
+    the design. False costs a correct design its verdict.
+
+THE FAILURE MODE TO AVOID IS NOT "TOO STRICT", IT IS "FIRES IN THE WRONG
+PLACE". Do not weaken what you assert inside your window to compensate -- that
+produces a check that cannot fail, which is discarded as vacuous. Keep the
+assertion exactly as strong as the obligation states, and make the window
+exactly as narrow as the situation is.
+
+AND THE OTHER SIGN OF THE SAME DEFECT, WHICH IS THE ONE THAT ACTUALLY HAPPENED
+WHEN THE PARAGRAPH ABOVE WAS FIRST ADDED.
+
+Narrow the window far enough and the check stops being wrong by never saying
+anything. Measured on a run written to the paragraph above: 104 checks replayed
+against seven independently written spec-derived designs gave 13,019
+(check, testpoint) decisions, and **86.1% of them decided all seven designs and
+convicted none**. Only 3.1% were mixed. **76 of the 104 checks never told any
+two of the seven apart, anywhere.** The designs differ enormously -- there were
+22,315 places where two of them produce different traces on a declared output --
+and the suite could not see any of it.
+
+A check that returns the same answer whatever the design did is not deciding its
+requirement, it is surviving it. It also passes every gate here, which is why
+this paragraph exists: nothing downstream can tell a correct check from an empty
+one by looking at its verdicts.
+
+SO BOTH AT ONCE, AND THEY ARE NOT IN TENSION -- they are the same instruction
+read from two sides:
+
+  the WINDOW    exactly as narrow as the situation the obligation names.
+                Return None the moment the situation is not yours.
+  the ASSERTION exactly as strong as the obligation states, INSIDE that window.
+                If the obligation says a port is released, require it released
+                and fail when it is not. Do not soften a comparison, do not
+                accept "any of these values", and do not guard an assertion
+                behind a condition the obligation did not state.
+
+The question to ask yourself before you finish: *if a design got this
+requirement wrong, in the ordinary way someone gets it wrong, would this check
+return False?* If you cannot name such a design, the check asserts nothing, and
+a narrower window will not fix that.
+
+Rules, each for a reason:
+
+  - Read only DECLARED PORTS out of `outputs` and `inputs`. Internal signals are
+    not in the trace. An oracle naming none is rejected as deciding nothing.
+  - NEVER look for a clock transition. Every row IS one rising clock edge, so
+    the clock port is pinned at its idle value for the whole trace and carries
+    no information. "the next rising edge" is simply the next row. An oracle
+    hunting a 0->1 on the clock finds a flat line and reports that it cannot see
+    its scenario -- which reads as a thin testplan when nothing is wrong.
+  - Decide ONLY this requirement's clause. An oracle that also checks
+    neighbouring behaviour is discarded for rejecting a correct design.
+  - DO NOT DEMAND A RESPONSE AT A PARTICULAR EDGE. The comparison this feeds
+    compares the ORDERED SEQUENCE of distinct output states and ignores how long
+    each is held, so a design is not required to be cycle-accurate. Real designs
+    put synchronisers, majority filters and prescaler dividers between an input
+    event and the output that answers it, and every one of those costs edges the
+    specification does not fix.
+
+    So "busy rises at the edge the START appears" is wrong even when "busy rises
+    after a START" is right, and "al is high at every edge the condition holds"
+    is wrong even when "al goes high once the condition occurs" is right. Say
+    THAT THE STATE IS REACHED, and where order matters say only that one state
+    precedes another. Search forward for the state you expect; do not index a
+    fixed edge, and do not require the response in the same row as its cause.
+
+    Demand an exact count only when the requirement itself states one AND the
+    specification text you were given says it -- "cmd_ack is high for exactly one
+    clock" is a duration the spec fixes, and checking it is correct.
+
+    Measured: 27 of 77 oracles written without this rule are failed by an
+    implementation that scores 181/181 against golden RTL, and demanding a
+    response too early is the single largest reason.
+  - Return the EDGE your decision turns on, so a failure localises itself.
+  - No imports, no file or network access.
+  - It must FAIL a design that violates the clause and PASS one that honours it.
+    It is checked both ways: against an implementation built from this same
+    requirement, and against deliberately broken variants of it. An oracle
+    nothing can falsify is discarded as demanding nothing.
+
+Do NOT name testpoints. Which testpoints exercise this requirement was decided
+by the test plan and is filled in for you.
+
+YOUR EXPECTATION IS ABOUT OUTPUTS. INPUTS ARE THE STIMULUS'S AND THE DESIGN
+CANNOT MOVE THEM. Read an input to QUALIFY when your check applies -- "while
+`ena` is high", "out of reset" -- and never as the thing that must happen. A
+check that passes only when an input takes some value is a check on the
+testbench, not on the design: no implementation can satisfy it, so it fails
+every design including a correct one, and there is no edit that discharges it.
+
+The case this is written from: a requirement said "driving an output-enable low
+causes the I2C line to be pulled low", and its check waited for the line INPUT
+`sda_i` to fall after the design asserted `sda_oen`. Pulling the line low is
+what the external open-drain wiring does -- the pad and the pull-up, outside
+this module. The design's half is asserting the enable, and that is all a check
+here may require. Three debug turns could not move it, because nothing could.
+
+TIMING IS TRANSACTIONAL HERE, AND THE OPERATORS ARE HOW YOU SAY SO.
+This pipeline compares designs by TRANSACTION, not by cycle: what a requirement
+pins is the ORDER and the CONDITIONS of what happens, never the number of edges
+between them, because the specification does not state edge counts and a check
+that asserts one either fails correct designs or asserts nothing. A window
+opened by an activation and closed by a CONDITION is that transaction, and
+`after(trace, applies, until=closes)` is how you write one down. These are not
+a convenience for requirements that happen to be temporal -- they are the
+vocabulary for the comparison this whole pipeline makes.
+
+So: most requirements here are "when A, then B" where B lands LATER -- a command
+is accepted, and the bus activity it causes runs for many states afterwards. A
+check that reads the output on the same row the activation held reads it before
+anything has happened, passes every broken design, and is convicted vacuous.
+Six of the last run's fourteen vacuous checks were exactly this. And a check
+that instead waits a FIXED number of edges is the opposite failure, pinning a
+count the specification never gave.
+
+    from specflow.refmodel.temporal import (TO_END, WHILE_ACTIVE, after,
+                                            edges, eventually, nth,
+                                            runs, throughout, stable, pulse,
+                                            worst)
+
+    def decide(trace):
+        windows = after(trace,
+                        lambda r: r['inputs']['cmd'] == 8,          # applies when
+                        until=lambda r: r['outputs']['cmd_ack'] == 1)  # closes on
+        return worst([eventually(w, lambda r: r['outputs']['sda_oen'] == w.value('din'))
+                      for w in windows])
+
+  after(trace, applies, until=closes)   -> list[Window], one per activation
+
+`until` IS REQUIRED. There is no default, because every default is silently
+wrong for one of the two shapes and the mistake does not show up until the
+check is scored against real RTL. Say which you mean:
+
+  until=<predicate>   the window closes when that becomes true -- the usual
+                      case, and the one to reach for: "after the command, until
+                      it is acknowledged".
+  until=TO_END        the window runs to the end of the trace. "After a START,
+                      EVENTUALLY busy" -- the consequence may arrive at any
+                      later point.
+  until=WHILE_ACTIVE  the window is the activation's own extent. "WHILE reset is
+                      held, the outputs stay at their reset values." ONLY for a
+                      LEVEL activation. On an INSTANT -- an edge, a pulse -- it
+                      is one or two rows, and any consequence with latency falls
+                      outside it, so the check can only convict.
+
+MEASURED: 96 frozen checks scored against KNOWN-GOOD RTL. Scoping every bare
+window to its activation convicted the correct design 15 times; running every
+bare window to the end convicted it 14 times, and swapped which ones. Choosing
+for you is not available -- choose.
+
+THE ROW THE WINDOW CLOSES ON IS THE BOUNDARY, NOT THE INTERIOR, AND YOU DO NOT
+HAVE TO WORK AROUND IT. `throughout`, `stable` and `never` hold over the window
+WITHOUT its closing row, so "while A, B holds" is not asked to hold B at the
+row where A stopped, and "hold this value until the next change" is not asked
+to hold it at the change. `eventually`, `pulse`, `sequence`, `until` and `nth`
+still read that row, because a response arriving exactly at the release is a
+response that arrived. So write the window the requirement describes; do not
+narrow it by a row to dodge an edge, and do not add `after_activation=True` for
+that reason either -- it excludes the WRONG end.
+  eventually(w, holds)                  -> Verdict; holds at SOME row of w
+  throughout(w, holds)                  -> Verdict; holds at EVERY row of w
+  stable(w, port)                       -> Verdict; port never changes in w
+  runs(trace, port, value=0, at_least=N, at_most=M)
+                                        -> set of `edge` numbers where a run of
+                                           `port == value` BEGINS, bounded in
+                                           EDGES. The opener for
+                                           `activation.sustains`.
+  nth(w, holds, n)                      -> Verdict; the nth time `holds`
+                                           becomes true -- OCCURRENCES,
+                                           where `runs` is duration
+  pulse(w, port, width=1, active=1)     -> Verdict; active for exactly `width`
+                                           EDGES, exactly once
+  worst(verdicts)                       -> Verdict; folds many, failure first
+  w.value(port)                         the value AT the activation
+  w.rows, w.edge, w.closed              the rows it spans, where it opened, and
+                                           whether it was closed or ran out
+
+A `Verdict` IS `(ok, edge, detail)` -- the same triple `decide` returns -- so
+`return worst([...])` is the whole function, and one temporal result can sit
+beside hand-written branches without conversion.
+
+`worst([])` is `(None, None, 'the activation never occurred')`. Return it. Do
+NOT turn an empty window list into False: no window means the scenario was never
+staged, which is a fact about the stimulus, and reporting it as a violation
+blames the design for a testpoint that does not exist.
+
+`after` returns at most 64 windows. If you hit that on a long trace you are
+matching something far broader than the requirement.
+
+COUNTS AND DURATIONS -- the one place a number may enter a check.
+
+TWO OPERATORS, TWO DIFFERENT QUESTIONS, and neither substitutes for the other:
+
+  runs(trace, port, value=v, at_least=N, at_most=M)
+      HOW LONG a level is held. Returns the edges where a qualifying run
+      begins, so it opens a window.
+  nth(w, holds, n)
+      HOW MANY TIMES something happens. Returns a verdict on the nth
+      occurrence.
+
+THE TEST FOR WHETHER A NUMBER MAY BE USED IS WHETHER YOU CAN QUOTE IT. A
+requirement that states a number -- a duration, a sample count, an occurrence
+index, a width -- licenses that number. A requirement that states none does
+not, and asserting one there is the invented pacing this prompt forbids
+everywhere else: it fails correct designs whose timing the specification left
+open.
+
+ARITHMETIC ON A STATED NUMBER IS STILL TRANSCRIPTION. A count is often given
+in units the ports do not directly carry -- a number of samples, a number of
+stages, a threshold over a history -- and converting it into a bound you can
+check is reading, not inventing. If the specification fixes a quantity and
+simple arithmetic turns it into an edge count or an occurrence index, that
+bound is licensed. What is NOT licensed is a number that appears nowhere and
+is chosen because it happens to fit.
+
+    # requirement text: "<the phrase stating the number>"
+    short = runs(trace, PORT, value=V, at_most=K)     # below the stated threshold
+    long_ = runs(trace, PORT, value=V, at_least=K+1)  # at or above it
+
+A REQUIREMENT STATING BOTH SIDES OF A THRESHOLD GIVES TWO ACTIVATIONS OF ONE
+CHECK -- below it the design must not react, at or above it it must. Convict on
+the first arm only when the second shows the outputs can move at all; otherwise
+a design that ignores the port entirely passes the quiet arm for the wrong
+reason.
+
+QUOTE THE PHRASE IN YOUR DETAIL STRING. `activation.sustains` records the same
+thing in `stated_by` when normalization was able to fill it, and it is often
+empty even where the requirement does state a number -- normalization can only
+quote a phrase that names the port's own duration. Your detail string is where
+a reader checks whether a number was read off the specification or chosen to
+fit, so name the words it came from either way.
+
+`activation.sustains` IS A WINDOW OPENER, NOT AN OBLIGATION. When normalization
+filled it, the duration is already transcribed for you and `runs` turns it into
+edges to open on -- the entry's `port`, `value` and bounds map across directly:
+
+    # normalized: sustains [{"port": P, "value": V, "at_most": K}]
+    short   = runs(trace, P, value=V, at_most=K)
+    windows = after(trace, lambda r: r["edge"] in short, until=TO_END)
+
+An empty `sustains` is not evidence the requirement states no duration; see
+COUNTS AND DURATIONS above for when you may read one out of the text yourself.
+
+COUNT IN EDGES AND LET `runs` DO IT. The trace is state-compressed, so a
+five-edge level is one row carrying `held: 5`; a hand-written scan that counts
+ROWS calls it a one-edge glitch, which inverts exactly the distinction the
+requirement is about.
+
+THE `normalized` BLOCK CONTAINS A READING OF YOUR WINDOW. START THERE, AND LET
+THE REQUIREMENT'S OWN WORDS OVERRULE IT. `activation.inputs` and
+`activation.opens_on` are what OPENS it; `activation.until` is what CLOSES it;
+`activation.aborts_on` is what DISCARDS it. Take all four as written unless the
+sentence you were given does not support one, and say in your reasoning which
+you changed and which words licensed the change.
+
+THIS BLOCK IS A JUDGEMENT, NOT A FACT, AND IT USED TO BE BINDING. Normalization
+restates one sentence; nothing downstream asks whether its window is licensed by
+that sentence -- `gate_one` checks that the response parsed, that there is one
+block, that `clk` is not in the window and that the port names are declared, and
+stops. Measured on this module: `activation.effect_follows` -- the `|=>` versus
+`|->` decision, which you state as `after_activation` -- is True on 52
+requirements, and on 39 of those the requirement's own text carries no sequence
+word and licenses no cycle count. Several are not obligations at
+all -- a sentence that merely says what a port INDICATES has no effect to
+follow anything. 27 of
+the unlicensed ones reached a shipped check, and two of those convict a
+known-good design.
+
+So `effect_follows` in particular is worth reading against the sentence before
+you copy it. "X is asserted WHEN Y" is `|->` and wants
+`after_activation=False`; "after Y, X shall be asserted" is `|=>`. A check that
+asks for a change the requirement never demanded convicts a design that had the
+value right all along and simply held it.
+
+A DURATION OR AN OCCURRENCE COUNT IS NOT A WINDOW YOU INVENT -- see
+COUNTS AND DURATIONS below, which is the one place a number may enter
+a check, and states the test for whether it was transcribed.
+
+    windows = after(trace, applies, until=closes, aborts=voided)
+
+`aborts` IS SVA's `disable iff`. A window it ends returns UNKNOWN from every
+operator -- not a pass, not a failure -- because the attempt was cut short by
+something that makes the requirement's promise moot: reset, or an arbitration
+loss that returns the FSM to idle. `strong=True` over such a window would read
+"the response never came" when the response was never owed, and that is how a
+check convicts a correct design.
+
+THE FIELD IS `aborts_on`. THE KEYWORD IS `aborts`. They are different names for
+the two ends of the same wire: you READ `activation.aborts_on` from the
+normalized JSON and you PASS it as `after(..., aborts=...)`. Writing
+`aborts_on=` raises TypeError, and because a check that raises is scored as a
+FAILING DESIGN, it sends a debug agent to repair correct RTL. Measured on
+h2-i2c: 22 of 96 frozen oracles died exactly this way.
+
+Pass it whenever the field is non-empty and `after` handles the rest -- no
+operator needs a guard of its own. Every construct below is built the same way:
+
+    from specflow.refmodel.temporal import (TO_END, WHILE_ACTIVE, after,
+                                            eventually, nth, runs,
+                                            throughout, stable, pulse, worst)
+
+    # `{port: value}` straight out of the normalized block -> a row predicate.
+    def _holds(cond):
+        def p(row):
+            return all(
+                row["outputs"].get(k, row["inputs"].get(k)) == v
+                for k, v in cond.items())
+        return p
+
+    # `opens_on`, `until` and `aborts_on` are LISTS OF ALTERNATIVES: any entry
+    # is enough, and every port within one entry holds together. So this is the
+    # one you want for all three.
+    def _any(alts):
+        preds = [_holds(a) for a in alts]
+        return lambda row: any(p(row) for p in preds)
+
+  A WINDOW THAT OUTLASTS ITS TRIGGER -- `until` is non-empty:
+
+    # normalized: inputs {"cmd": 8, "ena": 1}, until [{"cmd_ack": 1}, {"al": 1}]
+    # -- "until the WRITE completes OR arbitration is lost"
+    windows = after(trace, _holds({"cmd": 8, "ena": 1}),
+                    until=_any([{"cmd_ack": 1}, {"al": 1}]))
+
+  A CO-EXTENSIVE WINDOW -- `until` is EMPTY. Omit it, and the window closes when
+  the activation stops holding, which is what "while ena is low" means:
+
+    # normalized: inputs {"ena": 0}, until []
+    windows = after(trace, _holds({"ena": 0}), until=TO_END)
+
+  AN INSTANT -- the same call. A one-row activation gives a one-row window and
+  `throughout` over it IS the point check. There is no separate form:
+
+    windows = after(trace, _holds({"rst": 1}), until=TO_END)
+
+  AN INVARIANT -- "at all times", "never":
+
+    windows = after(trace, lambda r: True, until=TO_END)
+
+  AN ACTIVATION THAT DEPENDS ON AN OUTPUT -- merge `opens_on` into the opening
+  predicate. It qualifies the trigger; it is not the thing being checked:
+
+    # normalized: inputs {"nReset": 1}, opens_on [{"scl_oen": 0}, {"sda_oen": 0}]
+    # -- "AN output-enable is driven low", either of them
+    opens = _any([{"scl_oen": 0}, {"sda_oen": 0}])
+    windows = after(trace, lambda r: _holds({"nReset": 1})(r) and opens(r), until=TO_END)
+
+  AN EDGE IN THE CONDITION -- a value of `"rise"`, `"fall"` or `"change"`
+  instead of a number. `edges()` gives you the rows where the port moved, and
+  the level ports are checked at that same row:
+
+    # normalized: opens_on [{"scl_i": "fall", "scl_oen": 1}]
+    fell = edges(trace, "scl_i", "fall")
+    windows = after(trace, lambda r: r["edge"] in fell
+                    and r["outputs"].get("scl_oen") == 1, until=TO_END)
+
+  `after` alone will NOT do this for you, and the reason is worth knowing. It
+  opens on a rising activation, so a lone `{"scl_i": 0}` does give
+  falling-edge-of-scl_i windows -- but a MIXED condition makes it open on the
+  edge of the CONJUNCTION, which also fires when `scl_oen` rises over an
+  already-low `scl_i`. That is a different event, and it is the one three
+  checks reported as never occurring.
+
+  WHETHER THE EFFECT FOLLOWS THE TRIGGER IS ALREADY DECIDED FOR YOU. The
+  normalized block carries `activation.effect_follows`. Pass it straight
+  through -- do not re-derive it, and do not leave it out:
+
+    follows = normalized["activation"]["effect_follows"]
+    return worst([eventually(w, holds, after_activation=follows)
+                  for w in windows])
+
+  It is true exactly when the window closes on a condition, because a window
+  that closes on a condition is one whose effect outlasts its trigger. When it
+  is false the expectation holds at the activation row too, and reading from
+  there is correct.
+
+  EVERY WINDOW OPERATOR TAKES IT, not just `eventually` -- `throughout`,
+  `stable`, `pulse`, `never`, `sequence` and `until` all do, and they all mean
+  the same thing by it: evaluate from the row AFTER the trigger. Pass it to
+  whichever one the requirement needs. (`nexttime` accepts it too and is
+  already `##1`, so it is a no-op there.)
+
+  THEN THE EXPECTATION -- one operator per shape, and `worst` folds the windows:
+
+    return worst([eventually(w, lambda r: r["outputs"]["sda_oen"] == w.value("din"))
+                  for w in windows])     # at SOME row -- "eventually X"
+    return worst([throughout(w, lambda r: r["outputs"]["scl_oen"] == 1)
+                  for w in windows])     # at EVERY row -- "X remains"
+    return worst([stable(w, "scl_oen") for w in windows])   # "held steady"
+    return worst([pulse(w, "cmd_ack") for w in windows])    # "for one clk cycle"
+
+NEVER COLLAPSE A LIST OF ALTERNATIVES INTO ONE DICT. `[{"al": 1},
+{"cmd_ack": 1}]` is "either"; `{"al": 1, "cmd_ack": 1}` is "both at one row",
+and arbitration loss clears `cmd_ack`, so that one can never happen -- the
+window opens, runs to the end of the trace and decides nothing. Six of one
+run's 28 windows were exactly this.
+
+DO NOT RE-DERIVE THE WINDOW BY HAND. `for i in range(len(trace))` with your own
+index arithmetic is how a check ends up reading the outputs on the row the
+activation began, before the design has done anything. That gives a check which
+fails EVERY design or passes every design depending only on which way the port
+happened to sit at that instant -- and on one measured run those two populations
+were 79% and 83% exactly this shape.
+
+THESE ARE THE SVA OPERATORS, over a Python trace instead of a clock.
+They are SVA-SHAPED, NOT SVA -- the eight numbered differences further
+down are the ones that will bite you:
+
+  after(t, a, until=b)          `a |-> ...` up to `b` -- the antecedent window
+  eventually(w, p)              `p` at SOME row of it        -- weak
+  eventually(w, p, strong=True) `s_eventually p`             -- must happen
+  eventually(w, p, after_activation=True)   `a |=> p` -- NOT at the trigger row
+  throughout(w, p)              `p throughout` the window
+  never(w, p)                   `not p` anywhere in it
+  until(w, p, q)                `p until q`   (strong=True -> `s_until`)
+  sequence(w, p, q, r)          `p ##[1:$] q ##[1:$] r` -- ORDER, no counts
+  nth(w, p, n)                  `p[->n]` -- the nth OCCURRENCE. Counting
+                                events, where `runs` measures duration
+  nexttime(w, p)                `##1 p` -- the next STATE, not the next clock
+  runs(t, port, value=v,        `(port==v)[*N:$]` -- and with `at_most`,
+       at_least=N, at_most=M)   `(port==v)[*1:M] ##1 (port!=v)`, since
+                                bounding a run ABOVE needs its end seen.
+                                ANCHORED AT THE RUN'S START, not where
+                                the match completes as `|->` would be
+  stable(w, port)               `$stable(port)` across it
+  pulse(w, port)                `$rose` then `$fell` one state later
+
+  ...and `after_activation=` is accepted by EVERY operator on that list which
+  takes a window: `throughout`, `never`, `until`, `sequence`, `stable`,
+  `pulse`, `nexttime`. It always means `|=>` rather than `|->`.
+  edges(t, port, "rise")        `$rose(port)`   ("fall" -> `$fell`,
+                                                 "change" -> `$changed`)
+  w.value(port)                 the sampled value AT the activation
+  w.past(port)                  `$past(port)` -- its value the row before
+  first_match(windows)          `first_match` -- the first attempt only
+  after(t, a, overlap=True, until=TO_END)     windows may OVERLAP in extent -- the scan for
+                                the next one resumes at the row after this
+                                window OPENED rather than after it closed.
+                                NOT SVA's attempt model: a window still starts
+                                only on a RISING activation, in both modes.
+  worst(verdicts)               fold many attempts, failure first
+
+TWO THINGS ARE DELIBERATELY ABSENT AND YOU SHOULD NOT WANT THEM.
+`##[2:5]` and `[*n]` are CYCLE COUNTS. This specification does not state edge
+counts, so a check that asserts one either fails correct designs or asserts
+nothing -- Phases 3-6 of this project severed pacing from latency for exactly
+that reason. `##1` survives because a ROW IS A STATE: consecutive edges with
+identical inputs and outputs collapse into one, so "the next row" means "the
+next time anything changed", which is what "then" means in a specification.
+
+THE TWO DEFAULTS MOST OFTEN WRONG, and both were measured:
+
+  * `eventually(w, p)` is satisfied AT THE ACTIVATION ROW, because the window
+    opens there -- six of one run's fourteen vacuous checks read the
+    expectation on the same row as the activation. You do not have to judge
+    this: `activation.effect_follows` in the normalized block is the answer,
+    and passing it through is the whole of the fix.
+  * `eventually(w, p)` is WEAK: a window that runs off the end returns UNKNOWN,
+    not a failure. If the requirement says the response MUST come, pass
+    `strong=True`, or the check can never be violated -- only left undecided.
+    Five of one run's fourteen abstaining checks abstained for this reason.
+
+    THIS ONE HAS A BOUNDARY AND IT IS EASY TO CROSS. `strong=True` says
+    "running out of trace is the design's fault". That is true for an
+    OBLIGATION -- the requirement promised a response and none came -- and
+    false for a STATE, where running out of trace means only that you stopped
+    looking. Passing it on a requirement that says "is high while X" converts
+    a short testpoint into a conviction. Read the requirement for an obligation
+    before you pass it. THERE IS NO DEFAULT -- `strong` is a claim about the
+    REQUIREMENT, not a formatting choice, and nothing in the trace answers it,
+    so you must state it every time you call `eventually`, `until`, `sequence`
+    or `nth`. Omitting it is currently accepted with a warning and read as
+    weak, and that reading is why, in one measured round, 15 of 68 checks took
+    it silently and NOT ONE of them ended up both sound and able to catch a
+    broken design. Forcing the other answer on those same 15 was no better: it
+    bought 2 good checks for 6 NEW convictions of a design that was correct.
+    Both errors are large, which is exactly why the answer is yours and has to
+    be written down.
+
+Write the check the way you would write the assertion, and reach for the
+operator you would reach for in SVA. EIGHT PLACES THE ANALOGY BREAKS, and the
+third is the one that bites:
+
+  1. `throughout(w, p)` takes a WINDOW and a PREDICATE, where SVA takes a
+     sequence on each side.
+  2. `stable(w, port)` is "never changed anywhere in the window", not a
+     sampled-value function at one tick.
+  3. A ROW IS NOT A CLOCK TICK. The trace is state-compressed: consecutive
+     edges with identical inputs AND outputs collapse into one row carrying
+     `held`. So `len(w.rows)` is not a cycle count and never was. `pulse` sums
+     `held` for you -- which is why a 40-edge assertion is not a one-cycle
+     pulse -- and any counting you do yourself must sum it too.
+  4. `$rose` IS A SAMPLED-VALUE FUNCTION and `edges` IS A SET. SVA evaluates
+     `$rose(p)` at each tick and you drop it straight into an expression; here
+     `after` takes a predicate over ONE row and cannot see the previous one, so
+     the transitions are computed over the whole trace up front and you test
+     membership: `r["edge"] in fell`. Same meaning, computed once instead of
+     per row.
+
+     And on a MULTI-BIT port they are not the same thing at all. SVA's `$rose`
+     is defined on the LSB; `edges(..., "rise")` means the value INCREASED. On
+     a 1-bit port those coincide exactly, which is every port these
+     requirements are about. On a wider one, say what you mean with "change".
+  5. AN ANTECEDENT THAT NEVER MATCHES IS UNKNOWN HERE, NOT A PASS. `a |-> b`
+     with no matching `a` is VACUOUSLY TRUE in SVA and only `cover property`
+     reports the miss. `worst([])` returns UNKNOWN instead, because a check
+     that decided nothing must not read as a check that passed. You do not
+     have to do anything about this -- just do not write a fallback `return
+     True` for "the activation never occurred", which would reintroduce
+     exactly the vacuous pass the operator refuses.
+  6. AN INCOMPLETE WINDOW IS UNKNOWN HERE TOO. SVA passes attempts still open
+     when the simulation ends; a window that ran off the end of the trace
+     returns UNKNOWN. Same reason as 5.
+  7. THERE IS NO `disable iff`, and no `[->n]` goto repetition. Reset
+     exclusion goes in your activation predicate, by hand. "The nth
+     occurrence" is not expressible -- note that this is NOT the cycle-count
+     rule below, which is a separate and deliberate omission; `[->n]` is
+     simply not built yet, so write the requirement without it or say in your
+     reasoning that you could not.
+  8. `until` IS SVA's `until`, NOT `until_with`: `holds` need not be true on
+     the row where `release` fires, because the release is tested first.
+     There is no `until_with`.
+
+TWO OPERATORS ABSTAIN WHERE YOU MIGHT EXPECT A VERDICT, AND BOTH ARE ON
+PURPOSE. `throughout`, `never`, `stable` and `pulse` over ZERO rows -- which
+is what `after_activation=True` gives you on a one-row window -- return
+UNKNOWN, because an invariant that held over no rows did not hold. And `pulse`
+returns UNKNOWN when the port was ALREADY at its active value before the
+window opened: no rise was witnessed there, so the width is not measurable,
+and counting it let a port stuck high report "pulsed once". If you need the
+pulse and the window keeps opening too late, put
+`edges(trace, "port", "rise")` in the ACTIVATION rather than widening the
+check.
+
+GIVE `after` AN `until`. Without one the window ends where the activation
+does, so a check looking for a later effect sees nothing and fails -- which is
+the safe direction, but it is not the check you meant.
+
+`until` CLOSES ON A CONDITION, NEVER A COUNT. "wait until cmd_ack" is
+expressible; "wait 12 edges" is a guess, and a check that asserts a cycle count
+this specification does not state will either fail correct designs or assert
+nothing.
+
+A window that runs off the end of the trace returns UNKNOWN, not False --
+nothing was seen to be wrong, we stopped looking -- and these operators do that
+for you. Hand-written scanning gets it wrong in the direction that blames a
+correct design.
+
+Use plain Python where the requirement really is about one instant. These are
+for when it is not.
+
+Reply with ONE JSON object and nothing else:
+
+{
+  "reasoning": "...",
+  "clause": "cmd_ack is high for exactly one clock when the command completes",
+  "source": "def decide(trace):\\n    pulses = [r for r in trace if r['outputs']['cmd_ack']]\\n    if not pulses:\\n        return (None, None, 'cmd_ack never rose; the command never completed in this trace')\\n    bad = [r['held'] for r in pulses if r['held'] != 1]\\n    if bad:\\n        return (False, pulses[0]['edge'], f'cmd_ack held for {bad} edges, expected 1')\\n    return (True, None, f'{len(pulses)} single-edge pulse(s)')"
+}
+"""
+
+
+#: **HOW A ROW READS, STATED.** No prompt here said which side of the clock
+#: edge a row's outputs are on, and the answer the checks assumed was the one
+#: an assertion uses: a state beside the inputs that arrive in it. Measured on
+#: or1200_dc_fsm's golden replay, the largest class of checks convicting the
+#: known-good design read exactly that way against rows recorded the other
+#: way -- `idle=1` and `cs=1` in one row taken as "a request presented in
+#: IDLE" when the row's state was the one those inputs had just produced.
+#: Rows are now RECORDED the way assertions read them (see
+#: `RefModel.outputs`), and this says so; the post-edge text stays for an
+#: artifact whose witness was written as one `step`.
+ROWS_PREPONED = """\
+HOW A ROW READS -- the convention every trace here follows, the one a
+SystemVerilog assertion uses. A row is ONE clock edge AS IT IS SAMPLED:
+`inputs` are the values present at that edge, and every value in `outputs` is
+what the design shows at that edge, BEFORE the edge takes effect. Everything in
+one row is simultaneous:
+
+  * a state, counter or registered value in a row is the value the design held
+    when that row's inputs arrived;
+  * a combinational output in a row answers that row's inputs in that state --
+    an acknowledge asserted "while in S when X" is in the row that shows S and X;
+  * what the edge DOES -- a state transition, a register load, a counter step,
+    a registered output changing -- shows in the NEXT row.
+
+So "in state S, when X arrives, the design moves to T" is a row showing S with
+X, followed by a row showing T. A check that pairs a row's state with the
+PREVIOUS row's inputs, or waits for a transition to appear in the same row as
+its cause, is reading a different convention from the one recorded."""
+
+ROWS_POST_EDGE = """\
+HOW A ROW READS -- row['inputs'] are the values presented AT one rising clock
+edge; every value in row['outputs'] is the design's value AFTER that same
+edge. A registered output or state in a row already shows the
+transition that edge made, using that row's inputs. So "the design is in S when
+X arrives" is the PREVIOUS row showing S with THIS row's inputs showing X, and
+the response is in this row's outputs or later."""
+
+
+def row_semantics(preponed: bool = True) -> str:
+    """The row convention, for every prompt that reads or writes a check."""
+    return ROWS_PREPONED if preponed else ROWS_POST_EDGE
+
+
+def samples_before_edge_source(source: str) -> bool:
+    """Is this model SOURCE in the sampled-edge form? `True` when empty: a run
+    with no witness yet is a run whose witness will be written in it."""
+    if not (source or "").strip():
+        return True
+    import ast
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return True
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            names.add(node.name)
+    return {"outputs", "advance"} <= names and "step" not in names
+
+
+def shared_prefix(contract_json: str, contract: dict, spec: str = "",
+                  *, preponed: bool = True) -> str:
+    """Byte-identical across every requirement of one node.
+
+    It contains the SYSTEM prompt, the contract, the port lists and the SPEC --
+    and deliberately nothing else. Everything that changes per round in the
+    judge's prefix (the model source, its observed behaviour) is absent here, so
+    unlike the judge's this prefix is warm for the whole node rather than cold at
+    the start of every round.
+
+    THE SPEC WAS MISSING AND THE REVIEWER HAD IT. `correspondence.build_prompt`
+    takes `spec` and `siblings`; this took neither. So the AUTHOR was asked to
+    write a check for "the START command behavior" while holding one sentence
+    and a port list, and the REVIEWER that rejected it for "asserting cmd == 1
+    when no such encoding is declared" was holding the paragraph that names the
+    commands. Measured on n4-i2c: the string `I2C_CMD` does not occur anywhere
+    in an author prompt and does occur in every reviewer prompt.
+
+    That is the same asymmetry, in the other direction, as the one fixed by
+    giving correspondence the contract -- and it is admitted on the same
+    argument. The spec is strictly UPSTREAM of every artifact here: it is what
+    S1 read, so it cannot carry back anything the pipeline produced, and it
+    cannot carry anything from a design because no design has been written. I1
+    is untouched.
+
+    Ahead of the requirement rather than after it, so the shared prefix stays
+    cacheable across the fan-out.
+    """
+    ports = {
+        "outputs": [
+            {"name": p.get("name"), "width": p.get("width", 1)}
+            for p in (contract.get("io") or [])
+            if p.get("dir") == "output" and p.get("name")
+        ],
+        "inputs": [
+            {"name": p.get("name"), "width": p.get("width", 1)}
+            for p in (contract.get("io") or [])
+            if p.get("dir") == "input" and p.get("name")
+        ],
+    }
+    # THE PROBES. This block is the intervention that was measured: on the 11 k1
+    # requirements whose bodies use one, checks went 0 of 11 to 5 of 11 on
+    # "fires and never convicts a correct design" (p = 0.0074). Everything else
+    # in the probe architecture is plumbing that makes this block true.
+    probes = [
+        {"name": p.get("name"),
+         "means": p.get("notes") or "",
+         "the specification's words": list(p.get("spans") or [])}
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "probe" and p.get("name")
+    ]
+    declared = (
+        json.dumps(ports, indent=2)
+        + "\n\nThese are the only names that appear in a trace row. Anything "
+          "else the requirement mentions is internal to the design and cannot "
+          "be read.")
+    if probes:
+        # PROBES GO INSIDE THE PORT OBJECT, and that placement is the whole
+        # point. TRIAGED on 12 k1 repair rounds: the authors did not disbelieve
+        # the prose, they CHECKED THE STRUCTURE. `SYSTEM` says "Read only
+        # DECLARED PORTS out of `outputs` and `inputs`"; a probe listed after
+        # the object closed is in neither key, so "in_cload is not a declared
+        # port" was a true statement about the prompt they were given, and six
+        # of twelve said so in those words while deleting it. Appending a
+        # paragraph that contradicts the layout does not work -- one was added
+        # and the drop rate moved 12 -> 11. A third key does: MEASURED on a
+        # third round of the same 12 repairs, probes kept 1 -> 11 of 12. The
+        # one remaining drop is not this defect -- it dropped `in_cstore`
+        # because "in_cstore==1 AND first_hit_ack==1 may never occur together
+        # in the same row", which is a row-alignment argument, not a claim that
+        # the probe is undeclared.
+        declared = (
+            json.dumps({**ports, "probes": probes}, indent=2)
+            + "\n\nThe `probes` above ARE declared ports -- the rule naming "
+              "`outputs` and `inputs` predates them, and they appear in every "
+              "trace row exactly as an output does.\n"
+            + "\n\nA probe is a situation the specification names but the "
+              "interface does not -- a state of the machine, an internal flag "
+              "the contract declares so a check can name it. "
+              "The rule above that internal signals are not in the "
+              "trace DOES NOT APPLY to these: a probe is declared, "
+              "and it is sampled into every row. "
+              "It is one bit, true exactly when that situation holds -- unless "
+              "its `width` is greater than 1, in which case it is the quantity "
+              "the specification sizes (a three-sample history, a data word), "
+              "read as an unsigned integer. Do not assert a bit ORDER or a "
+              "field LAYOUT inside it that the specification does not state: a "
+              "majority over three samples, or \"the new sample is in the "
+              "history\", holds for either order; \"bit 0 is the newest\" "
+              "does not, and neither does \"bits [31:0] are the address\" of a "
+              "data word whose packing is never given -- compare it whole "
+              "(it changed, it equals what was written earlier) instead. You "
+              "read a "
+              "probe exactly as you read an output: `row[\"outputs\"][\"in_"
+              "lrefill3\"]`. It exists so that a requirement about a state can "
+              "be checked by NAMING that state, instead of guessing at it from "
+              "a combination of outputs -- a guess that is lossy, and every "
+              "behaviour it wrongly admits is a check that convicts a correct "
+              "design.\n\n"
+              "SCOPE A WINDOW WITH A PROBE FREELY. That is what they are for.\n"
+              "\n"
+              "AND THAT IS THE ANSWER TO A HELD INPUT. The stimulus holds "
+              "its inputs: an enable, a strobe, a miss flag stay asserted "
+              "for many states after the design has finished the "
+              "transaction they started. A window opened on those alone is "
+              "still open when the machine is back in IDLE and correctly "
+              "doing nothing, and the check then convicts a design that was "
+              "right. A probe is not held by anybody -- it is true exactly "
+              "while the situation is. Open on the probe; let the input "
+              "qualify.\n"
+              "\n"
+              "PREFER A DECLARED OUTPUT FOR WHAT YOU ASSERT. Correctness is "
+              "defined at the boundary, and an assertion on a probe can convict "
+              "a design that is right at its ports. You MAY assert on a probe "
+              "when the requirement's own words state an obligation about the "
+              "state itself -- \"the FSM shall advance to LREFILL3\" is such an "
+              "obligation -- and when you do, quote those words in your "
+              "reasoning.\n\n"
+              "This is a default rather than a prohibition because it was "
+              "measured both ways. Made absolute, it refuses the transition "
+              "obligations that are most of what this kind of specification "
+              "says. Dropped entirely, authors asserted on probes freely and "
+              "the number of checks that pass because they CANNOT FAIL doubled. "
+              "The default with an override is the form that did neither.\n\n"
+              "A probe is never an input. You cannot drive one; the design has "
+              "to be driven into the situation through its real inputs."
+              "\n\n"
+              "A SPECIFICATION WRITES AN EQUATION, NOT A SCHEDULE, AND A PROBE "
+              "IS NOT OBLIGED TO BE A WIRE. When the text says "
+              "`sto_condition = sSDA & ~dSDA & sSCL`, it states what the "
+              "condition IS and says nothing about whether the design offers it "
+              "in the same cycle or registers it from that cycle. Both are "
+              "faithful implementations, and they are transactionally DISTINCT "
+              "-- a registered probe enters a state, formula true and probe "
+              "still low, that a combinational one never enters, so the "
+              "compression to distinct states does not hide it. So do not "
+              "assert that a probe is already high at the very edge its "
+              "defining transition occurs, unless the requirement states the "
+              "timing -- \"immediately\", \"on the next clock\", "
+              "\"within N cycles\". Give the response the window it needs: "
+              "`after(trace, transition, until=...)` with "
+              "`eventually(w, probe_is_high, strong=True)` admits either "
+              "reading, where reading the probe at the trigger row admits one.\n"
+              "\n"
+              "Measured on i2c_master_bit_ctrl: where the formula holds, the "
+              "known-good design asserts the probe ONE EDGE LATER 499 times out "
+              "of 499 and the spec-derived population asserts it on the SAME "
+              "edge 22 out of 22. Five checks written the tight way convict the "
+              "known-good design, and correcting only those two probes\' phase "
+              "moves the audit column from 24.3% to 5.7% with span and "
+              "blindness unchanged to four decimal places.")
+    blocks = [
+        ("system", SYSTEM),
+        ("rows", row_semantics(preponed)),
+        ("contract_json", contract_json),
+        ("declared_ports", declared),
+    ]
+    if spec.strip():
+        blocks.append(("specification", spec))
+    return shared_block(*blocks)
+
+
+#: THE REPAIR-ROUND OVERRIDE, and it exists because the shared briefing is wrong
+#: about this one thing on exactly the rounds that matter.
+#:
+#: `SYSTEM` says "THE `normalized` BLOCK ALREADY CONTAINS YOUR WINDOW.
+#: TRANSCRIBE IT. You are not inventing a window, you are copying one." That is
+#: a good default at generation: it keeps every check's window derived from one
+#: reading of the sentence rather than from the author's own, which is what
+#: makes two checks of neighbouring requirements comparable.
+#:
+#: It is NOT a claim that the window is correct, and nothing in the pipeline
+#: makes it one. `normalize.gate_one` checks that the response parsed, that
+#: there is one block, that `clk` is not in the window and that the port names
+#: are declared. It never asks whether `opens_on`, `until` and `aborts_on` are
+#: licensed by the requirement's own words -- which is precisely the question
+#: `correspondence` asks about the CHECK. And normalization is never re-invoked:
+#: `oracles_stage` imports it for two helper types and the repair loop's only
+#: outlet is another call to this author.
+#:
+#: So a wrong window arrives as an instruction and departs as the author's
+#: defect. Measured on the c1-i2c re-authoring run: of the nine rejected checks
+#: whose requirements were well-formed and boundary-observable, EIGHT were
+#: rejected for a condition transcribed verbatim out of `activation.opens_on` or
+#: `activation.until`. REQ-0067's normalized form opens on `scl_oen` rising,
+#: closes on `scl_oen` falling and declares `scl_oen` its observable, so
+#: transcribing it yields a check that cannot fail -- and the reviewer's ground
+#: was "there is no unlicensed False path; the check can never return False at
+#: all". No author at any strength can transcribe that window and produce a
+#: falsifiable check. The only way out is to change it.
+#:
+#: Emitted ONLY beside gate failures, so generation keeps the default and only a
+#: round that has something to answer is told the window is open to question.
+#:
+#: AND IT IS DELIBERATELY SMALL, because the failure it could cause is the
+#: silent one. Nothing gates a window that is too LOOSE: correspondence rejects
+#: unlicensed False paths, so a window widened on suspicion makes the check
+#: weaker rather than convicted, and the vacuity leg needs variants to see it.
+#: Over-correcting here costs nothing visible; under-correcting costs a
+#: rejection the author can read. So this says WHEN to change the window and
+#: what licenses the change, and it does not pronounce on how much normalization
+#: can be trusted in general -- an author told the block is unreliable has every
+#: reason to rewrite windows nothing objected to, which loses the comparability
+#: the default is there to buy and buys nothing back. The rationale for the
+#: change lives in this comment; the prompt carries the instruction alone.
+WINDOW_NOT_AUTHORITATIVE = """\
+<window_authority>
+WHEN A GATE FAILURE ABOVE OBJECTS TO THE WINDOW, CHANGE THE WINDOW.
+
+`activation.opens_on` and `activation.until` are one reading of the same
+sentence you have, and nothing has checked that reading against it. So an
+objection to WHEN your window opens or closes is an objection to those fields,
+and transcribing them again will fail the same way.
+
+  - Drop a condition you cannot point at words in the requirement for, and
+    cannot read as an abort either.
+  - MOVE a condition that VOIDS the attempt rather than ending it. Reset is
+    always one; so is an arbitration loss that returns the FSM to idle, unless
+    the requirement is ABOUT that loss. Those belong in `aborts=`, and passing
+    them to `until=` instead is the error that convicts a correct design: the
+    window ends as though the sequence completed, and a strong obligation then
+    reports a response that was never owed as one that never came. Moving is
+    not dropping -- drop it and the window runs straight through the reset.
+  - Add one the words do license, if the objection is that the window runs past
+    what the sentence governs.
+  - If the opening, the closing and the asserted effect are all the same
+    signal, no design can fail the check whatever you write. Re-derive the
+    window from the sentence.
+
+  - AN ACTIVATION MADE ONLY OF INPUTS IS NOT A LIVE TRIGGER. `activation.inputs`
+    is what the stimulus DRIVES, and a testbench HOLDS its inputs: an enable, a
+    strobe, a miss flag stay asserted for many states after the design has
+    finished responding and gone back to idle. A window opened on those alone
+    re-opens, or never closes, across every one of those rows -- and the check
+    then demands the response again from a design that correctly gave it once.
+    Add to the opening predicate something the DESIGN drives -- a declared
+    output, or a probe -- that says it is actually in the situation, and let the
+    held input QUALIFY the window rather than open it.
+
+Name the condition you changed in `reasoning` and quote the words that license
+it. Change nothing that was not objected to: neighbouring requirements get
+comparable windows only when each one's end is derived from its own sentence,
+and a window rewritten on suspicion loses that for nothing.
+</window_authority>"""
+
+
+#: THE OBJECTIONS THE REVIEWER ACTUALLY RAISES, emitted on repair rounds beside
+#: the gate's own text. The first three were measured by triaging all 51
+#: ORACLE_INVALID dispositions on n4-i2c, where they account for 20 of the 51 --
+#: the share a better-briefed author can actually move.
+#:
+#: The FOURTH was added later on separate evidence: tracing all 15 k1
+#: requirements whose checks convict the known-good design to their
+#: counterexample rows, 4 of them assert the effect one state before it lands
+#: (`cnt_nonzero` drops at edge 10, `in_idle` arrives at edge 11, the check
+#: demands both on row 10). It is NOT part of the 20-of-51 figure above. (The other 31 are upstream defects
+#: this block cannot help with: 16 requirements whose trigger is an internal
+#: signal that reaches no declared port, 9 whose trigger needs a `cmd` encoding
+#: the specification never states, and 6 whose obligation is a fragment of a
+#: table or list rather than a sentence.)
+#:
+#: Phrased as the fix rather than the fault, because the author is answering an
+#: objection it has already been shown: repeating the objection back adds
+#: nothing, and what it lacks is the move that answers it.
+REJECTION_CLASSES = """\
+<objection_classes>
+THREE OBJECTIONS ACCOUNT FOR MOST REJECTIONS HERE. If the gate text above is
+one of them, this is the move that answers it.
+
+1. "UNLICENSED FALSE PATH: THE TRACE ENDED BEFORE THE RESPONSE."
+   You used a strong obligation where the requirement licenses only a weak one.
+   A requirement that says what happens AT a moment does not oblige the design
+   to reach that moment before the stimulus stops. Missing future evidence is
+   None, never False -- return None when the window is still open at the last
+   row. Use a strong form ONLY where the requirement's own words oblige the
+   response to arrive ("is asserted for exactly one cycle at the end of every
+   sequence" does; "the FSM then returns to idle" does not).
+
+2. "THE ASSERTION BELONGS TO A NEIGHBOURING REQUIREMENT."
+   You asserted an effect stated in a support span or a linked sibling rather
+   than in `obligation`. Keep the trigger you built from that context -- it is
+   licensed -- and assert what the obligation itself states. If the obligation
+   states no effect, say so in `reasoning` rather than borrowing one.
+
+3. "THE TRIGGER IS TOO BROAD / IS NOT THE REQUIREMENT'S SITUATION."
+   Your window opens on something easy to see rather than on the situation the
+   sentence is about -- any `cmd` change instead of a named command sequence,
+   any output-enable release instead of an arbitration check, `ena` rising
+   instead of a sequence completing. Narrow it to the stated situation even
+   when that situation is harder to recognise from the ports. A window that
+   opens too often convicts correct designs, and every such conviction is
+   unlicensed.
+
+4. "YOUR CHECK CONVICTED ONE STATE TOO EARLY."
+   The state or flag lands on the row AFTER the input that caused it -- that is
+   what a register does. And rows here are DISTINCT STATES, not clock edges, so
+   "on the row where the counter reaches zero, the FSM is back in idle" is a
+   claim about two different rows. Assert the effect over the window that
+   FOLLOWS the trigger row: pass `activation.effect_follows` through, or open on
+   the trigger and use `eventually`. Do not assert it AT the trigger row.
+</objection_classes>"""
+
+
+def _named_siblings(requirement: dict, normalized: dict | None,
+                    pool: dict[str, dict]) -> dict[str, dict]:
+    """Only the requirements THIS one names, never the whole set.
+
+    A route's `through_req`, a hop's `through_req` and the requirement's own
+    `supports` list are uids. Handing the author all 111 requirements would
+    bury the two it needs and cost the prefix its cacheability; handing it none
+    -- which is what happened until now -- leaves those uids as opaque tokens.
+    """
+    want: set[str] = set(requirement.get("supports") or [])
+    for r in (normalized or {}).get("observed_via") or []:
+        if r.get("through_req"):
+            want.add(str(r["through_req"]))
+    for h in (normalized or {}).get("activated_via") or []:
+        if h.get("through_req"):
+            want.add(str(h["through_req"]))
+    want.discard(str(requirement.get("uid") or ""))
+    out: dict[str, dict] = {}
+    for uid in sorted(want):
+        sib = pool.get(uid)
+        if not sib:
+            continue
+        ob = (sib.get("obligation") or {}).get("quote") or sib.get("text") or ""
+        out[uid] = {"obligation": ob, "ports": sib.get("ports") or []}
+    return out
+
+
+#: The rows an author is shown, and the ONLY provenance that may reach it.
+#:
+#: `build_prompt`'s contract is that no parameter can carry a design, and rows
+#: are exactly the shape that could. So the rows do not arrive as a bare list:
+#: they arrive wrapped, and the wrapper records where they came from. The
+#: witness is written by `oracles_stage._witness` from `requirements` and
+#: `contract_json` and nothing else -- the same two inputs the author already
+#: holds -- so witness rows tell the author nothing about the design under test.
+#: Golden's rows would, which is why `origin` is checked rather than trusted.
+@dataclass(frozen=True)
+class WitnessRows:
+    """Replay rows from the witness, keyed by testpoint.
+
+    Constructed only from a witness replay. `origin` is not decoration: a
+    later caller that wanted to pass golden's rows would have to write the
+    word, which is a visible change at the call site rather than one more
+    dict flowing through.
+    """
+
+    by_tp: dict[str, list[dict]]
+    origin: str = "witness"
+    #: `tp -> edge` where the author's own check failed ON THE WITNESS. When
+    #: present the window is centred there and the row is marked, instead of
+    #: starting at the witness's first activity -- the rows are then evidence
+    #: about one verdict, and the verdict is the author's, not the witness's.
+    focus: dict[str, int] | None = None
+
+    def __post_init__(self) -> None:
+        if self.origin != "witness":
+            raise ValueError(
+                f"rows shown to the author must come from the witness, not "
+                f"{self.origin!r}: quoting the design under test to the author "
+                f"is the control leak `oracles_stage` holds out as the grade")
+
+
+@dataclass(frozen=True)
+class CellBrief:
+    """A LOCATION THE SUITE IS SILENT ON. Never a behaviour, never a design.
+
+    Typed for the reason `WitnessRows` is typed. `build_prompt` refuses the
+    design under test by SIGNATURE, and a bare `str` parameter would give that
+    back -- any caller could put anything in it. This can only be built by
+    `at`, which takes a `variety.Cell` and renders it through `variety.brief`,
+    and `brief`'s own parameters are `cell, requirement, activation, driven`:
+    there is nowhere a design's source, a design's observed values, or a claim
+    that either design is correct could enter.
+
+    **THAT IS THE WHOLE POINT OF AUTHORING AT CELLS.** Presenting two observed
+    behaviours and asking which the specification means makes them the answer
+    set, when the specification may imply a third or may not constrain the port
+    at all -- and it reproduces the pathology the witness gate was deleted for:
+    "it does not make the check more correct, it makes the check agree with the
+    witness", measured on h-i2c as over-strictness 27 -> 15 and convictions
+    2 -> 16. A cell says only WHERE the specification is under-determined by
+    the current suite. What belongs there comes from the specification.
+    """
+
+    text: str
+    origin: str = "cell"
+
+    def __post_init__(self) -> None:
+        if self.origin != "cell":
+            raise ValueError(
+                f"a gap shown to the author must be a disagreement CELL, not "
+                f"{self.origin!r}: anything else is a behaviour to agree with")
+
+    @classmethod
+    def at(cls, cell, *, requirement: str, activation: str,
+           driven: dict) -> "CellBrief":
+        """The only constructor. Renders through `variety.brief`."""
+        from ..variety import brief
+        return cls(brief(cell, requirement=requirement,
+                         activation=activation, driven=driven))
+
+
+def _first_activity(rows: list[dict]) -> int:
+    """The first row whose outputs differ from the trace's own first row.
+
+    A testpoint opens with the design idle, and an author shown that prefix
+    learns nothing. The rule needs only the rows -- no activation, no
+    normalized form -- so it cannot go wrong on a requirement that has none.
+    """
+    if not rows:
+        return 0
+    base = rows[0].get("outputs") or {}
+    for i, row in enumerate(rows):
+        if (row.get("outputs") or {}) != base:
+            return max(0, i - 1)
+    return 0
+
+
+def witness_rows_block(rows: WitnessRows, *, per_tp: int = 12) -> str:
+    """A CONTIGUOUS window of real rows per testpoint, with `held` on each.
+
+    Contiguous, never sampled. The same rule the skew detectors are written
+    under: a check compares row i against row i-1, so a scattered sample
+    destroys the structure the author is being shown the rows to reason about.
+
+    It exists because the author has never seen one. `build_prompt` takes a
+    requirement, a contract, a specification and a normalized form, and out of
+    that the author writes `trace[i + 1]` against a row list whose unit it
+    cannot know: measured on k1, four rows in five hold a single clock edge
+    and the rest absorb up to two thousand, and a row boundary moves a median
+    of five ports -- so "the next row" is almost never "the next state of the
+    signal I am asserting on". Sixteen of k1's twenty false alarms are the
+    author guessing at exactly that.
+    """
+    out = []
+    focus = rows.focus or {}
+    for tp in sorted(rows.by_tp):
+        rs = rows.by_tp[tp] or []
+        at = focus.get(tp)
+        hit = next((k for k, r in enumerate(rs) if r.get("edge") == at), None) \
+            if at is not None else None
+        start = (max(0, hit - per_tp // 2) if hit is not None
+                 else _first_activity(rs))
+        window = rs[start:start + per_tp]
+        shown = [
+            {"edge": r.get("edge"), "held": r.get("held", 1),
+             "inputs": r.get("inputs") or {}, "outputs": r.get("outputs") or {},
+             **({"your_check_failed_here": True}
+                if hit is not None and r is rs[hit] else {})}
+            for r in window
+        ]
+        out.append({"tp_uid": tp, "rows_in_full": len(rs),
+                    "showing": f"{start}..{start + len(window) - 1}"
+                               if window else "none",
+                    "rows": shown})
+    return (
+        json_block("witness_rows", out)
+        + "\n\nTHESE ARE REAL ROWS, from the witness -- a second reading of the "
+        "same requirements, not the design under test, so they are evidence "
+        "about the TRACE SHAPE and never about whether the design is right. "
+        "`held` is how many clock edges that row lasted: where it is 1 the row "
+        "IS a clock edge, and where it is larger the row absorbed that many. "
+        "Read them before you decide what `the next row` means in your check. "
+        "If the response you are asserting has not arrived by the row after "
+        "the trigger, the requirement almost certainly did not promise it "
+        "there -- say what it did promise."
+        + ("\n\nWhere a row is marked `your_check_failed_here`, that is the "
+           "row at which YOUR check returned False on the witness. Read the rows "
+           "around it against the row convention and the specification, and "
+           "decide which of them your check misread -- a state paired with the "
+           "wrong inputs, a same-row response demanded on a later row, a window "
+           "still open after the transaction ended. The witness is not the "
+           "answer; the specification is."
+           if focus else "")
+    )
+
+
+def build_prompt(
+    *,
+    requirement: dict,
+    contract_json: str,
+    contract: dict,
+    normalized: dict | None = None,
+    spec: str = "",
+    siblings: dict[str, dict] | None = None,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+    rows: WitnessRows | None = None,
+    #: A disagreement CELL to author at. Typed, for the reason `rows` is: a
+    #: `str` here would undo the signature-level refusal of the design under
+    #: test. See `CellBrief`.
+    gap: "CellBrief | None" = None,
+    #: Which side of the edge the rows are sampled on -- see `row_semantics`.
+    preponed: bool = True,
+) -> str:
+    """Compose the prompt. No parameter can carry the DESIGN UNDER TEST.
+
+    That is the structural half of invariant I1, and it is why this function
+    takes a requirement rather than taking `**kwargs` or a context object: a
+    later edit that wanted to pass the model source would have to add a
+    parameter, which is a visible change to a signature rather than one more key
+    in a dict.
+
+    `rows` is the one parameter that carries a trace, and it is why the
+    invariant is stated about the design under test rather than about traces in
+    general. It is typed, not a list: `WitnessRows` refuses any origin but the
+    witness, which `oracles_stage._witness` builds from `requirements` and
+    `contract_json` alone -- the two inputs this function already receives. So
+    the author is shown rows produced by a second reading of its own inputs,
+    and golden cannot reach it without a caller writing the word.
+    """
+    parts = [json_block("requirement", requirement)]
+    #: THE REQUIREMENTS THIS ONE POINTS AT, and only those. A route's
+    #: `through_req` and a hop's `through_req` name a sibling by uid, and
+    #: without its text that uid is an opaque token -- the author is told the
+    #: port belongs to REQ-0086 and cannot read what REQ-0086 claims, so it
+    #: cannot tell this requirement's effect from that one's. `correspondence`
+    #: has been given siblings since it was written; this had not.
+    named = _named_siblings(requirement, normalized, siblings or {})
+    if named:
+        parts.append(json_block("linked_requirements", named))
+    if normalized:
+        parts.append(json_block("normalized", normalized))
+        if issues:
+            parts.append(WINDOW_NOT_AUTHORITATIVE)
+    #: Outside the `normalized` guard: the three objection classes are about the
+    #: check's own logic, not about the window it was handed, so a requirement
+    #: with no normalized form still gets them on a repair round.
+    if issues:
+        parts.append(REJECTION_CLASSES)
+    #: LAST, and outside every other guard. The rows are evidence about the
+    #: trace's SHAPE, which applies whether or not the requirement normalized
+    #: and whether or not this is a repair.
+    if rows is not None and rows.by_tp:
+        parts.append(witness_rows_block(rows))
+    #: AFTER the rows, because the gap is the ASK and everything above it is
+    #: context. A brief placed before the requirement would read as the subject
+    #: of the call rather than as where to point the check.
+    if gap is not None:
+        parts.append(gap.text)
+    return compose(
+        shared_prefix(contract_json, contract, spec, preponed=preponed),
+        "\n\n".join(parts),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def parse_response(text: str) -> OracleOutput:
+    try:
+        obj = extract_json_object(strip_markdown_code_fences(text))
+        return OracleOutput.model_validate(obj)
+    except Exception as exc:  # noqa: BLE001
+        return OracleOutput(reasoning=f"{PARSE_ERROR}{exc}")
+
+
+def gate_one(
+    out: OracleOutput,
+    *,
+    req_uid: str,
+    tp_uids: list[str],
+    contract: dict,
+    testplan: list[dict],
+    conforming_source: str = "",
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
+    #: The requirement's own sentence, for the one gate that needs it: a
+    #: positional claim is licensed only where the text states a count.
+    #: Empty means the licence cannot be read, and an unreadable licence
+    #: never refuses -- the gate stays silent rather than guessing.
+    requirement: dict | None = None,
+) -> list[Issue]:
+    """Screen the oracle before it costs anything downstream.
+
+    Reuses `oracles.well_formed` unchanged rather than re-deriving a screen: an
+    oracle is the same trust class as the reference model -- generated Python
+    this process will execute -- and if that sandbox is not good enough for one
+    it is not good enough for the other.
+
+    **Nothing here runs a design against the oracle, and that is deliberate.**
+
+    A must-pass leg used to live here: the oracle was replayed against the
+    witness and a failure came back as a gate issue, so `run_stage` re-prompted
+    the author with the exact edge its check tripped on. The reasoning was that
+    over-strictness is better caught where it can still be repaired than
+    discovered a stage later.
+
+    It is measurably the wrong trade. The witness is a second reading of the
+    same requirement by the same author, so it has no authority to say the
+    oracle is wrong -- and telling an author "an independent implementation
+    fails your check" does not make the check more correct, it makes the check
+    agree with the witness. Measured on h-i2c: over-strictness 27 -> 15,
+    convictions 2 -> 16. Oracles relaxed until they stopped disagreeing, and the
+    relaxation surfacing as vacuity. The docstring here used to concede the
+    premise -- "a disagreement could be either" -- and then act on it anyway.
+
+    So this gate is structural only: does the reply parse, does it name the
+    clause it decides, and is it a well-formed decision procedure. Whether an
+    oracle is satisfiable, and whether it can fail anything, are decided later
+    by `oracles_stage.verify_one`, where a design records rather than rejects.
+    """
+    if out.reasoning.startswith(PARSE_ERROR):
+        return [Issue("error", f"oracle.{req_uid}.response", out.reasoning)]
+    if not out.clause.strip():
+        return [Issue("error", f"oracle.{req_uid}.clause",
+                      "no clause; say which sentence of the requirement this "
+                      "decides, so a reader can tell an over-strict oracle from "
+                      "a real defect")]
+    oracle = RequirementOracle(req_uid=req_uid, tp_uids=list(tp_uids),
+                               clause=out.clause, source=out.source)
+    why = well_formed(oracle, contract, testplan)
+    if why:
+        return [Issue("error", f"oracle.{req_uid}.source", why)]
+
+    #: A ROW NAMED BY POSITION IS A CYCLE COUNT, and this pipeline severed
+    #: cycle-exactness from its accept criterion in Phases 3-6. So the check is
+    #: not being accused of being wrong -- it is being told it made a claim the
+    #: requirement never gave it, which is `correspondence` section 4's own rule
+    #: ("any cycle count in the check is unlicensed" where the text states
+    #: none) enforced where it can be enforced mechanically.
+    #:
+    #: Measured on k1: 20 of 20 positional checks, across two generation runs
+    #: and the frozen production set, have a requirement stating no count.
+    #: Their conviction rate is 1.7-2.0x the base rate in all three
+    #: populations. The four SOUND ones are sound by luck.
+    text = " ".join(str(v) for v in (
+        (requirement or {}).get("text", ""),
+        ((requirement or {}).get("obligation") or {}).get("quote", ""),
+    ) if v)
+    named = positional_claims(out.source) if text else []
+    if named and not licenses_a_cycle_count(text):
+        where = "`, `".join(named)
+        return [Issue("error", f"oracle.{req_uid}.source",
+                      f"`{where}` names a row by POSITION, which is the claim "
+                      f"that the response arrives a fixed number of states "
+                      f"after the trigger. This requirement's own sentence "
+                      f"states no such count, so nothing licenses it -- and a "
+                      f"row is not a clock edge, so the count is not even the "
+                      f"one you meant. Say what the requirement says instead: "
+                      f"`eventually(w, holds, strong=True)` when it obliges a "
+                      f"response and names no deadline, or search forward for "
+                      f"the row where the port you are asserting on actually "
+                      f"moves. If the requirement DOES name a number of "
+                      f"clocks, quote those words in `clause` and the position "
+                      f"is licensed.")]
+
+    return []
+
+
+def run_oracle_gen(
+    *,
+    requirements: list[dict],
+    contract_json: str,
+    contract: dict,
+    testplan: list[dict],
+    port: ModelPort,
+    normalized: dict[str, dict] | None = None,
+    #: The source document S1 read. Strictly upstream of every artifact here and
+    #: of any design, so admitting it cannot carry anything back -- see
+    #: `shared_prefix`. Empty keeps the old behaviour exactly.
+    spec: str = "",
+    #: An implementation built from these same requirements, for the must-pass
+    #: leg. NEVER the golden control: feeding a known-good design's behaviour
+    #: back into oracle generation is the contamination I1 exists to prevent,
+    #: and it would destroy `golden_check` as a held-out measure.
+    conforming_source: str = "",
+    stimulus_by_tp: dict[str, list[dict]] | None = None,
+    base: str = "step",
+    max_repairs: int = 2,
+    fanout: bool = True,
+    #: `req_uid -> issues` seeding the FIRST prompt for that requirement, so a
+    #: rejected oracle is re-asked with the reason it was rejected for. This is
+    #: what gives the oracle stage the repair loop every other stage has: today
+    #: a rejection is terminal because nothing ever re-asks.
+    feedback: dict[str, list[Issue]] | None = None,
+    #: Regenerate only these requirements. Scoped repair costs one call each,
+    #: against 77 for a full pass.
+    only: set[str] | None = None,
+    #: `req_uid -> the check being revised`, rendered as the previous answer.
+    #: Only a repair round supplies one; first generation has nothing to revise.
+    standing: dict[str, str] | None = None,
+    #: Appended to the stage name so a LATER pass over the same requirement is
+    #: recorded beside the first rather than on top of it. `model_io` keys every
+    #: prompt/response pair by `{stage}_r{round}` and each `run_stage` call
+    #: starts its rounds at zero, so a repair pass silently rewrites the record
+    #: of the attempt it is repairing -- destroying both the oracle that was
+    #: rejected and the prompt showing why, which is the evidence every
+    #: measurement in this project is reconstructed from.
+    label: str = "",
+    #: `req_uid -> WitnessRows` for a repair round: the witness's own rows
+    #: where the check being revised failed on it. Witness-only by type.
+    rows: dict[str, WitnessRows] | None = None,
+) -> tuple[list[RequirementOracle], dict[str, StageResult[OracleOutput]]]:
+    """One oracle per requirement, generated before any verdict exists.
+
+    `tp_uids` comes from the testplan's `covers`, never from the model. A
+    requirement no testpoint covers gets no oracle: there would be nothing to
+    replay it against, and an oracle naming no testpoint is discarded by
+    `well_formed` anyway -- better to not spend the call.
+
+    **Every oracle that has a source is returned, including one whose gate
+    failed**, keyed results beside it. Dropping the failures here is what made 5
+    of 77 requirements vanish on h-i2c into an `UNDECIDED` that also means
+    "decided nothing" -- a silent subset, which is the failure mode the verdict
+    enum exists to remove. Deciding what a gate-failing oracle IS belongs to the
+    stage, which can record it; it does not belong to the generator, which can
+    only forget it.
+    """
+    from ..obligation import by_requirement
+
+    attached = by_requirement(testplan)
+    pool = {str(r.get("uid") or ""): r for r in requirements}
+    wanted = [r for r in requirements if attached.get(str(r.get("uid") or ""))]
+    if only is not None:
+        wanted = [r for r in wanted if str(r.get("uid") or "") in only]
+    seeds = feedback or {}
+    #: The witness's form says how its rows -- and the suite's -- are sampled.
+    preponed = samples_before_edge_source(conforming_source)
+
+    def one(req: dict) -> StageResult[OracleOutput]:
+        uid = str(req.get("uid") or "")
+        tps = attached.get(uid, [])
+        return run_stage(
+            stage=f"{STAGE}_{uid or 'unknown'}{label}",
+            port=port,
+            # `previous` is THIS call's own prior attempt, which is empty on the
+            # first one -- so a repair round said "tighten your check" to an
+            # author holding no copy of the check. `standing` is the frozen
+            # oracle being revised, and it fills that first attempt.
+            #
+            # Measured before this existed: every strengthening rejection read
+            # `vacuous: passed all N variant(s)`, meaning the author answered
+            # "tighten it" by writing something WEAKER. An author composing
+            # afresh from the requirement has no way to be more specific than a
+            # check it cannot see, and no reason to land near it.
+            build_prompt=lambda issues, previous: build_prompt(
+                requirement=req, contract_json=contract_json, contract=contract,
+                normalized=(normalized or {}).get(uid),
+                spec=spec, siblings=pool,
+                issues=issues or seeds.get(uid),
+                previous=previous or (standing or {}).get(uid),
+                preponed=preponed,
+                rows=(rows or {}).get(uid),
+            ),
+            parse=parse_response,
+            gate=lambda out: gate_one(
+                out, req_uid=uid, tp_uids=tps, contract=contract,
+                testplan=testplan, conforming_source=conforming_source,
+                stimulus_by_tp=stimulus_by_tp, base=base,
+                requirement=req),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(wanted, one) if fanout else [one(r) for r in wanted]
+    by_uid: dict[str, StageResult[OracleOutput]] = {}
+    oracles: list[RequirementOracle] = []
+    for req, result in zip(wanted, results):
+        uid = str(req.get("uid") or "")
+        by_uid[uid] = result
+        if not (result.output.source or "").strip():
+            continue
+        oracles.append(RequirementOracle(
+            req_uid=uid,
+            tp_uids=list(attached.get(uid, [])),
+            clause=result.output.clause,
+            source=result.output.source,
+        ))
+    return oracles, by_uid
+
+
+def run_cell_gen(
+    *,
+    targets: list[dict],
+    contract_json: str,
+    contract: dict,
+    port: ModelPort,
+    testplan: list[dict],
+    normalized: dict | None = None,
+    spec: str = "",
+    siblings: dict | None = None,
+    conforming_source: str = "",
+    stimulus_by_tp: dict | None = None,
+    base: str = "",
+    max_repairs: int = 1,
+    fanout: bool = True,
+    label: str = "",
+) -> list[RequirementOracle]:
+    """One check per DISAGREEMENT CELL, authored from the requirement alone.
+
+    `run_oracle_gen` asks "write the check for this requirement". This asks
+    "write the check that decides THIS PORT in THIS SCENARIO, from this
+    requirement" -- the same author, the same gate, a different anchor. The
+    anchor is the whole hypothesis: resampling one prompt returns 69% identical
+    bodies among sound pairs because it samples one interpretation rather than
+    producing another, and a cell differs per target.
+
+    **THE AUTHOR IS NOT SHOWN THE DESIGNS.** Each target carries a `CellBrief`,
+    which can only be built through `variety.brief`, whose parameters are a
+    cell, a requirement, an activation and the driven inputs. A cell holds two
+    design NAMES and no values, and the names are never rendered. So the author
+    learns WHERE the suite is silent and never what any implementation did
+    there -- which is what separates this from the re-authoring round that
+    reached 0 new cells with a witness in the prompt.
+
+    Each target is `{cell, brief, requirement, tp_uids}`. Same shape out as
+    `run_oracle_gen`: every check with a source is returned, gate failures
+    included, because deciding what a gate-failing check IS belongs to the
+    stage that can record it.
+    """
+    preponed = samples_before_edge_source(conforming_source)
+
+    def one(t: dict) -> StageResult[OracleOutput]:
+        req = t["requirement"]
+        uid = str(req.get("uid") or "")
+        tps = list(t["tp_uids"])
+        cell = t["cell"]
+        return run_stage(
+            #: NAMED BY CELL, NOT BY REQUIREMENT. Several cells can belong to
+            #: one requirement, and `run_stage` keys its prompt/response record
+            #: by stage name -- so reusing the uid would have each target
+            #: silently overwrite the last one's evidence, which is the defect
+            #: `label` was added to `run_oracle_gen` to fix.
+            stage=f"{STAGE}_cell_{uid}_{cell.testpoint}_{cell.port}{label}",
+            port=port,
+            build_prompt=lambda issues, previous: build_prompt(
+                requirement=req, contract_json=contract_json, contract=contract,
+                normalized=(normalized or {}).get(uid),
+                spec=spec, siblings=siblings or {},
+                issues=issues, previous=previous,
+                gap=t["brief"], preponed=preponed,
+            ),
+            parse=parse_response,
+            gate=lambda out: gate_one(
+                out, req_uid=uid, tp_uids=tps, contract=contract,
+                testplan=testplan, conforming_source=conforming_source,
+                stimulus_by_tp=stimulus_by_tp or {}, base=base,
+                requirement=req),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(targets, one) if fanout else [one(t) for t in targets]
+    out: list[RequirementOracle] = []
+    for t, result in zip(targets, results):
+        if not (result.output.source or "").strip():
+            continue
+        out.append(RequirementOracle(
+            req_uid=str(t["requirement"].get("uid") or ""),
+            tp_uids=list(t["tp_uids"]),
+            clause=result.output.clause,
+            source=result.output.source,
+        ))
+    return out

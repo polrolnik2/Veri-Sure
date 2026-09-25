@@ -1,0 +1,117 @@
+spec 15713 bytes; population 7; cell budget 40; repair attempts 3; extra drafts 1; control loaded for the audit column
+out /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/full2
+
+no credentials file found; looked in .env.local, /home/user/Veri-Sure/.env.local. Model calls will use the process environment, which is a container snapshot -- a wrong or missing OPENAI_BASE_URL surfaces later as a 404 that names the MODEL, not this file.
+probes: 24 probe(s) ['idle', 'cnt_zero', 'clk_en', 'slave_wait', 'scl_sync', 'cscl', 'csda', 'filter_cnt', 'filter_cnt_expired', 'fscl', 'fsda', 'sscl', 'ssda', 'dscl', 'dsda', 'sta_condition', 'sto_condition', 'active_command', 'sda_chk', 'filtered_scl_rise', 'start_sequence', 'stop_sequence', 'read_sequence', 'write_sequence']; 0 alias(es); 16 cross-constraint(s)
+probes: 16 cross-constraint(s) recorded and NOT minted as requirements -- S1 already covers the spans they quote
+oracles: population of 7 spec-derived design(s)
+oracles: 152 alternate draft(s) retained for selection
+oracles: 40 blind cell(s) to author at
+oracles: 0 cell check(s) adopted of 40 authored
+oracles: REQ-0022 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0024 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0028 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0034 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0054 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0058 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0072 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0105 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0108 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0127 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: 37 abstainer(s) wait on 0 unobserved state(s) []; budget 111 instead of 111
+oracles: staging budget 111 testpoint(s) for the whole stage
+oracles: staged 111 new testpoint(s) for 37 requirement(s); 0 still unreached
+oracles: round 1 re-asking 91 rejected oracle(s)
+oracles: REQ-0002: the replacement is worse (malformed); the previous check stands
+oracles: REQ-0010: the replacement is worse (malformed); the previous check stands
+oracles: REQ-0014: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 277; the previous check stands
+oracles: REQ-0042: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0044: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0123: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 1; the previous check stands
+oracles: REQ-0126: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 2; the previous check stands
+oracles: REQ-0148: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0034 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0072 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0105 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0127 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: round 2 re-asking 69 rejected oracle(s)
+oracles: REQ-0002: the replacement decides nothing on any of its 14 testpoint(s) where the previous check decided 379; the previous check stands
+oracles: REQ-0007: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 214; the previous check stands
+oracles: REQ-0011: the replacement decides nothing on any of its 8 testpoint(s) where the previous check decided 480; the previous check stands
+oracles: REQ-0015: the replacement decides nothing on any of its 5 testpoint(s) where the previous check decided 272; the previous check stands
+oracles: REQ-0025: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 60; the previous check stands
+oracles: REQ-0041: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 284; the previous check stands
+oracles: REQ-0114: the replacement decides nothing on any of its 6 testpoint(s) where the previous check decided 16; the previous check stands
+oracles: REQ-0072 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0105 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0127 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: round 3 re-asking 60 rejected oracle(s)
+oracles: REQ-0011: the replacement decides nothing on any of its 8 testpoint(s) where the previous check decided 480; the previous check stands
+oracles: REQ-0034: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 43; the previous check stands
+oracles: REQ-0043: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0068: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0133: the replacement decides nothing on any of its 5 testpoint(s) where the previous check decided 421; the previous check stands
+oracles: REQ-0149: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 482; the previous check stands
+oracles: REQ-0127 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0000 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0006 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0009 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0010 staged 3 time(s), never reached (nothing in the design moved -- a pacing problem, not a values one)
+oracles: REQ-0012 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0013 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0023 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0030 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0036 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0046 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0047 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0049 staged 3 time(s), never reached (nothing in the design moved -- a pacing problem, not a values one)
+oracles: REQ-0052 staged 3 time(s), never reached (nothing in the design moved -- a pacing problem, not a values one)
+oracles: REQ-0056 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0060 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0065 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0068 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0070 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0074 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0076 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0077 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0082 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0084 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0087 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0092 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0095 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0097 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0098 staged 3 time(s), never reached (nothing in the design moved -- a pacing problem, not a values one)
+oracles: 2 discard(s) overturned -- liveness decided and moved them, which refutes the reachability ground they were held on: REQ-0046, REQ-0047
+oracles: 36 requirement(s) freeze a different body of their own corpus, chosen by marginal separation under dissent_weighted <= 2.0
+60 of 482 testpoint(s) move nothing at all on an implementation of these requirements: every oracle naming one is unjudgeable however well written
+4 trusted oracle(s) can fail, but nothing this stimulus produces comes near what would fail them: REQ-0026, REQ-0041, REQ-0078, REQ-0119
+133 of 482 testpoint(s) are named by no oracle: they render, they start a simulator, and nothing they produce decides anything
+oracles: 27 ABANDONED, 122 TRUSTED, 1 UNDECIDED, 2 VACUOUS (bound: witness); corpus retained 616 bodies over 152 requirements
+scorecard: SPAN       111/114 behavioural = 97.4%   (152 minted, 132 state an observable obligation)
+scorecard: BLINDNESS  3887/26549 cells = 14.6%   (population 7, effective_size 100)
+scorecard: AUDIT      0/14 judgeable = 0.0%
+scorecard: ACCEPTS    0 of 7 design(s)
+scorecard:   note: the control can judge 14 of 111 accepted check(s); the rest name state it does not expose, so the audit column is over that subset and says so
+
+BUILD ok=True stage= reason=artifacts built
+kept docs/evidence/e5/real-requirements.json
+kept docs/evidence/e5/real-oracles.json
+kept docs/evidence/e5/real-stimulus.json
+kept docs/evidence/e5/real-testplan.json
+kept docs/evidence/e5/real-normalized.json
+kept docs/evidence/e5/real-probes.json
+kept docs/evidence/e5/real-scorecard.json
+oracles.json: written
+  dispositions: {'ABANDONED': 27, 'TRUSTED': 122, 'VACUOUS': 2, 'UNDECIDED': 1}
+  TRUSTED bodies: 122
+  corpus 616 bodies / 152 reqs, median 4, provenance {'generate': 152, 'cell': 40, 'resample': 152, 'repair': 272}
+  requirements 152: {'scaffolding': 24, 'behavioural': 114, 'interface': 14}
+  SPAN  122/152 minted = 80.3% | 122/114 behavioural = 107.0%
+
+SPAN       111/114 behavioural = 97.4%   (152 minted, 132 state an observable obligation)
+BLINDNESS  3887/26549 cells = 14.6%   (population 7, effective_size 100)
+AUDIT      0/14 judgeable = 0.0%
+ACCEPTS    0 of 7 design(s)
+  note: the control can judge 14 of 111 accepted check(s); the rest name state it does not expose, so the audit column is over that subset and says so
+
+TARGET span > 90%, blindness < 10%, audit = 0: NOT MET

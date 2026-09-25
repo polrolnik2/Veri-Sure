@@ -1,0 +1,94 @@
+spec 15713 bytes; population 7; cell budget 40; repair attempts 3; extra drafts 1; control loaded for the audit column
+out /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/full7
+
+no credentials file found; looked in .env.local, /home/user/Veri-Sure/.env.local. Model calls will use the process environment, which is a container snapshot -- a wrong or missing OPENAI_BASE_URL surfaces later as a 404 that names the MODEL, not this file.
+probes: 24 probe(s) ['idle', 'clk_en', 'cnt_zero', 'slave_wait', 'scl_sync', 'cscl', 'csda', 'filter_cnt', 'fscl', 'fsda', 'sscl', 'ssda', 'dscl', 'dsda', 'sta_condition', 'sto_condition', 'active_command', 'sda_chk', 'start_sequence', 'stop_sequence', 'read_sequence', 'write_sequence', 'write_stable_high_phase', 'read_sample_window']; 0 alias(es); 14 cross-constraint(s)
+probes: 14 cross-constraint(s) recorded and NOT minted as requirements -- S1 already covers the spans they quote
+oracles: population of 7 spec-derived design(s)
+oracles: 148 alternate draft(s) retained for selection
+oracles: 40 blind cell(s) to author at
+oracles: 2 cell check(s) adopted of 40 authored
+oracles: REQ-0055 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0075 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0100 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0104 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0127 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: REQ-0129 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: 30 abstainer(s) wait on 0 unobserved state(s) []; budget 87 instead of 90
+oracles: staging budget 87 testpoint(s) for the whole stage
+oracles: 13 requirement(s) NOT staged -- normalize states no observable obligation for them, so there is no boundary situation to reach and no check to put in it: REQ-0009, REQ-0046, REQ-0050, REQ-0053, REQ-0057, REQ-0061, REQ-0066, REQ-0073
+oracles: staged 51 new testpoint(s) for 17 requirement(s); 0 still unreached
+oracles: round 1 re-asking 83 rejected oracle(s)
+oracles: REQ-0010: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0011: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0026: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 112; the previous check stands
+oracles: REQ-0044: the reply is byte-identical to the oracle it was asked to repair; not an attempt
+oracles: REQ-0079: the replacement decides nothing on any of its 5 testpoint(s) where the previous check decided 135; the previous check stands
+oracles: REQ-0091: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 130; the previous check stands
+oracles: REQ-0095: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 98; the previous check stands
+oracles: REQ-0104 waits on a state its own stimulus reached -- routing to the check author, no staging attempt spent
+oracles: 13 requirement(s) NOT staged -- normalize states no observable obligation for them, so there is no boundary situation to reach and no check to put in it: REQ-0009, REQ-0046, REQ-0050, REQ-0053, REQ-0057, REQ-0061, REQ-0066, REQ-0073
+oracles: round 2 re-asking 67 rejected oracle(s)
+oracles: REQ-0010: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0024: the replacement decides nothing on any of its 6 testpoint(s) where the previous check decided 137; the previous check stands
+oracles: REQ-0034: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 31; the previous check stands
+oracles: REQ-0045: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0084: the replacement decides nothing on any of its 5 testpoint(s) where the previous check decided 57; the previous check stands
+oracles: REQ-0091: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 130; the previous check stands
+oracles: REQ-0129: the replacement decides nothing on any of its 7 testpoint(s) where the previous check decided 185; the previous check stands
+oracles: REQ-0138: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 54; the previous check stands
+oracles: 13 requirement(s) NOT staged -- normalize states no observable obligation for them, so there is no boundary situation to reach and no check to put in it: REQ-0009, REQ-0046, REQ-0050, REQ-0053, REQ-0057, REQ-0061, REQ-0066, REQ-0073
+oracles: round 3 re-asking 52 rejected oracle(s)
+oracles: REQ-0005: the replacement decides nothing on any of its 4 testpoint(s) where the previous check decided 191; the previous check stands
+oracles: REQ-0010: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0011: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 442; the previous check stands
+oracles: REQ-0071: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 2; the previous check stands
+oracles: REQ-0088: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 45; the previous check stands
+oracles: REQ-0091: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 130; the previous check stands
+oracles: REQ-0123: the replacement decides nothing on any of its 2 testpoint(s) where the previous check decided 2; the previous check stands
+oracles: REQ-0129: the replacement is worse (malformed); the previous check stands
+oracles: REQ-0000 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0006 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0013 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0021 staged 3 time(s), never reached (the activation was driven and the check still saw nothing)
+oracles: REQ-0028 staged 3 time(s), never reached (the activation is state-dependent, so nothing here could decide whether it occurred -- it needs a probe naming the state, not another stimulus attempt)
+oracles: REQ-0030 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0036 staged 3 time(s), never reached (the ports this requirement is observed on never moved, so the observation route is what is wrong, not the stimulus)
+oracles: REQ-0145 staged 3 time(s), never reached (nothing in the design moved -- a pacing problem, not a values one)
+oracles: 13 requirement(s) NOT staged -- normalize states no observable obligation for them, so there is no boundary situation to reach and no check to put in it: REQ-0009, REQ-0046, REQ-0050, REQ-0053, REQ-0057, REQ-0061, REQ-0066, REQ-0073
+oracles: 44 requirement(s) freeze a different body of their own corpus, chosen by marginal separation under dissent_weighted <= 2.0
+36 of 442 testpoint(s) move nothing at all on an implementation of these requirements: every oracle naming one is unjudgeable however well written
+4 trusted oracle(s) can fail, but nothing this stimulus produces comes near what would fail them: REQ-0005, REQ-0041, REQ-0044, REQ-0045
+79 of 442 testpoint(s) are named by no oracle: they render, they start a simulator, and nothing they produce decides anything
+oracles: 21 ABANDONED, 123 TRUSTED, 4 VACUOUS (bound: witness); corpus retained 587 bodies over 148 requirements
+refmodel: rebuilding -- an upstream stage regenerated, so a cached model would be about requirements that changed
+scorecard: SPAN       109/111 behavioural = 98.2%   (148 minted, 135 state an observable obligation)
+scorecard: BLINDNESS  7200/29392 cells = 24.5%   (population 7, effective_size 107)
+scorecard: AUDIT      1/15 judgeable = 6.7%
+scorecard: ACCEPTS    0 of 7 design(s)
+scorecard:   note: the control is NOT contract-conformant: 24 of the 24 declared probe(s) are not exposed by it (idle, clk_en, cnt_zero, slave_wait, scl_sync, cscl, ...), so the 94 check(s) reading them can say nothing about it
+scorecard:   note: audit is over the 15 of 109 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+BUILD ok=True stage= reason=artifacts built
+kept docs/evidence/e5/real-requirements.json and docs/evidence/e5run-full7/requirements.json
+kept docs/evidence/e5/real-oracles.json and docs/evidence/e5run-full7/oracles.json
+kept docs/evidence/e5/real-stimulus.json and docs/evidence/e5run-full7/stimulus.json
+kept docs/evidence/e5/real-testplan.json and docs/evidence/e5run-full7/testplan.json
+kept docs/evidence/e5/real-normalized.json and docs/evidence/e5run-full7/normalized.json
+kept docs/evidence/e5/real-probes.json and docs/evidence/e5run-full7/probes.json
+kept docs/evidence/e5/real-scorecard.json and docs/evidence/e5run-full7/scorecard.json
+oracles.json: written
+  dispositions: {'ABANDONED': 21, 'TRUSTED': 123, 'VACUOUS': 4}
+  TRUSTED bodies: 123
+  corpus 587 bodies / 148 reqs, median 4, provenance {'generate': 148, 'resample': 148, 'repair': 251, 'cell': 40}
+  requirements 148: {'scaffolding': 19, 'behavioural': 111, 'interface': 18}
+  SPAN  123/148 minted = 83.1% | 123/111 behavioural = 110.8%
+
+SPAN       109/111 behavioural = 98.2%   (148 minted, 135 state an observable obligation)
+BLINDNESS  7200/29392 cells = 24.5%   (population 7, effective_size 107)
+AUDIT      1/15 judgeable = 6.7%
+ACCEPTS    0 of 7 design(s)
+  note: the control is NOT contract-conformant: 24 of the 24 declared probe(s) are not exposed by it (idle, clk_en, cnt_zero, slave_wait, scl_sync, cscl, ...), so the 94 check(s) reading them can say nothing about it
+  note: audit is over the 15 of 109 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+TARGET span > 90%, blindness < 10%, audit = 0: NOT MET

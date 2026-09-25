@@ -1,0 +1,182 @@
+{
+ "source_of_truth": "spec",
+ "module_name": "fpu_exceptions",
+ "parameters": [],
+ "io": [
+  {
+   "name": "clk",
+   "dir": "input",
+   "width": 1,
+   "notes": "clock"
+  },
+  {
+   "name": "rst",
+   "dir": "input",
+   "width": 1,
+   "notes": "active-high synchronous reset"
+  },
+  {
+   "name": "enable",
+   "dir": "input",
+   "width": 1,
+   "notes": "active-high state/output update enable; state holds when low"
+  },
+  {
+   "name": "rmode",
+   "dir": "input",
+   "width": 2,
+   "notes": "00=nearest, 01=toward zero, 10=toward +infinity, 11=toward -infinity"
+  },
+  {
+   "name": "opa",
+   "dir": "input",
+   "width": 64,
+   "notes": "IEEE-754 double-precision operand A"
+  },
+  {
+   "name": "opb",
+   "dir": "input",
+   "width": 64,
+   "notes": "IEEE-754 double-precision operand B"
+  },
+  {
+   "name": "in_except",
+   "dir": "input",
+   "width": 64,
+   "notes": "rounded normal candidate result; special-result sign is taken from bit 63"
+  },
+  {
+   "name": "exponent_in",
+   "dir": "input",
+   "width": 12,
+   "notes": "extended post-round exponent"
+  },
+  {
+   "name": "mantissa_in",
+   "dir": "input",
+   "width": 2,
+   "notes": "two low-order remainder bits for inexact detection"
+  },
+  {
+   "name": "fpu_op",
+   "dir": "input",
+   "width": 3,
+   "notes": "000=add, 001=subtract, 010=multiply, 011=divide; other encodings are unspecified"
+  },
+  {
+   "name": "out",
+   "dir": "output",
+   "width": 64,
+   "notes": "registered exception/special-result output"
+  },
+  {
+   "name": "ex_enable",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered request to select out instead of the normal result; may assert for ordinary inexact results"
+  },
+  {
+   "name": "underflow",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered underflow status"
+  },
+  {
+   "name": "overflow",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered overflow status"
+  },
+  {
+   "name": "inexact",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered inexact status"
+  },
+  {
+   "name": "exception",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered summary status"
+  },
+  {
+   "name": "invalid",
+   "dir": "output",
+   "width": 1,
+   "notes": "registered invalid-operation status"
+  }
+ ],
+ "clocking": {
+  "is_sequential": true,
+  "clock": {
+   "name": "clk",
+   "edge": "posedge"
+  },
+  "reset": {
+   "name": "rst",
+   "active": "high",
+   "type": "synchronous"
+  },
+  "enable": {
+   "name": "enable",
+   "active": "high",
+   "behavior": "when low, all state and outputs retain their previous values; reset takes priority"
+  }
+ },
+ "timing": {},
+ "functional_summary": [
+  "On a rising edge with rst asserted, clear all internal state and all outputs to zero; otherwise, on a rising edge with enable asserted, evaluate the current inputs and update the registered outputs.",
+  "Decode opa and opb as binary64 values: zero when bits [62:0] are zero, infinity when exponent is 2047 and fraction is zero, and NaN when exponent is 2047 and fraction is nonzero; distinguish quiet NaN by fraction bit 51 and signaling NaN by fraction bit 51 clear.",
+  "Propagate an input NaN with operand A payload preferred over operand B, set its quiet bit, and assert invalid for any signaling NaN. Generated invalid-operation NaNs are quiet NaNs derived from operand A; the final NaN sign is in_except[63].",
+  "For add/subtract, +inf plus -inf, -inf plus +inf, +inf minus +inf, and -inf minus -inf are invalid and produce NaN. For multiply, zero times infinity is invalid and produces NaN. For divide, 0/0 and infinity/infinity are invalid and produce NaN.",
+  "A valid infinity result is generated for infinity-producing operations, finite nonzero division by zero, or exponent_in greater than 2046. Its sign is in_except[63]. The magnitude is infinity except when directed rounding requires replacement by the corresponding largest finite magnitude (exponent 2046 and all-ones fraction).",
+  "Underflow-to-zero cases include finite division by infinity, nonzero multiplication whose candidate result is zero, and nonzero division whose candidate result is zero. For these cases the selected result is signed zero with sign in_except[63].",
+  "The selection priority is normal rounded result, then signed-zero underflow replacement, then infinity or maximum-finite replacement, then NaN replacement. ex_enable requests selection of out for NaN, infinity, overflow, underflow, and inexact conditions, including ordinary inexact results.",
+  "inexact is triggered by either mantissa_in bit or by generated infinity/maximum-finite or underflow replacement, except when a NaN input suppresses it. overflow is triggered by the infinity trigger when there is no NaN input; exception is the OR of invalid, overflow, underflow, and inexact trigger conditions."
+ ],
+ "corner_cases": [
+  "Reset is synchronous: outputs clear only on a rising edge with rst high, and reset has priority over enable.",
+  "When enable is low, outputs and internal state retain their previous values regardless of input changes.",
+  "NaN input has priority over infinity, underflow, and normal-result handling; signaling NaN is quieted and asserts invalid, while a quiet NaN does not by itself assert invalid.",
+  "The four infinity add/subtract sign combinations listed in the contract are invalid; all other add/subtract infinity combinations produce a valid infinity result.",
+  "Finite nonzero divide-by-zero has no separate divide-by-zero output port; it follows the infinity/overflow/inexact path.",
+  "Directed-rounding infinity replacement depends on the sign in in_except[63]: positive infinity rounds down for modes zero or -infinity, and negative infinity rounds down for modes zero or +infinity.",
+  "For invalid operations, generated NaN payload behavior must not be replaced by a fixed canonical constant; preserve the operand-A-derived quiet-NaN construction and input-NaN payload preference.",
+  "fpu_op encodings other than 000, 001, 010, and 011 are unspecified and need not be assigned a defined IEEE-754 behavior."
+ ],
+ "test_plan": [
+  "Assert rst across a rising edge with enable both high and low; verify every output is zero after reset and then holds when enable is low.",
+  "For each operation encoding, exercise ordinary finite inputs with no special trigger and verify out follows in_except, with status flags determined by mantissa_in.",
+  "Test quiet NaN in operand A, quiet NaN only in operand B, and signaling NaN in either operand; check payload preference, quiet-bit conversion, invalid, ex_enable, and NaN priority.",
+  "Test invalid infinity combinations for add/subtract, zero times infinity, 0/0, and infinity/infinity; verify quiet NaN output and invalid/exception behavior.",
+  "Test finite nonzero divide-by-zero and valid infinity-producing multiply/divide/add/subtract cases for both signs; verify infinity sign comes from in_except[63].",
+  "For positive and negative infinity triggers, test all four rounding modes and verify infinity versus maximum-finite substitution at the directed-rounding boundaries.",
+  "Test finite division by infinity, nonzero multiply yielding zero candidate, and nonzero divide yielding zero candidate; verify signed-zero output and underflow/inexact/exception flags.",
+  "Toggle mantissa_in between 00 and each nonzero value for an otherwise ordinary result, and verify inexact plus ex_enable without requiring a special-value replacement.",
+  "Drive exponent_in at 2046, 2047, and values above 2047, including NaN inputs, to verify the greater-than-2046 infinity trigger and NaN priority."
+ ],
+ "guidance": {
+  "verifier": [
+   "Drive all inputs to defined idle/zero values before releasing synchronous reset; apply stimulus sufficiently before a rising edge and sample registered outputs after that edge, preferably at the following falling edge to avoid races.",
+   "Model enable as a clock-enable: do not compare outputs against changing inputs while enable is low, and hold the reference state unchanged.",
+   "Use exact binary64 field decoding and compare NaN payload/sign bits, not only an is-NaN predicate. Check the stated result-selection priority and status-summary equations.",
+   "The specification does not provide a fixed cycle count for any output beyond registered edge/update behavior; do not impose an additional pipeline latency."
+  ],
+  "coder": [
+   "Match the exact parameterless port list, names, directions, and widths; use a single synchronous-reset sequential state/update structure with enable hold behavior.",
+   "Decode binary64 fields explicitly using exponent [62:52], fraction [51:0], and sign [63]; use explicit 64-bit constants for infinity, maximum finite, signed zero, and NaN construction.",
+   "Compute combinational triggers from the current input bundle, preserve underflow-then-infinity-then-NaN selection priority, and register outputs on posedge clk. Reset must be synchronous and must not add a new multi-stage pipeline.",
+   "Use sufficiently wide unsigned arithmetic for exponent_in comparisons and avoid truncating the 12-bit value before comparing against 2046. Preserve in_except[63] for all generated special-result signs and preserve NaN payload rules.",
+   "Ensure exception is formed from the specified trigger conditions and that NaN-input suppression of overflow/inexact is applied consistently."
+  ],
+  "debugger": [
+   "First check posedge timing, synchronous reset priority, and enable hold behavior; most failures are stale or one-edge-shifted registered outputs.",
+   "Check binary64 bit slicing, quiet-versus-signaling NaN classification, NaN operand-A payload preference, and generated-NaN sign/payload construction.",
+   "Check operation decode and the exact four invalid infinity add/subtract combinations, plus 0*inf, 0/0, and inf/inf.",
+   "Check infinity/maximum-finite rounding direction and that special-result sign comes from in_except[63], not recomputed operand signs.",
+   "Check trigger priority and flag suppression/aggregation, especially NaN priority, underflow-to-zero cases, ordinary mantissa-driven inexact, and exception OR composition.",
+   "Check exponent comparison width and boundary condition: the infinity trigger uses exponent_in greater than 2046, not merely an 11-bit overflow pattern."
+  ]
+ },
+ "contract_sva": null
+}

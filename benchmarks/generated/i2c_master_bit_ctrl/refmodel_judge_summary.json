@@ -1,0 +1,12 @@
+{
+  "counts": {
+    "met": 77,
+    "not_met": 0,
+    "ambiguous": 0
+  },
+  "blocking": [],
+  "verdict_histogram": {
+    "met": 77,
+    "total": 77
+  }
+}

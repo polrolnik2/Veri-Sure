@@ -1,0 +1,350 @@
+"""A resend-able failure must be resent. A 30-minute generation depends on it.
+
+The i2c reference model at `xhigh` is roughly half an hour of work, spread over
+several continuation chunks. One run lost all of it on the second chunk to a
+gateway 500 whose own message read "You can retry your request" -- because the
+retry set was a list of transport-error class NAMES, and the SDK reports a
+mid-stream server error as a bare `APIError` with no `status_code` to read.
+
+So the classification is by "could a resend fix this", not by exception type,
+and it is deliberately biased towards retrying: a wrong guess that way costs one
+wasted resend, and a wrong guess the other way costs the whole generation.
+"""
+
+from __future__ import annotations
+
+import httpx
+import openai
+import pytest
+
+from specflow.model_io import ApiPort, PortSettings, _retryable
+
+
+def _request() -> httpx.Request:
+    return httpx.Request("POST", "http://gateway.invalid/v1/responses")
+
+
+def _status(cls, code: int):
+    return cls("boom", response=httpx.Response(code, request=_request()), body=None)
+
+
+class TestRetryable:
+    def test_a_bare_apierror_from_a_stream_error_event_is_retried(self):
+        """The regression. The SDK raises a bare `APIError` -- NOT an
+        `APIStatusError` -- when the SSE carries an error event, so there is no
+        status code, and matching on the class name filed a transient 500 with
+        the permanent failures."""
+        exc = openai.APIError(
+            "The server had an error processing your request. Sorry about that! "
+            "You can retry your request",
+            request=_request(), body={"code": "server_error"},
+        )
+        assert _retryable(exc) is True
+
+    @pytest.mark.parametrize("cls,code", [
+        (openai.RateLimitError, 429),
+        (openai.ConflictError, 409),
+    ])
+    def test_transient_status_codes_are_retried(self, cls, code):
+        assert _retryable(_status(cls, code)) is True
+
+    @pytest.mark.parametrize("cls,code", [
+        (openai.BadRequestError, 400),
+        (openai.AuthenticationError, 401),
+        (openai.PermissionDeniedError, 403),
+        (openai.NotFoundError, 404),
+        (openai.UnprocessableEntityError, 422),
+    ])
+    def test_permanent_status_codes_are_not_retried(self, cls, code):
+        """Resending a malformed body produces the same malformed body."""
+        assert _retryable(_status(cls, code)) is False
+
+    def test_a_permanent_code_inside_a_500_shaped_reply_is_not_retried(self):
+        """A content filter does not become satisfied on the second attempt."""
+        exc = openai.APIError("filtered", request=_request(),
+                              body={"code": "content_filter"})
+        assert _retryable(exc) is False
+
+    def test_an_unparseable_event_is_not_retried(self):
+        """A shape the SDK cannot read will be equally unreadable next time."""
+        assert _retryable(TypeError("list index out of range")) is False
+        assert _retryable(KeyError("output")) is False
+
+    def test_an_unknown_failure_is_retried(self):
+        """The bias. An exception nobody classified costs one resend if it was
+        hopeless, and saves the generation if it was not."""
+        assert _retryable(RuntimeError("something new")) is True
+
+
+class _Event:
+    def __init__(self, type_, **kw):
+        self.type = type_
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+class _Responses:
+    """Fails `fail_times` times, then streams a complete response."""
+
+    def __init__(self, exc, fail_times):
+        self.exc, self.fail_times, self.calls = exc, fail_times, 0
+
+    def create(self, **_kw):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise self.exc
+        final = type("R", (), {"status": "completed", "usage": None})()
+        return iter([
+            _Event("response.output_text.delta", delta="def step("),
+            _Event("response.output_text.delta", delta="self): pass"),
+            _Event("response.completed", response=final),
+        ])
+
+
+def _port(tmp_path, retries):
+    return ApiPort(root=tmp_path,
+                   settings=PortSettings(stream_retries=retries))
+
+
+def test_a_retryable_chunk_recovers_rather_than_losing_the_work(tmp_path, monkeypatch):
+    """The whole point: the second attempt returns the chunk, and the caller
+    never sees the failure."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    exc = openai.APIError("server had an error", request=_request(),
+                          body={"code": "server_error"})
+    responses = _Responses(exc, fail_times=1)
+    client = type("C", (), {"responses": responses})()
+
+    got, final = _port(tmp_path, 2)._stream_chunk(client, {"input": []})
+
+    assert "".join(got) == "def step(self): pass"
+    assert final.status == "completed"
+    assert responses.calls == 2
+
+
+def test_a_permanent_failure_is_not_resent(tmp_path, monkeypatch):
+    """Retrying a 400 burns the budget and changes nothing."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    responses = _Responses(_status(openai.BadRequestError, 400), fail_times=99)
+    client = type("C", (), {"responses": responses})()
+
+    with pytest.raises(openai.BadRequestError):
+        _port(tmp_path, 3)._stream_chunk(client, {"input": []})
+    assert responses.calls == 1
+
+
+def test_retries_are_bounded_and_the_last_error_survives(tmp_path, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    exc = openai.APIError("still broken", request=_request(), body=None)
+    responses = _Responses(exc, fail_times=99)
+    client = type("C", (), {"responses": responses})()
+
+    with pytest.raises(openai.APIError):
+        _port(tmp_path, 2)._stream_chunk(client, {"input": []})
+    assert responses.calls == 3  # 1 attempt + 2 retries
+
+
+def test_backoff_grows_and_stays_bounded(tmp_path, monkeypatch):
+    """Instant resends hit the same unhealthy backend; unbounded ones would
+    themselves become the 300s idle gap this path exists to avoid."""
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", slept.append)
+    exc = openai.APIError("still broken", request=_request(), body=None)
+    client = type("C", (), {"responses": _Responses(exc, fail_times=99)})()
+
+    with pytest.raises(openai.APIError):
+        _port(tmp_path, 4)._stream_chunk(client, {"input": []})
+
+    assert slept == [4.0, 8.0, 16.0, 30.0]
+    assert max(slept) <= 30.0
+
+
+class _Chat:
+    """Fails `fail_times` times mid-stream, then streams a complete answer."""
+
+    def __init__(self, exc, fail_times, stream=True):
+        self.exc, self.fail_times, self.calls, self.stream = exc, fail_times, 0, stream
+
+    def create(self, **_kw):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise self.exc
+        if not self.stream:
+            msg = type("M", (), {"content": "ok"})()
+            choice = type("C", (), {"message": msg, "finish_reason": "stop"})()
+            return type("R", (), {"choices": [choice], "usage": None})()
+        chunk = type("Ch", (), {
+            "usage": None,
+            "choices": [type("C", (), {
+                "delta": type("D", (), {"content": "hello"})(),
+                "finish_reason": "stop"})()],
+        })()
+        return iter([chunk])
+
+
+def _chat_client(chat):
+    completions = chat
+    return type("C", (), {
+        "chat": type("Chat", (), {"completions": completions})()
+    })()
+
+
+def _chat_cfg(stream=True):
+    return type("Cfg", (), {"model": "m", "stream": stream})()
+
+
+def test_chat_completions_retries_a_mid_stream_failure(tmp_path, monkeypatch):
+    """The same defect lived on the DEFAULT flavour. `/chat/completions`
+    iterated the stream outside any try/except, so the identical bare
+    `APIError` propagated raw and unretried."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    exc = openai.APIError("server had an error", request=_request(),
+                          body={"code": "server_error"})
+    chat = _Chat(exc, fail_times=1)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(), {}, "prompt")
+
+    assert text == "hello"
+    assert chat.calls == 2
+
+
+def test_chat_completions_does_not_retry_a_permanent_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _Chat(_status(openai.BadRequestError, 400), fail_times=99)
+    port = _port(tmp_path, 3)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    with pytest.raises(openai.BadRequestError):
+        port._chat_call(_chat_cfg(), {}, "prompt")
+    assert chat.calls == 1
+
+
+def test_chat_completions_non_streaming_still_works(tmp_path, monkeypatch):
+    """The refactor moved the non-streamed branch too; it must still return
+    the message content rather than a reassembled stream."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _Chat(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok"
+    assert chat.calls == 1
+
+
+class _NullChoices(_Chat):
+    """Answers `null_times` times with a 200 carrying NO choices and an in-band
+    error -- OpenRouter's shape for a provider failure -- then answers."""
+
+    def __init__(self, null_times, error):
+        super().__init__(None, fail_times=0, stream=False)
+        self.null_times, self.error = null_times, error
+
+    def create(self, **kw):
+        if self.calls < self.null_times:
+            self.calls += 1
+            return type("R", (), {"choices": None, "usage": None,
+                                  "model_extra": {"error": self.error}})()
+        return super().create(**kw)
+
+
+def test_a_reply_with_no_choices_is_resent_not_filed_as_a_type_error(
+        tmp_path, monkeypatch):
+    """`choices[0]` on `None` raised TypeError, which the policy files as
+    permanent, and one such reply among ~97 S1 calls killed two builds."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(1, {"code": 502, "message": "upstream error"})
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok"
+    assert chat.calls == 2
+
+
+def test_a_permanent_in_band_error_is_still_permanent(tmp_path, monkeypatch):
+    from specflow.model_io import NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(99, {"code": "context_length_exceeded"})
+    port = _port(tmp_path, 3)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    with pytest.raises(NoChoicesError):
+        port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert chat.calls == 1
+
+
+def test_the_chat_path_sends_the_shared_prefix_as_its_own_message(tmp_path, monkeypatch):
+    """`developer_role_prefix` reached the Responses body only; the chat flavour
+    sent one flat `user` string, which the router could not cache across items
+    (1.5% cached over 1,047 calls). A prompt with the sentinel must go out as
+    `system` + `user`; one without it, unchanged."""
+    from specflow.model_io import _PREFIX_SENTINEL
+
+    seen = []
+
+    class _Capture(_Chat):
+        def create(self, **kw):
+            seen.append(kw["messages"])
+            return super().create(**kw)
+
+    chat = _Capture(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 0)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+
+    port._chat_call(_chat_cfg(stream=False), {}, "SPEC" + _PREFIX_SENTINEL + "\nITEM")
+    port._chat_call(_chat_cfg(stream=False), {}, "no boundary here")
+    assert seen[0] == [{"role": "system", "content": "SPEC" + _PREFIX_SENTINEL},
+                       {"role": "user", "content": "ITEM"}]
+    assert seen[1] == [{"role": "user", "content": "no boundary here"}]
+
+
+def test_a_rate_limit_is_waited_out_beyond_the_ordinary_budget(tmp_path, monkeypatch):
+    """An in-band 429 killed a build 17 minutes in: the ordinary budget (three
+    tries) was spent before the upstream window reopened."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    err = {"message": "rate-limited upstream", "code": 429,
+           "metadata": {"error_type": "rate_limit_exceeded"}}
+    chat = _NullChoices(6, err)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok" and chat.calls == 7
+
+
+def test_a_rate_limit_that_never_lifts_still_ends(tmp_path, monkeypatch):
+    from specflow.model_io import RATE_LIMIT_RETRIES, NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(999, {"code": 429})
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    with pytest.raises(NoChoicesError):
+        port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert chat.calls == RATE_LIMIT_RETRIES + 3
+
+
+def test_a_finish_reason_error_is_a_transport_failure_and_is_resent(tmp_path, monkeypatch):
+    """`finish_reason: "error"` with empty content reached the empty-content
+    check as a token-budget RuntimeError; normalize swallowed it and the run went
+    on with no normalized forms."""
+    from specflow.integration import _transport_failure
+    from specflow.model_io import NoChoicesError
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    class _ErrThenOk(_Chat):
+        def create(self, **kw):
+            if self.calls == 0:
+                self.calls += 1
+                msg = type("M", (), {"content": ""})()
+                ch = type("C", (), {"message": msg, "finish_reason": "error"})()
+                return type("R", (), {"choices": [ch], "usage": None, "model_extra": {}})()
+            return super().create(**kw)
+
+    chat = _ErrThenOk(None, fail_times=0, stream=False)
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    _r, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok" and chat.calls == 2
+    assert _transport_failure(NoChoicesError("finish_reason='error'"))

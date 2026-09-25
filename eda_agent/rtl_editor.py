@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -17,7 +18,8 @@ from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
 from .model import make_formatter, make_openai_model
-from .sim_reviewer import SimReviewer, check_syntax, multidriven_signals
+from .sim_reviewer import (SimReviewer, check_syntax, multidriven_signals,
+                           overdriven_signals)
 from .trace_report import build_trace_report
 from .trace_slicer import RtlBlock
 from .utils import (
@@ -44,12 +46,51 @@ _FAIL_TIME_FAILED_RE = re.compile(
 )
 
 
+#: Values that turn the rollback guard OFF. Anything else -- including a typo,
+#: an empty string, or a word nobody intended -- leaves it ON, so a mistake in
+#: this variable fails safe INTO the guard rather than silently out of it.
+_GUARD_OFF_WORDS = frozenset({"off", "0", "false", "no"})
+
+
+def resolve_rollback_guard(explicit: bool | None = None, env=None) -> bool:
+    """Whether an edit that increases the mismatch count should be reverted.
+
+    An explicit argument always wins; `None` consults `EDA_ROLLBACK_GUARD`.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    source = os.environ if env is None else env
+    return str(source.get("EDA_ROLLBACK_GUARD", "on")).strip().lower() not in _GUARD_OFF_WORDS
+
+
 def _extract_fail_time_from_sim_log_json(sim_log_json: str) -> int | None:
-    """Best-effort earliest mismatch time from a CommandResult JSON string."""
+    """Best-effort earliest mismatch time from a CommandResult JSON string.
+
+    On the specflow backend there is no Verilog testbench and therefore none of
+    the `Hint: Output '<x>' has N mismatches...` lines these regexes look for.
+    The temporal coordinate is `trace.fail_step` -- the earliest stimulus step
+    at which any testpoint diverged -- and it was simply never read, so this
+    returned None on every call.
+
+    That mattered because the ONLY escape from the rollback guard is
+    `new_fail_time > prev_fail_time` (see `_judge_replace_action_execution`).
+    With both sides None the comparison is dead, the allowance never fires, and
+    the guard degrades to a strictly greedy filter that cannot accept any edit
+    which trades a small regression for a later first failure. On
+    i2c_master_bit_ctrl that stalled the loop at 91 failing testpoints with four
+    consecutive rollbacks -- the guard rejecting each partial step of a repair
+    that only pays off once several parts land together.
+    """
     try:
         obj = json.loads(sim_log_json)
     except Exception:  # noqa: BLE001
         return None
+    if str(obj.get("format") or "") == "specflow":
+        step = (obj.get("trace") or {}).get("fail_step")
+        try:
+            return int(step) if step is not None else None
+        except Exception:  # noqa: BLE001
+            return None
     stdout = str(obj.get("stdout") or "")
     times: list[int] = []
     for m in _FAIL_TIME_HINT_RE.finditer(stdout):
@@ -100,6 +141,19 @@ def _summarize_sim_log_json(
         stderr = str(obj.get("stderr") or "")
     except Exception:  # noqa: BLE001
         return _clip_text(sim_log_json, max_chars=max_chars)
+
+    # An already-structured payload is passed through, not filtered. The
+    # vocabulary below was written for a SystemVerilog testbench's stdout, and
+    # the comment further down records what happens when a backend speaks a
+    # different one: every value row is silently dropped. It happened again.
+    # specflow's rows read "CHK-0000 sda_oen: expected=1 got=0 on ena=1, ...",
+    # which carries `got=` and `exp` but not the literal "mismatch" the filter
+    # requires -- so the debugger received 22 testpoint headers naming the
+    # diverging outputs and zero concrete values, and spent its budget on one
+    # no-op edit and two cosmetic reformats.
+    if str(obj.get("format") or "") == "specflow":
+        body = stdout if not stderr else f"{stdout}\n\n[stderr]\n{stderr}"
+        return _clip_text(body.strip(), max_chars=max_chars)
 
     # Keep the most informative bits: mismatch banner + hints + summary.
     #
@@ -347,19 +401,65 @@ KMAP_DEBUG_HINT_PROMPT = r"""
 
 EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until pass):
+0) START WITH THE REQUIREMENTS, not with the waveform. Call
+   _tool_list_failing_requirements() to see what actually failed, in each
+   requirement's own words, then _tool_explain(req_uid) on the one you intend to
+   fix. `explain` gives you what that requirement OWES -- its text, when it
+   applies, what must then happen -- alongside the span its check objected in,
+   the boundary ports across that span, the transitions in it, the suspect
+   blocks' internal signals from the waveform, and what value change would have
+   satisfied the check. Do not theorise about timing from signal names; the
+   requirement states the timing it requires.
 1) Use the contract + trace report + <failing_scenarios> to find the most likely
    root cause. All listed scenarios fail simultaneously — prefer a single fix that
    resolves the whole group over patching one failing case at a time.
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
-3) Call _tool_list_suspect_blocks(), then _tool_read_block(block_id) for the most
-   relevant one. Never guess a block_id -- list them first; an invented id costs
-   a whole iteration and returns nothing.
-4) Make ONE small change in ONE block via _tool_replace_block(block_id, new_code).
-5) Immediately call _tool_run_simulation() and iterate on the new trace summary.
+3) Call _tool_focus(req_uid) for the requirement you are fixing, THEN
+   _tool_list_suspect_blocks() and _tool_read_block(block_id). Focus slices from
+   that one requirement's ports; unfocused, with many requirements failing, the
+   slice is most of the design and tells you nothing. Never guess a block_id --
+   list them first; an invented id costs a whole iteration and returns nothing.
+4) STAGE the change. _tool_replace_block, _tool_add_block and _tool_remove_block
+   all edit a staged buffer: they do not compile, do not simulate, and DO NOT
+   COST A TRIAL. So a repair that needs several blocks to change together is one
+   batch, not several rejected attempts -- stage every part of it before
+   committing anything.
+5) _tool_check_staged() -- free and unlimited -- settles syntax and driver
+   problems before you pay for a build. Use it; a commit that fails to compile
+   costs a trial for something this would have told you for nothing.
+6) _tool_commit() compiles and simulates the batch. THIS IS THE TRIAL, and the
+   only one. If it improves, the batch is latched. If it does not, the accepted
+   RTL is untouched and YOUR STAGED EDITS ARE KEPT -- adjust them and commit
+   again rather than starting over. _tool_discard_staged() throws the batch away
+   and costs nothing.
 
 Rules:
+- Edits are free; commits are not. Think in batches, and commit a coherent
+  change rather than a fragment.
+- _tool_read_block shows the STAGED text with the line numbers a commit would
+  write, so it always reflects your own pending edits. _tool_list_suspect_blocks
+  describes the last ACCEPTED design and does not move until a commit lands.
+- Removing a block retires its id: reading it afterwards says "removed in this
+  staged batch", which is your own edit and not an error.
+- If a removal takes away a signal's last driver, add the replacement driver in
+  THE SAME batch. Nothing warns you at simulation -- the signal simply goes X
+  and every check that reads it stops deciding.
+- A check failing tells you something is wrong AT A PORT. Only the requirement
+  tells you what the design was supposed to do there. If _tool_explain reports
+  that NO single-value change satisfies the check, the defect is TEMPORAL --
+  ordering or timing -- and looking for a wrong constant will waste the trial.
+- FAILING and UNCOVERED are different findings with different remedies. A
+  failing requirement is evidence about the design: fix the design. An UNCOVERED
+  one means its check never saw the situation its clause is about, so no edit
+  can discharge it -- call _tool_add_stimulus(req_uid, "<what must happen>") and
+  describe the scenario in prose. Never edit the design to chase an uncovered
+  requirement, and never call add_stimulus for a failing one.
+- Whether a requirement is covered depends on WHAT THE DESIGN DOES, so an
+  uncovered one can be the symptom of the very bug you are hunting: if the
+  design never leaves a state, everything downstream of it abstains. Staging the
+  scenario is how you find out which it is.
 - Do not modify the testbench. Only modify the RTL code.
 - Preserve the module interface and the contract's timing assumptions.
 - Only modify code inside suspect blocks.
@@ -371,9 +471,22 @@ You will also receive a structured trace-grounded bug report (JSON) that include
 
 You MUST only modify code inside suspect blocks.
 Use tools:
+- _tool_list_failing_requirements()          what failed, as REQUIREMENTS  free
+- _tool_explain(req_uid)                     what it owed + where to look  free
+- _tool_focus(req_uid)                       slice from its ports alone    free
 - _tool_list_suspect_blocks()
 - _tool_read_block(block_id)
-- _tool_replace_block(block_id, new_code)
+- _tool_replace_block(block_id, new_code)   stage a replacement   free
+- _tool_add_block(anchor_id, code)          stage a NEW block after anchor_id,
+                                            or at module end with "endmodule"
+- _tool_remove_block(block_id)              stage a deletion      free
+- _tool_check_staged()                      syntax + drivers      free, unlimited
+- _tool_discard_staged()                    back to accepted RTL  free
+- _tool_commit()                            build + simulate      ONE TRIAL
+- _tool_add_stimulus(req_uid, what_the_scenario_needs)
+                                            stage a scenario the suite never
+                                            reaches, for an UNCOVERED
+                                            requirement                 free
 - _tool_run_simulation()
 
 These are the exact names the tool schema exposes. Earlier revisions of this
@@ -430,7 +543,10 @@ def _child_outputs_gone_dark(
 
 @dataclass
 class _EditSession:
-    tb_path: str
+    # None when there is no SystemVerilog testbench -- the specflow backend's
+    # oracle is a cocotb suite. Nothing in this session reads it; it is kept so
+    # a post-mortem can tell which backend produced the session.
+    tb_path: str | None
     rtl_path: str
     output_dir: str
     last_mismatch_cnt: int
@@ -443,6 +559,30 @@ class _EditSession:
     # BEFORE any simulation runs" -- a promise that was not true inside this
     # loop. See `_child_outputs_gone_dark`.
     child_names: Tuple[str, ...] = ()
+
+    #: When False, an edit that increases the mismatch count is KEPT rather than
+    #: reverted. The guard exists because a greedy filter is a good default; it
+    #: is also, exactly, a hill-climber, and a repair needing several parts to
+    #: land together has to pass through a worse state to get there. Turning it
+    #: off makes the search able to cross that valley; `best_rtl` below is what
+    #: keeps that from being a licence to end up worse than it started.
+    rollback_on_regression: bool = True
+    #: Best (lowest) mismatch count seen this session, and the RTL that produced
+    #: it. Recorded on every simulated edit regardless of accept/rollback, and
+    #: restored before `chat()` returns -- so with the guard off the loop is
+    #: free to wander uphill while the ANSWER is still the best point found.
+    best_mismatch_cnt: int | None = None
+    #: Best (HIGHEST) passing-requirement count seen, when the backend publishes
+    #: requirements. This is what `note_best` ranks on then, because it is what
+    #: `commit` judges on.
+    best_passing: int | None = None
+    best_rtl: str | None = None
+    #: The requirement split of the ACCEPTED design, `(passing, failing,
+    #: uncovered)`. Held here rather than re-derived from `req_results`,
+    #: because the rollback path restores the old RTL without re-reviewing, so
+    #: `req_results` describes the design that was just discarded. Updated only
+    #: where the accepted RTL changes; a rollback must not move it.
+    _accepted_req_split: tuple[set, set, set] | None = None
 
     is_done: bool = False
     action_calls: int = 0
@@ -468,6 +608,80 @@ class _EditSession:
     # was a guess because the falsifying data did not exist.
     traj_iter: int = 0
 
+    #: THE STAGED BUFFER. `None` means nothing is staged and the buffer IS the
+    #: accepted RTL on disk. Edits mutate this and never `rtl_path`, which is
+    #: what removes rollback entirely: a commit that does not improve never
+    #: overwrote anything, so there is nothing to put back and the agent's work
+    #: is not destroyed by a failed attempt.
+    staged_rtl: str | None = None
+    #: Each block's CURRENT text in the staged buffer, so a second edit to the
+    #: same block anchors on what the first one wrote rather than on the
+    #: original. Without it, refining your own staged edit is indistinguishable
+    #: from editing against a destroyed anchor.
+    staged_text: Dict[str, str] = field(default_factory=dict)
+    #: Blocks removed in this batch. A later `read_block` on one of these says
+    #: "removed", not "unknown block_id" -- different facts, and the second
+    #: reads as the agent's mistake rather than its own edit.
+    retired_ids: set = field(default_factory=set)
+    #: THE STIMULUS ROUTE. Anything exposing
+    #: `add_stimulus(req_uid, what_the_scenario_needs) -> dict`; the refmodel
+    #: arm's `specflow.refmodel.session` already does.
+    #:
+    #: Here because "decides nothing" is a property of the CURRENT DESIGN, not
+    #: of the stimulus: an oracle abstains when its activation never occurred,
+    #: and whether it occurs depends on what the design does. #98 is the case on
+    #: record -- a model invented a two-tick command handshake, brief `cmd`
+    #: pulses never left IDLE, and everything downstream abstained. The evidence
+    #: that exposes such a bug only exists once the design changes AND stimulus
+    #: reaches the new behaviour, so the loop that edits the design is exactly
+    #: where this has to be reachable.
+    #:
+    #: Without it an uncovered requirement is a finding the agent is shown and
+    #: cannot act on -- and once the build is gated on assertion coverage, a
+    #: number it can be blocked by and cannot move.
+    stimulus_stager: object | None = None
+
+    #: THE REQUIREMENT VIEW, keyed by req_uid: text, activation, expectation,
+    #: the frozen check and the ports it reads. Empty when the backend does not
+    #: supply one, which is the state the loop was ALWAYS in -- `req_uid`
+    #: appeared nowhere in the report path, so the agent was shown check ids and
+    #: asked to name the requirement behind them.
+    requirements: Dict[str, Any] = field(default_factory=dict)
+    #: Per-requirement results from the last suite run, keyed by req_uid.
+    #: `focus` and `explain` read this; without it they can still slice from a
+    #: requirement's ports but cannot say what its check objected to.
+    req_results: Dict[str, Any] = field(default_factory=dict)
+    #: The requirement `focus` last selected. `list_suspect_blocks` narrows to
+    #: it, which is what keeps the slice a slice once many requirements fail.
+    focused: str = ""
+    #: WHERE THE CURRENT SLICE CAME FROM. `focus` slices the STAGED buffer, so
+    #: its line numbers are what a commit would write; `_refresh_trace` slices
+    #: the last ACCEPTED RTL, so after staged edits its line numbers predate
+    #: them. Reporting one as the other is how an agent reads stale line numbers
+    #: as current ones -- and the note used to say "built from the last accepted
+    #: RTL" unconditionally, which became false the moment `focus` existed.
+    slice_from_staged: bool = False
+    #: The port contract, for `ports_read` and for the perturbation's declared
+    #: widths. Empty disables the perturbation half of `explain` and nothing else.
+    contract: Dict[str, Any] = field(default_factory=dict)
+    #: The waveform for the last run, when one was dumped. Only `explain`'s
+    #: block-internals half needs it; everything else comes from the recorded
+    #: trace, which is why the annotation degrades rather than fails without it.
+    vcd_path: Any = None
+    #: DUT instance name inside the testbench hierarchy, so a VCD lookup prefers
+    #: the copy inside the design over a same-named wire in the harness.
+    dut_instance: str = ""
+    #: `{tp_uid: wave.vcd}`. One waveform per testpoint, because that is how the
+    #: suite writes them -- one simulator process each -- so a single
+    #: `vcd_path` cannot be right for every requirement, and showing the wrong
+    #: testpoint's waveform is worse than showing none: it looks like data.
+    vcd_by_tp: Dict[str, Any] = field(default_factory=dict)
+
+    #: `check_staged()` calls. Unbounded (it is static and costs about a second)
+    #: but COUNTED and reported: fifty dry runs against two commits is a finding
+    #: about the agent, and a silent cap would hide it.
+    check_calls: int = 0
+
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -480,8 +694,834 @@ class _EditSession:
         with open(self.rtl_path, "w", encoding="utf-8") as f:
             f.write(content)
 
+    # ------------------------------------------------------------ staging
+    #
+    # Edits mutate a buffer; only `commit` builds and runs. A coherent change
+    # spanning several blocks could not be expressed before, because every
+    # intermediate state was simulated on the spot and rolled back as a
+    # regression -- and a batch legitimately passes through broken intermediate
+    # states, which is the whole point.
+
+    def staged(self) -> str:
+        """The buffer edits apply to: the staged text, or the accepted RTL."""
+        return self.staged_rtl if self.staged_rtl is not None else self.read_rtl()
+
+    def _anchor_for(self, block_id: str) -> str | None:
+        """This block's CURRENT text in the staged buffer.
+
+        Falls back to the text the trace report extracted, which is right until
+        the block has been staged over. Tracking it per block is what lets an
+        agent REFINE its own staged edit -- anchoring on the original text
+        forever would make the second edit to a block indistinguishable from an
+        edit against an anchor some other edit destroyed.
+        """
+        if block_id in self.retired_ids:
+            # REMOVED is not UNKNOWN, and not "your anchor was destroyed"
+            # either. Falling through to `blocks_by_id` here would report the
+            # agent's own deletion back to it as a collision with some other
+            # edit -- three different facts, and only one of them is true.
+            return None
+        if block_id in self.staged_text:
+            return self.staged_text[block_id]
+        block = (self.blocks_by_id or {}).get(block_id)
+        return block.code if block else None
+
+    def _splice(self, anchor: str, replacement: str, what: str) -> Dict[str, Any]:
+        """Content-anchored substitution. NEVER line numbers.
+
+        `blocks_by_id` carries line bounds from the last trace report, and one
+        staged edit shifts every line after it. Under batching a second edit
+        against stale bounds would splice into the wrong place SILENTLY, so the
+        anchor is the block's text and a miss is an explicit refusal.
+        """
+        buf = self.staged()
+        found = buf.count(anchor)
+        loose = False
+        if found == 0:
+            # WHITESPACE IS NOT THE AGENT'S TO GUESS. `read_block` renders the
+            # buffer with line-number prefixes, so there is no tool that returns
+            # a verbatim substring -- the agent has to retype the indentation and
+            # be right to the character.
+            #
+            # MEASURED, and it cost a whole session. In the seventh live run the
+            # anchor was one space wider than the file (25 leading spaces against
+            # 24) and was refused; the agent then degraded to shorter and
+            # shorter guesses -- `state <= ST_STOP_A;`, `state\t<= ST_READ_A;`,
+            # `state<=` -- none of which could match, because the file has
+            # `state   <= ` with three spaces. It burned eleven of forty-five
+            # rounds on that, made two probe edits purely to discover what the
+            # buffer contained, gave up on `edit` entirely and retyped the whole
+            # block. The sixth run, same model and same tool, transcribed the
+            # indentation correctly and made seven edits with no errors. That is
+            # the difference between the two runs' outcomes.
+            #
+            # So: match on the TOKEN SEQUENCE, and let whitespace between tokens
+            # be any whitespace. That is not the ambiguity §7.2's pin 7 guards
+            # against -- a destroyed anchor still matches nothing, and a token
+            # sequence occurring twice is still refused below. It is reported in
+            # the response rather than applied silently.
+            spans = self._loose_spans(buf, anchor)
+            if len(spans) == 1:
+                s, e = spans[0]
+                anchor, found, loose = buf[s:e], 1, True
+            elif len(spans) > 1:
+                found = len(spans)
+        if found == 0:
+            # TWO causes, and naming only one of them sends the agent looking in
+            # the wrong place. Within a batch it means an earlier staged edit
+            # overlapped this block; after a commit LATCHED it means the block
+            # table still describes the design from before that commit, which
+            # `_refresh_trace` only rebuilds when the run still has mismatches.
+            return {"is_action_executed": False, "error_msg": (
+                f"Cannot {what}: its text is not in the buffer -- and whitespace "
+                f"was already ignored, so this is not an indentation mismatch. "
+                f"The tokens themselves are not there, in that order. Either an "
+                f"earlier staged edit overlapped it, or a commit has latched "
+                f"since the block list was built. read_block({what.split()[-1]!r}) "
+                f"shows what is actually there; list_suspect_blocks() rebuilds "
+                f"the list against the accepted design.")}
+        if found > 1:
+            return {"is_action_executed": False, "error_msg": (
+                f"Cannot {what}: its text appears {found} times in the staged "
+                f"buffer, so a substitution would be ambiguous. Include "
+                f"surrounding lines to make it unique.")}
+        # PRESERVE THE ANCHOR'S BOUNDARY WHITESPACE, or tokens weld together.
+        #
+        # A block's `code` can swallow the newline that ended it. MEASURED on
+        # the i2c FSM block: the anchor ends "    end\nend\n", the text right
+        # after it is "endmodule\n", and an agent's replacement ends "end" with
+        # no trailing newline -- the natural way to write a block. The splice
+        # then produced "endendmodule", one identifier where two keywords
+        # belonged, and Verilator reported "syntax error, unexpected end of
+        # file" 145 lines away from the edit.
+        #
+        # Every replacement of that block in the fourth live run failed this
+        # way. The agent was writing correct Verilog and being handed a broken
+        # buffer, so it discarded and retried and discarded again. §7.2 promised
+        # a content anchor would refuse a MISS explicitly; this is the other
+        # case, where the anchor is found and the splice is still wrong.
+        lead = anchor[:len(anchor) - len(anchor.lstrip("\n"))]
+        trail = anchor[len(anchor.rstrip("\n")):]
+        body = replacement.strip("\n")
+        self.staged_rtl = buf.replace(anchor, lead + body + trail, 1)
+        res: Dict[str, Any] = {"is_action_executed": True}
+        if loose:
+            res["matched_on"] = (
+                "the token sequence, not the exact characters -- your anchor's "
+                "whitespace differed from the buffer's. Applied to the one region "
+                "that matches; the text now in the buffer is your new_text.")
+        return res
+
+    @staticmethod
+    def _loose_spans(buf: str, anchor: str) -> list[tuple[int, int]]:
+        r"""Where `anchor` occurs in `buf` if any whitespace matches any whitespace.
+
+        Token sequence only: every run of whitespace in the anchor becomes
+        `\s+`, so indentation width, tabs-vs-spaces and line wrapping stop
+        mattering while the tokens themselves still have to be present in order.
+        An anchor that is entirely whitespace matches nothing.
+        """
+        toks = [t for t in re.split(r"\s+", anchor.strip()) if t]
+        if not toks:
+            return []
+        pat = re.compile(r"\s+".join(re.escape(t) for t in toks))
+        return [(m.start(), m.end()) for m in pat.finditer(buf)]
+
+    def undriven_signals(self, text: str) -> list[str]:
+        """Signals a still-read name has lost its last driver for.
+
+        The mirror of `multidriven_signals`, and it exists because the failure
+        is otherwise silent: Verilator runs `-Wno-fatal` (deliberately -- the
+        lint gate owns lint findings), so UNDRIVEN does not fail the build. The
+        signal becomes X, the oracle X-guard turns that into an abstention, and
+        removing a driver would surface only as coverage quietly falling with
+        nothing naming the cause.
+        """
+        from .trace_slicer import parse_rtl_blocks
+
+        # PARSE BOTH TEXTS. This used to classify by literal presence --
+        # `b.code in text` meant driven, `b.code not in text` meant lost -- and
+        # a REPLACEMENT necessarily removes the block's original text, so every
+        # `replace_block` reported that block's writes as undriven. Nothing put
+        # the replacement back into `driven`, because the new text is not any
+        # block's `b.code`.
+        #
+        # MEASURED, twice, on live runs. Adding a one-character comment to the
+        # i2c FSM block is reported as "scl_oen, sda_chk, sda_oen, state are
+        # still read but the batch removed their LAST driver". In the first
+        # session that false positive REJECTED the only commit the agent
+        # landed; in the third it cost four rounds, and only went away because
+        # `focus` happened to rebuild the block table from the staged buffer, so
+        # the entry then carried the new text.
+        #
+        # It was also slice-relative: `blocks_by_id` holds whatever the last
+        # `focus` sliced, so the same buffer could be judged differently
+        # depending on which requirement was in view. Parsing settles both --
+        # the question is what the TEXT drives, and the text is right there.
+        try:
+            before = parse_rtl_blocks(self.read_rtl())
+            after = parse_rtl_blocks(text)
+        except Exception:  # noqa: BLE001
+            return []
+        if not before or not after:
+            return []
+        was_driven = {w for b in before for w in b.writes}
+        now_driven = {w for b in after for w in b.writes}
+        now_read = {r for b in after for r in b.reads}
+        # Only signals the ACCEPTED design drove: a module input is read and
+        # written by nothing, and is not a missing driver.
+        return sorted((was_driven - now_driven) & now_read)
+
+    def driver_warnings(self) -> list[str]:
+        """Driver hazards in the staged buffer. WARNINGS, never refusals.
+
+        A batch that removes a block and adds its replacement two edits later is
+        legitimately undriven in between, so refusing here would break exactly
+        the workflow staging exists for. `commit` rejects what is still
+        unresolved once the batch is claimed complete.
+
+        PURE PYTHON, from the staged TEXT, because this runs on EVERY staged
+        edit -- and because parsing is the only thing that can answer it. This
+        half used to count writers among `blocks_by_id`, which is whatever the
+        last `focus` sliced, so the same buffer was judged differently depending
+        on which requirement was in view and a duplicate outside the slice was
+        invisible. That is the identical defect `undriven_signals` was fixed
+        for, and it is fixed the same way. It also only counted `kind ==
+        "assign"`, so two always blocks driving one reg passed.
+        """
+        text = self.staged()
+        out = []
+        # Report only what THIS BATCH introduced. The docstring of
+        # `multidriven_signals` states the rule and it applies with more force
+        # here: the ChipVerilog candidate these sessions start from already ships
+        # `scl_sync` with two drivers, so an absolute check would refuse every
+        # commit for a defect the agent did not cause. Pre-existing duplicates
+        # are still surfaced -- as pre-existing, which is a different sentence.
+        try:
+            pre = overdriven_signals(self.read_rtl())
+        except Exception:  # noqa: BLE001
+            pre = set()
+        now = overdriven_signals(text)
+        multi = sorted(now - pre)
+        if multi:
+            out.append(f"{', '.join(multi)} now have MORE THAN ONE driver, which "
+                       f"this batch introduced")
+        stale = sorted(now & pre)
+        if stale:
+            out.append(f"{', '.join(stale)} have MORE THAN ONE driver, and ALREADY "
+                       f"DID in the accepted design -- not caused by this batch, "
+                       f"but they resolve to X wherever the drivers disagree, so "
+                       f"anything reading them is unreliable")
+        gone = self.undriven_signals(text)
+        if gone:
+            out.append(f"{', '.join(gone)} are still read but have LOST their "
+                       f"last driver")
+        return out
+
+    def stage_replace(self, block_id: str, new_code: str) -> Dict[str, Any]:
+        anchor = self._anchor_for(block_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {block_id}"
+                if block_id in self.retired_ids
+                else f"Unknown block_id '{block_id}'. "
+                     + (f"The current slice holds: {sorted(self.blocks_by_id)}."
+                        if self.blocks_by_id else
+                        "No slice has been built yet -- call focus(req_uid) on a "
+                        "failing requirement, which is what populates it."))}
+        body = new_code.rstrip("\n")
+        res = self._splice(anchor, body, f"replace {block_id}")
+        if res.get("is_action_executed"):
+            self.staged_text[block_id] = body
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def stage_edit(self, old_text: str, new_text: str) -> Dict[str, Any]:
+        """Replace an exact FRAGMENT of the staged buffer. FREE, like the rest.
+
+        THE UNIT OF EDIT WAS THE BLOCK, AND ONE BLOCK IS TWO THIRDS OF THIS
+        DESIGN. Measured on both the ChipVerilog i2c candidate and the golden
+        design: fifteen blocks, and the bit-controller FSM is 4713 of 7285
+        characters (65%) and 7159 of 10542 (68%). It writes cmd_ack, scl_oen,
+        sda_chk, sda_oen and state, so every failing requirement's slice lands
+        on it. To change ONE state's `scl_oen` assignment an agent had to
+        `replace_block` and retype all 4713 characters, and any transcription
+        slip anywhere in them broke the commit. Four live sessions of
+        stage-check-discard were mostly that.
+
+        §7.1 added `add_block` and `remove_block` reasoning that "a repair
+        needing new declarations, or one whose fix is removal, is unreachable".
+        On a design shaped like this the unreachable repair is the SMALL one,
+        and this is the tool for it.
+
+        SAME DISCIPLINE AS EVERY OTHER EDIT, deliberately: a content anchor, a
+        uniqueness requirement, and an explicit refusal rather than a guess.
+        Line numbers are still never used -- §7.2's rule stands, and it is why
+        this reuses `_splice` rather than adding a second splice path. Nothing
+        downstream needs to know: the driver and multi-driver guards parse the
+        buffer, so a fragment edit is checked exactly as a block edit is.
+        """
+        if not old_text:
+            return {"is_action_executed": False, "error_msg": (
+                "old_text is empty. Quote the exact fragment to replace, with "
+                "enough surrounding lines to make it unique.")}
+        res = self._splice(old_text, new_text, "edit that fragment")
+        if not res.get("is_action_executed"):
+            return res
+        # A fragment can sit INSIDE a block whose whole text is a later anchor,
+        # so that block's staged text has to move with it -- otherwise the next
+        # `replace_block` on it anchors on bytes the buffer no longer holds.
+        for bid, block in (self.blocks_by_id or {}).items():
+            current = self.staged_text.get(bid, block.code)
+            if old_text in current:
+                self.staged_text[bid] = current.replace(old_text, new_text, 1)
+        res["warnings"] = self.driver_warnings()
+        return res
+
+    def stage_remove(self, block_id: str) -> Dict[str, Any]:
+        anchor = self._anchor_for(block_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {block_id}"
+                if block_id in self.retired_ids
+                else f"Unknown block_id '{block_id}'. "
+                     + (f"The current slice holds: {sorted(self.blocks_by_id)}."
+                        if self.blocks_by_id else
+                        "No slice has been built yet -- call focus(req_uid) on a "
+                        "failing requirement, which is what populates it."))}
+        res = self._splice(anchor, "", f"remove {block_id}")
+        if res.get("is_action_executed"):
+            self.staged_text.pop(block_id, None)
+            self.retired_ids.add(block_id)
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def stage_add(self, anchor_id: str, code: str) -> Dict[str, Any]:
+        """Insert after `anchor_id`, or before `endmodule` when that is named.
+
+        Without this the editor can only rewrite blocks the slice found: a
+        repair needing a new register, state or `always_ff` is unreachable.
+        """
+        body = code.rstrip("\n")
+        if anchor_id == "endmodule":
+            buf = self.staged()
+            if buf.count("endmodule") != 1:
+                return {"is_action_executed": False, "error_msg": (
+                    "Cannot add at module end: 'endmodule' does not appear "
+                    "exactly once.")}
+            self.staged_rtl = buf.replace("endmodule", body + "\n\nendmodule", 1)
+            return {"is_action_executed": True, "warnings": self.driver_warnings()}
+        anchor = self._anchor_for(anchor_id)
+        if anchor is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"removed in this staged batch: {anchor_id}"
+                if anchor_id in self.retired_ids
+                else f"Unknown anchor '{anchor_id}'. Pass a block_id from "
+                     f"list_suspect_blocks(), or \"endmodule\".")}
+        res = self._splice(anchor, anchor + "\n\n" + body, f"add after {anchor_id}")
+        if res.get("is_action_executed"):
+            res["warnings"] = self.driver_warnings()
+        return res
+
+    def discard_staged(self) -> Dict[str, Any]:
+        """Back to the last accepted RTL. Costs nothing: nothing was written."""
+        self.staged_rtl = None
+        self.staged_text.clear()
+        self.retired_ids.clear()
+        return {"is_action_executed": True}
+
+    def _static_findings(self, text: str) -> tuple[bool, str, list[str], list[str]]:
+        """Syntax and drivers for `text`, WITHOUT touching `check_calls`.
+
+        Shared by `check_staged` (the agent's dry run, which counts) and by
+        `commit`'s pre-flight (which must not). `check_calls` is reported as a
+        finding about the agent -- fifty dry runs against two commits -- so
+        counting commit's own internal checks there would corrupt the very
+        number it exists to expose.
+
+        Written to a scratch file because both `check_syntax` and
+        `multidriven_signals` take a PATH and shell out to Verilator. The
+        accepted RTL is never the file they read.
+        """
+        scratch = Path(self.output_dir) / "staged.sv"
+        scratch.write_text(text, encoding="utf-8")
+        ok, out = check_syntax(str(scratch))
+        # The AUTHORITATIVE multi-driver check, which `driver_warnings` only
+        # approximates because it cannot afford Verilator per edit.
+        warnings = list(self.driver_warnings())
+        # THE UNION, because neither source sees the other's case. Verilator's
+        # MULTIDRIVEN is only "multiple driving blocks with different clocking";
+        # two `assign`s to one wire, and two same-clock always blocks, are both
+        # silent under it (verified on 5.038 with these exact flags). The text
+        # check is the reverse: it sees any two writing blocks but cannot reason
+        # about clocking it never parsed.
+        try:
+            multi = sorted(set(multidriven_signals(str(scratch)))
+                           | overdriven_signals(text))
+        except Exception:  # noqa: BLE001
+            multi = []
+        if multi:
+            warnings.append(f"{', '.join(multi)} have MORE THAN ONE driver")
+        return ok, out, warnings, multi
+
+    def would_commit_be_rejected(self, text: str) -> str:
+        """The rejection `commit` WOULD give this batch, or "".
+
+        One function so the free check and the paid one cannot drift.
+
+        MEASURED, and it is why this exists. On the first live run the agent
+        called `check_staged()`, was told "scl_oen, sda_chk, sda_oen, state are
+        still read but have LOST their last driver", committed anyway, and the
+        commit was rejected for exactly that -- spending the only trial it
+        landed all session on a question the free call had already answered.
+        The information was there; the SHAPE was not. `commit` says "Commit
+        rejected: ... Add the replacement driver to this batch"; `check_staged`
+        returned the same fact as a bare string in a `warnings` list, under a
+        field reading `is_syntax_correct: true` and nine hundred characters of
+        Verilator build report. A dry run whose answer has to be inferred from a
+        warnings list is one the agent will read past.
+        """
+        ok, _out, _warnings, multi = self._static_findings(text)
+        if not ok:
+            return ("the staged buffer does not compile, so a commit would be "
+                    "rejected and would cost a trial")
+        try:
+            pre = (set(multidriven_signals(self.rtl_path))
+                   | overdriven_signals(self.read_rtl()))
+        except Exception:  # noqa: BLE001
+            pre = set()
+        introduced = sorted(set(multi) - pre)
+        if introduced:
+            return ("a commit would be REJECTED: the batch gives "
+                    + ", ".join(introduced) + " MORE THAN ONE driver. Most "
+                    "often the replacement re-declares something that already "
+                    "exists outside the block it replaced -- search the whole "
+                    "buffer for the signal's name before adding a driver for it.")
+        lost = self.undriven_signals(text)
+        if lost:
+            return ("a commit would be REJECTED: " + ", ".join(lost)
+                    + " are still read but the batch removed their LAST driver. "
+                    "Add the replacement driver to this batch, or restore the "
+                    "block you removed. Fixing it here costs nothing; "
+                    "committing as it stands costs a trial and changes nothing.")
+        return ""
+
+    def check_staged(self) -> Dict[str, Any]:
+        """Static only: syntax and drivers. No simulation, NO TRIAL.
+
+        The expensive thing is the suite; syntax and drivers cost about a
+        second. Settling those for free, then spending the trial on the question
+        only simulation can answer, prices each check at what it actually costs
+        -- and is what makes "a failed commit costs a trial" a fair rule rather
+        than charging a typo the same as a wrong design hypothesis.
+        """
+        self.check_calls += 1
+        staged = self.staged()
+        ok, out, warnings, multi = self._static_findings(staged)
+        blocker = self.would_commit_be_rejected(staged)
+        return {"would_commit_be_rejected": bool(blocker),
+                "verdict": blocker or ("a commit would proceed to simulation; "
+                                       "whether it LATCHES is what the trial "
+                                       "answers"),
+                "is_syntax_correct": ok,
+                # Verilator prints a build report and a DECLFILENAME warning
+                # about this scratch file's own NAME on every success. Nine
+                # hundred characters of that above the finding is how the
+                # finding gets read past.
+                "syntax_output": out if not ok else "clean",
+                "warnings": warnings, "multidriven": multi,
+                "staged": self.staged_rtl is not None,
+                "check_calls": self.check_calls}
+
+    def focus(self, req_uid: str) -> Dict[str, Any]:
+        """Slice from ONE requirement's ports, and remember the choice.
+
+        §6.2(b): the slice's value comes from starting at *the* failing signal.
+        With 43 of 110 requirements failing -- the measured figure against
+        golden i2c RTL -- the union of their ports is most of the port list and
+        `dynamic_slice` returns most of the design. Slicing one requirement at a
+        time is what keeps it a slice, and it is why `focus` becomes
+        load-bearing here rather than merely convenient.
+        """
+        from .explain import focus_slice
+
+        view = self.requirements.get(req_uid)
+        if view is None:
+            known = ", ".join(sorted(self.requirements)[:8])
+            return {"is_action_executed": False, "error_msg": (
+                f"Unknown requirement '{req_uid}'."
+                + (f" Known: {known}..." if known else
+                   " No requirement view is wired into this session."))}
+        if not view.ports:
+            return {"is_action_executed": False, "error_msg": (
+                f"{req_uid}'s check reads no declared port, so there is nothing "
+                f"to slice from. Its evidence is indirect -- see its "
+                f"requirement text via explain({req_uid!r}).")}
+        blocks = focus_slice(self.staged(), view.ports)
+        was = set(self.blocks_by_id or {})
+        self.focused = req_uid
+        self.slice_from_staged = True
+        # The slice is rebuilt from the STAGED buffer, so it describes what a
+        # commit would compile rather than the last accepted design.
+        self.blocks_by_id = {b.id: b for b in blocks} or self.blocks_by_id
+        # AND IT NARROWS, so ids from the previous focus stop resolving. That
+        # was silent, and it misleads: MEASURED on the first live editor run,
+        # the agent read block C3 successfully, focused a different requirement
+        # four rounds later, and its `replace_block("C3")` nine rounds after
+        # that came back "Unknown block_id" -- which reads as the agent having
+        # invented an id it had in fact been given.
+        dropped = sorted(was - set(self.blocks_by_id))
+        return {
+            "is_action_executed": True, "focused": req_uid,
+            "ports": view.ports,
+            **({"ids_no_longer_in_scope": dropped,
+                "scope_note": (
+                    "focusing narrowed the slice: " + ", ".join(dropped)
+                    + " came from the previous focus and no longer resolve. "
+                    "Re-focus that requirement to reach them again.")}
+               if dropped else {}),
+            "suspect_blocks": [
+                {"id": b.id, "kind": b.kind, "clocking": b.clocking,
+                 "start_line": b.start_line, "end_line": b.end_line,
+                 "writes": list(b.writes)} for b in blocks],
+            "note": ("sliced from this requirement's ports alone; "
+                     "list_suspect_blocks() now shows these"),
+        }
+
+    def explain(self, req_uid: str) -> Dict[str, Any]:
+        """What this requirement OWES, what its check objected to, and where.
+
+        The requirement's own text is the half the loop never had. B21 is the
+        measured cost of its absence: with names only the debugger *"invented a
+        timing theory... rewrote `always_ff` to `always_comb` and broke the
+        contract's 1-cycle latency."*
+        """
+        from .explain import explain_failure
+
+        view = self.requirements.get(req_uid)
+        if view is None:
+            return {"is_action_executed": False, "error_msg": (
+                f"Unknown requirement '{req_uid}'. Use list_failing_requirements().")}
+        found = self.req_results.get(req_uid)
+        if found is None:
+            # The requirement text is still worth handing back: knowing what the
+            # design owes is useful even with no verdict to attach it to.
+            return {"is_action_executed": True, "requirement": view.brief(),
+                    "note": ("no per-requirement result is available from the "
+                             "last run, so there is no span, no boundary trace "
+                             "and no perturbation -- only what this requirement "
+                             "asks for.")}
+        result, trace = found
+        # THIS requirement's testpoint's waveform, not the session's. Falling
+        # back to `vcd_path` keeps the SystemVerilog backend working, where
+        # there is one run and one wave.
+        wave = self.vcd_by_tp.get(getattr(result, "tp_uid", "")) or self.vcd_path
+        return {"is_action_executed": True, **explain_failure(
+            view=view, result=result, trace=trace or {},
+            contract=self.contract or {}, rtl_text=self.staged(),
+            vcd_path=wave, dut_instance=self.dut_instance)}
+
+    def list_failing_requirements(self) -> dict:
+        """What the last run decided, per REQUIREMENT rather than per check id.
+
+        Two classes are actionable and both are listed in full: FAILS, where the
+        design did something the requirement forbids, and UNCOVERED, where the
+        check never saw its own scenario -- not an accusation, and no edit
+        discharges it (`add_stimulus` does).
+
+        THE PASSING ONES ARE COUNTED, NOT LISTED. On c1-i2c the frozen set is 90
+        requirements and around 60 of them pass; listing each would bury the
+        handful that need work under rows saying nothing happened. The count is
+        still reported because it is the thing a repair must not spend -- an
+        edit that fixes one requirement by breaking four is a regression, and
+        the agent cannot see that without knowing how many were passing.
+        """
+        fails, uncovered, passing = [], [], 0
+        for uid, found in sorted(self.req_results.items()):
+            result = found[0] if isinstance(found, tuple) else found
+            view = self.requirements.get(uid)
+            ok = getattr(result, "ok", None)
+            if ok is True:
+                passing += 1
+                continue
+            row = {
+                "req_uid": uid,
+                "verdict": "FAILS" if ok is False else "UNCOVERED",
+                "requirement": (view.text if view else "")[:200],
+                "check_said": (getattr(result, "detail", "") or "")[:160],
+                "testpoint": getattr(result, "tp_uid", "") or "",
+                "ports": view.ports if view else [],
+            }
+            (fails if ok is False else uncovered).append(row)
+        return {
+            "failing": fails,
+            "uncovered": uncovered,
+            "passing_count": passing,
+            "note": ("explain(req_uid) for the span, the boundary trace and what "
+                     "would have satisfied a FAILS; add_stimulus(req_uid, ...) is "
+                     "the only route for an UNCOVERED one. The passing ones are "
+                     "counted rather than listed -- keep that count from falling."
+                     if (fails or uncovered) else
+                     "nothing failing and nothing uncovered in the last run"),
+        }
+
+    def add_stimulus(self, req_uid: str, what_the_scenario_needs: str) -> Dict[str, Any]:
+        """Stage a scenario the current stimulus never reaches. FREE, not a trial.
+
+        ONLY for a requirement reported UNCOVERED -- one whose check never saw
+        the situation its clause is about. That is not an accusation against the
+        design and NO EDIT CAN DISCHARGE IT: the testplan is what is missing.
+
+        You describe WHAT MUST HAPPEN, in prose, the way a test plan does --
+        "issue a WRITE command with ena=1 and hold it until cmd_ack", "drive
+        sda_i low while the controller has released SDA". You never write
+        vectors: the harness generates them, gates them, and APPENDS a new
+        testpoint. Nothing existing is changed, so this can only add evidence.
+
+        That append-only discipline is what makes the tool safe to hand an agent
+        whose score falls with the failing count. A mutable stimulus would open
+        a real shortcut -- make the scenario stop occurring and a failure
+        becomes an abstention -- and appending cannot do that, because `_worst`
+        ranks failing above anything a new testpoint could contribute.
+
+        Not a trial: it costs a model call inside the harness, not a build, and
+        charging it against `max_trials` would price evidence-gathering at the
+        same rate as a design hypothesis.
+        """
+        stager = self.stimulus_stager
+        if stager is None or not hasattr(stager, "add_stimulus"):
+            return {"error": (
+                "no stimulus route is wired into this session, so an uncovered "
+                "requirement cannot be staged from here. Report it as a testplan "
+                "gap rather than editing the design to chase it.")}
+        try:
+            out = stager.add_stimulus(req_uid, what_the_scenario_needs)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"stimulus staging failed: {exc!r}"}
+        return dict(out) if isinstance(out, dict) else {"result": out}
+
+    def commit(self) -> Dict[str, Any]:
+        """Build and run the STAGED buffer. ONE TRIAL. Latch, or keep the batch.
+
+        The trial is here and not on the edits, which is what `max_trials`
+        always claimed to count: 30 compile-and-test cycles, with the edits
+        inside each one free. A budget counting individual edits is an order of
+        magnitude tighter than one counting rounds, and it charged an agent for
+        thinking rather than for simulating.
+
+        WHAT A FAILED COMMIT COSTS: a trial, and nothing else. The accepted RTL
+        is byte-identical afterwards and THE STAGED BUFFER SURVIVES, so the
+        agent adjusts its batch rather than starting over from the baseline.
+        That is what makes `commit` itself the test -- a separate `test_staged`
+        would only be a commit that refuses to bank a good result.
+
+        The mechanism is a write-run-restore rather than a build at a scratch
+        path, and the difference is worth naming: `sim_review` derives the RTL
+        it compiles from its run directory (`{output_path_per_run}/rtl.sv`), so
+        a genuinely separate build location means a separate run directory --
+        and on the specflow backend there is no `tb.sv` to copy into one, the
+        suite lives elsewhere. The OBSERVABLE contract is the same and is
+        pinned: after a commit that does not latch, `read_rtl()` returns exactly
+        what it returned before.
+
+        The static pre-flight is not redundant with the judge. The judge checks
+        syntax and MULTI-driver; only here is the mirror case checked -- a
+        removal that took away a signal's LAST driver. Verilator runs
+        `-Wno-fatal` so UNDRIVEN does not fail the build: the signal becomes X,
+        the oracle X-guard turns that into an abstention, and the defect would
+        surface only as coverage quietly falling with nothing naming the cause.
+        """
+        result = self._base_result()
+        if self.staged_rtl is None:
+            result["error_msg"] = (
+                "Nothing is staged, so there is nothing to commit. No trial was "
+                "consumed. Use add_block/replace_block/remove_block first.")
+            return result
+
+        # REFUSED BEFORE THE COUNTER MOVES, and staging stays open afterwards so
+        # the agent can still be asked to explain itself.
+        if self.action_calls >= self.max_trials:
+            result["error_msg"] = (
+                f"Reached maximum debug trials ({self.max_trials}); refusing to "
+                f"commit. Staged edits are kept and staging remains open.")
+            return result
+        self.action_calls += 1
+
+        accepted = self.read_rtl()
+        staged = self.staged_rtl
+        pre_multi = (set(multidriven_signals(self.rtl_path))
+                     | overdriven_signals(self.read_rtl()))
+
+        ok, syntax_out, warnings, multi = self._static_findings(staged)
+        result["is_syntax_correct"] = ok
+        result["syntax_output"] = syntax_out
+        result["warnings"] = warnings
+        result["action_calls"] = self.action_calls
+        result["trials_left"] = max(0, self.max_trials - self.action_calls)
+        result["staged_kept"] = True
+        result["check_calls"] = self.check_calls
+
+        if not ok:
+            result["error_msg"] = (
+                "Commit rejected: the staged buffer does not compile. This cost "
+                "a trial -- check_staged() would have told you the same thing "
+                "for free. The accepted RTL is untouched and your staged edits "
+                "are kept; fix them and commit again.")
+            return result
+
+        introduced = sorted(set(multi) - pre_multi)
+        if introduced:
+            result["error_msg"] = (
+                "Commit rejected: the batch gave " + ", ".join(introduced)
+                + " MORE THAN ONE continuous driver. The accepted RTL is "
+                "untouched and your staged edits are kept. Remove the duplicate "
+                "assignment -- most often the replacement re-declares something "
+                "that already exists outside the block it replaced.")
+            return result
+
+        lost = self.undriven_signals(staged)
+        if lost:
+            result["error_msg"] = (
+                "Commit rejected: " + ", ".join(lost)
+                + " are still read but the batch removed their LAST driver. "
+                "Verilator runs -Wno-fatal, so this would not have failed the "
+                "build -- the signal would go X, every check reading it would "
+                "abstain, and coverage would fall with nothing naming the "
+                "cause. Add the replacement driver to this batch, or restore "
+                "the block you removed.")
+            return result
+
+        if self.child_names:
+            went_dark = _child_outputs_gone_dark(accepted, staged, self.child_names)
+            if went_dark:
+                result["error_msg"] = (
+                    "Commit rejected: it left " + ", ".join(sorted(went_dark))
+                    + " READ BY NOTHING. That port carries a CHILD'S RESULT into "
+                    "this glue, and the batch recomputed the child's function "
+                    "inline instead of routing its output. Restore the "
+                    "assignment that consumes the port.")
+                return result
+
+        self.write_rtl(staged)
+        # The judge owns the ratchet, the fail-time allowance, `best_rtl` and the
+        # restore. Reusing it keeps ONE accept criterion rather than a second
+        # one here that would drift away from it.
+        judged = self._judge_replace_action_execution(
+            old_file_content=accepted, pre_multidriven=pre_multi,
+        )
+        judged["action_calls"] = self.action_calls
+        judged["trials_left"] = max(0, self.max_trials - self.action_calls)
+        judged["check_calls"] = self.check_calls
+        judged["warnings"] = warnings
+        if judged.get("is_action_executed"):
+            # LATCHED: the accepted RTL now IS the staged text, so there is no
+            # longer a batch pending. Anything staged next anchors on what was
+            # just banked.
+            self.staged_rtl = None
+            self.staged_text.clear()
+            self.retired_ids.clear()
+            judged["staged_kept"] = False
+        else:
+            # The judge restored the accepted bytes. The batch is NOT discarded:
+            # losing the agent's work is the cost staging exists to remove.
+            judged["staged_kept"] = True
+        return judged
+
+    def _req_split(self) -> tuple[set, set, set] | None:
+        """(passing, failing, uncovered) requirement uids, or None if unknown.
+
+        None rather than three empty sets: "no requirement data" and "nothing
+        passes" must not be the same value, or a backend that publishes no
+        requirements would silently look like total failure and reject every
+        commit.
+        """
+        rr = self.req_results or {}
+        if not rr:
+            return None
+        ok = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is True}
+        bad = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is False}
+        dark = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is None}
+        return ok, bad, dark
+
+    def note_best(self, mismatch_cnt: int, rtl_text: str,
+                  passing: int | None = None) -> bool:
+        """Record `rtl_text` if it is the best seen. Returns True when it is.
+
+        BEST BY THE SAME QUANTITY THE COMMIT IS JUDGED ON. This keyed on
+        `mismatch_cnt` -- failing TESTPOINTS -- while the accept criterion is
+        now passing REQUIREMENTS, and with the rollback guard off those two
+        disagree exactly where it matters: `restore_best` is what makes wandering
+        safe, so a "best" chosen by a different measure than the one being
+        optimised would hand back a design the loop had already improved on.
+        Measured on run 8 round 21, the two rank the same pair of designs
+        oppositely -- testpoints 104 -> 106 (worse) while failing requirements
+        went 19 -> 18 (better, though only by silencing one).
+
+        Ties do NOT overwrite: the earliest RTL achieving a given score is kept,
+        so a run that wanders across a plateau returns the point it reached
+        first rather than the last one it happened to touch.
+        """
+        if passing is not None:
+            if self.best_passing is None or int(passing) > self.best_passing:
+                self.best_passing = int(passing)
+                self.best_rtl = rtl_text
+                try:
+                    self.best_mismatch_cnt = int(mismatch_cnt)
+                except Exception:  # noqa: BLE001
+                    pass
+                return True
+            return False
+        try:
+            cnt = int(mismatch_cnt)
+        except Exception:  # noqa: BLE001
+            return False
+        if self.best_mismatch_cnt is None or cnt < self.best_mismatch_cnt:
+            self.best_mismatch_cnt = cnt
+            self.best_rtl = rtl_text
+            return True
+        return False
+
+    def restore_best(self) -> bool:
+        """Put the best-seen RTL back on disk. Returns True if it changed anything.
+
+        A no-op when the guard is on, because a monotone search already ends at
+        its best point. Load-bearing when it is off -- that is the whole reason
+        the guard CAN be turned off: the loop is free to wander uphill while the
+        ANSWER stays the best point found.
+        """
+        if self.best_rtl is None:
+            return False
+        if self.read_rtl() == self.best_rtl:
+            return False
+        self.write_rtl(self.best_rtl)
+        return True
+
+    def _pull_req_results(self) -> None:
+        """Take the last run's per-requirement verdicts off the reviewer.
+
+        Duck-typed on purpose: a backend that decides per requirement publishes
+        `req_results` (and, when it dumped one, `vcd_path`), and one that cannot
+        publishes neither. That keeps this file backend-agnostic -- the
+        SystemVerilog reviewer has no oracle set and simply leaves the surface
+        empty, which is the honest state for it.
+
+        Called after EVERY `review()`. A stale set is worse than an empty one:
+        `explain` would answer about the design as it was two commits ago and
+        say nothing about being out of date.
+        """
+        got = getattr(self.sim_reviewer, "req_results", None)
+        if isinstance(got, dict):
+            self.req_results = dict(got)
+        vcd = getattr(self.sim_reviewer, "vcd_path", None)
+        if vcd:
+            self.vcd_path = vcd
+        by_tp = getattr(self.sim_reviewer, "vcd_by_tp", None)
+        if isinstance(by_tp, dict):
+            self.vcd_by_tp = dict(by_tp)
+
     def run_simulation(self) -> Dict[str, Any]:
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
+        self._pull_req_results()
         # Persist full sim output for human inspection; provide excerpt to the agent.
         try:
             Path(self.output_dir, "debug_sim_output.json").write_text(sim_output, encoding="utf-8")
@@ -503,17 +1543,146 @@ class _EditSession:
             "sim_output_path": str(Path(self.output_dir, "debug_sim_output.json")),
         }
 
-    def list_suspect_blocks(self) -> list[dict[str, Any]]:
-        if not self.trace_report:
-            return []
-        return list(self.trace_report.get("suspect_blocks") or [])
+    def find_signal(self, name: str) -> Dict[str, Any]:
+        """Every block in the STAGED buffer that drives or reads `name`.
+
+        THERE WAS NO WAY TO ASK WHERE A SIGNAL COMES FROM. `read_block` takes a
+        block ID, `list_suspect_blocks` shows whatever the last `focus` sliced,
+        and neither answers "what drives scl_sync" -- so an agent holding a
+        signal name and needing its logic had only the id space to brute-force.
+
+        MEASURED on run 8: seventeen consecutive rounds (12-28) reading C1, C2,
+        C3, C4, C5, C6, C7, C8, C10, C11, A1, A2, A3 one after another, and five
+        more rounds spent calling `read_block("scl_sync")` and
+        `read_block("assign scl_sync")` -- using the block reader as a search
+        tool because nothing else would answer. That is half of a 45-round
+        session, in a run whose round cap bound before its trial budget did.
+
+        Reads the STAGED buffer, not the slice, so it sees pending edits and is
+        never narrowed by `focus`: a signal's driver is frequently OUTSIDE the
+        failing requirement's slice, which is exactly when the question is hard.
+        """
+        want = (name or "").strip()
+        if not want:
+            return {"error": "find_signal needs a signal name."}
+        from .trace_slicer import parse_rtl_blocks
+
+        try:
+            blocks = parse_rtl_blocks(self.staged())
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"could not parse the staged buffer: {exc}"}
+
+        # Keyed on NORMALISED text: the slice's copy of a block and a fresh
+        # parse of the same source differ in trailing whitespace, so an exact
+        # key silently reported every block as outside the slice -- turning the
+        # one field that lets `read_block` follow up into a constant.
+        def _key(code: str) -> str:
+            return " ".join((code or "").split())
+
+        ids = {_key(b.code): bid for bid, b in (self.blocks_by_id or {}).items()}
+        drivers, readers = [], []
+        for b in blocks:
+            row = {"block_id": ids.get(_key(b.code), "(not in the current slice)"),
+                   "kind": b.kind,
+                   "code": b.code if len(b.code) <= 400 else b.code[:400] + " ...",
+                   }
+            if want in set(b.writes):
+                drivers.append(row)
+            elif want in set(b.reads):
+                readers.append({k: v for k, v in row.items() if k != "code"})
+
+        out: Dict[str, Any] = {
+            "signal": want,
+            "driven_by": drivers,
+            "read_by": readers,
+            "driver_count": len(drivers),
+        }
+        if not drivers and not readers:
+            names = sorted({w for b in blocks for w in b.writes})
+            out["note"] = (f"nothing drives or reads {want!r}. Signals this "
+                           f"module drives: {names}")
+        elif not drivers:
+            out["note"] = (f"{want} is READ but nothing drives it -- it is a "
+                           f"module input, or its driver was removed.")
+        elif len(drivers) > 1:
+            out["note"] = (f"{want} has {len(drivers)} DRIVERS. Two continuous "
+                           f"assignments to one wire resolve to X wherever they "
+                           f"disagree, and Verilator does not warn for an "
+                           f"internal signal.")
+        return out
+
+    def list_suspect_blocks(self) -> Dict[str, Any]:
+        """THE CURRENT SLICE -- the same blocks `read_block` resolves against.
+
+        It used to read `trace_report`, which ONLY `_refresh_trace` writes, and
+        that runs only after an ACCEPTED simulation. `focus` builds
+        `blocks_by_id`, and `read_block`/`replace_block` resolve against
+        `blocks_by_id` through `_anchor_for`. So the two tools disagreed about
+        what existed: MEASURED live, an agent focused a requirement, replaced a
+        block, was told the batch had removed every driver, called
+        `list_suspect_blocks()` to find its way back -- and got an empty list,
+        because no commit had ever been accepted.
+
+        Worse, the unknown-block-id error told it to do exactly that. The one
+        tool the error points at was the one guaranteed to be empty at that
+        moment. Same class of defect as `check_staged` and `commit` disagreeing
+        about the same buffer, and fixed the same way: one source of truth.
+
+        AND AN EMPTY SLICE SAYS WHY. Returning a bare `[]` reads as "this design
+        has no blocks", which is never the fact; the fact is that nothing has
+        been sliced yet.
+        """
+        blocks = self.blocks_by_id or {}
+        if blocks:
+            rows = [{"id": b.id, "kind": b.kind, "clocking": b.clocking,
+                     "start_line": b.start_line, "end_line": b.end_line,
+                     "writes": list(b.writes), "reads": list(b.reads)}
+                    for b in blocks.values()]
+            out: Dict[str, Any] = {"suspect_blocks": rows,
+                                   "focused": self.focused or None}
+            if self.retired_ids:
+                out["removed_in_this_batch"] = sorted(self.retired_ids)
+            if self.staged_rtl is not None and not self.slice_from_staged:
+                out["note"] = (
+                    "this slice was built from the last ACCEPTED RTL and does "
+                    "not include your staged edits; its line numbers predate "
+                    "them. read_block(id) shows the staged text at the line "
+                    "numbers a commit would write, and focus(req_uid) rebuilds "
+                    "the slice from the staged buffer.")
+            return out
+        return {"suspect_blocks": [], "focused": None,
+                "note": ("no slice has been built yet, so there is nothing to "
+                         "list -- this is not a design with no blocks. Call "
+                         "focus(req_uid) on a failing requirement first; that "
+                         "is what slices the design from that requirement's "
+                         "ports and populates this.")}
 
     def read_block(self, block_id: str) -> str:
-        if not self.blocks_by_id or block_id not in self.blocks_by_id:
+        """The block AS STAGED, with the line numbers a commit would write.
+
+        Reading the trace report's copy instead would show the agent the text it
+        edited away from -- and its line numbers, which one staged edit above it
+        has already invalidated. Locating the block in the staged buffer makes
+        both true at once, which is what lets an agent refine its own batch
+        instead of guessing what is currently in it.
+        """
+        if block_id in self.retired_ids:
+            return (f"ERROR: '{block_id}' was removed in this staged batch. It is "
+                    f"not an unknown block -- you deleted it. discard_staged() "
+                    f"brings it back along with the rest of the batch.")
+        text = self._anchor_for(block_id)
+        if text is None:
             return f"ERROR: Unknown block_id '{block_id}'."
-        block = self.blocks_by_id[block_id]
-        lines = block.code.splitlines()
-        return "\n".join(f"{block.start_line + i}: {line}" for i, line in enumerate(lines)) + "\n"
+        buf = self.staged()
+        idx = buf.find(text)
+        if idx < 0:
+            return (f"ERROR: '{block_id}' is no longer in the staged buffer -- an "
+                    f"earlier staged edit overlapped it. list_suspect_blocks() "
+                    f"describes the last ACCEPTED design; discard_staged() "
+                    f"returns to it.")
+        start = buf.count("\n", 0, idx) + 1
+        lines = text.splitlines()
+        return "\n".join(f"{start + i}: {line}" for i, line in enumerate(lines)) + "\n"
 
     def _refresh_trace(self, *, sim_log_json: str) -> None:
         report, suspect_blocks = build_trace_report(
@@ -522,6 +1691,8 @@ class _EditSession:
             output_dir=Path(self.output_dir),
         )
         self.trace_report = report
+        # Built on the last ACCEPTED RTL, not on the staged buffer.
+        self.slice_from_staged = False
         self.blocks_by_id = {b.id: b for b in suspect_blocks} if suspect_blocks else None
         ft = report.get("fail_time")
         self.last_fail_time = int(ft) if isinstance(ft, int) else None
@@ -687,6 +1858,34 @@ class _EditSession:
         result = self._base_result()
         prev_mismatch_cnt = int(self.last_mismatch_cnt)
         prev_fail_time = self.last_fail_time
+        #: **THE BASELINE IS THE ACCEPTED DESIGN, NOT THE LAST SIMULATION.**
+        #: This read `self._req_split()`, which reports whatever `req_results`
+        #: last held -- and the rollback path writes the old RTL back WITHOUT
+        #: re-reviewing, so after any failed commit `req_results` still
+        #: describes the FAILED design. The next commit was then judged against
+        #: the attempt that had just been thrown away.
+        #:
+        #: Measured on the run that found it:
+        #:
+        #:     #2  LATCH   86 -> 88      the accepted RTL is now at 88
+        #:     #6  roll    88 -> 86      thrown away
+        #:     #7  LATCH   86 -> 88      "before" is the DISCARDED 86
+        #:
+        #: so #7 banked a design that only recovered ground the accepted one
+        #: already held, and the passing count sat at 88 for 25 commits while
+        #: the loop churned 83/86/88 latching recoveries.
+        #:
+        #: And the two halves of one decision disagreed: `prev_mismatch_cnt`
+        #: comes from `last_mismatch_cnt`, which the rollback path correctly
+        #: leaves alone, so the FAILING-testpoint baseline was right while the
+        #: REQUIREMENT baseline was stale -- in the same comparison.
+        #:
+        #: Cached rather than re-simulated: a rollback restores a design this
+        #: session has already measured, and paying for a second review of it
+        #: would charge a trial's cost for a number already known.
+        req_before = self._accepted_req_split
+        if req_before is None:
+            req_before = self._accepted_req_split = self._req_split()
         is_syntax_correct, syntax_output = check_syntax(self.rtl_path)
         result["is_syntax_correct"] = is_syntax_correct
         result["syntax_output"] = syntax_output
@@ -699,7 +1898,8 @@ class _EditSession:
         # nit, and check_syntax is deliberately permissive about warnings so it
         # sails through. Reject BEFORE simulating: the sim would either mask it
         # (last-writer-wins) or blame the datapath for an X.
-        new_multi = multidriven_signals(self.rtl_path)
+        new_multi = (set(multidriven_signals(self.rtl_path))
+                     | overdriven_signals(self.read_rtl()))
         introduced = new_multi - (pre_multidriven or set())
         if introduced:
             self.write_rtl(old_file_content)
@@ -708,7 +1908,7 @@ class _EditSession:
             result["error_msg"] = (
                 "Edit rolled back: it gave "
                 + ", ".join(sorted(introduced))
-                + " MORE THAN ONE continuous driver. Your replacement text re-declares "
+                + " MORE THAN ONE driver. Your replacement text re-declares "
                 "assignments that already exist OUTSIDE the block you replaced, so the "
                 "splice duplicated them. Replace ONLY the lines inside the block, and do "
                 "not repeat assignments that live elsewhere in the module."
@@ -761,6 +1961,11 @@ class _EditSession:
                 return result
 
         is_sim_pass, sim_mismatch_cnt, sim_output = self.sim_reviewer.review()
+        self._pull_req_results()
+        # Read HERE, not down at the ratchet: `note_best` runs before the accept
+        # decision -- a regressing edit is exactly when best-so-far matters --
+        # and it now ranks on this.
+        req_after = self._req_split()
         result["is_sim_pass"] = is_sim_pass
         result["sim_mismatch_cnt"] = sim_mismatch_cnt
         try:
@@ -783,9 +1988,149 @@ class _EditSession:
         new_fail_time = _extract_fail_time_from_sim_log_json(sim_output)
         result["new_fail_time"] = new_fail_time
 
-        if sim_mismatch_cnt > prev_mismatch_cnt:
-            # Sometimes fixing an early-cycle issue can expose additional later-cycle mismatches.
-            # Allow a small mismatch increase only if the FIRST mismatch time moves later.
+        # Recorded BEFORE the accept/rollback decision, because a regressing
+        # edit is exactly when the best-so-far matters, and because an edit that
+        # improves things is worth checkpointing whether or not a later one
+        # undoes it.
+        improved_best = self.note_best(
+            sim_mismatch_cnt, self.read_rtl(),
+            passing=len(req_after[0]) if req_after is not None else None)
+        result["best_mismatch_cnt"] = self.best_mismatch_cnt
+
+        # THE ACCEPT CRITERION IS PASSING REQUIREMENTS, WHEN THERE ARE ANY.
+        #
+        # Two things were wrong with judging on `sim_mismatch_cnt`, which counts
+        # failing TESTPOINTS.
+        #
+        # It is the wrong VOCABULARY. Everything the agent is shown -- what
+        # `list_failing_requirements` returns, what `explain` explains -- is per
+        # REQUIREMENT: "19 failing, 25 uncovered, 46 passing". The rejection then
+        # arrives as "prev=104, new=106", a quantity it has never seen anywhere
+        # else and cannot connect to any edit it could make.
+        #
+        # And NEITHER COUNT CAN TELL A REPAIR FROM A SILENCING. A requirement has
+        # three states, so "fewer failing" is satisfied just as well by
+        # FAILING -> PASSING as by FAILING -> UNCOVERED, and the second means the
+        # check stopped firing -- the design did not get better, the evidence
+        # went away. That is defect #93 ("the debug agent is scored on failing
+        # count, so un-exercising a requirement reads as progress"), and it is
+        # not hypothetical: MEASURED on run 8 round 21, `dout <= sSDA` ->
+        # `dout <= dSDA` moved the frozen 90 from 19/25/46 to 18/26/46. Failing
+        # fell by one and PASSING DID NOT MOVE -- REQ-0009 went dark. A
+        # failing-count ratchet at requirement granularity would have latched it.
+        #
+        # PASSING is immune to both. Silencing leaves it flat by construction, so
+        # it can never buy a latch; only FAILING -> PASSING or
+        # UNCOVERED -> PASSING raises it, and those are the two things a repair
+        # is supposed to do. The testpoint count stays, reported, as the fine
+        # gradient §6.2(a) asks for -- to steer, not to judge.
+        if req_before is not None and req_after is not None:
+            ok0, bad0, dark0 = req_before
+            ok1, bad1, dark1 = req_after
+            result["requirements"] = {
+                "passing": f"{len(ok0)} -> {len(ok1)}",
+                "failing": f"{len(bad0)} -> {len(bad1)}",
+                "uncovered": f"{len(dark0)} -> {len(dark1)}",
+                "repaired": sorted(bad0 & ok1),
+                "broken": sorted(ok0 & bad1),
+                "silenced": sorted(bad0 & dark1),
+                "went_dark_from_passing": sorted(ok0 & dark1),
+            }
+            #: **PASSING JUDGES, BUT A COARSE JUDGE DISCARDS REAL REPAIRS.**
+            #: A requirement with thirty failing testpoints and one with a
+            #: single failing testpoint both count zero, so an edit clearing
+            #: ninety-nine of them without tipping any requirement over the
+            #: line is worth nothing. Measured on the run that found it:
+            #:
+            #:     #14   178 -> 79 failing testpoints   passing 88 -> 88   DISCARDED
+            #:     #21   105 -> 48 failing testpoints   passing 88 -> 88   DISCARDED
+            #:      #9   105 -> 180 failing testpoints  passing 86 -> 88   LATCHED
+            #:
+            #: A 56% reduction in wrongness thrown away; a near-doubling
+            #: banked.
+            #:
+            #: **AND THE ANTI-SILENCING ARGUMENT SURVIVES INTACT, WHICH IS THE
+            #: WHOLE REASON THIS IS SAFE.** Defect #93 is that a failing-count
+            #: ratchet cannot tell FAILING -> PASSING from FAILING -> DARK, so
+            #: un-exercising a check reads as progress -- measured on run 8
+            #: round 21, where `dout <= sSDA` -> `dout <= dSDA` cut failing by
+            #: one purely by making REQ-0009 go dark. A silencing puts that
+            #: requirement in `dark1`, so `silenced` is non-empty and this
+            #: clause is closed. The gradient is reachable only by a design
+            #: that lost no evidence at all.
+            gradient = (
+                req_before is not None and req_after is not None
+                and len(ok1) == len(ok0)
+                and not ((bad0 | ok0) & dark1)
+                and int(sim_mismatch_cnt) < int(prev_mismatch_cnt)
+            )
+            if len(ok1) <= len(ok0) and not gradient:
+                # REVERTING IS A POLICY, NOT A LAW. A greedy filter is a good
+                # default and is also, exactly, a hill-climber: a repair needing
+                # several parts to land together has to pass through a worse
+                # state to reach the better one, and reverting every step of it
+                # makes that repair unreachable no matter how many trials are
+                # left. `rollback_on_regression=False` lets the search cross the
+                # valley, and `best_rtl` -- now ranked on the same passing count
+                # this criterion uses -- is what stops that being a licence to
+                # finish worse than it started.
+                silenced = sorted((bad0 | ok0) & dark1)
+                if not self.rollback_on_regression:
+                    self.last_mismatch_cnt = sim_mismatch_cnt
+                    if new_fail_time is not None:
+                        self.last_fail_time = int(new_fail_time)
+                    result["is_action_executed"] = True
+                    self._accepted_req_split = req_after
+                    result["kept_despite_no_improvement"] = True
+                    result["accept_reason"] = (
+                        f"KEPT WITHOUT IMPROVING (rollback guard off): passing "
+                        f"requirements {len(ok0)} -> {len(ok1)}. This is now the "
+                        f"working baseline, so you can build the next part of a "
+                        f"multi-part repair on it."
+                        + (f"  {', '.join(silenced)} stopped firing rather than "
+                           f"passing -- evidence lost, not a requirement met."
+                           if silenced else "")
+                        + f"  Best seen this session is {self.best_passing} "
+                          f"passing, and THAT version is what the session "
+                          f"returns if nothing beats it."
+                    )
+                    self._refresh_trace(sim_log_json=sim_output)
+                    result["trace_summary"] = self.trace_summary()
+                    return result
+                self.write_rtl(old_file_content)
+                result["error_msg"] = (
+                    f"Commit did NOT latch: passing requirements {len(ok0)} -> "
+                    f"{len(ok1)}, and a commit latches only when that number "
+                    f"RISES. The accepted RTL is unchanged and your staged "
+                    f"edits are kept -- adjust them and commit again."
+                    + (f"  Note what happened: {', '.join(silenced)} stopped "
+                       f"firing altogether rather than passing. A check that "
+                       f"goes dark is evidence LOST, not a requirement met, "
+                       f"which is why the failing count fell without this "
+                       f"counting as progress." if silenced else "")
+                    + (f"  It did repair {', '.join(sorted(bad0 & ok1))}, so the "
+                       f"idea is not wrong -- something else in the batch costs "
+                       f"more than it gains." if bad0 & ok1 else "")
+                    + f"  (failing testpoints {prev_mismatch_cnt} -> "
+                      f"{sim_mismatch_cnt}, for direction only.)"
+                )
+                return result
+            self._accepted_req_split = req_after
+            result["accept_reason"] = (
+                (f"LATCHED ON THE GRADIENT: passing requirements held at "
+                 f"{len(ok1)} with nothing silenced, and failing testpoints "
+                 f"{prev_mismatch_cnt} -> {sim_mismatch_cnt}"
+                 if gradient else
+                 f"LATCHED: passing requirements {len(ok0)} -> {len(ok1)}")
+                + (f", repairing {', '.join(sorted(bad0 & ok1))}" if bad0 & ok1 else "")
+                + (f"; but {', '.join(sorted(ok0 & bad1))} BROKE" if ok0 & bad1 else "")
+                + (f"; and {', '.join(sorted(bad0 & dark1))} went dark rather "
+                   f"than passing" if bad0 & dark1 else "")
+            )
+        elif sim_mismatch_cnt > prev_mismatch_cnt:
+            # NO REQUIREMENT DATA -- a backend that does not publish any. Falls
+            # back to the testpoint ratchet, which is what every non-specflow
+            # caller has always used.
             increase = int(sim_mismatch_cnt) - int(prev_mismatch_cnt)
             max_increase = min(5, max(1, int(0.1 * max(1, int(prev_mismatch_cnt)))))
             allow = (
@@ -794,16 +2139,35 @@ class _EditSession:
                 and (new_fail_time > prev_fail_time)
                 and (increase <= max_increase)
             )
-            if not allow:
+            if not allow and self.rollback_on_regression:
                 self.write_rtl(old_file_content)
                 result["error_msg"] = (
                     "Mismatch_cnt increased after replacement. Action rolled back. "
                     f"(prev={prev_mismatch_cnt}, new={sim_mismatch_cnt}, prev_fail_time={prev_fail_time}, new_fail_time={new_fail_time})"
                 )
                 return result
+            if not allow:
+                # Guard off: keep the regression and say so plainly. The agent
+                # is told the count went UP so it can judge whether it is part
+                # way through a multi-part repair or simply wrong -- reporting
+                # this as an ordinary acceptance would hide the one fact it
+                # needs to decide that.
+                result["accept_reason"] = (
+                    f"KEPT DESPITE REGRESSION (rollback guard off): mismatches "
+                    f"{prev_mismatch_cnt} -> {sim_mismatch_cnt} (+{increase}). "
+                    f"Best seen this session is {self.best_mismatch_cnt}, and that "
+                    "version is what will be returned if nothing beats it. If this "
+                    "edit is one part of a repair that needs several parts to land "
+                    "together, continue; if it was simply wrong, revert it yourself."
+                )
+            else:
+                result["accept_reason"] = (
+                    "Accepted despite slight mismatch increase because earliest mismatch moved later "
+                    f"(+{increase} mismatches, fail_time {prev_fail_time}->{new_fail_time})."
+                )
+        elif improved_best:
             result["accept_reason"] = (
-                "Accepted despite slight mismatch increase because earliest mismatch moved later "
-                f"(+{increase} mismatches, fail_time {prev_fail_time}->{new_fail_time})."
+                f"New best: {sim_mismatch_cnt} mismatches."
             )
 
         if sim_mismatch_cnt == 0 and not is_sim_pass:
@@ -823,41 +2187,13 @@ class _EditSession:
             result["trace_summary"] = self.trace_summary()
         return result
 
-    def replace_block(self, block_id: str, new_code: str) -> Dict[str, Any]:
-        if not self.blocks_by_id or block_id not in self.blocks_by_id:
-            return {
-                "is_action_executed": False,
-                "error_msg": f"Unknown block_id '{block_id}'. Use list_suspect_blocks() first.",
-            }
-
-        old_file_content = self.read_rtl()
-        old_lines = old_file_content.splitlines()
-        # Snapshot BEFORE the splice so the guard can reject only what this edit
-        # introduces, rather than refusing to work on RTL that arrived broken.
-        pre_multidriven = multidriven_signals(self.rtl_path)
-        block = self.blocks_by_id[block_id]
-        start = block.start_line - 1
-        end = block.end_line - 1
-        if start < 0 or end >= len(old_lines) or start > end:
-            return {
-                "is_action_executed": False,
-                "error_msg": f"Invalid block range for {block_id}: {block.start_line}-{block.end_line}.",
-            }
-
-        self.action_calls += 1
-        if self.action_calls > self.max_trials:
-            return {
-                "is_action_executed": False,
-                "error_msg": "Reached maximum debug trials; refusing further edits.",
-            }
-
-        new_block_lines = new_code.rstrip("\n").splitlines()
-        new_lines = old_lines[:start] + new_block_lines + old_lines[end + 1 :]
-        self.write_rtl("\n".join(new_lines) + ("\n" if old_file_content.endswith("\n") else ""))
-
-        return self._judge_replace_action_execution(
-            old_file_content=old_file_content, pre_multidriven=pre_multidriven,
-        )
+    # `replace_block` -- the immediate-latch splice -- is DELETED, not kept for
+    # compatibility. It spliced by LINE NUMBER, wrote `rtl_path` on the spot,
+    # simulated, and rolled back on regression; every one of those is wrong now.
+    # Line numbers shift under a staged edit above them, writing on the spot is
+    # what made rollback necessary, and rolling back is what destroyed the
+    # agent's work. `stage_replace` + `commit` replace it. A method left here
+    # would still latch, silently, from any caller that had not been updated.
 
 
 def _render_continue_debug_prompt(session: "_EditSession") -> str:
@@ -888,14 +2224,73 @@ def _render_continue_debug_prompt(session: "_EditSession") -> str:
         if session.last_fail_time is not None else ""
     )
 
+    staged_note = ""
+    if session.staged_rtl is not None:
+        pending = sorted(set(session.staged_text) | set(session.retired_ids))
+        staged_note = (
+            "You have edits STAGED and not yet committed"
+            + (f" (blocks touched: {', '.join(pending)})" if pending else "")
+            + ". They are not in the design until _tool_commit() latches them.\n\n"
+        )
+
     return (
         f"{last_action_block}"
-        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n\n"
+        f"{staged_note}"
+        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n"
+        f"Trials used: {session.action_calls}/{session.max_trials} "
+        f"(a trial is a commit; edits and check_staged are free).\n\n"
         "Continue debugging. Preserve the contract and module interface. If mismatches remain, "
-        "pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) "
-        "once, then run_simulation(). Do NOT call generate_response until run_simulation() reports "
-        "is_sim_pass=true with 0 mismatches — an unverified claim of success is not accepted as done."
+        "pick a suspect block and call _tool_read_block(block_id), stage every part of the fix with "
+        "_tool_replace_block / _tool_add_block / _tool_remove_block, settle syntax and drivers with "
+        "_tool_check_staged(), then call _tool_commit() ONCE for the whole batch. A commit that does "
+        "not improve keeps your staged edits — adjust them rather than starting over. Do NOT call "
+        "generate_response until a commit reports is_sim_pass=true with 0 mismatches — an unverified "
+        "claim of success is not accepted as done."
     )
+
+
+class _StallCounter:
+    """Consecutive TRIALS that failed to beat the best point seen.
+
+    **A TURN THAT SPENT NO TRIAL IS NOT A STALL, AND COUNTING IT WAS READING A
+    TAUTOLOGY AS A RESULT.** Only `commit` re-runs the reviewer, so on a turn
+    that did not commit the mismatch counts CANNOT have changed -- the "no
+    improvement" test is then true by construction, and the counter charges the
+    search for a turn that measured nothing. The turns it charged are exactly
+    the ones the prompt asks for first: `list_failing_requirements`, `explain`,
+    `focus`, `read_block`, `find_signal`.
+
+    Measured on the run that found it: six rounds, and rounds 2, 3, 4 and 5 each
+    ended after exactly TWO agent turns with the trial budget barely touched.
+    Round 3 ended having made NO commit at all -- two turns of reading, then
+    "not converging" over a mismatch count nothing had moved. 19 commits over
+    six rounds; 21 of a 40-trial budget never spent.
+
+    Improvement is measured against the BEST seen, not the previous value. With
+    the rollback guard off an uphill step raises `last`, and comparing to the
+    previous value would score every deliberate valley crossing as a stall --
+    precisely the search the guard was turned off to allow.
+
+    This is a class and not a closure so that it can be tested without an agent,
+    a session or a simulator.
+    """
+
+    def __init__(self, start_mismatch: int, spent: int = 0) -> None:
+        self.count = 0
+        self._reference = int(start_mismatch)
+        self._spent = int(spent)
+
+    def observe(self, *, spent: int, last: int, best: int | None) -> None:
+        """Record one agent turn. A turn that spent no trial is ignored."""
+        spent = int(spent)
+        if spent == self._spent:
+            return
+        self._spent = spent
+        reference = self._reference
+        improved = last < reference or (best is not None and best < reference)
+        self.count = 0 if improved else self.count + 1
+        self._reference = (min(reference, best) if best is not None
+                           else reference)
 
 
 class RTLEditor:
@@ -920,10 +2315,46 @@ class RTLEditor:
         # matching default and a case where losing history also hurt
         # convergence quality, independent of cost.
         memory_window: int = 0,
-        stall_rounds: int = 2,
+        #: Consecutive TRIALS that fail to beat the best point before giving
+        #: up. **WAS 2, AND 2 IS INSIDE THE NOISE OF ITS OWN SEARCH.** On the
+        #: run that motivated this the agent committed #6 and #7 without
+        #: improving and then #8 latched, taking passing requirements 85 -> 87
+        #: -- a recovery that a limit of 2 cuts off by construction. The
+        #: comment below already said so ("crossing a valley takes several
+        #: consecutive non-improving rounds by definition") and the number did
+        #: not follow.
+        #:
+        #: With stalls counted on trials rather than turns, this is a budget in
+        #: the same units as `max_trials`, and it should not be the binding
+        #: constraint on a search the caller has funded: six rounds of that run
+        #: spent 19 of 40 trials and every round after the first ended on this
+        #: counter, not on the budget.
+        stall_rounds: int = 6,
+        #: None reads EDA_ROLLBACK_GUARD from the environment ("off"/"0"/"false"
+        #: disable it); anything explicit wins over the environment. The guard
+        #: stays ON by default -- a greedy filter is the right default, and this
+        #: exists to make its cost measurable rather than to remove it.
+        rollback_guard: bool | None = None,
+        #: Backend-supplied stimulus route (see `_EditSession.stimulus_stager`).
+        #: None leaves `add_stimulus` registered but refusing, which is the
+        #: honest state for a backend that cannot mint testpoints -- rather than
+        #: hiding the tool and leaving the agent to wonder why an uncovered
+        #: requirement has no remedy.
+        stimulus_stager: object | None = None,
+        #: `{req_uid: RequirementView}` from `explain.load_requirement_views`.
+        #: Empty leaves `explain`/`focus` registered and answering "unknown
+        #: requirement", which is the honest state for a backend with no
+        #: requirement artifacts -- and exactly the state the loop was always
+        #: in, silently.
+        requirements: dict | None = None,
+        #: The port contract, for `ports_read` and the perturbation's widths.
+        contract: dict | None = None,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
+        self._stimulus_stager = stimulus_stager
+        self._requirements = dict(requirements or {})
+        self._contract = dict(contract or {})
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
         # Consecutive outer-loop rounds with no mismatch-count reduction before
@@ -931,24 +2362,74 @@ class RTLEditor:
         # detects non-convergence early, so a stuck debugger yields back to the
         # orchestrator (decomposition) instead of grinding through its full
         # budget on rounds that are structurally not making progress.
+        # Crossing a valley takes several consecutive non-improving rounds by
+        # definition, so a stall limit tuned for a monotone search will cut the
+        # search off before it can get anywhere. Overridable rather than derived
+        # from `rollback_guard`, because tying them together would silently
+        # change one knob when the caller set the other.
+        try:
+            stall_rounds = int(os.environ.get("EDA_STALL_ROUNDS") or stall_rounds)
+        except ValueError:
+            pass
         self._stall_rounds = max(1, int(stall_rounds))
+        self._rollback_guard = resolve_rollback_guard(rollback_guard)
         self._session: _EditSession | None = None
 
         toolkit = GuidingToolkit()
+        # THE REQUIREMENT SURFACE. Before these the loop was handed check ids
+        # and the whole spec as background, and asked to name the requirement
+        # behind a failure -- which it had to guess. B21 is what that cost.
+        toolkit.register_tool_function(self._tool_list_failing_requirements)
+        toolkit.register_tool_function(self._tool_explain)
+        toolkit.register_tool_function(self._tool_focus)
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
+        toolkit.register_tool_function(self._tool_find_signal)
+        # The STAGING surface. Edits are free and latch nothing; `commit` is the
+        # trial. Without these registered the staged buffer is unreachable --
+        # the methods exist on the session and no agent can call them.
         toolkit.register_tool_function(self._tool_replace_block)
+        toolkit.register_tool_function(self._tool_edit)
+        toolkit.register_tool_function(self._tool_add_block)
+        toolkit.register_tool_function(self._tool_remove_block)
+        toolkit.register_tool_function(self._tool_check_staged)
+        toolkit.register_tool_function(self._tool_discard_staged)
+        toolkit.register_tool_function(self._tool_commit)
+        toolkit.register_tool_function(self._tool_add_stimulus)
         toolkit.register_tool_function(self._tool_run_simulation)
 
+        # Held on the instance so `usage()` can read the cumulative counters
+        # off it. Constructed inline it is reachable only through the agent.
+        self._model = make_openai_model(cfg, cache_key="rtl-debug")
         self._agent = SafeReActAgent(
             name="Debugger",
             sys_prompt=SYSTEM_PROMPT,
-            model=make_openai_model(cfg),
+            model=self._model,
             formatter=make_formatter(cfg.model),
             toolkit=toolkit,
             memory=InMemoryMemory(),
             max_iters=10,
         )
+
+    def usage(self) -> tuple[int, int, int]:
+        """`(input, cached, output)` for this editor's model, cumulative.
+
+        `cached` is a SUBSET of `input`, and it is the number that decides
+        whether a long tool-using loop is cheap or ruinous. A trial re-sends a
+        growing conversation through a ReAct sub-loop of up to `max_iters`
+        calls, so input dominates the ledger -- and a re-sent prefix that hits
+        the cache and one that misses it look identical in the input total
+        alone. Measured on the refmodel loop, which is the same shape: 46.1M
+        input tokens on a2-i2c against 10.8M for every specflow stage combined.
+
+        A zero here means "nothing recorded yet", not "no cache hits"; the two
+        are only distinguishable because `input` is reported beside it.
+        """
+        from .model import get_model_cached, get_model_usage
+
+        model = getattr(self, "_model", None)
+        got = get_model_usage(model)
+        return got[0], get_model_cached(model), got[1]
 
     def reset(self) -> None:
         clear_memory_safely(self._agent)
@@ -958,14 +2439,30 @@ class RTLEditor:
         """List dynamically sliced suspect blocks (always/assign)."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
-        blocks = self._session.list_suspect_blocks()
-        return ToolResponse(content=[{"type": "text", "text": json.dumps(blocks, indent=2)}])
+        # §12's staleness note lives on the session now, because only the
+        # session knows WHERE the slice came from: `focus` slices the staged
+        # buffer, `_refresh_trace` slices the last accepted RTL. Asserting one
+        # unconditionally here was wrong for every focus-built slice.
+        payload = self._session.list_suspect_blocks()
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(payload, indent=2)}])
 
     async def _tool_read_block(self, block_id: str) -> ToolResponse:
         """Read a suspect block by id with line numbers."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         return ToolResponse(content=[{"type": "text", "text": self._session.read_block(block_id)}])
+
+    async def _tool_find_signal(self, name: str) -> ToolResponse:
+        """Where a SIGNAL is driven and read, by name. Free.
+
+        Answers the question `read_block` cannot: `read_block` takes a block id,
+        so an agent holding a signal name had only the id space to search. Reads
+        the staged buffer, so it sees pending edits and is not narrowed by focus.
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        return ToolResponse(content=[{"type": "text",
+                                      "text": json.dumps(self._session.find_signal(name), indent=1, default=str)}])
 
     async def _tool_run_simulation(self) -> ToolResponse:
         """Run simulation for current rtl.sv + tb.sv; returns pass/fail and mismatch count."""
@@ -988,12 +2485,11 @@ class RTLEditor:
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
     async def _tool_replace_block(self, block_id: str, new_code: str) -> ToolResponse:
-        """Replace a suspect block by id, then syntax-check + simulate (rollback if mismatch increases)."""
+        """Stage a replacement for a suspect block. Free: no compile, no simulation, no trial. Call commit() to build and test the batch."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
-        blk = (self._session.blocks_by_id or {}).get(block_id)
-        before = getattr(blk, "code", "") if blk is not None else ""
-        result = await asyncio.to_thread(self._session.replace_block, block_id, new_code)
+        before = self._session._anchor_for(block_id) or ""
+        result = await asyncio.to_thread(self._session.stage_replace, block_id, new_code)
         # The DIFF, not the whole file: what the model actually tried is the
         # thing that was never recorded, and it is what a post-mortem needs.
         try:
@@ -1019,6 +2515,139 @@ class RTLEditor:
         self._session.last_action_result = result
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
+    async def _tool_add_block(self, anchor_id: str, code: str) -> ToolResponse:
+        """Stage a NEW block after block `anchor_id`, or at module end when anchor_id is "endmodule". Free: no compile, no simulation, no trial."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.stage_add, anchor_id, code)
+        self._session._record_trajectory("add_block", result=result, block_id=anchor_id,
+                                         diff=code)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_edit(self, old_text: str, new_text: str) -> ToolResponse:
+        """Replace an exact FRAGMENT of the design, quoting enough context to be unique. Free: no compile, no simulation, no trial. Use this for a small change inside a large block instead of retyping the whole block."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.stage_edit, old_text, new_text)
+        self._session._record_trajectory("edit", result=result,
+                                         diff=f"- {old_text}\n+ {new_text}")
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_remove_block(self, block_id: str) -> ToolResponse:
+        """Stage the DELETION of a suspect block. Free: no compile, no simulation, no trial. Its id is then retired, not unknown."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        before = self._session._anchor_for(block_id) or ""
+        result = await asyncio.to_thread(self._session.stage_remove, block_id)
+        self._session._record_trajectory("remove_block", result=result,
+                                         block_id=block_id, diff=before)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_check_staged(self) -> ToolResponse:
+        """Would a commit be rejected? Syntax and drivers on the staged batch, with a verdict. Static only: no simulation and NO TRIAL, so it is free and unlimited. Call it before every commit."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.check_staged)
+        self._session._record_trajectory("check_staged", result=result)
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_discard_staged(self) -> ToolResponse:
+        """Throw away every staged edit and return to the last accepted RTL. Costs no trial."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.discard_staged)
+        self._session._record_trajectory("discard_staged", result=result)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_commit(self) -> ToolResponse:
+        """Compile and simulate the staged batch. THIS IS THE TRIAL. Improved -> latched; not improved -> the accepted RTL is untouched and your staged edits are kept."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.commit)
+        self._session._record_trajectory("commit", result=result)
+        if self._session.trace_report:
+            result.setdefault("trace_summary", self._session.trace_summary())
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
+    async def _tool_list_failing_requirements(self) -> ToolResponse:
+        """Every requirement the last run decided against or could not cover, in the requirement's OWN WORDS rather than as check ids. Start here."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        rows = self._session.list_failing_requirements()
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(rows, indent=2)}])
+
+    async def _tool_explain(self, req_uid: str) -> ToolResponse:
+        """What one requirement OWES, what its check objected to, and where to look: the span it governs, the boundary ports across that span, the transitions in it, the suspect blocks' INTERNAL signals from the waveform, and what single value change would have satisfied the check.
+
+        Read this before editing anything. It carries the requirement's own text
+        and its normalized activation, which no other tool gives you -- a
+        failing check tells you something is wrong at a port; only the
+        requirement tells you what the design was supposed to do there.
+
+        If it reports that NO single-value change satisfies the check, the
+        defect is TEMPORAL: the ordering or the timing, not a wrong value at one
+        edge. Do not go looking for a wrong constant.
+
+        Args:
+            req_uid: the requirement, e.g. "REQ-0031".
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.explain, req_uid)
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=2, default=str)}])
+
+    async def _tool_focus(self, req_uid: str) -> ToolResponse:
+        """Narrow the dataflow slice to ONE requirement's ports. With many requirements failing, an unfocused slice returns most of the design; this is what keeps it a slice. Costs no trial.
+
+        Args:
+            req_uid: the requirement to slice from, e.g. "REQ-0031".
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.focus, req_uid)
+        self._session._record_trajectory("focus", result=result, block_id=req_uid)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=2)}])
+
+    async def _tool_add_stimulus(
+        self, req_uid: str, what_the_scenario_needs: str
+    ) -> ToolResponse:
+        """Stage a scenario the suite never reaches, for a requirement reported UNCOVERED. Free: costs no trial. You describe what must happen in prose; the harness generates and gates the vectors and APPENDS a testpoint.
+
+        Use this when a requirement's check decided NOTHING. That means the
+        check never saw the situation its clause is about, so the design is not
+        being accused of anything and no edit can discharge it -- the testplan is
+        what is missing. This is how you say so.
+
+        Do NOT use it for a FAILING requirement. A failure is evidence that
+        already exists and is a finding about the design; adding stimulus cannot
+        discharge one.
+
+        The new testpoint is also attached to every other requirement whose
+        activation it happens to stage, so one good scenario can cover several.
+        Check the result's `attached_to`. If the result says the requirement is
+        still uncovered, the scenario you described did not stage it -- describe
+        it more concretely rather than repeating it.
+
+        Args:
+            req_uid: the requirement, e.g. "REQ-0031". Must currently be uncovered.
+            what_the_scenario_needs: what has to happen, concretely, in prose.
+        """
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(
+            self._session.add_stimulus, req_uid, what_the_scenario_needs)
+        self._session._record_trajectory("add_stimulus", result=result,
+                                         block_id=req_uid,
+                                         diff=what_the_scenario_needs)
+        self._session.last_action_result = result
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
     async def chat(
         self,
         *,
@@ -1028,9 +2657,21 @@ class RTLEditor:
         sim_mismatch_cnt: int,
         contract_json: str,
         max_trials: int | None = None,
+        tb_text: str | None = None,
+        tb_clip_chars: int = 8000,
     ) -> Tuple[bool, str, int, str]:
+        """Repair `rtl.sv` until the reviewer accepts it.
+
+        `tb_text` is what the agent is shown as the oracle. The SystemVerilog
+        path leaves it None and the text is read from `<run>/tb.sv`; specflow
+        supplies it directly, because its testbench is a rendered cocotb suite
+        plus a Python reference model and no such file exists. Reading that path
+        unconditionally is what made the specflow repair loop die with
+        `FileNotFoundError` on its first iteration, having never run once.
+        """
         self.reset()
         tb_path = f"{output_dir_per_run}/tb.sv"
+        has_tb_file = Path(tb_path).is_file()
         rtl_path = f"{output_dir_per_run}/rtl.sv"
         session_max_trials = int(max_trials) if max_trials is not None else int(self.max_trials)
         if session_max_trials < 0:
@@ -1048,17 +2689,30 @@ class RTLEditor:
             pass  # a contract we cannot parse simply disables the extra guard
 
         self._session = _EditSession(
-            tb_path=tb_path,
+            tb_path=tb_path if has_tb_file else None,
             rtl_path=rtl_path,
             output_dir=output_dir_per_run,
             last_mismatch_cnt=sim_mismatch_cnt,
             sim_reviewer=self.sim_reviewer,
             max_trials=session_max_trials,
             child_names=child_names,
+            rollback_on_regression=self._rollback_guard,
+            stimulus_stager=self._stimulus_stager,
+            requirements=self._requirements,
+            contract=self._contract,
         )
+        # The caller has ALREADY run the reviewer once -- that is where
+        # `sim_failed_log` and `sim_mismatch_cnt` came from. Without this the
+        # requirement surface stays empty until the agent's first commit, so
+        # the very first `list_failing_requirements()` -- the call the prompt
+        # tells it to start with -- would answer "nothing failing".
+        self._session._pull_req_results()
 
-        with open(tb_path, "r", encoding="utf-8") as f:
-            generated_tb = f.read()
+        if tb_text is not None:
+            generated_tb = tb_text
+        else:
+            with open(tb_path, "r", encoding="utf-8") as f:
+                generated_tb = f.read()
 
         # Save full failed log for inspection, but only send a short excerpt to the agent.
         try:
@@ -1085,7 +2739,7 @@ class RTLEditor:
         init = INIT_EDITION_PROMPT.format(
             input_spec=spec,
             contract_json=contract_json,
-            generated_tb=_clip_text(generated_tb, max_chars=8000),
+            generated_tb=_clip_text(generated_tb, max_chars=tb_clip_chars),
             sim_failed_log_excerpt=sim_failed_log_excerpt,
             kmap_hint=(KMAP_DEBUG_HINT_PROMPT if needs_kmap_hint else ""),
         )
@@ -1128,6 +2782,11 @@ class RTLEditor:
         # generating its own (potentially wrong) assertions via the LLM.
         asserter_hint = ""
         try:
+            if not has_tb_file:
+                # The asserter copies `tb.sv` into its proof directory and wraps
+                # it. With no SystemVerilog testbench there is nothing to wrap,
+                # and running it would spend an agent call to fail on a read.
+                raise FileNotFoundError(tb_path)
             fail_sigs: list[str] = []
             for fo in (report.get("fail_outputs") or []):
                 if isinstance(fo, dict) and isinstance(fo.get("sig"), str) and fo.get("sig"):
@@ -1235,15 +2894,20 @@ class RTLEditor:
         # rolled-back action or a round where the model never acts both leave
         # it unchanged, so this naturally catches both failure modes).
         stall_count = 0
-        prev_mismatch_for_stall = int(sim_mismatch_cnt)
+        _stall = _StallCounter(
+            int(sim_mismatch_cnt),
+            spent=int(getattr(self._session, "action_calls", 0) or 0),
+        )
 
         def _update_stall_tracking() -> None:
-            nonlocal stall_count, prev_mismatch_for_stall
-            if self._session.last_mismatch_cnt < prev_mismatch_for_stall:
-                stall_count = 0
-            else:
-                stall_count += 1
-            prev_mismatch_for_stall = self._session.last_mismatch_cnt
+            """One agent turn, recorded. See `_StallCounter` for the rule."""
+            nonlocal stall_count
+            _stall.observe(
+                spent=int(getattr(self._session, "action_calls", 0) or 0),
+                last=self._session.last_mismatch_cnt,
+                best=self._session.best_mismatch_cnt,
+            )
+            stall_count = _stall.count
 
         _turn_start_iter = self._session.traj_iter + 1
         response = await self._agent(Msg("user", first_prompt, role="user"))
@@ -1307,6 +2971,16 @@ class RTLEditor:
                     _justification = _last_content[idx:].strip()
                     break
 
+        # The answer is the best point the search found. With the guard on this
+        # is already where the RTL sits and the call is a no-op; with it off, the
+        # loop may have ended part way up a hill it was allowed to climb, and
+        # returning that would make "no guard" lose by construction rather than
+        # on the merits.
+        if not self._session.is_done and self._session.restore_best():
+            logger.info(
+                "restored best-seen RTL (%s mismatches) over the loop's final state",
+                self._session.best_mismatch_cnt,
+            )
         with open(rtl_path, "r", encoding="utf-8") as f:
             rtl_code = f.read()
         used = int(getattr(self._session, "action_calls", 0) or 0)

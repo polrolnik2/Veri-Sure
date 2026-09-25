@@ -1,0 +1,20 @@
+{
+  "requirements_minted": 150,
+  "requirements_observable": 135,
+  "requirements_behavioural": 120,
+  "trusted": 113,
+  "span": 0.9416666666666667,
+  "cells": 0,
+  "blind": 0,
+  "blindness": null,
+  "population": 7,
+  "control_judges": 12,
+  "control_convicted_by": 1,
+  "audit": 0.08333333333333333,
+  "effective_size": 100,
+  "accepted_designs": 0,
+  "notes": [
+    "the control is NOT contract-conformant: 21 of the 21 declared probe(s) are not exposed by it (cnt_zero, filter_cnt_expired, filter_cnt, filter_sample_update, fscl, fsda, ...), so the 101 check(s) reading them can say nothing about it",
+    "audit is over the 12 of 113 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have"
+  ]
+}

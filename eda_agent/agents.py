@@ -165,10 +165,55 @@ class SafeReActAgent(ReActAgent):
 
 
 def clear_memory_safely(agent: ReActAgent) -> None:
-    """Clear AgentScope memory without 'coroutine was never awaited' warnings."""
+    """Clear AgentScope memory NOW, not on the next network await.
+
+    The previous implementation scheduled `InMemoryMemory.clear()` with
+    `loop.create_task(ret)` when a loop was already running -- to dodge a
+    "coroutine was never awaited" warning -- and returned immediately
+    without the clear having happened yet. That is a real race, not a
+    cosmetic one, and it is live on every call site in this package: every
+    `chat`/`align`/`ablation_chat` entry point calls `self.reset()` and then,
+    still synchronously, proceeds to the turn that adds the next message.
+
+    Trace it through agentscope 1.0.7 itself
+    (`agentscope/memory/_in_memory_memory.py`,
+    `agentscope/agent/_react_agent.py::reply`): `InMemoryMemory.add()` and
+    `.clear()` are both `async def` for interface conformance only -- each is
+    a plain list operation with no genuine suspension point -- and
+    `ReActAgent.reply()` does `await self.memory.add(msg)` as its very first
+    line. So nothing yields control to the event loop between `reset()`
+    returning and the turn's opening message landing in memory; the FIRST
+    real suspension in the whole call is `_reasoning()`'s
+    `await self.model(...)`. That is exactly when a deferred clear task
+    finally gets to run -- after the opening message was added, not before --
+    so it wipes the very message the request in flight was just built from.
+    Every iteration after the first (anything that calls a tool, which is
+    the normal case for `RTLEditor`/`TBEditor`) then reasons with that
+    message already gone from its own history, and sends a message list
+    that no longer extends the previous request's -- the exact prefix break
+    `tests/test_prompt_prefix.py` exists to catch, one layer below where
+    that suite looks, and invisible to it because that suite builds its
+    message lists by hand rather than through a live agent turn.
+
+    The fix is to never create the coroutine at all. Every memory this
+    package constructs is `InMemoryMemory`, which exposes a plain `.content`
+    list -- the same attribute `RefModelEditor.restore_memory` already
+    assigns directly and synchronously elsewhere in this codebase -- so set
+    it directly. No task, no race, and no warning, because nothing async is
+    ever invoked.
+    """
     mem = getattr(agent, "memory", None)
     if mem is None:
         return
+    if hasattr(mem, "content"):
+        mem.content = []
+        return
+
+    # A MemoryBase implementation with no `.content` (not used anywhere in
+    # this package today, but `clear_memory_safely` is not typed to rule it
+    # out): fall back to the best-effort async clear rather than doing
+    # nothing. Still races the same way for THAT implementation, but no
+    # worse than before this fix.
     clear = getattr(mem, "clear", None)
     if clear is None:
         return
@@ -177,8 +222,6 @@ def clear_memory_safely(agent: ReActAgent) -> None:
     except TypeError:
         # Some memory implementations may require args; ignore.
         return
-
-    # In AgentScope 1.0.7, InMemoryMemory.clear() is async; schedule it if needed.
     if hasattr(ret, "__await__"):
         try:
             loop = __import__("asyncio").get_running_loop()

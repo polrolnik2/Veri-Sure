@@ -29,6 +29,16 @@ You write clean, synthesizable, syntactically-correct SystemVerilog RTL that mat
 
 Toolchain note:
 - The harness uses Verilator. Keep RTL compatible with Verilator (standard synthesizable SystemVerilog).
+- BUT DECLARE THE MODULE PORTS IN PLAIN VERILOG-2005: `input [15:0] a`,
+  `output reg [15:0] r`. Never `input logic` / `output logic` in the port list.
+  The body may stay SystemVerilog; only the port declarations must be portable.
+  This is not a style preference. Benchmark testbenches are Verilog-2005, and
+  one `logic` keyword in a port list makes the testbench fail to compile with
+  "Net data type requires SystemVerilog". The scoring flow then falls back to a
+  formal miter, which is stricter and reports a functionally CORRECT design as
+  not equivalent. Measured on `alu`: identical logic scored `function_fail`
+  with `input logic` and `pass` with `input` -- the whole difference was the
+  keyword, and every design generated so far carried it.
 
 Contract-only mode:
 - Treat <contract_json> as the ONLY source of truth for interface/timing/behavior.
@@ -194,6 +204,22 @@ Hard rules:
   literals) for the widths/values they govern.
 - Produce synthesizable RTL (no delays, no testbench constructs).
 - Keep the code small and readable.
+- A port whose contract direction is "probe" is declared as an ordinary Verilog
+  `output` -- Verilog has no probe direction. It is an OBSERVATION POINT: a
+  one-bit signal that is high exactly when the situation its `notes` and `spans`
+  describe holds, and nothing else in the design may read it or depend on it.
+  Drive it from the state you already have (`assign in_lrefill3 = (state ==
+  LREFILL3);`). It must not change the module's functional behaviour in any way;
+  it exists so a check can name the situation the specification names, and it is
+  stripped before the design is compared against a reference.
+- A PROBE'S NAME IS TAKEN. Several probes are named after signals the
+  specification also describes as internal state -- `hitmiss_eval` is the
+  clearest case -- so if you need an internal register for the same thing, give
+  the REGISTER a different name (`hitmiss_eval_r`) and drive the probe port from
+  it. Declaring both under one name does not compile: Verilator refuses with
+  "Duplicate declaration of signal", and the whole design is lost over an
+  identifier. This is measured, not hypothetical -- it is how one of three
+  generated designs failed.
 
 In `reasoning`, write a short summary of key decisions and assumptions (no step-by-step chain-of-thought).
 
@@ -229,9 +255,16 @@ Other requirements:
 5. NEVER USE 'inside' operator in RTL code. Code like 'state inside {STATE_B, STATE_C, STATE_D}' should NOT be used.
 6. Never USE 'unique' or 'unique0' keywords in RTL code. Code like 'unique case' should NOT be used.
 7. Respect any explicit latency/timing described in the contract (e.g., next-cycle outputs).
-8. LATENCY IS A HARD CONSTRAINT, NOT A PREFERENCE. `timing.<output>.latency_cycles`
-   is the EXACT number of clocked stages between an input being presented and that
-   output being observable. Count the registers on the path before you finish:
+8. WHERE THE CONTRACT DECLARES A LATENCY, IT IS A HARD CONSTRAINT, NOT A
+   PREFERENCE. `timing.<output>.latency_cycles` is the number of edges of the
+   DECLARED CLOCK between the edge that captures a stimulus and the edge on
+   which that output first reflects it -- edges of the declared clock, not
+   enable ticks, so a design whose FSM advances on a prescaled `clk_en` legitimately
+   takes more clock edges than it has phases. The field is present only when the
+   specification determines the count or a completion signal makes it observable.
+   WHERE IT IS ABSENT, the specification does not settle the depth: build what
+   the function needs and do not invent a pipeline to fill a number that is not
+   there. Count the registers on the path before you finish:
 
      latency_cycles = 0  -> purely combinational. The output must NOT be assigned
                             with `<=` in any clocked block.
@@ -247,10 +280,13 @@ Other requirements:
    sensible instinct and is WRONG here unless the contract asked for that depth:
    a deeper pipeline is not a better design, it is a different contract.
 
-   Nothing downstream will catch a mistake here. The testbench compares against a
-   queue that realigns to whatever latency your design happens to have, so a
-   design of the wrong depth passes its own checks and fails every consumer that
-   holds it to the contract. Getting this right is your responsibility alone.
+   Nothing downstream will catch a mistake here, and that is deliberate rather
+   than an oversight. The specflow testbench compares the ordered sequence of
+   output states and ignores how long each is held, precisely because a cycle
+   count nothing can check against the specification is a fiction -- so it will
+   not reject a design for its depth. Cycle structure depends on the hardware
+   the specification does not pin down, which makes it yours: getting it right
+   is your responsibility alone.
 """
 # Some prompts above comes from:
 # @misc{ho2024verilogcoderautonomousverilogcoding,
@@ -377,10 +413,35 @@ class RTLGenerator:
         clear_memory_safely(self._agent)
 
     def _new_agent(self, *, name: str, composition: bool = False) -> SafeReActAgent:
+        # `composition` picks the SYSTEM PROMPT (GLUE_SYSTEM_PROMPT vs
+        # SYSTEM_PROMPT), and `cache_key` has to follow it: a leaf call and a
+        # composition call are two genuinely different prefixes, diverging
+        # from the first sentence of the system prompt. Pooling them under
+        # one key is exactly what `make_openai_model`'s own docstring warns a
+        # module must not do when it "grows a second, differently prefixed
+        # agent" -- route both to one key and each interleaved call sends
+        # the OTHER prompt's traffic to a backend holding the wrong head, a
+        # miss even though a warm cache for that exact request exists
+        # somewhere, just not on the backend this key happened to route to.
+        #
+        # Two full `make_openai_model` call sites, deliberately, rather than
+        # one call with the key chosen by a ternary: `tests/test_cache_key.py`
+        # audits keys by scanning source text for one `cache_key="..."` per
+        # call site, and a ternary would hide the second key from that scan
+        # the same way this pooling bug hid from it the first time.
+        if composition:
+            return SafeReActAgent(
+                name=name,
+                sys_prompt=GLUE_SYSTEM_PROMPT,
+                model=make_openai_model(self._cfg, cache_key="rtl-generate-glue"),
+                formatter=make_formatter(self._cfg.model),
+                memory=InMemoryMemory(),
+                max_iters=10,
+            )
         return SafeReActAgent(
             name=name,
-            sys_prompt=GLUE_SYSTEM_PROMPT if composition else SYSTEM_PROMPT,
-            model=make_openai_model(self._cfg),
+            sys_prompt=SYSTEM_PROMPT,
+            model=make_openai_model(self._cfg, cache_key="rtl-generate"),
             formatter=make_formatter(self._cfg.model),
             memory=InMemoryMemory(),
             max_iters=10,

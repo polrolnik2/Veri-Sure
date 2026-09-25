@@ -1,0 +1,295 @@
+{
+  "ok": true,
+  "rounds": 7,
+  "covers": {
+    "REQ-0000": [
+      "step",
+      "_advance_fsm"
+    ],
+    "REQ-0001": [
+      "_state_outputs",
+      "_divider_tick",
+      "_advance_fsm",
+      "_write_outputs"
+    ],
+    "REQ-0002": [
+      "_write_outputs"
+    ],
+    "REQ-0003": [
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0004": [
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0005": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0006": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0007": [
+      "_update_filter",
+      "_divider_tick",
+      "_advance_fsm",
+      "step"
+    ],
+    "REQ-0008": [
+      "_divider_tick"
+    ],
+    "REQ-0009": [
+      "_update_filter",
+      "_divider_tick"
+    ],
+    "REQ-0010": [
+      "step",
+      "_divider_tick",
+      "_update_filter"
+    ],
+    "REQ-0011": [
+      "_divider_tick"
+    ],
+    "REQ-0012": [
+      "_update_filter"
+    ],
+    "REQ-0013": [
+      "_divider_tick"
+    ],
+    "REQ-0014": [
+      "step",
+      "_advance_fsm"
+    ],
+    "REQ-0015": [
+      "_advance_fsm"
+    ],
+    "REQ-0016": [
+      "_advance_fsm"
+    ],
+    "REQ-0017": [
+      "_bus_events"
+    ],
+    "REQ-0018": [
+      "_bus_events",
+      "_sda_check_active"
+    ],
+    "REQ-0019": [
+      "_update_filter",
+      "_bus_events"
+    ],
+    "REQ-0020": [
+      "_write_outputs"
+    ],
+    "REQ-0021": [
+      "_write_outputs"
+    ],
+    "REQ-0022": [
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0023": [
+      "_divider_tick"
+    ],
+    "REQ-0024": [
+      "step",
+      "_divider_tick"
+    ],
+    "REQ-0025": [
+      "step",
+      "_divider_tick"
+    ],
+    "REQ-0026": [
+      "_update_filter",
+      "_majority"
+    ],
+    "REQ-0027": [
+      "_update_filter",
+      "_bus_events"
+    ],
+    "REQ-0028": [
+      "_update_filter",
+      "_bus_events"
+    ],
+    "REQ-0029": [
+      "_bus_events"
+    ],
+    "REQ-0030": [
+      "_bus_events"
+    ],
+    "REQ-0031": [
+      "_bus_events"
+    ],
+    "REQ-0032": [
+      "_bus_events"
+    ],
+    "REQ-0033": [
+      "_divider_tick",
+      "_advance_fsm"
+    ],
+    "REQ-0034": [
+      "_advance_fsm"
+    ],
+    "REQ-0035": [
+      "_state_outputs",
+      "_advance_fsm"
+    ],
+    "REQ-0036": [
+      "_advance_fsm",
+      "step"
+    ],
+    "REQ-0037": [
+      "_state_outputs",
+      "_advance_fsm"
+    ],
+    "REQ-0038": [
+      "_state_outputs"
+    ],
+    "REQ-0039": [
+      "_state_outputs"
+    ],
+    "REQ-0040": [
+      "_bus_events"
+    ],
+    "REQ-0041": [
+      "_advance_fsm"
+    ],
+    "REQ-0042": [
+      "_state_outputs",
+      "_advance_fsm",
+      "_bus_events"
+    ],
+    "REQ-0043": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0044": [
+      "_reset_state",
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0045": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0046": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0047": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0048": [
+      "_reset_state"
+    ],
+    "REQ-0049": [
+      "_reset_state"
+    ],
+    "REQ-0050": [
+      "_reset_state",
+      "step"
+    ],
+    "REQ-0051": [
+      "_update_filter"
+    ],
+    "REQ-0052": [
+      "_update_filter",
+      "_divider_tick",
+      "step"
+    ],
+    "REQ-0053": [
+      "_divider_tick"
+    ],
+    "REQ-0054": [
+      "_divider_tick"
+    ],
+    "REQ-0055": [
+      "_divider_tick"
+    ],
+    "REQ-0056": [
+      "_advance_fsm"
+    ],
+    "REQ-0057": [
+      "_divider_tick"
+    ],
+    "REQ-0058": [
+      "step",
+      "_advance_fsm"
+    ],
+    "REQ-0059": [
+      "_sda_check_active",
+      "_bus_events"
+    ],
+    "REQ-0060": [
+      "_sda_check_active"
+    ],
+    "REQ-0061": [
+      "_bus_events"
+    ],
+    "REQ-0062": [
+      "_bus_events"
+    ],
+    "REQ-0063": [
+      "_bus_events",
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0064": [
+      "_bus_events"
+    ],
+    "REQ-0065": [
+      "_bus_events"
+    ],
+    "REQ-0066": [
+      "_bus_events"
+    ],
+    "REQ-0067": [
+      "_advance_fsm"
+    ],
+    "REQ-0068": [
+      "_state_outputs",
+      "_advance_fsm"
+    ],
+    "REQ-0069": [
+      "_state_outputs",
+      "_advance_fsm"
+    ],
+    "REQ-0070": [
+      "_state_outputs"
+    ],
+    "REQ-0071": [
+      "_state_outputs"
+    ],
+    "REQ-0072": [
+      "_bus_events"
+    ],
+    "REQ-0073": [
+      "_advance_fsm"
+    ],
+    "REQ-0074": [
+      "_state_outputs",
+      "_advance_fsm"
+    ],
+    "REQ-0075": [
+      "_state_outputs",
+      "_write_outputs"
+    ],
+    "REQ-0076": [
+      "_advance_fsm",
+      "step"
+    ]
+  },
+  "underdetermined": [
+    {
+      "req_uid": "",
+      "question": "The specification does not fully define whether a filtered-history update and its edge event are consumed on the same clock edge or the following edge; this model uses the newly computed majority value for edge detection."
+    },
+    {
+      "req_uid": "",
+      "question": "The specification does not define whether arbitration loss releases the lines on the detection edge or on the following eligible FSM tick; this model aborts immediately when the loss condition is detected."
+    }
+  ],
+  "issues": []
+}

@@ -1,0 +1,6 @@
+{
+  "verdict": "met",
+  "reason": "the requirement fixes sum as the exclusive-OR of the one-bit inputs a and b, and _half_add returns exactly that as its first value, which evaluate assigns to o['sum'].",
+  "evidence": "_half_add: `return self.mask(a ^ b, 1), ...`; evaluate: `o['sum'], o['cout'] = self._half_add(i['a'], i['b'])`",
+  "remedy": ""
+}

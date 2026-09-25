@@ -1,0 +1,957 @@
+"""Generate a testcase for an uncovered bin.
+
+**The agent chooses stimulus; it does not write test code.** This is the single
+most important constraint in the design, and it is what makes it safe to hand
+this tool to the RTL-repair agent -- whose objective is making things pass.
+
+What the tool cannot express is the guarantee:
+
+* checks come from the coverage model, so none can be weakened or omitted;
+* expected values come from the frozen reference model, so none can be bent
+  toward the current RTL;
+* the agent supplies a bounded stimulus list, never Python;
+* the bin must already be uncovered in the gate's own report, so targets cannot
+  be invented.
+
+Together these make adding a testcase **monotone**: it can add obligations, never
+remove one. An agent reaching for this to escape a failing check can only make
+its own job harder. The safety is a property of the interface, not a policy the
+agent is asked to respect.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from eda_agent.utils import extract_json_object, strip_markdown_code_fences
+
+from .ids import PREFIX_TESTCASE, mint, next_index
+from .model_io import ModelPort
+from .ports import classify
+from .schema import Issue, all_spans
+from .tb.runtime import is_reset_step, normalise_step, reset_ports
+from .fanout import compose, json_block, shared_block, spec_section
+from .stage import (
+    StageResult,
+    gate_failures_block,
+    previous_answer_block,
+    run_fanout,
+    run_stage,
+)
+
+STAGE = "testcase"
+SUITE_STAGE = "stimulus"
+
+#: Steps one testpoint may declare. Named rather than an inline default so the
+#: gate applied when a recorded `stimulus.json` is REUSED is provably the same
+#: bound applied when it was generated -- a reuse path gated more loosely than
+#: the generator is a way to accept what a fresh run would reject.
+STIMULUS_MAX_STEPS = 24
+
+
+def drivable_ports(contract: dict) -> list[dict]:
+    """The drivable ports AS THE AUTHOR SEES THEM -- with their encodings.
+
+    THE ENCODING USED TO BE DROPPED HERE, and it cost the suite its coverage.
+    All three prompt paths described a port as `{"name", "width"}` and nothing
+    else, so an author told to "issue a READ command" on a 4-bit `cmd` had to
+    guess which of sixteen values that is -- while the contract sat on disk
+    saying `I2C_CMD_READ: 8`, harvested by `encoding.enrich_contract` from the
+    design's own defines file and carrying the sha256 of the file it came from.
+
+    Measured on the suite that produced: across 322 testpoints and ~1539 steps,
+    `cmd` was driven READ FIVE TIMES, and 129 steps drove 3, 5, 10 or 15 --
+    values that are not commands at all. Eight of that run's 28 genuine
+    abstentions are checks about READ and WRITE whose activation the stimulus
+    therefore never reached. The checks were fine; the scenario never happened.
+
+    Only `encoding` travels, not the whole port record. `encoding_source` is
+    provenance for a human, and `notes` is prose the testplan already carries.
+    """
+    encodings = {
+        str(p.get("name")): p.get("encoding")
+        for p in (contract.get("io") or [])
+        if isinstance(p.get("encoding"), dict) and p.get("encoding")
+    }
+    out = []
+    for name, width in _drivable(contract).items():
+        port: dict = {"name": name, "width": width}
+        if name in encodings:
+            port["encoding"] = encodings[name]
+        out.append(port)
+    return out
+
+
+def _drivable(contract: dict) -> dict[str, int]:
+    """Input ports a testcase may drive: the functional ones.
+
+    Clock and reset are excluded because the runtime owns them -- `Env.reset()`
+    sequences the reset and calls the reference model's own `reset()`, so a
+    testcase toggling reset underneath would desynchronise the two. They are
+    still in the model's input bundle; see `specflow/ports.py`.
+    """
+    _, _, functional = classify(contract)
+    widths = {
+        str(p.get("name")): int(p.get("width") or 1)
+        for p in (contract.get("io") or [])
+    }
+    return {name: widths.get(name) or 1 for name in functional}
+
+
+class TestcaseSpec(BaseModel):
+    # Not a pytest test class despite the name.
+    __test__ = False
+
+    reasoning: str = ""
+    targets: list[str] = Field(default_factory=list)
+    #: Bounded choice list: one dict of port -> value per step.
+    stimulus_steps: list[dict] = Field(default_factory=list)
+    notes: str = ""
+
+
+SYSTEM = """\
+You choose stimulus for a coverage bin the testbench has not yet reached.
+
+You do NOT write test code. You do NOT state expected values. You supply input
+values only; the harness drives them, records the bin, and compares the outputs
+against the reference model on your behalf.
+
+Supply:
+  targets         the bin uid(s) this stimulus is meant to reach
+  stimulus_steps  a list of steps, each a dict of input port name -> integer
+                  value. Every input port must appear in every step.
+  notes           one line on why this stimulus should reach the bin
+
+Rules the gate enforces mechanically:
+  * every port you name must be an input port in the contract
+  * every value must fit its port width
+  * at least one step
+  * targets must be bins currently reported uncovered
+
+Reply with ONE JSON object and nothing else:
+
+{
+  "reasoning": "...",
+  "targets": ["BIN-0007"],
+  "stimulus_steps": [{"a": 1, "b": 1}],
+  "notes": "..."
+}
+"""
+
+
+def build_prompt(
+    *,
+    bin_uid: str,
+    condition: str,
+    testplan_element: dict,
+    contract: dict,
+    gap_category: str,
+    already_reached: list[dict],
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    inputs = drivable_ports(contract)
+    parts = [
+        SYSTEM,
+        f"<bin uid=\"{bin_uid}\" category=\"{gap_category}\">\n{condition}\n</bin>",
+        "<testplan_element>\n"
+        + json.dumps(testplan_element, indent=2, ensure_ascii=False)
+        + "\n</testplan_element>",
+        "<input_ports>\n" + json.dumps(inputs, indent=2) + "\n</input_ports>",
+        # What existing testcases already drove. "These were reached, this one
+        # was not" is a far more tractable prompt than "write a test for this".
+        "<already_driven>\n"
+        + json.dumps(already_reached[:32], indent=2)
+        + "\n</already_driven>",
+    ]
+    if previous:
+        parts.append(previous_answer_block(previous))
+    if issues:
+        parts.append(gate_failures_block(issues))
+    return "\n\n".join(parts)
+
+
+def parse_response(text: str) -> TestcaseSpec:
+    try:
+        obj = extract_json_object(strip_markdown_code_fences(text))
+        return TestcaseSpec.model_validate(obj)
+    except Exception as exc:  # noqa: BLE001
+        return TestcaseSpec(reasoning=f"Parse Error: {exc}")
+
+
+def gate(
+    spec: TestcaseSpec, *, bin_uid: str, contract: dict, uncovered: set[str]
+) -> list[Issue]:
+    if spec.reasoning.startswith("Parse Error: "):
+        return [Issue("error", "testcase.response", spec.reasoning)]
+
+    issues: list[Issue] = []
+    inputs = _drivable(contract)
+
+    if not spec.stimulus_steps:
+        issues.append(Issue("error", "testcase.stimulus_steps", "no steps supplied"))
+
+    for i, step in enumerate(spec.stimulus_steps):
+        path = f"testcase.stimulus_steps[{i}]"
+        for name, value in step.items():
+            if name not in inputs:
+                issues.append(
+                    Issue("error", path, f"{name!r} is not an input port in the contract")
+                )
+                continue
+            try:
+                as_int = int(value)
+            except Exception:  # noqa: BLE001
+                issues.append(Issue("error", path, f"{name}={value!r} is not an integer"))
+                continue
+            if not (0 <= as_int < (1 << inputs[name])):
+                issues.append(
+                    Issue("error", path,
+                          f"{name}={as_int} does not fit {inputs[name]} bit(s)")
+                )
+        missing = set(inputs) - set(step)
+        if missing:
+            issues.append(
+                Issue("error", path, f"does not drive {sorted(missing)}")
+            )
+
+    # The tool cannot invent targets: the bin must already be uncovered in the
+    # gate's own report. This is what keeps the addition monotone.
+    for target in spec.targets or [bin_uid]:
+        if target not in uncovered:
+            issues.append(
+                Issue("error", "testcase.targets",
+                      f"{target} is not currently reported uncovered")
+            )
+
+    return issues
+
+
+def run_testcase_agent(
+    *,
+    bin_uid: str,
+    condition: str,
+    testplan_element: dict,
+    contract: dict,
+    gap_category: str,
+    already_reached: list[dict],
+    uncovered: set[str],
+    port: ModelPort,
+    max_repairs: int = 2,
+) -> StageResult[TestcaseSpec]:
+    return run_stage(
+        stage=f"{STAGE}_{bin_uid.replace('-', '')}",
+        port=port,
+        build_prompt=lambda issues, previous: build_prompt(
+            bin_uid=bin_uid, condition=condition, testplan_element=testplan_element,
+            contract=contract, gap_category=gap_category,
+            already_reached=already_reached, issues=issues, previous=previous,
+        ),
+        parse=parse_response,
+        gate=lambda spec: gate(
+            spec, bin_uid=bin_uid, contract=contract, uncovered=uncovered
+        ),
+        max_repairs=max_repairs,
+    )
+
+
+def next_testcase_uid(existing: list[dict]) -> str:
+    return mint(PREFIX_TESTCASE, next_index([t.get("uid", "") for t in existing],
+                                            PREFIX_TESTCASE))
+
+
+def append_testcase(
+    *, testcases_path: Path, uid: str, targets: list[str], module: str
+) -> list[dict]:
+    """Record the testcase. Existing entries are never rewritten.
+
+    `frozen` makes the append-only discipline enforceable: an accepted testcase
+    is not a thing a later round may quietly amend.
+    """
+    path = Path(testcases_path)
+    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    existing.append({"uid": uid, "targets": targets, "module": module, "frozen": True})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    return existing
+
+
+# ------------------------------------------------- suite stimulus (build time)
+
+SUITE_SYSTEM = """\
+You choose the input stimulus for every element of a verification testplan.
+
+You do NOT write test code. You do NOT state expected values. You supply input
+values only; the harness drives them, records coverage, and compares the outputs
+against a reference model on your behalf. A wrong expected value is not a
+mistake you are able to make.
+
+Each testplan element states, in prose, the stimulus its testpoint requires --
+"issue a START command", "hold scl_i low after SCL is released", "sweep the
+prescale value". Turn each of those into a concrete ordered sequence of input
+values that actually performs it.
+
+Order matters and state persists. The steps of one testpoint are applied in
+order to a sequential design that is reset once at the start, so step N sees
+whatever state steps 0..N-1 produced.
+
+ONE STEP IS ONE CLOCK EDGE unless you say otherwise, and a step can state its
+own duration. This matters more than it sounds: a design gated on a prescaler
+advances one phase per tick, so a command can take tens or hundreds of clocks,
+and a sequence that runs out of edges half way through verifies nothing after
+that point.
+
+  {"a": 1, "b": 0}                          one edge
+  {"inputs": {...}, "hold": 8}              the same inputs, held 8 edges
+  {"inputs": {...}, "until": {"port": "done", "value": 1}, "timeout": 200}
+                                            held until the DESIGN says so
+
+Prefer `until` over a large `hold`. "Wait for the acknowledge" is a fact about
+the design; "wait 26 clocks" is a guess about its implementation, and it will be
+wrong on the next prescaler value. `until` waits on a declared OUTPUT -- what the
+design reports, never what you drive.
+
+IF YOU PROGRAM A CLOCK DIVIDER, THE RUN MUST OUTLAST IT. A prescaler input
+(`clk_cnt`, `prescale`, `divider`) means the design advances one phase every
+N+1 clocks, so the edges you supply must exceed N by the number of phases the
+scenario needs -- a value of 1000 needs thousands of edges, not tens. This is
+the single most common way a testpoint ends up testing nothing: on the last
+measured run, 60 of 167 testpoints programmed a divider their own duration
+could not complete ONE tick of, and 35 left the design in its idle state for
+every edge of the run. If you want a large divider value, either pair it with
+`until` and a timeout larger than the divider, or choose a small value -- a
+prescaler of 0 to 4 exercises the same logic and leaves edges for the scenario.
+
+TO EXERCISE RESET, USE A RESET STEP. Reset is not a drivable input: the harness
+owns it, so that the design and the reference model are reset together and
+cannot diverge. Ask for one with
+
+  {"reset": true}                           assert EVERY reset, hold 2, release
+  {"reset": true, "hold": 8}                the same, held 8 edges
+  {"reset": ["rst"], "hold": 2}             assert ONLY that reset port
+
+A design with more than one reset port needs the third form to tell them apart.
+`true` asserts all of them at the same edge, so a requirement about which reset
+does what -- a synchronous active-high `rst` beside an asynchronous active-low
+`nReset` -- can never observe the state it is about. Name the one the
+requirement is about, and the others stay idle.
+
+A reset step drives no inputs -- put the values you want afterwards in the step
+that follows it. Use one whenever the testpoint asks for reset to be applied
+mid-sequence, and only then: every testpoint is already reset once before its
+first step, so "start from reset" needs no step at all.
+
+Supply:
+  testpoints  one entry per testplan element, each with
+                tp_uid          the element's uid, exactly as given
+                stimulus_steps  an ordered list of steps. A step is either a
+                                bare dict of input port name -> integer value,
+                                or {"inputs": {...}} with an optional "hold" or
+                                "until"/"timeout", or {"reset": true} or
+                                {"reset": ["<reset port>"]}. Every
+                                drivable input must appear in every step that
+                                is not a reset step.
+
+Return ONE json object:
+
+{
+  "reasoning": "...",
+  "testpoints": [
+    {"tp_uid": "TP-0000", "stimulus_steps": [{"ena": 1, "cmd": 1}, {"ena": 1, "cmd": 0}]}
+  ]
+}
+"""
+
+
+class TestpointStimulus(BaseModel):
+    __test__ = False
+
+    tp_uid: str = ""
+    stimulus_steps: list[dict] = Field(default_factory=list)
+
+
+class SuiteStimulus(BaseModel):
+    __test__ = False
+
+    reasoning: str = ""
+    testpoints: list[TestpointStimulus] = Field(default_factory=list)
+
+
+def build_suite_prompt(
+    *,
+    testplan: list[dict],
+    contract: dict,
+    max_steps: int,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+) -> str:
+    inputs = drivable_ports(contract)
+    elements = [
+        {
+            "uid": tp.get("uid"),
+            "dimension": tp.get("dimension"),
+            "stimulus": tp.get("stimulus"),
+            "expected_response": tp.get("expected_response"),
+        }
+        for tp in testplan
+    ]
+    parts = [
+        SUITE_SYSTEM,
+        f"At most {max_steps} steps per testpoint.",
+        "<input_ports>\n" + json.dumps(inputs, indent=2) + "\n</input_ports>",
+        "<testplan>\n"
+        + json.dumps(elements, indent=2, ensure_ascii=False)
+        + "\n</testplan>",
+    ]
+    if previous:
+        parts.append(previous_answer_block(previous))
+    if issues:
+        parts.append(gate_failures_block(issues))
+    return "\n\n".join(parts)
+
+
+def parse_suite_response(text: str) -> SuiteStimulus:
+    try:
+        obj = extract_json_object(strip_markdown_code_fences(text))
+        return SuiteStimulus.model_validate(obj)
+    except Exception as exc:  # noqa: BLE001
+        return SuiteStimulus(reasoning=f"Parse Error: {exc}")
+
+
+#: Bounds on a step's declared duration. `hold` is capped low deliberately: a
+#: large fixed edge count is a guess, and `until` is the honest way to say "wait
+#: for the design". The timeout bound only has to be generous enough for a
+#: heavily prescaled design -- one i2c testpoint needs 506 edges for one command.
+MAX_HOLD = 64
+MAX_TIMEOUT = 4000
+
+
+def gate_suite(
+    spec: SuiteStimulus, *, testplan: list[dict], contract: dict, max_steps: int
+) -> list[Issue]:
+    """Every testpoint gets a valid, non-empty, in-range stimulus sequence.
+
+    Deliberately *not* gated on distinctness. The observed failure was 25 of 25
+    testpoints running an identical vector list, and a distinctness rule is
+    exactly the kind of check a model satisfies by permuting one value -- the
+    same lesson G1 taught when a coverage rule was answered with one 14.8KB
+    quote. What makes stimulus meaningful is whether it reaches the bins, and
+    the coverage gate already asks that and answers `EXTEND_TB` when it does
+    not. Distinctness is reported below as a diagnostic, not enforced.
+    """
+    if spec.reasoning.startswith("Parse Error: "):
+        return [Issue("error", "stimulus.response", spec.reasoning)]
+
+    issues: list[Issue] = []
+    inputs = _drivable(contract)
+    outputs = {
+        str(p.get("name")) for p in (contract.get("io") or [])
+        if p.get("dir") == "output" and p.get("name")
+    }
+    wanted = [str(tp.get("uid")) for tp in testplan]
+    by_uid = {tp.tp_uid: tp for tp in spec.testpoints}
+
+    for uid in wanted:
+        entry = by_uid.get(uid)
+        if entry is None or not entry.stimulus_steps:
+            issues.append(
+                Issue("error", f"stimulus.{uid}", "no stimulus supplied", "uncovered")
+            )
+            continue
+        if len(entry.stimulus_steps) > max_steps:
+            issues.append(
+                Issue("error", f"stimulus.{uid}",
+                      f"{len(entry.stimulus_steps)} steps exceeds the {max_steps} limit")
+            )
+        for i, raw in enumerate(entry.stimulus_steps):
+            path = f"stimulus.{uid}.steps[{i}]"
+            step, hold, until, timeout = normalise_step(raw)
+            if is_reset_step(raw):
+                # A reset step drives nothing: the runtime sequences the reset
+                # on both sides at once, which is exactly why reset stays out of
+                # `_drivable`. Only its duration -- and now which reset ports --
+                # is the test's business.
+                named = reset_ports(raw)
+                if named is not None:
+                    _, declared, _ = classify(contract)
+                    unknown = [n for n in named if n not in declared]
+                    if unknown:
+                        issues.append(
+                            Issue("error", path,
+                                  f"names {', '.join(unknown)} as a reset port; "
+                                  f"this design declares "
+                                  f"{', '.join(declared) or 'none'}"))
+                    elif not named:
+                        issues.append(
+                            Issue("error", path,
+                                  "an empty reset port list asserts nothing -- "
+                                  'use {"reset": true} for a whole reset'))
+                if hold > MAX_HOLD:
+                    issues.append(
+                        Issue("error", path,
+                              f"hold={hold} exceeds the {MAX_HOLD} edge limit"))
+                if step:
+                    issues.append(
+                        Issue("error", path,
+                              f"a reset step drives no inputs, but sets "
+                              f"{sorted(step)}; put them in the step after it"))
+                continue
+            # A step may state its own duration. Before this, `hold`/`until`
+            # were rejected as "not a drivable input" -- there was no way to say
+            # a command needs cycles except to repeat the identical dict, and
+            # how long a vector was actually applied came from the contract's
+            # guessed `latency_cycles` instead of from the test.
+            if hold > MAX_HOLD:
+                issues.append(
+                    Issue("error", path,
+                          f"hold={hold} exceeds the {MAX_HOLD} edge limit; use "
+                          f"`until` to wait for the design instead of guessing "
+                          f"a large edge count")
+                )
+            if until is not None:
+                port = str(until.get("port") or "")
+                if port not in outputs:
+                    issues.append(
+                        Issue("error", path,
+                              f"until.port={port!r} is not a declared output; a "
+                              f"step waits on what the DESIGN reports, not on "
+                              f"what the test drives")
+                    )
+                if timeout and timeout > MAX_TIMEOUT:
+                    issues.append(
+                        Issue("error", path,
+                              f"timeout={timeout} exceeds the {MAX_TIMEOUT} "
+                              f"edge limit")
+                    )
+            for name, value in step.items():
+                if name not in inputs:
+                    issues.append(
+                        Issue("error", path,
+                              f"{name!r} is not a drivable input; the runtime owns "
+                              f"clock and reset")
+                    )
+                    continue
+                try:
+                    as_int = int(value)
+                except Exception:  # noqa: BLE001
+                    issues.append(
+                        Issue("error", path, f"{name}={value!r} is not an integer")
+                    )
+                    continue
+                if not (0 <= as_int < (1 << inputs[name])):
+                    issues.append(
+                        Issue("error", path,
+                              f"{name}={as_int} does not fit {inputs[name]} bit(s)")
+                    )
+            missing = set(inputs) - set(step)
+            if missing:
+                issues.append(Issue("error", path, f"does not drive {sorted(missing)}"))
+
+    for uid in set(by_uid) - set(wanted):
+        issues.append(
+            Issue("error", f"stimulus.{uid}", "no such testplan element", "orphaned")
+        )
+
+    return issues
+
+
+#: Prose asking for a reset to be ASSERTED, as opposed to released or held off.
+#: Deliberately narrow: "start with reset released" is the overwhelmingly common
+#: phrasing and describes the harness default, so matching it would fire on
+#: nearly every testpoint and mean nothing.
+_WANTS_RESET_ASSERTED = re.compile(
+    r"(assert\w*\s+(the\s+)?(a?sync\w*\s+)?reset|apply\s+reset|pulse\s+reset"
+    r"|drive\s+reset\s+low|during\s+reset|reset\s+is\s+asserted"
+    # `rst` AS WELL AS `reset`, because that is what the spec calls it. The
+    # spelled-out form was the only one here, and normalisation writes the
+    # abbreviation: all three of a2-i2c's reset requirements say "rst is
+    # asserted high" and none of them matched, so the stimulus loop was never
+    # told to use a reset step and spent nine attempts driving inputs instead.
+    r"|\brst(_n)?\s+(is\s+)?asserted\b|\bwhile\s+rst(_n)?\s+is\s+high\b"
+    # The literal forms. `nReset=0` and `rst=1` ARE the assertion; their
+    # opposites (`nReset=1`, `rst=0`) are the harness default and must not match.
+    r"|\bnReset\s*=\s*0\b|\brst\s*=\s*1\b|\brst_n\s*=\s*0\b)", re.I)
+
+
+def unrealisable_reset(testplan: list[dict]) -> list[Issue]:
+    """Testpoints asking for a mid-run reset the stimulus schema cannot express.
+
+    `_drivable` excludes clock and reset on purpose -- the runtime owns them, and
+    a testcase toggling reset underneath would desynchronise `Env.reset()` from
+    the model's own `reset()`. That reasoning is sound and this does not change
+    it. What it does is stop the consequence being invisible.
+
+    S2 does not know about that exclusion, so it writes testpoints whose stated
+    scenario is "apply reset mid-sequence and check the outputs clear". On the
+    a-i2c run 37 of 167 testpoints did, covering 32 requirements, and not one
+    could drive `rst` or `nReset` -- the schema forbids it. Their oracles then
+    reported "nReset was never asserted low in this trace", which the loop read
+    as a failing model and sent an agent to fix.
+
+    A warning, not an error, and aimed at the testplan rather than the stimulus:
+    the stimulus agent did nothing wrong and regenerating it cannot help. The
+    real fix is a first-class reset step that the runtime sequences on both
+    sides at once, which is a change to the harness, not to a prompt.
+    """
+    hits = [
+        str(tp.get("uid")) for tp in testplan
+        if _WANTS_RESET_ASSERTED.search(
+            " ".join(str(tp.get(k, "")) for k in
+                     ("stimulus", "expected_response", "check_method")))
+    ]
+    if not hits:
+        return []
+    return [
+        Issue("warning", "testplan.reset",
+              f"{len(hits)} testpoint(s) ask for reset to be asserted mid-run, "
+              f"which no stimulus can do -- the runtime owns reset. Every "
+              f"requirement resting only on these is unjudgeable by replay: "
+              f"{', '.join(hits[:8])}{'...' if len(hits) > 8 else ''}")
+    ]
+
+
+#: Inputs that gate a design's whole datapath on a countdown. Named by
+#: convention because the contract has no field for "this is a prescaler", and
+#: the convention is strong: every ChipVerilog design that has one calls it one
+#: of these.
+_DIVIDER_NAMES = ("clk_cnt", "prescale", "prescaler", "divider", "div", "clk_div")
+
+
+def _divider_ports(contract: dict) -> list[str]:
+    return [name for name in _drivable(contract)
+            if name.lower() in _DIVIDER_NAMES]
+
+
+def starved_by_divider(spec: SuiteStimulus, contract: dict) -> list[Issue]:
+    """Testpoints that program a clock divider longer than their own run.
+
+    A prescaler of N means one phase per N+1 clocks, so a testpoint holding
+    `clk_cnt=1000` for 129 edges cannot complete a single tick and the design
+    correctly does nothing for the whole run. Its oracles then report "no STOP
+    condition observed in trace", which reads as an over-strict oracle or a dead
+    model rather than as the testpoint being impossible.
+
+    Measured on a-i2c: 13 of 167 testpoints cannot complete one tick, and they
+    account for 10 of the 39 testpoints the known-good control cannot move. An
+    earlier hand count said 60 and 26; it summed `hold` and ignored that an
+    `until` step is budgeted by its timeout, which is usually far larger. This
+    function is the honest version, which is the point of it being code.
+
+    A warning rather than an error, and one issue per testpoint so a repair
+    round can act on each. An `until` step counts its TIMEOUT, since that is the
+    most edges it can consume -- waiting on the design is the right answer to a
+    slow prescaler only when the timeout actually outlasts it.
+    """
+    dividers = _divider_ports(contract)
+    if not dividers:
+        return []
+    issues: list[Issue] = []
+    for tp in spec.testpoints:
+        worst = 0
+        edges = 0
+        for raw in tp.stimulus_steps:
+            if is_reset_step(raw):
+                continue
+            step, hold, until, timeout = normalise_step(raw)
+            for name in dividers:
+                try:
+                    worst = max(worst, int(step.get(name, 0) or 0))
+                except (TypeError, ValueError):
+                    continue
+            edges += timeout if until else hold
+        if worst <= 0:
+            continue
+        if edges < worst + 1:
+            issues.append(Issue(
+                "warning", f"stimulus.{tp.tp_uid}",
+                f"programs {dividers[0]}={worst} but runs only {edges} edge(s); "
+                f"one divider tick needs {worst + 1}, so the design cannot "
+                f"advance at all. Use a smaller divider, or `until` with a "
+                f"timeout above {worst + 1}"))
+    return issues
+
+
+def stimulus_diagnostics(spec: SuiteStimulus) -> list[Issue]:
+    """How much of the suite is actually distinct. Reported, never enforced."""
+    seen: dict[str, str] = {}
+    for tp in spec.testpoints:
+        seen.setdefault(json.dumps(tp.stimulus_steps, sort_keys=True), tp.tp_uid)
+    n, distinct = len(spec.testpoints), len(seen)
+    if n and distinct < n:
+        return [
+            Issue("warning", "stimulus",
+                  f"{n} testpoints share {distinct} distinct stimulus sequence(s); "
+                  f"testpoints running identical stimulus test the same thing under "
+                  f"different names")
+        ]
+    return []
+
+
+def run_suite_stimulus(
+    *,
+    testplan: list[dict],
+    contract: dict,
+    port: ModelPort,
+    max_steps: int = STIMULUS_MAX_STEPS,
+    max_repairs: int = 2,
+) -> StageResult[SuiteStimulus]:
+    """One call for the whole suite, not one per testpoint.
+
+    Same shape as the reference model's single fragment call: a node with 25
+    testplan elements makes one request carrying 25 stimulus sequences, and a
+    repair round re-asks with the gate's issues rather than regenerating from
+    nothing.
+    """
+    return run_stage(
+        stage=SUITE_STAGE,
+        port=port,
+        build_prompt=lambda issues, previous: build_suite_prompt(
+            testplan=testplan, contract=contract, max_steps=max_steps,
+            issues=issues, previous=previous,
+        ),
+        parse=parse_suite_response,
+        gate=lambda spec: gate_suite(
+            spec, testplan=testplan, contract=contract, max_steps=max_steps
+        ),
+        max_repairs=max_repairs,
+    )
+
+
+def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "",
+                        spec: str = "") -> str:
+    """Everything identical across testpoints: the task, the limits, the ports.
+
+    OUTPUTS are listed as well as inputs, because `until` waits on a declared
+    output and `gate_suite` rejects one that is not. Listing only the inputs
+    left the agent to guess output names out of the testpoint prose, and the
+    prose names internal signals: measured on i2c_master_bit_ctrl, 12 of the
+    first 41 testpoints needed a repair round, and the errors were
+    `until.port='clk_en'`, `'idle'`, `'slave_wait'`, `'filtered_sda'` -- all
+    real signals of the design, none of them ports. The gate was validating
+    against a list the agent had never been shown.
+
+    Both lists sit in the shared prefix, so they cost one cache write rather
+    than one copy per testpoint.
+
+    `domain_notes`, optional and empty for every design that does not supply
+    one: a WIDE input port sometimes packs a structured encoding -- an
+    instruction word with its opcode in a fixed bit range, a command field
+    with named values -- that no `contract` port list captures, because the
+    contract states widths and directions, not bit-level semantics. Nothing
+    here can derive that from `contract` alone, and nothing gates it, so a
+    testpoint asking for a NAMED value with no way to construct it produces a
+    step that parses, passes `gate_suite`, and drives nothing resembling what
+    it claims. Measured on or1200_ctrl: 185 of 246 driven `if_insn` values
+    across the whole 31-testpoint suite left the opcode field (bits [31:26])
+    at zero -- `sig_syscall`/`sig_trap`/`rfe`/`no_more_dslot` never fired in a
+    replay against the witness for the testpoints asking for them by name,
+    confirmed by direct execution, not inferred from the JSON. Caller-supplied
+    because this module has no business reading a benchmark's vendored
+    defines file; whatever calls this with domain knowledge of the design
+    under test is where that belongs.
+    """
+    inputs = drivable_ports(contract)
+    outputs = [
+        {"name": p.get("name"), "width": p.get("width", 1)}
+        for p in (contract.get("io") or [])
+        if p.get("dir") == "output" and p.get("name")
+    ]
+    sections = [
+        ("system", SUITE_SYSTEM),
+        *spec_section(spec),
+        ("limits", f"At most {max_steps} steps for this testpoint."),
+        ("input_ports", json.dumps(inputs, indent=2)),
+        ("output_ports",
+         json.dumps(outputs, indent=2)
+         + "\n\nThese are the ONLY signals `until` may wait on. Anything else "
+           "named in the testpoint prose is internal to the design and is not "
+           "observable at the boundary."),
+    ]
+    if domain_notes.strip():
+        sections.append(("domain_notes", domain_notes))
+    return shared_block(*sections)
+
+
+def spec_quotes_for(element: dict, requirements: list[dict] | None) -> list[str]:
+    """The specification text behind this testpoint, via `covers`.
+
+    A testpoint carries no spec of its own -- its fields are uid, rev, covers,
+    dimension, stimulus, expected_response, needs -- so the stimulus stage was
+    working purely from S2's paraphrase. Measured across a whole run, every
+    stage keyed on a REQUIREMENT carried spec text (s2 77/77, refmodel 7/7,
+    judge 539/539) and every stage keyed on a TESTPOINT carried none (s3 0/226,
+    stimulus 0/34).
+
+    The paraphrase is lossy in the direction that matters here. TP-0000's prose
+    reads "clk_cnt large so clk_en ticks predictably", which is sound advice to
+    a reader who knows clk_cnt is the divider reload and actively misleading to
+    one who does not: larger means FEWER edges per command, and the monolithic
+    run duly chose clk_cnt=1000 and then drove it for a single edge.
+
+    `covers` holds "REQ-0007@1"; the revision is not part of the key.
+    """
+    if not requirements:
+        return []
+    by_uid = {str(r.get("uid")): r for r in requirements}
+    quotes: list[str] = []
+    for ref in element.get("covers") or []:
+        req = by_uid.get(str(ref).split("@", 1)[0])
+        # Provenance: the obligation first, then the context it is read with.
+        # Stimulus is aimed at what the requirement rests on, so both belong --
+        # unlike a CHECK, which may only ever answer to the obligation.
+        for span in all_spans(req or {}):
+            quote = (span or {}).get("quote")
+            if quote and quote not in quotes:
+                quotes.append(quote)
+    return quotes
+
+
+def build_suite_prompt_one(
+    element: dict,
+    contract: dict,
+    max_steps: int,
+    issues: list[Issue] | None = None,
+    previous: str | None = None,
+    requirements: list[dict] | None = None,
+    domain_notes: str = "",
+    spec: str = "",
+) -> str:
+    item = {
+        "uid": element.get("uid"),
+        "dimension": element.get("dimension"),
+        "stimulus": element.get("stimulus"),
+        "expected_response": element.get("expected_response"),
+    }
+    quotes = spec_quotes_for(element, requirements)
+    if quotes:
+        item["specification_this_testpoint_covers"] = quotes
+    return compose(
+        suite_shared_prefix(contract, max_steps, domain_notes=domain_notes,
+                            spec=spec),
+        json_block("testplan_element", item),
+        issues=issues,
+        previous=previous,
+    )
+
+
+def run_suite_stimulus_fanout(
+    *,
+    testplan: list[dict],
+    contract: dict,
+    port: ModelPort,
+    max_steps: int = STIMULUS_MAX_STEPS,
+    max_repairs: int = 2,
+    fanout: bool = True,
+    requirements: list[dict] | None = None,
+    #: See `suite_shared_prefix`. Empty and inert for a design with no wide
+    #: structured-encoding input port.
+    domain_notes: str = "",
+    spec: str = "",
+) -> tuple[SuiteStimulus, list[StageResult[SuiteStimulus]]]:
+    """One call per testpoint, because testpoints do not constrain each other.
+
+    The reference model is generated whole for a real reason -- it needs global
+    context for ordering, reset priority and shared state. Stimulus has no such
+    coupling: each testpoint's vectors are independent of every other's, which
+    is exactly the condition that makes fanning out correct rather than merely
+    cheaper.
+
+    Monolithic generation was measured failing on `i2c_master_bit_ctrl` at 167
+    testpoints. Three repair rounds returned stimulus for TEN of them; the
+    fourth returned all 167 with exactly one step each, every `hold` equal to 1
+    and only 59 distinct sequences -- one testpoint drove `clk_cnt=1000` for a
+    single edge, which cannot advance a prescaler that needs 1000 ticks, let
+    alone complete a START. `gate_suite` passed it, because it requires stimulus
+    to be non-empty and one step is non-empty.
+
+    That is what a single call carrying 167 x 24 steps x 6 ports degrades into,
+    and the repair channel makes it worse rather than better: one invalid step
+    anywhere invalidates the whole batch and re-asks for all of it, so the
+    cheapest way out is to shrink every sequence. Per testpoint, the same budget
+    buys the depth the scenario actually needs.
+    """
+    def one(element: dict) -> StageResult[SuiteStimulus]:
+        return run_stage(
+            stage=f"{SUITE_STAGE}_{element.get('uid', 'unknown')}",
+            port=port,
+            build_prompt=lambda issues, previous: build_suite_prompt_one(
+                element, contract, max_steps, issues, previous,
+                requirements=requirements, domain_notes=domain_notes,
+                spec=spec),
+            parse=parse_suite_response,
+            gate=lambda spec: gate_suite(
+                spec, testplan=[element], contract=contract, max_steps=max_steps),
+            max_repairs=max_repairs,
+        )
+
+    results = run_fanout(testplan, one) if fanout else [one(e) for e in testplan]
+    merged = SuiteStimulus(
+        reasoning="; ".join(
+            r.output.reasoning for r in results if r.output.reasoning)[:2000],
+        testpoints=[tp for r in results for tp in r.output.testpoints],
+    )
+    return merged, results
+
+
+def stimulus_by_tp(spec: SuiteStimulus) -> dict[str, list[dict]]:
+    return {
+        tp.tp_uid: tp.stimulus_steps for tp in spec.testpoints if tp.stimulus_steps
+    }
+
+def stimulus_for_scenario(
+    *,
+    requirement: dict,
+    what_the_scenario_needs: str,
+    contract: dict,
+    port: ModelPort,
+    max_steps: int = STIMULUS_MAX_STEPS,
+    max_repairs: int = 2,
+) -> list[dict]:
+    """Steps that stage ONE scenario, for a requirement nothing currently reaches.
+
+    The same generator the suite uses, pointed at a single synthetic testplan
+    element instead of an S2 one. That reuse is the point: the prompt, the
+    duration vocabulary (`hold`/`until`/reset steps), the prescaler warning and
+    `gate_suite` are all identical, so stimulus minted inside a debug turn cannot
+    drift from stimulus minted at build time -- and a step list this rejects is
+    rejected for exactly the reasons a build-time one would be.
+
+    `what_the_scenario_needs` is the DEBUG AGENT'S intent, in prose, and it goes
+    where S2's `stimulus` field goes. The agent never writes steps: it says what
+    must be staged and the generator produces vectors the gate then screens,
+    which is what keeps `add_stimulus` monotone in the same way `add_testcase`
+    is (`testcase_agent.py:1-19`).
+
+    Returns [] rather than raising when nothing gate-clean could be produced. A
+    debug turn that cannot get stimulus has learned something worth reporting;
+    it has not failed.
+    """
+    element = {
+        "uid": "TP-NEW",
+        "dimension": "D2_control_flow",
+        "stimulus": what_the_scenario_needs,
+        "expected_response": str(requirement.get("text") or ""),
+        "covers": [f"{requirement.get('uid', '')}@1"],
+    }
+    result = run_stage(
+        stage=f"restimulus_{requirement.get('uid', 'unknown')}",
+        port=port,
+        build_prompt=lambda issues, previous: build_suite_prompt_one(
+            element, contract, max_steps, issues, previous,
+            requirements=[requirement],
+        ),
+        parse=parse_suite_response,
+        gate=lambda spec: gate_suite(
+            spec, testplan=[element], contract=contract, max_steps=max_steps),
+        max_repairs=max_repairs,
+    )
+    if not result.ok:
+        return []
+    for tp in result.output.testpoints:
+        if tp.stimulus_steps:
+            return list(tp.stimulus_steps)
+    return []

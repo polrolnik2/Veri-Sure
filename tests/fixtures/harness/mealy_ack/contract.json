@@ -1,0 +1,15 @@
+{
+  "module_name": "Dut",
+  "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "rst_n", "dir": "input", "width": 1},
+    {"name": "go", "dir": "input", "width": 1},
+    {"name": "done_i", "dir": "input", "width": 1},
+    {"name": "busy", "dir": "output", "width": 1},
+    {"name": "ack", "dir": "output", "width": 1},
+    {"name": "count", "dir": "output", "width": 2},
+    {"name": "in_busy", "dir": "probe", "width": 1},
+    {"name": "done_count", "dir": "probe", "width": 2}
+  ],
+  "clocking": {"is_sequential": true}
+}

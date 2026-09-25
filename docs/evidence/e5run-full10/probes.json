@@ -1,0 +1,481 @@
+{
+  "probes": [
+    {
+      "name": "cnt_zero",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the internal clock-divider counter cnt has reached zero or expired",
+      "licensed_by": [
+        "REQ-0049",
+        "REQ-0050",
+        "REQ-0119",
+        "REQ-0120"
+      ],
+      "spans": [
+        "when the counter reaches zero",
+        "When the counter expires"
+      ]
+    },
+    {
+      "name": "filter_cnt_expired",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the filter counter has expired",
+      "licensed_by": [
+        "REQ-0104",
+        "REQ-0105"
+      ],
+      "spans": [
+        "Whenever this counter expires"
+      ]
+    },
+    {
+      "name": "filter_cnt",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the input filter counter is the sampling-interval counter",
+      "licensed_by": [
+        "REQ-0104"
+      ],
+      "spans": [
+        "A filter counter, `filter_cnt`"
+      ]
+    },
+    {
+      "name": "filter_sample_update",
+      "dir": "probe",
+      "width": 1,
+      "notes": "new synchronized samples are shifted into the three-sample filter histories",
+      "licensed_by": [
+        "REQ-0062",
+        "REQ-0105"
+      ],
+      "spans": [
+        "samples are shifted into the three-sample histories"
+      ]
+    },
+    {
+      "name": "fscl",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the fSCL three-sample history",
+      "licensed_by": [
+        "REQ-0062",
+        "REQ-0063",
+        "REQ-0105",
+        "REQ-0106"
+      ],
+      "spans": [
+        "`fSCL`"
+      ]
+    },
+    {
+      "name": "fsda",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the fSDA three-sample history",
+      "licensed_by": [
+        "REQ-0062",
+        "REQ-0063",
+        "REQ-0105",
+        "REQ-0106"
+      ],
+      "spans": [
+        "`fSDA`"
+      ]
+    },
+    {
+      "name": "dscl",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the delayed filtered SCL value held in dSCL",
+      "licensed_by": [
+        "REQ-0108",
+        "REQ-0109"
+      ],
+      "spans": [
+        "`dSCL`"
+      ]
+    },
+    {
+      "name": "dsda",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the delayed filtered SDA value held in dSDA",
+      "licensed_by": [
+        "REQ-0108",
+        "REQ-0109"
+      ],
+      "spans": [
+        "`dSDA`"
+      ]
+    },
+    {
+      "name": "sta_condition",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the filtered SDA high-to-low transition while filtered SCL is high that constitutes a START condition",
+      "licensed_by": [
+        "REQ-0066",
+        "REQ-0110"
+      ],
+      "spans": [
+        "`sta_condition = ~sSDA & dSDA & sSCL`",
+        "A START condition is detected when SDA transitions from high to low while SCL is high"
+      ]
+    },
+    {
+      "name": "sto_condition",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the filtered SDA low-to-high transition while filtered SCL is high that constitutes a STOP condition",
+      "licensed_by": [
+        "REQ-0067",
+        "REQ-0111"
+      ],
+      "spans": [
+        "`sto_condition = sSDA & ~dSDA & sSCL`",
+        "A STOP condition is detected when SDA transitions from low to high while SCL is high"
+      ]
+    },
+    {
+      "name": "slave_wait",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the controller has released SCL high but filtered SCL remains low because the bus is being stretched",
+      "licensed_by": [
+        "REQ-0051",
+        "REQ-0053",
+        "REQ-0054",
+        "REQ-0055",
+        "REQ-0114",
+        "REQ-0115",
+        "REQ-0116"
+      ],
+      "spans": [
+        "If `slave_wait` is asserted",
+        "`slave_wait` is asserted when the master has just released SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low",
+        "While `slave_wait` remains active",
+        "the module asserts `slave_wait`",
+        "While `slave_wait` is active"
+      ]
+    },
+    {
+      "name": "scl_sync",
+      "dir": "probe",
+      "width": 1,
+      "notes": "an externally caused filtered SCL falling edge while this master has released SCL high",
+      "licensed_by": [
+        "REQ-0057",
+        "REQ-0058",
+        "REQ-0059",
+        "REQ-0117"
+      ],
+      "spans": [
+        "Multi-master clock synchronization: `scl_sync` detects a falling edge on the filtered SCL input while this master has released SCL high",
+        "the module asserts `scl_sync`"
+      ]
+    },
+    {
+      "name": "fsm_active",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the command FSM is executing a command rather than being in idle",
+      "licensed_by": [
+        "REQ-0071"
+      ],
+      "spans": [
+        "while the FSM is active"
+      ]
+    },
+    {
+      "name": "start_sequence",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the FSM is executing the START command sequence",
+      "licensed_by": [
+        "REQ-0081",
+        "REQ-0082",
+        "REQ-0134",
+        "REQ-0135"
+      ],
+      "spans": [
+        "The START sequence releases SDA and SCL",
+        "For a START command, the FSM releases SDA and SCL as needed"
+      ]
+    },
+    {
+      "name": "stop_sequence",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the FSM is executing the STOP command sequence",
+      "licensed_by": [
+        "REQ-0084",
+        "REQ-0136"
+      ],
+      "spans": [
+        "The STOP sequence drives SDA low",
+        "For a STOP command, the FSM first ensures SDA is low"
+      ]
+    },
+    {
+      "name": "read_sequence",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the FSM is executing the READ command sequence",
+      "licensed_by": [
+        "REQ-0086",
+        "REQ-0087",
+        "REQ-0089",
+        "REQ-0138",
+        "REQ-0139",
+        "REQ-0141"
+      ],
+      "spans": [
+        "The READ sequence releases SDA so the slave can drive the data bit",
+        "For a READ command, the FSM releases SDA so the external slave can drive the data bit",
+        "After the read bit cycle completes"
+      ]
+    },
+    {
+      "name": "read_window",
+      "dir": "probe",
+      "width": 1,
+      "notes": "SCL is released high during the READ sample window",
+      "licensed_by": [
+        "REQ-0087",
+        "REQ-0139"
+      ],
+      "spans": [
+        "SCL is released high for the sample window",
+        "It releases SCL high for the read window"
+      ]
+    },
+    {
+      "name": "write_sequence",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the FSM is executing the WRITE command sequence",
+      "licensed_by": [
+        "REQ-0091",
+        "REQ-0092",
+        "REQ-0142",
+        "REQ-0143",
+        "REQ-0144"
+      ],
+      "spans": [
+        "The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again.",
+        "For a WRITE command, the FSM drives or releases SDA according to the value of `din`.",
+        "The FSM then releases SCL high, enables SDA arbitration checking during the stable high phase, pulls SCL low again, returns to `idle`, and pulses `cmd_ack`."
+      ]
+    },
+    {
+      "name": "write_high_phase",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the WRITE FSM is in the stable high phase while SDA arbitration checking is enabled",
+      "licensed_by": [
+        "REQ-0124",
+        "REQ-0091",
+        "REQ-0144"
+      ],
+      "spans": [
+        "When the FSM reaches the stable high phase of a WRITE bit",
+        "enables SDA arbitration checking during the stable high phase"
+      ]
+    },
+    {
+      "name": "sda_chk",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the internal SDA arbitration-check signal is asserted",
+      "licensed_by": [
+        "REQ-0078",
+        "REQ-0124"
+      ],
+      "spans": [
+        "and `sda_chk` according to the required I2C timing phase",
+        "it asserts `sda_chk`"
+      ]
+    },
+    {
+      "name": "filtered_scl_rise",
+      "dir": "probe",
+      "width": 1,
+      "notes": "the filtered SCL signal has a rising edge",
+      "licensed_by": [
+        "REQ-0038",
+        "REQ-0074",
+        "REQ-0088",
+        "REQ-0129",
+        "REQ-0140"
+      ],
+      "spans": [
+        "on the rising edge of the filtered SCL signal",
+        "Whenever the filtered SCL signal has a rising edge",
+        "on the rising edge of filtered SCL"
+      ]
+    }
+  ],
+  "accepted": true,
+  "rejected": [],
+  "aliases": [],
+  "cross_constraints": [
+    {
+      "text": "When slave_wait is asserted, the timing counter holds its value and clk_en remains low.",
+      "probe": "slave_wait",
+      "ports": [],
+      "span": "If `slave_wait` is asserted, the counter holds its value and `clk_en` remains low, inserting wait states while SCL is stretched low."
+    },
+    {
+      "text": "When scl_sync is asserted, the timing counter is reloaded and low-period timing is restarted.",
+      "probe": "scl_sync",
+      "ports": [
+        "scl_i",
+        "scl_oen"
+      ],
+      "span": "If SCL falls externally while this master has released it high, the module asserts `scl_sync`, reloads the timing counter, and synchronizes its local low-period timing to the shared bus clock."
+    },
+    {
+      "text": "When sta_condition is asserted, busy is set.",
+      "probe": "sta_condition",
+      "ports": [
+        "busy"
+      ],
+      "span": "Based on these detected conditions, the `busy` flag is set after START and cleared after STOP."
+    },
+    {
+      "text": "When sto_condition is asserted, busy is cleared.",
+      "probe": "sto_condition",
+      "ports": [
+        "busy"
+      ],
+      "span": "Based on these detected conditions, the `busy` flag is set after START and cleared after STOP."
+    },
+    {
+      "text": "When filtered_scl_rise is asserted, dout captures the filtered SDA value.",
+      "probe": "filtered_scl_rise",
+      "ports": [
+        "dout"
+      ],
+      "span": "Whenever the filtered SCL signal has a rising edge, the module captures the filtered SDA value into `dout`."
+    },
+    {
+      "text": "During write_high_phase, sda_chk is asserted.",
+      "probe": "write_high_phase",
+      "ports": [],
+      "span": "When the FSM reaches the stable high phase of a WRITE bit, it asserts `sda_chk`."
+    },
+    {
+      "text": "During a START command, scl_oen and sda_oen release SCL and SDA before SDA is pulled low while SCL is high.",
+      "probe": "start_sequence",
+      "ports": [
+        "scl_oen",
+        "sda_oen"
+      ],
+      "span": "The START sequence releases SDA and SCL, then pulls SDA low while SCL is high to create a valid I2C START condition."
+    },
+    {
+      "text": "During a STOP command, sda_oen drives SDA low, scl_oen releases SCL, and then sda_oen releases SDA.",
+      "probe": "stop_sequence",
+      "ports": [
+        "scl_oen",
+        "sda_oen"
+      ],
+      "span": "The STOP sequence drives SDA low, releases SCL high, then releases SDA high while SCL is high to create a valid I2C STOP condition."
+    },
+    {
+      "text": "During a READ command, sda_oen releases SDA and scl_oen releases SCL for the read window.",
+      "probe": "read_sequence",
+      "ports": [
+        "scl_oen",
+        "sda_oen"
+      ],
+      "span": "The READ sequence releases SDA so the slave can drive the data bit. SCL is released high for the sample window, then driven low again."
+    },
+    {
+      "text": "During a WRITE command, scl_oen releases SCL and sda_oen drives or releases SDA according to din.",
+      "probe": "write_sequence",
+      "ports": [
+        "din",
+        "scl_oen",
+        "sda_oen"
+      ],
+      "span": "The WRITE sequence sets SDA according to `din`, releases SCL high, enables SDA arbitration checking during the high phase, then pulls SCL low again."
+    },
+    {
+      "text": "When arbitration is lost, the FSM returns to idle and scl_oen and sda_oen are set high.",
+      "probe": "fsm_active",
+      "ports": [
+        "scl_oen",
+        "sda_oen"
+      ],
+      "span": "When arbitration is lost, the FSM returns to `idle` and releases both SCL and SDA."
+    },
+    {
+      "text": "When the controller releases SCL high but filtered SCL remains low, slave_wait is asserted.",
+      "probe": "slave_wait",
+      "ports": [
+        "scl_oen",
+        "scl_i"
+      ],
+      "span": "If the controller releases SCL high through `scl_oen`, but the filtered SCL input `sSCL` remains low, the module asserts `slave_wait`."
+    }
+  ],
+  "reasoning": "The interface exposes only external inputs and outputs. Internal timing events, filtered and synchronized signal situations, bus-event conditions, FSM states and command phases therefore require one-bit probes. Specification-named internal situations use lower-case versions of the specification identifiers. Counter and history probes represent one-bit situations such as expiration or update events rather than exposing vectors. No internal register is directly identified as an alias of a declared output.",
+  "issues": [
+    {
+      "severity": "error",
+      "path": "io[1].spans",
+      "message": "probe 'cnt_nonzero' quotes 'the clock-divider counter is nonzero', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[2].spans",
+      "message": "probe 'clk_en' quotes 'generate clk_en ticks', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[2].spans",
+      "message": "probe 'clk_en' quotes 'the internal `clk_en` timing enable permits the FSM to advan', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[5].spans",
+      "message": "probe 'cscl' quotes '`cSCL` registers', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[6].spans",
+      "message": "probe 'csda' quotes 'registers `cSDA`', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[6].spans",
+      "message": "probe 'csda' quotes '`cSDA` registers', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[10].spans",
+      "message": "probe 'sscl' quotes '`sSCL` are generated', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[10].spans",
+      "message": "probe 'sscl' quotes 'filtered SCL signal sSCL', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[11].spans",
+      "message": "probe 'ssda' quotes 'filtered SDA signal sSDA', which is not in the specification; a span must be quoted, not paraphrased"
+    },
+    {
+      "severity": "error",
+      "path": "io[18].spans",
+      "message": "probe 'idle' quotes 'the command FSM remains in the `idle` state', which is not in the specification; a span must be quoted, not paraphrased"
+    }
+  ],
+  "rounds": 6,
+  "error": "",
+  "note": "[P] runs before normalize and before any design exists, so it may not say a state is unreachable; a config_gated entry is a HYPOTHESIS licensed by a quoted span, and only a prover on generated RTL can confirm it"
+}
