@@ -1,6 +1,10 @@
 """The triple of a run's shipped set as soon as its ORACLE STAGE has finished.
 
-    e7_after_oracles.py <runs-root> <module>
+    e7_after_oracles.py <runs-root> <module> [--keep-refuted]
+
+`--keep-refuted` cuts the cover from the whole pool, population-refuted bodies
+included -- the pipeline's choice before `exclude_refuted`; its corpus and
+golden go to `after_oracles_keep/` and `gold_after_oracles_keep/`.
 
 `build_artifacts` ships the cover (`shipped.json`) and scores it only after the
 reference-model stage, the longest one in the pipeline, and the figures do not
@@ -66,11 +70,13 @@ def main() -> int:
         print(__doc__.strip().splitlines()[2])
         return 2
     runs, module = Path(args[0]).resolve(), args[1]
+    keep = "--keep-refuted" in sys.argv
+    suffix = "_keep" if keep else ""
     sf = runs / module / "specflow"
     if not (sf / "oracles.json").is_file():
         print(f"{module}: no oracles.json yet")
         return 1
-    corpus = runs / "after_oracles" / module
+    corpus = runs / f"after_oracles{suffix}" / module
     if corpus.exists():
         shutil.rmtree(corpus)
     (corpus / "population").mkdir(parents=True)
@@ -103,7 +109,9 @@ def main() -> int:
     #: `_ship_cover` writes `<run_dir>/specflow/shipped.json`; give it that
     #: layout inside the corpus and move the file beside the rest.
     (corpus / "specflow").mkdir(exist_ok=True)
-    shipped = _ship_cover(corpus, pool, population, contract, by_tp)
+    #: As `build_artifacts` ships: no population-refuted body, unless asked.
+    shipped = _ship_cover(corpus, pool, population, contract, by_tp,
+                          exclude_refuted=not keep)
     written = corpus / "specflow" / "shipped.json"
     if written.is_file():
         shutil.move(str(written), corpus / "shipped.json")
@@ -115,21 +123,21 @@ def main() -> int:
 
     task = find_task(module)
     extras = [str(p) for p in child_sources(submodules(task, module))]
-    gold = runs / "gold_after_oracles" / module
+    gold = runs / f"gold_after_oracles{suffix}" / module
     res = runs / "results" / module
     res.mkdir(parents=True, exist_ok=True)
     rc = subprocess.run(
         [sys.executable, str(HERE / "e6_replay_corpus.py"), str(corpus),
          str(task / f"{module}.v"), str(gold)]
         + [a for e in extras for a in ("--extra", e)],
-        cwd=str(ROOT), stdout=open(res / "after_oracles_replay.log", "w"),
+        cwd=str(ROOT), stdout=open(res / f"after_oracles{suffix}_replay.log", "w"),
         stderr=subprocess.STDOUT).returncode
     if rc != 0:
         print(f"golden replay failed; see {res / 'after_oracles_replay.log'}")
         return 1
     return subprocess.run(
         [sys.executable, str(HERE / "e7_score_run.py"), str(corpus), str(gold),
-         "--json", str(res / "after_oracles.json")], cwd=str(ROOT)).returncode
+         "--json", str(res / f"after_oracles{suffix}.json")], cwd=str(ROOT)).returncode
 
 
 if __name__ == "__main__":
