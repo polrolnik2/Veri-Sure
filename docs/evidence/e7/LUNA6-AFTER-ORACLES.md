@@ -87,3 +87,54 @@ the previous vector on reset rows, while `oracles.replay` (the population side)
 recorded the idle one. On or1200_sb a pass-through check convicted the
 pass-through golden on the reset rows of TP-0033 for values no pin carried.
 With the fix, sb's name-bound audit goes 1/3 -> 0/2. dc_fsm is unchanged.
+
+## The hand-bound residue, classified, and the forced-repair experiment
+
+Every golden conviction of the shipped sets (dc_fsm, bit_ctrl, fpu; 115 in
+all) was classified by an agent that read the spec, the check and the golden
+trace rows, never golden's RTL: 40% the check misreads the spec or the trace,
+49% contract / stimulus / harness, 11% the spec does not decide. None is a
+golden violation. The dominant check error is ROW PAIRING: a row's post-edge
+state read together with the inputs that produced it ("idle=1 and cs=1 in one
+row" taken as a request presented in IDLE). The dominant harness causes are the
+same convention seen from the other side -- a combinational acknowledge that
+coincides with leaving a state is never recorded post-edge, so stimulus holds
+`biudata_valid` into a fresh state to make it appear -- and the 16-edge settle
+tail re-issuing a held command so a strong window is cut off mid-command.
+
+Forced repair of every population-refuted shipped body, scored over the WHOLE
+pool (no refuted body left anywhere in it for the re-cut cover to reach):
+
+    set                               span     blind    audit (name)   audit (bound)
+    dc_fsm   as shipped               71.2%     2.3%    2/9            20/49 = 40.8%
+    dc_fsm   refuted dropped          61.3%     3.9%    0/7             7/38 = 18.4%
+    dc_fsm   B: evidence repair       70.0%     3.5%    0/8            10/47 = 21.3%
+    dc_fsm   C: B + `before` field    70.0%     3.1%    0/8            10/47 = 21.3%
+    bit_ctrl as shipped               74.1%    39.3%    11/36          38/84 = 45.2%
+    bit_ctrl refuted dropped          62.9%    61.1%    12/36          22/68 = 32.4%
+    bit_ctrl B: evidence repair       70.7%    40.2%    13/38          28/78 = 35.9%
+
+B tells the author all seven designs fail its check, states the row convention,
+and shows the rows where they fail; a reply still refuted after two attempts is
+dropped. dc_fsm: 17 targets, 15 repaired, golden convicts 15 originals and 4
+repairs. bit_ctrl: 24 targets, 18 repaired, golden convicts 19 and 8. Repair
+recovers the span that dropping costs; neither moves the residue below ~20%
+(dc_fsm) or ~32% (bit_ctrl), because what is left is not refuted -- it is the
+convention and the tail, which every design and golden meet alike.
+
+## What changed after this (`4518076`, `8fe749e`)
+
+* **Rows are sampled as an assertion samples them.** A clocked model is
+  `outputs(i)` (reads the edge, changes nothing) + `advance(i)` (takes it); the
+  simulator reads the DUT after its inputs settle and before the rising edge.
+  A registered value changes in the row after the edge that loads it; a
+  combinational acknowledge sits beside the inputs it answers. Author, reviewer
+  and model prompts state it. Seven population models from one prompt had
+  answered "which side of the edge" three ways.
+* **No population-refuted body ships** (`exclude_refuted`, on by default).
+* **A strong obligation opened in the settle tail and still pending when the
+  rows run out abstains**; one opened while the stimulus drove still lapses.
+* A wide probe is a value in the Python replay, not a 0/1 flag.
+
+dc_fsm and bit_ctrl are re-running from their oracle stage on luna6's upstream
+artifacts (`/home/user/runs/luna8`) to measure these.
