@@ -102,6 +102,27 @@ def compose(
     return "\n\n".join(parts)
 
 
+#: Said once, beside the specification, in every stage that is given it: the
+#: contract carries only the specification's STRUCTURED facts, so behaviour is
+#: read from the specification itself and never from a paraphrase of it.
+SPEC_AUTHORITY = (
+    "THE SPECIFICATION BELOW IS THE AUTHORITY ON BEHAVIOUR. The contract that "
+    "follows it carries only structured facts taken from it -- ports, clocking "
+    "and reset, timing the specification states, encodings imported from the "
+    "design's defines header, probes. Where the two seem to differ, the "
+    "specification wins.")
+
+
+def spec_section(spec: str) -> tuple[tuple[str, str], ...]:
+    """The `(tag, body)` section a stage's shared prefix gives the spec.
+
+    Empty when no spec was passed, so a caller that has none composes exactly
+    the prefix it always did.
+    """
+    spec = (spec or "").strip()
+    return (("specification", SPEC_AUTHORITY + "\n\n" + spec),) if spec else ()
+
+
 def json_block(tag: str, value) -> str:
     """A tagged JSON block with **stable key order**.
 

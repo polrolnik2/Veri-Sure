@@ -45,7 +45,7 @@ from pydantic import (BaseModel, Field, computed_field, field_validator,
 from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from . import encoding
-from .fanout import compose, json_block, shared_block
+from .fanout import compose, json_block, shared_block, spec_section
 from .model_io import ModelPort
 from .schema import Issue
 from .stage import StageResult, run_fanout, run_stage
@@ -931,7 +931,7 @@ Reply with ONE JSON object and nothing else:
 
 
 def shared_prefix(contract_json: str, contract: dict, *,
-                  system: str = "", note: str = "") -> str:
+                  system: str = "", note: str = "", spec: str = "") -> str:
     """Byte-identical across every requirement of one node.
 
     `system` and `note` let the INDIRECT pass reuse the port lists under a
@@ -992,6 +992,7 @@ def shared_prefix(contract_json: str, contract: dict, *,
                   "own private vocabulary.")
     return shared_block(
         ("system", system or SYSTEM),
+        *spec_section(spec),
         ("contract_json", contract_json),
         #: **THE PROHIBITION STAYS WHERE THERE ARE NO PROBES.** "ONLY" is not
         #: phrasing: Arm C measured the unrestricted form DOUBLING vacuity, so
@@ -1022,9 +1023,10 @@ def build_prompt_one(
     contract: dict,
     issues: list[Issue] | None = None,
     previous: str | None = None,
+    spec: str = "",
 ) -> str:
     return compose(
-        shared_prefix(contract_json, contract),
+        shared_prefix(contract_json, contract, spec=spec),
         json_block("requirement", requirement),
         issues=issues,
         previous=previous,
@@ -1153,7 +1155,7 @@ With no route, that is:
 
 
 def indirect_prefix(contract_json: str, contract: dict,
-                    others: list[NormalizedRequirement]) -> str:
+                    others: list[NormalizedRequirement], spec: str = "") -> str:
     """The cached head for the indirect pass: ports, system text, and the SET.
 
     `the_other_requirements` BELONGS IN THE PREFIX, and putting it in the item
@@ -1173,6 +1175,7 @@ def indirect_prefix(contract_json: str, contract: dict,
     """
     return shared_block(
         ("system", INDIRECT_SYSTEM),
+        *spec_section(spec),
         ("contract_json", contract_json),
         ("output_ports", json.dumps([
             {"name": p.get("name"), "width": p.get("width", 1)}
@@ -1231,6 +1234,7 @@ def build_indirect_prompt(
     issues: list[Issue] | None = None,
     previous: str | None = None,
     ask: str = "observation",
+    spec: str = "",
 ) -> str:
     """The requirement, its first-pass reading, and WHICH question it is asked.
 
@@ -1244,7 +1248,7 @@ def build_indirect_prompt(
     does not need, and `observable` is the field every downstream stage reads.
     """
     return compose(
-        indirect_prefix(contract_json, contract, others),
+        indirect_prefix(contract_json, contract, others, spec=spec),
         "\n\n".join([
             _ASKS.get(ask, _ASKS["observation"]),
             json_block("requirement", requirement),
@@ -1959,6 +1963,7 @@ def run_normalize_fanout(
     port: ModelPort,
     max_repairs: int = 5,
     fanout: bool = True,
+    spec: str = "",
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """One small call per requirement. Requirements do not constrain each other.
 
@@ -1972,7 +1977,7 @@ def run_normalize_fanout(
             stage=f"{STAGE}_{req.get('uid', 'unknown')}",
             port=port,
             build_prompt=lambda issues, previous: build_prompt_one(
-                req, contract_json, contract, issues, previous),
+                req, contract_json, contract, issues, previous, spec=spec),
             parse=parse_response,
             gate=lambda out: gate_one(req, out, contract),
             max_repairs=max_repairs,
@@ -2098,6 +2103,7 @@ def resolve_indirect(
     port: ModelPort,
     max_repairs: int = 5,
     fanout: bool = True,
+    spec: str = "",
 ) -> tuple[list[NormalizedRequirement], list[StageResult[NormalizeOutput]]]:
     """Ask the blind requirements the second question. Returns the merged set.
 
@@ -2151,7 +2157,7 @@ def resolve_indirect(
             build_prompt=lambda issues, previous: build_indirect_prompt(
                 by_uid.get(shape.req_uid, {}), shape, normalized,
                 contract_json, contract, issues, previous,
-                ask=asks[shape.req_uid]),
+                ask=asks[shape.req_uid], spec=spec),
             parse=parse_response,
             gate=lambda out: gate_indirect(
                 out, uid=shape.req_uid, contract=contract, known=known),

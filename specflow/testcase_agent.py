@@ -34,7 +34,7 @@ from .model_io import ModelPort
 from .ports import classify
 from .schema import Issue, all_spans
 from .tb.runtime import is_reset_step, normalise_step, reset_ports
-from .fanout import compose, json_block, shared_block
+from .fanout import compose, json_block, shared_block, spec_section
 from .stage import (
     StageResult,
     gate_failures_block,
@@ -721,7 +721,8 @@ def run_suite_stimulus(
     )
 
 
-def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "") -> str:
+def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "",
+                        spec: str = "") -> str:
     """Everything identical across testpoints: the task, the limits, the ports.
 
     OUTPUTS are listed as well as inputs, because `until` waits on a declared
@@ -761,6 +762,7 @@ def suite_shared_prefix(contract: dict, max_steps: int, *, domain_notes: str = "
     ]
     sections = [
         ("system", SUITE_SYSTEM),
+        *spec_section(spec),
         ("limits", f"At most {max_steps} steps for this testpoint."),
         ("input_ports", json.dumps(inputs, indent=2)),
         ("output_ports",
@@ -816,6 +818,7 @@ def build_suite_prompt_one(
     previous: str | None = None,
     requirements: list[dict] | None = None,
     domain_notes: str = "",
+    spec: str = "",
 ) -> str:
     item = {
         "uid": element.get("uid"),
@@ -827,7 +830,8 @@ def build_suite_prompt_one(
     if quotes:
         item["specification_this_testpoint_covers"] = quotes
     return compose(
-        suite_shared_prefix(contract, max_steps, domain_notes=domain_notes),
+        suite_shared_prefix(contract, max_steps, domain_notes=domain_notes,
+                            spec=spec),
         json_block("testplan_element", item),
         issues=issues,
         previous=previous,
@@ -846,6 +850,7 @@ def run_suite_stimulus_fanout(
     #: See `suite_shared_prefix`. Empty and inert for a design with no wide
     #: structured-encoding input port.
     domain_notes: str = "",
+    spec: str = "",
 ) -> tuple[SuiteStimulus, list[StageResult[SuiteStimulus]]]:
     """One call per testpoint, because testpoints do not constrain each other.
 
@@ -875,7 +880,8 @@ def run_suite_stimulus_fanout(
             port=port,
             build_prompt=lambda issues, previous: build_suite_prompt_one(
                 element, contract, max_steps, issues, previous,
-                requirements=requirements, domain_notes=domain_notes),
+                requirements=requirements, domain_notes=domain_notes,
+                spec=spec),
             parse=parse_suite_response,
             gate=lambda spec: gate_suite(
                 spec, testplan=[element], contract=contract, max_steps=max_steps),

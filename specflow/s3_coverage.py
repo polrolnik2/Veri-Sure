@@ -21,7 +21,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from .assure import assure_testplan_to_bins, assure_testplan_to_checks
 from .ids import PREFIX_BIN, PREFIX_CHECK, mint
-from .fanout import compose, json_block, shared_block
+from .fanout import compose, json_block, shared_block, spec_section
 from .model_io import ModelPort
 from .s2_testplan import borrowed
 from .schema import CoverageOutput, Issue
@@ -95,10 +95,11 @@ _PROSE = {
 
 def build_prompt(
     testplan: list[dict], contract_json: str, issues: list[Issue] | None = None,
-    previous: str | None = None,
+    previous: str | None = None, spec: str = "",
 ) -> str:
     parts = [
         SYSTEM,
+        *[f"<{t}>\n{b}\n</{t}>" for t, b in spec_section(spec)],
         "<testplan>\n"
         + json.dumps(testplan, indent=2, ensure_ascii=False)
         + "\n</testplan>",
@@ -208,6 +209,7 @@ def run_s3(
     contract_json: str,
     port: ModelPort,
     max_repairs: int = 3,
+    spec: str = "",
 ) -> StageResult[CoverageOutput]:
     try:
         contract = json.loads(contract_json) if contract_json.strip() else {}
@@ -218,7 +220,7 @@ def run_s3(
         stage=STAGE,
         port=port,
         build_prompt=lambda issues, previous: build_prompt(
-            testplan, contract_json, issues, previous),
+            testplan, contract_json, issues, previous, spec=spec),
         parse=parse_response,
         gate=lambda out: gate(testplan, out, contract),
         max_repairs=max_repairs,
@@ -264,8 +266,9 @@ def write_artifacts(run_dir: Path, result: StageResult[CoverageOutput]) -> Path:
 # ------------------------------------------------------------------- fan-out
 
 
-def shared_prefix(contract_json: str) -> str:
-    return shared_block(("system", SYSTEM), ("contract_json", contract_json))
+def shared_prefix(contract_json: str, spec: str = "") -> str:
+    return shared_block(("system", SYSTEM), *spec_section(spec),
+                        ("contract_json", contract_json))
 
 
 #: Appended to an INDIRECT element's item block, for the same reason S2's is not
@@ -295,6 +298,7 @@ def build_prompt_one(
     issues: list[Issue] | None = None,
     previous: str | None = None,
     normalized: dict | None = None,
+    spec: str = "",
 ) -> str:
     item = json_block("testplan_element", element)
     if normalized:
@@ -302,7 +306,7 @@ def build_prompt_one(
         if borrowed(normalized):
             item += "\n\n" + INDIRECT_NOTE
     return compose(
-        shared_prefix(contract_json),
+        shared_prefix(contract_json, spec),
         item,
         issues=issues,
         previous=previous,
@@ -360,6 +364,7 @@ def run_s3_fanout(
     #: Without it an indirect element's bin can only be written over something
     #: internal -- coverable and unverifiable.
     normalized: dict[str, dict] | None = None,
+    spec: str = "",
 ) -> tuple[CoverageOutput, list[StageResult[CoverageOutput]]]:
     """One small call per testplan element, merged into one coverage model.
 
@@ -387,7 +392,8 @@ def run_s3_fanout(
             stage=f"{STAGE}_{element.get('uid', 'unknown')}",
             port=port,
             build_prompt=lambda issues, previous: build_prompt_one(
-                element, contract_json, issues, previous, normalized=shape),
+                element, contract_json, issues, previous, normalized=shape,
+                spec=spec),
             parse=parse_response,
             gate=lambda out: gate([element], out, contract)
             + indirect_issues(element, out, shape),

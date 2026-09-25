@@ -14,6 +14,7 @@ from typing import Protocol
 
 import logging
 
+from ..fanout import spec_section
 from ..model_io import ModelPort
 from ..ports import classify
 from ..schema import Issue, has_errors
@@ -294,6 +295,11 @@ def generate_model(
     #: confirmed by replaying it. Empty and inert for every design that does
     #: not supply one.
     domain_notes: str = "",
+    #: The specification itself. The contract carries only its structured
+    #: facts, so without this an implementation is written from the
+    #: requirement sentences alone. Before them, so it is shared across a
+    #: population drawn from one prompt.
+    spec: str = "",
 ) -> tuple[StageResult[RefModelOutput], str]:
     """Produce ONE implementation of these requirements. Returns it and its source.
 
@@ -315,6 +321,7 @@ def generate_model(
     def build_prompt(issues: list[Issue] | None, previous: str | None = None) -> str:
         parts = [
             SYSTEM,
+            *[f"<{t}>\n{b}\n</{t}>" for t, b in spec_section(spec)],
             "<requirements>\n"
             + json.dumps(requirements, indent=2, ensure_ascii=False)
             + "\n</requirements>",
@@ -386,6 +393,7 @@ def run_refmodel(
     #: Strengthening rounds after the debug loop converges. See `_closed_loop`.
     reconsider_rounds: int = 0,
     advisory_verdicts: frozenset[str] = frozenset(),
+    spec: str = "",
 ) -> tuple[StageResult[RefModelOutput], str]:
     """R2-R6. Returns the stage result and the rendered source.
 
@@ -409,7 +417,7 @@ def run_refmodel(
     result, source = generate_model(
         requirements=requirements, contract_json=contract_json,
         contract=contract, base=base, port=port, workdir=workdir,
-        max_repairs=max_repairs,
+        max_repairs=max_repairs, spec=spec,
     )
     rendered: dict[str, str] = {"src": source}
 

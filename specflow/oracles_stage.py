@@ -2388,7 +2388,7 @@ def run_oracle_stage(
 
     witness, witness_kind = _witness(
         requirements=requirements, contract_json=contract_json,
-        port=witness_port or port, workdir=workdir, run_dir=run_dir)
+        port=witness_port or port, workdir=workdir, run_dir=run_dir, spec=spec)
     control = control_source or ""
     if control:
         witness_kind = (f"{WITNESS}+{CONTROL}" if witness else CONTROL)
@@ -2402,7 +2402,7 @@ def run_oracle_stage(
         population = _population(
             size=population_size, requirements=requirements,
             contract_json=contract_json, port=port, workdir=workdir,
-            run_dir=run_dir)
+            run_dir=run_dir, spec=spec)
 
     #: **A LATENCY THE REQUIREMENT NEVER STATED** -- `refmodel/latency.py`. The
     #: substrate is the WITNESS, a spec-derived design this stage already
@@ -2469,7 +2469,7 @@ def run_oracle_stage(
         stimulus_by_tp=stimulus_by_tp, base=base,
         max_repairs=max_repairs, fanout=fanout,
         only=only, feedback=feedback, standing=standing,
-        label=label,
+        label=label, spec=spec,
     )
     held: dict[str, RequirementOracle] = {o.req_uid: o for o in oracles}
     by_uid = {str(r.get("uid") or ""): r for r in requirements}
@@ -2502,7 +2502,7 @@ def run_oracle_stage(
             #: A DIFFERENT STAGE NAME, or `run_stage` keys its prompt/response
             #: record by stage and each draft silently overwrites the last
             #: one's evidence -- the defect `label` was added to fix.
-            label=f"{label}_alt{draft}",
+            label=f"{label}_alt{draft}", spec=spec
         )
         alt_bodies.extend(more)
     if alt_bodies:
@@ -3129,7 +3129,7 @@ def run_oracle_stage(
                         if uid in quotable else [])
                 for uid in ask
             },
-            label=f"_fix{rounds}",
+            label=f"_fix{rounds}", spec=spec,
             standing=_standing(held, ask),
         )
         advised |= advisory_only | inert_only
@@ -4025,7 +4025,7 @@ def _ports_agree(source: str, contract_json: str) -> bool:
 
 def _witness(
     *, requirements: list[dict], contract_json: str, port: ModelPort,
-    workdir: Path, run_dir: Path | None,
+    workdir: Path, run_dir: Path | None, spec: str = "",
 ) -> tuple[str, str]:
     """The design the repair loop is allowed to quote, and whether there is one.
 
@@ -4071,6 +4071,7 @@ def _witness(
         requirements=requirements, contract_json=contract_json, port=port,
         workdir=(Path(run_dir) / "specflow" / "_witness"
                  if run_dir is not None else Path(workdir) / "_witness"),
+        spec=spec,
     )
     if not source:
         # No bound from above is a real weakening and it is reported as one.
@@ -4089,7 +4090,7 @@ def _witness(
 
 def _population(
     *, size: int, requirements: list[dict], contract_json: str, port: ModelPort,
-    workdir: Path, run_dir: Path | None,
+    workdir: Path, run_dir: Path | None, spec: str = "",
 ) -> tuple[str, ...]:
     """`size` independently written spec-derived designs, for the refutation leg.
 
@@ -4163,7 +4164,7 @@ def _population(
             source, _issues = conforming_implementation(
                 requirements=requirements, contract_json=contract_json,
                 port=gen_port, workdir=root / f"_gen{i}",
-                stage=f"{WITNESS_STAGE}_pop{i}")
+                stage=f"{WITNESS_STAGE}_pop{i}", spec=spec)
         except Exception as exc:  # noqa: BLE001
             logger.info("population member %d not produced (%r)", i, exc)
             return ""

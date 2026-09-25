@@ -53,6 +53,7 @@ def conforming_implementation(
     #: reference model can.
     domain_notes: str = "",
     stage: str = WITNESS_STAGE,
+    spec: str = "",
 ) -> tuple[str, list[Issue]]:
     """Generate one implementation of the design. Returns `(source, issues)`.
 
@@ -96,5 +97,6 @@ def conforming_implementation(
         # `PortSettings.for_stage` keys full strength on.
         stage=stage,
         domain_notes=domain_notes,
+        spec=spec,
     )
     return (source if result.ok else ""), list(result.issues)

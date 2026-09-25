@@ -395,7 +395,7 @@ def test_the_witness_is_written_once_and_read_forever(tmp_path):
     """
     calls: list[int] = []
 
-    def _gen(*, requirements, contract_json, port, workdir, max_repairs=2):
+    def _gen(*, requirements, contract_json, port, workdir, max_repairs=2, spec=""):
         calls.append(1)
         return WITNESS, []
 
@@ -2666,7 +2666,7 @@ def test_the_stage_can_build_its_own_population(tmp_path, monkeypatch):
     calls = []
     stages = []
 
-    def _gen(*, requirements, contract_json, port, workdir, stage):
+    def _gen(*, requirements, contract_json, port, workdir, stage, spec=""):
         calls.append(workdir)
         stages.append(stage)
         return f"# design {Path(workdir).name}\n", []
@@ -2707,7 +2707,7 @@ def test_a_partly_built_population_is_not_used(tmp_path, monkeypatch):
     from specflow import oracles_stage as O
     from specflow.refmodel import conform
 
-    def _flaky(*, requirements, contract_json, port, workdir, stage):
+    def _flaky(*, requirements, contract_json, port, workdir, stage, spec=""):
         return (("# only the first\n", []) if stage.endswith("pop0")
                 else ("", []))
 

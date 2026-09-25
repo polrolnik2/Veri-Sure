@@ -315,18 +315,26 @@ def symbols_in_spec(spec: str, port: str, names: set[str]) -> set[str]:
     spec picks WHICH symbols belong to the port and the header supplies only
     their VALUES. `source_of_truth: "spec"` survives the selection intact.
     """
-    m = next((m for m in _PORT_ENTRY.finditer(spec) if m.group(1) == port), None)
+    para = port_entry(spec, port)
+    return {n for n in names if re.search(rf"\b{re.escape(n)}\b", para)}
+
+
+def port_entry(spec: str, port: str) -> str:
+    """The specification's OWN description of `port`: its port-list entry,
+    verbatim, or "" when the spec has none.
+
+    Bounded by the next entry AND by the first blank line. The LAST entry of a
+    port list has no next entry, so it used to run to the end of the document
+    -- on i2c_master_byte_ctrl `sda_oen` swallowed the whole processing-flow
+    section and was handed the I2C_CMD_* encoding of a bus it never carries.
+    """
+    m = next((m for m in _PORT_ENTRY.finditer(spec or "") if m.group(1) == port), None)
     if m is None:
-        return set()
+        return ""
     nxt = _PORT_ENTRY.search(spec, m.end())
     end = nxt.start() if nxt else len(spec)
-    #: AND AT THE FIRST BLANK LINE. The LAST entry of a port list has no next
-    #: entry, so it used to run to the end of the document -- on
-    #: i2c_master_byte_ctrl `sda_oen` swallowed the whole processing-flow
-    #: section and was handed the I2C_CMD_* encoding of a bus it never carries.
     blank = re.search(r"\n[ \t]*\n", spec[m.end():end])
-    para = spec[m.end():m.end() + blank.start() if blank else end]
-    return {n for n in names if re.search(rf"\b{re.escape(n)}\b", para)}
+    return spec[m.end():m.end() + blank.start() if blank else end].strip()
 
 
 def find_defines(*roots: Path) -> list[Path]:

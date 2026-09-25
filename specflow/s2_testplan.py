@@ -17,7 +17,7 @@ from eda_agent.utils import extract_json_object, strip_markdown_code_fences
 
 from .assure import assure_requirements_to_testplan
 from .ids import PREFIX_TESTPLAN, mint
-from .fanout import compose, json_block, shared_block
+from .fanout import compose, json_block, shared_block, spec_section
 from .model_io import ModelPort
 from .schema import Issue, TestplanOutput
 from .stage import (
@@ -90,10 +90,11 @@ _VALID_DIMENSIONS = {
 
 def build_prompt(
     requirements: list[dict], contract_json: str, issues: list[Issue] | None = None,
-    previous: str | None = None,
+    previous: str | None = None, spec: str = "",
 ) -> str:
     parts = [
         SYSTEM,
+        *[f"<{t}>\n{b}\n</{t}>" for t, b in spec_section(spec)],
         "<requirements>\n"
         + json.dumps(requirements, indent=2, ensure_ascii=False)
         + "\n</requirements>",
@@ -153,12 +154,13 @@ def run_s2(
     contract_json: str,
     port: ModelPort,
     max_repairs: int = 3,
+    spec: str = "",
 ) -> StageResult[TestplanOutput]:
     return run_stage(
         stage=STAGE,
         port=port,
         build_prompt=lambda issues, previous: build_prompt(
-            requirements, contract_json, issues, previous),
+            requirements, contract_json, issues, previous, spec=spec),
         parse=parse_response,
         gate=lambda out: gate(requirements, out),
         max_repairs=max_repairs,
@@ -206,8 +208,9 @@ def write_artifacts(run_dir: Path, result: StageResult[TestplanOutput]) -> Path:
 _SHARED_SECTIONS = "system", "contract_json"
 
 
-def shared_prefix(contract_json: str) -> str:
-    return shared_block(("system", SYSTEM), ("contract_json", contract_json))
+def shared_prefix(contract_json: str, spec: str = "") -> str:
+    return shared_block(("system", SYSTEM), *spec_section(spec),
+                        ("contract_json", contract_json))
 
 
 #: Appended to an INDIRECT requirement's item block. Not in the shared prefix:
@@ -256,6 +259,7 @@ def build_prompt_one(
     issues: list[Issue] | None = None,
     previous: str | None = None,
     normalized: dict | None = None,
+    spec: str = "",
 ) -> str:
     item = json_block("requirement", requirement)
     if normalized:
@@ -263,7 +267,7 @@ def build_prompt_one(
         if borrowed(normalized) or normalized.get("activated_via"):
             item += "\n\n" + INDIRECT_NOTE
     return compose(
-        shared_prefix(contract_json),
+        shared_prefix(contract_json, spec),
         item,
         issues=issues,
         previous=previous,
@@ -308,6 +312,7 @@ def run_s2_fanout(
     #: without which an indirect requirement is planned as though its own text
     #: named the port -- one scenario, no contrast, and nothing to discriminate.
     normalized: dict[str, dict] | None = None,
+    spec: str = "",
 ) -> tuple[TestplanOutput, list[StageResult[TestplanOutput]]]:
     """One small call per requirement, merged into one testplan.
 
@@ -322,7 +327,8 @@ def run_s2_fanout(
             port=port,
             build_prompt=lambda issues, previous: build_prompt_one(
                 req, contract_json, issues, previous,
-                normalized=(normalized or {}).get(str(req.get("uid") or ""))),
+                normalized=(normalized or {}).get(str(req.get("uid") or "")),
+                spec=spec),
             parse=parse_response,
             gate=lambda out: gate_one(req, out),
             max_repairs=max_repairs,

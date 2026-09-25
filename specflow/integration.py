@@ -23,6 +23,7 @@ import logging
 from .cache_stats import CacheStats
 from .coverage import build_report, freeze_denominator
 from .gate import evaluate
+from . import contract_view
 from .model_io import PortSettings, make_port, resumable
 from .normalize import resolve_indirect, run_normalize_fanout
 from .normalize import write_artifacts as write_normalized
@@ -557,6 +558,9 @@ def build_artifacts(
     #: is on disk, and a later `--reuse` run starts at [O]. For holding runs at
     #: the stage whose rules are still being decided.
     stop_before_oracles: bool = False,
+    #: Reduce the contract to its structured facts and hand every stage the
+    #: specification itself. See `contract_view`.
+    structured_contract: bool = True,
     #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
     #: sources. A check convicting every one of them is rejected before freeze.
     #:
@@ -703,6 +707,13 @@ def build_artifacts(
         port = resumable(port, run_dir / "agent_io",
                          verify_prompt=resume_calls == "verified")
     contract = json.loads(contract_json) if contract_json.strip() else {}
+    #: **THE SPECIFICATION'S STRUCTURED FACTS, AND THE SPECIFICATION ITSELF.**
+    #: Every stage below is handed `spec`, and the contract is reduced to what
+    #: is not prose -- see `contract_view`. A model-written paraphrase was the
+    #: only description of the behaviour most stages had.
+    if structured_contract and contract and (spec or "").strip():
+        contract = contract_view.structured(contract, spec)
+        contract_json = json.dumps(contract, indent=2) + "\n"
 
     # Set once a stage regenerates: everything downstream must regenerate too,
     # because a cached artifact is only valid against the upstream that made it.
@@ -929,7 +940,7 @@ def build_artifacts(
             raise _Reused
         normalized, norm_results = run_normalize_fanout(
             requirements=reqs, contract_json=contract_json, contract=contract,
-            port=port, max_repairs=max_repairs, fanout=fanout,
+            port=port, max_repairs=max_repairs, fanout=fanout, spec=spec,
         )
         # EVERY UNOBSERVABLE REQUIREMENT IS ASKED THE SECOND QUESTION, before
         # anything downstream is planned from the first answer. A corrected
@@ -938,7 +949,7 @@ def build_artifacts(
         normalized, indirect_results = resolve_indirect(
             normalized=normalized, requirements=reqs,
             contract_json=contract_json, contract=contract,
-            port=port, max_repairs=max_repairs, fanout=fanout,
+            port=port, max_repairs=max_repairs, fanout=fanout, spec=spec,
         )
         norm_results = list(norm_results) + list(indirect_results)
     except _Reused:
@@ -987,7 +998,7 @@ def build_artifacts(
             merged, per_item = run_s2_fanout(
                 requirements=reqs, contract_json=contract_json, port=port,
                 normalized=normalized_by_uid,
-                max_repairs=max_repairs)
+                max_repairs=max_repairs, spec=spec)
             # **GATE THE MERGED ARTIFACT, NOT THE CONCATENATION OF PER-ITEM
             # ISSUES.** The fan-out's items are graded against their own slice;
             # what every later stage consumes is `merged`, and the two do not
@@ -1012,7 +1023,7 @@ def build_artifacts(
                     len(_s2_per_item), len(s2.issues))
         else:
             s2 = run_s2(requirements=reqs, contract_json=contract_json, port=port,
-                        max_repairs=max_repairs)
+                        max_repairs=max_repairs, spec=spec)
             renumber_tps(s2.output)
         write_s2(run_dir, s2)
     if not s2.ok:
@@ -1032,12 +1043,12 @@ def build_artifacts(
             merged3, per_item3 = run_s3_fanout(
                 testplan=tps, contract_json=contract_json, port=port,
                 normalized=normalized_by_uid,
-                max_repairs=max_repairs)
+                max_repairs=max_repairs, spec=spec)
             s3 = StageResult(merged3, [i for r in per_item3 for i in r.issues],
                              max((r.rounds for r in per_item3), default=0))
         else:
             s3 = run_s3(testplan=tps, contract_json=contract_json, port=port,
-                        max_repairs=max_repairs)
+                        max_repairs=max_repairs, spec=spec)
             renumber_cov(s3.output)
         write_s3(run_dir, s3)
     if not s3.ok:
@@ -1088,7 +1099,7 @@ def build_artifacts(
                 # them and the fourth returned all 167 with one step each.
                 merged, per_item = run_suite_stimulus_fanout(
                     testplan=tps, contract=contract, port=port,
-                    max_repairs=max_repairs,
+                    max_repairs=max_repairs, spec=spec,
                     # The spec quotes behind each testpoint, joined through
                     # `covers`. A testpoint carries no spec of its own.
                     requirements=reqs,
@@ -1260,7 +1271,7 @@ def build_artifacts(
         # fan-out moved into the gate, where "does this model satisfy
         # requirement N" is a local question with a local answer.
         rm, source = run_refmodel(
-            requirements=reqs, contract_json=contract_json, port=port,
+            requirements=reqs, contract_json=contract_json, port=port, spec=spec,
             workdir=run_dir / "specflow" / "_refmodel_check",
             max_repairs=(max_repairs if refmodel_max_repairs is None
                          else refmodel_max_repairs),
@@ -1343,7 +1354,7 @@ def build_artifacts(
             # whose recorded model went stale produced a model held to a weaker
             # standard than a fresh run would apply, silently.
             rm, source = run_refmodel(
-                requirements=reqs, contract_json=contract_json, port=port,
+                requirements=reqs, contract_json=contract_json, port=port, spec=spec,
                 workdir=run_dir / "specflow" / "_refmodel_check",
                 max_repairs=(max_repairs if refmodel_max_repairs is None
                              else refmodel_max_repairs),
