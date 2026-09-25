@@ -16,9 +16,9 @@ Golden replays re-run after `92c0d66`, which fixed stale inputs on reset rows
     module          span              blindness            audit (name)   audit (bound)
     or1200_sb       45/52  = 86.5%    6655/7637 = 87.1%    0/2            -- (0 of 9 probes exist)
     or1200_dc_fsm   57/80  = 71.2%    481/20862 =  2.3%    2/9  = 22%     20/49 = 41%
+    fpu_exceptions  68/84  = 81.0%      0/29972 =  0.0%   44/68 = 65%     44/68 = 65% (all 50 bound)
 
-fpu_exceptions, i2c_master_byte_ctrl and i2c_master_bit_ctrl are still in their
-oracle stage.
+i2c_master_byte_ctrl and i2c_master_bit_ctrl are still in their oracle stage.
 
 ## What each figure is made of
 
@@ -44,6 +44,18 @@ against 2 golden-passing. An example is REQ-0010 on TP-0002: the check pairs
 the post-edge state (`idle`) with the inputs sampled at that same edge, so it
 reads a request presented while the FSM was still in LREFILL3 as one presented
 in IDLE. Golden and all seven designs fail it.
+
+**fpu audit is a contract misreading of the pipeline.** The contract authored
+from the spec gives every output `latency_cycles: 1`. The spec describes several
+registered stages (stage-0/1/2 copies of the output; output selection "through
+registered intermediate results"), all gated by `enable`. The witness, the
+population and the checks inherited the one-cycle reading, and the stimulus
+pulses `enable` for a single cycle. Golden never updates `out` or `exception`
+under a one-cycle pulse (TP-0242: golden's internal `inexact_trigger` rises,
+`out` never moves), so a check expecting the result on the next row convicts
+it. 35 of the 50 convictions fall within three rows of reset. Binding the 50
+probes by hand changes nothing, because they bind to golden internals of the
+same name.
 
 ## Offline experiments (no model calls)
 
