@@ -342,3 +342,15 @@ def test_a_cell_only_a_REFUTED_body_separates_is_a_target_when_refuted_bodies_do
     assert seen == [], "R1 separates the cell, so without the switch it is not blind"
     assert [t["requirement"]["uid"] for t in told] == ["R2"]
     assert "ignore_refuted=refuted_excluded" in inspect.getsource(oracles_stage.run_oracle_stage)
+
+
+def test_refutation_LEADS_an_advisory_latency_finding():
+    """A check both latency-fragile and population-refuted must be told it is
+    refuted (and shown the witness failing it); the latency note rides after."""
+    import inspect
+
+    from specflow import oracles_stage
+
+    src = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert "if uid in rejected or (prior and not prior.startswith(_latency.PREFIX)):" in src
+    assert 'why += "\\n\\nSeparately -- " + prior' in src

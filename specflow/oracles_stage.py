@@ -3128,7 +3128,18 @@ def run_oracle_stage(
             #: blocked before any design existed: `well_formed`, a replay
             #: break, and a check that cannot fail.
             for uid in variety.refuted_by_the_population(pop_verdicts):
-                if uid in rejected or uid in quotable:
+                #: **REFUTATION LEADS AN ADVISORY LATENCY FINDING.** Both are
+                #: repair asks, and this skipped any check already queued --
+                #: so a check that was ALSO latency-fragile was re-asked only
+                #: to relax a latency, never told that every reading fails it,
+                #: and never shown the witness failing it. Measured on
+                #: or1200_dc_fsm: three of the five requirements whose every
+                #: body stayed refuted went that way. Refutation is the exact
+                #: signal here (every refuted shipped body on bit_ctrl, 36 of
+                #: 36, convicts the known-good design); the latency note is
+                #: kept, after it.
+                prior = quotable.get(uid, "")
+                if uid in rejected or (prior and not prior.startswith(_latency.PREFIX)):
                     continue
                 where = _where_it_fired(pop_where.get(uid) or {}, testplan)
                 evidence = _witness_failure_rows(
@@ -3139,6 +3150,8 @@ def run_oracle_stage(
                 why = _refuted_everywhere(
                     len(population), where, shown=evidence is not None,
                     excluded=refuted_excluded)
+                if prior:
+                    why += "\n\nSeparately -- " + prior
                 quotable[uid] = why
                 repairs.setdefault(uid, []).append(why)
             #: **THE OTHER SIGN OF THE SAME DEFECT.** The leg above catches a
