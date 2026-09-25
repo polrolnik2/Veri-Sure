@@ -552,6 +552,11 @@ def build_artifacts(
     #: audit, because a subset of objectors cannot convict more. Needs no model
     #: call, so a finished run gets it by re-entering with `reuse`.
     ship_cover: bool = False,
+    #: Stop after stimulus, before the oracle stage: every artifact [O] reads
+    #: (contract, requirements, normalized forms, testplan, coverage, stimulus)
+    #: is on disk, and a later `--reuse` run starts at [O]. For holding runs at
+    #: the stage whose rules are still being decided.
+    stop_before_oracles: bool = False,
     #: SPEC-DERIVED DESIGNS FROM RUNS THAT ALREADY FINISHED, as rendered
     #: sources. A check convicting every one of them is rejected before freeze.
     #:
@@ -1116,6 +1121,11 @@ def build_artifacts(
                     json.dumps(st.output.model_dump(), indent=2) + "\n",
                     encoding="utf-8",
                 )
+
+    if stop_before_oracles:
+        logger.info("stopping before the oracle stage, as asked: S1 through "
+                    "stimulus are on disk in %s", run_dir / "specflow")
+        return BuildResult(True, "before-oracles", [], stimulus_issues=stim_issues)
 
     # [O] The requirement oracles, BEFORE the reference model exists.
     #

@@ -106,3 +106,9 @@ def test_both_contract_builders_delete_before_the_gate_and_import_only_defines()
               / "docs/evidence/e7_contract.py").read_text()
     assert "strip_unsourced(blob, spec)" in driver
     assert "encoding.find_defines(TASK)" in driver
+
+
+def test_an_empty_latency_is_an_omitted_one():
+    from eda_agent.contract_linter import strip_unsourced
+    obj = {"timing": {"cmd_ack": {"latency_cycles": "", "notes": "unstated"}}}
+    assert strip_unsourced(obj, SPEC) and obj["timing"]["cmd_ack"] == {"notes": "unstated"}

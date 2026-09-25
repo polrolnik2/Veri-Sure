@@ -3,7 +3,7 @@
     e6_autorun.py <run-dir> --spec <spec.txt> --contract <contract.json>
                   [--control <ref_model.py>] [--reuse] [--resume | --resume-verified]
                   [--population N] [--no-preflight] [--admit-pool] [--cover]
-                  [--transport-retries N]
+                  [--transport-retries N] [--stop-before-oracles]
 
 **FOUR RUNS' ARTIFACTS WENT WITH A CONTAINER RECLAIM ON THIS BRANCH, AND EVERY
 NUMBER TAKEN FROM THEM HAD TO BE RECOMPUTED OR WITHDRAWN.** Three more --
@@ -217,6 +217,7 @@ def main() -> int:
             #: re-entering with `--reuse --no-preflight`: blindness and span
             #: held exactly, audit free only to fall.
             ship_cover="--cover" in FLAGS,
+            stop_before_oracles="--stop-before-oracles" in FLAGS,
             population_size=int(_opt("--population", 7)),
             audit_control=control_source,
             reuse=reuse,

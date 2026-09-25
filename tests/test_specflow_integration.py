@@ -491,3 +491,20 @@ def test_s2_is_gated_on_the_merged_testplan_not_the_per_item_issues():
         "S2 is gated on the per-item aggregate again")
     #: The per-item issues stay available for diagnosis; they must not decide.
     assert "_s2_per_item" in block
+
+
+def test_a_build_can_stop_before_the_oracle_stage(tmp_path):
+    """Held at [O]: everything the oracle stage reads is on disk, nothing it
+    writes is, and nothing downstream ran."""
+    run_dir = _run_dir(tmp_path)
+    result = build_artifacts(
+        divide_s1=False, fanout=False, run_dir=run_dir,
+        spec=(run_dir / "prompt.txt").read_text(encoding="utf-8"),
+        contract_json=(run_dir / "contract.json").read_text(encoding="utf-8"),
+        model_port="replay", stop_before_oracles=True)
+    sf = run_dir / "specflow"
+    assert result.ok and result.stage == "before-oracles"
+    for name in ("requirements.json", "testplan.json"):
+        assert (sf / name).is_file(), name
+    assert not (sf / "oracles.json").exists()
+    assert not (sf / "ref_model.py").exists()

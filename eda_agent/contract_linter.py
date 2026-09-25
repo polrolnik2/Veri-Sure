@@ -329,6 +329,13 @@ def strip_unsourced(obj: dict, spec: str) -> list[str]:
     """
     notes: list[str] = []
     timing = obj.get("timing")
+    #: A value that is not a cycle count is an OMITTED latency written badly --
+    #: `"latency_cycles": ""` is how the author said "unstated" on bit_ctrl.
+    for out, tinfo in (timing.items() if isinstance(timing, dict) else ()):
+        if (isinstance(tinfo, dict) and "latency_cycles" in tinfo
+                and _as_int(tinfo.get("latency_cycles")) is None):
+            notes.append(f"timing.{out}.latency_cycles={tinfo.pop('latency_cycles')!r} "
+                         f"deleted: not a cycle count")
     for issue in unlicensed_latencies(timing, spec):
         out = issue.path.split(".")[1]
         tinfo = timing.get(out) if isinstance(timing, dict) else None
