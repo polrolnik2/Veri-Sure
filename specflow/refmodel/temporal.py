@@ -443,6 +443,16 @@ def after(trace: list[dict], activation: Pred, *, until,
         # consecutive rows opens one window, not forty. What `overlap` changes
         # is where the scan resumes, not what counts as a start.
         rising = activation(trace[i]) and (i == 0 or not activation(trace[i - 1]))
+        #: **NO WINDOW OPENS IN THE SETTLE TAIL.** The tail holds the last
+        #: step's inputs so the design can answer them; holding them also
+        #: re-issues whatever they request -- a load with its bus response
+        #: already present, a command after its acknowledge -- and a window
+        #: opened on that is a scenario no stimulus step wrote. Measured on
+        #: or1200_dc_fsm's hand-bound golden replay: six of nineteen
+        #: convictions were on tail rows only. A window opened while the
+        #: stimulus drove still runs into the tail and is judged there.
+        if rising and trace[i].get("tail"):
+            break
         if not rising:
             i += 1
             continue

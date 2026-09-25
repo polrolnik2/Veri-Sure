@@ -1926,7 +1926,8 @@ def _select_frozen(trusted: dict, population: Sequence[str], contract: dict,
     return sel, shape
 
 
-def _refuted_everywhere(n: int, where: list[tuple[str, str]] | None = None) -> str:
+def _refuted_everywhere(n: int, where: list[tuple[str, str]] | None = None, *,
+                        shown: bool = False, excluded: bool = False) -> str:
     """The rejection for a check the whole admissible population contradicts.
 
     **THE DUAL OF `_cannot_fail`, AND THE STAGE BLOCKED ONLY ONE SIGN.** A
@@ -1955,7 +1956,53 @@ def _refuted_everywhere(n: int, where: list[tuple[str, str]] | None = None) -> s
         f"exact count the text does not state, an ordering it does not fix -- "
         f"that detail is where the over-strictness is."
         + _fired_at_block(where)
+        + ("\n\nThe witness -- one more reading of the same requirements -- "
+           "fails your check at the first of those testpoints too; its rows "
+           "there are shown below, with the row where your check returned "
+           "False marked." if shown else "")
+        + ("\n\nA check that every one of these readings fails is NOT "
+           "SHIPPED: if your revision is still failed by all of them, it is "
+           "left out and this requirement keeps only a check some reading "
+           "satisfies. If the specification really does demand what your check "
+           "asserts, quote the sentence in your reasoning and keep it -- but "
+           "first rule out a misread row." if excluded else "")
     )
+
+
+def _witness_failure_rows(oracle, witness: str, testpoints: Sequence[str],
+                          contract: dict, stimulus_by_tp: dict, *, base: str,
+                          transactional: bool) -> "oracle_gen.WitnessRows | None":
+    """The WITNESS's rows at the first testpoint where it fails `oracle`.
+
+    **THE WITNESS MAY REPAIR; THE POPULATION MAY ONLY REFUTE.** The testpoints
+    come from the population -- where every reading was convicted -- and the
+    rows from the witness, the one design this stage makes quotable. `None`
+    when there is no witness or it satisfies the check there, so an author is
+    never shown rows that do not show its own failure.
+
+    Why rows at all: the location alone left these checks standing. On
+    or1200_dc_fsm's first sampled-edge run, 13 of the 16 population-refuted
+    shipped bodies also convicted the known-good design, most for one misread
+    row -- a combinational acknowledge demanded on the row after the state that
+    raises it. Told only the testpoint, the authors declined the repair.
+    """
+    if oracle is None or not (witness or "").strip():
+        return None
+    for tp in testpoints:
+        steps = (stimulus_by_tp or {}).get(tp)
+        if not steps:
+            continue
+        try:
+            rep = replay(witness, contract, steps, base=base)
+        except Exception:  # noqa: BLE001 -- evidence is optional; never fail the stage for it
+            continue
+        if rep.error:
+            continue
+        rows = list(transactional_view(rep.rows) if transactional else rep.rows)
+        v = decide(oracle, rows)
+        if v.ok is False and v.edge is not None:
+            return oracle_gen.WitnessRows(by_tp={tp: rows}, focus={tp: v.edge})
+    return None
 
 
 def _fired_at_block(where: list[tuple[str, str]] | None) -> str:
@@ -2314,6 +2361,11 @@ def run_oracle_stage(
     #: defaults to 5, so a three-design run is refused by design; that has to
     #: read as "the rule declined" and not as "the rule found nothing".
     selection: "object | None" = None,
+    #: The run leaves every population-refuted body out of the shipped set
+    #: (`integration.build_artifacts(exclude_refuted=...)`), so the repair ask
+    #: for one says so -- the consequence is real, and an author told only
+    #: "declining is a real answer" is told something false.
+    refuted_excluded: bool = False,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -3024,6 +3076,10 @@ def run_oracle_stage(
         # OFF UNLESS A POPULATION WAS PASSED IN, because this stage runs before
         # any design of this run exists and must not acquire one of its own.
         inert_notes: dict[str, str] = {}
+        #: The witness's rows where a population-refuted check failed on it,
+        #: for this round's re-ask. Rebuilt every round: a repaired check has
+        #: its own failure, or none.
+        refuted_rows: dict[str, oracle_gen.WitnessRows] = {}
         if len(population) >= 2:
             pop_verdicts, pop_tp, pop_where = _population_tables(
                 held, population, contract, stimulus_by_tp,
@@ -3062,9 +3118,15 @@ def run_oracle_stage(
             for uid in variety.refuted_by_the_population(pop_verdicts):
                 if uid in rejected or uid in quotable:
                     continue
+                where = _where_it_fired(pop_where.get(uid) or {}, testplan)
+                evidence = _witness_failure_rows(
+                    held.get(uid), witness, [tp for tp, _ in where], contract,
+                    stimulus_by_tp, base=base, transactional=transactional)
+                if evidence is not None:
+                    refuted_rows[uid] = evidence
                 why = _refuted_everywhere(
-                    len(population),
-                    _where_it_fired(pop_where.get(uid) or {}, testplan))
+                    len(population), where, shown=evidence is not None,
+                    excluded=refuted_excluded)
                 quotable[uid] = why
                 repairs.setdefault(uid, []).append(why)
             #: **THE OTHER SIGN OF THE SAME DEFECT.** The leg above catches a
@@ -3133,6 +3195,7 @@ def run_oracle_stage(
             },
             label=f"_fix{rounds}", spec=spec,
             standing=_standing(held, ask),
+            rows={u: r for u, r in refuted_rows.items() if u in ask} or None,
         )
         advised |= advisory_only | inert_only
         # Only a replacement that actually arrived replaces anything. A round

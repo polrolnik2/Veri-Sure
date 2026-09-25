@@ -1275,6 +1275,11 @@ class WitnessRows:
 
     by_tp: dict[str, list[dict]]
     origin: str = "witness"
+    #: `tp -> edge` where the author's own check failed ON THE WITNESS. When
+    #: present the window is centred there and the row is marked, instead of
+    #: starting at the witness's first activity -- the rows are then evidence
+    #: about one verdict, and the verdict is the author's, not the witness's.
+    focus: dict[str, int] | None = None
 
     def __post_init__(self) -> None:
         if self.origin != "witness":
@@ -1357,13 +1362,20 @@ def witness_rows_block(rows: WitnessRows, *, per_tp: int = 12) -> str:
     author guessing at exactly that.
     """
     out = []
+    focus = rows.focus or {}
     for tp in sorted(rows.by_tp):
         rs = rows.by_tp[tp] or []
-        start = _first_activity(rs)
+        at = focus.get(tp)
+        hit = next((k for k, r in enumerate(rs) if r.get("edge") == at), None) \
+            if at is not None else None
+        start = (max(0, hit - per_tp // 2) if hit is not None
+                 else _first_activity(rs))
         window = rs[start:start + per_tp]
         shown = [
             {"edge": r.get("edge"), "held": r.get("held", 1),
-             "inputs": r.get("inputs") or {}, "outputs": r.get("outputs") or {}}
+             "inputs": r.get("inputs") or {}, "outputs": r.get("outputs") or {},
+             **({"your_check_failed_here": True}
+                if hit is not None and r is rs[hit] else {})}
             for r in window
         ]
         out.append({"tp_uid": tp, "rows_in_full": len(rs),
@@ -1381,6 +1393,14 @@ def witness_rows_block(rows: WitnessRows, *, per_tp: int = 12) -> str:
         "If the response you are asserting has not arrived by the row after "
         "the trigger, the requirement almost certainly did not promise it "
         "there -- say what it did promise."
+        + ("\n\nWhere a row is marked `your_check_failed_here`, that is the "
+           "row at which YOUR check returned False on the witness. Read the rows "
+           "around it against the row convention and the specification, and "
+           "decide which of them your check misread -- a state paired with the "
+           "wrong inputs, a same-row response demanded on a later row, a window "
+           "still open after the transaction ended. The witness is not the "
+           "answer; the specification is."
+           if focus else "")
     )
 
 
@@ -1596,6 +1616,9 @@ def run_oracle_gen(
     #: rejected and the prompt showing why, which is the evidence every
     #: measurement in this project is reconstructed from.
     label: str = "",
+    #: `req_uid -> WitnessRows` for a repair round: the witness's own rows
+    #: where the check being revised failed on it. Witness-only by type.
+    rows: dict[str, WitnessRows] | None = None,
 ) -> tuple[list[RequirementOracle], dict[str, StageResult[OracleOutput]]]:
     """One oracle per requirement, generated before any verdict exists.
 
@@ -1646,6 +1669,7 @@ def run_oracle_gen(
                 issues=issues or seeds.get(uid),
                 previous=previous or (standing or {}).get(uid),
                 preponed=preponed,
+                rows=(rows or {}).get(uid),
             ),
             parse=parse_response,
             gate=lambda out: gate_one(

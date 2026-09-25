@@ -197,23 +197,31 @@ def _rows(tail_from: int, n: int, *, fire: int) -> list[dict]:
     return out
 
 
-def test_a_strong_obligation_OPENED_IN_THE_TAIL_is_cut_off_not_failed():
+def test_NO_WINDOW_opens_in_the_tail_and_one_opened_before_it_is_judged_there():
+    """The tail holds the last inputs so the design can answer them; a window
+    opened on what that re-issues is a scenario no step wrote. One opened while
+    the stimulus drove still runs into the tail and lapses there."""
     from specflow.refmodel import temporal as T
 
-    def verdicts(rows):
-        ws = T.after(rows, lambda r: r["outputs"]["a"] == 1, until=T.TO_END)
-        assert len(ws) == 1
-        w = ws[0]
-        return (T.eventually(w, lambda r: r["outputs"]["b"] == 1, strong=True)[0],
-                T.sequence(w, lambda r: r["outputs"]["a"] == 1,
-                           lambda r: r["outputs"]["b"] == 1, strong=True)[0],
-                T.until(w, lambda r: r["outputs"]["a"] == 1,
-                        lambda r: r["outputs"]["b"] == 1, strong=True)[0])
+    def windows(rows):
+        return T.after(rows, lambda r: r["outputs"]["a"] == 1, until=T.TO_END)
 
-    assert verdicts(_rows(tail_from=6, n=10, fire=7)) == (None, None, None), (
-        "opened after the stimulus ended and still pending when the rows ran out")
-    assert verdicts(_rows(tail_from=6, n=10, fire=3)) == (False, False, False), (
-        "opened while the stimulus drove: the tail was its room, and it lapsed")
+    assert windows(_rows(tail_from=6, n=10, fire=7)) == []
+    ws = windows(_rows(tail_from=6, n=10, fire=3))
+    assert len(ws) == 1
+    w = ws[0]
+    assert T.eventually(w, lambda r: r["outputs"]["b"] == 1, strong=True)[0] is False
+    assert T.sequence(w, lambda r: r["outputs"]["a"] == 1,
+                      lambda r: r["outputs"]["b"] == 1, strong=True)[0] is False
+
+
+def test_a_hand_built_window_in_the_tail_is_still_cut_off_not_failed():
+    """`Window.opened_in_tail` covers a window a check built without `after`."""
+    from specflow.refmodel import temporal as T
+
+    rows = _rows(tail_from=6, n=10, fire=7)
+    w = T.Window(start=rows[7], rows=rows[7:], closed=False, prev=rows[6])
+    assert T.eventually(w, lambda r: r["outputs"]["b"] == 1, strong=True)[0] is None
 
 
 def test_a_state_is_a_tail_state_only_if_it_BEGINS_in_the_tail():
@@ -247,3 +255,59 @@ def test_a_fresh_model_starts_in_its_RESET_state():
             self.q = i["d"]
 
     assert M().step({"d": 1}) == {"q": 3}
+
+
+# ------------------------------------ evidence for a population-refuted check
+
+
+_LATE_ACK = ("from specflow.refmodel.temporal import after, eventually\n"
+             "def decide(trace):\n"
+             "    ws = after(trace, lambda r: r['outputs']['busy'] == 1 and r['inputs']['done_i'] == 1,\n"
+             "               until=lambda r: r['outputs']['busy'] == 0)\n"
+             "    if not ws:\n"
+             "        return (None, None, 'never')\n"
+             "    return eventually(ws[0], lambda r: r['outputs']['ack'] == 1,\n"
+             "                      strong=True, after_activation=True)\n")
+
+
+def test_the_witness_rows_for_a_refuted_check_are_centred_on_ITS_failure():
+    """The ack is in the row showing BUSY and done_i; a check demanding it on a
+    later row fails there, and the author is shown that row, marked."""
+    from specflow.oracles_stage import _witness_failure_rows
+
+    steps = {"TP-1": [{"inputs": {"go": 1, "done_i": 0}, "hold": 2},
+                      {"inputs": {"go": 0, "done_i": 1}, "hold": 1},
+                      {"inputs": {"go": 0, "done_i": 0}, "hold": 3}]}
+    ev = _witness_failure_rows(_check("R", _LATE_ACK), SAMPLED, ["TP-1"], CONTRACT,
+                               steps, base="step", transactional=True)
+    assert ev is not None and ev.origin == "witness"
+    block = oracle_gen.witness_rows_block(ev)
+    assert block.count('"your_check_failed_here": true') == 1
+    assert "The witness is not the answer; the specification is." in block
+
+    same_row = _LATE_ACK.replace("after_activation=True", "after_activation=False")
+    assert _witness_failure_rows(_check("R", same_row), SAMPLED, ["TP-1"], CONTRACT,
+                                 steps, base="step", transactional=True) is None, (
+        "a check the witness satisfies gets no rows -- they would not show its failure")
+
+
+def test_the_refutation_message_states_the_consequence_only_when_it_is_real():
+    from specflow.oracles_stage import _refuted_everywhere
+
+    told = _refuted_everywhere(7, [("TP-1", "")], shown=True, excluded=True)
+    assert "NOT SHIPPED" in told and "rows there are shown below" in told
+    assert "NOT SHIPPED" not in _refuted_everywhere(7, [("TP-1", "")])
+
+
+def test_the_repair_round_PASSES_the_rows_and_the_build_passes_the_switch():
+    """Source pins: a call site inside `run_oracle_stage` has been deleted on
+    this branch without failing a behavioural test."""
+    import inspect
+
+    from specflow import integration, oracles_stage
+
+    stage = inspect.getsource(oracles_stage.run_oracle_stage)
+    assert "rows={u: r for u, r in refuted_rows.items() if u in ask} or None" in stage
+    assert "_witness_failure_rows(" in stage
+    build = inspect.getsource(integration.build_artifacts)
+    assert "refuted_excluded=bool(ship_cover and admit_pool and exclude_refuted)" in build

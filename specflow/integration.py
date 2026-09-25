@@ -1205,6 +1205,7 @@ def build_artifacts(
             population_size=population_size,
             cell_budget=cell_budget,
             selection=selection,
+            refuted_excluded=bool(ship_cover and admit_pool and exclude_refuted),
             run_dir=run_dir, fanout=fanout,
             # Upstream regenerated, so the frozen oracles are about
             # requirements that no longer exist. Freezing is per requirement
