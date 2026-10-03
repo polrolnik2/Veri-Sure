@@ -190,3 +190,38 @@ specification reached every stage.
 **bit_ctrl here still runs on luna6's contract**, which gives `cmd` no encoding,
 so every design guessed what 4 and 8 mean; luna7's contract imports them from
 `i2c_master_defines.v`.
+
+## luna7: bit_ctrl on the fixed contract (`cmd` encoding imported), d4fea85
+
+[O] from luna7's staging, Flex, `--cell-budget 60`. 149 requirements minted,
+130 state an observable obligation, 120 TRUSTED; corpus 409 bodies, pool 333,
+98 refuted by the whole population.
+
+| arm | span | blindness | audit raw | audit hand-bound |
+|---|---|---|---|---|
+| pipeline (refuted excluded) | 92.3% | 43.9% | 13/38 = 34.2% | 37/100 = 37.0% |
+| keep refuted | 98.3% | 21.8% | 21/42 = 50.0% | (pending) |
+
+**Blindness is the pool's ceiling, and the cell leg delivered nothing.** The
+cover separates exactly what the pool separates (30,632 of 54,605). 0 of 60
+cell checks were adopted; 51 of 60 decide nothing on any testpoint for any of
+the seven designs. The cause is targeting: `_cell_targets` anchors a cell on
+the first requirement in its testpoint's `covers`, so **44 of 60 anchors do not
+observe the cell's port** (35 observe other ports, 9 state no observable at
+all, 7 are scaffolding). The author, told "if the requirement does not
+constrain this port, write no check", correctly wrote none.
+
+**The 39 hand-bound convictions, by primary cause** (golden RUN only; first
+matching class wins):
+
+| n | cause | class |
+|---|---|---|
+| 2 | row 0 is sampled before any edge: verilator's power-on zeros against a model built in its reset state (all 485 traces read `scl_oen=0` there) | instrument |
+| 10 | `ena` low: the spec says "normal FSM timing does not progress"; golden fires `clk_en` every cycle and completes commands (TP-0073: `cmd_ack` at row 10 with `ena=0` from row 6) | requirements |
+| 12 | filter/synchroniser cycle timing the spec describes structurally but does not pin; most pass all 7 designs (e.g. TP-0466: SDA falls one cycle after SCL rises, golden's filter captures the old SDA; TP-0111: a foreign STOP is detected ~58 rows later at `clk_cnt>>2`=32, mid-READ, so golden aborts with `al` and no `cmd_ack`) | requirements |
+| 13 | checks failed by 4-6 of the 7 designs; the unanimity rule lets them ship | checks |
+| 2 | checks failed by 3 of 7 (READ releases SDA) | checks |
+
+The bus is coherent: 0 of 142,274 rows read a line high while the master
+pulls it low, so the START/STOP events in these scenarios are a deliberate
+other participant, not an open-loop stimulus.
