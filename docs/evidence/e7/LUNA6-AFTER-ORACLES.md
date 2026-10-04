@@ -225,3 +225,45 @@ matching class wins):
 The bus is coherent: 0 of 142,274 rows read a line high while the master
 pulls it low, so the START/STOP events in these scenarios are a deliberate
 other participant, not an open-loop stimulus.
+
+### Selection rules beyond "all seven fail" (luna7 bit_ctrl pool, offline)
+
+The 333-body admitted pool replayed once against the seven designs and once
+against golden (raw and hand-bound); every rule cut with the pipeline's own
+cover and keys, so the first rule reproduces `shipped.json` exactly. Golden
+scores the rules and chooses none of them.
+
+| rule (golden-free) | bodies | span | blind | audit raw | audit bound |
+|---|---|---|---|---|---|
+| pipeline: drop unanimous, cover | 114 | 92.3% | 43.9% | 13/38 34.2% | 37/100 37.0% |
+| keep all, cover | 126 | 98.3% | 21.8% | 21/42 50.0% | 74/113 65.5% |
+| drop failed by >=6 of 7 | 113 | 91.5% | 44.1% | 13/38 34.2% | 35/98 35.7% |
+| drop failed by >=5 of 7 | 108 | 88.0% | 46.0% | 11/35 31.4% | 31/91 34.1% |
+| drop failed by >=4 of 7 | 103 | 83.8% | 46.8% | 10/35 28.6% | 27/87 31.0% |
+| drop failed by >=3 of 7 | 96 | 78.6% | 58.0% | 7/32 21.9% | 21/78 26.9% |
+| drop failed by >=1 (passes all 7) | 85 | 69.2% | 100% | 7/31 22.6% | 15/65 23.1% |
+| per requirement, least-refuted tier, no unanimous | 114 | 92.3% | 76.5% | 9/34 26.5% | 30/90 33.3% |
+| drop failing the medoid design | 101 | 82.9% | 58.5% | 10/35 28.6% | 25/84 29.8% |
+| drop failing either of the 2 central designs | 93 | 76.1% | 61.2% | 7/32 21.9% | 17/74 23.0% |
+| mask only the testpoints every design fails at | 126 | 98.3% | 21.8% | 16/37 43.2% | 57/96 59.4% |
+| mask testpoints a majority fails at | 131 | 98.3% | 34.2% | 10/33 30.3% | 45/90 50.0% |
+
+**Every rule is a point on one trade; none goes below 23% hand-bound.** The
+floor is the 27 convicting bodies that pass all seven designs: no population
+rule can see a reading the whole population shares. Masking at testpoint
+granularity is worse than dropping at body granularity -- golden is mostly
+convicted where the designs PASS the check, so a body refuted anywhere is the
+stronger signal.
+
+**The pool itself is the limit.** Choosing with golden (an upper bound, not a
+rule): one golden-clean body per requirement gives span 75.2%, blindness
+58.1%, audit 0. 27 behavioural requirements have no golden-clean body at all,
+and the golden-clean bodies separate 22,860 of 54,605 cells. Convicting bodies
+by population fail-count: 97 fail all 7 (already dropped), 36 fail 1-6, 27
+fail none.
+
+**Cell anchoring, previewed on the same artifacts after 6d841f6:** 60 targets
+over all eight ports, every anchor observing its cell's port (was 16 of 60);
+none of the blind testpoints is covered by a requirement observing the port,
+so all 60 come through the fallback; 53 anchors are TRUSTED, so their bodies
+can enter the pool.
