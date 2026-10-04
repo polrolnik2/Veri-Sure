@@ -267,3 +267,43 @@ over all eight ports, every anchor observing its cell's port (was 16 of 60);
 none of the blind testpoints is covered by a requirement observing the port,
 so all 60 come through the fallback; 53 anchors are TRUSTED, so their bodies
 can enter the pool.
+
+### luna11: the cell leg with port-observing anchors, and what the blind cells are
+
+Two relaunches of bit_ctrl's [O] from luna7's pre-oracle state, measured on
+the cell bodies before the stage went on:
+
+| cell leg | targets' testpoints | decide nothing | pass all 7 | separate anything | cells they separate |
+|---|---|---|---|---|---|
+| luna7 (first covering requirement) | -- | 51 of 60 | -- | 3 | -- |
+| luna11a (6d841f6: anchor observes the port) | 1 (all TP-0000) | 26 | 48 | 4 | 1,176 of 46,072 |
+| luna11 (3df6574: dealt across testpoints, anchor applies there, scenario shown) | 17 | 21 | 49 | 2 | 1,161 of 46,072 |
+
+The authors write faithful, tolerant checks -- ordered phases, no invented
+cycle counts -- or decline because the requirement does not constrain the port
+("the obligation does not constrain sda_oen specifically; no check is
+licensed"). That is below the plan's pre-registered 15% bar for E4.
+
+**Why: the blind cells are timing.** Of luna7's 23,973 blind cells, 89.4% are
+the same sequence of values on the port at different cycles and 10.6% one
+sequence a prefix of the other; **none has different values.**
+
+**And the cell instrument counted trace length as disagreement.**
+`variety.cells` compares a port's whole row string, and with reactive
+stimulus (`until` steps) designs advance at different rates -- so `scl_o` and
+`sda_o`, constant 0 in every design, carried 6,596 cells each. Counting a
+port only where its value differs at an edge both designs reached under
+identical inputs ("same experiment"):
+
+| set | blind, as scored | blind, same-experiment |
+|---|---|---|
+| cells | 54,605 | 12,706 (`scl_o`/`sda_o`: 0) |
+| shipped (unanimous) | 43.9% | 45.5% |
+| majority rule | 46.8% | 48.8% |
+| whole pool | 21.8% | 18.9% |
+
+The denominator was inflated; the rate was not. About half of the genuine
+disagreements -- `cmd_ack`, `scl_oen`, `sda_oen` timing under identical inputs
+-- are adjudicated by no shippable check, and the authors' own reasoning says
+the requirement text does not fix those cycles. Not changed in code: the
+blindness definition is the target's, and changing it is the user's call.
