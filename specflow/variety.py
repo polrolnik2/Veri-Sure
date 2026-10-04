@@ -1055,3 +1055,30 @@ def refuted_by_the_population(
         if len(decided) >= need and decided and all(v is False for v in decided):
             out.append(cid)
     return tuple(sorted(out))
+
+
+def convicted_by_a_majority(
+        verdicts: Mapping[str, Mapping[str, bool | None]]) -> tuple[str, ...]:
+    """Checks that convict a STRICT MAJORITY of the spec-derived population.
+
+    The population's size is every design any check reports on, so a check
+    that decides on few designs cannot reach a majority by abstaining on the
+    rest -- the same refusal `refuted_by_the_population`'s quorum makes.
+
+    **WHY A MAJORITY AND NOT ALL OF THEM.** Unanimity is the argument that
+    needs no statistics: a check convicting every admissible reading has
+    convicted the correct one too. It also leaves the rest in. Measured on
+    i2c_master_bit_ctrl's 333-body pool (luna7), golden scoring every cut and
+    choosing none: of the bodies golden convicts, 97 fail all seven designs,
+    36 fail one to six, 27 fail none; of the golden-clean ones 137 fail none
+    and 7 fail five or more. Dropping a body four of seven designs convict
+    took hand-bound audit 37/100 -> 27/87 at a cost of span 92.3% -> 83.8%
+    and blindness 43.9% -> 46.8%. A trade, chosen by the user, and the
+    unanimous rule remains available for a run that wants the other point.
+    """
+    designs = {d for per in verdicts.values() for d in per}
+    if not designs:
+        return ()
+    return tuple(sorted(
+        cid for cid, per in verdicts.items()
+        if sum(1 for v in per.values() if v is False) * 2 > len(designs)))

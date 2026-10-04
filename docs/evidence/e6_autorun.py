@@ -220,6 +220,9 @@ def main() -> int:
             #: `--keep-refuted` restores the pool the cover was cut from before
             #: population-refuted bodies were left out.
             exclude_refuted="--keep-refuted" not in FLAGS,
+            #: `--unanimous` restores "refuted" = every design convicts it;
+            #: the default is a strict majority (`build_artifacts`).
+            refute_majority="--unanimous" not in FLAGS,
             stop_before_oracles="--stop-before-oracles" in FLAGS,
             population_size=int(_opt("--population", 7)),
             #: **`--cell-budget N` AUTHORS AT N BLIND CELLS** -- one check per

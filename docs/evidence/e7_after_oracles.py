@@ -1,10 +1,12 @@
 """The triple of a run's shipped set as soon as its ORACLE STAGE has finished.
 
-    e7_after_oracles.py <runs-root> <module> [--keep-refuted]
+    e7_after_oracles.py <runs-root> <module> [--keep-refuted | --unanimous]
 
 `--keep-refuted` cuts the cover from the whole pool, population-refuted bodies
 included -- the pipeline's choice before `exclude_refuted`; its corpus and
 golden go to `after_oracles_keep/` and `gold_after_oracles_keep/`.
+`--unanimous` excludes only bodies EVERY design convicts -- the rule before
+the majority default -- into `after_oracles_unan/`.
 
 `build_artifacts` ships the cover (`shipped.json`) and scores it only after the
 reference-model stage, the longest one in the pipeline, and the figures do not
@@ -71,7 +73,8 @@ def main() -> int:
         return 2
     runs, module = Path(args[0]).resolve(), args[1]
     keep = "--keep-refuted" in sys.argv
-    suffix = "_keep" if keep else ""
+    unanimous = "--unanimous" in sys.argv
+    suffix = "_keep" if keep else ("_unan" if unanimous else "")
     sf = runs / module / "specflow"
     if not (sf / "oracles.json").is_file():
         print(f"{module}: no oracles.json yet")
@@ -111,7 +114,7 @@ def main() -> int:
     (corpus / "specflow").mkdir(exist_ok=True)
     #: As `build_artifacts` ships: no population-refuted body, unless asked.
     shipped = _ship_cover(corpus, pool, population, contract, by_tp,
-                          exclude_refuted=not keep)
+                          exclude_refuted=not keep, majority=not unanimous)
     written = corpus / "specflow" / "shipped.json"
     if written.is_file():
         shutil.move(str(written), corpus / "shipped.json")

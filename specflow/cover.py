@@ -124,7 +124,8 @@ def greedy_cover(order: Sequence[str], sep_of: Mapping[str, frozenset],
 def select(held: Mapping, req_of: Mapping[str, str], population: Sequence[str],
            contract: dict, stimulus_by_tp: dict, *, base: str,
            transactional: bool = True,
-           exclude_refuted: bool = False) -> Cover | None:
+           exclude_refuted: bool = False,
+           majority: bool = False) -> Cover | None:
     """The cover of `held` (body key -> `RequirementOracle`) over `population`.
 
     `None` when there is no population to cover against -- fewer than two
@@ -143,6 +144,10 @@ def select(held: Mapping, req_of: Mapping[str, str], population: Sequence[str],
     from 20 of 49 to 7 of 38 (i2c_master_bit_ctrl: 38 of 84 to 22 of 68). What
     it costs is span and, where a refuted body separated designs on some
     testpoint, cells -- which is why it is a switch the run records.
+
+    `majority` widens the exclusion from "every design" to "a strict majority
+    of designs" (`variety.convicted_by_a_majority`) -- a trade of span and
+    cells for audit, not the free move unanimity is.
     """
     from .oracles_stage import _population_rows, _population_tables
 
@@ -159,8 +164,8 @@ def select(held: Mapping, req_of: Mapping[str, str], population: Sequence[str],
     verdicts, by_tp, _obj = _population_tables(
         dict(held), list(population), contract, stimulus_by_tp, base=base,
         transactional=transactional)
-    refuted = (tuple(sorted(V.refuted_by_the_population(verdicts)))
-               if exclude_refuted else ())
+    rule = V.convicted_by_a_majority if majority else V.refuted_by_the_population
+    refuted = tuple(sorted(rule(verdicts))) if exclude_refuted else ()
     order = [k for k in held if k not in set(refuted)]
     sep_of = {k: v for k, v in separation(cells, by_tp).items() if k in set(order)}
     convictions = {k: sum(1 for x in (verdicts.get(k) or {}).values()

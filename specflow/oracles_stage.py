@@ -1261,7 +1261,8 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                   stimulus_by_tp: dict, testplan: list[dict],
                   by_uid: dict, normalized: dict | None, budget: int,
                   base: str, transactional: bool,
-                  ignore_refuted: bool = False) -> tuple[list[dict], tuple]:
+                  ignore_refuted: bool = False,
+                  majority: bool = False) -> tuple[list[dict], tuple]:
     """The blind cells worth authoring at, heaviest port first.
 
     `ignore_refuted`: a cell separated only by a body the whole population
@@ -1309,7 +1310,11 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
         held, population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
     if ignore_refuted:
-        gone = set(variety.refuted_by_the_population(_population_verdicts(
+        #: The SAME rule the cover ships by (`cover.select`): a cell only a
+        #: body the run will not ship separates is blind to the shipped set.
+        rule = (variety.convicted_by_a_majority if majority
+                else variety.refuted_by_the_population)
+        gone = set(rule(_population_verdicts(
             held, population, contract, stimulus_by_tp, base=base,
             transactional=transactional)))
         verdicts = {k: v for k, v in verdicts.items() if k not in gone}
@@ -1687,7 +1692,8 @@ def _choose_bodies(*, corpus: dict, held: dict, population: Sequence[str],
 
 def _adopt_cell_bodies(bodies: list, *, held: dict, population: Sequence[str],
                        contract: dict, stimulus_by_tp: dict, cells,
-                       base: str, transactional: bool) -> list[str]:
+                       base: str, transactional: bool,
+                       majority: bool = False) -> list[str]:
     """Take a cell check when it SEPARATES MORE than the body it would replace.
 
     **THE OLD RULE TOOK ONE ONLY WHEN THE STANDING BODY DECIDED NOTHING**, and
@@ -1735,7 +1741,8 @@ def _adopt_cell_bodies(bodies: list, *, held: dict, population: Sequence[str],
     want, want_tp, _o2 = _population_tables(
         cand, population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
-    refuted = set(variety.refuted_by_the_population(want))
+    refuted = set((variety.convicted_by_a_majority if majority
+                   else variety.refuted_by_the_population)(want))
 
     taken: list[str] = []
     for body in bodies:
@@ -2413,6 +2420,11 @@ def run_oracle_stage(
     #: for one says so -- the consequence is real, and an author told only
     #: "declining is a real answer" is told something false.
     refuted_excluded: bool = False,
+    #: Which bodies count as refuted where the run excludes them: a strict
+    #: majority of the population (`variety.convicted_by_a_majority`) rather
+    #: than all of it. The cell leg must read blindness by the rule the cover
+    #: ships by, or it authors at cells it believes closed.
+    refuted_majority: bool = False,
     transactional: bool = True,
     fanout: bool = True,
     #: THE FEEDBACK EDGE. A check a debug loop spent its whole budget on and
@@ -2644,7 +2656,8 @@ def run_oracle_stage(
             population=population, held=held, contract=contract,
             stimulus_by_tp=stimulus_by_tp, testplan=testplan, by_uid=by_uid,
             normalized=normalized, budget=cell_budget, base=base,
-            transactional=transactional, ignore_refuted=refuted_excluded)
+            transactional=transactional, ignore_refuted=refuted_excluded,
+            majority=refuted_majority)
         cell_report["targets"] = len(targets)
         logger.info("oracles: %d blind cell(s) to author at", len(targets))
         cell_bodies = list(run_cell_gen(
@@ -2656,7 +2669,8 @@ def run_oracle_stage(
         cell_authored = _adopt_cell_bodies(
             cell_bodies, held=held, population=population, contract=contract,
             stimulus_by_tp=stimulus_by_tp, cells=all_cells, base=base,
-            transactional=transactional)
+            transactional=transactional,
+            majority=bool(refuted_excluded and refuted_majority))
         cell_report["authored"] = len(cell_bodies)
         cell_report["adopted"] = len(cell_authored)
         logger.info("oracles: %d cell check(s) adopted of %d authored",
