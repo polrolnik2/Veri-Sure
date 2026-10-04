@@ -2906,10 +2906,45 @@ def test_one_cell_target_per_requirement(monkeypatch):
     got, _cells = O._cell_targets(
         population=("a", "b"), held={}, contract=contract,
         stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
-        by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"}}, normalized=None,
+        by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"}},
+        normalized={"REQ-1": {"observable": ["p", "q"]}},
         budget=8, base="", transactional=True)
     assert len(got) == 1, [t["cell"] for t in got]
     assert got[0]["requirement"]["uid"] == "REQ-1"
+
+
+def test_a_cell_is_anchored_on_a_requirement_that_OBSERVES_its_port(monkeypatch):
+    """The first covering requirement used to be taken whatever it spoke
+    about. On i2c_master_bit_ctrl 44 of 60 anchors did not observe the cell's
+    port, the author rightly wrote no check for them, and 51 of 60 cell bodies
+    decided nothing anywhere.
+
+    Order: a covering requirement observing the port; else any requirement
+    observing it; never one that does not.
+    """
+    from specflow import oracles_stage as O
+
+    rows = _cellrows({"TP-1": ["p"], "TP-2": ["q"], "TP-3": ["r"]})
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    monkeypatch.setattr(O, "_population_verdicts_by_tp", lambda *a, **k: {})
+    contract = {"io": [{"name": n, "dir": "output"} for n in ("p", "q", "r")]}
+    #: TP-1 is covered by a scaffolding unit FIRST, then by one observing p.
+    #: TP-2 is covered only by a unit observing something else; REQ-Q, which
+    #: covers no testpoint here, is the one that observes q. Nothing observes r.
+    testplan = [{"uid": "TP-1", "covers": ["REQ-S@1", "REQ-P@1"]},
+                {"uid": "TP-2", "covers": ["REQ-X@1"]},
+                {"uid": "TP-3", "covers": ["REQ-S@1"]}]
+    by_uid = {u: {"uid": u, "text": "t"}
+              for u in ("REQ-S", "REQ-P", "REQ-X", "REQ-Q")}
+    normalized = {"REQ-S": {"observable": []}, "REQ-P": {"observable": ["p"]},
+                  "REQ-X": {"observable": ["p"]}, "REQ-Q": {"observable": ["q"]}}
+    got, _cells = O._cell_targets(
+        population=("a", "b"), held={}, contract=contract,
+        stimulus_by_tp={t: [{}] for t in ("TP-1", "TP-2", "TP-3")},
+        testplan=testplan, by_uid=by_uid, normalized=normalized,
+        budget=8, base="", transactional=True)
+    anchor = {t["cell"].port: t["requirement"]["uid"] for t in got}
+    assert anchor == {"p": "REQ-P", "q": "REQ-Q"}, anchor
 
 
 def test_the_cell_budget_spreads_across_ports(monkeypatch):
@@ -2929,10 +2964,12 @@ def test_the_cell_budget_spreads_across_ports(monkeypatch):
                        {"name": "q", "dir": "output"}]}
     testplan = [{"uid": f"TP-{i}", "covers": [f"REQ-{i}@1"]} for i in range(1, 5)]
     by_uid = {f"REQ-{i}": {"uid": f"REQ-{i}", "text": "t"} for i in range(1, 5)}
+    normalized = {f"REQ-{i}": {"observable": ["p"] if i < 4 else ["q"]}
+                  for i in range(1, 5)}
     got, _cells = O._cell_targets(
         population=("a", "b"), held={}, contract=contract,
         stimulus_by_tp={f"TP-{i}": [{}] for i in range(1, 5)},
-        testplan=testplan, by_uid=by_uid, normalized=None,
+        testplan=testplan, by_uid=by_uid, normalized=normalized,
         budget=2, base="", transactional=True)
     ports = [t["cell"].port for t in got]
     assert len(got) == 2
@@ -2972,7 +3009,9 @@ def test_a_cell_is_blind_until_a_check_separates_it_AT_THAT_TESTPOINT(monkeypatc
         stimulus_by_tp={"TP-1": [{}], "TP-2": [{}]}, testplan=testplan,
         by_uid={"REQ-1": {"uid": "REQ-1", "text": "t"},
                 "REQ-2": {"uid": "REQ-2", "text": "t"}},
-        normalized=None, budget=8, base="", transactional=True)
+        normalized={"REQ-1": {"observable": ["p"]},
+                    "REQ-2": {"observable": ["p"]}},
+        budget=8, base="", transactional=True)
     at = [t["cell"].testpoint for t in got]
     #: TP-2 IS STILL BLIND. Collapsing to the pair returns no target at all.
     assert at == ["TP-2"], at

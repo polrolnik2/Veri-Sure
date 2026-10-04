@@ -1326,6 +1326,31 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
         for c in (tp.get("covers") or []):
             covers.setdefault(uid, []).append(str(c).split("@")[0])
 
+    #: **AN ANCHOR MUST OBSERVE THE CELL'S PORT.** The first covering
+    #: requirement used to be taken whatever it spoke about, and the author is
+    #: told -- rightly -- that a requirement which does not constrain the port
+    #: gets no check. Measured on i2c_master_bit_ctrl (luna7, budget 60):
+    #: **44 of 60 anchors did not observe the cell's port** (35 observed other
+    #: ports, 9 stated no observable at all, 7 were scaffolding), 51 of the 60
+    #: bodies decided nothing for any of the seven designs, and none was
+    #: adopted -- blindness stayed at the pool's 43.9%.
+    #:
+    #: `normalize`'s `observable` is the route: the declared output ports the
+    #: requirement is decidable at. A covering requirement observing the port
+    #: is preferred, because it is the one the scenario was staged for; failing
+    #: that, any requirement observing the port, ranked by how many of this
+    #: port's blind cells sit on testpoints it covers. The replay scope is
+    #: every testpoint (`_population_scope`), so a check anchored off its own
+    #: testpoints still separates wherever its scenario occurs. A requirement
+    #: observing nothing is never an anchor.
+    observes: dict[str, frozenset] = {
+        str(uid): frozenset(str(p) for p in ((form or {}).get("observable") or []))
+        for uid, form in (normalized or {}).items()}
+    covering: dict[str, set[str]] = {}
+    for tp_uid, uids in covers.items():
+        for uid in uids:
+            covering.setdefault(uid, set()).add(tp_uid)
+
     #: **ONE TARGET PER REQUIREMENT, AND THAT IS FORCED BY THE DATA MODEL.**
     #: A `RequirementOracle` is keyed by `req_uid`, so two checks authored for
     #: one requirement cannot both be held -- the second overwrites the first.
@@ -1347,6 +1372,16 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
         by_port[port].sort(key=lambda c: (c.testpoint, c.left, c.right))
     order = sorted(by_port, key=lambda p: (-weight.get(p, 0), p))
 
+    def _anchors(cell) -> list[str]:
+        own = [u for u in covers.get(cell.testpoint, [])
+               if cell.port in observes.get(u, ())]
+        mass = Counter(c.testpoint for c in by_port[cell.port])
+        rest = sorted(
+            (u for u, ports in observes.items()
+             if cell.port in ports and u not in own),
+            key=lambda u: (-sum(mass[t] for t in covering.get(u, ())), u))
+        return own + rest
+
     claimed: set[str] = set()
     targets: list[dict] = []
     depth = 0
@@ -1357,7 +1392,7 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
             if len(by_port[port]) <= depth:
                 continue
             cell = by_port[port][depth]
-            for uid in covers.get(cell.testpoint, []):
+            for uid in _anchors(cell):
                 if uid in claimed:
                     continue
                 req = by_uid.get(uid)

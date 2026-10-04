@@ -335,7 +335,8 @@ def test_a_cell_only_a_REFUTED_body_separates_is_a_target_when_refuted_bodies_do
     plan = [{"uid": "TP-0", "covers": ["R2@1"]}, {"uid": "TP-1", "covers": ["R2@1"]}]
     by_uid = {"R2": {"uid": "R2", "text": "busy rises after go"}}
     kw = dict(population=population, held=held, contract=CONTRACT,
-              stimulus_by_tp=stim, testplan=plan, by_uid=by_uid, normalized={},
+              stimulus_by_tp=stim, testplan=plan, by_uid=by_uid,
+              normalized={"R2": {"observable": ["busy"]}},
               budget=4, base="step", transactional=True)
     seen, _ = oracles_stage._cell_targets(**kw)
     told, _ = oracles_stage._cell_targets(**kw, ignore_refuted=True)
