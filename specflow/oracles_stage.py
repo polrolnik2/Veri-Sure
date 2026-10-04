@@ -1309,6 +1309,13 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     verdicts = _population_verdicts_by_tp(
         held, population, contract, stimulus_by_tp, base=base,
         transactional=transactional)
+    #: `uid -> the testpoints its held check DECIDES on` for some design: the
+    #: requirement's own check says its scenario occurs there. Read before the
+    #: refuted filter -- a refuted check still knows where it applies.
+    decides_at: dict[str, set[str]] = {
+        str(k): {tp for tp, col in (table or {}).items()
+                 if any(v is not None for v in (col or {}).values())}
+        for k, table in verdicts.items()}
     if ignore_refuted:
         #: The SAME rule the cover ships by (`cover.select`): a cell only a
         #: body the run will not ship separates is blind to the shipped set.
@@ -1370,22 +1377,43 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
     #: opposite of a variety lever. Ports are visited round-robin in weight
     #: order, so the first pass takes the heaviest cell of each port before any
     #: port gets a second.
+    #: **AND WITHIN A PORT THE BUDGET IS SPREAD ACROSS TESTPOINTS**, heaviest
+    #: first. Sorting a port's cells by testpoint NAME put every one of
+    #: luna11's 60 targets on TP-0000 -- each port's first cells, one per
+    #: requirement -- so the whole leg described one scenario. A port's cells
+    #: are now dealt one per testpoint per pass, testpoints in order of how
+    #: many of this port's blind cells they carry.
     by_port: dict[str, list] = {}
     for cell in blind:
         by_port.setdefault(cell.port, []).append(cell)
-    for port in by_port:
-        by_port[port].sort(key=lambda c: (c.testpoint, c.left, c.right))
+    for port, cs in by_port.items():
+        mass_tp = Counter(c.testpoint for c in cs)
+        rank: dict[str, int] = {}
+        dealt = []
+        for c in sorted(cs, key=lambda c: (-mass_tp[c.testpoint], c.testpoint,
+                                           c.left, c.right)):
+            n = rank.get(c.testpoint, 0)
+            rank[c.testpoint] = n + 1
+            dealt.append((n, -mass_tp[c.testpoint], c.testpoint, c.left,
+                          c.right, c))
+        by_port[port] = [x[-1] for x in sorted(dealt, key=lambda x: x[:5])]
     order = sorted(by_port, key=lambda p: (-weight.get(p, 0), p))
 
     def _anchors(cell) -> list[str]:
+        """Covering and observing; else observing and its own check decides
+        at this testpoint, so the requirement demonstrably applies here; else
+        any observer, by this port's blind mass on testpoints it covers."""
         own = [u for u in covers.get(cell.testpoint, [])
                if cell.port in observes.get(u, ())]
+        active = sorted(u for u, ports in observes.items()
+                        if cell.port in ports and u not in own
+                        and cell.testpoint in decides_at.get(u, ()))
         mass = Counter(c.testpoint for c in by_port[cell.port])
         rest = sorted(
             (u for u, ports in observes.items()
-             if cell.port in ports and u not in own),
+             if cell.port in ports and u not in own and u not in active),
             key=lambda u: (-sum(mass[t] for t in covering.get(u, ())), u))
-        return own + rest
+        return own + active + rest
 
     claimed: set[str] = set()
     targets: list[dict] = []
@@ -1414,7 +1442,9 @@ def _cell_targets(*, population: Sequence[str], held: dict, contract: dict,
                         requirement=str(req.get("text") or ""),
                         activation=str(act.get("text") or "")
                         or "whenever the requirement's condition holds",
-                        driven=dict(act.get("inputs") or {})),
+                        driven=dict(act.get("inputs") or {}),
+                        scenario=list(
+                            (stimulus_by_tp or {}).get(cell.testpoint) or [])),
                 })
                 claimed.add(uid)
                 break

@@ -183,7 +183,9 @@ def test_no_parameter_could_carry_a_design_or_its_values():
     """The enforcement is structural, as it is in `variants.build_prompt`: an
     instruction not to look is not a guarantee, a missing parameter is."""
     params = set(inspect.signature(V.brief).parameters)
-    assert params == {"cell", "requirement", "activation", "driven"}
+    #: `scenario` is the testpoint's STIMULUS -- what every design is driven
+    #: with, the definition of the location -- never what one did with it.
+    assert params == {"cell", "requirement", "activation", "driven", "scenario"}
     for leaky in ("design", "designs", "source", "rows", "trace", "values",
                   "observed", "population", "witness", "reference"):
         assert leaky not in params, leaky

@@ -2947,6 +2947,85 @@ def test_a_cell_is_anchored_on_a_requirement_that_OBSERVES_its_port(monkeypatch)
     assert anchor == {"p": "REQ-P", "q": "REQ-Q"}, anchor
 
 
+def test_an_anchor_whose_own_check_DECIDES_there_beats_one_that_merely_observes(monkeypatch):
+    """luna11: every fallback anchor observed the port but belonged to another
+    scenario (a READ requirement for a WRITE testpoint), so the checks written
+    for it abstained there. A requirement whose held check decides at the
+    testpoint demonstrably applies there."""
+    from specflow import oracles_stage as O
+
+    rows = _cellrows({"TP-1": ["p"], "TP-8": ["p"], "TP-9": ["p"]})
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    #: REQ-A's check runs at TP-1 and passes both designs: applies, separates
+    #: nothing. REQ-B covers two other blind testpoints, so mass ranks it first.
+    monkeypatch.setattr(O, "_population_verdicts_by_tp", lambda *a, **k: {
+        "REQ-A": {"TP-1": {"alpha": True, "bravo": True}}})
+    testplan = [{"uid": "TP-1", "covers": ["REQ-S@1"]},
+                {"uid": "TP-8", "covers": ["REQ-B@1"]},
+                {"uid": "TP-9", "covers": ["REQ-B@1"]}]
+    by_uid = {u: {"uid": u, "text": "t"} for u in ("REQ-S", "REQ-A", "REQ-B")}
+    normalized = {"REQ-S": {"observable": []}, "REQ-A": {"observable": ["p"]},
+                  "REQ-B": {"observable": ["p"]}}
+    got, _cells = O._cell_targets(
+        population=("a", "b"), held={"REQ-A": object()},
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={t: [{}] for t in ("TP-1", "TP-8", "TP-9")},
+        testplan=testplan, by_uid=by_uid, normalized=normalized,
+        budget=8, base="", transactional=True)
+    at = {t["cell"].testpoint: t["requirement"]["uid"] for t in got}
+    assert at.get("TP-1") == "REQ-A", at
+
+
+def test_a_ports_budget_is_dealt_across_testpoints_heaviest_first(monkeypatch):
+    """Sorting a port's cells by testpoint NAME put all 60 of luna11's targets
+    on TP-0000. Three designs give three cells per testpoint; TP-5 carries
+    three blind cells of `p`, TP-0 one."""
+    from specflow import oracles_stage as O
+
+    rows = {"x": {"TP-0": [{"inputs": {}, "outputs": {"p": 0}}],
+                  "TP-5": [{"inputs": {}, "outputs": {"p": 0}}]},
+            "y": {"TP-0": [{"inputs": {}, "outputs": {"p": 0}}],
+                  "TP-5": [{"inputs": {}, "outputs": {"p": 1}}]},
+            "z": {"TP-0": [{"inputs": {}, "outputs": {"p": 1}}],
+                  "TP-5": [{"inputs": {}, "outputs": {"p": 2}}]}}
+    monkeypatch.setattr(O, "_population_rows", lambda *a, **k: rows)
+    monkeypatch.setattr(O, "_population_verdicts_by_tp", lambda *a, **k: {})
+    uids = [f"REQ-{i}" for i in range(4)]
+    testplan = [{"uid": "TP-0", "covers": [f"{u}@1" for u in uids]},
+                {"uid": "TP-5", "covers": [f"{u}@1" for u in uids]}]
+    got, _cells = O._cell_targets(
+        population=("x", "y", "z"), held={},
+        contract={"io": [{"name": "p", "dir": "output"}]},
+        stimulus_by_tp={"TP-0": [{}], "TP-5": [{}]}, testplan=testplan,
+        by_uid={u: {"uid": u, "text": "t"} for u in uids},
+        normalized={u: {"observable": ["p"]} for u in uids},
+        budget=2, base="", transactional=True)
+    assert [t["cell"].testpoint for t in got] == ["TP-5", "TP-0"]
+
+
+def test_the_cell_brief_shows_what_the_testpoint_DRIVES():
+    from specflow import variety as V
+
+    cell = V.Cell(testpoint="TP-0000", port="sda_oen", left="l", right="r")
+    text = V.brief(cell, requirement="r", activation="a", driven={},
+                   scenario=[{"reset": True},
+                             {"inputs": {"cmd": 4, "din": 0},
+                              "until": {"port": "sda_oen", "value": 0},
+                              "timeout": 100}])
+    assert "WHAT TESTPOINT TP-0000 DRIVES" in text
+    assert "1. reset" in text
+    assert "2. cmd=4, din=0 -- held until sda_oen=0 (at most 100 cycles)" in text
+
+
+def test_the_cell_leg_hands_the_testpoint_stimulus_to_the_brief():
+    import inspect
+
+    from specflow import oracles_stage as O
+
+    src = inspect.getsource(O._cell_targets)
+    assert "scenario=list(\n                            (stimulus_by_tp or {}).get(cell.testpoint) or [])" in src
+
+
 def test_the_cell_budget_spreads_across_ports(monkeypatch):
     """`ranked` collapses cells to `(port, count)`, so ranking by that weight
     alone poured a whole budget into one port -- `sda_oen`, twelve of twelve --

@@ -1322,11 +1322,12 @@ class CellBrief:
 
     @classmethod
     def at(cls, cell, *, requirement: str, activation: str,
-           driven: dict) -> "CellBrief":
+           driven: dict, scenario=()) -> "CellBrief":
         """The only constructor. Renders through `variety.brief`."""
         from ..variety import brief
         return cls(brief(cell, requirement=requirement,
-                         activation=activation, driven=driven))
+                         activation=activation, driven=driven,
+                         scenario=scenario))
 
 
 def _first_activity(rows: list[dict]) -> int:

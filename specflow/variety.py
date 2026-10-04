@@ -308,8 +308,34 @@ def ranked(blind_cells: Sequence[Cell],
     return tuple(sorted(tally.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
+def _steps_text(steps: Sequence[Mapping[str, object]], limit: int = 10) -> str:
+    """A testpoint's stimulus, one line per step: what is DRIVEN, never what
+    any design did in response."""
+    lines = []
+    for i, st in enumerate(list(steps or ())[:limit], 1):
+        if st.get("reset"):
+            lines.append(f"{i}. reset")
+            continue
+        ins = st.get("inputs") if isinstance(st.get("inputs"), Mapping) else {
+            k: v for k, v in st.items()
+            if k not in ("until", "timeout", "hold", "reset", "note")}
+        text = ", ".join(f"{k}={v}" for k, v in sorted((ins or {}).items()))
+        until = st.get("until")
+        if isinstance(until, Mapping) and until.get("port"):
+            text += (f" -- held until {until.get('port')}={until.get('value')}"
+                     f" (at most {st.get('timeout', '?')} cycles)")
+        elif st.get("hold"):
+            text += f" -- for {st.get('hold')} cycle(s)"
+        lines.append(f"{i}. {text or '(no change)'}")
+    more = len(list(steps or ())) - limit
+    if more > 0:
+        lines.append(f"... and {more} further step(s)")
+    return "\n".join(lines)
+
+
 def brief(cell: Cell, *, requirement: str, activation: str,
-          driven: Mapping[str, object]) -> str:
+          driven: Mapping[str, object],
+          scenario: Sequence[Mapping[str, object]] = ()) -> str:
     """What the author is told. A LOCATION AND A REQUIREMENT. Nothing else.
 
     **THE PARAMETERS ARE THE ENFORCEMENT.** There is no argument here through
@@ -321,12 +347,22 @@ def brief(cell: Cell, *, requirement: str, activation: str,
     The author is told that the requirement applies here and that nothing in the
     suite currently decides this port in this scenario. What the port should do
     is for the specification to say.
+
+    `scenario` is the testpoint's STIMULUS -- the inputs every design was
+    driven with, which is the definition of the location, not a behaviour. The
+    brief used to name the testpoint and nothing else, so an author asked to
+    decide `sda_oen` "at TP-0000" could not know TP-0000 was a WRITE: on
+    i2c_master_bit_ctrl (luna11) every one of 60 cell checks was written for
+    the anchor's own scenario, 26 decided nothing anywhere and 48 passed all
+    seven designs.
     """
     driven_text = ", ".join(f"{k}={v}" for k, v in sorted(driven.items()))
+    steps = _steps_text(scenario)
     return (
         f"REQUIREMENT\n{requirement.strip()}\n\n"
         f"WHEN IT APPLIES\n{activation.strip()}\n\n"
-        f"THE GAP\nIn the scenario driven by {driven_text or '(no inputs)'}, "
+        + (f"WHAT TESTPOINT {cell.testpoint} DRIVES\n{steps}\n\n" if steps else "")
+        + f"THE GAP\nIn the scenario driven by {driven_text or '(no inputs)'}, "
         f"nothing in the current suite decides the output port `{cell.port}` at "
         f"testpoint {cell.testpoint}. Readings of this specification that are "
         f"each defensible come apart there, which means the specification's "
