@@ -51,4 +51,7 @@ UNBOUND = {
     "outstanding_store": f"reg outstanding_store (or1200_sb.v:67, updated :107-113) {_GATE}.",
     # Would-be binding if enabled: reg fifo_wr_ack (:68), always block :118-124.
     "fifo_wr_ack": f"reg fifo_wr_ack (or1200_sb.v:68, updated :118-124) {_GATE}.",
+    # Minted by luna12's [P] (a popped-entry indication inside the FIFO instance): the
+    # or1200_sb_fifo instance itself (:93-104) is behind the same `ifdef.
+    "or1200_sb_fifo": f"the or1200_sb_fifo instance (or1200_sb.v:93-104) {_GATE}.",
 }

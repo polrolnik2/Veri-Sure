@@ -75,7 +75,20 @@ PROBES = {
     "core_cmd_write": _eq("core_cmd", I2C_CMD_WRITE),  # 4'b0100
     "core_cmd_stop": _eq("core_cmd", I2C_CMD_STOP),    # 4'b0010
     "core_cmd_nop": _eq("core_cmd", I2C_CMD_NOP),      # 4'b0000
+    # -- minted by luna12's [P] --------------------------------------------------------
+    # Bit counter nonzero: |dcnt (reg dcnt :138); the complement of cnt_done (:194).
+    "dcnt_nonzero": lambda s: None if s.get("dcnt") is None else int(s["dcnt"] != 0),
+    # A bit-level command other than NOP is selected: core_cmd != `I2C_CMD_NOP (:128).
+    "core_cmd": lambda s: None if s.get("core_cmd") is None else int(s["core_cmd"] != I2C_CMD_NOP),
+    # Structural "is instantiated" probes: the reference instantiates
+    # i2c_master_bit_ctrl as bit_controller unconditionally (:145-:158), so both are 1.
+    "bit_controller": lambda s: 1,
+    "i2c_master_bit_ctrl": lambda s: 1,
 }
 
 #: probe name -> one-sentence reason it has NO counterpart in the reference.
-UNBOUND = {}
+UNBOUND = {
+    # Minted by luna12's [P] from "contentReference[oaicite:N]" citation tokens left in
+    # the specification text: not a design quantity at all.
+    "contentreference": "names citation metadata in the specification text, not a signal of any design.",
+}
