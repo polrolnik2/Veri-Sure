@@ -348,3 +348,30 @@ def test_a_finish_reason_error_is_a_transport_failure_and_is_resent(tmp_path, mo
     _r, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
     assert text == "ok" and chat.calls == 2
     assert _transport_failure(NoChoicesError("finish_reason='error'"))
+
+
+def test_a_provider_outage_is_waited_out_like_a_rate_limit(tmp_path, monkeypatch):
+    """luna12 byte_ctrl: "Flex processing is temporarily unavailable" outlasted
+    the three-try budget, the stage aborted, and the autorun re-entered the
+    whole oracle stage. A fast-failing outage is waited out."""
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    chat = _NullChoices(6, {"message": "Flex processing is temporarily unavailable. "
+                                       "Please try again later.", "code": 503})
+    port = _port(tmp_path, 2)
+    monkeypatch.setattr(port, "_client", lambda: _chat_client(chat))
+    _response, text = port._chat_call(_chat_cfg(stream=False), {}, "prompt")
+    assert text == "ok" and chat.calls == 7
+
+
+def test_what_counts_as_a_provider_outage():
+    from specflow.model_io import NoChoicesError, _provider_unavailable
+
+    class _Cut(Exception):
+        pass
+
+    assert _provider_unavailable(NoChoicesError("finish_reason='error'"))
+    assert _provider_unavailable(type("E", (Exception,), {"status_code": 503})())
+    #: A connection cut may have dropped a long generation; resending it is
+    #: not free, so it keeps the ordinary budget.
+    assert not _provider_unavailable(_Cut("connection reset"))
+    assert not _provider_unavailable(type("E", (Exception,), {"status_code": 500})())

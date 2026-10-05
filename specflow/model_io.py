@@ -859,6 +859,28 @@ def _rate_limited(exc: BaseException) -> bool:
     return False
 
 
+def _provider_unavailable(exc: BaseException) -> bool:
+    """A provider-side outage that fails FAST: an in-band reply with no
+    choices or `finish_reason: "error"`, or an HTTP 502/503/504.
+
+    Waited out like a rate limit rather than counted against the three-try
+    budget, because nothing was generated -- a resend costs a request, not a
+    generation. Measured on luna12's i2c_master_byte_ctrl: "Flex processing is
+    temporarily unavailable" and a bare `finish_reason='error'` each outlasted
+    the ordinary 4-8s backoff, the stage aborted, and the autorun re-entered
+    the whole oracle stage -- hours of local replay for a minute-long outage.
+    A connection CUT is not here: one that drops a long generation would pay
+    for that generation again on every resend.
+    """
+    if isinstance(exc, NoChoicesError):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status in (502, 503, 504):
+        return True
+    body = getattr(exc, "body", None)
+    return isinstance(body, dict) and body.get("code") in (502, 503, 504)
+
+
 def _no_choices(response) -> None:
     """Raise `NoChoicesError` when a completion came back with no choices --
     or with a choice whose `finish_reason` is `"error"`.
@@ -1408,7 +1430,8 @@ class ApiPort:
                 if not _retryable(exc):
                     raise
                 last = exc
-                #: **A RATE LIMIT IS WAITED OUT, NOT COUNTED AS A FAILURE.** It
+                #: **A RATE LIMIT IS WAITED OUT, NOT COUNTED AS A FAILURE** --
+                #: and so is a provider outage (`_provider_unavailable`). It
                 #: says nothing about the request, only about when to send it,
                 #: and the ordinary budget (three tries, 4-8s apart) is gone
                 #: before any upstream window reopens. Measured: five runs at
@@ -1416,7 +1439,8 @@ class ApiPort:
                 #: ("temporarily rate-limited upstream") and one build died on
                 #: it 17 minutes in. Its own budget, backing off to two minutes
                 #: with jitter so parallel workers do not return in lockstep.
-                if _rate_limited(exc) and limited < RATE_LIMIT_RETRIES:
+                if ((_rate_limited(exc) or _provider_unavailable(exc))
+                        and limited < RATE_LIMIT_RETRIES):
                     limited += 1
                     time.sleep(min(120.0, 5.0 * 2 ** (limited - 1))
                                + random.uniform(0.0, 3.0))
