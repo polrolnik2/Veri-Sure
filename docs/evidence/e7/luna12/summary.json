@@ -27,16 +27,16 @@
  },
  {
   "module": "i2c_master_byte_ctrl",
-  "span": "--",
-  "blindness": "--",
-  "audit_raw": "--",
-  "audit_bound": "--",
-  "accepts": "--",
-  "pool": null,
-  "shipped": null,
-  "refuted_excluded": 0,
-  "rule": null,
-  "took": "10:27:00"
+  "span": "83/110 behavioural = 75.5%",
+  "blindness": "7603/57110 cells = 13.3%",
+  "audit_raw": "0/7 judgeable = 0.0%",
+  "audit_bound": "17/52 judgeable = 32.7%",
+  "accepts": "0 of 7 design(s)",
+  "pool": 304,
+  "shipped": 88,
+  "refuted_excluded": 122,
+  "rule": "majority",
+  "took": "8:41:11"
  },
  {
   "module": "or1200_dc_fsm",

@@ -1,5 +1,7 @@
 # luna12 — five modules end to end, rep 1
 
+Total model spend for the rep: $7.82 (OpenRouter, GPT-6-Luna Flex).
+
 Pipeline from S1 through the reference model on dbc3676 (contracts: luna7's
 authored `input_contract.json`; GPT-6-Luna Flex, effort xhigh; population 7;
 `--admit-pool --cover --cell-budget 60`; shipping rule: no body a **majority**
@@ -14,7 +16,7 @@ audit-only bindings in `../golden_bind/`.
 | i2c_master_bit_ctrl | 82.1% (96/117) | 65.0% (36,329/55,857) | 27.3% (9/33) | 31.0% (27/87) | 346 → 104 (130) | 4:31 |
 | or1200_dc_fsm | 87.7% (71/81) | 94.0% (438/466) | 12.5% (1/8) | **3.4%** (2/59) | 232 → 80 (61) | 4:32 |
 | or1200_sb | **94.3%** (50/53) | 99.4% (8,654/8,708) | **0/3** | **0/3** | 212 → 68 (50) | 6:30 |
-| i2c_master_byte_ctrl | pending | | | | | |
+| i2c_master_byte_ctrl | 75.5% (83/110) | 13.3% (7,603/57,110) | 0/7 | 32.7% (17/52) | 304 → 88 (122) | 8:41 (last attempt) |
 
 `corpora/` holds each run's packed corpus (`e6_pack_corpus.py`: contract,
 requirements, normalized forms, testplan, stimulus, coverage, probes, the
@@ -43,10 +45,16 @@ scoring JSON and logs; `summary.json` is the table above.
   everywhere; few disagreements exist and almost none is separated.
 - **bit_ctrl's blindness** is the pool's: after the majority rule removed 130
   of 346 bodies, the remainder separates 19,528 of 55,857 cells.
-- **byte_ctrl** lost its oracle stage twice: after a session restart long
-  requests were cut by the network path (six transport failures, the build
-  gave up at 10:27 on resumable state), and a container reboot killed the
-  resumed run. It is resuming from the cache.
+- **byte_ctrl** needed five attempts at its oracle stage: after a session
+  restart the network path cut long requests (six transport failures, the
+  build gave up on resumable state); two provider outages ("Flex processing
+  is temporarily unavailable", a bare `finish_reason='error'`) each aborted
+  the stage and the autorun re-entered it; and three container reboots
+  killed the process. Every attempt resumed from the cache, so no call was
+  paid twice; e465fd8 now waits out a fast-failing outage per call instead
+  of re-entering the stage. Its span is the lowest of the five: the majority
+  rule removed 122 of 304 bodies, and 27 behavioural requirements were left
+  with none.
 - The probe stage minted probes no design can implement for byte_ctrl
   (`contentreference`, from citation tokens left in the spec text, and two
   "is instantiated" structural probes) and one for sb (`or1200_sb_fifo`);
