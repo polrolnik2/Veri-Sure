@@ -59,3 +59,23 @@ scoring JSON and logs; `summary.json` is the table above.
   (`contentreference`, from citation tokens left in the spec text, and two
   "is instantiated" structural probes) and one for sb (`or1200_sb_fifo`);
   the hand bindings were extended for them (ec33357).
+
+## Would the latency instrument fix fpu? (offline, after the rep)
+
+`refmodel.latency.fragile` delays the observables of a passing trace by one
+and two clocks on the run's own witness and flags a check that then fails --
+golden-free. Made decisive at shipping on fpu's 352-body pool:
+
+| rule | span | blind | audit (raw = hand-bound) |
+|---|---|---|---|
+| pipeline (majority) | 90.7% | 6.7% | 49/74 = 66.2% |
+| majority + drop latency-fragile | 87.2% | 34.9% | 44/70 = 62.9% |
+| drop latency-fragile only | 91.9% | 0.7% | 50/75 = 66.7% |
+
+It flags 69 of the 172 bodies that convict golden and 19 of the 180 that do
+not. Golden is not the witness delayed by a register stage: the difference also
+runs through the 60 internal probes and the enable-gated registers, which the
+lag does not move. Not a fix; not adopted.
+
+Rep-1 hand-bound conviction rows by module: fpu 59, bit_ctrl 30 (2 on the
+power-on first row), byte_ctrl 17, dc_fsm 2, sb 0.
