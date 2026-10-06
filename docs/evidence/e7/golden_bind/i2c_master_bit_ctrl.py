@@ -94,6 +94,16 @@ PROBES = {
     # sda_chk (L563-L565). wr_d is therefore the one state whose period is the
     # settled SCL-high window with arbitration checking on.
     "in_write_stable_high_phase": _bind(lambda c: c == WR_D, "c_state"),
+    # Minted by luna13's [P] under another name ("the FSM is in the stable high
+    # phase of a WRITE bit"): the same state.
+    "write_stable_high_phase": _bind(lambda c: c == WR_D, "c_state"),
+
+    # Minted by luna13's [P]: "the READ sequence is in its SCL-high sampling
+    # window" (spec: "SCL is released high for the sample window, then driven
+    # low again"). The rd_b arm releases SCL (scl_oen<=1, L511) and the rd_c arm
+    # keeps it released (L519); the rd_d arm pulls it low (L528). So scl_oen is
+    # 1 exactly while the register holds rd_c or rd_d: the released window.
+    "read_sample_window": _bind(lambda c: c in (RD_C, RD_D), "c_state"),
 
     # cSCL is reg [1:0] (L172) shifted {cSCL[0], scl_i} (L248); the value the
     # two-stage synchronizer delivers downstream is its second stage cSCL[1]
@@ -132,6 +142,9 @@ PROBES = {
     # Rising edge of filtered SCL: the reference's own `sSCL & ~dSCL`, the
     # condition that captures dout (L359). Combinational over registers.
     "sscl_rising": _bind(lambda s_, d_: (s_ & 1) & (~d_ & 1), "sSCL", "dSCL"),
+    # Minted by luna13's [P] under another name ("the filtered SCL signal has a
+    # rising edge"): the same term.
+    "sscl_rise": _bind(lambda s_, d_: (s_ & 1) & (~d_ & 1), "sSCL", "dSCL"),
 
     # Timing tick: reg clk_en (L178), set 1 on reload / cleared otherwise
     # (L208-L228). Registered: high the clk AFTER cnt was zero.
