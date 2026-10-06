@@ -79,3 +79,7 @@ lag does not move. Not a fix; not adopted.
 
 Rep-1 hand-bound conviction rows by module: fpu 59, bit_ctrl 30 (2 on the
 power-on first row), byte_ctrl 17, dc_fsm 2, sb 0.
+
+**After a30e279** (a preponed trace is not judged on its power-on row),
+re-scored offline: bit_ctrl hand-bound audit 27/87 -> 26/85 = 30.6%; the other
+modules had no conviction on that row.
