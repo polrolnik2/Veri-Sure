@@ -61,6 +61,27 @@ def rows_from(trace: dict, *, side: str = "dut") -> list[dict]:
     ]
 
 
+def _judged_rows(trace: dict, rows: list[dict]) -> list[dict]:
+    """The rows a check is decided on: all but a POWER-ON row.
+
+    Under preponed sampling (`RefModel.outputs`, D10) row i is the design
+    before edge i takes effect, so row 0 is the design before it has taken any
+    clock edge at all. In a two-state simulator that is power-on zeros -- not
+    the reset state, not anything a specification describes -- while every
+    spec-derived model is constructed in its reset state. Measured on luna7's
+    and luna12's i2c_master_bit_ctrl: all 485 golden traces read
+    `scl_oen=0, sda_oen=0` on row 0 and the reset values from row 1, and two
+    reset requirements (REQ-0097, REQ-0098) convicted golden on that row alone.
+
+    The harness's reset-held rows that follow are judged as before: by then
+    the reset has been applied on an edge. Post-edge traces are unchanged --
+    their row 0 already follows an edge.
+    """
+    if trace.get("sampling") == "preponed" and rows and int(rows[0].get("edge", 0) or 0) == 0:
+        return rows[1:]
+    return rows
+
+
 def load(path: Path | str, *, side: str = "dut") -> list[dict]:
     """`rows_from` over a `{tp_uid}.trace.json` on disk."""
     return rows_from(json.loads(Path(path).read_text(encoding="utf-8")),
@@ -313,7 +334,7 @@ def decide_rtl(
             trace = traces_by_tp.get(tp)
             if trace is None:
                 continue
-            rows = rows_from(trace, side=side)
+            rows = _judged_rows(trace, rows_from(trace, side=side))
             if transactional:
                 rows = transactional_view(rows)
             result = decide(oracle, rows)

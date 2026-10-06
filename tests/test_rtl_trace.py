@@ -463,3 +463,26 @@ def test_a_port_sampled_AT_its_declared_width_still_convicts():
            "    return (True, None, 'ok')\n")
     [res] = decide_rtl([_oracle(src)], {"TP-0000": t}, CONTRACT)
     assert res.ok is False
+
+
+def test_a_preponed_trace_is_not_judged_on_its_power_on_row():
+    """Row 0 of a preponed trace is the design before any clock edge: power-on
+    zeros in a two-state simulator. Two reset requirements convicted the
+    known-good i2c design on that row alone."""
+    from specflow.refmodel.oracle_gen import RequirementOracle
+    from specflow.refmodel.rtl_trace import decide_rtl
+
+    def trace(sampling):
+        edges = [{"edge": i, "inputs": {"rst": 1}, "dut": {"oen": v}}
+                 for i, v in enumerate((0, 1, 1, 1))]
+        return {"sampling": sampling, "edges": edges}
+
+    src = ("def decide(trace):\n"
+           "    bad = [r['edge'] for r in trace if r['inputs']['rst'] and r['outputs']['oen'] != 1]\n"
+           "    return (False, bad[0], 'oen low in reset') if bad else (True, None, 'ok')\n")
+    check = RequirementOracle(req_uid="R", tp_uids=["TP-0"], clause="", source=src)
+    contract = {"io": [{"name": "rst", "dir": "input"}, {"name": "oen", "dir": "output"}]}
+    pre = decide_rtl([check], {"TP-0": trace("preponed")}, contract, transactional=False)
+    post = decide_rtl([check], {"TP-0": trace("post-edge")}, contract, transactional=False)
+    assert [r.ok for r in pre if r.tp_uid == "TP-0"] == [True]
+    assert [r.ok for r in post if r.tp_uid == "TP-0"] == [False]
