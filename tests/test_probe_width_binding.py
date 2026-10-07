@@ -100,6 +100,28 @@ def test_a_RECORDING_of_a_register_that_shares_a_probe_name_is_not_refused():
     _clear()
 
 
+def test_a_name_that_resolves_to_an_INSTANCE_reads_as_absent():
+    """A probe named after a child instance (`bit_controller`) finds a scope on
+    a design carrying that instance. A scope has no value; reading one raised
+    and failed every testpoint of a golden replay recording it."""
+
+    class _Scope:
+        def __len__(self):
+            return 30  # a scope's len() counts its children
+
+        def __getattr__(self, name):
+            raise AttributeError(f"contains no child object named {name}")
+
+    _clear()
+    dut = _Dut()
+    dut.bit_controller = _Scope()
+    env = _env(dut, _Ref())
+
+    assert env.sample("bit_controller", as_probe=False) is None
+    assert env.sample("bit_controller") is None
+    _clear()
+
+
 def test_a_recording_does_not_restore_a_refused_case_binding():
     """The refusal drops the case-fallback binding; the recording that follows
     on the same edge must not put it back into the trace's `case_bound`."""

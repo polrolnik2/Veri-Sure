@@ -998,6 +998,15 @@ class Env:
                     signal, (int(declared[signal]), int(found)))
                 _CASE_BOUND.pop(signal, None)
                 return None
+        #: **A NAME CAN RESOLVE TO AN INSTANCE.** The probe stage mints
+        #: "is instantiated" probes named after a child instance
+        #: (`bit_controller`), and on a design carrying that instance the name
+        #: finds a scope, which has no value. The probe path is refused above
+        #: only because a scope's `len()` counts its children; a recording
+        #: skips that gate, and reading `.value` off a scope raised and failed
+        #: every testpoint of the suite.
+        if not hasattr(handle, "value"):
+            return None
         return _plain(handle.value)
 
     def expect(self, stim: dict) -> dict:
