@@ -86,7 +86,10 @@ def preflight() -> str | None:
     req = urllib.request.Request(
         base + "/chat/completions",
         data=json.dumps({**(extra if isinstance(extra, dict) else {}),
-                         "model": model, "max_tokens": 64,
+                         #: The chat spelling the pipeline sends: the SDC
+                         #: gateway answers `max_tokens` with a 400 for
+                         #: gpt-6-luna, which the pipeline never sends.
+                         "model": model, "max_completion_tokens": 64,
                          "messages": [{"role": "user", "content": "ping"}]}).encode(),
         headers={"Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY', '')}",
                  "Content-Type": "application/json"})
