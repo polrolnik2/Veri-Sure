@@ -64,6 +64,9 @@ PROBES = {
     # c_state == idle. Reset to idle at L387/L395; returns to idle from
     # start_e/stop_d/rd_d/wr_d at L458/L492/L526/L561; decodes cmd in idle L408-L416.
     "idle": _bind(lambda c: c == IDLE, "c_state"),
+    # Minted by luna15's [P] under another name ("the command FSM is in the
+    # `idle` state"): the same state.
+    "in_idle": _bind(lambda c: c == IDLE, "c_state"),
 
     # Any non-idle state. The reference itself uses `|c_state` for exactly
     # "FSM active in a command" in the unexpected-STOP arbitration term, L354.
