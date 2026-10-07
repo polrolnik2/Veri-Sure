@@ -1,0 +1,13 @@
+i2c_master_bit_ctrl: 120 accepted, pool 345, shipped 111
+/home/user/runs/luna14/after_oracles/i2c_master_bit_ctrl
+scoring the SHIPPED set (shipped.json): 111 bodies over 111 requirement(s); 448 golden trace(s)
+
+SPAN       107/119 behavioural = 89.9%   (151 minted, 130 state an observable obligation)
+BLINDNESS  36123/48987 cells = 73.7%   (population 7, effective_size 88)
+AUDIT      7/36 judgeable = 19.4%
+ACCEPTS    0 of 7 design(s)
+  note: the control is NOT contract-conformant: 12 of the 24 declared probe(s) are not exposed by it (cscl, csda, filter_cnt_expired, filter_cnt_nonzero, cnt_zero, idle, ...), so the 71 check(s) reading them can say nothing about it
+  note: audit is over the 36 of 107 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 8  REQ-0030[behav] REQ-0039[behav] REQ-0064[behav] REQ-0090[behav] REQ-0111[behav] REQ-0114[behav] REQ-0115[scaff] REQ-0140[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

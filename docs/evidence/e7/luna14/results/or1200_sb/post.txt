@@ -1,0 +1,7 @@
+== or1200_sb
+SPAN       52/54 behavioural = 96.3%   (87 minted, 82 state an observable obligation)
+BLINDNESS  3264/8306 cells = 39.3%   (population 7, effective_size 42)
+AUDIT      0/5 judgeable = 0.0%
+ACCEPTS    2 of 7 design(s)
+target span>0.90 MET  blindness<0.10 no  audit=0 MET
+bound AUDIT      0/5 judgeable = 0.0%
