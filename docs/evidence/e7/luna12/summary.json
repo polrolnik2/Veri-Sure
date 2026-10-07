@@ -30,7 +30,7 @@
   "span": "83/110 behavioural = 75.5%",
   "blindness": "7603/57110 cells = 13.3%",
   "audit_raw": "0/7 judgeable = 0.0%",
-  "audit_bound": "17/52 judgeable = 32.7%",
+  "audit_bound": "27/74 judgeable = 36.5%",
   "accepts": "0 of 7 design(s)",
   "pool": 304,
   "shipped": 88,

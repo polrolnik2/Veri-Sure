@@ -16,7 +16,15 @@ audit-only bindings in `../golden_bind/`.
 | i2c_master_bit_ctrl | 82.1% (96/117) | 65.0% (36,329/55,857) | 27.3% (9/33) | 31.0% (27/87) | 346 → 104 (130) | 4:31 |
 | or1200_dc_fsm | 87.7% (71/81) | 94.0% (438/466) | 12.5% (1/8) | **3.4%** (2/59) | 232 → 80 (61) | 4:32 |
 | or1200_sb | **94.3%** (50/53) | 99.4% (8,654/8,708) | **0/3** | **0/3** | 212 → 68 (50) | 6:30 |
-| i2c_master_byte_ctrl | 75.5% (83/110) | 13.3% (7,603/57,110) | 0/7 | 32.7% (17/52) | 304 → 88 (122) | 8:41 (last attempt) |
+| i2c_master_byte_ctrl | 75.5% (83/110) | 13.3% (7,603/57,110) | 0/7 | 36.5% (27/74)¹ | 304 → 88 (122) | 8:41 (last attempt) |
+
+¹ Re-audited after 5fe1601 + ca6b7c6; it was 32.7% (17/52). The golden replay's
+recording of the reference's internals went through the probe-width refusal,
+and this contract declares a one-bit probe `core_cmd` beside the design's
+`reg [3:0] core_cmd`: the register was blanked, and with it the six probes
+the hand binding derives from it, so 22 checks abstained. Every earlier
+verdict is unchanged; the 22 newly judged checks add 10 convictions
+(REQ-0003, 0038, 0051, 0053, 0058, 0060, 0076, 0085, 0108, 0115).
 
 `corpora/` holds each run's packed corpus (`e6_pack_corpus.py`: contract,
 requirements, normalized forms, testplan, stimulus, coverage, probes, the
@@ -78,7 +86,7 @@ runs through the 60 internal probes and the enable-gated registers, which the
 lag does not move. Not a fix; not adopted.
 
 Rep-1 hand-bound conviction rows by module: fpu 59, bit_ctrl 30 (2 on the
-power-on first row), byte_ctrl 17, dc_fsm 2, sb 0.
+power-on first row), byte_ctrl 17 (27 after the re-audit, ¹ above), dc_fsm 2, sb 0.
 
 **After a30e279** (a preponed trace is not judged on its power-on row),
 re-scored offline: bit_ctrl hand-bound audit 27/87 -> 26/85 = 30.6%; the other
