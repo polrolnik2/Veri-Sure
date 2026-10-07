@@ -1,0 +1,32 @@
+[
+ {
+  "module": "fpu_exceptions",
+  "span": "78/86 behavioural = 90.7%",
+  "blindness": "18/108 cells = 16.7%",
+  "audit_raw": "44/74 judgeable = 59.5%",
+  "audit_bound": "44/74 judgeable = 59.5%",
+  "accepts": "6 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 285,
+  "shipped": 143,
+  "refuted_excluded": 49,
+  "rule": "majority",
+  "recorded_cost_usd": 2.6
+ },
+ {
+  "module": "i2c_master_bit_ctrl",
+  "span": "100/119 behavioural = 84.0%",
+  "blindness": "31087/42065 cells = 73.9%",
+  "audit_raw": "5/37 judgeable = 13.5%",
+  "audit_bound": "12/93 judgeable = 12.9%",
+  "accepts": "1 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 338,
+  "shipped": 108,
+  "refuted_excluded": 115,
+  "rule": "majority",
+  "recorded_cost_usd": 2.51
+ }
+]
