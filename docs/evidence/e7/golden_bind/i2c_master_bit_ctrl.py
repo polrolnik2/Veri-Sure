@@ -100,6 +100,9 @@ PROBES = {
     # Minted by luna13's [P] under another name ("the FSM is in the stable high
     # phase of a WRITE bit"): the same state.
     "write_stable_high_phase": _bind(lambda c: c == WR_D, "c_state"),
+    # Minted by luna14's [P] under another name ("true during the stable high phase
+    # of a WRITE bit"): the same state.
+    "write_high_phase": _bind(lambda c: c == WR_D, "c_state"),
 
     # Minted by luna13's [P]: "the READ sequence is in its SCL-high sampling
     # window" (spec: "SCL is released high for the sample window, then driven
@@ -166,6 +169,9 @@ PROBES = {
     # Filter counter expired: the reference's own `~|filter_cnt`, which reloads
     # it (L257) and shifts fSCL/fSDA (L272).
     "filter_cnt_expired": _bind(lambda c: c == 0, "filter_cnt"),
+    # Minted by luna14's [P]: "the named filter counter being nonzero" -- the
+    # complement of filter_cnt_expired, over the same register.
+    "filter_cnt_nonzero": _bind(lambda c: c != 0, "filter_cnt"),
 
     # Clock-stretch wait: reg slave_wait (L179), L198-L200.
     "slave_wait": _bind(lambda v: v & 1, "slave_wait"),
