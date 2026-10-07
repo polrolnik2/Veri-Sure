@@ -12,7 +12,12 @@
   "shipped": 143,
   "refuted_excluded": 49,
   "rule": "majority",
-  "recorded_cost_usd": 2.6
+  "recorded_cost_usd": 2.6,
+  "uncosted_calls": {
+   "calls": 0,
+   "prompt_tokens": 0,
+   "completion_tokens": 0
+  }
  },
  {
   "module": "i2c_master_bit_ctrl",
@@ -27,6 +32,11 @@
   "shipped": 108,
   "refuted_excluded": 115,
   "rule": "majority",
-  "recorded_cost_usd": 2.51
+  "recorded_cost_usd": 2.51,
+  "uncosted_calls": {
+   "calls": 0,
+   "prompt_tokens": 0,
+   "completion_tokens": 0
+  }
  }
 ]
