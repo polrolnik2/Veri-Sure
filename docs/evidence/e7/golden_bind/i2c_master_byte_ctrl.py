@@ -84,6 +84,15 @@ PROBES = {
     # i2c_master_bit_ctrl as bit_controller unconditionally (:145-:158), so both are 1.
     "bit_controller": lambda s: 1,
     "i2c_master_bit_ctrl": lambda s: 1,
+    # -- minted by luna14's [P] under other names for terms bound above -----------------
+    # "The bit counter has a nonzero number of bits remaining": |dcnt, as dcnt_nonzero.
+    "cnt_nonzero": lambda s: None if s.get("dcnt") is None else int(s["dcnt"] != 0),
+    # "The command issued through core_cmd is I2C_CMD_*": as core_cmd_*.
+    "i2c_cmd_start": _eq("core_cmd", I2C_CMD_START),
+    "i2c_cmd_stop": _eq("core_cmd", I2C_CMD_STOP),
+    "i2c_cmd_read": _eq("core_cmd", I2C_CMD_READ),
+    "i2c_cmd_write": _eq("core_cmd", I2C_CMD_WRITE),
+    "core_cmd_is_nop": _eq("core_cmd", I2C_CMD_NOP),
 }
 
 #: probe name -> one-sentence reason it has NO counterpart in the reference.
