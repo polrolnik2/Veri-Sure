@@ -74,6 +74,48 @@ def test_a_wider_signal_is_refused_not_sampled():
     assert env.sample("idle") == 1, "a conforming probe must still bind"
 
 
+def test_a_RECORDING_of_a_register_that_shares_a_probe_name_is_not_refused():
+    """`trace_internals` records a reference's own registers at their real width
+    for an audit-side binding to compute probes from, and a register can share a
+    declared probe's name. The i2c byte controller's contract declares a one-bit
+    probe `core_cmd` beside the design's `reg [3:0] core_cmd`: refusing the
+    RECORDING blanked the register and every probe the binding derives from it.
+    """
+    from specflow.tb import runtime
+
+    class _Ref3:
+        PROBE_WIDTHS = {"core_cmd": 1}
+
+    _clear()
+    dut = _Dut()
+    dut.core_cmd = _Handle(4, 0b0100)
+    env = _env(dut, _Ref3())
+
+    assert env.sample("core_cmd", as_probe=False) == 0b0100
+    assert runtime._WIDTH_REFUSED == {}, (
+        "a recording is not a probe binding and must not be reported as refused")
+    assert env.sample("core_cmd") is None, (
+        "the probe itself is still a four-bit register declared one bit")
+    assert runtime._WIDTH_REFUSED["core_cmd"] == (1, 4)
+    _clear()
+
+
+def test_a_recording_does_not_restore_a_refused_case_binding():
+    """The refusal drops the case-fallback binding; the recording that follows
+    on the same edge must not put it back into the trace's `case_bound`."""
+    from specflow.tb import runtime
+
+    _clear()
+    dut = _Dut()
+    dut.cSCL = _Handle(2, 3)
+    env = _env(dut, _Ref2())
+
+    assert env.sample("cscl") is None
+    assert env.sample("cscl", as_probe=False) == 3
+    assert "cscl" not in runtime._CASE_BOUND
+    _clear()
+
+
 def test_one_bit_too_wide_is_already_a_different_quantity():
     """The boundary is `wider at all`, not `much wider`.
 

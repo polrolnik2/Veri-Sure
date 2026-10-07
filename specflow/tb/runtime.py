@@ -903,7 +903,7 @@ class Env:
 
         await Timer(1, unit="step")
 
-    def sample(self, signal: str) -> int | None:
+    def sample(self, signal: str, *, as_probe: bool = True) -> int | None:
         """Read one DUT output, or `None` if the design does not expose it.
 
         A missing port used to raise `AttributeError` out of `drive()`, which
@@ -952,7 +952,8 @@ class Env:
                 if name.casefold() == want:
                     handle = getattr(self.dut, name, None)
                     if handle is not None:
-                        _CASE_BOUND.setdefault(signal, name)
+                        if as_probe:
+                            _CASE_BOUND.setdefault(signal, name)
                         break
         if handle is None:
             return None
@@ -977,8 +978,17 @@ class Env:
         #: Refusing yields `None`, which is the SAME outcome as an absent
         #: signal: the check abstains and the record says why. It does not
         #: invent a value, truncate one, or guess which bit was meant.
+        #:
+        #: **THE REFUSAL GUARDS A PROBE, NOT A RECORDING.** `trace_internals`
+        #: records a reference design's own registers at their real width for an
+        #: audit-side binding to compute probes FROM (`as_probe=False`), and a
+        #: register can share its name with a declared probe. On the known-good
+        #: i2c byte controller the contract declares a one-bit probe `core_cmd`
+        #: beside the design's four-bit `reg [3:0] core_cmd`; refusing the
+        #: recording blanked the register, and with it all six probes the
+        #: binding derives from it -- 35 checks abstained in luna14's audit.
         declared = getattr(self.ref, "PROBE_WIDTHS", None)
-        if isinstance(declared, dict) and signal in declared:
+        if as_probe and isinstance(declared, dict) and signal in declared:
             try:
                 found = len(handle)
             except TypeError:
@@ -1156,7 +1166,7 @@ class Env:
         ))
         if self.trace_internals:
             self._internals.append((
-                {n: self.sample(n) for n in self.trace_internals},
+                {n: self.sample(n, as_probe=False) for n in self.trace_internals},
                 {n: _plain(getattr(self.ref, n, None)) for n in self.trace_internals},
             ))
 
