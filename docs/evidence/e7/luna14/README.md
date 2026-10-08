@@ -44,12 +44,12 @@ No earlier verdict changed; the 25 newly judged checks add 5 convictions
 
 ## Golden convictions against the population
 
-How the population judges each check that convicts golden (hand-bound
+How the population judges each requirement whose check convicts golden (hand-bound
 traces): **shared** = every design that decides it passes (a misreading the
 population shares), **minority** = one to three of seven fail (shipped under the
 strict-majority rule).
 
-| module | conviction rows | shared | minority |
+| module | convicting requirements | shared | minority |
 |---|---|---|---|
 | fpu_exceptions | 52 | 49 | 3 |
 | i2c_master_bit_ctrl | 17 | 13 | 4 |

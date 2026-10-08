@@ -1,0 +1,25 @@
+bound 10 probe(s), 1 left unbound:
+   cache_inhibit                w=1  values seen [0, 1]
+   cload                        w=1  values seen [0, 1]
+   cnt_nonzero                  w=1  values seen [0, 1]
+   cstore                       w=1  values seen [0, 1]
+   first_store_hit_ack          w=1  values seen [0, 1]
+   hitmiss_eval                 w=1  values seen [0, 1]
+   idle                         w=1  values seen [0, 1]
+   load                         w=1  values seen [0, 1]
+   lrefill3                     w=1  values seen [0, 1]
+   store                        w=1  values seen [0, 1]
+   srefill4                     UNBOUND: SREFILL4 exists only under `ifdef OR1200_DC_STORE_REFILL (or1200_dc_fsm.v:94-96, :189-198, :208-219), which or1200_defines.v:1345 leaves commented out, so the compiled reference has no SREFILL4 state (the contract itself marks this probe config_gated on OR1200_DC_STORE_REFILL=false).
+
+/home/user/runs/luna13/after_oracles/or1200_dc_fsm
+scoring the SHIPPED set (shipped.json): 84 bodies over 84 requirement(s); 327 golden trace(s)
+
+SPAN       78/83 behavioural = 94.0%   (99 minted, 96 state an observable obligation)
+BLINDNESS  12/102 cells = 11.8%   (population 7, effective_size 70)
+AUDIT      3/68 judgeable = 4.4%
+ACCEPTS    6 of 7 design(s)
+  note: the control is NOT contract-conformant: 1 of the 11 declared probe(s) are not exposed by it (srefill4), so the 10 check(s) reading them can say nothing about it
+  note: audit is over the 68 of 78 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 3  REQ-0034[behav] REQ-0058[behav] REQ-0075[behav]
+target span>0.90 MET  blindness<0.10 no  audit=0 no
