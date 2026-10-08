@@ -1,0 +1,19 @@
+{
+  "requirements_minted": 157,
+  "requirements_observable": 140,
+  "requirements_behavioural": 117,
+  "trusted": 116,
+  "span": 0.9914529914529915,
+  "cells": 44746,
+  "blind": 613,
+  "blindness": 0.013699548563000045,
+  "population": 7,
+  "control_judges": 14,
+  "control_convicted_by": 2,
+  "audit": 0.14285714285714285,
+  "effective_size": 116,
+  "accepted_designs": 0,
+  "notes": [
+    "the control can judge 14 of 116 accepted check(s); the rest name state it does not expose, so the audit column is over that subset and says so"
+  ]
+}

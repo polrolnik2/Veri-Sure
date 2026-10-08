@@ -1,0 +1,29 @@
+{
+  "all": {
+    "decide": 14,
+    "effective_size": 9,
+    "audit": 7,
+    "blind": 69,
+    "accepts": []
+  },
+  "refuted_dropped": {
+    "decide": 9,
+    "effective_size": 8,
+    "audit": 2,
+    "blind": 69,
+    "accepts": []
+  },
+  "ceiling_reference_picked": {
+    "decide": 7,
+    "effective_size": 6,
+    "audit": 0,
+    "blind": 142,
+    "accepts": [
+      "h",
+      "n",
+      "p",
+      "q",
+      "s"
+    ]
+  }
+}

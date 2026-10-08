@@ -1,0 +1,5 @@
+{
+  "reasoning": "decides the clause over the declared output",
+  "clause": "cout is the logical AND of a and b",
+  "source": "def decide(trace):\n    for row in trace:\n        want = row['inputs']['a'] & row['inputs']['b']\n        if row['outputs']['cout'] != want:\n            return False, row['edge'], 'cout is not a AND b'\n    return True, 0, 'cout was a AND b throughout'\n"
+}

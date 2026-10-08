@@ -1,0 +1,12 @@
+fpu_exceptions: 144 accepted, pool 285, shipped 143
+/home/user/runs/luna15/after_oracles/fpu_exceptions
+scoring the SHIPPED set (shipped.json): 143 bodies over 143 requirement(s); 823 golden trace(s)
+
+SPAN       78/86 behavioural = 90.7%   (172 minted, 169 state an observable obligation)
+BLINDNESS  18/108 cells = 16.7%   (population 7, effective_size 101)
+AUDIT      44/74 judgeable = 59.5%
+ACCEPTS    6 of 7 design(s)
+  note: audit is over the 74 of 78 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 52  REQ-0000[behav] REQ-0003[behav] REQ-0004[behav] REQ-0006[behav] REQ-0008[inter] REQ-0010[inter] REQ-0014[behav] REQ-0019[behav] REQ-0020[behav] REQ-0021[behav] REQ-0022[behav] REQ-0024[behav] REQ-0025[behav] REQ-0026[behav] REQ-0027[behav] REQ-0028[behav] REQ-0030[behav] REQ-0034[behav] REQ-0039[inter] REQ-0042[inter] REQ-0044[inter] REQ-0071[behav] REQ-0077[scaff] REQ-0116[behav] REQ-0121[inter] REQ-0131[behav] REQ-0136[behav] REQ-0137[behav] REQ-0138[behav] REQ-0139[behav] REQ-0140[behav] REQ-0143[behav] REQ-0144[behav] REQ-0146[behav] REQ-0147[behav] REQ-0148[behav] REQ-0149[behav] REQ-0150[behav] REQ-0153[behav] REQ-0154[behav] REQ-0155[behav] REQ-0156[behav] REQ-0157[behav] REQ-0158[behav] REQ-0159[behav] REQ-0160[behav] REQ-0163[behav] REQ-0167[behav] REQ-0168[behav] REQ-0169[scaff] REQ-0170[behav] REQ-0171[behav]
+target span>0.90 MET  blindness<0.10 no  audit=0 no

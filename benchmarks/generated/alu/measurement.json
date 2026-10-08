@@ -1,0 +1,26 @@
+{
+  "task": "alu",
+  "family": "mips_16",
+  "shape": "combinational",
+  "golden": "benchmarks/chipverilog/Des/mips_16/alu/alu.v",
+  "generated_by": {
+    "command": "python -m benchmarks.run_chipverilog --task alu --effort xhigh --small-model gpt-5-mini --small-effort low --full-strength-stages refmodel",
+    "repairs_needed": 0
+  },
+  "reference_model": {
+    "vs_golden": {"passed": 40, "total": 40},
+    "vs_mutant": {"passed": 0, "total": 40},
+    "separation": 40,
+    "mutant": "python -m benchmarks.mutate benchmarks/chipverilog/Des/mips_16/alu/alu.v <out> --op 0 -> line 26: + becomes -",
+    "hold": 1,
+    "compare": "transactional",
+    "verdict": "correct on golden and fully discriminating against a wrong DUT"
+  },
+  "rtl": {
+    "as_generated": "function_fail",
+    "ports_rewritten_to_verilog_2005": "pass",
+    "body_diff_between_the_two": "none, byte-identical",
+    "why": "`input logic` in the port list makes iverilog reject this task's shipped testbench ('Net data type requires SystemVerilog'), so the scorer falls back to formal -- and the formal path for this task cannot be passed by any correct design, because golden's first case arm is `ALU_NC` = 3'bxxx and yosys treats x in a case item as a wildcard, synthesising golden itself to `assign r = 16'hxxxx`.",
+    "verdict": "the generated design is functionally correct; the failing verdict was a scoring artefact, now prevented by the Verilog-2005 port requirement in rtl_generator's prompt"
+  }
+}

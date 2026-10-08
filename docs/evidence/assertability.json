@@ -1,0 +1,954 @@
+{
+ "REQ-0000": {
+  "text": "The i2c_master_bit_ctrl module shall act as the bit-level controller of the OpenCores I2C master core.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0001": {
+  "text": "The i2c_master_bit_ctrl module shall receive simple bit commands from the byte-level controller on the cmd input and translate each received command into timed SCL and SDA open-drain control sequences by driving scl_oen, sda_oen (with scl_o and sda_o as constant low drive values).",
+  "rules_assertable": false,
+  "rules_ground": "SCOPE",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "scl_o",
+   "sda_o"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0002": {
+  "text": "The module generates I2C START and STOP conditions on the bus by driving and releasing the SDA and SCL lines according to I2C timing.",
+  "rules_assertable": false,
+  "rules_ground": "HEDGED",
+  "observable": [
+   "sda_oen",
+   "scl_oen",
+   "sda_o",
+   "scl_o"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "CONVICTS",
+  "role": "discriminating"
+ },
+ "REQ-0003": {
+  "text": "The module performs single-bit WRITE cycles by driving or releasing SDA according to the transmitted bit and toggling SCL through the prescribed bit-timing phases.",
+  "rules_assertable": false,
+  "rules_ground": "no obligation verb",
+  "observable": [
+   "sda_oen",
+   "scl_oen"
+  ]
+ },
+ "REQ-0004": {
+  "text": "The module performs single-bit READ cycles by releasing SDA so a peer can drive the data bit, toggling SCL for the sample window, and capturing the sampled bit into dout.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen",
+   "scl_oen",
+   "dout"
+  ]
+ },
+ "REQ-0005": {
+  "text": "The module detects bus-busy status by setting the busy flag after a filtered START condition and clearing busy after a filtered STOP condition.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "busy"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0006": {
+  "text": "The module detects arbitration loss and signals it by asserting al when the controller expects SDA to be high but the filtered SDA is observed low or when an unexpected STOP occurs during an active command.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0007": {
+  "text": "The module implements slave clock stretching by pausing bit timing when the module has released SCL but the filtered SCL input remains low, holding the timing counter until SCL is released.",
+  "rules_assertable": false,
+  "rules_ground": "SCOPE",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "passes",
+  "role": "INVERTED"
+ },
+ "REQ-0011": {
+  "text": "The module must control the external SCL and SDA lines using open-drain semantics.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0012": {
+  "text": "The outputs scl_o and sda_o shall be constant logical low drive values.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_o",
+   "sda_o"
+  ]
+ },
+ "REQ-0013": {
+  "text": "The outputs scl_oen and sda_oen shall be active-low output-enable controls.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen",
+   "sda_oen"
+  ]
+ },
+ "REQ-0016": {
+  "text": "The i2c_master_bit_ctrl module implements the Bit Command Controller role: the module accepts bit-level commands on cmd from the Byte Command Controller and generates the corresponding START, STOP, READ and WRITE bit-level SCL/SDA open-drain control sequences while providing command completion and status via cmd_ack, busy, al and providing sampled read bits via dout.",
+  "rules_assertable": false,
+  "rules_ground": "SCOPE",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0018": {
+  "text": "Asserting rst high causes internal state, counters, filtered inputs, bus-status flags, and the command FSM to be reset on the rising edge of clk.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0019": {
+  "text": "When the asynchronous active-low reset nReset is asserted low, the module immediately initializes most sequential state elements independent of the system clock.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0020": {
+  "text": "The ena input is the core enable signal that gates normal timing and input filtering operation.",
+  "rules_assertable": false,
+  "rules_ground": "DEFINITION",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "dout",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "CONVICTS"
+ },
+ "REQ-0023": {
+  "text": "When the ena input is low, the module prevents normal bit-timing progression so the bit-level FSM does not advance.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "cmd_ack"
+  ]
+ },
+ "REQ-0026": {
+  "text": "When the command FSM is in the idle state, the controller decodes the cmd input as one of the supported commands I2C_CMD_START, I2C_CMD_STOP, I2C_CMD_WRITE, or I2C_CMD_READ, and any unsupported or idle value leaves the FSM in the idle state.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0027": {
+  "text": "The busy output is set when a filtered START condition is detected and is cleared when a filtered STOP condition is detected.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "busy"
+  ]
+ },
+ "REQ-0028": {
+  "text": "The arbitration-lost output al indicates that the controller has detected an arbitration loss.",
+  "rules_assertable": false,
+  "rules_ground": "DEFINITION",
+  "observable": [
+   "al"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "silent"
+ },
+ "REQ-0029": {
+  "text": "The arbitration-lost output al is asserted when the controller releases SDA (releases the open-drain so the line should be high) but the filtered SDA input remains low during arbitration checking.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ]
+ },
+ "REQ-0030": {
+  "text": "The arbitration-lost output al is asserted when a STOP condition is detected on the filtered bus while the bit-level controller is executing a command and the detected STOP was not requested by this controller.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0031": {
+  "text": "The output dout shall capture the filtered SDA value on a rising edge of the filtered SCL signal.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "dout"
+  ]
+ },
+ "REQ-0032": {
+  "text": "The output port scl_o must be permanently driven to logical 0 (tied low).",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_o"
+  ]
+ },
+ "REQ-0033": {
+  "text": "The module must use scl_oen as an active-low open-drain output-enable that pulls the SCL line low when scl_oen = 0 and releases the SCL line when scl_oen = 1 so the pull-up can drive it high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_o",
+   "scl_oen"
+  ]
+ },
+ "REQ-0037": {
+  "text": "The slave_wait condition causes the internal counter to hold its current value and causes clk_en to remain low, thereby inserting timing wait states while the external SCL line remains stretched low.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0047": {
+  "text": "The module detects an I2C START condition when the filtered SDA transitions from high to low while the filtered SCL is high, i.e. when ~sSDA & dSDA & sSCL evaluates true.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "busy"
+  ]
+ },
+ "REQ-0049": {
+  "text": "The busy flag is set when a START condition is detected on the filtered I2C bus.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "busy"
+  ]
+ },
+ "REQ-0050": {
+  "text": "The busy flag remains set until a STOP condition is detected on the filtered I2C bus.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "busy"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0051": {
+  "text": "The module captures the filtered SDA value into dout on the rising edge of the filtered SCL signal.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "dout"
+  ]
+ },
+ "REQ-0052": {
+  "text": "The module provides those sampled dout values so the byte-level controller can collect received bits during READ operations.",
+  "rules_assertable": false,
+  "rules_ground": "no obligation verb",
+  "observable": [
+   "dout"
+  ]
+ },
+ "REQ-0053": {
+  "text": "The command finite-state machine advances to the next bit-timing phase only when the internal timing tick clk_en is asserted.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_oen",
+   "sda_oen"
+  ]
+ },
+ "REQ-0054": {
+  "text": "The command finite-state machine decodes the cmd input while in the idle state and transitions into the START, STOP, READ, or WRITE sequence when cmd encodes a supported command.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen",
+   "sda_oen"
+  ]
+ },
+ "REQ-0055": {
+  "text": "Each command sequence drives the scl_oen and sda_oen open-drain output enables and asserts the internal sda_chk arbitration-check signal at the appropriate I2C timing phases.",
+  "rules_assertable": false,
+  "rules_ground": "HEDGED",
+  "observable": [
+   "scl_oen",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "passes",
+  "role": "INVERTED"
+ },
+ "REQ-0056": {
+  "text": "At the end of a START, STOP, READ, or WRITE sequence the command finite-state machine returns to the idle state and pulses the cmd_ack output for exactly one clk cycle.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0057": {
+  "text": "The START sequence releases the SDA open-drain output enable so the external pull-up can drive the SDA line high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "CONVICTS"
+ },
+ "REQ-0058": {
+  "text": "The START sequence releases the SCL open-drain output enable so the external pull-up can drive the SCL line high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0059": {
+  "text": "The START sequence then pulls the SDA line low while the SCL line is observed high to create a valid I2C START condition.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen",
+   "busy"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0060": {
+  "text": "The START sequence pulls the SCL line low by asserting the SCL open-drain output enable to actively drive SCL low.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0061": {
+  "text": "The START sequence asserts the cmd_ack output as a one-clock-cycle command-completion pulse when the START sequence finishes.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0062": {
+  "text": "The STOP command sequence drives the SDA line low by asserting the SDA open-drain output-enable active (sda_oen).",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0063": {
+  "text": "The STOP command sequence releases the SCL line so the external pull-up can drive it high by deasserting the SCL open-drain output-enable (scl_oen).",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0064": {
+  "text": "The STOP command sequence releases the SDA line while the SCL line is high on the bus to create a valid I2C STOP condition.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0065": {
+  "text": "The STOP command sequence asserts the one-clock command-complete acknowledge signal cmd_ack when the STOP sequence finishes.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0066": {
+  "text": "The READ command sequence releases the SDA line so that the external slave can drive the data bit.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0067": {
+  "text": "The READ command sequence releases SCL to provide the sampling window and then drives SCL low again after the sample window ends.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0068": {
+  "text": "The module captures the filtered SDA value into dout when the filtered SCL signal has a rising edge.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "dout"
+  ]
+ },
+ "REQ-0069": {
+  "text": "The READ command sequence finishes by asserting cmd_ack for exactly one system-clock cycle to indicate command completion.",
+  "rules_assertable": false,
+  "rules_ground": "no obligation verb",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0070": {
+  "text": "When the WRITE sequence needs to drive SDA low the controller must assert sda_oen low when the input din equals 0.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0071": {
+  "text": "During the WRITE bit high phase the controller must release SCL by deasserting scl_oen high so the external pull-up can drive the SCL line high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0072": {
+  "text": "During the WRITE bit high phase the controller must perform SDA arbitration checking and assert the arbitration-lost output al if the controller expects SDA released high but the observed SDA input is low.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ]
+ },
+ "REQ-0073": {
+  "text": "After the WRITE bit high phase the controller must drive SCL low by asserting scl_oen low to terminate the bit timing window.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0074": {
+  "text": "When the WRITE bit sequence completes the controller must assert cmd_ack for exactly one clk cycle to indicate command completion.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0075": {
+  "text": "The i2c_master_bit_ctrl module begins operation with a reset and initialization sequence.",
+  "rules_assertable": false,
+  "rules_ground": "SCOPE",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0076": {
+  "text": "The i2c_master_bit_ctrl module returns to a known idle state when the asynchronous active-low input nReset is driven low or when the synchronous active-high input rst is asserted on a rising clk edge.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0077": {
+  "text": "The command finite-state machine is reset to the idle state.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "al",
+   "dout",
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0079": {
+  "text": "The module releases the SCL and SDA output enables by driving scl_oen and sda_oen high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen",
+   "sda_oen"
+  ]
+ },
+ "REQ-0080": {
+  "text": "The controller disables arbitration checking.",
+  "rules_assertable": false,
+  "rules_ground": "no obligation verb",
+  "observable": [
+   "al",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0081": {
+  "text": "The module clears status flags such as the bus-busy and arbitration-lost indicators.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "busy",
+   "al"
+  ]
+ },
+ "REQ-0087": {
+  "text": "While slave_wait is active the module pauses the timing counter and prevents the bit-level FSM from advancing.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "cmd_ack"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "CONVICTS",
+  "candidate": "passes",
+  "role": "INVERTED"
+ },
+ "REQ-0093": {
+  "text": "When the core enable input ena is low, the module reloads the internal counter cnt from clk_cnt and normal command-FSM bit timing does not progress.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0094": {
+  "text": "The module shall perform arbitration checking during WRITE bit operations.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al",
+   "scl_oen",
+   "sda_oen",
+   "cmd_ack"
+  ]
+ },
+ "REQ-0095": {
+  "text": "The module shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al",
+   "sda_oen"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0096": {
+  "text": "The module shall assert the arbitration-lost output al whenever arbitration checking expects SDA to be released high but the filtered SDA input is observed low.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ]
+ },
+ "REQ-0097": {
+  "text": "The module shall assert the arbitration-lost output al when a filtered STOP condition is detected while a non-STOP command is active.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0098": {
+  "text": "The module shall return the FSM to the idle state and release both SCL and SDA by driving scl_oen and sda_oen high when arbitration is lost.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen",
+   "sda_oen"
+  ]
+ },
+ "REQ-0099": {
+  "text": "The module performs read-data sampling from the filtered SDA line.",
+  "rules_assertable": false,
+  "rules_ground": "no obligation verb",
+  "observable": [
+   "dout"
+  ]
+ },
+ "REQ-0101": {
+  "text": "During READ commands, the module presents the sampled SDA bit on dout for the byte-level controller to use as the received data bit.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "dout"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "CONVICTS"
+ },
+ "REQ-0102": {
+  "text": "The command finite-state machine remains in the idle state until a valid bit-level command is present on cmd and the internal clk_en timing tick permits the FSM to advance.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "busy"
+  ],
+  "hand_assertable": false,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "silent"
+ },
+ "REQ-0104": {
+  "text": "A recognized command value on cmd causes the command FSM to enter the corresponding START, STOP, READ, or WRITE sequence, while an unsupported or idle value on cmd leaves the FSM in the idle state.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "busy"
+  ]
+ },
+ "REQ-0105": {
+  "text": "The FSM ensures the SDA line is driven low by asserting the SDA open-drain output enable low.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0106": {
+  "text": "The FSM releases the SCL line by deasserting the SCL open-drain output enable so the external pull-up can drive SCL high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0107": {
+  "text": "The FSM releases the SDA line while SCL is high to generate a valid I2C STOP condition.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0109": {
+  "text": "The FSM pulses the command-acknowledge output for one system clock cycle to indicate command completion.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0110": {
+  "text": "The bit-level FSM releases SDA by driving the sda_oen output to the inactive (released/high) level so the external slave can drive the data bit.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0111": {
+  "text": "The bit-level FSM releases SCL by driving the scl_oen output to the inactive (released/high) level for the read window.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0112": {
+  "text": "The bit-level FSM subsequently drives SCL low by asserting the scl_oen output active (low) after the read window.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0113": {
+  "text": "The module captures the filtered SDA value into the dout output on the rising edge of the filtered SCL signal and then the FSM returns to the idle state while pulsing cmd_ack for one clk cycle to indicate command completion.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "dout",
+   "cmd_ack"
+  ]
+ },
+ "REQ-0114": {
+  "text": "The FSM drives or releases the SDA line according to the value presented on the din input during a WRITE command.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0115": {
+  "text": "The controller must assert the SDA open-drain enable low (drive SDA low by asserting sda_oen = 0) when din equals 0 during a WRITE command.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0116": {
+  "text": "The controller must release the SDA open-drain enable (deassert sda_oen to release SDA high) when din equals 1 during a WRITE command.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "sda_oen"
+  ]
+ },
+ "REQ-0117": {
+  "text": "The FSM releases SCL (deasserts scl_oen to allow SCL to be pulled high) as the WRITE bit enters its stable high phase.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "CONVICTS",
+  "role": "discriminating"
+ },
+ "REQ-0118": {
+  "text": "The controller enables SDA arbitration checking during the stable high phase so that the module can detect when the filtered SDA remains low while SDA is expected to be released high.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "al"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "silent"
+ },
+ "REQ-0119": {
+  "text": "The FSM pulls SCL low again (asserts scl_oen to drive SCL low) to end the high phase of the WRITE bit.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen"
+  ]
+ },
+ "REQ-0120": {
+  "text": "The FSM returns to the idle state when the WRITE bit sequence completes.",
+  "rules_assertable": false,
+  "rules_ground": "INTERNAL",
+  "observable": [
+   "cmd_ack"
+  ]
+ },
+ "REQ-0121": {
+  "text": "The FSM pulses cmd_ack for one system clock cycle to acknowledge completion of the WRITE command.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "silent",
+  "candidate": "silent"
+ },
+ "REQ-0122": {
+  "text": "The i2c_master_bit_ctrl module implements open-drain output behavior for the I2C SCL and SDA lines.",
+  "rules_assertable": false,
+  "rules_ground": "SCOPE",
+  "observable": [
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0123": {
+  "text": "The scl_o and sda_o outputs are tied to constant logic 0 while scl_oen and sda_oen control whether each line is actively driven low or released.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_o",
+   "scl_oen",
+   "sda_o",
+   "sda_oen"
+  ]
+ },
+ "REQ-0124": {
+  "text": "Driving an output-enable signal (scl_oen or sda_oen) low causes the corresponding I2C line to be actively driven low via the module's constant-low drive outputs.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "scl_oen",
+   "sda_oen",
+   "scl_o",
+   "sda_o"
+  ],
+  "hand_assertable": true,
+  "in_the_43": true,
+  "golden": "passes",
+  "candidate": "passes"
+ },
+ "REQ-0126": {
+  "text": "The module asserts cmd_ack synchronized to clk for exactly one clk cycle at the end of every START, STOP, READ, and WRITE bit-level sequence.",
+  "rules_assertable": true,
+  "rules_ground": "assertable",
+  "observable": [
+   "cmd_ack"
+  ]
+ }
+}

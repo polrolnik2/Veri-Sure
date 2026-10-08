@@ -1,0 +1,501 @@
+{
+  "oracles": [
+    {
+      "req_uid": "REQ-0001",
+      "tp_uids": [
+        "TP-0002",
+        "TP-0003"
+      ],
+      "clause": "while ena=1, nReset=1 and rst=0 (a command window, open until cmd_ack or al), scl_o and sda_o stay driven low throughout",
+      "source": "from specflow.refmodel.temporal import after, throughout, worst\n\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    applies = _holds({\"ena\": 1, \"nReset\": 1, \"rst\": 0})\n    closes = _any([{\"cmd_ack\": 1}, {\"al\": 1}])\n    follows = True  # normalized activation.effect_follows\n\n    windows = after(trace, applies, until=closes)\n\n    def const_low(r):\n        return r[\"outputs\"].get(\"scl_o\") == 0 and r[\"outputs\"].get(\"sda_o\") == 0\n\n    return worst([throughout(w, const_low, after_activation=follows) for w in windows])",
+      "hash": "cf0e58bad62d817d",
+      "evidence": "be3a5f44c5812995"
+    },
+    {
+      "req_uid": "REQ-0006",
+      "tp_uids": [
+        "TP-0014",
+        "TP-0015",
+        "TP-0297",
+        "TP-0298",
+        "TP-0299"
+      ],
+      "clause": "al is asserted when an active (non-NOP) command expects SDA released (din=1) but the filtered SDA is observed low, or when the filtered SDA rises unexpectedly (unexpected STOP) during that command's high phase",
+      "source": "from specflow.refmodel.temporal import after, edges, eventually, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row['outputs'].get(k, row['inputs'].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    # activation.inputs: pins the window to an actual active (non-NOP)\n    # command, out of reset, enabled -- the qualifier the prior answer\n    # omitted, which let it open during idle/reset defaults.\n    active = _holds({'cmd': 1, 'ena': 1, 'nReset': 1, 'rst': 0})\n\n    # opens_on alt1, transcribed literally (din, not sda_oen).\n    alt1 = _holds({'din': 1, 'scl_i': 1, 'sda_i': 0})\n\n    # opens_on alt2: scl_i high at the edge filtered sda_i rises.\n    rose_sda = set(edges(trace, 'sda_i', 'rise'))\n\n    def alt2(row):\n        return row['edge'] in rose_sda and row['inputs'].get('scl_i') == 1\n\n    def opens(row):\n        return active(row) and (alt1(row) or alt2(row))\n\n    def closes(row):\n        return row['outputs'].get('cmd_ack') == 1 or row['outputs'].get('al') == 1\n\n    windows = after(trace, opens, until=closes)\n\n    return worst([\n        eventually(w, lambda r: r['outputs'].get('al') == 1,\n                   after_activation=True, strong=True)\n        for w in windows\n    ])",
+      "hash": "6c80b6bdafb35ce1",
+      "evidence": "e1e8622602f3fb35"
+    },
+    {
+      "req_uid": "REQ-0016",
+      "tp_uids": [
+        "TP-0039",
+        "TP-0040",
+        "TP-0041",
+        "TP-0042",
+        "TP-0043",
+        "TP-0044"
+      ],
+      "clause": "For a supported bit-level command presented while enabled and out of reset: scl_o and sda_o stay constant 0 through the transaction; absent an intervening reset, an observed completion or arbitration loss for that window is credited (a window that ran out before either appeared is left undecided rather than convicted); and any cmd_ack pulse observed is exactly one system clock wide.",
+      "source": "from specflow.refmodel.temporal import after, throughout, eventually, pulse, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    # Transcribed straight from the normalized block: a supported bit-level\n    # command presented while enabled and out of reset, running until the\n    # command completes (cmd_ack) or arbitration is lost (al).\n    applies = _holds({\"cmd\": 1, \"ena\": 1, \"nReset\": 1, \"rst\": 0})\n    closes = _any([{\"cmd_ack\": 1}, {\"al\": 1}])\n    windows = after(trace, applies, until=closes)\n    follows = True  # normalized activation.effect_follows\n\n    results = []\n    for w in windows:\n        # scl_o/sda_o are the module's driven-data lines and are constant 0\n        # for the whole transaction; real drive/release is on scl_oen/sda_oen.\n        results.append(throughout(w, lambda r: r[\"outputs\"][\"scl_o\"] == 0))\n        results.append(throughout(w, lambda r: r[\"outputs\"][\"sda_o\"] == 0))\n\n        # Reset during a command suppresses acknowledgement (explicit corner\n        # case) -- only demand completion for a window reset never touched.\n        reset_free = all(r[\"inputs\"][\"nReset\"] == 1 and r[\"inputs\"][\"rst\"] == 0\n                          for r in w.rows)\n        if reset_free:\n            # Weak, not strong: `until` already guarantees cmd_ack or al\n            # holds at the row where any window actually closes, so this\n            # can only be exercised by a window that ran off the end of the\n            # trace unclosed. strong=True there was reading a testpoint\n            # that simply hadn't finished (trace truncation, or ena paused\n            # per spec) as a design failure; weak leaves that case UNKNOWN\n            # instead of convicting it, while still crediting the ordinary\n            # closed-window case.\n            results.append(eventually(\n                w,\n                lambda r: r[\"outputs\"][\"cmd_ack\"] == 1 or r[\"outputs\"][\"al\"] == 1,\n                after_activation=follows))\n\n        # Where cmd_ack does pulse, it must be exactly one system clock wide --\n        # the one duration the spec text itself states.\n        if any(r[\"outputs\"][\"cmd_ack\"] == 1 for r in w.rows):\n            results.append(pulse(w, \"cmd_ack\"))\n\n    return worst(results)",
+      "hash": "fecc38ad822ce5e7",
+      "evidence": "5378626b7573c395"
+    },
+    {
+      "req_uid": "REQ-0020",
+      "tp_uids": [
+        "TP-0051",
+        "TP-0052"
+      ],
+      "clause": "While ena is low, normal timing/filter progression is gated: cmd_ack must not pulse, and busy, dout, scl_oen, and sda_oen must hold their current values without change until ena returns high, unless a reset intervenes, in which case the attempt is voided rather than judged.",
+      "source": "from specflow.refmodel.temporal import after, never, stable, worst\n\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    windows = after(trace, _holds({\"ena\": 0}), until=_holds({\"ena\": 1}),\n                     aborts=_any([{\"nReset\": 0}, {\"rst\": 1}]))\n\n    verdicts = []\n    for w in windows:\n        verdicts.append(never(w, lambda r: r[\"outputs\"][\"cmd_ack\"] == 1,\n                               after_activation=True))\n        verdicts.append(stable(w, \"dout\", after_activation=True))\n        verdicts.append(stable(w, \"busy\", after_activation=True))\n        verdicts.append(stable(w, \"scl_oen\", after_activation=True))\n        verdicts.append(stable(w, \"sda_oen\", after_activation=True))\n    return worst(verdicts)",
+      "hash": "091df4edf6014dfd",
+      "evidence": "67d247dcde961801"
+    },
+    {
+      "req_uid": "REQ-0030",
+      "tp_uids": [
+        "TP-0073",
+        "TP-0074"
+      ],
+      "clause": "al is asserted when a STOP condition is detected on the filtered bus while a command is executing that was not a STOP requested by this controller",
+      "source": "from specflow.refmodel.temporal import after, eventually, worst, edges\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    rose = edges(trace, \"sda_i\", \"rise\")\n    activation_inputs = _holds({\"cmd\": 1, \"ena\": 1, \"nReset\": 1, \"rst\": 0})\n\n    def opens(row):\n        return (row[\"edge\"] in rose\n                and row[\"inputs\"].get(\"scl_i\") == 1\n                and activation_inputs(row))\n\n    closes = _any([{\"cmd_ack\": 1}, {\"al\": 1}])\n    aborts = _any([{\"nReset\": 0}, {\"rst\": 1}])\n\n    windows = after(trace, opens, until=closes, aborts=aborts)\n\n    return worst([\n        eventually(w, lambda r: r[\"outputs\"].get(\"al\") == 1,\n                   after_activation=True, strong=True)\n        for w in windows\n    ])",
+      "hash": "15db4f4e7f421d71",
+      "evidence": "30fc50a0b79f0be4"
+    },
+    {
+      "req_uid": "REQ-0050",
+      "tp_uids": [
+        "TP-0120",
+        "TP-0121"
+      ],
+      "clause": "the busy flag remains set (1) on every clock after a filtered START sets it, and does not clear until a plausible filtered STOP (raw SDA rising while SCL reads high) has occurred somewhere in the transaction, or reset intervenes -- with an asynchronous nReset==0 permitted to have already cleared busy on the very row it closes the window",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import after, throughout, worst, edges\n\n    busy_rises = edges(trace, \"busy\", \"rise\")\n\n    def activation(row):\n        return row[\"edge\"] in busy_rises and row[\"inputs\"].get(\"ena\") == 1\n\n    # Reconstructed STOP evidence from the DECLARED raw inputs. Spec item 6\n    # defines a STOP condition as \"filtered SDA rises while filtered SCL is\n    # high\"; the filtered/synchronised version is internal, so the raw\n    # scl_i/sda_i inputs are the observable proxy for when a STOP was\n    # staged on the bus. Using them -- rather than busy itself -- keeps the\n    # window's boundary independent of the very port the assertion decides,\n    # instead of self-referential with it.\n    sda_rises = edges(trace, \"sda_i\", \"rise\")\n\n    def closes(row):\n        if row[\"edge\"] in sda_rises and row[\"inputs\"].get(\"scl_i\") == 1:\n            return True\n        if row[\"inputs\"].get(\"nReset\") == 0:\n            return True\n        if row[\"inputs\"].get(\"rst\") == 1:\n            return True\n        return False\n\n    windows = after(trace, activation, until=closes)\n    follows = True  # normalized.activation.effect_follows\n\n    # STATE requirement: busy must stay asserted throughout the transaction,\n    # not merely be reasserted at some point. The window ends on\n    # reconstructed STOP evidence, nReset==0, or rst==1 -- not on busy's own\n    # value -- so this assertion can be violated by a spurious/early clear.\n    #\n    # nReset is asynchronous and dominant, so on the very row it goes low\n    # busy has already been cleared by that same reset: the closing row and\n    # the row the effect disappears on are one and the same for that\n    # closer. normalized.expectation names reset as a sanctioned\n    # alternative closer, so a design that clears busy exactly on the\n    # nReset==0 row is behaving correctly, not violating \"remains set until\n    # STOP\" -- but throughout() is inclusive of the closing row and would\n    # convict it anyway. The other two closers do not have this problem:\n    # busy's registered/synchronous update means it has not yet cleared on\n    # the reconstructed-STOP-evidence row or the rst==1 row (rst only takes\n    # effect on the following rising edge), so busy==1 is still the right\n    # read there and the exception below is scoped to nReset==0 alone.\n    return worst([\n        throughout(w, lambda r: r[\"outputs\"].get(\"busy\") == 1\n                   or r[\"inputs\"].get(\"nReset\") == 0,\n                   after_activation=follows)\n        for w in windows\n    ])",
+      "hash": "e3d905e682ccf506",
+      "evidence": "5b3c8f36ced7c7ff"
+    },
+    {
+      "req_uid": "REQ-0063",
+      "tp_uids": [
+        "TP-0151",
+        "TP-0152"
+      ],
+      "clause": "During a STOP command sequence (cmd=2, core enabled, not in reset), scl_oen is deasserted (driven to 1) at some point before the sequence completes (cmd_ack), unless an arbitration-lost condition -- fresh or already sticky -- is present, in which case the attempt is void and decides nothing.",
+      "source": "from specflow.refmodel.temporal import after, eventually, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    opens = _holds({\"cmd\": 2, \"ena\": 1, \"nReset\": 1, \"rst\": 0})\n    closes = _holds({\"cmd_ack\": 1})\n    voids = _holds({\"al\": 1})\n\n    windows = after(trace, opens, until=closes, aborts=voids)\n\n    return worst([\n        eventually(w, lambda r: r[\"outputs\"][\"scl_oen\"] == 1, after_activation=True)\n        for w in windows\n    ])",
+      "hash": "cc2c963ae15c6788",
+      "evidence": "d58faf4b2d8ea4af"
+    },
+    {
+      "req_uid": "REQ-0066",
+      "tp_uids": [
+        "TP-0157",
+        "TP-0158",
+        "TP-0159"
+      ],
+      "clause": "sda_oen stays released (1) throughout the READ command's data-bit phase (cmd=4, ena=1, until SCL is pulled low, the command completes, or arbitration is lost), except that the specification does not pin sda_oen's value on the exact row that phase concludes.",
+      "source": "from specflow.refmodel.temporal import after, throughout, worst\n\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    applies = _holds({\"cmd\": 4, \"ena\": 1})\n    closes = _any([{\"scl_oen\": 0}, {\"cmd_ack\": 1}, {\"al\": 1}])\n    follows = True  # normalized activation.effect_follows\n\n    windows = after(trace, applies, until=closes)\n\n    def released_or_concluding(r):\n        # sda_oen must be released throughout the READ data-bit phase, but the\n        # specification pins WHILE the slave can drive the bit, and never says\n        # sda_oen must still read 1 on the exact row the phase concludes (SCL\n        # pulled low to end the sample window, the command completing, or\n        # arbitration being lost). `closes` can only be true at the window's\n        # own last row -- that is what ends it -- so this excuses the\n        # requirement there and only there, while still demanding release on\n        # every row strictly inside the window.\n        return r[\"outputs\"].get(\"sda_oen\") == 1 or closes(r)\n\n    return worst([throughout(w, released_or_concluding, after_activation=follows)\n                  for w in windows])",
+      "hash": "304799268a09926a",
+      "evidence": "b2287a94210d55f7"
+    },
+    {
+      "req_uid": "REQ-0071",
+      "tp_uids": [
+        "TP-0168",
+        "TP-0169"
+      ],
+      "clause": "During the WRITE bit high phase (opening when scl_oen rises after a WRITE-bit command is accepted, running until scl_oen returns low, arbitration is lost, or the command completes) scl_oen remains deasserted (1, released) up to that point, so the external pull-up can drive SCL high",
+      "source": "from specflow.refmodel.temporal import after, edges, until, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    # Open at the high phase's own start (scl_oen's rise), not at bare\n    # WRITE-bit command acceptance -- acceptance can still be inside the\n    # SDA-setup sub-phase, which this requirement does not cover.\n    rose = edges(trace, \"scl_oen\", \"rise\")\n\n    def applies(row):\n        return (row[\"edge\"] in rose\n                and row[\"inputs\"].get(\"cmd\") == 4\n                and row[\"inputs\"].get(\"ena\") == 1\n                and row[\"inputs\"].get(\"nReset\") == 1\n                and row[\"inputs\"].get(\"rst\") == 0)\n\n    # normalized.activation.until -- the high phase ends when SCL is pulled\n    # low again (its own ordinary completion), arbitration is lost, or the\n    # command completes.\n    closes = _any([{\"scl_oen\": 0}, {\"al\": 1}, {\"cmd_ack\": 1}])\n\n    windows = after(trace, applies, until=closes)\n    if not windows:\n        return (None, None,\n                \"no WRITE-bit high phase (scl_oen rising while cmd=4, \"\n                \"enabled, out of reset) occurred in this trace\")\n\n    follows = True  # normalized.activation.effect_follows\n\n    # `until`, not `throughout`: the window's own release condition can be\n    # scl_oen going low -- the phase's normal, correct end -- and `until`\n    # does not require the held predicate on the row the release fires.\n    return worst([\n        until(w, lambda r: r[\"outputs\"].get(\"scl_oen\") == 1, closes,\n              after_activation=follows)\n        for w in windows\n    ])",
+      "hash": "0f9391f6e162b10e",
+      "evidence": "2a077cbe8a2adc3c"
+    },
+    {
+      "req_uid": "REQ-0073",
+      "tp_uids": [
+        "TP-0172",
+        "TP-0173"
+      ],
+      "clause": "after the WRITE bit high phase the controller drives SCL low (scl_oen asserted 0) to terminate the bit timing window",
+      "source": "from specflow.refmodel.temporal import after, eventually, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    activation = _holds({\"cmd\": 4, \"din\": 1, \"ena\": 1, \"nReset\": 1, \"rst\": 0})\n    closes = _holds({\"cmd_ack\": 1})\n    # Reset during a command voids the attempt rather than ending it --\n    # 'Reset during a command releases both bus lines and suppresses\n    # acknowledgement' -- so it belongs beside arbitration loss in aborts,\n    # not left unguarded to run the window off the end of the trace.\n    aborts = _any([{\"al\": 1}, {\"nReset\": 0}, {\"rst\": 1}])\n\n    windows = after(trace, activation, until=closes, aborts=aborts)\n\n    return worst([\n        eventually(w, lambda r: r[\"outputs\"].get(\"scl_oen\") == 0,\n                   after_activation=True, strong=True)\n        for w in windows\n    ])",
+      "hash": "4fa1de5ec6ffdd59",
+      "evidence": "d6856373c8225f77"
+    },
+    {
+      "req_uid": "REQ-0095",
+      "tp_uids": [
+        "TP-0223",
+        "TP-0224"
+      ],
+      "clause": "during the stable high phase of a WRITE bit the module samples SDA for arbitration: sda_i observed low asserts al, sda_i observed high leaves al unasserted",
+      "source": "from specflow.refmodel.temporal import after, throughout, eventually, worst\n\ndef decide(trace):\n    def act(r):\n        return (r['inputs'].get('cmd') == 4\n                and r['inputs'].get('din') == 1\n                and r['inputs'].get('ena') == 1\n                and r['inputs'].get('nReset') == 1\n                and r['inputs'].get('rst') == 0\n                and r['inputs'].get('scl_i') == 1\n                and r['outputs'].get('scl_oen') == 1)\n\n    def closes(r):\n        return (r['outputs'].get('scl_oen') == 0\n                or r['outputs'].get('al') == 1\n                or r['outputs'].get('cmd_ack') == 1)\n\n    windows = after(trace, act, until=closes)\n    follows = True  # normalized activation.effect_follows\n\n    verdicts = []\n    for w in windows:\n        # sda_i is the stimulus; scan the whole window (including the\n        # trigger row, which is already inside the stable high phase since\n        # scl_oen/scl_i are required there) for whether it was ever driven low.\n        low_seen = any(r['inputs'].get('sda_i') == 0 for r in w.rows)\n        if low_seen:\n            verdicts.append(\n                eventually(w, lambda r: r['outputs'].get('al') == 1,\n                           after_activation=follows, strong=True))\n        else:\n            verdicts.append(\n                throughout(w, lambda r: r['outputs'].get('al') == 0,\n                           after_activation=follows))\n\n    return worst(verdicts)",
+      "hash": "949047e7090f3b70",
+      "evidence": "8ce4a2ceff5d1b1d"
+    },
+    {
+      "req_uid": "REQ-0097",
+      "tp_uids": [
+        "TP-0227",
+        "TP-0228",
+        "TP-0300"
+      ],
+      "clause": "The module asserts al when a filtered STOP condition (SDA rises while SCL reads filtered-high) is detected while the active command is not itself a STOP -- confirmed by evidence the FSM was engaged (scl_oen or sda_oen left its idle-released value) during that command's own episode, combined with the design never itself having driven SDA low as part of it.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import after, edges, worst\n\n    # normalized.activation: inputs {\"nReset\": 1, \"rst\": 0},\n    # opens_on [{\"scl_i\": 1, \"sda_i\": \"rise\"}] -- a filtered STOP condition,\n    # until [{\"cmd_ack\": 1}, {\"al\": 1}, {\"rst\": 1}, {\"nReset\": 0}]\n    rose = edges(trace, \"sda_i\", \"rise\")\n\n    def applies(r):\n        return (r[\"edge\"] in rose\n                and r[\"inputs\"].get(\"nReset\") == 1\n                and r[\"inputs\"].get(\"rst\") == 0\n                and r[\"inputs\"].get(\"scl_i\") == 1)\n\n    def closes(r):\n        return (r[\"outputs\"].get(\"cmd_ack\") == 1\n                or r[\"outputs\"].get(\"al\") == 1\n                or r[\"inputs\"].get(\"rst\") == 1\n                or r[\"inputs\"].get(\"nReset\") == 0)\n\n    windows = after(trace, applies, until=closes)\n    if not windows:\n        return (None, None,\n                \"no filtered STOP condition (scl_i=1 with a filtered sda_i rise, \"\n                \"out of reset) was observed in this trace\")\n\n    results = []\n    for w in windows:\n        if not w.closed:\n            # ran off the end of the trace with no decisive outcome\n            continue\n\n        close_row = w.rows[-1]\n\n        if close_row[\"outputs\"].get(\"al\") == 1:\n            results.append((True, w.edge,\n                             \"al asserted on a filtered STOP detected while a \"\n                             \"command was active\"))\n            continue\n\n        if close_row[\"outputs\"].get(\"cmd_ack\") != 1:\n            # closed by reset (rst=1 or nReset=0); the attempt was cut short\n            continue\n\n        # cmd_ack closing the window only proves SOME command eventually\n        # completed after the edge, not that a command was already active\n        # when the STOP edge itself occurred. Look back over just this\n        # episode -- from the previous cmd_ack/al/reset boundary up to\n        # where this window opened -- for evidence the design drove\n        # sda_oen low as part of it (the specification's own\n        # encoding-independent STOP signature).\n        open_idx = w.rows[0][\"index\"]\n        boundary = 0\n        for j in range(open_idx - 1, -1, -1):\n            row = trace[j]\n            if (row[\"outputs\"].get(\"cmd_ack\") == 1\n                    or row[\"outputs\"].get(\"al\") == 1\n                    or row[\"inputs\"].get(\"rst\") == 1\n                    or row[\"inputs\"].get(\"nReset\") == 0):\n                boundary = j + 1\n                break\n        episode = trace[boundary:open_idx]\n\n        # Positive evidence that the FSM was engaged at all during this\n        # episode -- if neither output-enable ever left its idle-released\n        # value, this episode is indistinguishable from the FSM having\n        # simply been idle (idle drives nothing), so we cannot confirm the\n        # requirement's own trigger -- 'a non-STOP command is active' --\n        # ever held here. Decide nothing rather than guess.\n        engaged = any(r[\"outputs\"].get(\"scl_oen\") == 0\n                      or r[\"outputs\"].get(\"sda_oen\") == 0\n                      for r in episode)\n        if not engaged:\n            continue\n\n        drove_sda_low = any(r[\"outputs\"].get(\"sda_oen\") == 0 for r in episode)\n\n        if drove_sda_low:\n            # This command's own SDA-low drive explains the later release --\n            # the specification's own STOP signature -- so the active\n            # command was itself STOP and this instance is outside this\n            # requirement's scope (a non-STOP command was not active).\n            continue\n\n        results.append((False, w.edge,\n                         \"a filtered STOP was detected while an engaged, active \"\n                         \"command never drove SDA low itself (so it was not the \"\n                         \"module's own STOP), yet the window closed via cmd_ack \"\n                         \"with al never asserted\"))\n\n    return worst(results)",
+      "hash": "6aca53c0f90bb2ac",
+      "evidence": "d77a9671389e2a61"
+    },
+    {
+      "req_uid": "REQ-0101",
+      "tp_uids": [
+        "TP-0235",
+        "TP-0236"
+      ],
+      "clause": "During an active READ command (cmd=8, core enabled, until cmd_ack or arbitration loss), once the external SCL bus actually rises while the DUT has released SCL (the observable start of the READ's sampled high phase), dout comes to equal the sda_i value observed at that moment, at some point before the command ends.",
+      "source": "from specflow.refmodel.temporal import after, edges, worst\n\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    opens = _holds({\"cmd\": 8, \"ena\": 1})\n    closes = _any([{\"cmd_ack\": 1}, {\"al\": 1}])\n\n    windows = after(trace, opens, until=closes)\n    if not windows:\n        return (None, None,\n                'no READ command (cmd=8 while ena=1) was issued in this trace')\n\n    # Proxy for the spec's 'filtered SCL rising edge' sampling instant:\n    # the earliest point at which the raw bus input scl_i is observed to\n    # rise while the DUT has itself released SCL (scl_oen=1) -- the first\n    # hard, boundary-visible evidence that the READ's sampled high phase\n    # has actually been reached, rather than a snapshot taken merely at\n    # command acceptance.\n    scl_rose = edges(trace, \"scl_i\", \"rise\")\n\n    per_window = []\n    for w in windows:\n        rows = w.rows\n        anchor_idx = None\n        for i, r in enumerate(rows):\n            if r[\"edge\"] in scl_rose and r[\"outputs\"].get(\"scl_oen\") == 1:\n                anchor_idx = i\n                break\n\n        if anchor_idx is None:\n            per_window.append((None, w.edge,\n                'no external SCL rise while the DUT had released SCL was '\n                'observed during this READ command; the sampled high phase '\n                'was never seen in this window'))\n            continue\n\n        expected = rows[anchor_idx][\"inputs\"].get(\"sda_i\")\n        anchor_edge = rows[anchor_idx][\"edge\"]\n        found = any(r[\"outputs\"].get(\"dout\") == expected\n                    for r in rows[anchor_idx:])\n\n        if found:\n            per_window.append((True, anchor_edge,\n                f'dout reached the sampled SDA value ({expected}) after the '\n                f'SCL-high sampling phase began at edge {anchor_edge}'))\n        else:\n            last_edge = rows[-1][\"edge\"] if rows else w.edge\n            per_window.append((False, last_edge,\n                f'dout never reflected the sampled SDA value ({expected}) '\n                f'after the SCL-high sampling phase began at edge {anchor_edge}'))\n\n    return worst(per_window)",
+      "hash": "b37bca8526075677",
+      "evidence": "77422bd2ab7d7b60"
+    },
+    {
+      "req_uid": "REQ-0117",
+      "tp_uids": [
+        "TP-0268",
+        "TP-0269"
+      ],
+      "clause": "The FSM releases SCL (scl_oen transitions to 1) as the WRITE bit enters its stable high phase; an attempt voided by arbitration loss before that release is not held to this obligation",
+      "source": "from specflow.refmodel.temporal import after, edges, eventually, worst\n\ndef decide(trace):\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    # Transcribed from activation.inputs: a WRITE bit accepted (cmd=4)\n    # while enabled.\n    applies = _holds({\"cmd\": 4, \"ena\": 1})\n\n    # until=: the bit's low phase (scl_oen returning to 0) is the genuine\n    # completion of this attempt's window.\n    closes = _holds({\"scl_oen\": 0})\n\n    # aborts=: arbitration loss returns the FSM to idle before this claim's\n    # release action is owed -- a void, not a completion, so it must not\n    # sit in `until`.\n    aborts = _holds({\"al\": 1})\n\n    windows = after(trace, applies, until=closes, aborts=aborts)\n\n    # The requirement names an ACTION (releasing SCL), and scl_oen's idle\n    # value is already 1 (released) -- the same number -- so a level check\n    # can be satisfied by the line simply having never moved yet. Require\n    # the witnessed transition instead.\n    rose = set(edges(trace, \"scl_oen\", \"rise\"))\n\n    follows = True  # normalized.activation.effect_follows\n\n    return worst([\n        eventually(w, lambda r: r[\"edge\"] in rose,\n                   after_activation=follows, strong=True)\n        for w in windows\n    ])",
+      "hash": "f424d3a3bdd4623a",
+      "evidence": "de35c9421ee4c32d"
+    },
+    {
+      "req_uid": "REQ-0118",
+      "tp_uids": [
+        "TP-0270",
+        "TP-0271",
+        "TP-0301"
+      ],
+      "clause": "If filtered SDA (sda_i) remains low for the whole of a stable SCL-high phase during an active WRITE command in which SDA is expected released, the controller asserts al (arbitration-lost), unless the attempt is voided by reset",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import after, edges, eventually, throughout, worst\n\n    def _holds(cond):\n        def p(row):\n            return all(\n                row[\"outputs\"].get(k, row[\"inputs\"].get(k)) == v\n                for k, v in cond.items())\n        return p\n\n    def _any(alts):\n        preds = [_holds(a) for a in alts]\n        return lambda row: any(p(row) for p in preds)\n\n    # normalized.activation.inputs {ena:1, scl_i:1} merged with opens_on\n    # {sda_oen:1} -- an activation that depends on an output, so it is\n    # merged into the opening predicate rather than being the thing under\n    # test. Restricted to cmd==4 (WRITE, per this contract's established\n    # encoding -- see REQ-0082's activated_via) because the requirement\n    # itself scopes arbitration checking to write operations only\n    # ('Arbitration checking is performed during write operations'); the\n    # testbench holds cmd stable across a command's whole execution, so\n    # this reads true throughout an in-progress WRITE's stable-high phase\n    # and false during READ/STOP/START/idle/other-master activity.\n    qualifies = _holds({\"ena\": 1, \"scl_i\": 1, \"cmd\": 4})\n    released = _holds({\"sda_oen\": 1})\n    applies = lambda r: qualifies(r) and released(r)\n\n    # normalized.activation.until: [{\"scl_i\": \"fall\"}, {\"al\": 1}] -- one\n    # alternative is an edge value, so it needs edges(), not _holds/_any.\n    fell = edges(trace, \"scl_i\", \"fall\")\n\n    def closes(row):\n        return row[\"edge\"] in fell or row[\"outputs\"].get(\"al\") == 1\n\n    # Reset (async nReset low, or sync rst high) voids an in-progress\n    # attempt rather than ending it as though the phase resolved: the\n    # gate objected to a window that survived a reset and later closed\n    # without al reasserting being scored as a completed, failed\n    # obligation. aborts= makes every operator below return UNKNOWN for\n    # such a window automatically, instead of hand-checking reset in the\n    # loop body.\n    voided = _any([{\"nReset\": 0}, {\"rst\": 1}])\n\n    windows = after(trace, applies, until=closes, aborts=voided)\n    if not windows:\n        return (None, None,\n                \"the stable SCL-high phase with SDA released during an \"\n                \"active WRITE command never occurred in this trace\")\n\n    follows = True  # normalized.activation.effect_follows\n\n    verdicts = []\n    for w in windows:\n        # Antecedent: filtered SDA stayed low for the whole phase. Using\n        # throughout() rather than hand-scanning w.rows means a window\n        # ended by reset reports UNKNOWN here automatically -- no\n        # separate reset check needed in this loop.\n        sda_low = throughout(w, lambda r: r[\"inputs\"].get(\"sda_i\") == 0,\n                              after_activation=follows)\n        if sda_low[0] is not True:\n            # Either SDA rose within the phase (antecedent didn't hold --\n            # nothing for this clause to judge here), the window was too\n            # short to observe, or the attempt was voided by reset. In\n            # every case this attempt says nothing about the clause.\n            verdicts.append((None, None,\n                              \"filtered SDA did not remain low for the \"\n                              \"whole stable SCL-high release phase in \"\n                              \"this attempt (\" + str(sda_low[2]) + \"); \"\n                              \"this clause's condition did not arise\"))\n            continue\n\n        # Consequent: al must be asserted before the phase resolves.\n        # eventually() is weak (a window that ran off the end of the\n        # trace without closing reports UNKNOWN, not False) and an\n        # aborted window reports UNKNOWN regardless of what its rows\n        # show, so a completed phase (closed via scl_i fall or al==1)\n        # with SDA held low throughout but al never asserted is the only\n        # way this reports False.\n        verdicts.append(eventually(w, lambda r: r[\"outputs\"].get(\"al\") == 1,\n                                    after_activation=follows))\n\n    return worst(verdicts)",
+      "hash": "6c4a77b8f995b0c1",
+      "evidence": "d99304f204be84ae"
+    }
+  ],
+  "dispositions": {
+    "REQ-0001": "TRUSTED",
+    "REQ-0002": "ORACLE_INVALID",
+    "REQ-0006": "TRUSTED",
+    "REQ-0007": "ORACLE_INVALID",
+    "REQ-0016": "TRUSTED",
+    "REQ-0020": "TRUSTED",
+    "REQ-0028": "NOT_ASSERTABLE",
+    "REQ-0030": "TRUSTED",
+    "REQ-0050": "TRUSTED",
+    "REQ-0055": "ORACLE_INVALID",
+    "REQ-0057": "ORACLE_INVALID",
+    "REQ-0063": "TRUSTED",
+    "REQ-0066": "TRUSTED",
+    "REQ-0071": "TRUSTED",
+    "REQ-0073": "TRUSTED",
+    "REQ-0080": "ORACLE_INVALID",
+    "REQ-0082": "ORACLE_INVALID",
+    "REQ-0087": "ORACLE_INVALID",
+    "REQ-0095": "TRUSTED",
+    "REQ-0097": "TRUSTED",
+    "REQ-0101": "TRUSTED",
+    "REQ-0117": "TRUSTED",
+    "REQ-0118": "TRUSTED"
+  },
+  "reasons": {
+    "REQ-0002": "off-target: The unlicensed False path is the ordering_v branch ('neither a valid START ordering nor a valid STOP ordering was observed') when it fires on a window that al (not a genuine cmd_ack completion) closed. The check's TRIGGER/window construction needs to move al out of `until=` and into `aborts=`, alongside the reset conditions already there -- e.g. `closes = _holds({'cmd_ack': 1})` and `aborts = _any([{'nReset': 0}, {'rst': 1}, {'al': 1}])` -- so a START/STOP attempt legitimately cut short by arbitration loss returns UNKNOWN from sequence() instead of being scored against an ordering pattern it was never given the chance to complete.",
+    "REQ-0007": "off-target: The False path taken when the window is opened (and then broken) by a single raw-scl_i sample reading low -- a transient dip the module's own three-sample majority filter is specified to reject as a glitch (spec item 5; corner_cases item 7) -- is unlicensed: the requirement's trigger is 'the FILTERED SCL input remains low', not the raw pad value, and a design that correctly ignores an unfiltered glitch and keeps advancing its already-scheduled bit timing is not in violation, yet the check convicts it. The check's TRIGGER needs to require the low to be sustained/filter-qualified before treating it as 'the filtered SCL input remains low' -- e.g. requiring scl_i to read 0 for a run of samples spanning the filter's sampling interval (derived from clk_cnt>>2, per spec item 5), or otherwise excluding a window whose raw-low condition never outlasts a single sample -- instead of opening the window on the very first raw-low row.",
+    "REQ-0028": "not-assertable: Both the trigger and the effect are absent. REQ-0028's sentence only glosses what al MEANS ('indicates that the controller has detected an arbitration loss'); it never states a situation in which a particular al behavior is required (no trigger) nor any obligation on al's value or timing that a design could violate (no effect). Consequently the check cannot be testing this requirement's own claim -- its trigger (sda_oen release during a din=1 WRITE bit with sda_i=0) and its effect (al asserts and stays sticky until reset) are both imported wholesale from other spec paragraphs (Implementation Details #8/#14 and the reset section) describing the arbitration-detection mechanism and reset/sticky behavior, which belong to other requirements' own words, not REQ-0028's. This is a definition with no obligation to fit; the finding goes back to the specification, not the check's author.",
+    "REQ-0055": "off-target: The trigger unlicensedly narrows 'each command sequence' to cmd==1 (START) only; STOP/WRITE/READ sequences are excluded from every trace by construction, so the check never decides REQ-0055 for three of the four commands its own 'each' explicitly covers. The check's TRIGGER would have to become cmd in {1,2,3,4} (however this contract encodes START/STOP/WRITE/READ) rather than a single pinned value. That alone is not sufficient, though: the effect (eventually scl_oen==0 and eventually sda_oen==0) is specific to START's own phase pattern (spec item 11) and does not hold for STOP, which never drives SCL low within its own window (item 12). A correct fix needs either separate per-command windows each asserting that command's own phase-appropriate scl_oen/sda_oen value, folded together with worst(), or an effect expressed generically enough (e.g. 'each output enable takes both values 0 and 1 somewhere in the sequence, per the command's own phases') to hold across all four commands rather than only the one currently pinned.",
+    "REQ-0057": "off-target: The check can never return False for any design, so the relevant defect is that it convicts nothing rather than convicting the wrong thing: `until(released, pulled_low)` is a tautology because pulled_low is defined as the exact negation of released on the one-bit sda_oen port, so the 'release' side of the until is always already discharged and a design that never once shows sda_oen==1 during the START sequence -- directly contradicting the requirement -- still passes. The assertion needs to actually require the released state to be witnessed, e.g. `eventually(w, released, after_activation=follows)` (sda_oen was seen at 1 somewhere in the window), rather than pairing it against its own complement inside `until`, which can never expose a design that skipped the release step entirely.",
+    "REQ-0080": "off-target: The unlicensed False path is `throughout(w, al==0)` firing on an idle window that opens with al already sticky-high from an earlier, unrelated (and correctly detected/latched) arbitration-loss event within the same reset session -- the spec's only stated al-clearing event is reset, so a correct design keeps al=1 through every subsequent idle span until the next reset, and 'the controller disables arbitration checking' does not obligate it to un-latch that. The check's TRIGGER/assertion would have to stop treating al's resting level as the signal: either (a) scope the window to the FIRST idle interval after reset only (before any command has yet been accepted since that reset), matching the reset-paragraph context REQ-0080 is drawn from, and drop the repeated re-opening on every later return to idle, or (b) if every idle span is meant to be covered, replace `throughout(al==0)` with a check that al is not NEWLY asserted during the window -- e.g. no rising edge of al inside it -- so a window that opens with al already latched high from a prior event is not, by that fact alone, evidence that arbitration checking is active now.",
+    "REQ-0082": "off-target: The check's trigger only covers one of the four alternatives normalized.activation.opens_on names (ena==0); nReset falling, synchronous rst asserted, and an external SCL fall while SCL is released (multi-master sync reload) are never opened as windows, so the requirement is never decided for those three reload scenarios in any trace. The TRIGGER would need to become the union of all four opens_on entries (an edge-based window on nReset fall, one on the {nReset:1, rst:1} row, the existing ena==0 window, and one on an SCL fall while scl_oen==1), each paired with the observation the corresponding route licenses at that specific moment -- not a blanket stability claim over an entire window, which for the ena=0 case in particular does not distinguish a genuine counter-reload from scl_oen merely being held by the unrelated ena-gating obligation REQ-0020/REQ-0053 already state.",
+    "REQ-0087": "off-target: The unlicensed False path is `stable(w, \"sda_oen\")` returning False when nReset=0 or rst=1 closes the window and reset's own mandatory output-enable release (sda_oen forced to 1) lands on that closing row while sda_oen had legitimately been 0 (a WRITE of din=0) going into the reset. The check's TRIGGER/window needs nReset==0 and rst==1 moved out of `until=` and into `aborts=` (e.g. `windows = after(trace, opens, until=_any([{'scl_i':1},{'scl_oen':0}]), aborts=_any([{'nReset':0},{'rst':1}]))`), so a slave_wait window a reset interrupts returns UNKNOWN from `never`/`stable` instead of being scored against obligations reset itself overrides."
+  },
+  "witness": "witness",
+  "rounds": 3,
+  "variants": 0,
+  "vacuity_checked": false,
+  "correspondence_checked": true,
+  "over_strictness_bounded_by": "witness",
+  "repairs": {
+    "REQ-0001": [
+      "off-target: The eventually(w, completes, strong=True, ...) branch is an unlicensed False path: it convicts a design for not producing cmd_ack/al, but those ports appear nowhere in REQ-0001's text, its declared 'ports' list, or its own 'observed_via' routes -- that obligation belongs to the separate 'cmd_ack pulses for one clock at command completion' requirement. It also fires on missing evidence rather than a witnessed violation, since the window it runs over is keyed only to {ena, nReset, rst} and never confirms that a supported command was actually presented on cmd, so an idle-but-enabled stretch with no command issued can strongly convict a correct design. The fix is not to delete the assertion and keep the window as a bare pass-through -- it is to drop the completion obligation from this check entirely (rebuild the check around only the const_low assertion, which is fully licensed) and let the cmd_ack/al-completion clause be decided by its own requirement's check."
+    ],
+    "REQ-0002": [
+      "off-target: The trigger predicate `_holds({'cmd': 1, 'ena': 1})` matches only cmd==1 (START, per this contract's own established encoding, cross-confirmed by REQ-0063's cmd=2=STOP and REQ-0101's cmd=8=READ), even though both the requirement's text and this oracle's own normalized.activation.text describe the trigger as 'a START OR STOP command is issued.' Because of that, `after()` never opens a window on a genuine STOP command, so the stop_v branch of the code is effectively dead: it can only be evaluated inside a START-triggered window, where a real STOP sequence's data never appears. A design with an entirely broken STOP implementation therefore receives no verdict from this check at all, despite the requirement explicitly claiming STOP generation too. The fix is to rebuild the trigger as an alternation over both encodings, e.g. `_any([{'cmd': 1, 'ena': 1}, {'cmd': 2, 'ena': 1}])`, so that a STOP command opens its own window and the STOP-ordering sequence check is actually exercised against real STOP behavior rather than only ever running inside a window that can only be a START.",
+      "off-target: The False path 'neither a valid START ordering nor a valid STOP ordering was observed' is unlicensed for a window a mid-command reset interrupts. The check's window is built with `after(trace, applies, until=closes)` and no `aborts=`; because a reset (nReset=0 or rst=1) legitimately suppresses cmd_ack (per corner_cases: 'Reset during a command releases both bus lines and suppresses acknowledgement'), such a window never closes at the reset -- it runs straight through and is instead closed by whatever cmd_ack/al comes next in the trace, typically a later, unrelated command's completion. The sequence() ordering check then scores the reset-plus-next-command rows against the START/STOP patterns and fails a design that behaved correctly. The check's TRIGGER (window construction) would have to become `after(trace, applies, until=closes, aborts=_any([{'nReset': 0}, {'rst': 1}]))`, voiding (UNKNOWN) any attempt a reset interrupts instead of letting it run through and be scored against whatever it happens to close on later.",
+      "off-target: The unlicensed False path is the ordering_v branch ('neither a valid START ordering nor a valid STOP ordering was observed') when it fires on a window that al (not a genuine cmd_ack completion) closed. The check's TRIGGER/window construction needs to move al out of `until=` and into `aborts=`, alongside the reset conditions already there -- e.g. `closes = _holds({'cmd_ack': 1})` and `aborts = _any([{'nReset': 0}, {'rst': 1}, {'al': 1}])` -- so a START/STOP attempt legitimately cut short by arbitration loss returns UNKNOWN from sequence() instead of being scored against an ordering pattern it was never given the chance to complete."
+    ],
+    "REQ-0006": [
+      "off-target: The trigger's cmd==1 qualifier (copied from normalized.activation.inputs) has no basis in REQ-0006's own words, which never name a cmd value, and no basis in the specification or interface, which never fix cmd's numeric encoding (cmd is only listed by command name; the module declares no parameters). If code 1 is not the implementation's WRITE encoding, alt1 (scl_i==1 & sda_i==0, the spec's own START-condition pattern) or alt2 (a filtered sda_i rise while scl_i==1, the spec's own STOP-condition pattern) opens during that other command's ordinary, correct execution, and the strong eventually(al==1) convicts a compliant design for not asserting al during its own START or its own requested STOP. The trigger would have to identify 'the controller expects SDA released' and 'an active, non-STOP command' from ports the requirement's words actually license -- e.g. the design's own sda_oen==1 in place of din==1 for alt1, and excluding the module's own STOP behavior structurally -- rather than a hard-coded, guessed numeric cmd value.",
+      "off-target: opens() lacks the 'during an active (non-NOP) command' qualifier that normalized.activation.text states is part of this clause's trigger. It gates only on ena/nReset/rst plus sda_oen==1 & scl_i==1 & sda_i==0, values that also hold in the default idle/reset-released state where no arbitration checking is actually in effect. The TRIGGER needs an added conjunct pinning the window to an actual active command/arbitration-check condition (e.g. that the FSM is mid-command, not idle -- such as tracking that a command was accepted out of idle and hasn't yet produced cmd_ack, or gating on the WRITE-bit high phase the din:1 entry in normalized.activation.opens_on points at) so a stray idle-period low sample on sda_i cannot open a window that a later, unrelated command's cmd_ack then closes as an unlicensed False."
+    ],
+    "REQ-0016": [
+      "off-target: The eventually(lambda r: cmd_ack==1 or al==1, after_activation=True, strong=True) branch (guarded by reset_free) is the unlicensed path. Because the window's own until=[{cmd_ack:1},{al:1}] already guarantees that same disjunction holds at the row where any window actually closes, this assertion is a restatement of the closing condition and can only fail when the window instead runs off the end of the trace unclosed -- a fact about how long/what the stimulus did (trace truncation, or ena legitimately held low per the spec's own pause behavior), not evidence the design misbehaved. Deleting the assertion would silently drop real completion-obligation coverage, which is not the fix; the check's obligation-assertion needs to stop being identical to its own window-closing predicate. Either drop strong=True so an unclosed window reports UNKNOWN (honest 'stimulus never finished this') instead of False, or rebuild the window so completion is asserted against a trigger that does not already bake the same condition into 'until' -- e.g. open the window on command acceptance alone (without cmd_ack/al in its own closing set) so 'eventually cmd_ack or al' is an independent, falsifiable claim about a design that could otherwise run forever without ever producing either output."
+    ],
+    "REQ-0020": [
+      "off-target: The unlicensed False path: a reset (nReset==0 or rst==1) occurring while ena is still low. The window is only closed by ena==1, so it stays open across a mid-window reset and convicts a design that correctly reset cmd_ack/busy/scl_oen/sda_oen -- behavior REQ-0020's text never speaks to. The trigger needs to become an aborting window, not just an opening/closing one: after(trace, _holds({\"ena\": 0}), until=_holds({\"ena\": 1}), aborts=_any([{\"nReset\": 0}, {\"rst\": 1}])), so a reset mid-window returns UNKNOWN there instead of a False against reset-driven changes. Rebuilding the window this way is the fix, not deleting the stability/never assertions, which are otherwise correctly licensed by 'gates normal timing and input filtering operation.'"
+    ],
+    "REQ-0030": [
+      "off-target: The {nReset:0} and {rst:1} entries belong in an abort condition, not in `until`: they should be passed as `aborts=_any([{\"nReset\":0},{\"rst\":1}])` to `after()` (dropped out of `until`, which would then just be `_any([{\"cmd_ack\":1},{\"al\":1}])`), so a window ended by reset returns UNKNOWN from `eventually(strong=True)` instead of a scored violation. As written, the check's TRIGGER-closing logic treats a reset that interrupts the scenario as though the command sequence had run to completion, and convicts a design for not asserting al before/through a reset that the specification itself says clears al. Simply deleting the strong=True or the al-less False branch is not the fix -- the window itself has to stop treating reset as a normal close."
+    ],
+    "REQ-0050": [
+      "off-target: The check has no reachable False path: `until` closes the window on the same port (busy==0) whose negation `throughout` then asserts across the surviving rows, so the window can never contain a row with busy==0 for the assertion to catch -- the check cannot distinguish a design that clears busy on a genuine filtered STOP from one that clears it early for no reason at all, since either case simply becomes the window's own closing point. To actually test 'remains set until a STOP is detected,' the check's ASSERTION -- not its trigger -- would have to become something that can disagree with the window's own boundary: for instance, reconstructing evidence of a genuine filtered-SDA-rise-while-SCL-high from the declared inputs scl_i/sda_i near the row where busy drops (so an early, STOP-less drop can be told apart from a legitimate one), rather than asserting busy==1 over a span that is definitionally free of busy==0 by the very rule used to end it.",
+      "off-target: tests_the_requirement is false because of one unlicensed False path, not the whole construction: throughout(busy==1) is evaluated inclusive of the window's own closing row, and for the nReset==0 closer specifically (asynchronous, so busy is already 0 on that same row) that convicts a design correctly, immediately clearing busy on reset -- behavior normalized.expectation itself sanctions as a legitimate closer. The other two closers (reconstructed STOP evidence, and rst==1) are fine as-is, since busy's registered/synchronous update means it has not yet cleared on those particular closing rows. The trigger's window (open on busy rise, close on STOP evidence/nReset==0/rst==1) does not need to change; the assertion does -- it needs to stop demanding busy==1 on the row that closes the window via nReset==0 specifically, e.g. by checking `busy==1 or row['inputs'].get('nReset')==0` (or by using the dedicated until(w, busy==1, closes) operator, which by this pipeline's own rule does not require the held predicate to be true on the row the release fires) rather than a bare throughout()."
+    ],
+    "REQ-0057": [
+      "off-target: The False path is 'sda_oen != 1 at the exact row the trigger condition first holds' -- that convicts a design for not having released SDA before its own clk_en-gated tick has even occurred, which the specification's clk_en/prescaler language explicitly allows to take extra edges. The check's assertion needs to become a forward-scanning one over the window's rows honoring effect_follows -- e.g. throughout(w, lambda r: r['outputs'].get('sda_oen')==1, after_activation=True) (or eventually+throughout together if only the release, not its persistence, is being decided) -- rather than w.value('sda_oen') sampled at the activation edge. Rebuilding the assertion around the window's rows, not just deleting the current False branch, is the fix.",
+      "off-target: The False path that opens on a START acceptance and closes at al==1 (arbitration lost) is unlicensed: REQ-0057 only describes what the START sequence's own release action does and is silent about a START aborted by arbitration loss. The check's `until` set folds al together with cmd_ack as though arbitration loss were an ordinary completion of the sequence, then applies a strong `eventually` obligation across that whole window -- so a design that is legitimately cut short by al before its own release action fires gets convicted anyway. The check's window-closing logic needs to treat al as an abort that VOIDS the window (e.g. pass it as an `aborts=` condition to `after(...)`, returning None/UNKNOWN there, per the briefing's own worked example) rather than as a normal `until` condition feeding a strong obligation.",
+      "off-target: The check can never return False for any design, so the relevant defect is that it convicts nothing rather than convicting the wrong thing: `until(released, pulled_low)` is a tautology because pulled_low is defined as the exact negation of released on the one-bit sda_oen port, so the 'release' side of the until is always already discharged and a design that never once shows sda_oen==1 during the START sequence -- directly contradicting the requirement -- still passes. The assertion needs to actually require the released state to be witnessed, e.g. `eventually(w, released, after_activation=follows)` (sda_oen was seen at 1 somewhere in the window), rather than pairing it against its own complement inside `until`, which can never expose a design that skipped the release step entirely."
+    ],
+    "REQ-0071": [
+      "off-target: The unlicensed False path: throughout(scl_oen==1) is evaluated starting the row after WRITE-bit command acceptance, which can still be inside the SDA-setup sub-phase (SCL legitimately held low while SDA is driven to din) that precedes the high phase this requirement actually covers -- a correct design following the spec's own described WRITE sequencing (set SDA, then release SCL) gets convicted there. The check's TRIGGER needs to become the high phase's own start, not command acceptance: e.g. open on the edge where scl_oen rises from 0 to 1 after a WRITE-bit is accepted (mirroring the opens_on-with-edges pattern: `opens_on [{cmd:4, ena:1, nReset:1, rst:0, scl_oen:'rise'}]`), so the window's evaluated rows begin genuinely inside the high phase rather than potentially still in the setup step ahead of it. Narrowing the assertion or dropping throughout is not the fix -- the window itself opens in the wrong place."
+    ],
+    "REQ-0073": [
+      "off-target: The eventually(scl_oen==0, after_activation=True, strong=True) call is the unlicensed path. strong=True turns 'the window never closed' into False, but the window's closes/aborts (cmd_ack, al) do not include reset (nReset==0 or rst==1), so a mid-command reset -- which the spec says suppresses cmd_ack and releases the bus, i.e. a compliant response -- leaves the window open with nothing left to trigger scl_oen back to 0, and it can run off the end of the trace and be wrongly convicted; the same strong=True also convicts any WRITE-of-1 command simply still in progress when a trace ends before cmd_ack/al is reached. The fix is not to delete the assertion -- drop strong=True so a window that never closes (whether from reset, a still-running command, or a short trace) reports UNKNOWN rather than False, and/or add nReset==0 or rst==1 to the abort condition (alongside al) so a reset-interrupted attempt is explicitly voided rather than left to run off the end of the trace.",
+      "off-target: The False path ('scl_oen never reaches 0 before the window closes') is unlicensed because the window's activation opens on cmd==4, which by this specification's own command ordering (and the numeric convention already used elsewhere in this contract, e.g. cmd==1/2 for START/STOP) encodes READ, not WRITE (WRITE is cmd==3). So the check never truly examines a WRITE command's bit high phase -- it either stays vacuous through real WRITE activity or, when din happens to also be 1, fires on an unrelated READ command instead, letting a False conviction land on REQ-0073 for behavior the text never addresses. The check's TRIGGER would have to become activation = _holds({'cmd': 3, 'din': ..., 'ena': 1, 'nReset': 1, 'rst': 0}) (cmd==3 for WRITE) -- and since the text's obligation applies to a WRITE bit regardless of the transmitted value, the din qualifier should not be pinned to 1 alone either, though that narrowing alone is a demand-strength question and not this defect.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 2; the previous stands"
+    ],
+    "REQ-0080": [
+      "off-target: The single False path -- al asserting while sda_oen==0 inside a din=0 WRITE-bit window -- is unlicensed by this requirement: REQ-0080's words, read with their spec_span source, are about reset disabling arbitration checking, and reset (nReset, rst) never appears in the check's activation ({din:0, ena:1}) at all, so the check cannot convict or exonerate any reset behavior. It is testing the separate 'WRITE of zero must not lose arbitration merely because SDA is low' clause instead. The check's TRIGGER would have to become reset being active (nReset==0 or rst==1) rather than a WRITE-of-zero bit, with the window built around that condition (and, since al is also cleared by a more direct reset requirement, the reasoning would need to name a port/moment where 'checking disabled' and 'al forced to 0' are actually distinguishable, such as the interval immediately after reset releases and before a new command is accepted, rather than reusing the WRITE-bit's own sda_oen/al pairing).",
+      "off-target: The check's TRIGGER inverts the requirement's scope: it should open on rows where reset is active (nReset==0 or rst==1) -- matching the sibling 'cmd_ack cleared while reset is active' example drawn from the same sentence -- rather than explicitly excluding reset rows via out_of_reset and instead opening on idle (cmd==0) periods after reset has released, which then get reopened for every later idle gap between unrelated commands throughout the trace. The unlicensed False path is: al==1 during some ordinary post-command idle wait, far from any reset, which the reset-behavior sentence never speaks to. The fix is to rebuild the window as applies(r) = reset active (not out-of-reset-and-idle), closing it wherever reset deasserts (or simply asserting throughout the reset rows), not to loosen or delete the al==0 assertion.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 1; the previous stands",
+      "off-target: The unlicensed False path is `throughout(w, al==0)` firing on an idle window that opens with al already sticky-high from an earlier, unrelated (and correctly detected/latched) arbitration-loss event within the same reset session -- the spec's only stated al-clearing event is reset, so a correct design keeps al=1 through every subsequent idle span until the next reset, and 'the controller disables arbitration checking' does not obligate it to un-latch that. The check's TRIGGER/assertion would have to stop treating al's resting level as the signal: either (a) scope the window to the FIRST idle interval after reset only (before any command has yet been accepted since that reset), matching the reset-paragraph context REQ-0080 is drawn from, and drop the repeated re-opening on every later return to idle, or (b) if every idle span is meant to be covered, replace `throughout(al==0)` with a check that al is not NEWLY asserted during the window -- e.g. no rising edge of al inside it -- so a window that opens with al already latched high from a prior event is not, by that fact alone, evidence that arbitration checking is active now."
+    ],
+    "REQ-0095": [
+      "off-target: The throughout(w, lambda r: r['outputs'].get('sda_oen') == 1, after_activation=follows) verdict has no license in REQ-0095's text: nothing in 'enable arbitration checking ... by sampling the SDA line for the expected released-high level' obliges sda_oen itself to read 1 -- that is a different (sibling) WRITE-bit requirement about driving SDA from din. The fix is to drop that verdict from the list folded by worst() and decide only the al outcome against the sampled sda_i, not to weaken or delete the al branch that IS licensed.",
+      "off-target: The not-low_seen branch's `throughout(al==0)` is an unlicensed False path: it convicts whenever al reaches 1 before the window closes for ANY reason, but REQ-0095 only speaks to al caused by sampling SDA low during this WRITE bit's stable high phase -- it says nothing about (and does not forbid) al asserted because of the spec's separate 'unexpected STOP condition during an active command' arbitration-loss cause. As written, al==1 is dual-purposed inside `until` as both the expected effect (fine for the low_seen branch) and an ordinary window-closer (wrong for the not-low_seen branch, where it should instead void the window -- an aborts_on/UNKNOWN case -- rather than terminate it into a strong 'al stayed 0' obligation). The fix is not to delete the al-based close, but to rebuild the window so that an al assertion not attributable to this bit's own SDA sample (i.e., one not preceded by sda_i going low) aborts the window into an UNKNOWN verdict instead of feeding the throughout(al==0) obligation.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 2; the previous stands"
+    ],
+    "REQ-0097": [
+      "off-target: The False path fires whenever the window closes via cmd_ack with no sda_oen==0 row in the pre-edge episode and al never asserted -- but the code never confirms a command was actually accepted/active at all during that episode, only that SDA wasn't driven low in it, and idle produces that same signature (nothing drives sda_oen while the FSM sits in idle). So a filtered STOP edge that occurs while genuinely idle, followed later by some unrelated command being issued and completing (its cmd_ack is the first thing that satisfies `until` after the edge), trips this False branch even though no non-STOP command -- the requirement's own trigger -- was active when the edge happened. The fix is not to delete the SDA-low heuristic (it correctly avoids assuming an unstated cmd encoding) but to rebuild the window so activity, not just SDA-low, is verified for the episode: positively confirm some command was accepted and running through to the STOP edge (e.g. treat a window as decidable only when there is evidence of FSM engagement -- scl_oen or sda_oen having left its idle-released value at some point in that same episode, not merely the absence of a low drive) before requiring al, and return None rather than False when the episode looks indistinguishable from idle."
+    ],
+    "REQ-0101": [
+      "off-target: The unlicensed False path: eventually(w, dout == w.value('sda_i')) compares dout against sda_i's value at READ-command acceptance, but the actual sample this requirement is about is taken later, once SCL has been released for the high phase and a filtered SCL rising edge occurs -- and this module's own test plan exercises sda_i changing within a command's window specifically to test that filtering. A correct design's dout can legitimately never equal that stale acceptance-time value in such a trace. The check's comparison value needs to become an anchor near the actual sampling instant rather than the trigger row -- e.g. compare dout against sda_i sampled near the window's close (close to cmd_ack, by which point a correct design has already completed its filtered sample and settled dout), or require dout to match sda_i at whatever later row dout itself is observed to take its value, not a value fixed at activation. Moving the anchor is the fix; the trigger/window bounds (cmd=8, ena=1, until cmd_ack or al) are otherwise correct.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 1; the previous stands",
+      "off-target: The eventually(dout == w.value('sda_i')) False path is unlicensed whenever sda_i changes between command acceptance (the window's opening row, where w.value freezes its snapshot) and the actual filtered-SCL-rising-edge sampling instant the spec describes -- which the READ sequence's own low-phase-then-sample-window structure permits. The check's TRIGGER/reference value would need to become an SCL-rise-anchored sample of sda_i (or dout compared against whatever value is stable during the sampled high phase) instead of a snapshot taken at the moment the command was merely accepted."
+    ],
+    "REQ-0117": [
+      "off-target: The check's activation uses cmd==4, which in this project's own command encoding (fixed by REQ-0066's self-consistent 'READ data-bit phase' activation, matching the OpenCores CMD_READ=4/CMD_WRITE=3 numbering) selects READ, not WRITE. Every False path this check can take therefore fires on a READ-bit window, which REQ-0117's WRITE-specific text never speaks to -- and the check never opens a window on an actual WRITE bit, so it never examines the behavior the requirement is about. The check's TRIGGER needs to become {cmd:3, ena:1} (WRITE accepted) in place of {cmd:4, ena:1}; the rest of the window (until scl_oen==0 or al==1) and the strong-eventually-scl_oen==1 assertion are otherwise a reasonable encoding of 'releases SCL ... as the WRITE bit enters its stable high phase' once pointed at the right command.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 2; the previous stands",
+      "off-target: The False path taken when a window closes via al=1 (arbitration lost) without scl_oen ever having reached 1 is unlicensed -- REQ-0117 says nothing about what must happen when arbitration is lost before the FSM reaches the SCL-release action, and per spec item 8 an unexpected-STOP-triggered al can fire at any point in the active WRITE command, including before SCL is ever released. al is an abort here (it 'returns the FSM to idle'), not a legitimate completion of the claim's window, so it should not sit in `until` alongside scl_oen==0. The trigger/window would have to become: windows = after(trace, applies, until=[{scl_oen:0}], aborts=[{al:1}]) (or equivalent), so a window that closes because arbitration was lost is voided (UNKNOWN) rather than held to the strong eventually(scl_oen==1) obligation. Only a window that closes via scl_oen returning to 0 -- a genuine completed-or-failed WRITE bit -- should be checked for the SCL-release effect."
+    ],
+    "REQ-0118": [
+      "off-target: The window needs reset excluded: either pass aborts=_any([{\"nReset\":0},{\"rst\":1}]) to after() so a window a reset interrupts returns UNKNOWN instead of a scored False, or add nReset==1 and rst==0 as qualifiers in the opening predicate (and treat a mid-window reset as ending observation rather than letting it run through). As written, a window that survives across a reset and later closes without al reasserting is scored as a completed, failed obligation rather than a voided attempt -- the window has to be rebuilt to recognize reset, not just the False branch adjusted.",
+      "off-target: The False path taken when the open/close window falls entirely inside a READ command's SDA-sampling phase (slave drives a 0 bit while this controller has released SDA and external SCL is high) -- or inside a bus-idle period with another master active -- is unlicensed: the specification scopes 'SDA arbitration checking' to the WRITE command's stable-high phase only ('Arbitration checking is performed during write operations'), so a design that correctly stays silent (no al) during READ or idle is not in violation, yet the check convicts it. The check's TRIGGER (currently just ena==1 & scl_i==1 & sda_oen==1) needs to also be restricted to the WRITE-command's stable-high sub-phase -- e.g. by tracking, from the `cmd` input sampled at the FSM's last idle-to-command transition, that the in-progress command is I2C_CMD_WRITE -- so that windows opened during READ or during idle/other-master activity are excluded rather than scored as failed arbitration-check obligations."
+    ],
+    "REQ-0082": [
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 1; the previous stands",
+      "off-target: The check's TRIGGER needs to become the full four-way disjunction from normalized.activation.opens_on -- nReset falling, the synchronous rst=1/nReset=1 reset row, ena==0, and scl_i falling while scl_oen==1 -- instead of ena==0 alone, so all four counter-reset/reload occasions are actually examined. Beyond that, the assertion itself decides REQ-0053's already-separate claim (scl_oen stability while ena is low, per through_req) rather than anything whose pass/fail turns on REQ-0082's own claim that the internal timing/filter counters were reset or reloaded; as written the check's verdict is identical whether or not REQ-0082 holds.",
+      "repair rejected -- the replacement decided nothing on any of its 2 testpoint(s), where the previous check decided 1; the previous stands",
+      "off-target: The check's trigger only covers one of the four alternatives normalized.activation.opens_on names (ena==0); nReset falling, synchronous rst asserted, and an external SCL fall while SCL is released (multi-master sync reload) are never opened as windows, so the requirement is never decided for those three reload scenarios in any trace. The TRIGGER would need to become the union of all four opens_on entries (an edge-based window on nReset fall, one on the {nReset:1, rst:1} row, the existing ena==0 window, and one on an SCL fall while scl_oen==1), each paired with the observation the corresponding route licenses at that specific moment -- not a blanket stability claim over an entire window, which for the ena=0 case in particular does not distinguish a genuine counter-reload from scl_oen merely being held by the unrelated ena-gating obligation REQ-0020/REQ-0053 already state."
+    ],
+    "REQ-0055": [
+      "off-target: The al==1 branch of `closes` is an unlicensed False path: it treats arbitration loss (a discarded/aborted attempt, per section 3's own example of 'an arbitration loss that returns the FSM to idle') as if it were a normal completion of the command sequence, so the still-live 'eventually changed' obligation can convict a design whose sequence was legitimately cut short by an externally-detected, not-requested STOP before scl_oen/sda_oen ever had a chance to move. The check's TRIGGER/window needs to change: al should be passed as an abort condition (e.g. `after(trace, act, until=lambda r: r['outputs'].get('cmd_ack')==1, aborts=lambda r: r['outputs'].get('al')==1)`), voiding those windows to an unknown/no-verdict result, rather than sitting inside `until` where it closes the window as a completion and still demands the eventually-changed obligation hold by that point.",
+      "off-target: The trigger unlicensedly narrows 'each command sequence' to cmd==1 (START) only; STOP/WRITE/READ sequences are excluded from every trace by construction, so the check never decides REQ-0055 for three of the four commands its own 'each' explicitly covers. The check's TRIGGER would have to become cmd in {1,2,3,4} (however this contract encodes START/STOP/WRITE/READ) rather than a single pinned value. That alone is not sufficient, though: the effect (eventually scl_oen==0 and eventually sda_oen==0) is specific to START's own phase pattern (spec item 11) and does not hold for STOP, which never drives SCL low within its own window (item 12). A correct fix needs either separate per-command windows each asserting that command's own phase-appropriate scl_oen/sda_oen value, folded together with worst(), or an effect expressed generically enough (e.g. 'each output enable takes both values 0 and 1 somewhere in the sequence, per the command's own phases') to hold across all four commands rather than only the one currently pinned."
+    ],
+    "REQ-0007": [
+      "off-target: The False path taken when the window is opened (and then broken) by a single raw-scl_i sample reading low -- a transient dip the module's own three-sample majority filter is specified to reject as a glitch (spec item 5; corner_cases item 7) -- is unlicensed: the requirement's trigger is 'the FILTERED SCL input remains low', not the raw pad value, and a design that correctly ignores an unfiltered glitch and keeps advancing its already-scheduled bit timing is not in violation, yet the check convicts it. The check's TRIGGER needs to require the low to be sustained/filter-qualified before treating it as 'the filtered SCL input remains low' -- e.g. requiring scl_i to read 0 for a run of samples spanning the filter's sampling interval (derived from clk_cnt>>2, per spec item 5), or otherwise excluding a window whose raw-low condition never outlasts a single sample -- instead of opening the window on the very first raw-low row."
+    ],
+    "REQ-0087": [
+      "off-target: The unlicensed False path is `stable(w, \"sda_oen\")` returning False when nReset=0 or rst=1 closes the window and reset's own mandatory output-enable release (sda_oen forced to 1) lands on that closing row while sda_oen had legitimately been 0 (a WRITE of din=0) going into the reset. The check's TRIGGER/window needs nReset==0 and rst==1 moved out of `until=` and into `aborts=` (e.g. `windows = after(trace, opens, until=_any([{'scl_i':1},{'scl_oen':0}]), aborts=_any([{'nReset':0},{'rst':1}]))`), so a slave_wait window a reset interrupts returns UNKNOWN from `never`/`stable` instead of being scored against obligations reset itself overrides."
+    ]
+  },
+  "instrument_notes": {
+    "REQ-0006": {
+      "idle_match": "judged at edge 6, before any of al, cmd_ack had moved off its reset value -- and cmd_ack moves later in this same trace, so the scenario had not happened yet",
+      "witness": "fails it at edge 6 -- the expected response never occurred in the window opening at edge 6"
+    },
+    "REQ-0020": {
+      "witness": "fails it at edge 25 -- scl_oen changed from 1 to 0 at edge 25, in the window opening at edge 9"
+    },
+    "REQ-0028": {
+      "idle_match": "judged at edge 6, before any of al, sda_oen had moved off its reset value -- and sda_oen moves later in this same trace, so the scenario had not happened yet",
+      "witness": "fails it at edge 6 -- the expected response never occurred in the window opening at edge 6"
+    },
+    "REQ-0063": {
+      "witness": "fails it at edge 27 -- the expected response never occurred in the window opening at edge 27"
+    },
+    "REQ-0080": {
+      "witness": "fails it at edge 415 -- the invariant broke at edge 415, in the window opening at edge 415"
+    },
+    "REQ-0095": {
+      "witness": "fails it at edge 1 -- the expected response never occurred in the window opening at edge 1"
+    },
+    "REQ-0101": {
+      "witness": "fails it at edge 11 -- dout never reflected the sampled SDA value (1) after the SCL-high sampling phase began at edge 9"
+    },
+    "REQ-0117": {
+      "idle_match": "judged at edge 5, before any of al, scl_oen had moved off its reset value -- and scl_oen moves later in this same trace, so the scenario had not happened yet",
+      "witness": "fails it at edge 5 -- the expected response never occurred in the window opening at edge 5"
+    }
+  },
+  "unsatisfiable_by_the_control": [],
+  "over_strict_after_repair": [],
+  "abandoned": {},
+  "staging": {
+    "REQ-0097": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "staged": "TP-0300",
+          "outcome": "the check decided (True)"
+        }
+      ],
+      "reached_at_attempt": 1,
+      "staged": 1,
+      "attempted": 1
+    },
+    "REQ-0118": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "staged": "TP-0301",
+          "outcome": "the check decided (True)"
+        }
+      ],
+      "reached_at_attempt": 1,
+      "staged": 1,
+      "attempted": 1
+    }
+  },
+  "stimulus_added": {
+    "REQ-0097": [
+      "TP-0300"
+    ],
+    "REQ-0118": [
+      "TP-0301"
+    ]
+  },
+  "abandoned_count": 0,
+  "considered": 23,
+  "testpoints_no_oracle_names": [
+    "TP-0004",
+    "TP-0005",
+    "TP-0006",
+    "TP-0016",
+    "TP-0017",
+    "TP-0067",
+    "TP-0068",
+    "TP-0069",
+    "TP-0070",
+    "TP-0132",
+    "TP-0133",
+    "TP-0139",
+    "TP-0140",
+    "TP-0187",
+    "TP-0188",
+    "TP-0192",
+    "TP-0193",
+    "TP-0206",
+    "TP-0207"
+  ],
+  "stimulus_liveness": {
+    "testpoints": 59,
+    "inert": [
+      "TP-0003",
+      "TP-0006",
+      "TP-0044",
+      "TP-0068",
+      "TP-0074",
+      "TP-0132"
+    ],
+    "inert_count": 6
+  },
+  "oracle_liveness": {
+    "counts": {
+      "live": 14,
+      "dead-oracle": 0,
+      "dead-stimulus": 1,
+      "unknown": 0
+    },
+    "verdicts": {
+      "REQ-0001": "live",
+      "REQ-0006": "live",
+      "REQ-0016": "live",
+      "REQ-0020": "live",
+      "REQ-0030": "live",
+      "REQ-0050": "live",
+      "REQ-0063": "live",
+      "REQ-0066": "live",
+      "REQ-0071": "dead-stimulus",
+      "REQ-0073": "live",
+      "REQ-0095": "live",
+      "REQ-0097": "live",
+      "REQ-0101": "live",
+      "REQ-0117": "live",
+      "REQ-0118": "live"
+    },
+    "dead_oracle": [],
+    "dead_stimulus": [
+      "REQ-0071"
+    ],
+    "asserts_on": {
+      "REQ-0001": [
+        "al",
+        "cmd_ack",
+        "scl_o",
+        "sda_o"
+      ],
+      "REQ-0006": [
+        "al"
+      ],
+      "REQ-0016": [
+        "al",
+        "cmd_ack",
+        "scl_o",
+        "sda_o"
+      ],
+      "REQ-0020": [
+        "cmd_ack",
+        "scl_oen"
+      ],
+      "REQ-0030": [
+        "al",
+        "cmd_ack"
+      ],
+      "REQ-0050": [
+        "busy"
+      ],
+      "REQ-0063": [
+        "al",
+        "cmd_ack",
+        "scl_oen"
+      ],
+      "REQ-0066": [
+        "scl_oen",
+        "sda_oen"
+      ],
+      "REQ-0071": [
+        "scl_oen"
+      ],
+      "REQ-0073": [
+        "al",
+        "cmd_ack",
+        "scl_oen"
+      ],
+      "REQ-0095": [
+        "al",
+        "scl_oen"
+      ],
+      "REQ-0097": [
+        "al",
+        "sda_oen"
+      ],
+      "REQ-0101": [
+        "al",
+        "cmd_ack",
+        "dout",
+        "scl_oen"
+      ],
+      "REQ-0117": [
+        "al",
+        "scl_oen"
+      ],
+      "REQ-0118": [
+        "al",
+        "sda_oen"
+      ]
+    }
+  }
+}

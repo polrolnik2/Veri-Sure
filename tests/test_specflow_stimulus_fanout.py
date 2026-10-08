@@ -1,0 +1,217 @@
+"""Stimulus is generated per testpoint, not in one call for the whole suite.
+
+Monolithic generation was measured degrading at scale on `i2c_master_bit_ctrl`:
+167 testpoints in one request, three repair rounds returning stimulus for TEN
+of them, and a fourth returning all 167 with exactly one step each -- every
+`hold` equal to 1, 59 distinct sequences, one testpoint driving `clk_cnt=1000`
+for a single edge. `gate_suite` passed it because one step is non-empty.
+"""
+
+from __future__ import annotations
+
+import json
+
+from specflow.testcase_agent import (
+    build_suite_prompt,
+    build_suite_prompt_one,
+    run_suite_stimulus_fanout,
+    suite_shared_prefix,
+)
+
+CONTRACT = {
+    "io": [
+        {"name": "clk", "dir": "input", "width": 1, "role": "clock"},
+        {"name": "rst_n", "dir": "input", "width": 1, "role": "reset"},
+        {"name": "ena", "dir": "input", "width": 1},
+        {"name": "cmd", "dir": "input", "width": 4},
+        {"name": "q", "dir": "output", "width": 8},
+    ]
+}
+PLAN = [
+    {"uid": f"TP-{i:04d}", "dimension": "D2_control_flow",
+     "stimulus": f"scenario {i}", "expected_response": f"response {i}"}
+    for i in range(5)
+]
+
+
+class RecordingPort:
+    def __init__(self):
+        self.prompts: list[str] = []
+
+    def complete(self, *, stage, round_, prompt):
+        self.prompts.append(prompt)
+        uid = stage.rsplit("_", 1)[-1]
+        return json.dumps({
+            "reasoning": "r",
+            "testpoints": [{
+                "tp_uid": uid,
+                "stimulus_steps": [{"inputs": {"ena": 1, "cmd": 1}, "hold": 8}],
+            }],
+        })
+
+
+def test_each_testpoint_gets_its_own_call():
+    port = RecordingPort()
+    merged, per_item = run_suite_stimulus_fanout(
+        testplan=PLAN, contract=CONTRACT, port=port, fanout=False
+    )
+    assert len(per_item) == len(PLAN)
+    assert len(port.prompts) == len(PLAN), (
+        "the whole point is one request per testpoint; a single call carrying "
+        "all of them is what degraded to one step each"
+    )
+    assert {tp.tp_uid for tp in merged.testpoints} == {e["uid"] for e in PLAN}
+
+
+def test_a_call_carries_its_own_testpoint_and_not_the_others():
+    """Otherwise the split is nominal and each call still costs the whole plan."""
+    port = RecordingPort()
+    run_suite_stimulus_fanout(
+        testplan=PLAN, contract=CONTRACT, port=port, fanout=False
+    )
+    from specflow.fanout import PREFIX_SENTINEL
+
+    for i, prompt in enumerate(port.prompts):
+        # Only the ITEM region. The shared prefix carries an output example
+        # naming TP-0000, which is prose in the cached head, not a leak of one
+        # testpoint into another's call.
+        item = prompt.split(PREFIX_SENTINEL, 1)[1]
+        assert f"TP-{i:04d}" in item
+        others = [f"TP-{j:04d}" for j in range(len(PLAN)) if j != i]
+        assert not [o for o in others if o in item], (
+            f"call {i} names other testpoints; the prompt was not actually split"
+        )
+
+
+def test_the_per_item_prompt_is_far_smaller_than_the_monolithic_one():
+    """The size gap is the mechanism, not a nicety.
+
+    One request carrying 167 testpoints x up to 24 steps x 6 ports is what the
+    model answered by shrinking every sequence to a single step.
+    """
+    big = build_suite_prompt(testplan=PLAN, contract=CONTRACT, max_steps=24)
+    one = build_suite_prompt_one(PLAN[0], CONTRACT, 24)
+    assert len(one) < len(big)
+
+
+def test_the_shared_prefix_precedes_the_item_so_it_can_cache():
+    from specflow.fanout import PREFIX_SENTINEL
+
+    prompt = build_suite_prompt_one(PLAN[3], CONTRACT, 24)
+    assert PREFIX_SENTINEL in prompt
+    assert prompt.index(PREFIX_SENTINEL) < prompt.index("TP-0003")
+
+
+def test_the_prompt_lists_the_outputs_until_is_allowed_to_wait_on():
+    """`gate_suite` rejects an `until.port` that is not a declared output.
+
+    Listing only inputs left the agent to guess output names from the testpoint
+    prose, and the prose names internal signals. Measured live on
+    i2c_master_bit_ctrl: 12 of the first 41 testpoints needed a repair round,
+    failing on `until.port='clk_en'`, `'idle'`, `'slave_wait'`,
+    `'filtered_sda'` -- all real signals of the design, none of them ports.
+    """
+    prompt = build_suite_prompt_one(PLAN[0], CONTRACT, 24)
+    assert "output_ports" in prompt
+    assert '"q"' in prompt, "the declared output is not shown to the agent"
+
+
+def test_a_testpoint_carries_the_specification_it_covers():
+    """A testpoint has no spec of its own; it reaches one through `covers`.
+
+    Every stage keyed on a requirement carried spec text (s2 77/77, judge
+    539/539); every stage keyed on a testpoint carried none (s3 0/226,
+    stimulus 0/34). S2's paraphrase is what the stimulus agent had, and it is
+    lossy exactly where it matters -- "clk_cnt large so clk_en ticks
+    predictably" reads as good advice and means FEWER edges per command.
+    """
+    quote = "SCL is generated by dividing the system clock by clk_cnt+1."
+    reqs = [{"uid": "REQ-0000", "spec_spans": [{"quote": quote}]}]
+    element = {**PLAN[0], "covers": ["REQ-0000@1"]}
+
+    assert quote in build_suite_prompt_one(element, CONTRACT, 24, requirements=reqs)
+    # Without the join it must not appear from nowhere.
+    assert quote not in build_suite_prompt_one(element, CONTRACT, 24)
+
+
+def test_only_the_covered_requirements_spec_is_carried():
+    """Otherwise every call re-sends the whole specification uncached."""
+    reqs = [
+        {"uid": "REQ-0000", "spec_spans": [{"quote": "MINE: the covered one."}]},
+        {"uid": "REQ-0009", "spec_spans": [{"quote": "THEIRS: not covered here."}]},
+    ]
+    element = {**PLAN[0], "covers": ["REQ-0000@1"]}
+    prompt = build_suite_prompt_one(element, CONTRACT, 24, requirements=reqs)
+    assert "MINE" in prompt
+    assert "THEIRS" not in prompt
+
+
+def test_domain_notes_absent_by_default_and_present_when_supplied():
+    """Measured live on or1200_ctrl: with no way to construct a NAMED value for
+    a wide structured-encoding input port (an instruction word's opcode bit
+    range, not stated by `contract`), 185 of 246 driven `if_insn` values across
+    the suite left the opcode field at zero -- confirmed by replaying the
+    stimulus against the witness, where `sig_syscall`/`sig_trap`/`rfe`/
+    `no_more_dslot` never fired for the testpoints asking for them by name.
+    `domain_notes` is the caller's escape hatch for exactly this; empty and
+    invisible in the prompt for every design that does not supply one, since
+    this module has no business reading a benchmark's vendored defines file.
+    """
+    plain = build_suite_prompt_one(PLAN[0], CONTRACT, 24)
+    assert "domain_notes" not in plain
+
+    noted = build_suite_prompt_one(
+        PLAN[0], CONTRACT, 24,
+        domain_notes="OR32_J opcode is 6'b000000 in if_insn[31:26].")
+    assert "domain_notes" in noted
+    assert "OR32_J opcode is 6'b000000" in noted
+
+
+# -- the port's ENCODING reaches the author ----------------------------------
+
+
+def _with_encoding() -> dict:
+    c = json.loads(json.dumps(CONTRACT))
+    for p in c["io"]:
+        if p["name"] == "cmd":
+            p["encoding"] = {"I2C_CMD_NOP": 0, "I2C_CMD_START": 1,
+                             "I2C_CMD_STOP": 2, "I2C_CMD_WRITE": 4,
+                             "I2C_CMD_READ": 8}
+            p["encoding_source"] = {"file": "i2c_master_defines.v",
+                                    "sha256": "0" * 64}
+    return c
+
+
+def test_the_stimulus_author_is_shown_the_ENCODING_not_just_the_width():
+    """Told "issue a READ command" on a 4-bit port, an author shown only a width
+    has to guess which of sixteen values that is.
+
+    Measured on the suite that produced: across 322 testpoints and ~1539 steps,
+    `cmd` was driven READ FIVE TIMES, and 129 steps drove 3, 5, 10 or 15 --
+    values that are not commands. Eight of that run's 28 genuine abstentions
+    are checks about READ and WRITE whose activation the stimulus never
+    reached, while the contract on disk said `I2C_CMD_READ: 8` all along.
+    """
+    for prompt in (build_suite_prompt(testplan=PLAN, contract=_with_encoding(),
+                                      max_steps=8),
+                   build_suite_prompt_one(element=PLAN[0],
+                                          contract=_with_encoding(),
+                                          max_steps=8),
+                   suite_shared_prefix(_with_encoding(), 8)):
+        assert "I2C_CMD_READ" in prompt, "the encoding never reached the author"
+        assert '"width": 4' in prompt, "the width must still be there"
+
+
+def test_only_the_ENCODING_travels_not_the_provenance():
+    """`encoding_source` is a sha256 for a human auditing where a value came
+    from. Spending prompt on it buys the author nothing and costs every
+    testpoint that shares the prefix."""
+    prompt = suite_shared_prefix(_with_encoding(), 8)
+    assert "encoding_source" not in prompt and "sha256" not in prompt
+
+
+def test_a_port_with_no_encoding_is_UNCHANGED():
+    """The overwhelming majority of ports have no symbolic values, and an empty
+    `encoding` key on each of them is noise in a cached prefix."""
+    prompt = suite_shared_prefix(CONTRACT, 8)
+    assert "encoding" not in prompt

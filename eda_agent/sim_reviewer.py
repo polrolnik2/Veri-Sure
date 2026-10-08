@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from typing import Tuple
+from typing import Sequence, Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 
@@ -112,9 +112,25 @@ def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
     return bool(_MULTIDRIVEN_RE.search(stdout) or _MULTIDRIVEN_RE.search(stderr))
 
 
-def check_syntax(rtl_path: str) -> Tuple[bool, str]:
+def check_syntax(
+    rtl_path: str,
+    extra_sources: "Sequence[str]" = (),
+    include_dirs: "Sequence[str]" = (),
+) -> Tuple[bool, str]:
+    """Lint `rtl_path`, optionally alongside pre-made modules it instantiates.
+
+    A hierarchical DUT linted on its own reports `Cannot find file containing
+    module` for every child, which is fatal -- so without `extra_sources` a
+    correct hierarchical design is rejected before it is ever simulated, for a
+    reason that is about the lint invocation rather than the design.
+    """
     _require_executable("verilator")
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {rtl_path}"
+    incs = " ".join(f"-I{d}" for d in include_dirs)
+    extras = " ".join(str(s) for s in extra_sources)
+    cmd = (
+        f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert "
+        f"{incs} {rtl_path} {extras}".replace("  ", " ")
+    )
     is_pass, sim_output = run_bash_command(cmd, timeout=60)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""
@@ -162,6 +178,124 @@ def multidriven_signals(rtl_path: str) -> set[str]:
     except Exception:  # noqa: BLE001
         return set()
     return set(_MULTIDRIVEN_SIGNAL_RE.findall(text))
+
+
+
+_COND_DIRECTIVE = re.compile(r"^\s*`(ifdef|ifndef|elsif|else|endif)\b")
+
+
+def _branch_paths(text: str) -> list[tuple[tuple[int, int], ...]]:
+    """1-based line number -> the preprocessor branch that line sits in.
+
+    A path is a tuple of (conditional id, arm index): `ifdef opens arm 0, each
+    `elsif / `else advances the arm, `endif closes the conditional. Two lines are
+    mutually exclusive exactly when their paths name a shared conditional at
+    different arms -- no set of defines compiles both.
+    """
+    paths: list[tuple[tuple[int, int], ...]] = [()]      # lines are 1-based
+    stack: list[list[int]] = []
+    next_id = 0
+    for line in text.splitlines():
+        m = _COND_DIRECTIVE.match(line)
+        if m:
+            kw = m.group(1)
+            if kw in ("ifdef", "ifndef"):
+                stack.append([next_id, 0])
+                next_id += 1
+            elif kw in ("elsif", "else") and stack:
+                stack[-1][1] += 1
+            elif kw == "endif" and stack:
+                stack.pop()
+        paths.append(tuple((c, a) for c, a in stack))
+    return paths
+
+
+def _paths_can_coexist(
+    p: tuple[tuple[int, int], ...], q: tuple[tuple[int, int], ...]
+) -> bool:
+    """True when some set of defines compiles both lines."""
+    arm_of = dict(p)
+    return all(cond not in arm_of or arm_of[cond] == arm for cond, arm in q)
+
+
+def overdriven_signals(text: str) -> set[str]:
+    r"""Signals more than one block in THIS TEXT drives. Pure Python, no Verilator.
+
+    `multidriven_signals` is a regex over Verilator's MULTIDRIVEN warning, and
+    THAT WARNING STOPS AT THE MODULE BOUNDARY. Measured against Verilator 5.038
+    under the exact flags `check_syntax` uses (`--lint-only --sv --timing -Wall
+    -Wno-fatal --assert`):
+
+        output c;  assign c = a; assign c = ~a;   fires ("multiple
+                                                  combinational drivers")
+        always @(posedge clk1) c <= a;            fires ("different clocking")
+        always @(posedge clk2) c <= b;
+
+        wire w;  assign w = a; assign w = b;      SILENT. exit 0, no warning
+        always @(posedge clk) c <= a;             SILENT. exit 0, no warning
+        always @(posedge clk) c <= b;
+
+    So the guard sees duplicate drivers on PORTS and goes blind on INTERNAL
+    signals -- which is where the editor does its work. §7.1 describes it as
+    catching "an edit giving a signal a SECOND continuous driver"; for an
+    internal wire, the commonest shape of that edit, it cannot.
+
+    MEASURED, and it latched. Across three live editor sessions the committed
+    i2c design carried `assign scl_sync` TWICE (the ChipVerilog candidate it
+    started from has one). `scl_sync` is read by the clock divider's reload
+    condition, and in the sixth session the two drivers came to disagree --
+    `scl_oen & ~sSCL & dSCL` against `cSCL[1] & ~scl_i & scl_oen` -- which in
+    Verilog resolves to X wherever they differ. Every commit passed the guard.
+    Worse, the agent spent two rounds editing the two copies SEPARATELY,
+    refining what it took to be one expression, because nothing it could call
+    would say the signal had two drivers.
+
+    Parsing the text settles it, the same way `undriven_signals` settles the
+    mirror question, and costs nothing -- so this can run on every staged edit
+    rather than only where a Verilator call is affordable.
+
+    Multiple writes from ONE block are not a finding: a reg assigned in two
+    branches of a single always block has one driver.
+
+    Two blocks in MUTUALLY EXCLUSIVE preprocessor arms are ONE driver, and
+    counting them as two is a false accusation this guard used to make. Measured
+    on a generated OR1200 dc_fsm, which writes `burst` the way the original does:
+
+        `ifdef OR1200_DC_STORE_REFILL
+            assign burst = burst_load || burst_refill || burst_store_refill;
+        `else
+            assign burst = burst_load || burst_refill;
+        `endif
+
+    No set of defines compiles both, so `burst` has exactly one driver -- and the
+    guard reported it as overdriven. That reached a live RTL editor as the claim
+    that `burst` resolves "to X wherever the drivers disagree, so anything
+    reading them is unreliable", about the signal two of its five objections were
+    about. Worse, an edit that INTRODUCES a conditional is a commit rejection
+    (`introduced = multi - pre_multi`), advising the agent to "remove the
+    duplicate assignment" -- which would delete a live arm.
+
+    So a signal is overdriven only when two blocks writing it could compile
+    TOGETHER: their branch paths agree wherever they name the same conditional.
+    A genuine double inside one arm still fires, which is the case that matters.
+    """
+    from .trace_slicer import parse_rtl_blocks
+
+    try:
+        blocks = parse_rtl_blocks(text)
+    except Exception:  # noqa: BLE001
+        return set()
+    paths = _branch_paths(text)
+    by_signal: dict[str, list[tuple[tuple[int, int], ...]]] = {}
+    for b in blocks:
+        path = paths[b.start_line] if 0 < b.start_line < len(paths) else ()
+        for w in set(b.writes):
+            by_signal.setdefault(w, []).append(path)
+    return {
+        w for w, ps in by_signal.items()
+        if any(_paths_can_coexist(ps[i], ps[j])
+               for i in range(len(ps)) for j in range(i + 1, len(ps)))
+    }
 
 
 def sim_review_mismatch_cnt(stdout: str) -> int:

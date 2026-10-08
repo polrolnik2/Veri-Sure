@@ -1,0 +1,327 @@
+"""Everything downstream of normalization, re-run on the new normalized set.
+
+`normalized_by_uid` feeds four stages, and each one is regenerated here because
+each one read the old forms:
+
+    S2 testplan      run_s2_fanout(normalized=...)   -> new testpoints
+    S3 coverage      run_s3_fanout(normalized=...)   -> new bins and checks
+    stimulus         per testpoint, so it moves when S2 does
+    [O] oracles      run_oracle_stage(normalized=...) -> the checks themselves
+
+S2 IS WHY THE WHOLE CHAIN HAS TO MOVE. Its testpoint uids are what every
+oracle's `tp_uids` names and what every stimulus entry is keyed by, so a new
+testplan invalidates the frozen oracle set outright -- there is no way to
+regenerate only the checks and keep the suite.
+
+THE REFERENCE MODEL IS NOT RUN. It reads `normalized` too, so it is strictly in
+scope, and it is skipped deliberately: it is the artifact the plan retires, its
+debug turn is measured moving the held-out grade by exactly zero, and c1-i2c's
+own node failed at that stage with 68 issues while the oracle set it is
+compared against had already been written. Running it would be the most
+expensive call in the chain and would change nothing being measured. Named here
+rather than quietly omitted.
+
+THE WITNESS IS COPIED, NOT REGENERATED, for the reason it always is: it is the
+instrument that bounds over-strictness, and "the thing doing the measuring has
+to hold still". Regenerating it would make this run's over-strictness a
+different reading of the same requirements than c1-i2c's.
+
+NOTHING HERE SEES THE GOLDEN RTL. `control_source` stays None.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, "/home/user/Veri-Sure")
+
+SRC = Path("/home/user/runs/c1-i2c")
+
+
+def main() -> int:
+    from specflow import encoding
+    from specflow.model_io import PortSettings, make_port, resumable
+    from specflow.oracles_stage import run_oracle_stage
+    from specflow.refmodel.compose import choose_base
+    from specflow.s2_testplan import TestplanOutput, run_s2_fanout
+    from specflow.s2_testplan import write_artifacts as write_s2
+    from specflow.s3_coverage import run_s3_fanout
+    from specflow.s3_coverage import write_artifacts as write_s3
+    from specflow.stage import StageResult
+    from specflow.testcase_agent import (
+        SuiteStimulus,
+        run_suite_stimulus_fanout,
+        stimulus_by_tp,
+    )
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run-dir", default="/home/user/runs/n1-i2c")
+    ap.add_argument("--max-repairs", type=int, default=3)
+    ap.add_argument("--model", default="gpt-5-mini",
+                    help="S2, S3 and stimulus: the model c1-i2c recorded")
+    #: THE CHECK AUTHOR GETS ITS OWN MODEL, and only it.
+    #:
+    #: `PortSettings.deep_effort_stages` already names `oracle` as the stage
+    #: worth spending more on, and records why: eleven oracles [O] could not
+    #: make non-vacuous were re-authored at full strength and "one of the first
+    #: five produced a check `gpt-5-mini`/medium could not write... So authoring
+    #: quality is a real lever." Its cheap arm -- raise effort, keep the model
+    #: -- ships disabled (`deep_effort` defaults to None) and is unmeasured.
+    #: This is the expensive arm, run deliberately.
+    #:
+    #: LUNA, and affordable again now that the fan-out caches.
+    #:
+    #: The earlier "luna cannot cache a prefix, so put it only on the 13 repair
+    #: calls" reasoning rested on a premise that is retracted: every probe
+    #: behind it varied routing hints and transport hardening while holding one
+    #: thing constant -- `input` as a flat `user` string. Sent instead as a
+    #: `developer`-role item for the shared prefix plus a `user` item for the
+    #: item text, luna caches at parity with gpt-5-mini.
+    #:
+    #: Verified independently through this very port, nonce prefix per arm so
+    #: no arm can warm another, four items each:
+    #:
+    #:     luna, flat `user`            item 1 0.0%  then 0.0%, 0.0%, 0.0%
+    #:     luna, developer + user       item 1 0.0%  then 99.8%, 99.8%, 99.8%
+    #:     gpt-5-mini, either shape     unchanged -- the switch is neutral
+    #:
+    #: So the cold miss is ONE call in a 225-call fan-out, not 225 of them.
+    #: `developer_role_prefix` is set on both ports below for that reason, and
+    #: because it is a no-op on a prompt with no `shared_block` sentinel.
+    #:
+    #: THIS RUN IS THE RUN-SCALE MEASUREMENT that the switch's own docstring
+    #: says is still owed: real oracle prompts, real fan-out concurrency, 225
+    #: calls rather than 4 filler ones.
+    ap.add_argument("--oracle-model", default="gpt-5.6-luna")
+    #: VARIANTS GET THEIR OWN MODEL. A variant is deliberately WRONG -- the
+    #: must-fail leg that proves a check is not vacuous -- so what it needs is
+    #: breadth over the five kinds, not the authoring care an oracle needs. They
+    #: ran on the oracle port because `run_oracle_stage` passed its own `port`
+    #: through, which is also the confound that contaminated the c1-vs-n2
+    #: keeper-rate comparison.
+    #:
+    #: NOT the cheapest model, though: that was the reasoning behind nano and it
+    #: is REFUTED by measurement on n4-i2c. Per usable variant, output tokens ran
+    #: nano 13,138 / mini 4,332 / luna 2,875, because 87% of nano's output is
+    #: reasoning tokens (mini 73%, luna 62%) and 6% of its first-pass responses
+    #: came back headless -- the opening brace lost at a continuation boundary,
+    #: vs 1% on mini and 0% on luna -- so 12% of nano's repair rounds bought
+    #: nothing but recovery from a transport artefact. Yield fell with the spend:
+    #: 239 usable variants over 86 requirements, against mini's 335 over 104 and
+    #: luna's 311 over 102. Mini is the default because it is the cheapest model
+    #: MEASURED to cover the requirement set, which is not the same thing.
+    ap.add_argument("--variant-model", default="gpt-5-mini")
+    ap.add_argument("--variant-effort", default="medium")
+    ap.add_argument("--oracle-effort", default="medium",
+                    choices=["low", "medium", "high", "xhigh"],
+                    help="high is safe: EFFORT_CHUNK gives it a 48000 slice, "
+                         "and the measured stream deaths were at 9000")
+    ap.add_argument("--effort", default="medium")
+    #: S3 IS SKIPPED BY DEFAULT, and it is the biggest saving here: 335 model
+    #: calls on c1-i2c for cover bins that NOTHING downstream reads. The oracle
+    #: stage never sees them, and coverage is the oracles' own tri-state --
+    #: `decide` returning None where the activation never occurred -- not a bin
+    #: denominator. Their last consumer was `Env.finish`'s
+    #: `assert self.sb.invoked`, which crashed on the very testpoints the
+    #: coverage metric exists to count; that assert is gone, so a suite renders
+    #: and runs with no checks and no bins.
+    #: WHERE `cmd`'s ENCODING COMES FROM. `enrich_contract` harvests the
+    #: symbol table out of a design's shared defines header and attaches it to
+    #: the port, so the author writes I2C_CMD_READ and the harness resolves the
+    #: number. `top_agent` has always called it; this driver never did, so every
+    #: run in the evidence series shipped a contract with no table and the
+    #: author guessed -- measured on n4-i2c: of 18 numeric `cmd` values, 8 right,
+    #: 5 wrong, 3 illegal (`cmd=3` matches no arm of the design's case), and READ
+    #: never once correct.
+    #:
+    #: DEFAULTED, not merely switchable. This gap existed for the whole evidence
+    #: series precisely because nothing happened unless somebody remembered to
+    #: make it happen; a flag defaulting to None would reproduce that exactly.
+    #: `SRC` already pins this driver to the c1-i2c run, so the repo's own i2c
+    #: benchmark is the design it is talking about, and pointing at it is a
+    #: statement of fact rather than a guess. A runtime switch (never an
+    #: environment variable) overrides it for any other design, and `--defines-
+    #: root ""` opts out -- enrichment is inert without a header, and an absent
+    #: table is now SAID rather than silently assumed.
+    ap.add_argument("--defines-root",
+                    default=str(Path(__file__).resolve().parents[2]
+                                / "benchmarks/chipverilog/Des/i2c"),
+                    help="directory searched for the design's shared defines "
+                         "header; pass an empty string to opt out, and the "
+                         "contract then carries no encoding table so the "
+                         "oracle author must guess every symbol")
+    ap.add_argument("--skip", default="s3",
+                    help="comma list: s2,s3,stimulus,oracles")
+    a = ap.parse_args()
+    skip = {s.strip() for s in a.skip.split(",") if s.strip()}
+
+    run_dir = Path(a.run_dir)
+    sf = run_dir / "specflow"
+    # The run's OWN requirements when it has them. Reading c1-i2c's while the
+    # normalized forms come from the run dir pairs 127 requirements with a
+    # different set's normalizations -- silently, because both are keyed by uid
+    # and the uids collide. Same defect renorm.py had.
+    reqs_path = sf / "requirements.json"
+    if not reqs_path.is_file():
+        reqs_path = SRC / "specflow" / "requirements.json"
+    print(f"requirements from {reqs_path}", flush=True)
+    reqs = json.loads(reqs_path.read_text())["requirements"]
+    contract_json = (SRC / "contract.json").read_text()
+    contract = json.loads(contract_json)
+    spec = (SRC / "prompt.txt").read_text()
+
+    # Attach the symbol table BEFORE anything reads the contract, so the
+    # normalizer, the oracle author and the reviewer all see one encoding.
+    # Enrichment is inert without a header, and never fails a run.
+    defines = (encoding.find_defines(Path(a.defines_root))
+               if a.defines_root else [])
+    try:
+        notes = encoding.enrich_contract(contract, spec=spec, defines=defines)
+    except Exception as exc:  # noqa: BLE001
+        notes = []
+        print(f"contract encoding enrichment skipped: {exc}", flush=True)
+    if notes:
+        contract_json = json.dumps(contract, indent=2) + "\n"
+        print(f"contract encodings: {'; '.join(notes)}", flush=True)
+    else:
+        print("contract carries NO encoding table -- every symbolic value the "
+              "spec names will be a guess. Pass --defines-root to fix.",
+              flush=True)
+
+    norm_path = sf / "normalized.json"
+    if not norm_path.is_file():
+        raise SystemExit(f"{norm_path} missing -- run renorm.py first")
+    normalized_by_uid = {
+        n["req_uid"]: n
+        for n in json.loads(norm_path.read_text()).get("normalized", [])
+        if n.get("req_uid")
+    }
+    print(f"normalized forms in hand: {len(normalized_by_uid)}", flush=True)
+
+    settings = PortSettings(model=a.model, effort=a.effort,
+                            small_model=a.model, small_effort=a.effort,
+                            developer_role_prefix=True)
+    port = resumable(make_port("api", run_dir / "agent_io", settings=settings),
+                     run_dir / "agent_io")
+    oracle_settings = PortSettings(
+        model=a.oracle_model, effort=a.oracle_effort,
+        small_model=a.oracle_model, small_effort=a.oracle_effort,
+        developer_role_prefix=True)
+    oracle_port = resumable(
+        make_port("api", run_dir / "agent_io", settings=oracle_settings),
+        run_dir / "agent_io")
+    variant_settings = PortSettings(
+        model=a.variant_model, effort=a.variant_effort,
+        small_model=a.variant_model, small_effort=a.variant_effort,
+        developer_role_prefix=True)
+    variant_port = resumable(
+        make_port("api", run_dir / "agent_io", settings=variant_settings),
+        run_dir / "agent_io")
+    t0 = time.time()
+
+    # --- S2 ------------------------------------------------------------------
+    if "s2" not in skip:
+        merged, per_item = run_s2_fanout(
+            requirements=reqs, contract_json=contract_json, port=port,
+            normalized=normalized_by_uid, max_repairs=a.max_repairs)
+        s2 = StageResult(merged, [i for r in per_item for i in r.issues],
+                         max((r.rounds for r in per_item), default=0))
+        write_s2(run_dir, s2)
+        print(f"S2: {len(s2.output.elements)} testpoints, ok={s2.ok} "
+              f"({time.time()-t0:.0f}s)", flush=True)
+    # Read back from disk rather than from `s2` above, so a --skip s2 re-entry
+    # takes exactly the same path as a fresh one.
+    tps = [e.model_dump() for e in TestplanOutput(
+        **json.loads((sf / "testplan.json").read_text())).elements]
+
+    # --- S3 ------------------------------------------------------------------
+    if "s3" not in skip:
+        merged3, per3 = run_s3_fanout(
+            testplan=tps, contract_json=contract_json, port=port,
+            normalized=normalized_by_uid, max_repairs=a.max_repairs)
+        s3 = StageResult(merged3, [i for r in per3 for i in r.issues],
+                         max((r.rounds for r in per3), default=0))
+        write_s3(run_dir, s3)
+        print(f"S3: {len(s3.output.bins)} bins, ok={s3.ok} "
+              f"({time.time()-t0:.0f}s)", flush=True)
+
+    # --- stimulus ------------------------------------------------------------
+    if "stimulus" not in skip:
+        merged_s, per_s = run_suite_stimulus_fanout(
+            testplan=tps, contract=contract, port=port,
+            max_repairs=a.max_repairs, requirements=reqs)
+        (sf / "stimulus.json").write_text(
+            json.dumps(merged_s.model_dump(), indent=2) + "\n", encoding="utf-8")
+        print(f"stimulus: {len(merged_s.testpoints)} testpoints "
+              f"({time.time()-t0:.0f}s)", flush=True)
+    stim_by_tp = stimulus_by_tp(SuiteStimulus(
+        **json.loads((sf / "stimulus.json").read_text())))
+
+    # --- [O] the oracles -----------------------------------------------------
+    if "oracles" not in skip:
+        # HOLD THE TWO INSTRUMENTS STILL: the witness, which bounds
+        # over-strictness, and the variants, which are the must-fail leg.
+        #
+        # `variants.json` carries 335 wrong implementations over 104 of the 127
+        # requirements. The requirement set here is byte-identical to c1-i2c's,
+        # and `run_oracle_stage` states the rule itself: "GENERATED ONCE, FROM
+        # THE WITNESS, AND THEN NEVER AGAIN... A variant is a wrong
+        # implementation of ONE requirement, and the requirement does not
+        # change." Regenerating is not merely 335 calls -- it is a DIFFERENT
+        # DRAW, so "an oracle can be convicted vacuous this round and cleared
+        # the next for no reason anyone could name".
+        #
+        # The normalized form does reach variants, in two narrow places, and
+        # neither is touched by what changed: `kinds_for` scans only
+        # `activation.text` and `expectation` (never `observed_via` or `when`),
+        # and `build_prompt` carries the form as context. `kinds_delta` below
+        # checks the first empirically rather than trusting the reading.
+        # VARIANTS ARE REDRAWN AFTER ALL, and `kinds_delta.py` is why. The
+        # reuse argument was that a variant is a wrong implementation of a
+        # requirement and the requirement has not changed -- true -- plus a
+        # reading of `kinds_for` as depending only on fields my changes do not
+        # touch. That reading was WRONG: it scans the requirement text joined
+        # with `activation.text` and `expectation`, both of which the new
+        # normalization rewrites, and 49 of 127 requirements come out with a
+        # different kind set (+duration, -threshold, and so on).
+        #
+        # Reusing wholesale would leave 39% of the set with a must-fail leg
+        # testing clause kinds the requirement no longer presents. Partial
+        # reuse is not available -- `run_oracle_stage` regenerates only when
+        # `variants` is EMPTY, with no gap-filling -- so the coherent choices
+        # are all or nothing, and the instrument-stability argument only holds
+        # if the WHOLE set holds still. It does not.
+        for name in ("_witness", "witness.py", "exercised.json"):
+            src, dst = SRC / "specflow" / name, sf / name
+            if src.exists() and not dst.exists():
+                (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
+        oracle_set = run_oracle_stage(
+            requirements=reqs, contract_json=contract_json, contract=contract,
+            testplan=tps, stimulus_by_tp=stim_by_tp, port=oracle_port,
+            variant_port=variant_port,
+            workdir=sf, base=choose_base(contract),
+            normalized=normalized_by_uid, spec=spec,
+            control_source=None,          # the golden RTL never reaches here
+            want_variants=True, want_correspondence=True,
+            run_dir=run_dir, fanout=True,
+            # NOT rewrite=True. It unlinks variants.json AND witness.py, so the
+            # two files copied above would be deleted and regenerated -- the
+            # exact opposite of holding them still. The flag exists for a
+            # CHANGED REQUIREMENT SET, where old variants describe requirements
+            # that no longer exist; this run reuses c1-i2c's requirements.json
+            # unchanged, so it does not apply. A fresh run dir has no
+            # oracles.json, so nothing stale is reused either.
+            rewrite=False)
+        print(f"[O]: {len(oracle_set.trusted)} trusted "
+              f"({time.time()-t0:.0f}s)", flush=True)
+
+    print(f"\ndone in {time.time()-t0:.0f}s")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

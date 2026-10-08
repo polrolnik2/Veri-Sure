@@ -1,0 +1,12 @@
+design  arm  compiles  encoding                          ok   mismatch  first
+A1      A    True      S1 S2 W4 R8  (declared)           Y        3233      0
+A2      A    True      S1 S2 W4 R8  (declared)           Y        3048      0
+A3      A    True      S1 S2 W4 R8  (declared)           Y        2698      0
+A4      A    True      S1 S2 W3 R4  (declared)           n        2936      0
+B1      B    True      S1 S2 W4 R8  (macro)              Y        2599      0
+B2      B    True      S1 S2 W4 R8  (macro)              Y        3205      0
+B3      B    True      S1 S2 W4 R8  (macro)              Y        2949      0
+B4      B    True      S1 S2 W4 R8  (macro)              Y        2644      0
+
+  arm A (description only      ) n=4  compiles=4  encoding correct=3/4  mismatches=[2698, 2936, 3048, 3233]
+  arm B (description + defines ) n=4  compiles=4  encoding correct=4/4  mismatches=[2599, 2644, 2949, 3205]

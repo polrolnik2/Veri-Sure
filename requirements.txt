@@ -1,7 +1,24 @@
 agentscope==1.0.7
+# agentscope 1.0.7 imports mcp.client.streamable_http.streamablehttp_client, which
+# mcp 2.0.0 removed. agentscope declares `mcp` unpinned, so a fresh resolve picks
+# 2.0.0 and `import agentscope` dies with an ImportError before any Veri-Sure code
+# runs. Pin below 2 until agentscope supports the 2.x client API.
+mcp>=1.29,<2
 pydantic>=2,<3
 tqdm>=4,<5
 tree-sitter>=0.25,<0.26
 tree-sitter-verilog>=1,<2
 vcdvcd>=1,<2
 pytest==9.0.2
+# The linter. Pinned to a minor series rather than left to the container image:
+# ruff ships new rules in minor bumps, so an unpinned upgrade can turn a clean
+# tree red without a line of code changing. It was previously available only
+# because the base image happened to carry it, which is not a property a repo
+# should depend on.
+ruff>=0.15,<0.16
+# Python testbench flow (specflow: spec-grounded requirements, testplan, coverage).
+# cocotb 2.x refuses Verilator < 5.036. apt ships 5.020, so .claude/hooks/session-start.sh
+# builds 5.038 from source into /usr/local/bin; the verilator backend is the one
+# specflow uses, and coverage instrumentation (VM_COVERAGE) is why icarus will not
+# substitute. Veri-Sure's own sim_reviewer.py calls verilator directly.
+cocotb==2.0.1

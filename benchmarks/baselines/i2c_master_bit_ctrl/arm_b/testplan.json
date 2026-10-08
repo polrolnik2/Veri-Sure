@@ -1,0 +1,377 @@
+{
+  "reasoning": "The plan covers every requirement declaring needs=[\"testplan\"], with all references pinned to revision 1. It uses separate ordinary, corner, reset, timing, filtering, protocol, and error-injection scenarios and checks observable outputs through a wired-AND open-drain bus model.",
+  "elements": [
+    {
+      "uid": "TP-0000",
+      "rev": 1,
+      "covers": [
+        "REQ-0000@1",
+        "REQ-0001@1"
+      ],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Assert and release both reset inputs, toggle ena, apply clk_cnt values 0, 1, 4, and 16, and execute START, STOP, READ, and WRITE commands while monitoring scl_o and sda_o.",
+      "expected_response": "scl_o and sda_o remain continuously 0 during reset, idle, every command phase, and all input changes.",
+      "check_method": "At every posedge clk after nonblocking assignments settle, compare both outputs against constant 1'b0 and flag any transition or X value.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0001",
+      "rev": 1,
+      "covers": [
+        "REQ-0002@1"
+      ],
+      "dimension": "D2_control_flow",
+      "stimulus": "Use a resolved open-drain SCL bus model with the external driver released high. Execute START, STOP, READ, and WRITE commands and record each scl_oen value and the resolved SCL line.",
+      "expected_response": "Whenever scl_oen is 0, the resolved SCL line is low regardless of the external pull-up; whenever scl_oen is 1 and no external low driver is present, the resolved SCL line is high.",
+      "check_method": "Procedurally compute scl_line = scl_oen ? external_scl_drive : 0 and compare the model value with the SCL input returned to the DUT at every sampled phase.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0002",
+      "rev": 1,
+      "covers": [
+        "REQ-0003@1"
+      ],
+      "dimension": "D2_control_flow",
+      "stimulus": "Use a resolved open-drain SDA bus model with the external driver released high. Execute a START followed by a STOP and observe sda_oen during the driven-low and released phases.",
+      "expected_response": "When sda_oen is 0, the resolved SDA line is low; when sda_oen is 1 and no external low driver is present, the resolved SDA line is high.",
+      "check_method": "Compute the resolved SDA level from sda_oen and the external driver, feed it back as sda_i, and compare it against the expected polarity for every command phase.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0003",
+      "rev": 1,
+      "covers": [
+        "REQ-0004@1"
+      ],
+      "dimension": "D3_timing",
+      "stimulus": "Keep nReset high and rst low, issue a valid command, and toggle cmd, din, scl_i, and sda_i only at falling edges of clk between rising edges while the command is active.",
+      "expected_response": "Registered outputs scl_oen, sda_oen, cmd_ack, busy, al, and dout do not change at falling edges or between rising edges; state changes occur only after rising edges of clk.",
+      "check_method": "Sample all registered outputs immediately before each falling edge and immediately after each falling edge, then compare against the post-posedge reference model.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0004",
+      "rev": 1,
+      "covers": [
+        "REQ-0005@1",
+        "REQ-0030@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "Start a command and create busy or arbitration state where possible, then set rst=1 while nReset=1 for one rising edge of clk; deassert rst on the following cycle.",
+      "expected_response": "Before the reset rising edge, active registered state remains unchanged. Immediately after that rising edge, cmd_ack, busy, and al are 0, dout is 0, scl_oen and sda_oen are 1, and no command sequence remains active. Subsequent idle-high bus inputs do not create a stale event from pre-reset filter state.",
+      "check_method": "Use a cycle-accurate scoreboard sampled after each posedge, explicitly checking the reset values and checking that no reset response occurs before the qualifying posedge.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0005",
+      "rev": 1,
+      "covers": [
+        "REQ-0006@1",
+        "REQ-0030@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "While the DUT is active, drive nReset from 1 to 0 midway between two clk rising edges and hold it low without applying a clock edge; then release nReset high.",
+      "expected_response": "Without waiting for clk, cmd_ack, busy, and al clear, dout becomes 0, and scl_oen and sda_oen become 1. Releasing nReset does not restart the aborted command until a new valid command is accepted.",
+      "check_method": "Use event-based checks on the nReset transition for immediate outputs, followed by posedge checks confirming reset state persistence and idle restart behavior.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0006",
+      "rev": 1,
+      "covers": [
+        "REQ-0007@1"
+      ],
+      "dimension": "D3_timing",
+      "stimulus": "Set clk_cnt=2, hold a valid START command, set ena=0 for at least eight rising edges, and toggle the external bus during the disabled interval; then set ena=1 while continuing to hold cmd.",
+      "expected_response": "While ena=0, no FSM output phase changes, no filter-driven protocol decision occurs, and cmd_ack remains 0. After ena returns high, timing and the pending command resume and eventually produce the normal START completion.",
+      "check_method": "Compare every disabled-cycle output against a hold-last-value scoreboard, then compare the enabled sequence against a reference model that restarts timing after ena rises.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0007",
+      "rev": 1,
+      "covers": [
+        "REQ-0008@1",
+        "REQ-0021@1"
+      ],
+      "dimension": "D3_timing",
+      "stimulus": "Set ena=1 and clk_cnt=0, issue a START command while idle, and hold the command until acknowledgment.",
+      "expected_response": "The divider produces an eligible timing event on every eligible clock, allowing the START phases to advance one timing phase per eligible clock; no phase advances without the timing event, and cmd_ack occurs after the final phase.",
+      "check_method": "Use the clk_cnt=0 reference model to predict each scl_oen, sda_oen, and cmd_ack value after every posedge and compare the observed waveform cycle by cycle.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0008",
+      "rev": 1,
+      "covers": [
+        "REQ-0008@1",
+        "REQ-0021@1"
+      ],
+      "dimension": "D3_timing",
+      "stimulus": "Run the same accepted START command twice with ena=1, first using clk_cnt=1 and then using clk_cnt=5, holding all bus inputs idle-high.",
+      "expected_response": "For each nonzero prescaler, FSM output phase transitions occur only at divider expiration events and are separated by the reference-model divider interval; increasing clk_cnt increases the command latency without changing the phase order.",
+      "check_method": "Measure intervals between registered scl_oen/sda_oen phase changes and cmd_ack, compare them with a divider scoreboard, and assert no phase transition occurs on an intervening clock.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0009",
+      "rev": 1,
+      "covers": [
+        "REQ-0009@1",
+        "REQ-0010@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "After reset with clk_cnt=0 and ena=1, apply a one-sample low pulse independently to scl_i and sda_i, return each input high, then apply two or more consecutive low filter samples. Account for the two synchronization stages before evaluating the bus.",
+      "expected_response": "A raw one-sample glitch does not produce a filtered transition, START, STOP, busy change, or arbitration decision. A sustained low level becomes effective only after synchronization and a majority of the three history samples represents low.",
+      "check_method": "Drive a resolved bus waveform and compare busy, al, and command behavior against a reference model containing two-stage synchronization and three-sample majority filtering; assert the expected filtering latency.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0010",
+      "rev": 1,
+      "covers": [
+        "REQ-0011@1",
+        "REQ-0013@1"
+      ],
+      "dimension": "D5_protocol",
+      "stimulus": "With the DUT idle, both resolved bus lines high, and no command active, hold filtered-equivalent SCL high and drive SDA from high to low long enough to pass synchronization and filtering.",
+      "expected_response": "The filtered SDA falling transition while filtered SCL is high is detected as START, and busy becomes 1 after the registered detection update.",
+      "check_method": "Use the filter reference model to identify the filtered falling transition, then check busy on the following registered output sample.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0011",
+      "rev": 1,
+      "covers": [
+        "REQ-0012@1",
+        "REQ-0013@1"
+      ],
+      "dimension": "D5_protocol",
+      "stimulus": "First create a filtered START so busy is 1, then while no command is active hold filtered-equivalent SCL high and drive SDA from low to high long enough to pass synchronization and filtering.",
+      "expected_response": "The filtered SDA rising transition while filtered SCL is high is detected as STOP, and busy becomes 0 after the registered detection update; no arbitration-lost indication is generated because no non-STOP command is active.",
+      "check_method": "Correlate the modeled filtered SDA rising edge with the post-posedge busy value and check al remains 0.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0012",
+      "rev": 1,
+      "covers": [
+        "REQ-0014@1"
+      ],
+      "dimension": "D3_timing",
+      "stimulus": "Issue a READ with clk_cnt=1 and ena=1. When the DUT sets scl_oen=1 for the high phase, hold the external SCL driver low for at least ten filter sample opportunities while supplying a valid SDA value; then release the external SCL driver high.",
+      "expected_response": "While scl_oen=1 but filtered SCL remains low, the high phase does not advance, scl_oen and sda_oen remain at their waiting values, and cmd_ack remains 0. Completion occurs only after filtered SCL becomes high.",
+      "check_method": "Use a stretch-aware reference model and assert that no phase transition or acknowledgment occurs before the filtered SCL release, then check the normal low phase and completion afterward.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0013",
+      "rev": 1,
+      "covers": [
+        "REQ-0015@1"
+      ],
+      "dimension": "D7_microarch",
+      "stimulus": "During a READ high phase with scl_oen=1, start with resolved SCL high, force an external falling edge on SCL, and then release it high again. Repeat with a control transaction that has no external falling edge.",
+      "expected_response": "The externally observed filtered SCL fall while SCL is released causes timing to restart from the reference-model reload point; the next FSM phase and completion timing match the synchronized shared-clock model and do not use stale pre-fall divider progress.",
+      "check_method": "Compare the phase-transition timestamps after the external fall against a no-fall control waveform and a scoreboard that reloads the divider at the detected filtered falling edge.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0014",
+      "rev": 1,
+      "covers": [
+        "REQ-0016@1",
+        "REQ-0018@1",
+        "REQ-0019@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "Issue WRITE with din=1. During the released SCL-high arbitration-check phase, force an external low driver on SDA long enough to become filtered low; then remove the driver and run clocks without reset.",
+      "expected_response": "al asserts after the filtered mismatch, the active command aborts without cmd_ack, both scl_oen and sda_oen become 1, and al remains 1 through subsequent clocks and attempted commands. A later reset clears al.",
+      "check_method": "Check the registered al assertion and abort waveform, assert no cmd_ack pulse follows the aborted command, monitor al across multiple cycles, and finally verify reset clears it.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0015",
+      "rev": 1,
+      "covers": [
+        "REQ-0017@1",
+        "REQ-0018@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "Issue a READ and, while it is active with SCL filtered high and SDA released, drive SDA low and then high to create an externally generated filtered STOP before the read bit cycle completes.",
+      "expected_response": "The unexpected filtered STOP asserts al, returns the controller to idle, releases both output enables, and prevents cmd_ack for the aborted READ command.",
+      "check_method": "Use a filtered bus-event scoreboard to identify the STOP during the active non-STOP command and check al, output enables, and absence of acknowledgment on subsequent cycles.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0016",
+      "rev": 1,
+      "covers": [
+        "REQ-0020@1",
+        "REQ-0022@1",
+        "REQ-0026@1",
+        "REQ-0028@1"
+      ],
+      "dimension": "D1_data_boundary",
+      "stimulus": "With clk_cnt=0 and an idle bus, issue READ=0100 and hold it until completion. During the released SCL high phase, drive SDA low and keep it low through the filtered SCL rising edge.",
+      "expected_response": "The READ sequence releases SDA, releases SCL for the read window, captures dout=0 after the registered filtered-SCL rising-edge sample, pulls SCL low, and produces one cmd_ack pulse.",
+      "check_method": "Track the resolved line and filtered-edge model, check dout immediately after the expected capture edge, verify the output-enable phase order, and assert cmd_ack is high for exactly one clk interval.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0017",
+      "rev": 1,
+      "covers": [
+        "REQ-0020@1",
+        "REQ-0022@1",
+        "REQ-0026@1",
+        "REQ-0028@1"
+      ],
+      "dimension": "D1_data_boundary",
+      "stimulus": "With clk_cnt=0 and an idle bus, issue READ=0100 and hold it until completion. During the released SCL high phase, release SDA to the pull-up so filtered SDA is high at the filtered SCL rising edge.",
+      "expected_response": "dout becomes 1 after the registered filtered-SCL rising-edge sample, the controller then pulls SCL low, and exactly one cmd_ack pulse is generated after the bit cycle.",
+      "check_method": "Compare dout against the filtered SDA value at each modeled filtered SCL rising edge and check the phase sequence and single-cycle acknowledgment.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0018",
+      "rev": 1,
+      "covers": [
+        "REQ-0022@1",
+        "REQ-0024@1",
+        "REQ-0028@1"
+      ],
+      "dimension": "D4_fsm_transition",
+      "stimulus": "Reset to idle-high bus, set ena=1 and clk_cnt=0, issue START=0001, and hold cmd until cmd_ack.",
+      "expected_response": "The accepted command enters the START sequence: SDA and SCL are initially released, SDA is pulled low while SCL remains high, SCL is then pulled low, and cmd_ack is asserted for exactly one clk cycle at completion.",
+      "check_method": "Compare the observed scl_oen and sda_oen waveform against an ordered FSM transition model and use a one-shot pulse checker for cmd_ack.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0019",
+      "rev": 1,
+      "covers": [
+        "REQ-0022@1",
+        "REQ-0025@1",
+        "REQ-0028@1"
+      ],
+      "dimension": "D4_fsm_transition",
+      "stimulus": "Create a START first, then while the controller is idle issue STOP=0010 with the bus initially holding SDA low; keep the external SCL driver released so SCL can rise.",
+      "expected_response": "The accepted STOP sequence drives SDA low, releases SCL and waits until filtered SCL is high, releases SDA high while SCL is high, and produces exactly one cmd_ack pulse.",
+      "check_method": "Check the ordered output-enable transitions against the STOP reference model, gate SDA release on the observed filtered SCL-high condition, and verify the acknowledgment pulse width.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0020",
+      "rev": 1,
+      "covers": [
+        "REQ-0022@1",
+        "REQ-0027@1",
+        "REQ-0028@1",
+        "REQ-0029@1"
+      ],
+      "dimension": "D1_data_boundary",
+      "stimulus": "With an idle bus, set din=0, issue WRITE=1000 with clk_cnt=0, and hold cmd through completion. Keep the external SDA driver released.",
+      "expected_response": "The controller drives SDA low with sda_oen=0, releases SCL for the high phase, does not assert al when the bus matches the transmitted zero, pulls SCL low, and produces exactly one cmd_ack pulse.",
+      "check_method": "Check the resolved SDA level against din=0, verify the SCL phase order, assert al remains 0, and measure cmd_ack as a one-cycle completion pulse.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0021",
+      "rev": 1,
+      "covers": [
+        "REQ-0022@1",
+        "REQ-0027@1",
+        "REQ-0028@1",
+        "REQ-0029@1"
+      ],
+      "dimension": "D1_data_boundary",
+      "stimulus": "With an idle bus, set din=1, issue WRITE=1000 with clk_cnt=0, and hold cmd through completion. Leave SDA externally released high during the arbitration-check window.",
+      "expected_response": "The controller releases SDA with sda_oen=1, releases SCL for the high phase, observes matching high SDA without asserting al, pulls SCL low, and produces exactly one cmd_ack pulse.",
+      "check_method": "Check that the resolved SDA line is high while sda_oen=1, verify no arbitration loss with matching bus data, and check the ordered phase waveform and single-cycle acknowledgment.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    },
+    {
+      "uid": "TP-0022",
+      "rev": 1,
+      "covers": [
+        "REQ-0023@1"
+      ],
+      "dimension": "D6_error_injection",
+      "stimulus": "While idle with clk_cnt=0 and ena=1, apply NOP=0000 and unsupported 4-bit command values 0011, 0101, 0111, 1001, and 1111 one at a time, holding each value for several clocks.",
+      "expected_response": "The FSM remains idle for every unsupported or NOP value, scl_oen and sda_oen do not enter a command sequence, and cmd_ack remains 0 throughout.",
+      "check_method": "Use a procedural monitor to compare all output-enable and acknowledgment values against the idle reference state for each illegal command interval.",
+      "needs": [
+        "bin",
+        "check"
+      ]
+    }
+  ]
+}

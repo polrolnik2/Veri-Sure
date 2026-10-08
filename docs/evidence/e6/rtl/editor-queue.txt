@@ -1,0 +1,19 @@
+kind            failing  in set  fail rate
+behavioural          27     111        24%
+scaffolding           4       5        80%
+interface             3       6        50%
+TOTAL                34     122        28%
+
+UNFIXABLE BY CONSTRUCTION: 7 of 34 = 21% of the queue
+  REQ-0008 [scaffolding] The Bit Command Controller performs START, STOP, read, and write bit-level signal generati
+  REQ-0014 [interface] The input port clk is the system clock.
+  REQ-0025 [scaffolding] The supported bit-level command list includes `I2C_CMD_STOP`.
+  REQ-0026 [interface] The bit-level command input cmd supports the I2C_CMD_WRITE command.
+  REQ-0028 [interface] The din input is the data bit transmitted during a WRITE operation.
+  REQ-0054 [scaffolding] A low filtered SCL input after the master releases SCL indicates that a slave or another b
+  REQ-0058 [scaffolding] A falling edge on the filtered SCL input while this controller has released SCL high indic
+
+truncated in the queue (text cut at 200 chars): 3
+  REQ-0002 255 chars
+  REQ-0037 242 chars
+  REQ-0050 236 chars

@@ -1,0 +1,13 @@
+or1200_sb: 68 accepted, pool 211, shipped 66
+/home/user/runs/luna13/after_oracles/or1200_sb
+scoring the SHIPPED set (shipped.json): 66 bodies over 66 requirement(s); 248 golden trace(s)
+
+SPAN       53/57 behavioural = 93.0%   (90 minted, 84 state an observable obligation)
+BLINDNESS  7844/8518 cells = 92.1%   (population 7, effective_size 35)
+AUDIT      1/5 judgeable = 20.0%
+ACCEPTS    3 of 7 design(s)
+  note: the control is NOT contract-conformant: 9 of the 9 declared probe(s) are not exposed by it (fifo_dat_i, fifo_dat_o, fifo_wr, fifo_rd, fifo_full, fifo_empty, ...), so the 48 check(s) reading them can say nothing about it
+  note: audit is over the 5 of 53 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 1  REQ-0016[behav]
+target span>0.90 MET  blindness<0.10 no  audit=0 no

@@ -1,0 +1,12 @@
+{
+  "status": "function_fail",
+  "flow": "equivalence",
+  "proof_type": "bounded_seq",
+  "reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$620 when 1'1.",
+  "reference_precheck": "pass",
+  "interface_status": "compatible",
+  "formal_status": "not_equivalent",
+  "compile_gate_status": "pass",
+  "task": "i2c_master_bit_ctrl",
+  "label": "armB"
+}

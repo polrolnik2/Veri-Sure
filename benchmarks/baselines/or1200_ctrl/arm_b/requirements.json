@@ -1,0 +1,780 @@
+{
+  "reasoning": "The requirements below separate the externally observable decode, pipeline, forwarding, address-generation, exception, branch, and feature-dependent behaviors. The complete specification text is claimed by REQ-0000, while the remaining requirements provide focused testable statements for individual outputs and behaviors.",
+  "requirements": [
+    {
+      "uid": "REQ-0000",
+      "rev": 1,
+      "text": "The module decodes OR1200 instructions and generates the specified ALU, LSU, register-write-back, branch, exception-sideband, forwarding, and pipeline-control outputs.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 14323,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control.\n\nThis module is the main instruction decode and control block of the OR1200 processor. It receives the fetch-stage instruction `if_insn`, decodes it into control signals for register-file access, immediate generation, ALU/compare/shift/MAC operation selection, branch handling, load/store control, special-purpose register access, write-back selection, custom instruction support, exception signaling, and pipeline movement.\n\nMost sequential state in this module is updated on the rising edge of `clk` and reset by an active-high asynchronous `rst`. On reset, the local instruction pipeline registers and control registers are initialized to defined NOP or inactive values. `flushpipe` clears the ID/EX/WB instruction pipeline registers to NOP and clears many EX-stage control outputs, but it does not directly clear every internal register; for example, `rf_addrw`, `wb_rfaddrw`, and `sel_imm` do not have explicit `flushpipe` branches. The freeze signals `id_freeze`, `ex_freeze`, and `wb_freeze` control whether the corresponding pipeline stage advances or holds its current state. When ID is frozen while EX is not frozen, the module inserts NOP/inactive control values into the EX stage to avoid re-executing stale decode information.\n\nFor register-file read access, the module directly derives the source register addresses from `if_insn`: `rf_addra = if_insn[20:16]` and `rf_addrb = if_insn[15:11]`. The register-read enable indicators `rf_rda` and `rf_rdb` are derived from `if_insn[31]` and `if_insn[30]`, respectively. These signals indicate whether source port A or B is used according to the OR1200 instruction encoding.\n\nThe module maintains instruction pipeline registers `id_insn`, `ex_insn`, and `wb_insn`. `if_insn` is latched into `id_insn`, `id_insn` into `ex_insn`, and `ex_insn` into `wb_insn`, subject to reset, flush, and freeze conditions. Reset and flush force the instruction registers to the special OR1200 NOP encoding whose bit 16 is set, allowing `id_void` and `ex_void` to detect void/NOP instructions.\n\nForwarding control is generated through `sel_a` and `sel_b`. `sel_a` selects between the register file, EX-stage forwarding, and WB-stage forwarding by comparing the current ID-stage source register with the EX and WB destination registers. `sel_b` uses similar forwarding logic for source B, but immediate selection has the highest priority: when `sel_imm` is asserted, `sel_b` selects the immediate operand rather than register or forwarded data. `sel_imm` is decoded using an exclusion-style rule: explicitly listed register-type, branch-return, SPR, store, ALU, SFXX, custom, and NOP instructions clear `sel_imm`; all other opcodes default to immediate selection. Whether an unsupported opcode is legal is determined separately by `except_illegal`.\n\nImmediate generation is performed from the ID-stage instruction. `simm` is produced by either sign-extending or zero-extending `id_insn[15:0]`, depending on `imm_signextend`. Instructions such as `l.addi`, `l.addic`, `l.xori`, `l.muli` when multiplication is implemented, `l.maci` when MAC is implemented, and immediate compare instructions use sign extension; other immediate instructions default to zero extension. `branch_addrofs` is generated from the EX-stage instruction by sign-extending `ex_insn[25:0]` into the branch offset output range `[31:2]`. `lsu_addrofs` is also based on `ex_insn`; store instructions use a split immediate field involving `ex_insn[25:21]` and `ex_insn[10:0]`, while load and default cases use the immediate field involving `ex_insn[15:11]` and `ex_insn[10:0]`.\n\nThe write-back destination register `rf_addrw` is generated at the EX-control timing point. By default it uses `id_insn[25:21]`. When `pre_branch_op` indicates `JR` or `BAL`, the destination address is forced to register r9, the link register. However, this does not by itself mean every such instruction writes the link register; actual write-back is controlled by `rfwb_op`. In this implementation, link-register write-back selection is generated for `JAL` and `JALR`, while ordinary `J` and `JR` do not generate register-file write-back. `wb_rfaddrw` stores the write destination one stage later and is used by the forwarding comparison logic.\n\nThe module also generates the SPR immediate address `spr_addrimm`. For `l.mfspr`, it uses `id_insn[15:0]`; for other SPR-related cases, especially `l.mtspr`, it uses the concatenation `{id_insn[25:21], id_insn[10:0]}`. This register is reset to zero and is also cleared when a bubble is inserted into EX or when the pipeline is flushed.\n\nThe `multicycle` output is decoded mainly from ALU instructions. For `OR1200_OR32_ALU`, it takes `id_insn[9:8]`; otherwise it defaults to `OR1200_ONE_CYCLE`. The code contains load/store two-cycle decode cases inside an `ifdef UNUSED` block, so those cases are normally not active unless that block is explicitly enabled.\n\nThe module generates major functional control outputs including `alu_op`, `mac_op`, `shrot_op`, `comp_op`, `lsu_op`, `branch_op`, `rfwb_op`, `cust5_op`, `cust5_limm`, `sig_syscall`, `sig_trap`, `except_illegal`, and `rfe`. These signals are decoded from the instruction opcode and subfields, then registered or assigned at the stage required by the rest of the processor pipeline. `alu_op` selects ALU behavior such as immediate handling, MOVHI, SPR access, arithmetic, logic, shift/rotate, comparison, custom operation, or NOP. `shrot_op` is derived from `id_insn[7:6]`. `comp_op` is derived from `id_insn[24:21]`. `lsu_op` selects load/store size and sign behavior for load/store opcodes, and defaults to NOP for non-memory instructions.\n\nWhen MAC support is enabled, `mac_op` decodes MAC-related instructions such as `l.maci` and `l.mac/l.msb`; otherwise `mac_op` is tied to NOP. Similarly, `id_macrc_op` detects the MAC-result-read operation in the ID stage when MAC support is enabled, and `ex_macrc_op` is its EX-stage registered version. If MAC support is not implemented, both are tied inactive.\n\nBranch handling is split between `pre_branch_op` and `branch_op`. `pre_branch_op` is decoded from the fetch-stage instruction when the ID stage can accept a new instruction. It identifies branch, jump, jump-register, branch-if-flag, branch-if-no-flag, and RFE operations. `branch_op` is the EX-stage registered version of `pre_branch_op`, subject to flush and freeze rules. The `rfe` output is asserted when either `pre_branch_op` or `branch_op` indicates an RFE operation, allowing exception-return handling to be observed early or at the formal branch-control stage.\n\nFor delay-slot control, `no_more_dslot` is asserted when a branch operation is present, the ID instruction is not void, and `branch_taken` is true, or when the current branch operation is RFE. This informs the instruction fetch / PC-control logic that no further normal delay-slot instruction should be processed. `force_dslot_fetch` is present as an interface signal, but in this implementation it is hardwired to `1'b0`; the older logic that forced delay-slot fetching after load/store-before-branch cases is commented out.\n\nException-related decode includes `except_illegal`, `sig_syscall`, and `sig_trap`. `except_illegal` is registered at the EX-control timing point. It is cleared for explicitly supported OR1200 opcodes and asserted for unrecognized or unsupported opcodes. Its exact set of legal instructions depends on compile-time feature macros such as MAC, multiplication, and custom instruction support. `sig_syscall` is asserted when the instruction encoding matches `l.sys`. `sig_trap` is asserted when the instruction encoding matches `l.trap`, and it is also asserted when the debug unit raises `du_hwbkpt`.\n\nCustom instruction support is reflected through `cust5_op` and `cust5_limm`, which are assigned directly from EX-stage instruction subfields. If custom instruction opcode support is enabled at compile time, `l.cust5` is treated as a legal instruction and can select the custom ALU operation path.\n\nmodule or1200_ctrl(\n    // Clock and reset\n    input clk,\n    input rst,\n\n    // Internal i/f\n    input id_freeze,\n    input ex_freeze,\n    input wb_freeze,\n    input flushpipe,\n    input [31:0] if_insn,\n    output [31:0] ex_insn,\n    output [2:0] branch_op,\n    input branch_taken,\n    output [4:0] rf_addra,\n    output [4:0] rf_addrb,\n    output rf_rda,\n    output rf_rdb,\n    output [3:0] alu_op,\n    output [1:0] mac_op,\n    output [1:0] shrot_op,\n    output [3:0] comp_op,\n    output [4:0] rf_addrw,\n    output [2:0] rfwb_op,\n    output [31:0] wb_insn,\n    output [31:0] simm,\n    output [31:2] branch_addrofs,\n    output [31:0] lsu_addrofs,\n    output [1:0] sel_a,\n    output [1:0] sel_b,\n    output [3:0] lsu_op,\n    output [4:0] cust5_op,\n    output [5:0] cust5_limm,\n    output [1:0] multicycle,\n    output [15:0] spr_addrimm,\n    input wbforw_valid,\n    input du_hwbkpt,\n    output sig_syscall,\n    output sig_trap,\n    output force_dslot_fetch,\n    output no_more_dslot,\n    output ex_void,\n    output id_macrc_op,\n    output ex_macrc_op,\n    output rfe,\n    output except_illegal\n);\n\nInput ports:\n    clk: Primary clock; sequential state in this module updates on its rising edge.\n    rst: Reset input that returns local state elements to their defined reset values.\n    id_freeze: Freeze control for the decode stage.\n    ex_freeze: Freeze control for the execute stage.\n    wb_freeze: Freeze control for the writeback stage.\n    flushpipe: Pipeline flush request.\n    if_insn[31:0]: Instruction word presented to the decode stage.\n    branch_taken: Indicates whether the current branch decision is taken.\n    wbforw_valid: Indicates that the writeback-forwarding path carries valid data.\n    du_hwbkpt: Hardware-breakpoint request generated by the debug unit.\n\nOutput port:\n    ex_insn[31:0]: Instruction word in the execute stage.\n    branch_op[2:0]: Encoded branch/jump operation selector.\n    rf_addrw[4:0]: Register-file write address.\n    rf_addra[4:0]: Register-file read address for source port A.\n    rf_addrb[4:0]: Register-file read address for source port B.\n    rf_rda: Source-A register-read enable from the control path.\n    rf_rdb: Source-B register-read enable from the control path.\n    alu_op[3:0]: Major ALU operation selector.\n    mac_op[1:0]: Encoded MAC operation selector.\n    shrot_op[1:0]: Shift/rotate sub-operation selector.\n    rfwb_op[2:0]: Encoded writeback-source selector and valid bit.\n    wb_insn[31:0]: Instruction word in the writeback stage.\n    simm[31:0]: Expanded immediate operand supplied to execute-stage muxing.\n    branch_addrofs[31:2]: Branch target offset produced by the decode/control path.\n    lsu_addrofs[31:0]: Load/store address offset generated by the control path.\n    sel_a[1:0]: Source selector for execute-stage operand A.\n    sel_b[1:0]: Source selector for execute-stage operand B.\n    lsu_op[3:0]: Encoded load/store operation selector.\n    comp_op[3:0]: Compare sub-operation selector.\n    multicycle[1:0]: Multi-cycle operation control value used by the freeze logic.\n    cust5_op[4:0]: Minor opcode for l.cust5 custom operations.\n    cust5_limm[5:0]: Immediate field used by l.cust5 custom operations.\n    spr_addrimm[15:0]: Immediate SPR address field generated by the decode/control logic.\n    sig_syscall: Raw system-call exception source.\n    sig_trap: Raw trap exception source, including du_hwbkpt.\n    force_dslot_fetch: Control that forces fetching of a branch delay-slot instruction.\n    no_more_dslot: Indicates that no further delay-slot instruction should be executed.\n    ex_void: Indicates that the execute stage currently holds a void/NOP instruction.\n    id_macrc_op: Decode-stage indication that the current instruction reads the MAC result.\n    ex_macrc_op: Execute-stage MAC-result-read indication.\n    rfe: Exception-return control indication.\n    except_illegal: Illegal-instruction exception indication exported to exception control.\n\nProcessing Flow:\n\n1. Fetch-stage decode and register-file read setup:\n   The module first uses the incoming `if_insn` to derive register-file source addresses and read-enable indicators. It also pre-decodes branch information into `pre_branch_op` and pre-decodes immediate selection into `sel_imm` when the ID stage is not frozen.\n\n2. ID-stage instruction capture:\n   When reset or flush occurs, `id_insn` is forced to the OR1200 NOP encoding. Otherwise, if `id_freeze` is not asserted, `if_insn` is latched into `id_insn`.\n\n3. ID-stage combinational decode:\n   The current `id_insn` is used to generate immediate extension control, `simm`, forwarding selections `sel_a` and `sel_b`, multicycle information, and MAC-result-read detection. Source operands are selected from the register file, EX forwarding, WB forwarding, or immediate data according to these decode results.\n\n4. EX-stage control registration:\n   When EX can advance, the module transfers `id_insn` into `ex_insn` and registers most functional control signals, including `alu_op`, `mac_op`, `shrot_op`, `comp_op`, `lsu_op`, `rfwb_op`, `branch_op`, `spr_addrimm`, `sig_syscall`, `sig_trap`, and `except_illegal`. If ID is frozen while EX is not frozen, or if the pipeline is flushed, the module inserts NOP or inactive control values into the EX stage.\n\n5. EX-stage address and branch-related generation:\n   The EX-stage instruction is used to form `branch_addrofs`, `lsu_addrofs`, `cust5_op`, `cust5_limm`, `ex_void`, and branch/delay-slot sideband signals. `branch_op`, together with `branch_taken` and `id_void`, determines whether `no_more_dslot` should be asserted.\n\n6. Write-back stage tracking:\n   When WB can advance, `ex_insn` is latched into `wb_insn`, and the write-back destination register is tracked through `wb_rfaddrw`. This WB-stage destination information is used by the forwarding selection logic for later instructions.\n\n7. Exception and special-control handling:\n   In parallel with normal decode, the module identifies illegal instructions, system calls, traps, debug hardware breakpoints, MAC result reads, and RFE operations. These signals are aligned to the pipeline stage where the rest of the processor expects to consume them."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "clk",
+        "rst",
+        "id_freeze",
+        "ex_freeze",
+        "wb_freeze",
+        "flushpipe",
+        "if_insn",
+        "ex_insn",
+        "branch_op",
+        "branch_taken",
+        "rf_addra",
+        "rf_addrb",
+        "rf_rda",
+        "rf_rdb",
+        "alu_op",
+        "mac_op",
+        "shrot_op",
+        "comp_op",
+        "rf_addrw",
+        "rfwb_op",
+        "wb_insn",
+        "simm",
+        "branch_addrofs",
+        "lsu_addrofs",
+        "sel_a",
+        "sel_b",
+        "lsu_op",
+        "cust5_op",
+        "cust5_limm",
+        "multicycle",
+        "spr_addrimm",
+        "wbforw_valid",
+        "du_hwbkpt",
+        "sig_syscall",
+        "sig_trap",
+        "force_dslot_fetch",
+        "no_more_dslot",
+        "ex_void",
+        "id_macrc_op",
+        "ex_macrc_op",
+        "rfe",
+        "except_illegal"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0001",
+      "rev": 1,
+      "text": "The module derives rf_addra from if_insn[20:16], rf_addrb from if_insn[15:11], rf_rda from if_insn[31], and rf_rdb from if_insn[30] without reset gating.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "if_insn",
+        "rf_addra",
+        "rf_addrb",
+        "rf_rda",
+        "rf_rdb"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0002",
+      "rev": 1,
+      "text": "On each advancing clock, if ID is not frozen and reset and flush are inactive, the module captures if_insn into the ID-stage instruction register.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "clk",
+        "rst",
+        "flushpipe",
+        "id_freeze",
+        "if_insn"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0003",
+      "rev": 1,
+      "text": "Asynchronous active-high reset has priority over clocked updates and initializes the instruction pipeline and registered controls to NOP, inactive, or zero values.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "clk",
+        "rst",
+        "ex_insn",
+        "wb_insn",
+        "branch_op",
+        "alu_op",
+        "mac_op",
+        "shrot_op",
+        "comp_op",
+        "rfwb_op",
+        "spr_addrimm",
+        "sig_syscall",
+        "sig_trap",
+        "except_illegal",
+        "ex_macrc_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0004",
+      "rev": 1,
+      "text": "When flushpipe is asserted, the ID, EX, and WB instruction pipeline registers become the OR1200 NOP encoding and EX-stage functional and exception controls become inactive.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "flushpipe",
+        "ex_insn",
+        "wb_insn",
+        "branch_op",
+        "alu_op",
+        "mac_op",
+        "shrot_op",
+        "comp_op",
+        "rfwb_op",
+        "spr_addrimm",
+        "sig_syscall",
+        "sig_trap",
+        "except_illegal",
+        "ex_macrc_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0005",
+      "rev": 1,
+      "text": "If ex_freeze is asserted, EX-stage state holds its current values, and if wb_freeze is asserted, WB-stage state holds its current values.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "ex_freeze",
+        "wb_freeze",
+        "ex_insn",
+        "wb_insn",
+        "branch_op",
+        "alu_op",
+        "mac_op",
+        "shrot_op",
+        "comp_op",
+        "rfwb_op",
+        "spr_addrimm",
+        "sig_syscall",
+        "sig_trap",
+        "except_illegal"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0006",
+      "rev": 1,
+      "text": "When ID is frozen while EX advances, the module inserts a NOP and inactive controls into EX instead of re-executing stale ID decode information.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "id_freeze",
+        "ex_freeze",
+        "ex_insn",
+        "branch_op",
+        "alu_op",
+        "mac_op",
+        "shrot_op",
+        "comp_op",
+        "rfwb_op",
+        "spr_addrimm",
+        "sig_syscall",
+        "sig_trap",
+        "except_illegal"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0007",
+      "rev": 1,
+      "text": "When WB advances, the module transfers ex_insn into wb_insn and tracks the EX write destination for later forwarding comparisons.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "wb_freeze",
+        "ex_insn",
+        "wb_insn",
+        "rf_addrw"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0008",
+      "rev": 1,
+      "text": "sel_a selects the register-file operand, EX-stage forwarding, or WB-stage forwarding by comparing the ID-stage source-A register with the EX and WB destination registers.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "sel_a",
+        "rf_addrw",
+        "wbforw_valid"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0009",
+      "rev": 1,
+      "text": "sel_b uses the same register-file, EX-forwarding, and WB-forwarding comparisons as sel_a, but immediate selection has priority over all forwarded or register-file choices.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "sel_b",
+        "wbforw_valid",
+        "simm"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0010",
+      "rev": 1,
+      "text": "The module generates simm from id_insn[15:0] by sign extension for the specified arithmetic, immediate-compare, multiplication, and MAC-immediate classes and by zero extension for other immediate classes.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "simm"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0011",
+      "rev": 1,
+      "text": "The module sign-extends ex_insn[25:0] into branch_addrofs[31:2].",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "ex_insn",
+        "branch_addrofs"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0012",
+      "rev": 1,
+      "text": "For store instructions, lsu_addrofs uses the split immediate formed from ex_insn[25:21] and ex_insn[10:0], while loads and default cases use the field formed from ex_insn[15:11] and ex_insn[10:0].",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "ex_insn",
+        "lsu_addrofs"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0013",
+      "rev": 1,
+      "text": "The module generates rf_addrw from id_insn[25:21] by default and forces it to r9 when pre_branch_op indicates JR or BAL.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "rf_addrw"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0014",
+      "rev": 1,
+      "text": "JAL and JALR select link-register write-back through rfwb_op, whereas J and JR do not generate register-file write-back solely because rf_addrw is r9.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "rf_addrw",
+        "rfwb_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0015",
+      "rev": 1,
+      "text": "For l.mfspr, spr_addrimm uses id_insn[15:0], and for other SPR-related instructions it uses {id_insn[25:21], id_insn[10:0]}.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "spr_addrimm"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0016",
+      "rev": 1,
+      "text": "alu_op selects the decoded ALU behavior for immediate operations, MOVHI, SPR access, arithmetic, logic, shift/rotate, comparison, custom operations, and NOP.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "alu_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0017",
+      "rev": 1,
+      "text": "shrot_op is derived from id_insn[7:6], and comp_op is derived from id_insn[24:21].",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "shrot_op",
+        "comp_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0018",
+      "rev": 1,
+      "text": "lsu_op selects the load/store size and sign behavior for memory instructions and is NOP for non-memory instructions.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "lsu_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0019",
+      "rev": 1,
+      "text": "For ALU instructions, multicycle equals id_insn[9:8], and for other instructions it defaults to the one-cycle value unless the disabled UNUSED decode is explicitly enabled.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "multicycle"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0020",
+      "rev": 1,
+      "text": "When MAC support is enabled, mac_op decodes MAC instructions, and when MAC support is unavailable, mac_op is tied to the inactive NOP value.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "mac_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0021",
+      "rev": 1,
+      "text": "When MAC support is enabled, id_macrc_op identifies the MAC-result-read instruction in ID and ex_macrc_op is its registered EX-stage version; otherwise both outputs are inactive.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "id_macrc_op",
+        "ex_macrc_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0022",
+      "rev": 1,
+      "text": "The module pre-decodes branch, jump, jump-register, conditional-flag, inverse-conditional-flag, and RFE operations and registers the accepted ID-stage branch operation into branch_op for EX.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "if_insn",
+        "id_freeze",
+        "branch_op"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0023",
+      "rev": 1,
+      "text": "rfe is asserted when either the early branch predecode or the registered EX branch operation identifies an RFE instruction.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "rfe"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0024",
+      "rev": 1,
+      "text": "no_more_dslot is asserted for a taken branch when the ID instruction is non-void, and is asserted for an RFE operation regardless of the ID void state.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "branch_op",
+        "branch_taken",
+        "no_more_dslot"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0025",
+      "rev": 1,
+      "text": "force_dslot_fetch is always driven to 1'b0.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "force_dslot_fetch"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0026",
+      "rev": 1,
+      "text": "sig_syscall is asserted when the decoded instruction encoding matches l.sys.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "sig_syscall"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0027",
+      "rev": 1,
+      "text": "sig_trap is asserted for l.trap and is independently asserted whenever du_hwbkpt is asserted.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "sig_trap",
+        "du_hwbkpt"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0028",
+      "rev": 1,
+      "text": "except_illegal is registered for EX and is cleared for supported instructions but asserted for unrecognized or unsupported instructions.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "except_illegal"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0029",
+      "rev": 1,
+      "text": "cust5_op and cust5_limm are directly extracted from the EX-stage instruction subfields.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "ex_insn",
+        "cust5_op",
+        "cust5_limm"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0030",
+      "rev": 1,
+      "text": "ex_void indicates whether the EX-stage instruction has the OR1200 void/NOP encoding identified by bit 16.",
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 196,
+          "quote": "Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, exception-related sideband signals, forwarding selection, and pipeline control."
+        }
+      ],
+      "kind": "behaviour",
+      "ports": [
+        "ex_insn",
+        "ex_void"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    }
+  ],
+  "underdetermined": [
+    {
+      "req_uid": "REQ-0003",
+      "question": "What is the complete bit pattern of the OR1200 NOP encoding used on reset, flush, and inserted bubbles? The specification identifies that bit 16 is set but does not provide the remaining bits."
+    },
+    {
+      "req_uid": "REQ-0016",
+      "question": "What exact numeric encodings correspond to each alu_op value and each listed opcode class?"
+    },
+    {
+      "req_uid": "REQ-0018",
+      "question": "What exact numeric encodings correspond to each lsu_op value and each load/store size and sign variant?"
+    },
+    {
+      "req_uid": "REQ-0022",
+      "question": "What exact numeric encodings correspond to the branch_op values for branch, jump, jump-register, conditional branches, inverse conditional branches, and RFE?"
+    },
+    {
+      "req_uid": "REQ-0008",
+      "question": "What exact validity conditions qualify an EX-stage destination for forwarding, beyond the stated destination-register comparison and WB validity input?"
+    },
+    {
+      "req_uid": "REQ-0020",
+      "question": "Which compile-time MAC, multiplication, and CUSTOM5 feature configurations are to be tested, and what exact instruction encodings are legal in each configuration?"
+    },
+    {
+      "req_uid": "REQ-0019",
+      "question": "Is the UNUSED load/store two-cycle multicycle decode disabled for the reference configuration, or should a configuration with that block enabled also be modeled?"
+    },
+    {
+      "req_uid": "REQ-0028",
+      "question": "What complete set of opcode and subopcode encodings is considered legal for each compile-time feature configuration?"
+    }
+  ]
+}

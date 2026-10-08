@@ -1,0 +1,5 @@
+{
+  "reasoning": "decides the clause over the declared output",
+  "clause": "sum is the exclusive-OR of a and b",
+  "source": "def decide(trace):\n    for row in trace:\n        want = row['inputs']['a'] ^ row['inputs']['b']\n        if row['outputs']['sum'] != want:\n            return False, row['edge'], 'sum is not a XOR b'\n    return True, 0, 'sum was a XOR b throughout'\n"
+}

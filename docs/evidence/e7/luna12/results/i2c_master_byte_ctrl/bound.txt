@@ -1,0 +1,37 @@
+bound 22 probe(s), 1 left unbound:
+   bit_controller               w=1  values seen [1]
+   cnt_done                     w=1  values seen [0, 1]
+   core_ack                     w=1  values seen [0, 1]
+   core_cmd                     w=1  values seen [0, 1]
+   core_cmd_nop                 w=1  values seen [0, 1]
+   core_cmd_read                w=1  values seen [0, 1]
+   core_cmd_start               w=1  values seen [0, 1]
+   core_cmd_stop                w=1  values seen [0, 1]
+   core_cmd_write               w=1  values seen [0, 1]
+   core_rxd                     w=1  values seen [0, 1]
+   core_txd                     w=1  values seen [0, 1]
+   dcnt_nonzero                 w=1  values seen [0, 1]
+   go                           w=1  values seen [0, 1]
+   i2c_master_bit_ctrl          w=1  values seen [1]
+   ld                           w=1  values seen [0, 1]
+   shift                        w=1  values seen [0, 1]
+   st_ack                       w=1  values seen [0, 1]
+   st_idle                      w=1  values seen [0, 1]
+   st_read                      w=1  values seen [0, 1]
+   st_start                     w=1  values seen [0, 1]
+   st_stop                      w=1  values seen [0, 1]
+   st_write                     w=1  values seen [0, 1]
+   contentreference             UNBOUND: names citation metadata in the specification text, not a signal of any design.
+
+/home/user/runs/luna12/after_oracles/i2c_master_byte_ctrl
+scoring the SHIPPED set (shipped.json): 88 bodies over 88 requirement(s); 435 golden trace(s)
+
+SPAN       83/110 behavioural = 75.5%   (124 minted, 122 state an observable obligation)
+BLINDNESS  7603/57110 cells = 13.3%   (population 7, effective_size 74)
+AUDIT      27/74 judgeable = 36.5%
+ACCEPTS    0 of 7 design(s)
+  note: the control is NOT contract-conformant: 1 of the 23 declared probe(s) are not exposed by it (contentreference), so the 9 check(s) reading them can say nothing about it
+  note: audit is over the 74 of 83 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 27  REQ-0002[behav] REQ-0003[behav] REQ-0008[behav] REQ-0010[behav] REQ-0012[behav] REQ-0026[behav] REQ-0032[behav] REQ-0038[behav] REQ-0050[behav] REQ-0051[behav] REQ-0053[behav] REQ-0058[behav] REQ-0060[behav] REQ-0067[behav] REQ-0069[behav] REQ-0076[behav] REQ-0082[behav] REQ-0085[behav] REQ-0093[behav] REQ-0094[behav] REQ-0108[behav] REQ-0110[behav] REQ-0111[behav] REQ-0112[behav] REQ-0115[behav] REQ-0119[behav] REQ-0120[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

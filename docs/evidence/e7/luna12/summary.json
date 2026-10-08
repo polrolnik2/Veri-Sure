@@ -1,0 +1,67 @@
+[
+ {
+  "module": "fpu_exceptions",
+  "span": "78/86 behavioural = 90.7%",
+  "blindness": "2200/32770 cells = 6.7%",
+  "audit_raw": "49/74 judgeable = 66.2%",
+  "audit_bound": "49/74 judgeable = 66.2%",
+  "accepts": "4 of 7 design(s)",
+  "pool": 352,
+  "shipped": 143,
+  "refuted_excluded": 67,
+  "rule": "majority",
+  "took": "6:14:56"
+ },
+ {
+  "module": "i2c_master_bit_ctrl",
+  "span": "96/117 behavioural = 82.1%",
+  "blindness": "36329/55857 cells = 65.0%",
+  "audit_raw": "9/33 judgeable = 27.3%",
+  "audit_bound": "27/87 judgeable = 31.0%",
+  "accepts": "0 of 7 design(s)",
+  "pool": 346,
+  "shipped": 104,
+  "refuted_excluded": 130,
+  "rule": "majority",
+  "took": "4:30:56"
+ },
+ {
+  "module": "i2c_master_byte_ctrl",
+  "span": "83/110 behavioural = 75.5%",
+  "blindness": "7603/57110 cells = 13.3%",
+  "audit_raw": "0/7 judgeable = 0.0%",
+  "audit_bound": "27/74 judgeable = 36.5%",
+  "accepts": "0 of 7 design(s)",
+  "pool": 304,
+  "shipped": 88,
+  "refuted_excluded": 122,
+  "rule": "majority",
+  "took": "8:41:11"
+ },
+ {
+  "module": "or1200_dc_fsm",
+  "span": "71/81 behavioural = 87.7%",
+  "blindness": "438/466 cells = 94.0%",
+  "audit_raw": "1/8 judgeable = 12.5%",
+  "audit_bound": "2/59 judgeable = 3.4%",
+  "accepts": "4 of 7 design(s)",
+  "pool": 232,
+  "shipped": 80,
+  "refuted_excluded": 61,
+  "rule": "majority",
+  "took": "4:31:31"
+ },
+ {
+  "module": "or1200_sb",
+  "span": "50/53 behavioural = 94.3%",
+  "blindness": "8654/8708 cells = 99.4%",
+  "audit_raw": "0/3 judgeable = 0.0%",
+  "audit_bound": "0/3 judgeable = 0.0%",
+  "accepts": "5 of 7 design(s)",
+  "pool": 212,
+  "shipped": 68,
+  "refuted_excluded": 50,
+  "rule": "majority",
+  "took": "6:29:47"
+ }
+]

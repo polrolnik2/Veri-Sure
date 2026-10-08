@@ -10,3 +10,22 @@ __pycache__/
 runs/
 sim_build/
 *.xml
+# `golden_check.py --out` defaults here: rendered testbenches and two
+# Verilator builds, ~24 MB a run. A measurement's workspace, not source.
+golden_check/
+
+.venv/
+.env.local
+
+# Verification reports written by the per-step Haiku subagents. Evidence for a
+# step that has landed, not part of the artifact.
+scratchpad/
+
+# E3's model traces. The RESULT files beside them are committed
+# (requirements.json, normalized.json, e3-result.json); the per-call prompts and
+# responses are not. Storing them is not reading them, but a trace is the same
+# information as a design in another format, and this branch keeps the
+# reference out of reach of whoever works on it next.
+docs/evidence/e3/*_prompt.txt
+docs/evidence/e3/*_response.txt
+docs/evidence/e3/*_meta.json

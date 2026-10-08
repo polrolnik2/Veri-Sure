@@ -1,0 +1,29 @@
+run    req         moved  held bound trans
+edit1  REQ-0114        0     0     7     8
+edit1  REQ-0066        0     0    15     4
+edit1  REQ-0070        0     0    15     9
+edit1  REQ-0090        0     0    15     2
+edit1  REQ-0042        0     0    15     4
+edit2  REQ-0003       12     0     4     4
+edit2  REQ-0090       12     0    15     2
+edit2  REQ-0042       12     0    15     4
+edit2  REQ-0009       12     0    15     2
+edit3  REQ-0110        5    48    15     1
+edit3  REQ-0090        6    36    15     2
+edit3  REQ-0114        8    45     7     8
+edit3  REQ-0062        4    49    15     1
+edit3  REQ-0066        9    44    15     4
+edit3  REQ-0116        9    44    15     5
+edit3  REQ-0095       10    43     9     9
+edit4  REQ-0066        8    45    15     4
+edit4  REQ-0110        5    48    15     1
+edit4  REQ-0114        8    45     7     8
+edit4  REQ-0066        9    44    15     4
+edit4  REQ-0003        6    47     4     4
+edit4  REQ-0062        4    49    15     1
+
+22 explain calls.
+distinct what_would_satisfy_it answers: 1
+    NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the o
+
+ONE answer in every call: this field carries no information.

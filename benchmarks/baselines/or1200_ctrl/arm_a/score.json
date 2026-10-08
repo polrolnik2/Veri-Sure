@@ -1,0 +1,12 @@
+{
+  "status": "equivalence_error",
+  "flow": "equivalence",
+  "proof_type": "bounded_seq",
+  "reason": "ERROR: Failed to import cell $flatten\\gold.$auto$proc_rom.cc:150:do_switch$114 (type $mem_v2) to SAT database.",
+  "reference_precheck": "pass",
+  "interface_status": "compatible",
+  "formal_status": "unknown",
+  "compile_gate_status": "pass",
+  "task": "or1200_ctrl",
+  "label": "armA"
+}

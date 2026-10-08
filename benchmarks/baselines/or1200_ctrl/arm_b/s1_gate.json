@@ -1,0 +1,198 @@
+{
+  "ok": false,
+  "rounds": 4,
+  "issues": [
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0000.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0001.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0002.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0003.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0004.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0005.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0006.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0007.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0008.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0009.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0010.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0011.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0012.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0013.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0014.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0015.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0016.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0017.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0018.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0019.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0020.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0021.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0022.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0023.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0024.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0025.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0026.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0027.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0028.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0029.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "requirement.REQ-0030.spec_spans[0]",
+      "message": "quote is not the verbatim spec text at that range",
+      "kind": null
+    },
+    {
+      "severity": "error",
+      "path": "spec[0:14323]",
+      "message": "no requirement claims this text: 'Module `or1200_ctrl` decodes instructions and generates control signals for ALU, LSU, register write-back, branching, ex'",
+      "kind": "uncovered"
+    }
+  ]
+}

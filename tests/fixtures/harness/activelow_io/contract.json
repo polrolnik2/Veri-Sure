@@ -1,0 +1,13 @@
+{
+  "module_name": "Dut",
+  "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "rst_n", "dir": "input", "width": 1},
+    {"name": "req_n", "dir": "input", "width": 1, "idle_value": 1},
+    {"name": "bus_i", "dir": "input", "width": 1, "idle_value": 1},
+    {"name": "oen", "dir": "output", "width": 1},
+    {"name": "seen", "dir": "output", "width": 1}
+  ],
+  "clocking": {"is_sequential": true},
+  "timing": {"oen": {"latency_cycles": 1}, "seen": {"latency_cycles": 1}}
+}

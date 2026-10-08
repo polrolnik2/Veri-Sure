@@ -1,0 +1,15 @@
+req        class            cand   gold   requirement
+REQ-0006   INVERTED         True   False  The module detects arbitration loss and signals it by asserting 
+REQ-0009   DISCRIMINATING   False  True   The module synchronizes raw SDA and SCL inputs by capturing them
+REQ-0030   CONVICTS-GOLDEN  False  False  The arbitration-lost output al is asserted when a STOP condition
+REQ-0042   DISCRIMINATING   False  True   The module shall assert scl_sync when a falling edge occurs on t
+REQ-0066   DISCRIMINATING   False  True   The READ command sequence releases the SDA line so that the exte
+REQ-0095   CONVICTS-GOLDEN  False  False  The module shall enable arbitration checking during the stable h
+
+    3  DISCRIMINATING
+    2  CONVICTS-GOLDEN
+    1  INVERTED
+
+PROVEN UNSATISFIABLE (golden fails them too): 2  ['REQ-0030', 'REQ-0095']
+REACHABLE BY THE LOOP (golden passes them)  : 3
+UNKNOWN -- golden never exercised them, so no verdict either way: 0  []

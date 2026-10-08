@@ -1,0 +1,161 @@
+{
+  "targets": [
+    {
+      "req": "REQ-0000",
+      "tp": "TP-0000",
+      "port": "sda_oen"
+    },
+    {
+      "req": "REQ-0002",
+      "tp": "TP-0014",
+      "port": "dout"
+    },
+    {
+      "req": "REQ-0001",
+      "tp": "TP-0004",
+      "port": "sda_oen"
+    },
+    {
+      "req": "REQ-0003",
+      "tp": "TP-0017",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0004",
+      "tp": "TP-0019",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0007",
+      "tp": "TP-0030",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0008",
+      "tp": "TP-0033",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0010",
+      "tp": "TP-0040",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0017",
+      "tp": "TP-0055",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0019",
+      "tp": "TP-0058",
+      "port": "cmd_ack"
+    },
+    {
+      "req": "REQ-0005",
+      "tp": "TP-0021",
+      "port": "sda_oen"
+    },
+    {
+      "req": "REQ-0020",
+      "tp": "TP-0062",
+      "port": "cmd_ack"
+    }
+  ],
+  "authored": {
+    "REQ-0000": "def decide(trace):\n    # sda_oen is the declared observable for this scenario, but the\n    # obligation states no licensed expectation for its value or behavior.\n    for row in trace:\n        row.get('outputs', {}).get('sda_oen')\n    return (None, None, 'the requirement states a module role only; it imposes no licensed expectation on declared port sda_oen')",
+    "REQ-0002": "def decide(trace):\n    observed_dout = [row.get('outputs', {}).get('dout') for row in trace]\n    return (None, None, 'The obligation does not constrain declared output dout; it only lists support for single-bit READ cycles')",
+    "REQ-0001": "def decide(trace):\n    from specflow.refmodel.temporal import after, worst\n\n    supported = {1, 2, 4, 8}\n\n    def row_value(row, port):\n        return row['outputs'].get(port, row['inputs'].get(port))\n\n    def holds(row, cond):\n        return all(row_value(row, port) == value for port, value in cond.items())\n\n    def any_condition(conditions):\n        return lambda row: any(holds(row, condition) for condition in conditions)\n\n    opens = lambda row: (\n        row_value(row, 'ena') == 1\n        and row_value(row, 'cmd') in supported\n        and row_value(row, 'active_command') == 1\n    )\n    closes = lambda row: row_value(row, 'cmd_ack') == 1\n    aborts = any_condition([\n        {'al': 1},\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    windows = after(trace, opens, until=closes, aborts=aborts)\n    verdicts = []\n\n    for window in windows:\n        rows = window.rows\n        if not rows:\n            verdicts.append((None, window.edge, 'no post-activation SDA-control state was observed'))\n            continue\n\n        # effect_follows is true for the normalized activation: inspect only\n        # distinct states after the active-command trigger.\n        trigger_index = rows[0]['index']\n        post = [row for row in rows if row['index'] > trigger_index]\n        cmd = window.value('cmd')\n        din = window.value('din')\n\n        if cmd == 1:  # START: SDA is driven low.\n            match = next((row for row in post if row_value(row, 'sda_oen') == 0), None)\n            if match is not None:\n                verdicts.append((True, match['edge'], 'START sequence drives sda_oen low'))\n            elif window.closed:\n                verdicts.append((False, window.edge, 'START sequence never drives sda_oen low'))\n            else:\n                verdicts.append((None, window.edge, 'START window ended before SDA drive was observed'))\n\n        elif cmd == 2:  # STOP: SDA is driven low, then released high.\n            low = next((row for row in post if row_value(row, 'sda_oen') == 0), None)\n            high = None\n            if low is not None:\n                high = next(\n                    (row for row in post\n                     if row['index'] > low['index'] and row_value(row, 'sda_oen') == 1),\n                    None)\n            if high is not None:\n                verdicts.append((True, high['edge'], 'STOP sequence drives SDA low and then releases it'))\n            elif window.closed:\n                verdicts.append((False, window.edge, 'STOP sequence did not drive SDA low and then release it'))\n            else:\n                verdicts.append((None, window.edge, 'STOP window ended before the SDA sequence was observed'))\n\n        elif cmd == 4:  # WRITE: din=0 drives low; din=1 releases high.\n            expected = 0 if din == 0 else 1\n            match = next((row for row in post if row_value(row, 'sda_oen') == expected), None)\n            if match is not None:\n                verdicts.append((True, match['edge'], f'WRITE din={din} selects sda_oen={expected}'))\n            elif window.closed:\n                verdicts.append((False, window.edge, f'WRITE din={din} never produces sda_oen={expected}'))\n            else:\n                verdicts.append((None, window.edge, 'WRITE window ended before SDA control was observed'))\n\n        elif cmd == 8:  # READ: SDA is released for the read window.\n            match = next((row for row in post if row_value(row, 'sda_oen') == 1), None)\n            if match is not None:\n                verdicts.append((True, match['edge'], 'READ sequence releases SDA'))\n            elif window.closed:\n                verdicts.append((False, window.edge, 'READ sequence never releases SDA'))\n            else:\n                verdicts.append((None, window.edge, 'READ window ended before SDA release was observed'))\n\n    return worst(verdicts)",
+    "REQ-0003": "def decide(trace):\n    if not trace:\n        return (None, None, 'no clock-edge samples were provided')\n\n    for row in trace:\n        outputs = row.get('outputs', {})\n        if outputs.get('scl_o') != 0:\n            return (False, row.get('edge'), 'scl_o is not the required constant low open-drain drive value')\n        if outputs.get('sda_o') != 0:\n            return (False, row.get('edge'), 'sda_o is not the required constant low open-drain drive value')\n\n    return (True, None, 'scl_o and sda_o remain constant low across all sampled states; cmd_ack is not constrained by this requirement')",
+    "REQ-0004": "def decide(trace):\n    # cmd_ack is declared, but this requirement licenses no expectation about it.\n    _considered = [r.get('outputs', {}).get('cmd_ack') for r in trace]\n    return (None, None, 'cmd_ack is not constrained by this requirement; the specification is silent')",
+    "REQ-0007": "def decide(trace):\n    # cmd_ack is a declared output, but this obligation constrains no\n    # cmd_ack behavior.\n    _cmd_ack_values = [row.get('outputs', {}).get('cmd_ack') for row in trace]\n    return (None, None, 'the requirement does not constrain declared output cmd_ack')",
+    "REQ-0008": "def decide(trace):\n    # cmd_ack is a declared output, but this architectural obligation\n    # states no expectation for its value or timing.\n    observed_cmd_ack = [row.get('outputs', {}).get('cmd_ack') for row in trace]\n    return (None, None, 'cmd_ack is declared but unconstrained by this architectural requirement; no licensed check exists.')",
+    "REQ-0010": "def decide(trace):\n    observed_cmd_ack = [\n        row.get('outputs', {}).get('cmd_ack')\n        for row in trace\n        if 'cmd_ack' in row.get('outputs', {})\n    ]\n    if observed_cmd_ack:\n        return (None, trace[0].get('edge'),\n                'cmd_ack is observable, but this interface declaration does not constrain its behavior')\n    return (None, None,\n            'cmd_ack is not present in the trace; this interface declaration does not constrain its behavior')",
+    "REQ-0017": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\ndef decide(trace):\n    windows = after(\n        trace,\n        lambda r: r['inputs'].get('nReset') == 0,\n        until=WHILE_ACTIVE,\n    )\n    return worst([\n        throughout(\n            w,\n            lambda r: r['outputs'].get('cmd_ack') == 0,\n            after_activation=False,\n        )\n        for w in windows\n    ])",
+    "REQ-0019": "def decide(trace):\n    # cmd_ack is a declared observable port, but this obligation does not\n    # constrain its value in the ena=0 scenario.\n    for row in trace:\n        row.get('outputs', {}).get('cmd_ack')\n    return (None, None, 'REQ-0019 does not specify an expectation for cmd_ack while ena is low')",
+    "REQ-0005": "def decide(trace):\n    sda_oen_values = [\n        row.get('outputs', {}).get('sda_oen')\n        for row in trace\n    ]\n    return (None, None, 'sda_oen is observed, but the obligation constrains the external SDA line rather than requiring either sda_oen level in this scenario; no licensed expectation is decidable')",
+    "REQ-0020": "def decide(trace):\n    from specflow.refmodel.temporal import after, throughout\n\n    def out(row, name, default=0):\n        return row.get('outputs', {}).get(name, default)\n\n    def aborted(row):\n        return row.get('inputs', {}).get('nReset') == 0 or row.get('inputs', {}).get('rst') == 1 or out(row, 'al') == 1\n\n    def active_while_disabled(row):\n        return (not aborted(row)\n                and row.get('inputs', {}).get('ena') == 0\n                and out(row, 'active_command') == 1)\n\n    windows = after(\n        trace,\n        active_while_disabled,\n        until=lambda r: (not aborted(r)) and (\n            r.get('inputs', {}).get('ena') != 0\n            or out(r, 'active_command') != 1\n        ),\n        aborts=aborted,\n    )\n\n    if not windows:\n        return (None, None, 'no active command was observed while ena was low')\n\n    low_verdicts = [\n        throughout(w, lambda r: out(r, 'cmd_ack') == 0)\n        for w in windows\n    ]\n\n    for verdict, window in zip(low_verdicts, windows):\n        if verdict[0] is False:\n            return verdict\n\n    # The routed observation is a difference: after ena is re-enabled, the\n    # command-complete acknowledgement may resume.  This is evidence that the\n    # low-ena interval postponed completion rather than merely observing the\n    # ordinary low level of cmd_ack.\n    for window in windows:\n        rows = window.rows\n        if not rows:\n            continue\n        last_index = max(r.get('index', -1) for r in rows)\n        released = False\n        for row in trace:\n            if row.get('index', -1) <= last_index:\n                continue\n            if aborted(row):\n                break\n            if row.get('inputs', {}).get('ena') != 0:\n                released = True\n            if released and out(row, 'cmd_ack') == 1:\n                return (True, row.get('edge'), 'cmd_ack stayed low while ena was low and appeared after ena was re-enabled')\n\n    return (None, None, 'cmd_ack was postponed while ena was low, but the trace did not show re-enabled command completion')"
+  },
+  "per_body": {
+    "REQ-0000": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0002": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0001": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": true
+    },
+    "REQ-0003": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": true
+    },
+    "REQ-0004": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0007": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0008": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0010": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0017": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0019": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0005": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    },
+    "REQ-0020": {
+      "closes": 0,
+      "closes_its_own_cell": false,
+      "decides_anywhere": false
+    }
+  },
+  "cells": 3530,
+  "blind_before": 3425,
+  "blind_after": 3437,
+  "effective_before": 89,
+  "effective_after": 84,
+  "fully_caught": [],
+  "partly": [],
+  "fully_blind": [
+    "REQ-0000",
+    "REQ-0002",
+    "REQ-0001",
+    "REQ-0003",
+    "REQ-0004",
+    "REQ-0007",
+    "REQ-0008",
+    "REQ-0010",
+    "REQ-0017",
+    "REQ-0019",
+    "REQ-0005",
+    "REQ-0020"
+  ]
+}

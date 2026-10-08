@@ -1,0 +1,12 @@
+# Runtime/output directories
+Generated_Verilog_codex/
+Description/
+
+# Local environment directories
+env/
+
+run.log
+.codex_batch_logs/
+.codex_batch_work/
+reports/supplemental/verification/
+run_codex_batch_txt.sh

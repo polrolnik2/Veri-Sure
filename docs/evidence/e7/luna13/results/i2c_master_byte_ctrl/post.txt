@@ -1,0 +1,7 @@
+== i2c_master_byte_ctrl
+SPAN       92/112 behavioural = 82.1%   (127 minted, 124 state an observable obligation)
+BLINDNESS  3441/53740 cells = 6.4%   (population 7, effective_size 79)
+AUDIT      0/3 judgeable = 0.0%
+ACCEPTS    0 of 7 design(s)
+target span>0.90 no  blindness<0.10 MET  audit=0 MET
+bound AUDIT      17/73 judgeable = 23.3%

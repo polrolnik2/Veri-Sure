@@ -1,0 +1,214 @@
+{
+  "source_of_truth": "spec",
+  "module_name": "i2c_master_bit_ctrl",
+  "parameters": [],
+  "io": [
+    {
+      "name": "clk",
+      "dir": "input",
+      "width": 1,
+      "notes": "system clock; all synchronous updates use posedge"
+    },
+    {
+      "name": "rst",
+      "dir": "input",
+      "width": 1,
+      "notes": "synchronous active-high reset"
+    },
+    {
+      "name": "nReset",
+      "dir": "input",
+      "width": 1,
+      "notes": "asynchronous active-low reset"
+    },
+    {
+      "name": "ena",
+      "dir": "input",
+      "width": 1,
+      "notes": "core enable; low reloads timing and resets filter timing; FSM does not progress"
+    },
+    {
+      "name": "clk_cnt",
+      "dir": "input",
+      "width": 16,
+      "notes": "clock prescaler value"
+    },
+    {
+      "name": "cmd",
+      "dir": "input",
+      "width": 4,
+      "notes": "bit command; assumed encodings NOP=0000, START=0001, STOP=0010, READ=0100, WRITE=1000 because numeric encodings are not stated"
+    },
+    {
+      "name": "cmd_ack",
+      "dir": "output",
+      "width": 1,
+      "notes": "one-clock command-complete pulse"
+    },
+    {
+      "name": "busy",
+      "dir": "output",
+      "width": 1,
+      "notes": "bus busy status; set by filtered START and cleared by filtered STOP"
+    },
+    {
+      "name": "al",
+      "dir": "output",
+      "width": 1,
+      "notes": "arbitration-lost status"
+    },
+    {
+      "name": "din",
+      "dir": "input",
+      "width": 1,
+      "notes": "WRITE data bit; 0 drives SDA low and 1 releases SDA"
+    },
+    {
+      "name": "dout",
+      "dir": "output",
+      "width": 1,
+      "notes": "received bit sampled from filtered SDA"
+    },
+    {
+      "name": "scl_i",
+      "dir": "input",
+      "width": 1,
+      "notes": "external SCL line input"
+    },
+    {
+      "name": "scl_o",
+      "dir": "output",
+      "width": 1,
+      "notes": "constant 0 open-drain drive value"
+    },
+    {
+      "name": "scl_oen",
+      "dir": "output",
+      "width": 1,
+      "notes": "active-low SCL output enable: 0 drives low, 1 releases"
+    },
+    {
+      "name": "sda_i",
+      "dir": "input",
+      "width": 1,
+      "notes": "external SDA line input"
+    },
+    {
+      "name": "sda_o",
+      "dir": "output",
+      "width": 1,
+      "notes": "constant 0 open-drain drive value"
+    },
+    {
+      "name": "sda_oen",
+      "dir": "output",
+      "width": 1,
+      "notes": "active-low SDA output enable: 0 drives low, 1 releases"
+    }
+  ],
+  "clocking": {
+    "is_sequential": true,
+    "clock": {
+      "name": "clk",
+      "edge": "posedge"
+    },
+    "reset": {
+      "name": "nReset",
+      "active": "nReset low asynchronously; rst high synchronously",
+      "type": "combined asynchronous and synchronous; nReset has priority"
+    }
+  },
+  "timing": {
+    "scl_o": {
+      "latency_cycles": 0,
+      "notes": "constant 0"
+    },
+    "sda_o": {
+      "latency_cycles": 0,
+      "notes": "constant 0"
+    },
+    "scl_oen": {
+      "latency_cycles": 1,
+      "notes": "registered output; changes after a posedge on an eligible clk_en FSM phase transition; timing is variable and high-phase completion can be delayed by clock stretching"
+    },
+    "sda_oen": {
+      "latency_cycles": 1,
+      "notes": "registered output; changes after a posedge on an eligible clk_en FSM phase transition; timing is variable"
+    },
+    "cmd_ack": {
+      "latency_cycles": 1,
+      "notes": "registered one-clock pulse after the posedge on which the accepted command reaches its final phase; total command latency is variable because it depends on clk_cnt, ena, filtering, and stretching"
+    },
+    "busy": {
+      "latency_cycles": 1,
+      "notes": "registered status update after the posedge detecting a filtered START or STOP; detection latency is variable because of synchronization and filtering"
+    },
+    "al": {
+      "latency_cycles": 1,
+      "notes": "registered assertion after the posedge detecting arbitration loss or an unexpected STOP; al remains asserted until reset"
+    },
+    "dout": {
+      "latency_cycles": 1,
+      "notes": "registered capture after the posedge detecting a rising edge of filtered SCL; input-to-capture latency is variable because of synchronization and filtering"
+    }
+  },
+  "functional_summary": [
+    "Implement a bit-level I2C controller with an idle FSM and START, STOP, READ, and WRITE command sequences. Unsupported commands, including NOP, leave the FSM idle and do not generate cmd_ack.",
+    "The FSM accepts a command only while idle and on a clk_en timing tick. A command is held by the caller until cmd_ack; no new command is accepted while a prior command is active.",
+    "Generate open-drain signaling exclusively through scl_oen and sda_oen. scl_o and sda_o are continuously 0; output-enable 0 pulls a line low and output-enable 1 releases it.",
+    "START releases SCL and SDA, pulls SDA low while SCL is high, then pulls SCL low and completes. STOP drives SDA low, releases SCL and waits for filtered SCL high, then releases SDA high while SCL is high and completes.",
+    "READ releases SDA, releases SCL for the high phase and samples the filtered SDA value on the filtered SCL rising edge, then drives SCL low and completes. WRITE sets SDA from din, releases SCL for the high phase, checks arbitration while a released SDA is expected high, then drives SCL low and completes.",
+    "The 16-bit divider produces a one-clock clk_en pulse when its count expires and reloads from clk_cnt; the FSM advances only on clk_en. If slave_wait is active, the divider is held and no FSM phase advances.",
+    "Synchronize scl_i and sda_i through two-stage registers, periodically shift samples into three-sample histories using a filter interval derived from clk_cnt >> 2, and use a three-sample majority for filtered SCL/SDA. Filtered SDA falling/rising while filtered SCL is high detects START/STOP.",
+    "Set busy on any filtered START and clear it on any filtered STOP. Detect slave clock stretching when SCL is released but filtered SCL remains low, and detect multi-master synchronization when filtered SCL falls while this master has released SCL. On arbitration loss, return idle, release both lines, and do not acknowledge the aborted command."
+  ],
+  "corner_cases": [
+    "When nReset is low, state, counters, filter histories, delayed filtered inputs, busy, al, cmd_ack, and output enables reset asynchronously; scl_oen and sda_oen become 1, filtered SCL/SDA initialize high, and dout resets to 0. When rst is high, the same state is applied on the next posedge; nReset low has priority.",
+    "al is sticky after assertion and remains set until either reset input resets it. Arbitration loss occurs only when SDA checking is enabled and released SDA is filtered low, or when an unexpected filtered STOP occurs during a non-STOP active command.",
+    "A WRITE of din=0 does not lose arbitration merely because SDA is low; arbitration checking applies to a released/high-expected SDA phase, normally din=1.",
+    "If clk_cnt is 0, the divider and the derived filter interval are treated as expiring on every eligible clock, so clk_en and filter sampling can occur every clock. For clk_cnt values below 4, clk_cnt >> 2 is also 0.",
+    "While ena is low, timing is reloaded, filter timing is reset, filtered histories and FSM progression are held, and no command acknowledge is generated; a pending command resumes when ena returns high.",
+    "Clock stretching may hold a READ, WRITE, or STOP high phase for an unbounded number of system clocks until filtered SCL is high. The FSM must not complete that phase early.",
+    "The three-sample filter suppresses changes not represented by a majority; START/STOP and arbitration decisions use filtered, not raw, inputs. Reset initializes the filtered bus state to idle-high.",
+    "A STOP condition clears busy even if it is externally generated. An externally detected STOP during an active non-STOP command also asserts al."
+  ],
+  "test_plan": [
+    "Assert nReset asynchronously between clock edges and verify immediate release of both open-drain lines, idle FSM behavior, cleared status/ack, high filtered initialization, and dout=0; repeat with synchronous rst asserted across a posedge.",
+    "Verify scl_o and sda_o remain 0 for all reset, idle, and command phases, and verify output-enable polarity by checking that 0 means drive low and 1 means release.",
+    "With a small nonzero clk_cnt, issue NOP and unsupported command values and verify no output sequence and no cmd_ack; issue each valid command only while idle and hold cmd until acknowledgment.",
+    "Issue START on an idle-high bus and verify SDA is released before being pulled low while SCL is high, then SCL is pulled low and exactly one cmd_ack pulse occurs; verify busy becomes set from the filtered START.",
+    "Issue STOP after a START and verify SDA is low, SCL is released and allowed to reach high, SDA is then released high while SCL is high, exactly one cmd_ack pulse occurs, and busy clears.",
+    "Issue WRITE with din=0 and din=1 and verify SDA drive/release behavior, SCL high and low phases, completion acknowledgment, and no false arbitration loss when the bus matches the transmitted bit.",
+    "During WRITE din=1, externally hold SDA low during the released SCL-high check; verify al asserts, both lines release, the command aborts without cmd_ack, and al remains asserted until reset.",
+    "Issue READ with external SDA low and high values, allow filtered SCL to rise, verify dout captures the corresponding filtered SDA bit, then verify SCL is pulled low and one cmd_ack is produced.",
+    "Hold scl_i low after the controller releases SCL during READ, WRITE, and STOP; verify output and FSM phase remain waiting and completion occurs only after filtered SCL becomes high.",
+    "Inject short and sustained SDA/SCL glitches, external START/STOP events, and an external SCL falling edge while SCL is released; verify majority filtering, busy tracking, arbitration-on-unexpected-STOP, and timing reload/synchronization."
+  ],
+  "guidance": {
+    "verifier": [
+      "Drive the open-drain bus model as the wired-AND of the DUT release/drive controls and external low drivers; never drive a high value against an asserted output enable.",
+      "Drive inputs before each posedge clk and observe registered outputs only after that posedge and after nonblocking assignments settle. Use posedge clk exclusively for stimulus and checking; do not sample at any other clock edge. Treat total command latency as variable and count clk_en ticks rather than assuming a fixed system-clock count.",
+      "Keep cmd stable from acceptance until cmd_ack or arbitration loss. Use small clk_cnt values to shorten tests, but include clk_cnt=0 and values below 4.",
+      "Allow for two-stage synchronization and filter sampling latency when checking line events. A filter sample is accepted only when ena is high and its derived interval expires.",
+      "Use procedural checks or simple immediate assertions compatible with Verilator; avoid requiring advanced SVA constructs. Check that cmd_ack is never high for more than one consecutive posedge-to-posedge interval."
+    ],
+    "coder": [
+      "Use the exact module name and port names/directions above; implement cmd_ack, busy, al, and dout as outputs, resolving the contradictory grouping in the source interface by their stated behaviors.",
+      "Use a combined asynchronous-reset/synchronous-reset sequential structure with nReset in the sensitivity list and rst checked synchronously; reset output enables high, status/ack low, filtered histories high, and dout low.",
+      "Keep scl_o and sda_o as continuous constant-zero assignments. Derive all physical line drive behavior from active-low scl_oen and sda_oen.",
+      "Separate synchronized raw inputs, filter counters/history, delayed filtered values, divider/clk_en, status logic, and command FSM. Use explicit unsigned widths for the 16-bit divider and filter counter; truncate/reload values deliberately.",
+      "Advance FSM phases only on clk_en and hold the divider during slave_wait. Gate timing/filter progression with ena. Preserve output enables while waiting for filtered SCL high.",
+      "Implement majority voting as at least two of three history bits. Detect START/STOP from filtered current and delayed SDA with filtered SCL high, and detect SCL synchronization from filtered falling edges while SCL is released.",
+      "Make arbitration checking conditional on the WRITE released-SDA high phase, and abort to idle with both output enables released on arbitration loss. Default cmd_ack low each active clock so it is a one-cycle pulse."
+    ],
+    "debugger": [
+      "First check the corrected interface interpretation: cmd_ack, busy, al, and dout are outputs, while din is the only data-bit input among those names.",
+      "Check reset sensitivity, reset priority, and reset values, especially active-low asynchronous nReset versus active-high synchronous rst and released output enables.",
+      "Check active-low open-drain polarity; reversing an output-enable is the most common cause of inverted START/STOP and data behavior.",
+      "Check off-by-one errors in divider/filter expiration, clk_cnt=0 handling, and advancing FSM phases when ena is low or slave_wait is active.",
+      "Check that SCL-high phases wait for filtered SCL rather than raw SCL, and that synchronization/filter latency is not mistaken for a protocol failure.",
+      "Check majority-history update and delayed-value update ordering for false START/STOP edges, missed bus busy transitions, and incorrect read sampling.",
+      "Check arbitration only when SDA is expected to be released, clear no status except by reset, and ensure an arbitration abort does not emit cmd_ack."
+    ]
+  }
+}

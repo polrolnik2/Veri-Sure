@@ -113,7 +113,7 @@ class BooleanProoferAgent:
         self._agent = SafeReActAgent(
             name="BooleanProofer",
             sys_prompt=SYSTEM_PROMPT,
-            model=make_openai_model(cfg),
+            model=make_openai_model(cfg, cache_key="boolean-proofer"),
             formatter=make_formatter(cfg.model),
             memory=InMemoryMemory(),
             max_iters=10,

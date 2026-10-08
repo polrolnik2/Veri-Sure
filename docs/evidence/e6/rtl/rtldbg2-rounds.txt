@@ -1,0 +1,8 @@
+run /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/rtldbg2
+122 frozen check(s); 24 declared probe(s)
+debug_max_trials=20 rounds=3
+NO reference model is generated -- ref_model.py is read for the runtime's lockstep and nothing else
+starting from /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/e6/work/candidate.v (518 lines)
+ROUND 0: 84 pass, 35 FAIL, 3 abstain of 122 check(s); 215 failing testpoint(s)
+  failing: REQ-0002, REQ-0008, REQ-0014, REQ-0024, REQ-0025, REQ-0026, REQ-0031, REQ-0034, REQ-0037, REQ-0050, REQ-0054, REQ-0055
+  abstain: REQ-0051, REQ-0073, REQ-0128

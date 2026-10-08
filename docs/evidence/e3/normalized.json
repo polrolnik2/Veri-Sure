@@ -1,0 +1,2268 @@
+{
+  "REQ-0008": {
+    "req_uid": "REQ-0008",
+    "activation": {
+      "text": "the Byte Command Controller sequences a byte-level operation that requires bit-level START/STOP/READ/WRITE signal generation",
+      "inputs": {
+        "ena": 1,
+        "nReset": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "dout",
+      "scl_o",
+      "scl_oen",
+      "sda_o",
+      "sda_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "while such a byte-level sequence runs, the Bit Command Controller drives scl_o and sda_o together with scl_oen and sda_oen to produce the I2C-level START, STOP, READ and WRITE bit signalling, and dout reflects sampled SDA during READ bit operations",
+    "observed_via": [
+      {
+        "port": "scl_o",
+        "through_req": "",
+        "when": "during the Byte Command Controller's byte-level sequence (the activation)",
+        "shows": "scl_o toggles to drive SCL high/low as required for I2C bit timing (edges and levels for START/STOP/clocking)",
+        "otherwise": "scl_o remains at its idle driven level or does not perform the bit-level toggles associated with START/STOP/READ/WRITE"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the Byte Command Controller's byte-level sequence (the activation)",
+        "shows": "scl_oen is actively driven (pulled low to drive SCL or released high when not driving) in the pattern required to implement bit-level SCL signalling",
+        "otherwise": "scl_oen stays in the released/idle state or does not exhibit the drive/release pattern tied to bit-level operations"
+      },
+      {
+        "port": "sda_o",
+        "through_req": "",
+        "when": "during the Byte Command Controller's byte-level sequence (the activation)",
+        "shows": "sda_o is driven to produce the data/START/STOP bit levels when the controller transmits bits",
+        "otherwise": "sda_o remains at its idle driven level or does not perform the data/START/STOP transitions"
+      },
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the Byte Command Controller's byte-level sequence (the activation)",
+        "shows": "sda_oen is driven low when the controller actively drives SDA and released high when not driving, following the bit-level transmit/release pattern",
+        "otherwise": "sda_oen stays released/idle or does not follow the transmit/release pattern tied to bit-level operations"
+      },
+      {
+        "port": "dout",
+        "through_req": "",
+        "when": "during the Byte Command Controller's READ-bit phases within the byte-level sequence (the activation)",
+        "shows": "dout presents the sampled value of SDA for READ bit operations as produced by the Bit Command Controller",
+        "otherwise": "dout remains unchanged or does not present the sampled READ-bit values expected from bit-level read operations"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0007",
+        "activation": {
+          "text": "the Byte Command Controller sequences a byte-level operation (START/STOP/READ/WRITE) that commands the Bit Command Controller to perform bit-level signalling",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the Byte Command Controller accepts and begins executing the byte-level command (i.e. the byte-level sequence is active)",
+        "shows": "the Byte Command Controller's acceptance and sequencing is visible as the bit-level outputs departing idle: scl_o/scl_oen/sda_o/sda_oen begin the drive/release patterns for the requested START/STOP/READ/WRITE and dout is driven during READ bits"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0025": {
+    "req_uid": "REQ-0025",
+    "activation": {
+      "text": "Either (a) the controller releases SDA (controller stops driving it low) while the filtered SDA line is observed low during arbitration checking, or (b) a STOP condition is detected (SDA rises while SCL is high) while a bit-level command is active and that STOP was not requested by this controller.",
+      "inputs": {},
+      "opens_on": [
+        {
+          "sda_oen": 1,
+          "sda_i": 0
+        },
+        {
+          "sda_i": "rise",
+          "scl_i": 1,
+          "sda_oen": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "al"
+    ],
+    "unobservable_reason": "",
+    "expectation": "The arbitration-lost output al is asserted (driven high) when either alternative trigger occurs.",
+    "observed_via": [
+      {
+        "port": "al",
+        "through_req": "",
+        "when": "when either (a) the controller releases SDA while filtered SDA (sda_i) is sampled low during arbitration-checking, or (b) a STOP-shaped event occurs (SDA rises while SCL is high) during an active bit-level command not requested by this controller \u2014 i.e. the activation described above",
+        "shows": "al is asserted (driven high) while the arbitration-loss condition holds",
+        "otherwise": "al remains deasserted (low) when those trigger conditions do not hold"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "Controller releases SDA while the filtered SDA line is observed low during arbitration checking (the bus forces SDA low while this controller has released it).",
+          "inputs": {
+            "sda_i": 0,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "at the instant the controller has released SDA (sda_oen = 1) and sda_i is sampled low during arbitration checking",
+        "shows": "the bus observation sda_i = 0 together with the controller releasing SDA (sda_oen departing the driven-low state) \u2014 visible as sda_i = 0 in the trace while the controller no longer drives SDA; al should then be asserted"
+      },
+      {
+        "through_req": "",
+        "activation": {
+          "text": "A STOP condition occurs (SDA rises while SCL is high) during an active bit-level command that did not request this STOP.",
+          "inputs": {
+            "sda_i": 1,
+            "scl_i": 1,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "on the SDA rising event while SCL is sampled high during an active bit-level command window (the activation above)",
+        "shows": "a rising sda_i while scl_i is 1 (the STOP-shaped event) observed during activity; al should then be asserted"
+      }
+    ],
+    "unreachable_reason": "None \u2014 the activation is described as driven from bus observations (sda_i and scl_i) and core enable; no prior-requirement UID could be identified or is needed to open the window."
+  },
+  "REQ-0037": {
+    "req_uid": "REQ-0037",
+    "activation": {
+      "text": "slave_wait is asserted (SCL is stretched low while the controller has released SCL)",
+      "inputs": {
+        "scl_i": 0
+      },
+      "opens_on": [
+        {
+          "scl_oen": 1
+        }
+      ],
+      "until": [
+        {
+          "scl_i": 1
+        },
+        {
+          "scl_oen": 0
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [],
+    "unobservable_reason": "Not visible on any declared output this sentence names; the requirement is about internal signals: clk_en remaining low and the internal counter cnt holding. This effect would be visible only indirectly as a lack of clk_en-driven progress on outputs (e.g. no bit-timing-driven changes on scl_o, sda_o, dout, cmd_ack or busy) while scl_i stays low and scl_oen remains released.",
+    "expectation": "the internal timing counter cnt holds its current value and the clk_en signal remains low, thereby inserting wait states while the SCL line is stretched low.",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "slave_wait is asserted (SCL is stretched low while the controller has released SCL)",
+          "inputs": {
+            "scl_i": 0
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0038": {
+    "req_uid": "REQ-0038",
+    "activation": {
+      "text": "the master releases SCL (scl_oen becomes 1) while the bus SCL is held low",
+      "inputs": {
+        "scl_i": 0
+      },
+      "opens_on": [
+        {
+          "scl_oen": 1,
+          "scl_i": 0
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any declared output ports; the obligation concerns internal signal 'slave_wait' (and internal filtered SCL 'sSCL') being asserted when the master releases SCL while the bus SCL is low \u2014 this effect is not exported on any port named by this sentence.",
+    "expectation": "slave_wait is asserted",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "the master releases SCL while the bus SCL is held low",
+          "inputs": {
+            "scl_i": 0
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0040": {
+    "req_uid": "REQ-0040",
+    "activation": {
+      "text": "the module's slave_wait signal is asserted while SCL is held low",
+      "inputs": {
+        "scl_i": 0
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "scl_i": "rise"
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this requirement names; the effect is that the internal timing counter 'cnt' does not advance, which would only be visible indirectly as delayed changes on outputs covered by other requirements",
+    "expectation": "the module's internal timing counter 'cnt' holds its current value and does not advance while slave_wait is asserted, until SCL is released (scl_i rises)",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "the module's slave_wait signal is asserted while SCL is held low",
+          "inputs": {
+            "scl_i": 0
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0041": {
+    "req_uid": "REQ-0041",
+    "activation": {
+      "text": "a falling edge on the filtered SCL input occurs while this master has released SCL (scl_oen = 1)",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_i": "fall",
+          "scl_oen": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any declared output port; the requirement's effect is assertion of the internal signal 'scl_sync' when scl_i falls while scl_oen is 1",
+    "expectation": "the internal signal scl_sync is asserted when a falling edge on the filtered SCL input occurs while scl_oen is high",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a falling edge on the filtered SCL input occurs while this master has released SCL (scl_oen = 1)",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0042": {
+    "req_uid": "REQ-0042",
+    "activation": {
+      "text": "a falling edge on the filtered SCL input while the master has released SCL high",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_i": "fall",
+          "scl_oen": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "scl_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "When a falling edge on scl_i occurs while scl_oen==1, this indicates another master has forced SCL low (i.e. scl_oen remains released while scl_i falls).",
+    "observed_via": [
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "at the row where scl_i has a falling edge and scl_oen is 1 (the activation event)",
+        "shows": "scl_oen remains 1 (released) while scl_i falls, which indicates another master has forced SCL low",
+        "otherwise": "scl_oen may be 0 when this master is pulling SCL low; in that case the falling edge is not evidence that another master forced SCL low"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a falling edge on the filtered SCL input while the master has released SCL high",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0048": {
+    "req_uid": "REQ-0048",
+    "activation": {
+      "text": "filtered SDA falls while filtered SCL is high (START condition)",
+      "inputs": {},
+      "opens_on": [
+        {
+          "sda_i": "fall",
+          "scl_i": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this requirement names; the effect is that sta_condition becomes true (a START was detected). That detection should be observable where the design reports START detection, but no such declared output is named in this sentence.",
+    "expectation": "sta_condition is true, i.e. ~sSDA & dSDA & sSCL holds (filtered SDA has transitioned low while filtered SCL is high).",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "filtered SDA falls while filtered SCL is high (START condition)",
+          "inputs": {},
+          "opens_on": [
+            {
+              "sda_i": "fall",
+              "scl_i": 1
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0049": {
+    "req_uid": "REQ-0049",
+    "activation": {
+      "text": "a STOP condition is detected on the rising edge of filtered SDA when filtered SCL is high",
+      "inputs": {
+        "scl_i": 1
+      },
+      "opens_on": [
+        {
+          "sda_i": "rise"
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "Not visible on any declared output port this requirement names; the effect is that a STOP condition is detected (sto_condition becomes true), which should be visible wherever STOP detection is reported by the design (e.g. a higher-level status or state output).",
+    "expectation": "sto_condition = sSDA & ~dSDA & sSCL",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a STOP condition is detected on the rising edge of filtered SDA when filtered SCL is high",
+          "inputs": {
+            "scl_i": 1
+          },
+          "opens_on": [
+            {
+              "sda_i": "rise"
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [
+            {
+              "nReset": 0
+            },
+            {
+              "rst": 1
+            }
+          ],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0050": {
+    "req_uid": "REQ-0050",
+    "activation": {
+      "text": "a START condition is detected (SDA falls while SCL is high)",
+      "inputs": {},
+      "opens_on": [
+        {
+          "sda_i": "fall",
+          "scl_i": 1
+        }
+      ],
+      "until": [
+        {
+          "sda_i": "rise",
+          "scl_i": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "busy"
+    ],
+    "unobservable_reason": "",
+    "expectation": "busy is asserted (logic 1) upon START detection and remains asserted until a STOP condition is detected",
+    "observed_via": [
+      {
+        "port": "busy",
+        "through_req": "",
+        "when": "during the window opened by the START-shaped edge on sda_i (sda_i fall while scl_i is 1) and lasting until the STOP-shaped edge (sda_i rise while scl_i is 1)",
+        "shows": "busy is asserted (1) while the START-to-STOP window is active",
+        "otherwise": "busy is deasserted (0) when not within that window"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a START condition is presented on the external I2C bus",
+          "inputs": {},
+          "opens_on": [
+            {
+              "sda_i": "fall",
+              "scl_i": 1
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "on the START-shaped edge (the row where sda_i falls while scl_i is 1)",
+        "shows": "sda_i exhibits a falling edge while scl_i is sampled high"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0051": {
+    "req_uid": "REQ-0051",
+    "activation": {
+      "text": "during SDA arbitration checking the controller expects SDA released high but filtered SDA is observed low",
+      "inputs": {
+        "ena": 1,
+        "nReset": 1,
+        "rst": 0,
+        "sda_i": 0
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "al"
+    ],
+    "unobservable_reason": "",
+    "expectation": "al is asserted (al == 1) when, during SDA arbitration checking, the controller expects SDA released high but the observed (filtered) SDA is low",
+    "observed_via": [
+      {
+        "port": "al",
+        "through_req": "",
+        "when": "during the SDA arbitration-checking window (the activation): when the controller expects SDA released high and the filtered SDA observation is low",
+        "shows": "al is asserted (goes to 1) at or immediately after the arbitration-lost observation",
+        "otherwise": "al remains deasserted (0) when no arbitration-lost condition is observed"
+      }
+    ],
+    "activated_via": [],
+    "unreachable_reason": "The activation is a controller-internal phase (SDA arbitration checking: controller expecting SDA released high). Reaching that internal phase depends on prior controller behaviour (a prerequisite requirement) that is not named here, so this activation cannot be expressed as a driven or reached hop in activated_via."
+  },
+  "REQ-0052": {
+    "req_uid": "REQ-0052",
+    "activation": {
+      "text": "a STOP condition is detected while the bit-level FSM is active and the current command is not a STOP command",
+      "inputs": {
+        "ena": 1
+      },
+      "opens_on": [
+        {
+          "sda_i": "rise",
+          "scl_i": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "al"
+    ],
+    "unobservable_reason": "",
+    "expectation": "al is asserted (driven high) when that STOP condition occurs while the FSM is active with a non-STOP current command",
+    "observed_via": [
+      {
+        "port": "al",
+        "through_req": "",
+        "when": "when the STOP-shaped event occurs (sda_i rises while scl_i is high) during the activation (the FSM is active with a non-STOP current command)",
+        "shows": "al is asserted (driven high) at that instant",
+        "otherwise": "al stays low for that event"
+      }
+    ],
+    "activated_via": [],
+    "unreachable_reason": "The activation also requires the bit-level FSM to be active with a current command that is not STOP \u2014 that is an internal state reached by prior command acceptance and cannot be expressed solely by current input values or by naming a prior requirement here."
+  },
+  "REQ-0055": {
+    "req_uid": "REQ-0055",
+    "activation": {
+      "text": "on the rising edge of the filtered SCL while a READ operation is active",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_i": "rise"
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [],
+      "effect_follows": false
+    },
+    "observable": [
+      "dout"
+    ],
+    "unobservable_reason": "",
+    "expectation": "On each rising edge of scl_i during an active READ operation, dout captures (equals) the sampled filtered SDA value (sda_i) at that edge.",
+    "observed_via": [
+      {
+        "port": "dout",
+        "through_req": "",
+        "when": "on the rising edge of scl_i while the READ sequence is active (the activation above)",
+        "shows": "dout equals the sampled (filtered) SDA value at that rising edge (i.e. captures sda_i at the sample instant)",
+        "otherwise": "dout may differ from sda_i (no discrimination outside the sampling instants)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0054",
+        "activation": {
+          "text": "the controller is executing a READ operation",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the READ command has been accepted and the read sequence is running",
+        "shows": "visible as cmd_ack pulsing on acceptance and busy asserted for the duration of the read; while busy=1, the rising edges on scl_i are the sampling instants"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0057": {
+    "req_uid": "REQ-0057",
+    "activation": {
+      "text": "the command FSM is in its idle state and a START, STOP, READ or WRITE command value is presented on the cmd input while the core is enabled and not held in reset",
+      "inputs": {
+        "cmd": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "ena": 1,
+        "nReset": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "cmd_ack",
+      "busy"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the FSM accepts the command: cmd_ack asserts (pulses) to acknowledge the command and busy becomes asserted as the corresponding bit-level START/STOP/READ/WRITE sequence begins",
+    "observed_via": [
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the activation window opened when a cmd value from {0,1,2,3} is presented while ena=1 and nReset=1 (i.e. when the FSM is in idle and the command is being decoded)",
+        "shows": "cmd_ack pulses high to acknowledge acceptance of the command (a short single-clock assertion at the start of the corresponding bit-level sequence)",
+        "otherwise": "no cmd_ack pulse is seen at that activation (no acknowledgement for this presented command)"
+      },
+      {
+        "port": "busy",
+        "through_req": "",
+        "when": "immediately after the command is accepted (the same activation window as for cmd_ack), while the bit-level START/STOP/READ/WRITE sequence runs",
+        "shows": "busy becomes asserted (logic 1) for the duration of the commanded bit-level sequence",
+        "otherwise": "busy remains deasserted (logic 0) during this activation window"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a command value from {0,1,2,3} is driven on cmd while the FSM is idle, ena=1 and nReset=1",
+          "inputs": {
+            "cmd": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "ena": 1,
+            "nReset": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the cmd value is presented on the cmd port while the core is enabled and not in reset and the FSM is in idle (this presentation opens the activation window)",
+        "shows": "the command-decode hop is visible when cmd_ack pulses and busy asserts as the FSM leaves idle into the corresponding bit-level sequence"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0059": {
+    "req_uid": "REQ-0059",
+    "activation": {
+      "text": "the end of a command sequence (the FSM completes a command sequence)",
+      "inputs": {
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "cmd_ack",
+      "busy"
+    ],
+    "unobservable_reason": "",
+    "expectation": "cmd_ack is asserted for exactly one clock cycle and busy is deasserted (0), indicating the FSM has returned to idle.",
+    "observed_via": [
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "on the cycle that marks the end of the command sequence (the activation) \u2014 the cycle when the FSM completes the sequence",
+        "shows": "cmd_ack is asserted (1) for exactly one clock row",
+        "otherwise": "cmd_ack remains 0 or is asserted for a duration not equal to one clock"
+      },
+      {
+        "port": "busy",
+        "through_req": "",
+        "when": "on the same row as the end-of-sequence activation (the cycle when cmd_ack pulses) or the immediate row after it where idle is observable",
+        "shows": "busy is deasserted (0), indicating the FSM has returned to idle",
+        "otherwise": "busy remains 1, indicating the FSM did not return to idle"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a command sequence completes (the FSM reaches the end of a command sequence)",
+          "inputs": {
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0061": {
+    "req_uid": "REQ-0061",
+    "activation": {
+      "text": "a START command is issued",
+      "inputs": {
+        "cmd": 1,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "cmd_ack",
+      "scl_oen",
+      "sda_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "The controller first releases SDA and SCL (sda_oen and scl_oen indicate released), then drives SDA low while SCL remains released/high to form the I2C START condition, then drives SCL low, and finally asserts cmd_ack.",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the START command sequence opened by cmd == 1 (while the sequence runs until cmd_ack)",
+        "shows": "sda_oen is released (indicating SDA released) and then driven (indicating SDA pulled low) at the START event (the release-then-drive pattern implied by the obligation)",
+        "otherwise": "sda_oen does not show the release-then-drive pattern during the same window (i.e. remains released or does not go low while scl_oen indicates SCL is high)"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the START command sequence opened by cmd == 1 (while the sequence runs until cmd_ack)",
+        "shows": "scl_oen is released while SDA is pulled low (showing SCL high during the START edge) and then is driven low afterward to complete the sequence",
+        "otherwise": "scl_oen does not show the required timing relationship with sda_oen (e.g. driven low too early or not driven low after SDA), so the START condition is not formed as required"
+      },
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "by the end of the START command sequence (i.e. before the window closed by cmd_ack in until)",
+        "shows": "cmd_ack pulses high to acknowledge completion of the START sequence",
+        "otherwise": "cmd_ack does not pulse (remains low) within the sequence window"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a START command is presented",
+          "inputs": {
+            "cmd": 1,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the cmd input is driven to the START value (cmd == 1) while ena == 1",
+        "shows": "the START sequence begins: sda_oen and scl_oen first go to the released state and then follow the release-then-drive pattern that forms a START; cmd_ack is asserted at the sequence end"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0062": {
+    "req_uid": "REQ-0062",
+    "activation": {
+      "text": "the controller is executing a STOP command",
+      "inputs": {
+        "cmd": 2,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "sda_oen",
+      "scl_oen",
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the controller drives SDA low, then releases SCL so SCL may go high, then releases SDA high while SCL is high to form a valid I2C STOP, and then asserts cmd_ack to acknowledge completion",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the STOP sequence activation window (the controller is executing the STOP command, until cmd_ack)",
+        "shows": "sda_oen is driven low early in the sequence and later released high (the low-then-release-high ordering that yields SDA high while SCL is high)",
+        "otherwise": "does not perform the low-then-release-high sequence; may remain released or driven without that ordering (no STOP-shaped SDA event)"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the STOP sequence activation window (the controller is executing the STOP command, until cmd_ack)",
+        "shows": "scl_oen is released (goes to the released level) between the SDA low and the SDA release, allowing SCL to be high during the SDA release",
+        "otherwise": "is not released in that interval (SCL remains driven low or its release does not occur between SDA low and SDA release)"
+      },
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the end of the STOP sequence activation window (the controller is executing the STOP command, until cmd_ack)",
+        "shows": "cmd_ack pulses high to acknowledge command completion",
+        "otherwise": "no acknowledgement pulse is observed (cmd_ack stays low / does not pulse)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a STOP command is issued while the core is enabled",
+          "inputs": {
+            "cmd": 2,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0063": {
+    "req_uid": "REQ-0063",
+    "activation": {
+      "text": "during a READ command (the READ bit-level sequence runs)",
+      "inputs": {
+        "cmd": 3,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "scl_oen": 0
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "sda_oen",
+      "scl_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the controller releases SDA (sda_oen = 1) so the external slave can drive the data bit; SCL is released (scl_oen = 1) for the read sample window and then driven low again (scl_oen = 0)",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the READ command's read sample window (the activation above)",
+        "shows": "sda_oen is released (driven to 1) so the external slave can drive the data bit",
+        "otherwise": "sda_oen remains driven (0) by the controller (no release for a read)"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the READ command's read sample window (the activation above) and until the window ends",
+        "shows": "scl_oen is released (1) for the read sample window and then is driven low (0) again at the end of the window",
+        "otherwise": "scl_oen stays driven low (0) and no read sample window is presented"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a READ command is presented",
+          "inputs": {
+            "cmd": 3,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when cmd is driven to 3 while ena = 1 at the controlling clock edge that starts command execution",
+        "shows": "sda_oen and scl_oen depart their driven idle values (sda_oen -> released for slave drive; scl_oen -> released for the sample window) revealing the bit-level READ sequence has started"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0065": {
+    "req_uid": "REQ-0065",
+    "activation": {
+      "text": "the READ bit-level command sequence completes",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "cmd_ack is asserted when the READ bit-level command sequence completes",
+    "observed_via": [
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the instant the READ bit-level command sequence completes (the activation)",
+        "shows": "cmd_ack is asserted (pulses high) to indicate the READ sequence has completed",
+        "otherwise": "cmd_ack is not asserted at that instant"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0064",
+        "activation": {
+          "text": "the READ bit-level command sequence is running",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the READ bit-level command was accepted from idle",
+        "shows": "busy is 1 while the bit-level READ sequence is in progress; scl_oen or sda_oen depart the released-idle values and dout receives the sampled bit(s) via SCL rising-edge sampling until cmd_ack"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0066": {
+    "req_uid": "REQ-0066",
+    "activation": {
+      "text": "During a WRITE command",
+      "inputs": {
+        "cmd": 4
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "scl_oen": 0
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "sda_oen",
+      "scl_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "The controller drives or releases SDA according to din (asserts active-low sda_oen=0 to pull SDA low when din=0, deasserts sda_oen=1 to release SDA when din=1), then deasserts active-low scl_oen (scl_oen=1) to release SCL for the stable high phase (during which SDA arbitration checking is enabled internally), and finally asserts scl_oen=0 to pull SCL low again.",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the WRITE-bit transmission window: while SCL has been released for the stable high phase and before SCL is pulled low again",
+        "shows": "sda_oen follows din: asserted (0) to pull SDA low when din = 0, deasserted (1) to release SDA when din = 1",
+        "otherwise": "sda_oen does not follow din (for example remains 0 when din = 1 or remains 1 when din = 0), indicating the controller did not drive/release SDA as required"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "for the same WRITE-bit transmission window: from the moment SCL is released for its stable high phase until it is pulled low again",
+        "shows": "scl_oen is deasserted (1) for the stable SCL high phase and then asserted (0) when SCL is pulled low again",
+        "otherwise": "scl_oen remains asserted (0) throughout the window or does not return to asserted (0) when expected, indicating SCL was not released for the high phase or not pulled low as required"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "During a WRITE command",
+          "inputs": {
+            "cmd": 4
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0067": {
+    "req_uid": "REQ-0067",
+    "activation": {
+      "text": "the WRITE command sequence is running",
+      "inputs": {},
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "cmd_ack is asserted (driven high) to indicate the WRITE sequence has finished.",
+    "observed_via": [
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the completion of the WRITE command sequence (i.e. the activation's closing event / the 'until' row when the sequence ends)",
+        "shows": "cmd_ack is driven high to signal the WRITE sequence has finished",
+        "otherwise": "cmd_ack remains low (not asserted) while the WRITE sequence has not completed or if it was aborted"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0066",
+        "activation": {
+          "text": "the WRITE command has been accepted and its sequence is running",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the WRITE command is accepted from idle (the acceptance event that starts the WRITE sequence)",
+        "shows": "busy becomes 1 and the controller drives sda_oen/scl_oen out of the released idle pair (visible on sda_oen and scl_oen); this running sequence then proceeds and ultimately ends with cmd_ack asserted"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0069": {
+    "req_uid": "REQ-0069",
+    "activation": {
+      "text": "this heading does not activate any behavioural requirement; it imposes no precondition under which outputs are constrained",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "The obligation is scaffolding/documentation only and names no behaviour that affects any declared output ports; there is nothing observable on the module interface.",
+    "expectation": "Heading 'Processing Flow:' names a following explanatory section and does not itself impose any requirement on the design or any of its ports.",
+    "observed_via": [],
+    "activated_via": [],
+    "unreachable_reason": "This is a documentation/header requirement that does not describe runtime behaviour or an activation condition; it cannot be reached by driving inputs and so has no activation path."
+  },
+  "REQ-0072": {
+    "req_uid": "REQ-0072",
+    "activation": {
+      "text": "after the module completes reset and returns to its initialized idle state",
+      "inputs": {
+        "nReset": 1,
+        "rst": 0
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "The requirement concerns internal capture of scl_i and sda_i into two-stage synchronizer registers (cSCL/cSDA); this internal sampling has no direct effect on any declared output port.",
+    "expectation": "The raw scl_i and sda_i signals are continuously captured into their two-stage registers (cSCL and cSDA) on each rising edge of clk while the module is not in reset.",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "after the module completes reset and returns to its initialized idle state",
+          "inputs": {
+            "nReset": 1,
+            "rst": 0
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0078": {
+    "req_uid": "REQ-0078",
+    "activation": {
+      "text": "a falling transition on the filtered SDA is observed while the filtered SCL is high",
+      "inputs": {
+        "scl_i": 1
+      },
+      "opens_on": [
+        {
+          "sda_i": "fall",
+          "scl_i": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this requirement names; the effect is that an internal START-detection event occurs, which should be visible wherever START detection is signalled (for example, outputs that other requirements tie to START such as busy, cmd_ack or sda_oen).",
+    "expectation": "the module detects (registers) a START condition at that falling transition of filtered SDA while filtered SCL is high",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a falling transition on the filtered SDA is observed while the filtered SCL is high",
+          "inputs": {
+            "scl_i": 1
+          },
+          "opens_on": [
+            {
+              "sda_i": "fall",
+              "scl_i": 1
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0079": {
+    "req_uid": "REQ-0079",
+    "activation": {
+      "text": "SDA transitions from low to high while SCL is high (the filtered signals).",
+      "inputs": {},
+      "opens_on": [
+        {
+          "sda_i": "rise",
+          "scl_i": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "Not visible on any port this requirement names; the effect is that the controller detects a STOP condition (filtered SDA low->high while filtered SCL is high), which should be visible wherever STOP detection is reported at the interface.",
+    "expectation": "The module detects (registers) a STOP condition when SDA transitions from low to high while SCL is high (on the filtered signals).",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "SDA transitions from low to high while SCL is high.",
+          "inputs": {},
+          "opens_on": [
+            {
+              "sda_i": "rise",
+              "scl_i": 1
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0085": {
+    "req_uid": "REQ-0085",
+    "activation": {
+      "text": "an external falling edge on scl_i occurs while the master has released SCL",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_i": "fall",
+          "scl_oen": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "The sentence names only internal signals (scl_sync and the internal timing counter reload). These are not declared output ports; the effect would be visible only indirectly as a restart/synchronization of SCL timing on the bus (observable as changes to scl_o / scl_oen timing), but the requirement itself names no declared output, so it is not directly observable on the declared outputs.",
+    "expectation": "The module asserts its internal synchronization signal scl_sync, reloads the internal timing counter from the clk_cnt prescale value, and restarts/synchronizes its local low-period timing to the shared bus clock.",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "an external falling edge on scl_i while scl_oen = 1",
+          "inputs": {},
+          "opens_on": [
+            {
+              "scl_i": "fall",
+              "scl_oen": 1
+            }
+          ],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [
+            {
+              "nReset": 0
+            },
+            {
+              "rst": 1
+            }
+          ],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0088": {
+    "req_uid": "REQ-0088",
+    "activation": {
+      "text": "the internal timing-enable signal clk_en is asserted (i.e. the bit-timing counter has expired)",
+      "inputs": {
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this requirement names; the sentence predicates FSM phase advancement on the internal signal clk_en. The effect of a phase advance should be visible at the interface as changes in timing-related outputs (for example scl_o, scl_oen, sda_o, sda_oen or dout) but this sentence does not name any specific declared output as its observable.",
+    "expectation": "The FSM advances to its next bit-timing phase only when clk_en is asserted.",
+    "observed_via": [],
+    "activated_via": [
+      {
+        "through_req": "REQ-0087",
+        "activation": {
+          "text": "the internal timing-enable clk_en is asserted (counter expiry)",
+          "inputs": {
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "the bit-timing counter expires and clk_en is asserted",
+        "shows": "an advancement of the bit-timing phase, which should appear as corresponding changes in timing-related outputs such as scl_o/scl_oen/sda_o/sda_oen or dout"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0090": {
+    "req_uid": "REQ-0090",
+    "activation": {
+      "text": "the FSM reaches the stable high phase of a WRITE bit during a WRITE operation",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "sda_chk is an internal signal not exported on any declared output. The effect is that arbitration checking asserts sda_chk during the stable-high phase of a WRITE bit; this would be visible where arbitration-check results are reported (for example an 'al' assertion or by the module's drive on the SDA line via sda_o / sda_oen), but the obligation names no exported port as its effect.",
+    "expectation": "sda_chk is asserted when the FSM reaches the stable high phase of a WRITE bit.",
+    "observed_via": [],
+    "activated_via": [],
+    "unreachable_reason": "Reaching the FSM's stable-high WRITE-bit phase requires a WRITE operation (a specific cmd value or prior acceptance of a WRITE command). The contract provides no encoding for cmd and no prerequisite requirement UID is given that places the FSM into the WRITE bit phase, so I cannot list the necessary input stimulus or the through_req that reaches this activation."
+  },
+  "REQ-0091": {
+    "req_uid": "REQ-0091",
+    "activation": {
+      "text": "during arbitration checking (when the FSM reaches the stable high phase of a WRITE bit)",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "al"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the module drives al high (asserts the arbitration-lost flag) when, during arbitration checking, the controller expects SDA released high but the filtered SDA is observed low",
+    "observed_via": [
+      {
+        "port": "al",
+        "through_req": "",
+        "when": "during arbitration checking (the FSM is in the stable high phase of a WRITE bit) while the controller expects SDA to be released high",
+        "shows": "al is driven high (the arbitration-lost flag is asserted) in the cycle where filtered SDA is low while arbitration checking is active",
+        "otherwise": "al remains low (not asserted) when no arbitration loss is detected during arbitration checking"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0090",
+        "activation": {
+          "text": "the FSM reaches the stable high phase of a WRITE bit (arbitration checking active)",
+          "inputs": {
+            "cmd": "I2C_CMD_WRITE",
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the WRITE command has been accepted and the FSM has progressed to the stable-high phase of the WRITE bit (the arbitration-checking window)",
+        "shows": "trace evidence: the controller is busy (busy = 1) while it has released SDA (sda_oen = 1) during a write bit; this pattern on declared ports indicates the arbitration-checking phase referenced by REQ-0090"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0092": {
+    "req_uid": "REQ-0092",
+    "activation": {
+      "text": "an unexpected STOP condition is observed while a bit-level command is active and that active command is not the STOP command",
+      "inputs": {
+        "ena": 1
+      },
+      "opens_on": [
+        {
+          "sda_i": "rise",
+          "scl_i": 1
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "al"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the arbitration-lost flag al is asserted (driven high) when an unexpected STOP is observed during an active bit-level command, unless the active command itself is STOP",
+    "observed_via": [
+      {
+        "port": "al",
+        "through_req": "",
+        "when": "at the moment an unexpected STOP is detected (a rising edge on sda_i while scl_i is high) during an active non-STOP bit-level command",
+        "shows": "al is asserted (driven high) to indicate arbitration lost",
+        "otherwise": "al is not asserted (remains low) when no arbitration-lost condition is detected at that instant"
+      }
+    ],
+    "activated_via": [],
+    "unreachable_reason": "Activation requires that a non-STOP bit-level command is currently active (i.e. a prior accepted command other than STOP). Which prior requirement/acceptance produces that internal active state cannot be named from the provided information, so the prerequisite event is not given here."
+  },
+  "REQ-0096": {
+    "req_uid": "REQ-0096",
+    "activation": {
+      "text": "during a READ operation, on a rising edge of scl_i",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_i": "rise"
+        }
+      ],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "dout"
+    ],
+    "unobservable_reason": "",
+    "expectation": "On the rising edge of scl_i during a READ operation, dout equals the sampled SDA value (dout == sda_i) and therefore carries the received data bit.",
+    "observed_via": [
+      {
+        "port": "dout",
+        "through_req": "",
+        "when": "on the rising edge of scl_i during an active READ operation (the activation above)",
+        "shows": "dout equals the sampled SDA value at that row (dout == sda_i), i.e. carries the received data bit",
+        "otherwise": "dout does not equal sda_i (the sampled bit is not the received data bit)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0095",
+        "activation": {
+          "text": "the byte-level controller has entered the READ sequence (a READ operation is active)",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "after the READ command has been accepted and the byte-level controller entered the READ sequence",
+        "shows": "on subsequent rising edges of scl_i during that sequence, dout samples sda_i (dout equals sda_i)"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0097": {
+    "req_uid": "REQ-0097",
+    "activation": {
+      "text": "the FSM is in its internal idle state and has not yet advanced to a command sequence because a valid cmd together with the internal clk_en have not both occurred",
+      "inputs": {},
+      "opens_on": [],
+      "until": [
+        {
+          "busy": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this requirement names; the effect is that the FSM stays in idle, which at the interface would be visible as busy remaining 0 and no cmd_ack pulse until a valid cmd is presented on cmd and clk_en allows advancement.",
+    "expectation": "the command FSM remains in the internal idle state and does not begin any command sequence until a valid command value is presented on cmd and the internal clk_en permits the FSM to advance (boundary effect: busy remains deasserted and no cmd_ack is produced until those conditions occur).",
+    "observed_via": [],
+    "activated_via": [],
+    "unreachable_reason": "activation depends on the FSM being in the internal 'idle' state (reached via prior behaviour such as reset or completion of a sequence) which is not named by this requirement, so the prerequisite event cannot be referenced here."
+  },
+  "REQ-0098": {
+    "req_uid": "REQ-0098",
+    "activation": {
+      "text": "the command FSM is in its idle state",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [],
+    "unobservable_reason": "not visible on any port this sentence names; the effect is that the FSM leaves idle and starts the corresponding command sequence (or remains in idle), which should be observable via outputs such as 'busy', 'cmd_ack', 'scl_oen' or 'sda_oen' but the obligation does not name any of those outputs.",
+    "expectation": "When the FSM is in its idle state, the module decodes the 4-bit cmd input as START, STOP, READ, WRITE, or no-operation. If cmd encodes a recognized command the FSM transitions into the corresponding command sequence; if cmd is unsupported or encodes no-operation the FSM remains in the idle state.",
+    "observed_via": [],
+    "activated_via": [],
+    "unreachable_reason": "Activation depends on the internal FSM being in the idle state; the requirement does not name which prior observable event or requirement places the design into idle, so this activation cannot be opened from declared ports without a linking requirement."
+  },
+  "REQ-0099": {
+    "req_uid": "REQ-0099",
+    "activation": {
+      "text": "a START command is issued and the controller is enabled (the FSM begins processing START)",
+      "inputs": {
+        "cmd": 1,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "sda_oen",
+      "scl_oen",
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "The controller first releases SDA and SCL (sda_oen = 1 and scl_oen = 1), then drives SDA low while SCL remains released (sda_oen falls to 0 while scl_oen = 1) to form the I2C START condition, then drives SCL low (scl_oen falls to 0), and finally asserts cmd_ack high for exactly one clk cycle to indicate command completion.",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the START command sequence initiated by cmd=1 with ena=1 (from the release of SDA/SCL until cmd_ack)",
+        "shows": "sda_oen is released (driven high/1) and then driven low (0) while scl_oen remains released (1) to form the I2C START (SDA pulled low while SCL is high)",
+        "otherwise": "sda_oen does not exhibit the release-then-pull-low pattern during the START-shaped window (it may remain released or be driven independently)"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the START command sequence initiated by cmd=1 with ena=1 (from the release of SDA/SCL until cmd_ack)",
+        "shows": "scl_oen is released (1) while SDA is pulled low to form START, then driven low (0) after SDA is low as the FSM pulls SCL low",
+        "otherwise": "scl_oen does not show the release-while-SDA-pulled-low then drive-low pattern during the START-shaped window"
+      },
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the end of the START command sequence (the cycle after SCL is pulled low and the FSM returns to idle)",
+        "shows": "cmd_ack pulses high for exactly one clk cycle to indicate command completion",
+        "otherwise": "cmd_ack stays low (or pulses at times unrelated to this START sequence)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a START command is issued (the cmd input carries START) while the controller is enabled",
+          "inputs": {
+            "cmd": 1,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "immediately when the START command is presented to the module and accepted (the FSM departs idle into the START sequence)",
+        "shows": "the START sequence begins: scl_oen and sda_oen depart the released idle pair and follow the release-then-pull pattern, and the sequence ends with cmd_ack pulsing for one cycle"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0100": {
+    "req_uid": "REQ-0100",
+    "activation": {
+      "text": "during execution of a STOP command",
+      "inputs": {
+        "cmd": 2,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "sda_oen",
+      "scl_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "sda_oen is asserted low (0) first to drive SDA low, and then scl_oen is deasserted high (1) to release SCL; the deassertion of scl_oen must occur after the sda_oen assertion during the STOP sequence.",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during execution of the STOP command (the STOP sequence)",
+        "shows": "sda_oen is asserted low (0) during the first phase of the STOP sequence, driving SDA low",
+        "otherwise": "sda_oen is not held low (may be 1 or toggling) when this requirement does not hold"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during execution of the STOP command (the STOP sequence), after sda_oen has been asserted low",
+        "shows": "scl_oen is deasserted high (1) to release SCL after the sda_oen assertion",
+        "otherwise": "scl_oen remains asserted low (0) or does not transition to 1 when this requirement does not hold"
+      }
+    ],
+    "activated_via": [],
+    "unreachable_reason": "Activation requires the FSM to be executing the STOP sequence (i.e. a previously-accepted STOP command). The specific prior requirement or observable evidence that accepts the STOP command / causes the FSM to enter the STOP sequence is not supplied in this span, so the route to reach this activation cannot be named here."
+  },
+  "REQ-0101": {
+    "req_uid": "REQ-0101",
+    "activation": {
+      "text": "During the STOP command sequence, after SCL has been released and is observed high",
+      "inputs": {},
+      "opens_on": [
+        {
+          "scl_oen": 1,
+          "scl_o": 1
+        }
+      ],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "sda_oen",
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "the FSM releases SDA (sda_oen goes to the inactive/released level) so SDA goes high to form a valid STOP, and then the FSM returns to idle and cmd_ack pulses high",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the STOP command window after SCL has been released and is observed high and before the cmd_ack pulse",
+        "shows": "sda_oen transitions to the released/inactive level (1), indicating the FSM has released SDA so SDA goes high",
+        "otherwise": "sda_oen remains asserted low (0), indicating SDA is still being driven low"
+      },
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "when the FSM completes the STOP sequence after releasing SDA high (within the same STOP window)",
+        "shows": "cmd_ack pulses high (for one clock) indicating the FSM has returned to idle and acknowledged the command",
+        "otherwise": "cmd_ack does not pulse at that time"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0100",
+        "activation": {
+          "text": "the FSM has begun and progressed to the STOP command sequence state where it releases SCL high",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the FSM releases SCL high as part of the STOP command sequence",
+        "shows": "observe scl_oen = 1 and scl_o = 1 in the trace to indicate SCL has been released high"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0102": {
+    "req_uid": "REQ-0102",
+    "activation": {
+      "text": "a READ command is active",
+      "inputs": {
+        "cmd": 3,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "sda_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "sda_oen is driven high (the open-drain driver is released) for the duration of the READ command so the external slave can drive the data bit",
+    "observed_via": [
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the READ command activation (when cmd = 3 and ena = 1)",
+        "shows": "sda_oen is driven high, indicating the controller has released its open-drain driver so the external slave may drive SDA",
+        "otherwise": "sda_oen is driven low, indicating the controller is driving SDA (the driver is not released); if no other behaviour can contradict this, put \"no discrimination\""
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a READ command is issued",
+          "inputs": {
+            "cmd": 3,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0103": {
+    "req_uid": "REQ-0103",
+    "activation": {
+      "text": "a READ command is issued while the core is enabled",
+      "inputs": {
+        "cmd": 2,
+        "ena": 1
+      },
+      "opens_on": [
+        {
+          "scl_oen": 1
+        }
+      ],
+      "until": [
+        {
+          "scl_oen": 0
+        },
+        {
+          "scl_o": 0
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "scl_o",
+      "scl_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "The controller releases SCL for the read window (observable as scl_oen driven to the released level so scl_o may be high) and then subsequently drives SCL low again (observable as scl_o driven low or scl_oen returning to the driven-low state).",
+    "observed_via": [
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the read window opened by the READ command (i.e. after the controller releases SCL and before it pulls SCL low again)",
+        "shows": "scl_oen drives to the released level for the read window (allowing SCL to be pulled high by the bus)",
+        "otherwise": "scl_oen remains in the driven-low state (controller holding SCL low)"
+      },
+      {
+        "port": "scl_o",
+        "through_req": "",
+        "when": "during the read window opened by the READ command (i.e. after the controller releases SCL and before it pulls SCL low again)",
+        "shows": "scl_o may be observed high (pulled up externally) while the controller has released SCL; later the controller drives scl_o low when ending the window",
+        "otherwise": "scl_o is driven low by the controller (no read window active)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a READ command is issued while the core is enabled",
+          "inputs": {
+            "cmd": 2,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the READ command is presented with ena = 1 at the controlling clock edge that starts bit sequencing",
+        "shows": "the bit-level FSM begins the READ bit sequence: scl_oen departs the driven-low state to release SCL (then later returns to drive SCL low at the end of the window); this is observable on scl_oen and scl_o"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0108": {
+    "req_uid": "REQ-0108",
+    "activation": {
+      "text": "a WRITE command sequence is running",
+      "inputs": {
+        "cmd": 2,
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [
+        {
+          "cmd_ack": 1
+        }
+      ],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "al": 1
+        },
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": true
+    },
+    "observable": [
+      "scl_oen",
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "during the WRITE command sequence the controller releases SCL so it goes high for the stable arbitration-check phase, then drives SCL low again, returns to idle, and pulses cmd_ack",
+    "observed_via": [
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the WRITE command sequence: specifically across the stable SCL-high phase and the subsequent SCL pull-low phase that precedes return to idle (i.e. the activation window)",
+        "shows": "scl_oen is released (driven high/released to let SCL go high) during the stable high phase and is driven low again before the FSM returns to idle",
+        "otherwise": "scl_oen does not exhibit this release-then-drive-low pattern during that activation window"
+      },
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the end of the WRITE command sequence when the FSM returns to idle (the activation's until condition closes)",
+        "shows": "cmd_ack pulses high to acknowledge the completed WRITE sequence",
+        "otherwise": "no cmd_ack pulse is observed at that time"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a WRITE command is presented",
+          "inputs": {
+            "cmd": 2,
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the cmd input is driven to the WRITE value while ena = 1 (this opens the WRITE sequence)",
+        "shows": "the FSM enters the WRITE sequence observable as the sequence of scl_oen changes described above and ending with a cmd_ack pulse"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0109": {
+    "req_uid": "REQ-0109",
+    "activation": {
+      "text": "during any START, STOP, READ, or WRITE command sequence",
+      "inputs": {},
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "scl_o",
+      "scl_oen",
+      "sda_o",
+      "sda_oen"
+    ],
+    "unobservable_reason": "",
+    "expectation": "During those command sequences, scl_o and sda_o remain at the low-drive value (0) and the line state is controlled solely by scl_oen and sda_oen (0 = actively pull the line low, 1 = release); neither scl_o nor sda_o shall be driven high by the module",
+    "observed_via": [
+      {
+        "port": "scl_o",
+        "through_req": "",
+        "when": "during the activation window: any START, STOP, READ, or WRITE command sequence (the activation above)",
+        "shows": "scl_o remains at the low-drive value 0 while scl_oen transitions to pull the line low (0) or release it (1), i.e. the module never drives scl_o high to assert a logical 1",
+        "otherwise": "scl_o may be driven high (1) at times, indicating active high-drive rather than open-drain behavior"
+      },
+      {
+        "port": "scl_oen",
+        "through_req": "",
+        "when": "during the activation window: any START, STOP, READ, or WRITE command sequence (the activation above)",
+        "shows": "scl_oen is used to control the line: 0 when actively pulling SCL low, 1 when releasing SCL, and transitions of scl_oen (with scl_o held low) effect line changes consistent with open-drain operation",
+        "otherwise": "scl_oen does not correlate with line pull behavior (e.g. remains static or contradicts observed line drive), indicating the line is not being controlled via open-drain enables"
+      },
+      {
+        "port": "sda_o",
+        "through_req": "",
+        "when": "during the activation window: any START, STOP, READ, or WRITE command sequence (the activation above)",
+        "shows": "sda_o remains at the low-drive value 0 while sda_oen transitions to pull the line low (0) or release it (1); the module does not drive sda_o high to assert a logical 1",
+        "otherwise": "sda_o may be driven high (1) or otherwise reflect active-high driving, indicating non-open-drain behavior"
+      },
+      {
+        "port": "sda_oen",
+        "through_req": "",
+        "when": "during the activation window: any START, STOP, READ, or WRITE command sequence (the activation above)",
+        "shows": "sda_oen is the control for SDA: 0 when actively pulling SDA low, 1 when releasing SDA, with transitions implementing line control consistent with open-drain operation",
+        "otherwise": "sda_oen does not behave as an open-drain enable (e.g. no correlation with line drive, or other signals actively driving the line high)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "REQ-0110",
+        "activation": {
+          "text": "the controller has entered a START, STOP, READ, or WRITE command sequence",
+          "inputs": {},
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "when the command is accepted and the sequence begins (the start of the command sequence)",
+        "shows": "a trace shows scl_o and sda_o held at 0 while scl_oen and/or sda_oen change between 0 (pulling low) and 1 (releasing), indicating the module is operating in the command sequence and implementing line control via enable signals rather than driving highs"
+      }
+    ],
+    "unreachable_reason": ""
+  },
+  "REQ-0113": {
+    "req_uid": "REQ-0113",
+    "activation": {
+      "text": "a START, STOP, READ or WRITE command sequence completes",
+      "inputs": {
+        "ena": 1
+      },
+      "opens_on": [],
+      "until": [],
+      "sustains": [],
+      "aborts_on": [
+        {
+          "nReset": 0
+        },
+        {
+          "rst": 1
+        }
+      ],
+      "effect_follows": false
+    },
+    "observable": [
+      "cmd_ack"
+    ],
+    "unobservable_reason": "",
+    "expectation": "At the end of every START, STOP, READ, or WRITE sequence the output cmd_ack is asserted (driven high) for exactly one clk cycle.",
+    "observed_via": [
+      {
+        "port": "cmd_ack",
+        "through_req": "",
+        "when": "at the activation (the row when a START, STOP, READ or WRITE sequence completes)",
+        "shows": "cmd_ack is driven high for exactly one clk cycle",
+        "otherwise": "cmd_ack is not driven high for exactly one clk cycle (either stays low or is asserted for a different duration)"
+      }
+    ],
+    "activated_via": [
+      {
+        "through_req": "",
+        "activation": {
+          "text": "a START, STOP, READ or WRITE command sequence completes",
+          "inputs": {
+            "ena": 1
+          },
+          "opens_on": [],
+          "until": [],
+          "sustains": [],
+          "aborts_on": [],
+          "effect_follows": false
+        },
+        "when": "",
+        "shows": ""
+      }
+    ],
+    "unreachable_reason": ""
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "reasoning": "The DUT is a purely combinational two-input block, so its entire input space is four points and exhaustive stimulus is both natural and cheap. Rather than write one broad 'try all four' element per requirement, I split the space so each element pins one distinguishable behaviour and each failure mode has a named home. For REQ-0000 (sum = a XOR b) the four points are separate elements: (0,0) is the all-zeros boundary, (0,1) and (1,0) are the two asymmetric single-operand points -- kept apart deliberately, because a design that ties sum to a single input still passes if only one of the two is driven -- and (1,1) is the corner where the XOR result wraps back to 0 and the carry leaves through cout rather than sum, which is the one point that separates a half adder's sum from an OR. For REQ-0001 (cout = a AND b) the interesting partition is different: (1,1) is the only asserting point and is therefore its own element, (0,0) is the all-zeros boundary, and the two exactly-one-high points share an element because they are the same behaviour and together they are what distinguishes AND from OR. All of these are D1_data_boundary: with one-bit ports every input value is simultaneously a minimum, a maximum and a width edge, so there is no separate 'ordinary' data case to write. One further element is not about data at all: the contract declares is_sequential=false and latency_cycles=0 for both outputs, so the plan carries a D3_timing element that changes the inputs with no clock edge in between and requires both outputs to follow within the same evaluation. That is the element that fails a design which latched or registered its outputs -- a defect the four data points cannot see, because a registered half adder produces exactly the right values one cycle late. Both requirements declare needs=[\"testplan\",\"refmodel\"], so both are legitimately coverable; nothing else in the requirement set is covered, and every reference is pinned at revision 1.",
+  "elements": [
+    {
+      "uid": "TP-0000",
+      "rev": 1,
+      "covers": ["REQ-0000@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=0 and b=0, the all-zeros corner of the two-bit input space, and hold the inputs stable until the outputs settle.",
+      "expected_response": "The output sum settles to the half-adder sum of the two input bits for this input combination, as produced by the reference model.",
+      "check_method": "Sample sum once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0001",
+      "rev": 1,
+      "covers": ["REQ-0000@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=0 and b=1, the first of the two asymmetric points where exactly one input bit is high, and hold the inputs stable until the outputs settle.",
+      "expected_response": "The output sum settles to the half-adder sum of the two input bits for this input combination, as produced by the reference model.",
+      "check_method": "Sample sum once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0002",
+      "rev": 1,
+      "covers": ["REQ-0000@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=1 and b=0, the mirror of the previous point, so that the two single-operand cases are exercised independently rather than as one class.",
+      "expected_response": "The output sum settles to the half-adder sum of the two input bits for this input combination, as produced by the reference model.",
+      "check_method": "Sample sum once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus; taken together with TP-0001 this distinguishes a genuine XOR from an implementation that forwards a single input to sum.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0003",
+      "rev": 1,
+      "covers": ["REQ-0000@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=1 and b=1, the all-ones corner of the input space, and hold the inputs stable until the outputs settle.",
+      "expected_response": "The output sum settles to the half-adder sum of the two input bits for this input combination, as produced by the reference model; this is the corner where the sum bit wraps and the weight of the addition leaves through the carry-out instead.",
+      "check_method": "Sample sum once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus; this is the point that separates a half-adder sum from a plain OR of the inputs.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0004",
+      "rev": 1,
+      "covers": ["REQ-0001@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=1 and b=1, the all-ones corner and the only input combination for which the half-adder carry-out asserts, and hold the inputs stable until the outputs settle.",
+      "expected_response": "The output cout settles to the half-adder carry-out of the two input bits for this input combination, as produced by the reference model.",
+      "check_method": "Sample cout once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0005",
+      "rev": 1,
+      "covers": ["REQ-0001@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive a=0 and b=0, the all-zeros corner, and hold the inputs stable until the outputs settle.",
+      "expected_response": "The output cout settles to the half-adder carry-out of the two input bits for this input combination, as produced by the reference model.",
+      "check_method": "Sample cout once the inputs have settled and compare it against the value the frozen reference model produces for the same a/b stimulus; this is the deasserted baseline for the carry-out.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0006",
+      "rev": 1,
+      "covers": ["REQ-0001@1"],
+      "dimension": "D1_data_boundary",
+      "stimulus": "Drive the two input combinations in which exactly one input bit is high -- a=0 with b=1, and a=1 with b=0 -- holding each stable until the outputs settle before moving to the next.",
+      "expected_response": "For each of the two combinations the output cout settles to the half-adder carry-out of the two input bits, as produced by the reference model.",
+      "check_method": "Sample cout after each of the two stimuli has settled and compare it against the value the frozen reference model produces for that a/b stimulus; these are the points that separate the carry-out from an OR or an XOR of the inputs.",
+      "needs": ["bin", "check"]
+    },
+    {
+      "uid": "TP-0007",
+      "rev": 1,
+      "covers": ["REQ-0000@1", "REQ-0001@1"],
+      "dimension": "D3_timing",
+      "stimulus": "Walk the input pair through a back-to-back sequence that visits all four combinations with no clock edge and no intervening idle time, changing a and b directly from one combination to the next.",
+      "expected_response": "Both outputs track the new input combination within the same evaluation in which the inputs change, with no cycle of latency and no dependence on the previous input combination; the settled values are those the reference model produces for the current inputs alone.",
+      "check_method": "After each input change, sample sum and cout in the same evaluation, with no clock edge applied, and compare both against the values the frozen reference model produces for the current a/b stimulus; a registered or latched implementation shows up here as a stale value carried over from the previous combination even though all four data-boundary elements pass.",
+      "needs": ["bin", "check"]
+    }
+  ]
+}

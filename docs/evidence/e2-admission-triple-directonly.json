@@ -1,0 +1,29 @@
+{
+  "kept_only": {
+    "span": 13,
+    "decide": 9,
+    "effective_size": 7,
+    "audit": 5,
+    "blind": 96,
+    "cells": 445,
+    "accepted": []
+  },
+  "admitted_only": {
+    "span": 8,
+    "decide": 6,
+    "effective_size": 4,
+    "audit": 2,
+    "blind": 263,
+    "cells": 445,
+    "accepted": []
+  },
+  "union": {
+    "span": 21,
+    "decide": 15,
+    "effective_size": 9,
+    "audit": 7,
+    "blind": 51,
+    "cells": 445,
+    "accepted": []
+  }
+}

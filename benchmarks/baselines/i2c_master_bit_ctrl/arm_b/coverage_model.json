@@ -1,0 +1,527 @@
+{
+  "reasoning": "Each testplan element has one pinned reachability bin and one pinned reference-model check. All referenced signals are declared DUT ports, signal lists contain only output ports, and no check embeds a hard-coded expected value.",
+  "bins": [
+    {
+      "uid": "BIN-0000",
+      "rev": 1,
+      "covers": [
+        "TP-0000@1"
+      ],
+      "condition": "nReset and rst are asserted and released, ena is toggled, clk_cnt is exercised at the listed boundary values, cmd is driven through the valid command encodings, and scl_i and sda_i are monitored across the resulting phases",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0001",
+      "rev": 1,
+      "covers": [
+        "TP-0001@1"
+      ],
+      "condition": "ena is active, cmd is driven through START, STOP, READ, and WRITE, and scl_i is connected to the resolved open-drain bus model while scl_oen is observed",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0002",
+      "rev": 1,
+      "covers": [
+        "TP-0002@1"
+      ],
+      "condition": "A START waveform is followed by a STOP waveform while sda_i is connected to the resolved open-drain bus model and sda_oen is observed",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0003",
+      "rev": 1,
+      "covers": [
+        "TP-0003@1"
+      ],
+      "condition": "nReset is inactive, rst is inactive, a valid cmd is active, and cmd, din, scl_i, and sda_i change between successive rising edges of clk",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0004",
+      "rev": 1,
+      "covers": [
+        "TP-0004@1"
+      ],
+      "condition": "A command is active with nReset inactive and rst transitions to its active state across a rising edge of clk before being released",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0005",
+      "rev": 1,
+      "covers": [
+        "TP-0005@1"
+      ],
+      "condition": "A command is active and nReset transitions to its active state between rising edges of clk, remains active without a clock edge, and is then released",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0006",
+      "rev": 1,
+      "covers": [
+        "TP-0006@1"
+      ],
+      "condition": "ena is deasserted for multiple rising edges while cmd holds a START request, clk_cnt selects the stated timing interval, scl_i and sda_i are toggled during the disabled interval, and ena is later reasserted",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0007",
+      "rev": 1,
+      "covers": [
+        "TP-0007@1"
+      ],
+      "condition": "ena is active, clk_cnt is zero, cmd holds a START request from the idle state, and the request is held through its attempted completion",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0008",
+      "rev": 1,
+      "covers": [
+        "TP-0008@1"
+      ],
+      "condition": "ena is active and the same START request is executed in separate runs with clk_cnt set to two different nonzero prescaler values while scl_i and sda_i remain idle-high",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0009",
+      "rev": 1,
+      "covers": [
+        "TP-0009@1"
+      ],
+      "condition": "After reset, scl_i and sda_i each receive an independent short low pulse followed by a sustained low interval, with ena active and the synchronized input history allowed to update",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0010",
+      "rev": 1,
+      "covers": [
+        "TP-0010@1"
+      ],
+      "condition": "The controller is idle, scl_i is held high, and sda_i transitions from high to low for enough sampled clocks to pass synchronization and filtering",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0011",
+      "rev": 1,
+      "covers": [
+        "TP-0011@1"
+      ],
+      "condition": "A prior START has made the bus active, no command is active, scl_i is held high, and sda_i transitions from low to high for enough sampled clocks to pass synchronization and filtering",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0012",
+      "rev": 1,
+      "covers": [
+        "TP-0012@1"
+      ],
+      "condition": "cmd holds a READ request with ena active, scl_oen releases SCL, scl_i is held low by the bus model for multiple filter opportunities, and scl_i is later released",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0013",
+      "rev": 1,
+      "covers": [
+        "TP-0013@1"
+      ],
+      "condition": "During an active READ high phase, scl_oen is released and scl_i is driven through a falling transition followed by a rising transition",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0014",
+      "rev": 1,
+      "covers": [
+        "TP-0014@1"
+      ],
+      "condition": "cmd holds a WRITE request with din high, sda_oen releases SDA during the arbitration-check phase, and sda_i is driven low long enough to become filtered before returning high",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0015",
+      "rev": 1,
+      "covers": [
+        "TP-0015@1"
+      ],
+      "condition": "cmd holds a READ request while the controller is active, scl_i is filtered high, and sda_i is driven from low to high long enough to create an externally observed filtered STOP",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0016",
+      "rev": 1,
+      "covers": [
+        "TP-0016@1"
+      ],
+      "condition": "cmd holds a READ request with ena active, sda_i is driven low during the released SDA interval, and the low level persists through the filtered scl_i rising transition",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0017",
+      "rev": 1,
+      "covers": [
+        "TP-0017@1"
+      ],
+      "condition": "cmd holds a READ request with ena active, sda_i is released high during the released SDA interval, and the high level is present at the filtered scl_i rising transition",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0018",
+      "rev": 1,
+      "covers": [
+        "TP-0018@1"
+      ],
+      "condition": "The bus is idle-high, ena is active, clk_cnt is zero, cmd holds a START request, and the request is held until cmd_ack is observed",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0019",
+      "rev": 1,
+      "covers": [
+        "TP-0019@1"
+      ],
+      "condition": "A START has occurred, cmd then holds a STOP request, sda_i initially represents a low bus state, and scl_i is allowed to rise through the released SCL phase",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0020",
+      "rev": 1,
+      "covers": [
+        "TP-0020@1"
+      ],
+      "condition": "ena is active, clk_cnt is zero, din is low, cmd holds a WRITE request, sda_i remains externally released during the arbitration-check phase, and cmd is held through completion",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0021",
+      "rev": 1,
+      "covers": [
+        "TP-0021@1"
+      ],
+      "condition": "ena is active, clk_cnt is zero, din is high, cmd holds a WRITE request, sda_i remains externally released during the arbitration-check phase, and cmd is held through completion",
+      "disposition": null
+    },
+    {
+      "uid": "BIN-0022",
+      "rev": 1,
+      "covers": [
+        "TP-0022@1"
+      ],
+      "condition": "While the controller is idle with ena active and clk_cnt zero, cmd is driven through NOP and each listed unsupported command encoding",
+      "disposition": null
+    }
+  ],
+  "checks": [
+    {
+      "uid": "CHK-0000",
+      "rev": 1,
+      "covers": [
+        "TP-0000@1"
+      ],
+      "expr": "scl_o and sda_o match the constant-drive reference model throughout reset, idle, command phases, and input changes",
+      "signals": [
+        "scl_o",
+        "sda_o"
+      ]
+    },
+    {
+      "uid": "CHK-0001",
+      "rev": 1,
+      "covers": [
+        "TP-0001@1"
+      ],
+      "expr": "scl_oen and the sampled scl_i behavior match the resolved open-drain SCL reference model in every command phase",
+      "signals": [
+        "scl_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0002",
+      "rev": 1,
+      "covers": [
+        "TP-0002@1"
+      ],
+      "expr": "sda_oen and the sampled sda_i behavior match the resolved open-drain SDA reference model through the START and STOP phases",
+      "signals": [
+        "sda_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0003",
+      "rev": 1,
+      "covers": [
+        "TP-0003@1"
+      ],
+      "expr": "All registered outputs match the post-posedge reference model and show no registered transition between rising-edge updates",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack",
+        "busy",
+        "al",
+        "dout"
+      ]
+    },
+    {
+      "uid": "CHK-0004",
+      "rev": 1,
+      "covers": [
+        "TP-0004@1"
+      ],
+      "expr": "The registered outputs match the synchronous-reset reference model after the qualifying posedge, with active state unchanged before that edge and no stale command response afterward",
+      "signals": [
+        "cmd_ack",
+        "busy",
+        "al",
+        "dout",
+        "scl_oen",
+        "sda_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0005",
+      "rev": 1,
+      "covers": [
+        "TP-0005@1"
+      ],
+      "expr": "The outputs match the asynchronous-reset reference model immediately on the nReset transition and retain reset-state behavior until a new valid command is accepted",
+      "signals": [
+        "cmd_ack",
+        "busy",
+        "al",
+        "dout",
+        "scl_oen",
+        "sda_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0006",
+      "rev": 1,
+      "covers": [
+        "TP-0006@1"
+      ],
+      "expr": "Every output during ena-disabled clocks matches the hold-and-reload reference model, and the subsequent enabled command sequence matches the resumed timing model",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack",
+        "busy",
+        "al",
+        "dout"
+      ]
+    },
+    {
+      "uid": "CHK-0007",
+      "rev": 1,
+      "covers": [
+        "TP-0007@1"
+      ],
+      "expr": "The START phase waveform and completion pulse match the clk_cnt-zero reference model, with phase changes occurring only on eligible timing events",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0008",
+      "rev": 1,
+      "covers": [
+        "TP-0008@1"
+      ],
+      "expr": "Both nonzero-prescaler START runs match the divider reference model for phase order, transition spacing, and completion timing without intervening phase changes",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0009",
+      "rev": 1,
+      "covers": [
+        "TP-0009@1"
+      ],
+      "expr": "The outputs match the synchronized three-sample filter reference model for glitch suppression, sustained transitions, protocol decisions, and filtering latency",
+      "signals": [
+        "busy",
+        "al",
+        "cmd_ack",
+        "scl_oen",
+        "sda_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0010",
+      "rev": 1,
+      "covers": [
+        "TP-0010@1"
+      ],
+      "expr": "busy matches the reference model after the filtered SDA falling transition while filtered SCL is high",
+      "signals": [
+        "busy"
+      ]
+    },
+    {
+      "uid": "CHK-0011",
+      "rev": 1,
+      "covers": [
+        "TP-0011@1"
+      ],
+      "expr": "busy and al match the reference model after the filtered SDA rising transition while filtered SCL is high and no non-STOP command is active",
+      "signals": [
+        "busy",
+        "al"
+      ]
+    },
+    {
+      "uid": "CHK-0012",
+      "rev": 1,
+      "covers": [
+        "TP-0012@1"
+      ],
+      "expr": "The READ high-phase wait, subsequent phase order, and completion pulse match the stretch-aware reference model and do not complete before filtered SCL release",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0013",
+      "rev": 1,
+      "covers": [
+        "TP-0013@1"
+      ],
+      "expr": "Phase-transition timestamps and completion timing after the external SCL fall match the synchronized shared-clock reference model with divider reload at the detected fall",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0014",
+      "rev": 1,
+      "covers": [
+        "TP-0014@1"
+      ],
+      "expr": "The arbitration-loss assertion, command abort, output release, absence of completion acknowledgment, sticky status, and reset clearing match the reference model",
+      "signals": [
+        "al",
+        "cmd_ack",
+        "scl_oen",
+        "sda_oen"
+      ]
+    },
+    {
+      "uid": "CHK-0015",
+      "rev": 1,
+      "covers": [
+        "TP-0015@1"
+      ],
+      "expr": "The outputs match the filtered unexpected-STOP reference model for arbitration status, bus status, idle return, output release, and suppression of acknowledgment",
+      "signals": [
+        "al",
+        "busy",
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0016",
+      "rev": 1,
+      "covers": [
+        "TP-0016@1"
+      ],
+      "expr": "dout capture, output-enable phase order, and the completion pulse match the filtered READ reference model for the sampled SDA condition",
+      "signals": [
+        "dout",
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0017",
+      "rev": 1,
+      "covers": [
+        "TP-0017@1"
+      ],
+      "expr": "dout capture, output-enable phase order, and the completion pulse match the filtered READ reference model for the sampled SDA condition",
+      "signals": [
+        "dout",
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0018",
+      "rev": 1,
+      "covers": [
+        "TP-0018@1"
+      ],
+      "expr": "The accepted START output-enable sequence and single completion pulse match the ordered FSM reference model",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0019",
+      "rev": 1,
+      "covers": [
+        "TP-0019@1"
+      ],
+      "expr": "The accepted STOP output-enable sequence, filtered-SCL-high wait, bus-status update, and completion pulse match the STOP reference model",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "busy",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0020",
+      "rev": 1,
+      "covers": [
+        "TP-0020@1"
+      ],
+      "expr": "The WRITE data-drive phase, SCL phase order, arbitration status, and completion pulse match the reference model for the applied din condition",
+      "signals": [
+        "sda_oen",
+        "scl_oen",
+        "al",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0021",
+      "rev": 1,
+      "covers": [
+        "TP-0021@1"
+      ],
+      "expr": "The WRITE data-release phase, SCL phase order, arbitration status, and completion pulse match the reference model for the applied din condition",
+      "signals": [
+        "sda_oen",
+        "scl_oen",
+        "al",
+        "cmd_ack"
+      ]
+    },
+    {
+      "uid": "CHK-0022",
+      "rev": 1,
+      "covers": [
+        "TP-0022@1"
+      ],
+      "expr": "The output enables and acknowledgment behavior for every NOP and unsupported command interval match the idle reference model",
+      "signals": [
+        "scl_oen",
+        "sda_oen",
+        "cmd_ack"
+      ]
+    }
+  ]
+}

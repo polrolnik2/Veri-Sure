@@ -1,0 +1,37 @@
+bound 24 probe(s), 0 left unbound:
+   clk_en                       w=1  values seen [0, 1]
+   cnt_zero                     w=1  values seen [0, 1]
+   cscl                         w=1  values seen [0, 1]
+   csda                         w=1  values seen [0, 1]
+   dscl                         w=1  values seen [0, 1]
+   dsda                         w=1  values seen [0, 1]
+   filter_cnt_expired           w=1  values seen [0, 1]
+   filter_cnt_nonzero           w=1  values seen [0, 1]
+   fscl                         w=3  values seen [0, 1, 2, 3, 4, 5, 6, 7]
+   fsda                         w=3  values seen [0, 1, 2, 3, 4, 5, 6, 7]
+   fsm_active                   w=1  values seen [0, 1]
+   idle                         w=1  values seen [0, 1]
+   in_read_sequence             w=1  values seen [0, 1]
+   in_start_sequence            w=1  values seen [0, 1]
+   in_stop_sequence             w=1  values seen [0, 1]
+   in_write_sequence            w=1  values seen [0, 1]
+   scl_sync                     w=1  values seen [0, 1]
+   sda_chk                      w=1  values seen [0, 1]
+   slave_wait                   w=1  values seen [0, 1]
+   sscl                         w=1  values seen [0, 1]
+   ssda                         w=1  values seen [0, 1]
+   sta_condition                w=1  values seen [0, 1]
+   sto_condition                w=1  values seen [0, 1]
+   write_high_phase             w=1  values seen [0, 1]
+
+/home/user/runs/luna14/after_oracles/i2c_master_bit_ctrl
+scoring the SHIPPED set (shipped.json): 111 bodies over 111 requirement(s); 448 golden trace(s)
+
+SPAN       107/119 behavioural = 89.9%   (151 minted, 130 state an observable obligation)
+BLINDNESS  36123/48987 cells = 73.7%   (population 7, effective_size 88)
+AUDIT      16/97 judgeable = 16.5%
+ACCEPTS    0 of 7 design(s)
+  note: audit is over the 97 of 107 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 17  REQ-0018[behav] REQ-0019[behav] REQ-0030[behav] REQ-0039[behav] REQ-0054[behav] REQ-0056[behav] REQ-0064[behav] REQ-0090[behav] REQ-0111[behav] REQ-0114[behav] REQ-0115[scaff] REQ-0116[behav] REQ-0122[behav] REQ-0131[behav] REQ-0135[behav] REQ-0138[behav] REQ-0140[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

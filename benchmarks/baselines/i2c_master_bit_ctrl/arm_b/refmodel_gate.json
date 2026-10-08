@@ -1,0 +1,145 @@
+{
+  "ok": true,
+  "rounds": 4,
+  "fragments": [
+    {
+      "req_uid": "REQ-0000",
+      "method_name": "_req_0000"
+    },
+    {
+      "req_uid": "REQ-0001",
+      "method_name": "_req_0001"
+    },
+    {
+      "req_uid": "REQ-0002",
+      "method_name": "_req_0002"
+    },
+    {
+      "req_uid": "REQ-0003",
+      "method_name": "_req_0003"
+    },
+    {
+      "req_uid": "REQ-0004",
+      "method_name": "_req_0004"
+    },
+    {
+      "req_uid": "REQ-0005",
+      "method_name": "_req_0005"
+    },
+    {
+      "req_uid": "REQ-0006",
+      "method_name": "_req_0006"
+    },
+    {
+      "req_uid": "REQ-0007",
+      "method_name": "_req_0007"
+    },
+    {
+      "req_uid": "REQ-0008",
+      "method_name": "_req_0008"
+    },
+    {
+      "req_uid": "REQ-0009",
+      "method_name": "_req_0009"
+    },
+    {
+      "req_uid": "REQ-0010",
+      "method_name": "_req_0010"
+    },
+    {
+      "req_uid": "REQ-0011",
+      "method_name": "_req_0011"
+    },
+    {
+      "req_uid": "REQ-0012",
+      "method_name": "_req_0012"
+    },
+    {
+      "req_uid": "REQ-0013",
+      "method_name": "_req_0013"
+    },
+    {
+      "req_uid": "REQ-0014",
+      "method_name": "_req_0014"
+    },
+    {
+      "req_uid": "REQ-0015",
+      "method_name": "_req_0015"
+    },
+    {
+      "req_uid": "REQ-0016",
+      "method_name": "_req_0016"
+    },
+    {
+      "req_uid": "REQ-0017",
+      "method_name": "_req_0017"
+    },
+    {
+      "req_uid": "REQ-0018",
+      "method_name": "_req_0018"
+    },
+    {
+      "req_uid": "REQ-0019",
+      "method_name": "_req_0019"
+    },
+    {
+      "req_uid": "REQ-0020",
+      "method_name": "_req_0020"
+    },
+    {
+      "req_uid": "REQ-0021",
+      "method_name": "_req_0021"
+    },
+    {
+      "req_uid": "REQ-0022",
+      "method_name": "_req_0022"
+    },
+    {
+      "req_uid": "REQ-0023",
+      "method_name": "_req_0023"
+    },
+    {
+      "req_uid": "REQ-0024",
+      "method_name": "_req_0024"
+    },
+    {
+      "req_uid": "REQ-0025",
+      "method_name": "_req_0025"
+    },
+    {
+      "req_uid": "REQ-0026",
+      "method_name": "_req_0026"
+    },
+    {
+      "req_uid": "REQ-0027",
+      "method_name": "_req_0027"
+    },
+    {
+      "req_uid": "REQ-0028",
+      "method_name": "_req_0028"
+    },
+    {
+      "req_uid": "REQ-0029",
+      "method_name": "_req_0029"
+    },
+    {
+      "req_uid": "REQ-0030",
+      "method_name": "_req_0030"
+    }
+  ],
+  "underdetermined": [
+    {
+      "question": "The specification does not state the numeric encodings of START, STOP, READ, and WRITE; the contract assumes NOP=0, START=1, STOP=2, READ=4, and WRITE=8. Should these encodings be confirmed?"
+    },
+    {
+      "question": "The specification does not fully define whether divider and filter expiration are evaluated using pre-update or post-update counter values; this model treats a zero counter as expiring on the current eligible clock and reloads it on that clock."
+    },
+    {
+      "question": "The specification does not fully define the exact synchronization and filter pipeline cycle alignment for transition detection and read capture; this model uses registered two-stage synchronization, pre-update filtered values for protocol decisions, and majority-history updates on the current clock."
+    },
+    {
+      "question": "The specification describes asynchronous reset behavior, but the step interface provides no separate event mechanism for changes between calls; this model applies asynchronous reset whenever nReset is observed low during a step."
+    }
+  ],
+  "issues": []
+}

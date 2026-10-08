@@ -1,0 +1,13 @@
+{
+  "module_name": "Dut",
+  "io": [
+    {"name": "clk", "dir": "input", "width": 1},
+    {"name": "rst_n", "dir": "input", "width": 1},
+    {"name": "load", "dir": "input", "width": 1},
+    {"name": "d", "dir": "input", "width": 1},
+    {"name": "q", "dir": "output", "width": 1},
+    {"name": "latched", "dir": "output", "width": 1}
+  ],
+  "clocking": {"is_sequential": true},
+  "timing": {}
+}

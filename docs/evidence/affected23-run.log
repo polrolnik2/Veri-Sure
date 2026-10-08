@@ -1,0 +1,9 @@
+requirements 23   testpoints 57   stimulus 57   witness reused
+sibling map widened to 43 requirements (authoring 23)
+6 of 59 testpoint(s) move nothing at all on an implementation of these requirements: every oracle naming one is unjudgeable however well written
+1 trusted oracle(s) can fail, but nothing this stimulus produces comes near what would fail them: REQ-0071
+19 of 59 testpoint(s) are named by no oracle: they render, they start a simulator, and nothing they produce decides anything
+
+elapsed 10043s   calls 130
+dispositions: {'TRUSTED': 15, 'ORACLE_INVALID': 7, 'NOT_ASSERTABLE': 1}
+wrote /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/affected23/run/specflow/oracles.json
