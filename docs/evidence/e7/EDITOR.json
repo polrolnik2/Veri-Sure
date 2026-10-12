@@ -110,5 +110,21 @@
   "flow": "equivalence",
   "proof": "induction",
   "verdict_reason": "equivalence proven by temporal induction (k=16)"
+ },
+ {
+  "run": "luna15",
+  "module": "fpu_exceptions",
+  "requirements": 143,
+  "pass": 128,
+  "fail": 6,
+  "abstain": 9,
+  "failing_testpoints": 76,
+  "rounds_run": 3,
+  "trials_used": 4,
+  "seconds": 10416,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Impo"
  }
 ]
