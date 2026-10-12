@@ -126,5 +126,21 @@
   "flow": "equivalence",
   "proof": "bounded_seq",
   "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Impo"
+ },
+ {
+  "run": "luna15",
+  "module": "i2c_master_bit_ctrl",
+  "requirements": 106,
+  "pass": 98,
+  "fail": 0,
+  "abstain": 8,
+  "failing_testpoints": 299,
+  "rounds_run": 3,
+  "trials_used": 20,
+  "seconds": 16807,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import"
  }
 ]
