@@ -1,0 +1,21 @@
+--- editor /home/user/runs/luna12/or1200_sb start 2026-10-12T13:59:08Z on fbf35f2
+== RTL editor
+     File "/home/user/Veri-Sure/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1990, in post
+       return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     File "/home/user/Veri-Sure/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1775, in request
+       raise self._make_status_error_from_response(err.response) from None
+   openai.BadRequestError: Error code: 400 - {'error': {'message': "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses
+   -> exit 1 (log /home/user/runs/luna12/results/or1200_sb/editor.log)
+--- editor exited 0 at 2026-10-12T13:59:17Z
+--- editor /home/user/runs/luna12/or1200_sb start 2026-10-12T14:00:03Z on fbf35f2
+== RTL editor
+                                                           **************************************************************************************
+   - :0: Verilog $finish
+   
+   ROUND 1: 64 pass, 0 FAIL, 4 abstain of 68 requirement(s); 12 failing testpoint(s)
+   
+   FINAL rtl.sv: 135 lines; summary /home/user/runs/luna12/results/or1200_sb/editor_summary.json
+   -> exit 0 (log /home/user/runs/luna12/results/or1200_sb/editor.log)
+== ChipVerilog verdict: equivalence_error (equivalence, bounded_seq)
+--- editor exited 0 at 2026-10-12T15:29:44Z

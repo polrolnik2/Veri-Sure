@@ -1,0 +1,10 @@
+{
+  "status": "equivalence_error",
+  "flow": "equivalence",
+  "proof_type": "bounded_seq",
+  "reason": "ERROR: Failed to import cell gate.u_probed.fifo_mem (type $mem_v2) to SAT database.",
+  "reference_precheck": "pass",
+  "interface_status": "compatible",
+  "formal_status": "unknown",
+  "compile_gate_status": "pass"
+}
