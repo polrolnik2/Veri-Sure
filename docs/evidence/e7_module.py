@@ -1,6 +1,7 @@
 """Everything after a run is packed, for one module, in one command.
 
-    e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--skip-editor]
+    e7_module.py <runs-root> <module> [--trials N] [--rounds R]
+                 [--skip-editor | --editor-only]
 
 Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
 (the corpus `e6_autorun.py` packed), writes `<runs-root>/results/<module>/`:
@@ -22,7 +23,9 @@ Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
                        rtl.sv. -> chipverilog.json
 
 Each step logs to its own file beside the JSON; a failed step is reported and
-the later steps that do not depend on it still run.
+the later steps that do not depend on it still run. `--skip-editor` runs 1-2
+only; `--editor-only` runs 3-4 only, for a run whose replay and triple are
+already scored (the editor reads the run, not the golden replay).
 """
 from __future__ import annotations
 
@@ -76,10 +79,13 @@ def main() -> int:
     extras = [str(p) for p in child_sources(submodules(task, module))]
 
     py = sys.executable
-    ok_gold = _step("golden replay", [py, str(HERE / "e6_replay_corpus.py"), str(corpus),
-                                      str(golden), str(gold)]
-                    + [a for e in extras for a in ("--extra", e)],
-                    res / "replay.log")
+    if "--editor-only" in sys.argv:
+        ok_gold = False
+    else:
+        ok_gold = _step("golden replay", [py, str(HERE / "e6_replay_corpus.py"), str(corpus),
+                                          str(golden), str(gold)]
+                        + [a for e in extras for a in ("--extra", e)],
+                        res / "replay.log")
     if ok_gold:
         _step("the triple of the shipped set", [py, str(HERE / "e7_score_run.py"),
                                                 str(corpus), str(gold), "--json",
