@@ -1,21 +1,33 @@
 """Publish the frozen runs to a Hugging Face dataset repository.
 
-    HF_TOKEN=... e7_hf_upload.py <runs-root> [--repo OWNER/NAME] [--public]
+    HF_TOKEN=... e7_hf_upload.py RUN [RUN ...] [--tarballs DIR] [--repo OWNER/NAME]
+                                 [--public] [--dry-run]
 
-Everything a run left behind, per module, so a run can be re-scored and re-read
-without this container:
+    e7_hf_upload.py luna12 luna13 luna14 luna15 --tarballs <stage>
 
-    corpora/<module>-ok.tar.gz      the packed corpus (`e6_pack_corpus.py`):
-                                    contract, requirements, normalized forms,
-                                    testplan, stimulus, coverage, probes, the
-                                    oracle set WITH its corpus, the shipped set,
-                                    the population, the reference model, the
-                                    scorecard, and a sha256 of every file
-    runs/<module>.tar.gz            the whole run directory, model I/O included
-                                    (`agent_io/`: every prompt and response),
-                                    waveforms (`*.vcd`) excluded for size
-    results/<module>/*.json         golden-replay score and RTL Editor summary
-    README.md                       a dataset card with the results table
+Per run, from `docs/evidence/e7/<RUN>/` (committed):
+
+    <RUN>/corpora/<module>-ok.tar.gz   the packed corpus (`e6_pack_corpus.py`):
+                                       contract, requirements, normalized forms,
+                                       testplan, stimulus, coverage, probes, the
+                                       oracle set WITH its corpus, the shipped set,
+                                       the population, the reference model, the
+                                       scorecard, and a sha256 of every file
+    <RUN>/results/<module>/            golden-replay scores and audit logs
+    <RUN>/summary.json, README.md      the run's table and notes
+
+and, when `--tarballs DIR` holds `DIR/<RUN>/runs/<module>.tar.gz`:
+
+    <RUN>/runs/<module>.tar.gz         the whole run directory, model I/O included
+                                       (`agent_io/`: every prompt and response),
+                                       waveforms (`*.vcd`) excluded
+
+Make those with `tar --exclude='*.vcd' -czf DIR/<RUN>/runs/<m>.tar.gz -C <runs-root>/<RUN> <m>`.
+The golden-replay traces (`gold/`, `bound/`, ...) are not uploaded: they are
+regenerated from a corpus by `e7_module.py` / `e7_bind_golden.py`.
+
+`REPS.md` (the cross-rep comparison) goes to the root, and the dataset card is
+built from it.
 
 **PRIVATE UNLESS `--public`.** Publishing a research artifact is the owner's
 decision; a private repository can be made public from its settings page, and a
@@ -26,40 +38,25 @@ available to an agent session is read-only (ls/cat/search), so it cannot do this
 """
 from __future__ import annotations
 
-import json
 import os
+import shutil
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+EVIDENCE = HERE / "e7"
 
 
 def _opt(name, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
-def _card(root: Path, modules: list[str], repo: str) -> str:
-    rows = []
-    for m in modules:
-        res = root / "results" / m
-        sc = res / "score.json"
-        ed = res / "editor_summary.json"
-        gr = res / "chipverilog.json"
-        s = json.loads(sc.read_text()) if sc.is_file() else {}
-        e = json.loads(ed.read_text()) if ed.is_file() else {}
-        g = json.loads(gr.read_text()) if gr.is_file() else {}
-        fin = (e.get("final") or {})
-
-        def pct(x):
-            return "n/a" if x is None else f"{100 * x:.1f}%"
-        audit = (f"{s.get('audit_convicted')}/{s.get('audit_judges')}"
-                 if s.get("audit_judges") is not None else "n/a")
-        rows.append(
-            f"| {m} | {s.get('bodies', 'n/a')} | {pct(s.get('span'))} | "
-            f"{pct(s.get('blindness'))} | {audit} | "
-            f"{fin.get('pass', 'n/a')}/{fin.get('requirements', 'n/a')} | "
-            f"{g.get('status', 'n/a')} |")
-    table = "\n".join(rows)
+def _card(runs: list[str], with_io: dict[str, list[str]], repo: str) -> str:
+    io = ", ".join(f"{run} ({len(m)})" for run, m in with_io.items() if m) or "none"
+    reps = (EVIDENCE / "REPS.md").read_text() if (EVIDENCE / "REPS.md").is_file() else ""
+    #: The numbers live in REPS.md alone (it applies the re-scores and marks the
+    #: cache-seeded runs); a second table built from the raw summaries would not.
     return f"""---
 license: other
 pretty_name: Veri-Sure frozen pipeline runs
@@ -71,69 +68,81 @@ tags:
 
 # Veri-Sure frozen pipeline runs
 
-Five ChipVerilog modules, each run through the Veri-Sure specification-to-checks
-pipeline from scratch (contract, S1 through the oracle stage, the reference model
-and the shipped check set), then used as the testbench for an RTL Editor loop
-that generates and repairs RTL against it.
-
-| module | shipped bodies | span | blindness | audit (golden) | editor: requirements passing | ChipVerilog verdict |
-|---|---|---|---|---|---|---|
-{table}
-
-- **span**: share of behavioural requirements with at least one shipped check.
-- **blindness**: share of disagreement cells among 7 spec-derived designs that no
-  shipped check separates.
-- **audit**: requirements whose shipped checks convict the known-good design,
-  over those that can be judged on it. The golden design is simulated for this
-  column only and is never shown to any model.
+Five ChipVerilog modules run end to end through the Veri-Sure
+specification-to-checks pipeline (contract, S1 through the oracle stage, the
+reference model and the shipped check set), three independent times each, then
+scored against the known-good design. The golden design is simulated for
+scoring only and is never shown to any model. Runs: {", ".join(runs)}; the
+comparison, with which run is which rep, is `REPS.md`, reproduced below.
 
 ## Layout
 
-- `corpora/<module>-ok.tar.gz` -- packed corpus with a `MANIFEST.json` of sha256s.
-- `runs/<module>.tar.gz` -- the full run directory, including every model prompt
-  and response under `agent_io/`; waveforms excluded.
-- `results/<module>/` -- golden-replay score, RTL Editor summary, ChipVerilog verdict.
+- `<run>/corpora/<module>-ok.tar.gz` -- packed corpus with a manifest of sha256s.
+- `<run>/runs/<module>.tar.gz` -- the full run directory, including every model
+  prompt and response under `agent_io/`; waveforms excluded. Present for: {io}.
+- `<run>/results/<module>/` -- golden-replay scores and the hand-bound audit.
+- `<run>/README.md`, `<run>/summary.json` -- each run's table and notes.
+- `REPS.md` -- the cross-rep comparison, reproduced below.
 
 The benchmark designs and specifications are from ChipVerilog; see that
 project's licence. Repository: `{repo}`.
-"""
+
+---
+
+{reps}"""
 
 
 def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")
-            and sys.argv[sys.argv.index(a) - 1] != "--repo"]
-    if not args:
+    runs = [a for a in sys.argv[1:] if not a.startswith("--")
+            and sys.argv[sys.argv.index(a) - 1] not in ("--repo", "--tarballs")]
+    if not runs:
         print(__doc__.strip().splitlines()[2])
         return 2
+    missing = [r for r in runs if not (EVIDENCE / r / "summary.json").is_file()]
+    if missing:
+        print(f"no saved evidence for {missing} under {EVIDENCE}")
+        return 2
+    repo = _opt("--repo", "polrolnik2/veri-sure-runs")
+    tarballs = Path(_opt("--tarballs")) if _opt("--tarballs") else None
+    dry = "--dry-run" in sys.argv
     token = os.environ.get("HF_TOKEN")
-    if not token:
+    if not token and not dry:
         print("HF_TOKEN is not set; a token with write access is required")
         return 1
-    from huggingface_hub import HfApi
 
-    root = Path(args[0])
-    repo = _opt("--repo", "polrolnik2/veri-sure-runs")
-    api = HfApi(token=token)
-    api.create_repo(repo, repo_type="dataset", private="--public" not in sys.argv,
-                    exist_ok=True)
-    modules = sorted(p.name for p in root.iterdir()
-                     if p.is_dir() and (p / "specflow").is_dir())
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp)
-        (stage / "runs").mkdir()
-        for m in modules:
-            with tarfile.open(stage / "runs" / f"{m}.tar.gz", "w:gz") as tf:
-                tf.add(root / m, arcname=m,
-                       filter=lambda ti: None if ti.name.endswith(".vcd") else ti)
-            print(f"packed runs/{m}.tar.gz", flush=True)
-        (stage / "README.md").write_text(_card(root, modules, repo))
-        api.upload_folder(repo_id=repo, repo_type="dataset", folder_path=str(stage),
-                          commit_message="frozen runs")
-    for sub in ("corpora", "results"):
-        if (root / sub).is_dir():
-            api.upload_folder(repo_id=repo, repo_type="dataset",
-                              folder_path=str(root / sub), path_in_repo=sub,
-                              commit_message=f"{sub}")
+        with_io: dict[str, list[str]] = {}
+        for run in runs:
+            shutil.copytree(EVIDENCE / run, stage / run)
+            src = tarballs / run / "runs" if tarballs else None
+            with_io[run] = sorted(p.name for p in src.glob("*.tar.gz")) if src and src.is_dir() else []
+            if with_io[run]:
+                (stage / run / "runs").mkdir()
+                for name in with_io[run]:
+                    #: Hard links: the stage is a view, not a second copy.
+                    try:
+                        os.link(src / name, stage / run / "runs" / name)
+                    except OSError:  # another filesystem
+                        shutil.copy(src / name, stage / run / "runs" / name)
+        if (EVIDENCE / "REPS.md").is_file():
+            shutil.copy(EVIDENCE / "REPS.md", stage / "REPS.md")
+        (stage / "README.md").write_text(_card(runs, with_io, repo))
+        files = sorted(p for p in stage.rglob("*") if p.is_file())
+        size = sum(p.stat().st_size for p in files)
+        print(f"staged {len(files)} file(s), {size / 1e6:.0f} MB, for {repo} "
+              f"({'public' if '--public' in sys.argv else 'private'})")
+        for run in runs:
+            print(f"  {run}: model I/O for {len(with_io[run])} module(s)")
+        if dry:
+            print("--dry-run: nothing uploaded")
+            return 0
+        from huggingface_hub import HfApi
+
+        api = HfApi(token=token)
+        api.create_repo(repo, repo_type="dataset", private="--public" not in sys.argv,
+                        exist_ok=True)
+        api.upload_large_folder(repo_id=repo, repo_type="dataset", folder_path=str(stage))
     print(f"https://huggingface.co/datasets/{repo}")
     return 0
 
