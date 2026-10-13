@@ -77,6 +77,47 @@ shutil.copytree(SRC / "suite", OUT / "suite", dirs_exist_ok=True)
 for f in (OUT / "suite" / "results").glob("*"):
     f.unlink()
 
+#: **EVERY MODEL CALL'S USAGE, ONE LINE EACH** -> usage.jsonl, totalled in the
+#: summary. `UsageTrackingModel` counted input, cached and output tokens in memory
+#: and nothing wrote them out, so the editor's prompt-cache rate was the one
+#: number its runs could not report. Hooked at the class: the generator and every
+#: editor model go through it, whatever builds them.
+from eda_agent import model as _model  # noqa: E402
+from eda_agent.model import usage_attr  # noqa: E402
+
+USAGE = OUT / "usage.jsonl"
+PHASE = {"name": "generate"}
+_accumulate = _model.UsageTrackingModel._accumulate_usage
+
+
+def _logged_usage(self, usage) -> None:
+    _accumulate(self, usage)
+    if usage is None:
+        return
+    det = usage_attr(usage, "input_tokens_details") or usage_attr(usage, "prompt_tokens_details")
+    odet = (usage_attr(usage, "output_tokens_details")
+            or usage_attr(usage, "completion_tokens_details"))
+    row = {"t": round(time.time(), 1), "phase": PHASE["name"],
+           "input": int(usage_attr(usage, "input_tokens", 0) or 0),
+           "cached": int(usage_attr(det, "cached_tokens", 0) or 0) if det is not None else 0,
+           "output": int(usage_attr(usage, "output_tokens", 0) or 0),
+           "reasoning": (int(usage_attr(odet, "reasoning_tokens", 0) or 0)
+                         if odet is not None else 0)}
+    with USAGE.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+_model.UsageTrackingModel._accumulate_usage = _logged_usage
+
+
+def _usage_totals() -> dict:
+    rows = [json.loads(line) for line in USAGE.read_text().splitlines()] if USAGE.is_file() else []
+    tot = {k: sum(r[k] for r in rows) for k in ("input", "cached", "output", "reasoning")}
+    tot["calls"] = len(rows)
+    tot["cache_hit_rate"] = round(tot["cached"] / tot["input"], 4) if tot["input"] else None
+    return tot
+
+
 contract = json.loads((OUT / "specflow" / "contract.json").read_text())
 (OUT / "contract.json").write_text(json.dumps(contract, indent=1))
 contract_json = json.dumps(contract)
@@ -148,6 +189,7 @@ async def _drive() -> None:
         row = _tally(rnd, failing)
         if is_pass or row["fail"] == 0 or not remaining or rnd == ROUNDS:
             break
+        PHASE["name"] = f"edit-r{rnd}"
         editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
                            stimulus_stager=stager,
                            requirements=load_requirement_views(OUT, contract),
@@ -179,6 +221,8 @@ SUMMARY.write_text(json.dumps({
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "seconds": round(time.time() - t0),
     "history": history, "final": history[-1] if history else None,
+    "usage": _usage_totals(),
 }, indent=2) + "\n")
 print(f"\nFINAL rtl.sv: {len(rtl_path.read_text().splitlines())} lines; "
       f"summary {SUMMARY}", flush=True)
+print(f"USAGE {json.dumps(_usage_totals())}", flush=True)
