@@ -13,7 +13,8 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$650 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$650 when 1'1. | Import"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$650 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$650 when 1'1. | Import",
+  "usage": null
  },
  {
   "run": "luna12",
@@ -29,7 +30,8 @@
   "verdict": "equivalence_error",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "ERROR: Failed to import cell gate.u_probed.fifo_mem (type $mem_v2) to SAT database."
+  "verdict_reason": "ERROR: Failed to import cell gate.u_probed.fifo_mem (type $mem_v2) to SAT database.",
+  "usage": null
  },
  {
   "run": "luna13",
@@ -45,7 +47,8 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1107 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1107 when 1'1. | Impo"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1107 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1107 when 1'1. | Impo",
+  "usage": null
  },
  {
   "run": "luna13",
@@ -61,7 +64,8 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$753 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$753 when 1'1. | Import"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$753 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$753 when 1'1. | Import",
+  "usage": null
  },
  {
   "run": "luna13",
@@ -77,7 +81,32 @@
   "verdict": "equivalence_error",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "ERROR: Failed to import cell gate.u_probed.fifo_mem (type $mem_v2) to SAT database."
+  "verdict_reason": "ERROR: Failed to import cell gate.u_probed.fifo_mem (type $mem_v2) to SAT database.",
+  "usage": null
+ },
+ {
+  "run": "luna14",
+  "module": "i2c_master_bit_ctrl",
+  "requirements": 111,
+  "pass": 96,
+  "fail": 4,
+  "abstain": 11,
+  "failing_testpoints": 107,
+  "rounds_run": 3,
+  "trials_used": 18,
+  "seconds": 22415,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$664 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$664 when 1'1. | Import",
+  "usage": {
+   "input": 75227170,
+   "cached": 67322343,
+   "output": 673441,
+   "reasoning": 0,
+   "calls": 466,
+   "cache_hit_rate": 0.8949
+  }
  },
  {
   "run": "luna14",
@@ -93,7 +122,8 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$760 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$760 when 1'1. | Import"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$760 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$760 when 1'1. | Import",
+  "usage": null
  },
  {
   "run": "luna14",
@@ -109,7 +139,8 @@
   "verdict": "pass",
   "flow": "equivalence",
   "proof": "induction",
-  "verdict_reason": "equivalence proven by temporal induction (k=16)"
+  "verdict_reason": "equivalence proven by temporal induction (k=16)",
+  "usage": null
  },
  {
   "run": "luna15",
@@ -125,7 +156,8 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Impo"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Impo",
+  "usage": null
  },
  {
   "run": "luna15",
@@ -141,6 +173,7 @@
   "verdict": "function_fail",
   "flow": "equivalence",
   "proof": "bounded_seq",
-  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import"
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$653 when 1'1. | Import",
+  "usage": null
  }
 ]
