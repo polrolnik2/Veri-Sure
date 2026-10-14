@@ -158,6 +158,30 @@
  },
  {
   "run": "luna14",
+  "module": "fpu_exceptions",
+  "requirements": 136,
+  "pass": 131,
+  "fail": 3,
+  "abstain": 2,
+  "failing_testpoints": 72,
+  "rounds_run": 2,
+  "trials_used": 12,
+  "seconds": 13990,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1140 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1140 when 1'1. | Impo",
+  "usage": {
+   "input": 46810019,
+   "cached": 41317544,
+   "output": 411342,
+   "reasoning": 0,
+   "calls": 215,
+   "cache_hit_rate": 0.8827
+  }
+ },
+ {
+  "run": "luna14",
   "module": "i2c_master_bit_ctrl",
   "requirements": 111,
   "pass": 96,
