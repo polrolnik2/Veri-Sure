@@ -230,6 +230,30 @@
  },
  {
   "run": "luna14",
+  "module": "i2c_master_byte_ctrl",
+  "requirements": 98,
+  "pass": 59,
+  "fail": 24,
+  "abstain": 15,
+  "failing_testpoints": 210,
+  "rounds_run": 3,
+  "trials_used": 10,
+  "seconds": 24256,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$742 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$742 when 1'1. | Import",
+  "usage": {
+   "input": 83645984,
+   "cached": 74887164,
+   "output": 454218,
+   "reasoning": 0,
+   "calls": 577,
+   "cache_hit_rate": 0.8953
+  }
+ },
+ {
+  "run": "luna14",
   "module": "or1200_dc_fsm",
   "requirements": 79,
   "pass": 74,
