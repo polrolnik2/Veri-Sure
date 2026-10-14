@@ -1,0 +1,181 @@
+{
+  "run": "/home/user/runs/luna12/i2c_master_byte_ctrl",
+  "module": "i2c_master_byte_ctrl",
+  "bodies": 88,
+  "requirements": 88,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "seconds": 24735,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 88,
+      "pass": 62,
+      "fail": 10,
+      "abstain": 16,
+      "failing_testpoints": 321,
+      "failing": [
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0010",
+        "REQ-0026",
+        "REQ-0038",
+        "REQ-0045",
+        "REQ-0050",
+        "REQ-0067",
+        "REQ-0076",
+        "REQ-0085"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0029",
+        "REQ-0044",
+        "REQ-0049",
+        "REQ-0051",
+        "REQ-0066",
+        "REQ-0074",
+        "REQ-0080",
+        "REQ-0086",
+        "REQ-0089",
+        "REQ-0090",
+        "REQ-0098",
+        "REQ-0100",
+        "REQ-0101",
+        "REQ-0115"
+      ],
+      "rtl_lines": 321,
+      "editor_trials_used": 5
+    },
+    {
+      "round": 1,
+      "requirements": 88,
+      "pass": 69,
+      "fail": 6,
+      "abstain": 13,
+      "failing_testpoints": 273,
+      "failing": [
+        "REQ-0003",
+        "REQ-0010",
+        "REQ-0026",
+        "REQ-0038",
+        "REQ-0076",
+        "REQ-0085"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0029",
+        "REQ-0044",
+        "REQ-0066",
+        "REQ-0074",
+        "REQ-0080",
+        "REQ-0086",
+        "REQ-0089",
+        "REQ-0090",
+        "REQ-0098",
+        "REQ-0100",
+        "REQ-0101"
+      ],
+      "rtl_lines": 325,
+      "editor_trials_used": 2
+    },
+    {
+      "round": 2,
+      "requirements": 88,
+      "pass": 72,
+      "fail": 4,
+      "abstain": 12,
+      "failing_testpoints": 270,
+      "failing": [
+        "REQ-0003",
+        "REQ-0038",
+        "REQ-0076",
+        "REQ-0085"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0044",
+        "REQ-0066",
+        "REQ-0074",
+        "REQ-0080",
+        "REQ-0086",
+        "REQ-0089",
+        "REQ-0090",
+        "REQ-0098",
+        "REQ-0100",
+        "REQ-0101"
+      ],
+      "rtl_lines": 325,
+      "editor_trials_used": 1
+    },
+    {
+      "round": 3,
+      "requirements": 88,
+      "pass": 72,
+      "fail": 4,
+      "abstain": 12,
+      "failing_testpoints": 270,
+      "failing": [
+        "REQ-0003",
+        "REQ-0038",
+        "REQ-0076",
+        "REQ-0085"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0044",
+        "REQ-0066",
+        "REQ-0074",
+        "REQ-0080",
+        "REQ-0086",
+        "REQ-0089",
+        "REQ-0090",
+        "REQ-0098",
+        "REQ-0100",
+        "REQ-0101"
+      ],
+      "rtl_lines": 325
+    }
+  ],
+  "final": {
+    "round": 3,
+    "requirements": 88,
+    "pass": 72,
+    "fail": 4,
+    "abstain": 12,
+    "failing_testpoints": 270,
+    "failing": [
+      "REQ-0003",
+      "REQ-0038",
+      "REQ-0076",
+      "REQ-0085"
+    ],
+    "abstaining": [
+      "REQ-0004",
+      "REQ-0014",
+      "REQ-0044",
+      "REQ-0066",
+      "REQ-0074",
+      "REQ-0080",
+      "REQ-0086",
+      "REQ-0089",
+      "REQ-0090",
+      "REQ-0098",
+      "REQ-0100",
+      "REQ-0101"
+    ],
+    "rtl_lines": 325
+  },
+  "usage": {
+    "input": 83863635,
+    "cached": 74821201,
+    "output": 543512,
+    "reasoning": 0,
+    "calls": 566,
+    "cache_hit_rate": 0.8922
+  }
+}
