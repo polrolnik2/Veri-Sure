@@ -1,6 +1,6 @@
 """Everything after a run is packed, for one module, in one command.
 
-    e7_module.py <runs-root> <module> [--trials N] [--rounds R]
+    e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--rtl START.sv]
                  [--skip-editor | --editor-only]
 
 Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
@@ -63,7 +63,7 @@ def _step(name: str, argv: list[str], log: Path) -> bool:
 
 def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
-           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds")]
+           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
@@ -97,6 +97,9 @@ def main() -> int:
                                  "--spec", str(task / "description.txt"),
                                  "--trials", _opt("--trials", "20"),
                                  "--rounds", _opt("--rounds", "3"),
+                                 #: `--rtl`: resume from a given rtl.sv instead of generating one
+                                 #: (a run cut short by a provider error, with its remaining budget).
+                                 *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
                                  "--summary", str(res / "editor_summary.json")],
                   res / "editor.log")
     if ok_ed or (editor / "rtl.sv").is_file():
