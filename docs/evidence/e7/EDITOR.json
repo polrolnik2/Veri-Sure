@@ -1,6 +1,30 @@
 [
  {
   "run": "luna12",
+  "module": "fpu_exceptions",
+  "requirements": 143,
+  "pass": 136,
+  "fail": 1,
+  "abstain": 6,
+  "failing_testpoints": 0,
+  "rounds_run": 2,
+  "trials_used": 11,
+  "seconds": 15130,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$928 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$928 when 1'1. | Import",
+  "usage": {
+   "input": 63836994,
+   "cached": 57868083,
+   "output": 296806,
+   "reasoning": 0,
+   "calls": 223,
+   "cache_hit_rate": 0.9065
+  }
+ },
+ {
+  "run": "luna12",
   "module": "i2c_master_bit_ctrl",
   "requirements": 103,
   "pass": 77,
