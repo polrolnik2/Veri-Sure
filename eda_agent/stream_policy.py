@@ -40,6 +40,8 @@ import `specflow` -- arm A is reconstructed with `specflow/` deleted -- while
 
 from __future__ import annotations
 
+import os
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -74,8 +76,11 @@ DEFAULT_TOTAL = 192000
 DEFAULT_WIDENINGS = 2
 
 #: Resends of a dropped stream. Distinct from the SDK's own `max_retries`,
-#: which applies before a response starts.
-DEFAULT_STREAM_RETRIES = 2
+#: which applies before a response starts. `EDA_STREAM_RETRIES` overrides it:
+#: two resends wait 4s and 8s, so a gateway overload ("The server is overloaded
+#: or not ready yet") lasting ~12s ended an RTL Editor run two hours in (luna14
+#: fpu, 2026-10-14). The backoff is capped at 30s, so 6 rides out ~2 minutes.
+DEFAULT_STREAM_RETRIES = int(os.environ.get("EDA_STREAM_RETRIES", "2"))
 
 #: Names of exceptions that mean the connection died mid-stream. A drop with no
 #: terminal event is the signature of a response truncated inside the reasoning
