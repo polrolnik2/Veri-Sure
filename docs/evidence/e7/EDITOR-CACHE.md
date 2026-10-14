@@ -39,3 +39,15 @@ edit-r2: 189 calls, 88.7% cached, avg input 115k
   24,563 recorded calls ($0.0625 / $0.00625 / $0.25 per M uncached-in / cached-in /
   out); SDC reports no cost, so the true figure may be lower. On that estimate
   the ~11% of input that missed the cache is ~46% of the cost.
+
+## Update, 2026-10-14 (interim)
+
+The remaining jobs ran on an expanded budget, and `editor-usage/` now holds one log
+per attempt: `<run>-<module>.jsonl` is the run that reached (or is reaching) its
+verdict, and a `-<timestamp>` suffix marks an attempt that did not --
+`-20261013T1053Z` the two fpu jobs stopped by choice above (the table's rows), and
+`luna14-fpu_exceptions-20261014T1226Z` the attempt an SDC overload killed, which was
+then resumed from its round-1 RTL (`luna14/editor/fpu_exceptions/RESUME.md`). The
+three byte_ctrl logs are snapshots of jobs still running; the table is regenerated
+over every attempt when they finish. At the last snapshot, 2,922 calls over all
+attempts were 89.3% cached.
