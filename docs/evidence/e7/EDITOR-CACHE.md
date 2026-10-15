@@ -40,14 +40,45 @@ edit-r2: 189 calls, 88.7% cached, avg input 115k
   out); SDC reports no cost, so the true figure may be lower. On that estimate
   the ~11% of input that missed the cache is ~46% of the cost.
 
-## Update, 2026-10-14 (interim)
+## Final, 2026-10-15: every logged attempt
 
-The remaining jobs ran on an expanded budget, and `editor-usage/` now holds one log
-per attempt: `<run>-<module>.jsonl` is the run that reached (or is reaching) its
-verdict, and a `-<timestamp>` suffix marks an attempt that did not --
-`-20261013T1053Z` the two fpu jobs stopped by choice above (the table's rows), and
-`luna14-fpu_exceptions-20261014T1226Z` the attempt an SDC overload killed, which was
-then resumed from its round-1 RTL (`luna14/editor/fpu_exceptions/RESUME.md`). The
-three byte_ctrl logs are snapshots of jobs still running; the table is regenerated
-over every attempt when they finish. At the last snapshot, 2,922 calls over all
-attempts were 89.3% cached.
+The remaining jobs ran on an expanded budget. `editor-usage/` holds one log per
+attempt: `<run>-<module>.jsonl` is the run that reached its verdict, and a
+`-<timestamp>` suffix marks one that did not -- `-20261013T1053Z` the two fpu
+jobs stopped by choice above, `luna14-fpu_exceptions-20261014T1226Z` the attempt
+an SDC overload killed, and `luna13-i2c_master_byte_ctrl-20261015T0117Z` the
+attempt a machine reboot killed. The last two were resumed (`RESUME.md` in each
+job's `<run>/editor/<module>/`), so their "ran to verdict" rows are the resumes
+alone. The nine jobs that finished on 2026-10-12, before b42f33f, have no log:
+dc_fsm and sb in all three reps, luna13 fpu, and luna15 fpu and bit_ctrl.
+
+| job | state | calls | input | cached | hit | repair-only hit | est $ |
+|---|---|---|---|---|---|---|---|
+| luna12/fpu_exceptions | ran to verdict | 223 | 63.8M | 57.9M | 90.6% | 90.7% | 1.62 |
+| luna12/i2c_master_bit_ctrl | ran to verdict | 389 | 54.4M | 48.4M | 88.9% | 88.9% | 1.55 |
+| luna12/i2c_master_byte_ctrl | ran to verdict | 566 | 83.9M | 74.8M | 89.2% | 89.2% | 2.34 |
+| luna12/fpu_exceptions-20261013T1053Z | stopped by choice, to save budget | 58 | 6.2M | 5.4M | 87.7% | 87.9% | 0.21 |
+| luna13/i2c_master_bit_ctrl | ran to verdict | 411 | 68.0M | 60.6M | 89.2% | 89.2% | 2.04 |
+| luna13/i2c_master_byte_ctrl | ran to verdict (resume) | 78 | 5.9M | 5.1M | 87.1% | 87.1% | 0.25 |
+| luna13/i2c_master_byte_ctrl-20261015T0117Z | killed by machine reboot, resumed | 321 | 45.6M | 38.4M | 84.2% | 84.2% | 1.64 |
+| luna14/fpu_exceptions | ran to verdict (resume) | 215 | 46.8M | 41.3M | 88.3% | 88.3% | 1.41 |
+| luna14/i2c_master_bit_ctrl | ran to verdict | 466 | 75.2M | 67.3M | 89.5% | 89.5% | 2.17 |
+| luna14/i2c_master_byte_ctrl | ran to verdict | 577 | 83.6M | 74.9M | 89.5% | 89.5% | 2.26 |
+| luna14/fpu_exceptions-20261013T1053Z | stopped by choice, to save budget | 79 | 16.8M | 14.7M | 87.8% | 88.0% | 0.51 |
+| luna14/fpu_exceptions-20261014T1226Z | crashed (SDC overload), resumed | 187 | 53.0M | 47.5M | 89.6% | 89.6% | 1.40 |
+| **all** | | **3570** | 603.3M | 536.4M | **88.9%** | 88.9% | 17.38 |
+
+generate: 14 calls, 22.9% cached; output 4.64M tokens total
+per repair call: {'>=90%': 3084, '50-90%': 86, '<50%': 31, '0%': 355}
+edit-r0: 1884 calls, 89.2% cached, avg input 203k
+edit-r1: 1075 calls, 88.3% cached, avg input 147k
+edit-r2: 597 calls, 89.0% cached, avg input 105k
+
+- **The rate held at 88.9%** over 3,570 calls and 603M input tokens, against
+  89.1% on the first 1,014. Per job it is 87-91%; the one outlier is the
+  rebooted byte_ctrl attempt at 84.2%.
+- The misses are still concentrated: 355 of 3,556 repair calls hit nothing,
+  while 3,084 hit 90% or more.
+- The ~11% of input that missed the cache is $8.36 of the $17.38 estimate
+  (48%). Cached input is $6.71 and output is $2.32 (1.3k tokens per call on
+  average).
