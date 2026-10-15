@@ -51,6 +51,31 @@
  },
  {
   "run": "luna12",
+  "module": "fpu_exceptions",
+  "sample": "gen3",
+  "exit": 0,
+  "requirements": 143,
+  "pass": 136,
+  "fail": 1,
+  "abstain": 6,
+  "failing_testpoints": 3,
+  "rtl_lines": 395,
+  "seconds": 3700,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$1086 when 1'1. | Impo",
+  "usage": {
+   "input": 17284,
+   "cached": 17281,
+   "output": 14832,
+   "reasoning": 0,
+   "calls": 1,
+   "cache_hit_rate": 0.9998
+  }
+ },
+ {
+  "run": "luna12",
   "module": "i2c_master_bit_ctrl",
   "sample": "gen1",
   "exit": 0,
@@ -172,6 +197,31 @@
    "reasoning": 0,
    "calls": 2,
    "cache_hit_rate": 0.3838
+  }
+ },
+ {
+  "run": "luna12",
+  "module": "i2c_master_byte_ctrl",
+  "sample": "gen3",
+  "exit": 0,
+  "requirements": 88,
+  "pass": 71,
+  "fail": 5,
+  "abstain": 12,
+  "failing_testpoints": 83,
+  "rtl_lines": 308,
+  "seconds": 1230,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$718 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$718 when 1'1. | Import",
+  "usage": {
+   "input": 33882,
+   "cached": 12805,
+   "output": 23789,
+   "reasoning": 0,
+   "calls": 2,
+   "cache_hit_rate": 0.3779
   }
  },
  {
@@ -897,6 +947,31 @@
    "reasoning": 0,
    "calls": 2,
    "cache_hit_rate": 0.3852
+  }
+ },
+ {
+  "run": "luna14",
+  "module": "i2c_master_byte_ctrl",
+  "sample": "gen3",
+  "exit": 0,
+  "requirements": 98,
+  "pass": 83,
+  "fail": 5,
+  "abstain": 10,
+  "failing_testpoints": 302,
+  "rtl_lines": 313,
+  "seconds": 946,
+  "verdict": "function_fail",
+  "flow": "equivalence",
+  "proof": "bounded_seq",
+  "verdict_reason": "$assert                         1 | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$735 when 1'1. | Import proof for assert: $auto$miter.cc:269:create_miter_equiv$735 when 1'1. | Import",
+  "usage": {
+   "input": 34042,
+   "cached": 13131,
+   "output": 17925,
+   "reasoning": 0,
+   "calls": 2,
+   "cache_hit_rate": 0.3857
   }
  },
  {
