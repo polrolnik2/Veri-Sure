@@ -1,0 +1,96 @@
+{
+  "run": "/home/user/runs/luna14/i2c_master_byte_ctrl",
+  "module": "i2c_master_byte_ctrl",
+  "bodies": 99,
+  "requirements": 98,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 896,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 98,
+      "pass": 73,
+      "fail": 12,
+      "abstain": 13,
+      "failing_testpoints": 360,
+      "failing": [
+        "REQ-0003",
+        "REQ-0011",
+        "REQ-0043",
+        "REQ-0047",
+        "REQ-0049",
+        "REQ-0053",
+        "REQ-0063",
+        "REQ-0074",
+        "REQ-0084",
+        "REQ-0109",
+        "REQ-0116",
+        "REQ-0122"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0030",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 349
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 98,
+    "pass": 73,
+    "fail": 12,
+    "abstain": 13,
+    "failing_testpoints": 360,
+    "failing": [
+      "REQ-0003",
+      "REQ-0011",
+      "REQ-0043",
+      "REQ-0047",
+      "REQ-0049",
+      "REQ-0053",
+      "REQ-0063",
+      "REQ-0074",
+      "REQ-0084",
+      "REQ-0109",
+      "REQ-0116",
+      "REQ-0122"
+    ],
+    "abstaining": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0008",
+      "REQ-0030",
+      "REQ-0046",
+      "REQ-0058",
+      "REQ-0067",
+      "REQ-0068",
+      "REQ-0077",
+      "REQ-0086",
+      "REQ-0091",
+      "REQ-0096",
+      "REQ-0100"
+    ],
+    "rtl_lines": 349
+  },
+  "usage": {
+    "input": 34373,
+    "cached": 13131,
+    "output": 20409,
+    "reasoning": 0,
+    "calls": 2,
+    "cache_hit_rate": 0.382
+  }
+}
