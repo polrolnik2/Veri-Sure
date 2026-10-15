@@ -63,7 +63,10 @@ run's checks were written against a buffering reference model and fail it on
   returns the best of them, even when it is worse than the input. Passing falls
   between reviews in 5 of 17 jobs (6 times; ¹). It also explains the two
   rounds of luna13 byte_ctrl's first attempt that latched nothing yet changed
-  the RTL: each returned a rejected candidate that tied at 73.
+  the RTL: each returned a rejected candidate that tied at 73. **Fixed on this
+  branch after these jobs ran:** the judge now records the starting design
+  before the first commit, and since ties do not overwrite, a round that latches
+  nothing returns its input. All 17 jobs above ran without the fix.
 
 ## Attempts that did not reach a verdict
 

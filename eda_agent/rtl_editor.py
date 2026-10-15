@@ -1992,6 +1992,16 @@ class _EditSession:
         # edit is exactly when the best-so-far matters, and because an edit that
         # improves things is worth checkpointing whether or not a later one
         # undoes it.
+        #
+        # **THE DESIGN THE SESSION STARTED FROM IS A CANDIDATE TOO.** It was
+        # never recorded, so the first judged commit became "best" whatever it
+        # scored, and `restore_best` wrote a design the ratchet had REFUSED over
+        # the one it had kept. MEASURED on the rep corpora: passing fell between
+        # two reviews in 5 of 17 RTL Editor jobs (luna13 byte_ctrl 73 -> 71, its
+        # only commit, not latched). Recorded first, so a tie keeps the start.
+        if self.best_rtl is None:
+            self.note_best(prev_mismatch_cnt, old_file_content,
+                           passing=len(req_before[0]) if req_before is not None else None)
         improved_best = self.note_best(
             sim_mismatch_cnt, self.read_rtl(),
             passing=len(req_after[0]) if req_after is not None else None)

@@ -1987,6 +1987,49 @@ def test_without_requirements_best_still_ranks_on_the_testpoint_count(tmp_path):
     assert s.best_rtl == "rtl-B" and s.best_mismatch_cnt == 40
 
 
+class _ReqReviewer(_Reviewer):
+    """A `_Reviewer` that also publishes per-requirement verdicts."""
+
+    def __init__(self, results, req_results):
+        super().__init__(results)
+        self.req_results = req_results
+
+
+def test_restore_best_never_hands_back_a_commit_the_ratchet_REFUSED(tmp_path, monkeypatch):
+    """THE DESIGN THE SESSION STARTED FROM IS A CANDIDATE TOO.
+
+    `note_best` records every judged commit before the latch decision, and the
+    accepted design was never recorded, so the first refused commit became
+    "best" by default and `restore_best` wrote it over the design the ratchet
+    had just protected. MEASURED on the rep corpora: passing fell between two
+    reviews in 5 of 17 RTL Editor jobs, e.g. luna13 byte_ctrl's one commit went
+    73 -> 71 passing, did not latch, and was handed back as the round's RTL.
+    """
+    s = _committable(tmp_path, [(False, 7, "{}")], monkeypatch=monkeypatch)
+    s.sim_reviewer = _ReqReviewer(
+        [(False, 7, "{}")],
+        {"REQ-A": (_ReqStub(True), {}), "REQ-B": (_ReqStub(False), {})})
+    s.last_mismatch_cnt = 3
+    s._accepted_req_split = ({"REQ-A", "REQ-B"}, set(), set())
+    before = s.read_rtl()
+    s.stage_replace("blk_assign", "assign b = ~a;")
+    assert not s.commit()["is_action_executed"], "2 -> 1 passing must not latch"
+    assert s.read_rtl() == before
+    assert s.restore_best() is False, "the refused design is not the best seen"
+    assert s.read_rtl() == before
+
+
+def test_restore_best_never_hands_back_a_refused_commit_on_testpoints_either(tmp_path, monkeypatch):
+    """The same hole on the testpoint ratchet every non-specflow caller uses."""
+    s = _committable(tmp_path, [(False, 99, "{}")], monkeypatch=monkeypatch)
+    s.last_mismatch_cnt = 3
+    before = s.read_rtl()
+    s.stage_replace("blk_assign", "assign b = ~a;")
+    assert not s.commit()["is_action_executed"]
+    assert s.restore_best() is False
+    assert s.read_rtl() == before
+
+
 def test_add_stimulus_gates_on_the_set_the_agent_is_shown(tmp_path):
     """`gate.evaluate` RETURNS ON ITS FIRST MATCHING BRANCH:
 
