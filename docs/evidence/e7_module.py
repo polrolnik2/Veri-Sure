@@ -1,7 +1,7 @@
 """Everything after a run is packed, for one module, in one command.
 
     e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--rtl START.sv]
-                 [--skip-editor | --editor-only]
+                 [--skip-editor | --editor-only] [--tag NAME]
 
 Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
 (the corpus `e6_autorun.py` packed), writes `<runs-root>/results/<module>/`:
@@ -26,6 +26,12 @@ Each step logs to its own file beside the JSON; a failed step is reported and
 the later steps that do not depend on it still run. `--skip-editor` runs 1-2
 only; `--editor-only` runs 3-4 only, for a run whose replay and triple are
 already scored (the editor reads the run, not the golden replay).
+
+`--tag NAME` keeps a second editor job on the same run apart from the first:
+its working directory is `<runs-root>/editor-NAME/<module>`, its JSON and logs go
+to `results/<module>/NAME/`, and its deliverable to `deliverable/NAME/<module>`.
+`--rounds 0 --tag gen1` is GENERATION ONLY: the generator writes rtl.sv, the
+shipped set reviews it once, and no repair runs -- the editor's ablation.
 """
 from __future__ import annotations
 
@@ -63,15 +69,19 @@ def _step(name: str, argv: list[str], log: Path) -> bool:
 
 def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
-           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl")]
+           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
     runs, module = Path(pos[0]).resolve(), pos[1]
     run, corpus = runs / module, runs / "corpora" / f"{module}-ok"
     gold, res = runs / "gold" / module, runs / "results" / module
-    editor = runs / "editor" / module
+    tag = _opt("--tag")
+    editor = runs / (f"editor-{tag}" if tag else "editor") / module
     res.mkdir(parents=True, exist_ok=True)
+    #: The editor's JSON and logs; the replay and triple stay in `res`.
+    res_ed = res / tag if tag else res
+    res_ed.mkdir(parents=True, exist_ok=True)
     task = _task(module)
     golden = task / f"{module}.v"
     sys.path.insert(0, str(ROOT / "benchmarks"))
@@ -100,20 +110,20 @@ def main() -> int:
                                  #: `--rtl`: resume from a given rtl.sv instead of generating one
                                  #: (a run cut short by a provider error, with its remaining budget).
                                  *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
-                                 "--summary", str(res / "editor_summary.json")],
-                  res / "editor.log")
+                                 "--summary", str(res_ed / "editor_summary.json")],
+                  res_ed / "editor.log")
     if ok_ed or (editor / "rtl.sv").is_file():
         import shutil
 
         from score_chipverilog import score  # noqa: E402 -- benchmarks/ is on the path
         #: Graded on the DELIVERABLE -- the reference interface, probes
         #: unconnected -- which the scorer expects to find as `rtl.sv`.
-        ship = runs / "deliverable" / module
+        ship = runs / "deliverable" / (tag or "") / module
         ship.mkdir(parents=True, exist_ok=True)
         src = editor / "rtl_deliverable.sv"
         shutil.copy(src if src.is_file() else editor / "rtl.sv", ship / "rtl.sv")
         verdict = score(ship, module)
-        (res / "chipverilog.json").write_text(json.dumps(verdict, indent=2) + "\n")
+        (res_ed / "chipverilog.json").write_text(json.dumps(verdict, indent=2) + "\n")
         print(f"== ChipVerilog verdict: {verdict.get('status')} "
               f"({verdict.get('flow')}, {verdict.get('proof_type')})", flush=True)
     return 0
