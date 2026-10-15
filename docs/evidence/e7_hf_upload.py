@@ -14,6 +14,8 @@ Per run, from `docs/evidence/e7/<RUN>/` (committed):
                                        the population, the reference model, the
                                        scorecard, and a sha256 of every file
     <RUN>/results/<module>/            golden-replay scores and audit logs
+    <RUN>/editor/<module>/             the RTL Editor job: summary, verdict, final
+                                       and generated RTL, usage, compressed log
     <RUN>/summary.json, README.md      the run's table and notes
 
 and, when `--tarballs DIR` holds `DIR/<RUN>/runs/<module>.tar.gz`:
@@ -23,11 +25,20 @@ and, when `--tarballs DIR` holds `DIR/<RUN>/runs/<module>.tar.gz`:
                                        waveforms (`*.vcd`) excluded
 
 Make those with `tar --exclude='*.vcd' -czf DIR/<RUN>/runs/<m>.tar.gz -C <runs-root>/<RUN> <m>`.
+And when it holds `DIR/<RUN>/editor-runs/<job>.tar.gz`:
+
+    <RUN>/editor-runs/<job>.tar.gz     an RTL Editor job's directory, model I/O
+                                       included (`debug_trajectory.jsonl`: every
+                                       turn's text, tool calls and diffs;
+                                       `debugger_prompt.txt`); `suite/` excluded.
+                                       `<module>-<timestamp>` is an attempt that
+                                       did not reach its verdict.
 The golden-replay traces (`gold/`, `bound/`, ...) are not uploaded: they are
 regenerated from a corpus by `e7_module.py` / `e7_bind_golden.py`.
 
 `REPS.md` (the cross-rep comparison) goes to the root, and the dataset card is
-built from it.
+built from it. So do the RTL Editor's `EDITOR-RESULTS.md`, `EDITOR-CACHE.md`,
+`EDITOR.json` and `editor-usage/`.
 
 **PRIVATE UNLESS `--public`.** Publishing a research artifact is the owner's
 decision; a private repository can be made public from its settings page, and a
@@ -52,8 +63,15 @@ def _opt(name, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
-def _card(runs: list[str], with_io: dict[str, list[str]], repo: str) -> str:
+#: The RTL Editor's cross-run files, uploaded to the root beside REPS.md.
+EDITOR_ROOT = ("EDITOR-RESULTS.md", "EDITOR-CACHE.md", "EDITOR.json", "editor-usage")
+
+
+def _card(runs: list[str], with_io: dict[str, list[str]], repo: str,
+          with_editor_io: dict[str, list[str]] | None = None) -> str:
     io = ", ".join(f"{run} ({len(m)})" for run, m in with_io.items() if m) or "none"
+    eio = ", ".join(f"{run} ({len(m)})" for run, m in (with_editor_io or {}).items()
+                    if m) or "none"
     reps = (EVIDENCE / "REPS.md").read_text() if (EVIDENCE / "REPS.md").is_file() else ""
     #: The numbers live in REPS.md alone (it applies the re-scores and marks the
     #: cache-seeded runs); a second table built from the raw summaries would not.
@@ -81,6 +99,13 @@ comparison, with which run is which rep, is `REPS.md`, reproduced below.
 - `<run>/runs/<module>.tar.gz` -- the full run directory, including every model
   prompt and response under `agent_io/`; waveforms excluded. Present for: {io}.
 - `<run>/results/<module>/` -- golden-replay scores and the hand-bound audit.
+- `<run>/editor/<module>/` -- the RTL Editor job on that corpus: generate, then
+  repair against the shipped set, then a ChipVerilog equivalence verdict.
+  Results across jobs: `EDITOR-RESULTS.md`; token use and prompt-cache rate:
+  `EDITOR-CACHE.md`.
+- `<run>/editor-runs/<job>.tar.gz` -- the editor job's directory with every
+  model turn (`debug_trajectory.jsonl`); `<module>-<timestamp>` is an attempt
+  that did not reach a verdict. Present for: {eio}.
 - `<run>/README.md`, `<run>/summary.json` -- each run's table and notes.
 - `REPS.md` -- the cross-rep comparison, reproduced below.
 
@@ -113,27 +138,35 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp)
         with_io: dict[str, list[str]] = {}
+        with_editor_io: dict[str, list[str]] = {}
         for run in runs:
             shutil.copytree(EVIDENCE / run, stage / run)
-            src = tarballs / run / "runs" if tarballs else None
-            with_io[run] = sorted(p.name for p in src.glob("*.tar.gz")) if src and src.is_dir() else []
-            if with_io[run]:
-                (stage / run / "runs").mkdir()
-                for name in with_io[run]:
-                    #: Hard links: the stage is a view, not a second copy.
-                    try:
-                        os.link(src / name, stage / run / "runs" / name)
-                    except OSError:  # another filesystem
-                        shutil.copy(src / name, stage / run / "runs" / name)
+            for sub, seen in (("runs", with_io), ("editor-runs", with_editor_io)):
+                src = tarballs / run / sub if tarballs else None
+                seen[run] = sorted(p.name for p in src.glob("*.tar.gz")) if src and src.is_dir() else []
+                if seen[run]:
+                    (stage / run / sub).mkdir()
+                    for name in seen[run]:
+                        #: Hard links: the stage is a view, not a second copy.
+                        try:
+                            os.link(src / name, stage / run / sub / name)
+                        except OSError:  # another filesystem
+                            shutil.copy(src / name, stage / run / sub / name)
         if (EVIDENCE / "REPS.md").is_file():
             shutil.copy(EVIDENCE / "REPS.md", stage / "REPS.md")
-        (stage / "README.md").write_text(_card(runs, with_io, repo))
+        for name in EDITOR_ROOT:
+            if (EVIDENCE / name).is_dir():
+                shutil.copytree(EVIDENCE / name, stage / name)
+            elif (EVIDENCE / name).is_file():
+                shutil.copy(EVIDENCE / name, stage / name)
+        (stage / "README.md").write_text(_card(runs, with_io, repo, with_editor_io))
         files = sorted(p for p in stage.rglob("*") if p.is_file())
         size = sum(p.stat().st_size for p in files)
         print(f"staged {len(files)} file(s), {size / 1e6:.0f} MB, for {repo} "
               f"({'public' if '--public' in sys.argv else 'private'})")
         for run in runs:
-            print(f"  {run}: model I/O for {len(with_io[run])} module(s)")
+            print(f"  {run}: model I/O for {len(with_io[run])} module(s), "
+                  f"{len(with_editor_io[run])} editor job(s)")
         if dry:
             print("--dry-run: nothing uploaded")
             return 0
