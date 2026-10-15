@@ -1,0 +1,11 @@
+--- gen /home/user/runs/luna12/or1200_sb gen3 start 2026-10-15T09:32:50Z on 187ef94
+== RTL editor
+   
+   ROUND 0: 62 pass, 2 FAIL, 4 abstain of 68 requirement(s); 27 failing testpoint(s)
+     failing: REQ-0010, REQ-0035
+   
+   FINAL rtl.sv: 118 lines; summary /home/user/runs/luna12/results/or1200_sb/gen3/editor_summary.json
+   USAGE {"input": 9488, "cached": 9485, "output": 11925, "reasoning": 0, "calls": 1, "cache_hit_rate": 0.9997}
+   -> exit 0 (log /home/user/runs/luna12/results/or1200_sb/gen3/editor.log)
+== ChipVerilog verdict: equivalence_error (equivalence, bounded_seq)
+--- gen exited 0 at 2026-10-15T09:44:20Z

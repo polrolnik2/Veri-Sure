@@ -1,0 +1,80 @@
+{
+  "run": "/home/user/runs/luna12/fpu_exceptions",
+  "module": "fpu_exceptions",
+  "bodies": 143,
+  "requirements": 143,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 2903,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 143,
+      "pass": 126,
+      "fail": 9,
+      "abstain": 8,
+      "failing_testpoints": 31,
+      "failing": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0006",
+        "REQ-0013",
+        "REQ-0133",
+        "REQ-0149",
+        "REQ-0157",
+        "REQ-0166",
+        "REQ-0171"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0077",
+        "REQ-0083",
+        "REQ-0108",
+        "REQ-0111",
+        "REQ-0116",
+        "REQ-0155"
+      ],
+      "rtl_lines": 429
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 143,
+    "pass": 126,
+    "fail": 9,
+    "abstain": 8,
+    "failing_testpoints": 31,
+    "failing": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0006",
+      "REQ-0013",
+      "REQ-0133",
+      "REQ-0149",
+      "REQ-0157",
+      "REQ-0166",
+      "REQ-0171"
+    ],
+    "abstaining": [
+      "REQ-0004",
+      "REQ-0014",
+      "REQ-0077",
+      "REQ-0083",
+      "REQ-0108",
+      "REQ-0111",
+      "REQ-0116",
+      "REQ-0155"
+    ],
+    "rtl_lines": 429
+  },
+  "usage": {
+    "input": 17284,
+    "cached": 17281,
+    "output": 15795,
+    "reasoning": 0,
+    "calls": 1,
+    "cache_hit_rate": 0.9998
+  }
+}
