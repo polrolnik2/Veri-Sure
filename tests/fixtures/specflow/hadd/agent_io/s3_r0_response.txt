@@ -1,0 +1,124 @@
+{
+  "reasoning": "Each of the eight testplan elements declares needs=[\"bin\",\"check\"], so each gets at least one of both and nothing else is covered. For the six single-stimulus data-boundary elements the mapping is one bin to one check: the bin condition is simply the input combination that element drives, stated over the contract's own port names, and the check names the one output that element's requirement constrains -- sum for TP-0000 through TP-0003, cout for TP-0004 and TP-0005. TP-0006 drives two distinct input combinations, so it gets two bins rather than one; a single bin reading 'exactly one input is high' would be hit by the first combination alone and would then report the element as reached while half its stimulus had never run, which is precisely the vacuity the bin is there to prevent. TP-0007 is the zero-latency element and constrains both outputs, so it carries one bin for the no-clock input change and two checks, one per output, so that a stale sum and a stale cout are distinguishable failures rather than one merged verdict. No check names a or b: comparing an input would be comparing the stimulus against itself and proves nothing about the DUT. No expr states a value. Every expr says only which output is compared and that the comparison is against the frozen reference model evaluated on the same stimulus, so the oracle stays outside this artifact and a later change to the reference model propagates without any edit here. All references are pinned at revision 1.",
+  "bins": [
+    {
+      "uid": "BIN-0000",
+      "rev": 1,
+      "covers": ["TP-0000@1"],
+      "condition": "a and b both equal 0"
+    },
+    {
+      "uid": "BIN-0001",
+      "rev": 1,
+      "covers": ["TP-0001@1"],
+      "condition": "a equals 0 and b equals 1"
+    },
+    {
+      "uid": "BIN-0002",
+      "rev": 1,
+      "covers": ["TP-0002@1"],
+      "condition": "a equals 1 and b equals 0"
+    },
+    {
+      "uid": "BIN-0003",
+      "rev": 1,
+      "covers": ["TP-0003@1"],
+      "condition": "a and b both equal 1"
+    },
+    {
+      "uid": "BIN-0004",
+      "rev": 1,
+      "covers": ["TP-0004@1"],
+      "condition": "a and b both equal 1"
+    },
+    {
+      "uid": "BIN-0005",
+      "rev": 1,
+      "covers": ["TP-0005@1"],
+      "condition": "a and b both equal 0"
+    },
+    {
+      "uid": "BIN-0006",
+      "rev": 1,
+      "covers": ["TP-0006@1"],
+      "condition": "a equals 0 and b equals 1"
+    },
+    {
+      "uid": "BIN-0007",
+      "rev": 1,
+      "covers": ["TP-0006@1"],
+      "condition": "a equals 1 and b equals 0"
+    },
+    {
+      "uid": "BIN-0008",
+      "rev": 1,
+      "covers": ["TP-0007@1"],
+      "condition": "a or b changes to a different value with no clock in that same cycle"
+    }
+  ],
+  "checks": [
+    {
+      "uid": "CHK-0000",
+      "rev": 1,
+      "covers": ["TP-0000@1"],
+      "signals": ["sum"],
+      "expr": "sum matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0001",
+      "rev": 1,
+      "covers": ["TP-0001@1"],
+      "signals": ["sum"],
+      "expr": "sum matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0002",
+      "rev": 1,
+      "covers": ["TP-0002@1"],
+      "signals": ["sum"],
+      "expr": "sum matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0003",
+      "rev": 1,
+      "covers": ["TP-0003@1"],
+      "signals": ["sum"],
+      "expr": "sum matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0004",
+      "rev": 1,
+      "covers": ["TP-0004@1"],
+      "signals": ["cout"],
+      "expr": "cout matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0005",
+      "rev": 1,
+      "covers": ["TP-0005@1"],
+      "signals": ["cout"],
+      "expr": "cout matches the reference model evaluated on the same inputs"
+    },
+    {
+      "uid": "CHK-0006",
+      "rev": 1,
+      "covers": ["TP-0006@1"],
+      "signals": ["cout"],
+      "expr": "cout matches the reference model evaluated on the same inputs, for each of the two combinations driven"
+    },
+    {
+      "uid": "CHK-0007",
+      "rev": 1,
+      "covers": ["TP-0007@1"],
+      "signals": ["sum"],
+      "expr": "sum matches the reference model evaluated on the current inputs, sampled in the same cycle as the input change with no clock applied"
+    },
+    {
+      "uid": "CHK-0008",
+      "rev": 1,
+      "covers": ["TP-0007@1"],
+      "signals": ["cout"],
+      "expr": "cout matches the reference model evaluated on the current inputs, sampled in the same cycle as the input change with no clock applied"
+    }
+  ]
+}

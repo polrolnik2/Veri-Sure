@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -8,18 +7,21 @@ from pathlib import Path
 import re
 import shutil
 import traceback
-from typing import List, Tuple
+from typing import Tuple
 
 from .bash_tools import CommandResult, run_bash_command
 from .architect_agent import ArchitectAgent
-from .rtl_editor import RTLEditor
-from .contract_linter import lint_contract_json, render_contract_issues
+from .contract_linter import (lint_contract_json, strip_unsourced, prototype_ports,
+                              render_contract_issues)
 from .config import OpenAIConfig
 from .model import UsageBreakdown, get_model_usage
 from .rtl_generator import RTLGenerator
-from .sim_reviewer import SimReviewer
-from .tb_editor import TBEditor
-from .tb_generator import TBGenerator
+# NOTE: there is no `tb_generator` import. The SystemVerilog testbench path is
+# retired: `tb_generator.py` and its prompt corpus are deleted, `_run_instance`
+# is gone, and specflow builds the oracle instead. See
+# docs/specflow-migration.md.
+
+from specflow import encoding
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,24 @@ _LINT_EXCERPT_TRANSLATIONS: list[tuple[re.Pattern[str], str]] = [
         "— they want a variable shift, so write a shift.",
     ),
 ]
+
+
+def _unsourced_deleted(contract_json: str, spec: str) -> str:
+    """The contract with every value the spec does not state DELETED.
+
+    Applied to each architect output before the lint gate, so a generated
+    encoding or latency is removed rather than sent back to be regenerated --
+    see `contract_linter.strip_unsourced`.
+    """
+    try:
+        obj = json.loads(contract_json)
+    except Exception:  # noqa: BLE001 -- the lint gate reports unparsable JSON
+        return contract_json
+    notes = strip_unsourced(obj, spec)
+    if not notes:
+        return contract_json
+    logger.info("contract: deleted what the spec does not state: %s", "; ".join(notes))
+    return json.dumps(obj, indent=2) + "\n"
 
 
 def _augment_lint_excerpt(excerpt: str) -> str:
@@ -208,6 +228,69 @@ would disable the unified glue loop everywhere it gates.
 class TopAgentConfig:
     sim_max_retry: int = 4
     is_ablation: bool = False
+    # Which testbench path builds the oracle.
+    #   "sv"       -- TBGenerator writes one monolithic tb.sv (the original path)
+    #   "specflow" -- spec -> requirements -> testplan -> coverage -> cocotb suite
+    #                 with a Python reference model (see specflow/ and
+    #                 docs/specflow-migration.md)
+    # specflow's verdict is three-valued per testpoint and is written as data by
+    # the runtime, rather than parsed from log markers -- see sim_reviewer's
+    # _EXPLICIT_PASS_RE for why that distinction exists.
+    tb_backend: str = "specflow"
+    # How specflow's five agent calls reach a model. "file" emits each prompt and
+    # stops so it can be answered by hand; "replay" reads recorded fixtures and
+    # needs no model at all; "api" is the eventual HTTP path.
+    specflow_model_port: str = "file"
+    #: Every model-call switch for the specflow stages, as one explicit object.
+    #: `None` means the defaults. Never read from the environment at call time:
+    #: `load_env_file` overrides `os.environ` so a rotated key can reach a live
+    #: session, which means any knob also taken from the environment is settled
+    #: by whichever file a callee re-reads rather than by what the caller asked.
+    specflow_port_settings: object | None = None
+    # Pre-made modules the generated RTL may instantiate but does not define,
+    # and the include directories their headers live in. A hierarchical DUT
+    # cannot elaborate without them, and the resulting build error reads as a
+    # defect in the generated RTL rather than a missing library. They are
+    # libraries, never oracle inputs: the reference model still derives the
+    # composed behaviour from the specification alone.
+    specflow_extra_sources: tuple[str, ...] = ()
+    specflow_include_dirs: tuple[str, ...] = ()
+    #: Reuse certified specflow artifacts already in the run directory instead
+    #: of regenerating them. The gates are always re-run on what is reused, so
+    #: this skips the model calls, never the checks.
+    specflow_reuse: bool = False
+    #: S1 by division at authorial boundaries plus a per-unit classifier,
+    #: instead of the generative decomposition. On by default; set False for an
+    #: A/B against the generative arm on the same task, model and effort.
+    specflow_divide_s1: bool = True
+    #: One small call per item for S2, S3 and the reference model.
+    specflow_fanout: bool = True
+    #: Repair rounds for each specflow stage, and for the reference model
+    #: specifically. The reference model gets its own because its feedback comes
+    #: from a judge rather than a script, and it converges: 8 -> 4 -> 3 -> 2
+    #: blocking verdicts over four rounds on i2c_master_bit_ctrl, still
+    #: descending when the budget ran out.
+    specflow_max_repairs: int = 5
+    specflow_refmodel_max_repairs: int = 6
+    #: Edit attempts per debug turn on the reference model. 0 disables the
+    #: agentic path and falls back to prose-driven regeneration.
+    specflow_refmodel_debug_attempts: int = 30
+    #: Judging passes. Each is ~one call per requirement, so this is the
+    #: expensive budget; the attempts inside a turn are pure Python.
+    specflow_refmodel_judge_turns: int = 3
+    #: Path to a known-good reference model for this design, for trust gate 3.
+    #: Only the benchmark runners know where controls live, so this stays a
+    #: path they set rather than something discovered here.
+    specflow_refmodel_control: str | None = None
+    #: Report a requirement-only oracle set beside the judge's. Read-only.
+    #: Requirement-only oracles drive the loop; the judge stops deciding.
+    specflow_variants: bool = False
+    specflow_correspondence: bool = False
+    #: The relax-side feedback edge -- see `compose._closed_loop`.
+    specflow_reconsider_rounds: int = 0
+    #: Blocking verdicts reported as `warning` rather than `error`, so a build
+    #: proceeds with them itemised. Only `verdict.DOWNGRADABLE` is honoured.
+    specflow_advisory_verdicts: frozenset[str] = frozenset()
     contract_only: bool = True
     debug_max_trials: int = 15
     # Number of TB lint-repair attempts after the initial generation, in
@@ -425,13 +508,81 @@ class TopAgent:
         golden_tb_path: str | None,
         output_dir_per_run: Path,
         max_repairs: int = 2,
+        reuse: bool = False,
     ) -> str:
-        """Generate contract.json and (best-effort) repair it until lint passes."""
-        contract = await architect.chat(spec, golden_tb_path=golden_tb_path)
-        contract_json = contract.model_dump_json(indent=2, exclude_none=True) + "\n"
+        """Generate contract.json and (best-effort) repair it until lint passes.
+
+        REUSED WHEN ONE IS ALREADY THERE, on the same terms as every specflow
+        artifact: skip the model call, never the lint. Until this existed the
+        contract was the one artifact `--reuse` did not cover -- it is built
+        here, one level above specflow, so `specflow_reuse` never reached it --
+        and it is the artifact every other one is DERIVED from. Everything
+        downstream was pinned; the thing they were pinned to was re-rolled each
+        run.
+
+        That is not a theoretical hazard. The i2c spec's own prototype omits the
+        direction keyword on cmd_ack, busy, al and dout -- each name dangles
+        under the preceding `input` line, so read literally all four are inputs
+        -- and the architect has to override the prototype from the prose. It is
+        a judgement call on four ports, re-taken every run. On a2-i2c one run
+        dropped `busy` from the outputs and the next kept it; the witness, held
+        from the first, then had no `busy` to emit, and six requirements were
+        abandoned as "never reached" for a stimulus that was never at fault.
+        """
+        held = output_dir_per_run / "contract.json"
+        if reuse and held.is_file():
+            existing = held.read_text(encoding="utf-8")
+            if existing.strip():
+                issues, obj = lint_contract_json(existing, spec)
+                if obj is not None and not [i for i in issues if i.severity == "error"]:
+                    self._write_output(
+                        output_dir_per_run=output_dir_per_run,
+                        file_name="contract_lint.txt",
+                        content=render_contract_issues(issues) or "(no issues)\n",
+                    )
+                    return existing
+                # Re-gated and it failed, so it is regenerated rather than
+                # trusted. Reuse skips the call, not the check.
+
+        # NAME THE PORTS IT WILL HAVE TO GUESS, BEFORE IT GUESSES.
+        #
+        # The linter catches a DROPPED port after the fact, and that is the gate.
+        # It does not stop the architect getting a direction wrong, and its
+        # "these directions were inferred" finding is a WARNING -- so it only
+        # reaches the model when some other error happens to trigger a repair
+        # round, and on a clean-but-inferred contract it reaches nobody but a
+        # human reading `contract_lint.txt`.
+        #
+        # A Verilog port list may state a direction once and let it carry across
+        # the names that follow, and a spec written by stripping an original
+        # header leaves names dangling under whatever preceded them. The i2c
+        # prototype does exactly this to cmd_ack, busy, al and dout -- read
+        # literally, all four are inputs -- so the architect must override the
+        # header from the prose, on four ports, every run. It got `busy` wrong
+        # once and six requirements were abandoned for it.
+        #
+        # Guidance and gate, the same pairing the oracle prompt uses for
+        # declared inputs: say it up front, check it afterwards.
+        undirected = prototype_ports(spec)[1]
+        primed = spec
+        if undirected:
+            primed = spec + (
+                "\n\nNOTE ON THE MODULE HEADER ABOVE. It states no direction "
+                "for " + ", ".join(undirected) + ". In Verilog each of those "
+                "carries the direction of the line above it, so read literally "
+                "they take the preceding port's direction -- which is very "
+                "likely wrong, because a header written this way has usually "
+                "had its `output`/`output reg` keywords stripped. Decide each "
+                "of them from the PROSE port list, which is authoritative "
+                "where the two disagree, and make sure every one appears in "
+                "`io` with a direction.")
+
+        contract = await architect.chat(primed, golden_tb_path=golden_tb_path)
+        contract_json = _unsourced_deleted(
+            contract.model_dump_json(indent=2, exclude_none=True) + "\n", spec)
 
         for repair_idx in range(max(0, int(max_repairs)) + 1):
-            issues, _obj = lint_contract_json(contract_json)
+            issues, _obj = lint_contract_json(contract_json, spec)
             errors = [i for i in issues if i.severity == "error"]
             lint_report = render_contract_issues(issues)
 
@@ -452,7 +603,36 @@ class TopAgent:
                 lint_errors=lint_report,
                 golden_tb_path=golden_tb_path,
             )
-            contract_json = revised.model_dump_json(indent=2, exclude_none=True) + "\n"
+            contract_json = _unsourced_deleted(
+                revised.model_dump_json(indent=2, exclude_none=True) + "\n", spec)
+
+        # THE PORT ENCODING, from a shared constants header if the design ships
+        # one. This is the same class of information `golden_tb_path` already
+        # brings in above and on the same terms -- it pins the INTERFACE and
+        # goes no further. A byte controller cannot issue a command without
+        # `cmd`'s encoding, so it is as much interface as the port's width.
+        #
+        # The SPEC decides which symbols belong to which port; the header
+        # supplies only their values. That keeps the selection inside
+        # `source_of_truth: "spec"` and keeps the design out of it.
+        #
+        # Direction of flow is what makes this a contract rather than
+        # contamination: frozen here, BEFORE any candidate exists, a design that
+        # decodes the port differently fails -- correctly, it violated the
+        # interface it was handed. Harvested from what a candidate emitted, that
+        # candidate would pass trivially.
+        try:
+            obj = json.loads(contract_json)
+            notes = encoding.enrich_contract(
+                obj, spec=spec,
+                defines=encoding.find_defines(golden_tb_path) if golden_tb_path else [])
+            if notes:
+                contract_json = json.dumps(obj, indent=2) + "\n"
+                logger.info("contract encodings: %s", "; ".join(notes))
+        except Exception:  # noqa: BLE001
+            # Never fail a run over an enrichment. Absent a table every gate
+            # behaves exactly as it did before this existed.
+            logger.warning("contract encoding enrichment skipped", exc_info=True)
 
         self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
         return contract_json
@@ -473,478 +653,105 @@ class TopAgent:
             return ""
         return "Contract-only context:\n" + "\n".join(f"- {s}" for s in items[:6]) + "\n"
 
-    async def _run_instance(
+    async def _run_instance_specflow(
         self,
         *,
         spec: str,
         output_dir_per_run: Path,
-        golden_tb_path: str | None,
-        golden_rtl_blackbox_path: str | None,
+        golden_tb_path: str | None = None,
         contract_sva: list[dict] | None = None,
         child_assumes: dict | None = None,
         child_rtl: dict[str, str] | None = None,
-        external_tb: str | None = None,
     ) -> Tuple[bool, str, int, int, dict | None]:
-        """Run one instance of the full agent procedure.
+        """The default path: contract, then specflow's oracle, then RTL repair.
 
-        Returns ``(is_sim_pass, rtl_code, input_tokens, output_tokens,
-        usage_breakdown_dict)``. The repair step is the standard RTLEditor debug
-        loop; ``is_sim_pass`` (the self-TB verdict) is the per-node escalation
-        signal consumed by the DAG OR-node.
-
-        ``child_rtl`` (module_name -> real, already-verified RTL source):
-        when given, TBGenerator instantiates these children directly instead
-        of writing an inline behavioral stand-in, and the mock-DUT/TBEditor
-        alignment pass is skipped entirely (there is no invented model to
-        align — the TB wires real RTL). Only meaningful for children also
-        present in ``child_assumes`` (their prefixed port names come from
-        there); a name in ``child_rtl`` but not ``child_assumes`` is ignored.
+        Deliberately short. The SystemVerilog path's length came almost entirely
+        from the testbench being one opaque artifact -- three generation
+        branches, a lint-repair loop, a mock-DUT alignment pass, and a verdict
+        recovered from log prose. Here the oracle is built and certified by
+        gates before any RTL exists, and the verdict arrives as data.
         """
+        from .specflow_node import run_specflow_node
+
         architect = ArchitectAgent(self.cfg)
-        tb_gen = TBGenerator(self.cfg)
         rtl_gen = RTLGenerator(self.cfg)
-        sim_reviewer = SimReviewer(str(output_dir_per_run), golden_rtl_blackbox_path)
-        rtl_edit = RTLEditor(self.cfg, sim_reviewer=sim_reviewer, max_trials=int(self.config.debug_max_trials))
-
-        def build_breakdown() -> UsageBreakdown:
-            return UsageBreakdown(
-                architect=get_model_usage(architect._agent.model),
-                tb_gen=get_model_usage(tb_gen._agent.model),
-                rtl_gen=get_model_usage(rtl_gen._agent.model),
-                rtl_edit=get_model_usage(rtl_edit._agent.model),
-            )
-
-        def finish(
-            is_sim_pass: bool,
-            rtl_code: str,
-        ) -> Tuple[bool, str, int, int, dict | None]:
-            breakdown = build_breakdown()
-            total_in, total_out = breakdown.total
-            return is_sim_pass, rtl_code, total_in, total_out, breakdown.to_dict()
 
         architect.reset()
+        # `golden_tb_path` reaches the ARCHITECT only, and only to pin the
+        # interface: module name, port names, directions and widths. On the
+        # benchmark path the generated RTL is compiled against the golden
+        # testbench, so an inferred name that differs by one character fails
+        # every node for a reason that has nothing to do with the design.
+        #
+        # It goes no further. `build_artifacts` receives `spec` and
+        # `contract_json` and nothing else, so neither the requirements nor the
+        # reference model can see golden -- which is the isolation property the
+        # oracle depends on, and it is enforced by what is passed rather than by
+        # an instruction.
         contract_json = await self._build_contract_json(
             architect=architect,
             spec=spec,
             golden_tb_path=golden_tb_path,
             output_dir_per_run=output_dir_per_run,
+            reuse=self.config.specflow_reuse,
         )
-        # Inject orchestrator-supplied contract SVA and child assumes into the
-        # contract so they flow to all downstream agents as first-class fields.
-        if contract_sva or child_assumes:
+
+        # Orchestrator-supplied fields, merged exactly as the original path did.
+        if contract_sva or child_assumes or child_rtl:
             try:
-                _cobj = json.loads(contract_json)
+                obj = json.loads(contract_json)
                 if contract_sva:
-                    _cobj["contract_sva"] = contract_sva
+                    obj["contract_sva"] = contract_sva
                 if child_assumes:
-                    _cobj["child_assumes"] = child_assumes
+                    obj["child_assumes"] = child_assumes
                 if child_rtl:
-                    for _name in child_rtl:
-                        if _name in _cobj.get("child_assumes", {}):
-                            _cobj["child_assumes"][_name]["rtl_available"] = True
-                contract_json = json.dumps(_cobj, indent=2) + "\n"
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="contract.json", content=contract_json)
+                    for name in child_rtl:
+                        obj.setdefault("child_assumes", {}).setdefault(name, {})[
+                            "rtl_available"
+                        ] = True
+                contract_json = json.dumps(obj, indent=2)
+                (output_dir_per_run / "contract.json").write_text(
+                    contract_json, encoding="utf-8"
+                )
             except Exception:  # noqa: BLE001
-                pass
-        try:
-            contract_obj = json.loads(contract_json)
-            module_name = str(contract_obj.get("module_name") or "TopModule")
-        except Exception:  # noqa: BLE001
-            module_name = "TopModule"
-        try:
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="architect_prompt.txt",
-                content=(getattr(architect, "last_prompt", "") or "") + "\n",
-            )
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="architect_raw_output.txt",
-                content=(getattr(architect, "last_raw_output", "") or "") + "\n",
-            )
-        except Exception:  # noqa: BLE001
-            pass
+                logger.exception("failed to merge orchestrator fields into contract")
 
-        tb_gen.reset()
-        tb_gen.set_golden_tb_path(golden_tb_path)
-        tb_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
-
-        if external_tb is not None:
-            # An oracle was supplied, so generate nothing: this TB IS the gate.
-            # Used for composition (glue) nodes, which are handed the parent's
-            # own original-interface TB. Together with `child_rtl` (the real,
-            # already-certified children appended below) the sim/debug loop
-            # downstream is exactly the composed-simulation check — the glue is
-            # written and repaired against the same assembly and the same
-            # oracle that decides whether it certifies.
-            #
-            # This is NOT `golden_tb_path`, which still regenerates a TB and
-            # only falls back to the golden text on a syntax error. Here the
-            # supplied text is authoritative and never redrawn, so there is no
-            # second, invented oracle anywhere in a composition's pipeline.
-            testbench = self._augment_dumpvars_with_dut_scope(external_tb, module_name=module_name)
-            # Give the glue debugger the same visibility a leaf debugger has by
-            # construction: values for every port it can drive, not just the
-            # wrapper's two external outputs.
-            testbench = self._augment_glue_port_probes(
-                testbench, module_name=module_name,
-                assembled_rtl_path=golden_rtl_blackbox_path,
-            )
-            testbench = _append_child_rtl(testbench, child_rtl)
-            interface = ""
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-            tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=output_dir_per_run / "tb.sv")
-            if not tb_ok:
-                # A supplied oracle that will not elaborate is a broken ORACLE,
-                # not a broken design. There is no repair path here (we must not
-                # rewrite the caller's gate), so surface it instead of letting
-                # the Coder burn its budget against an unusable testbench.
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log.json", content=tb_lint_json)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt.txt", content=tb_lint_excerpt)
-                logger.error("Supplied external TB does not lint; aborting this attempt:\n%s", tb_lint_excerpt)
-                return finish(False, "")
-        else:
-            testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
-            testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
-            testbench = _append_child_rtl(testbench, child_rtl)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
-        # If we were given a golden TB and the LLM accidentally broke its syntax,
-        # fall back to the original golden TB (plus our safe dumpvars augmentation).
-        tb_path = output_dir_per_run / "tb.sv"
-        if external_tb is not None:
-            # Already linted above and authoritative by construction — neither
-            # the golden fallback nor the Verifier repair loop may touch it.
-            pass
-        elif golden_tb_path and self._tb_has_syntax_error(tb_path=tb_path):
-            golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
-            golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
-            golden_text = _append_child_rtl(golden_text, child_rtl)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
-            testbench = golden_text
-        elif not golden_tb_path:
-            # Non-golden mode: the self-generated TB is the only oracle (no golden
-            # fallback), so lint it and give the Verifier a bounded repair loop.
-            # Each retry feeds back the accumulated lint errors (set_tb_lint_error
-            # appends), so the model sees the full history rather than one blind shot.
-            tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
-            inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
-            attempt = 0
-            while (not tb_ok or not inv_ok) and attempt < self.config.tb_lint_max_retry:
-                suffix = "" if attempt == 0 else f"_attempt{attempt}"
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_log{suffix}.json", content=tb_lint_json)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name=f"tb_lint_failed_excerpt{suffix}.txt", content=tb_lint_excerpt)
-
-                # A TB that lints clean but fails the ORACLE invariant gets the
-                # invariant as its feedback, not a stale lint log — otherwise
-                # the model is told to fix errors it has already fixed and
-                # collapsing further to a stub looks like progress.
-                feedback = _augment_lint_excerpt(tb_lint_excerpt) if not tb_ok else ""
-                if not inv_ok:
-                    logger.warning("Generated TB rejected by the oracle invariant: %s", inv_reason)
-                    feedback = (feedback + "\n\n" if feedback else "") + (
-                        "The testbench is not a usable ORACLE: " + inv_reason
-                    )
-                tb_gen.set_tb_lint_error(lint_log=feedback, previous_tb=testbench)
-                testbench, interface = await tb_gen.chat(tb_input_spec, contract_json=contract_json)
-                testbench = self._augment_dumpvars_with_dut_scope(testbench, module_name=module_name)
-                testbench = _append_child_rtl(testbench, child_rtl)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="if.sv", content=interface)
-
-                attempt += 1
-                tb_ok, tb_lint_excerpt, tb_lint_json = self._tb_lint_report(tb_path=tb_path)
-                inv_ok, inv_reason = _tb_is_acceptable(testbench, module_name, contract_json)
-
-            if not tb_ok or not inv_ok:
-                # Exhausted the repair budget: the TB still does not lint clean,
-                # or it lints but is not an oracle. Both are unusable, and the
-                # invariant failure is the more dangerous of the two because it
-                # would otherwise be CACHED and gate every later attempt.
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_log_final.json", content=tb_lint_json)
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_lint_failed_excerpt_final.txt", content=tb_lint_excerpt)
-                try:
-                    self._write_output(
-                        output_dir_per_run=output_dir_per_run,
-                        file_name="verifier_prompt.txt",
-                        content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
-                    )
-                    self._write_output(
-                        output_dir_per_run=output_dir_per_run,
-                        file_name="verifier_raw_output.txt",
-                        content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
-                tb_lint_lesson = (
-                    "TB generation failed: the testbench did not pass Verilator lint "
-                    "after all repair attempts. The contract may be specifying constructs "
-                    "that the Verifier cannot generate correctly.\n"
-                    f"Lint errors:\n{tb_lint_excerpt}\n\n"
-                    "Guidance: revise the contract to avoid constructs that produce these "
-                    "lint errors. For example, avoid 8'sd-X signed literals (write -X instead), "
-                    "avoid static variable initializers in function/task bodies, and avoid "
-                    "SVA temporal operators (##, $past with non-constant delays)."
-                )
-                return finish(False, "")
-        try:
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="verifier_prompt.txt",
-                content=(getattr(tb_gen, "last_prompt", "") or "") + "\n",
-            )
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="verifier_raw_output.txt",
-                content=(getattr(tb_gen, "last_raw_output", "") or "") + "\n",
-            )
-        except Exception:  # noqa: BLE001
-            pass
-
-        # TB alignment pass (composition nodes only): before the TB is used to
-        # gate the real glue RTL, verify its inline child behavioral model
-        # actually satisfies child_assumes SVA, using a mock DUT + Verilator —
-        # independent of whatever the (not-yet-correct) glue RTL does. A TB
-        # bug here would otherwise silently poison the self-TB gate: either
-        # penalizing correct glue RTL, or letting broken glue RTL pass because
-        # the TB's child model never exercised the violated property.
-        #
-        # Skipped when child_rtl is given: the TB already wires REAL,
-        # already-verified child RTL (see _append_child_rtl above) instead of
-        # an inline behavioral stand-in, so there is no invented model to
-        # align — child_assumes is only used above for prompt guidance (drive
-        # instantiation, not a stand-in) and for contract_sva's assert side.
-        # ...and equally when `external_tb` is set. That is the UNIFIED glue
-        # loop, where the children are just as real -- they are compiled into
-        # the assembled composition (`fixed.sv`) alongside the wrapper instead
-        # of being spliced into the testbench text. The guard tested HOW the
-        # children arrived rather than WHETHER they exist, so under `unified`
-        # (which passes child_rtl=None by design) it ran anyway.
-        #
-        # There is nothing to align in that path: the composed testbench drives
-        # the WRAPPER, so it contains no inline child model. The pass fabricated
-        # a stub for a glue about to be generated, injected assumption asserts
-        # built from model-authored expressions, and on stage_roundpack one of
-        # them was `(...)[24]` -- a bit-select on a parenthesised expression,
-        # illegal SystemVerilog -- so mock_dut.sv failed to compile, all 24
-        # assertions were lost, and the agent spent a trial diagnosing a
-        # testbench that was never at fault while being forbidden to touch the
-        # file that was. Same warning on stage_addsub and stage_normalize with a
-        # different illegal expression each time.
-        #
-        # Bottom-up composition is what makes this unnecessary: the children are
-        # already CERTIFIED, so a check that the testbench's imagined children
-        # match their contracts has nothing left to verify.
-        if child_assumes and not child_rtl and external_tb is None:
-            # Snapshot the pre-alignment draft (mirrors rtl_before_debug.sv)
-            # so a post-mortem can attribute a defect to TBGenerator's own
-            # draft vs. something TBEditor introduced/failed to resolve while
-            # patching — otherwise unanswerable once tb.sv is overwritten below.
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_before_align.sv", content=testbench)
-            tb_editor = TBEditor(
-                self.cfg,
-                max_trials=int(self.config.tb_align_max_trials),
-                stall_rounds=int(self.config.tb_align_stall_rounds),
-            )
-            aligned, aligned_tb, tb_align_trials, tb_align_log = await tb_editor.chat(
-                contract_json=contract_json,
-                tb_code=testbench,
-                output_dir_per_run=str(output_dir_per_run),
-            )
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb_align_log.txt", content=tb_align_log + "\n")
-            # Structured, machine-readable assurance record. The free-text log
-            # alone cannot answer "was the TB's child model actually verified
-            # against child_assumes?" — downstream consumers (gating policy,
-            # stage evals, triage) need the verdict, not a narrative. aligned
-            # False here means the self-TB gate is running on an UNVERIFIED
-            # child model; the certificate consumer can decide what to do
-            # with that, but it must be visible.
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="tb_align_verdict.json",
-                content=json.dumps(
-                    {
-                        "aligned": bool(aligned),
-                        "trials_used": int(tb_align_trials),
-                        "max_trials": int(self.config.tb_align_max_trials),
-                        "log_tail": tb_align_log[-2000:],
-                    },
-                    indent=2,
-                ) + "\n",
-            )
-            if aligned_tb:
-                testbench = aligned_tb
-                self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=testbench)
-            if not aligned:
-                logger.warning(
-                    "TB did not fully align with child_assumes after %d trial(s) (continuing with best effort): %s",
-                    tb_align_trials, tb_align_log,
-                )
-
-        rtl_gen.reset()
-        rtl_path = str(output_dir_per_run / "rtl.sv")
-        rtl_input_spec = self._contract_only_context(contract_json) if self.config.contract_only else spec
-        is_syntax_pass, rtl_code = await rtl_gen.chat(
-            input_spec=rtl_input_spec,
-            testbench=testbench,
-            interface=interface,
-            rtl_path=rtl_path,
+        accepted, rtl_code, detail = await run_specflow_node(
+            cfg=self.cfg,
+            spec=spec,
             contract_json=contract_json,
+            output_dir_per_run=output_dir_per_run,
+            rtl_gen=rtl_gen,
+            sim_max_retry=self.config.sim_max_retry,
+            debug_max_trials=self.config.debug_max_trials,
+            model_port=self.config.specflow_model_port,
+            port_settings=self.config.specflow_port_settings,
+            extra_sources=self.config.specflow_extra_sources,
+            include_dirs=self.config.specflow_include_dirs,
+            reuse=self.config.specflow_reuse,
+            divide_s1=self.config.specflow_divide_s1,
+            fanout=self.config.specflow_fanout,
+            max_repairs=self.config.specflow_max_repairs,
+            refmodel_max_repairs=self.config.specflow_refmodel_max_repairs,
+            refmodel_debug_attempts=self.config.specflow_refmodel_debug_attempts,
+            refmodel_judge_turns=self.config.specflow_refmodel_judge_turns,
+            refmodel_control=self.config.specflow_refmodel_control,
+            variants=self.config.specflow_variants,
+            correspondence=self.config.specflow_correspondence,
+            reconsider_rounds=self.config.specflow_reconsider_rounds,
+            advisory_verdicts=self.config.specflow_advisory_verdicts,
         )
-        if not is_syntax_pass:
-            try:
-                self._write_output(
-                    output_dir_per_run=output_dir_per_run,
-                    file_name="coder_prompt.txt",
-                    content=(getattr(rtl_gen, "last_prompt", "") or "") + "\n",
-                )
-                self._write_output(
-                    output_dir_per_run=output_dir_per_run,
-                    file_name="coder_raw_output.txt",
-                    content=(getattr(rtl_gen, "last_raw_output", "") or "") + "\n",
-                )
-            except Exception:  # noqa: BLE001
-                pass
-            return finish(False, rtl_code)
-        self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl.sv", content=rtl_code)
-        try:
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="coder_prompt.txt",
-                content=(getattr(rtl_gen, "last_prompt", "") or "") + "\n",
-            )
-            self._write_output(
-                output_dir_per_run=output_dir_per_run,
-                file_name="coder_raw_output.txt",
-                content=(getattr(rtl_gen, "last_raw_output", "") or "") + "\n",
-            )
-        except Exception:  # noqa: BLE001
-            pass
 
-        sim_log = ""
-        is_sim_pass = False
-        sim_mismatch_cnt = 0
-        did_rtl_regen_after_mismatch = False
-        did_fallback_to_golden_tb = False
-        remaining_debug_trials = int(self.config.debug_max_trials)
+        (output_dir_per_run / "specflow_node.json").write_text(
+            json.dumps(detail, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
 
-        # Simulation + repair loop. The repair step is the standard trace-based
-        # RTLEditor debug loop; the leaf's is_sim_pass is the escalation signal.
-        for _ in range(max(1, int(self.config.sim_max_retry))):
-            is_sim_pass, sim_mismatch_cnt, sim_log = await asyncio.to_thread(sim_reviewer.review)
-            if is_sim_pass:
-                return finish(True, rtl_code)
-
-            if sim_mismatch_cnt <= 0:
-                if golden_tb_path and not did_fallback_to_golden_tb:
-                    # The Verifier may have introduced SV features unsupported by Verilator
-                    # (or broken the TB) even if it remains syntactically valid.
-                    # In that case, fall back to the original golden TB and retry.
-                    try:
-                        tb_before = (output_dir_per_run / "tb.sv").read_text(encoding="utf-8")
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="tb_before_golden_fallback.sv",
-                            content=tb_before,
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                    try:
-                        self._write_output(
-                            output_dir_per_run=output_dir_per_run,
-                            file_name="sim_failed_log_before_tb_fallback.json",
-                            content=sim_log,
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-
-                    golden_text = Path(golden_tb_path).read_text(encoding="utf-8")
-                    golden_text = self._augment_dumpvars_with_dut_scope(golden_text, module_name=module_name)
-                    self._write_output(output_dir_per_run=output_dir_per_run, file_name="tb.sv", content=golden_text)
-                    testbench = golden_text
-                    did_fallback_to_golden_tb = True
-                    continue
-
-                # Non-mismatch failures (harness timeout, runtime error) — no repair possible.
-                self._write_output(
-                    output_dir_per_run=output_dir_per_run,
-                    file_name="sim_failed_log.json",
-                    content=sim_log,
-                )
-                try:
-                    _sim_log_obj = json.loads(sim_log)
-                    _sim_excerpt = str(_sim_log_obj.get("stderr") or _sim_log_obj.get("stdout") or sim_log)
-                except Exception:  # noqa: BLE001
-                    _sim_excerpt = sim_log
-                compile_lesson = (
-                    "RTL simulation failed with a compile/lint error — no behavioral "
-                    "mismatches were produced (the simulator could not execute at all).\n"
-                    f"Failure excerpt:\n{_sim_excerpt[:800]}\n\n"
-                    "Guidance: the contract may be specifying RTL constructs that the Coder "
-                    "generates incorrectly. Clarify bit-widths, operator types, and "
-                    "Verilator-compatible constructs."
-                )
-                return finish(False, rtl_code)
-
-            # Give the Coder one shot to regenerate RTL from the failure log before
-            # handing off to the trace-based debugger.  This fixes systematic
-            # contract/timing misunderstandings faster than local patching.
-            if not did_rtl_regen_after_mismatch:
-                did_rtl_regen_after_mismatch = True
-                try:
-                    rtl_gen.set_failed_trial(sim_log, rtl_code, testbench)
-                    is_syntax_pass2, rtl_code2 = await rtl_gen.chat(
-                        input_spec=rtl_input_spec,
-                        testbench=testbench,
-                        interface=interface,
-                        rtl_path=rtl_path,
-                        contract_json=contract_json,
-                    )
-                    if is_syntax_pass2:
-                        rtl_code = rtl_code2
-                        self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl_regen_after_mismatch.sv", content=rtl_code)
-                        self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl.sv", content=rtl_code)
-                        try:
-                            self._write_output(
-                                output_dir_per_run=output_dir_per_run,
-                                file_name="coder_prompt_regen_after_mismatch.txt",
-                                content=(getattr(rtl_gen, "last_prompt", "") or "") + "\n",
-                            )
-                            self._write_output(
-                                output_dir_per_run=output_dir_per_run,
-                                file_name="coder_raw_output_regen_after_mismatch.txt",
-                                content=(getattr(rtl_gen, "last_raw_output", "") or "") + "\n",
-                            )
-                        except Exception:  # noqa: BLE001
-                            pass
-                        continue
-                except Exception:  # noqa: BLE001
-                    pass
-
-            # Standard repair step: trace-based RTLEditor debug loop.
-            # Snapshot the pre-debug state for diagnostics (the leaf harvests these).
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="rtl_before_debug.sv", content=rtl_code)
-            self._write_output(output_dir_per_run=output_dir_per_run, file_name="sim_failed_log.json", content=sim_log)
-
-            if remaining_debug_trials <= 0:
-                return finish(False, rtl_code)
-
-            rtl_edit.reset()
-            is_sim_pass, rtl_code, used_trials, _edit_justification = await rtl_edit.chat(
-                spec=(self._contract_only_context(contract_json) if self.config.contract_only else spec),
-                output_dir_per_run=str(output_dir_per_run),
-                sim_failed_log=sim_log,
-                sim_mismatch_cnt=sim_mismatch_cnt,
-                contract_json=contract_json,
-                max_trials=remaining_debug_trials,
-            )
-            remaining_debug_trials = max(0, remaining_debug_trials - int(used_trials))
-            if is_sim_pass:
-                return finish(True, rtl_code)
-
-        # Last check, in case the final edit improved but didn't re-run.
-        is_sim_pass, _, _ = await asyncio.to_thread(sim_reviewer.review)
-        return finish(is_sim_pass, rtl_code)
+        breakdown = UsageBreakdown(
+            architect=get_model_usage(architect._agent.model),
+            rtl_gen=get_model_usage(rtl_gen._agent.model),
+        )
+        total_in, total_out = breakdown.total
+        return accepted, rtl_code, total_in, total_out, breakdown.to_dict()
 
     async def _run_instance_ablation(
         self,
@@ -979,6 +786,15 @@ class TopAgent:
         if_path = str(output_dir_per_run / "if.sv")
         rtl_path = str(output_dir_per_run / "rtl.sv")
 
+        # Persist the spec at the node. `cli.py:74` writes prompt.txt for the
+        # `run` subcommand, but `benchmarks/run_verilog_eval_v2.py` builds its
+        # prompt separately and never wrote it -- so a benchmark node had no spec
+        # on disk at all. specflow's S1 reads it, and it is what makes an offline
+        # replay of a node possible.
+        prompt_path = output_dir_per_run / "prompt.txt"
+        if not prompt_path.exists():
+            prompt_path.write_text(spec.rstrip() + "\n", encoding="utf-8")
+
         tag = output_dir_per_run / "properly_finished.tag"
         if tag.exists():
             tag.unlink()
@@ -995,22 +811,28 @@ class TopAgent:
                 is_sim_pass, rtl_code, input_tokens, output_tokens = await self._run_instance_ablation(
                     spec=spec, output_dir_per_run=output_dir_per_run
                 )
-            else:
+            elif self.config.tb_backend == "specflow":
                 (
                     is_sim_pass,
                     rtl_code,
                     input_tokens,
                     output_tokens,
                     usage_breakdown,
-                ) = await self._run_instance(
+                ) = await self._run_instance_specflow(
                     spec=spec,
                     output_dir_per_run=output_dir_per_run,
                     golden_tb_path=golden_tb_path,
-                    golden_rtl_blackbox_path=golden_rtl_blackbox_path,
                     contract_sva=contract_sva,
                     child_assumes=child_assumes,
                     child_rtl=child_rtl,
-                    external_tb=external_tb,
+                )
+            else:
+                raise ValueError(
+                    f"unknown tb_backend {self.config.tb_backend!r}. The "
+                    f"SystemVerilog testbench path has been retired -- "
+                    f"tb_generator.py and its prompt corpus are deleted, and "
+                    f"specflow is the only backend. See "
+                    f"docs/specflow-migration.md."
                 )
             tag.write_text("1", encoding="utf-8")
         except Exception as e:  # noqa: BLE001

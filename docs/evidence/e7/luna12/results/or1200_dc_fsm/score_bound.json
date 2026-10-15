@@ -1,0 +1,14 @@
+{
+  "scored": "the SHIPPED set (shipped.json)",
+  "bodies": 80,
+  "span": 0.8765432098765432,
+  "blindness": 0.9399141630901288,
+  "audit": 0.03389830508474576,
+  "audit_convicted": 2,
+  "audit_judges": 59,
+  "effective_size": 62,
+  "convicting": [
+    "REQ-0022",
+    "REQ-0036"
+  ]
+}

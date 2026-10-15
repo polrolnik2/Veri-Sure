@@ -1,0 +1,24 @@
+bound 0 probe(s), 10 left unbound:
+   fifo_dat_i                   UNBOUND: wire [4+dw+aw-1:0] fifo_dat_i (or1200_sb.v:60) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_dat_o                   UNBOUND: wire [4+dw+aw-1:0] fifo_dat_o (or1200_sb.v:61) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_empty                   UNBOUND: wire fifo_empty (or1200_sb.v:65) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_full                    UNBOUND: wire fifo_full (or1200_sb.v:64) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_rd                      UNBOUND: wire fifo_rd (or1200_sb.v:63, assigned :80) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_wr                      UNBOUND: wire fifo_wr (or1200_sb.v:62, assigned :79) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   fifo_wr_ack                  UNBOUND: reg fifo_wr_ack (or1200_sb.v:68, updated :118-124) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   or1200_sb_fifo               UNBOUND: the or1200_sb_fifo instance (or1200_sb.v:93-104) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   outstanding_store            UNBOUND: reg outstanding_store (or1200_sb.v:67, updated :107-113) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+   sel_sb                       UNBOUND: wire sel_sb (or1200_sb.v:66, assigned :88) exists only under `ifdef OR1200_SB_IMPLEMENTED (or1200_sb.v:55-125), which or1200_defines.v:1396 leaves commented out, so the compiled reference is the pass-through at or1200_sb.v:126-137 and has no such signal.
+
+/home/user/runs/luna14/after_oracles/or1200_sb
+scoring the SHIPPED set (shipped.json): 66 bodies over 66 requirement(s); 227 golden trace(s)
+
+SPAN       52/54 behavioural = 96.3%   (87 minted, 82 state an observable obligation)
+BLINDNESS  3264/8306 cells = 39.3%   (population 7, effective_size 42)
+AUDIT      0/5 judgeable = 0.0%
+ACCEPTS    2 of 7 design(s)
+  note: the control is NOT contract-conformant: 10 of the 10 declared probe(s) are not exposed by it (fifo_dat_i, fifo_dat_o, fifo_wr, fifo_rd, fifo_full, fifo_empty, ...), so the 47 check(s) reading them can say nothing about it
+  note: audit is over the 5 of 52 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 0  
+target span>0.90 MET  blindness<0.10 no  audit=0 MET

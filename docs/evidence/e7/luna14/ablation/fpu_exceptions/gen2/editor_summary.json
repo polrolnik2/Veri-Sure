@@ -1,0 +1,56 @@
+{
+  "run": "/home/user/runs/luna14/fpu_exceptions",
+  "module": "fpu_exceptions",
+  "bodies": 138,
+  "requirements": 136,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 1101,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 136,
+      "pass": 131,
+      "fail": 3,
+      "abstain": 2,
+      "failing_testpoints": 72,
+      "failing": [
+        "REQ-0014",
+        "REQ-0126",
+        "REQ-0149"
+      ],
+      "abstaining": [
+        "REQ-0022",
+        "REQ-0122"
+      ],
+      "rtl_lines": 412
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 136,
+    "pass": 131,
+    "fail": 3,
+    "abstain": 2,
+    "failing_testpoints": 72,
+    "failing": [
+      "REQ-0014",
+      "REQ-0126",
+      "REQ-0149"
+    ],
+    "abstaining": [
+      "REQ-0022",
+      "REQ-0122"
+    ],
+    "rtl_lines": 412
+  },
+  "usage": {
+    "input": 15357,
+    "cached": 15354,
+    "output": 16453,
+    "reasoning": 0,
+    "calls": 1,
+    "cache_hit_rate": 0.9998
+  }
+}

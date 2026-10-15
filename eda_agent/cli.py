@@ -30,7 +30,12 @@ def main(argv: list[str] | None = None) -> int:
         help="OpenAI extra_body JSON string (default: env OPENAI_EXTRA_BODY)",
     )
     m.add_argument("--runs-root", default="runs", help="Directory to store artifacts")
-    m.add_argument("--temperature", type=float, default=0.0)
+    # Default None means "do not send the parameter". Reasoning models in the
+    # gpt-5 family reject an explicit temperature -- this gateway answers
+    # `temperature does not support 0.0 with this model, only the default (1)`
+    # -- so a hardcoded 0.0 made the CLI unusable with the models this repo
+    # targets. Pass --temperature explicitly for a model that accepts one.
+    m.add_argument("--temperature", type=float, default=None)
     m.add_argument("--top-p", type=float, default=1.0)
     m.add_argument("--stream", action="store_true", help="Enable streaming model output")
     m.add_argument("--sim-max-retry", type=int, default=4)

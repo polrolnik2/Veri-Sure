@@ -1,0 +1,24 @@
+{
+ "adequacy": null,
+ "gate": {
+  "by_severity": {
+   "warning": 1
+  },
+  "issues": 1,
+  "ok": true,
+  "present": true
+ },
+ "model_present": true,
+ "oracles": {
+  "by_requirement": {},
+  "correspondence_checked": null,
+  "dispositions": {},
+  "frozen": 0,
+  "repaired": 0,
+  "rounds": null,
+  "vacuity_checked": null
+ },
+ "rtl_produced": true,
+ "run": "y-i2c",
+ "turns": []
+}

@@ -1,0 +1,7 @@
+== or1200_dc_fsm
+SPAN       73/82 behavioural = 89.0%   (98 minted, 96 state an observable obligation)
+BLINDNESS  3411/3661 cells = 93.2%   (population 7, effective_size 57)
+AUDIT      0/8 judgeable = 0.0%
+ACCEPTS    4 of 7 design(s)
+target span>0.90 no  blindness<0.10 no  audit=0 MET
+bound AUDIT      3/69 judgeable = 4.3%

@@ -1,0 +1,33 @@
+bound 19 probe(s), 0 left unbound:
+   cnt_done                     w=1  values seen [0, 1]
+   core_ack                     w=1  values seen [0, 1]
+   core_cmd_nop                 w=1  values seen [0, 1]
+   core_cmd_read                w=1  values seen [0, 1]
+   core_cmd_start               w=1  values seen [0, 1]
+   core_cmd_stop                w=1  values seen [0, 1]
+   core_cmd_write               w=1  values seen [0, 1]
+   core_rxd                     w=1  values seen [0, 1]
+   core_txd                     w=1  values seen [0, 1]
+   dcnt_nonzero                 w=1  values seen [0, 1]
+   go                           w=1  values seen [0, 1]
+   ld                           w=1  values seen [0, 1]
+   shift                        w=1  values seen [0, 1]
+   st_ack                       w=1  values seen [0, 1]
+   st_idle                      w=1  values seen [0, 1]
+   st_read                      w=1  values seen [0, 1]
+   st_start                     w=1  values seen [0, 1]
+   st_stop                      w=1  values seen [0, 1]
+   st_write                     w=1  values seen [0, 1]
+
+/home/user/runs/luna13/after_oracles/i2c_master_byte_ctrl
+scoring the SHIPPED set (shipped.json): 102 bodies over 97 requirement(s); 434 golden trace(s)
+
+SPAN       92/112 behavioural = 82.1%   (127 minted, 124 state an observable obligation)
+BLINDNESS  3441/53740 cells = 6.4%   (population 7, effective_size 79)
+AUDIT      17/73 judgeable = 23.3%
+ACCEPTS    0 of 7 design(s)
+  note: 102 check bodies over 97 requirement(s): 5 requirement(s)' worth of ADDITIONAL bodies are carried. span and audit count requirements (97); blindness and effective_size count bodies (102), because a cell is separated by a check and a second body is a second chance to separate it
+  note: audit is over the 73 of 92 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 17  REQ-0007[behav] REQ-0009[behav] REQ-0028[behav] REQ-0029[behav] REQ-0034[behav] REQ-0043[behav] REQ-0045[behav] REQ-0049[behav] REQ-0053[behav] REQ-0054[behav] REQ-0060[behav] REQ-0071[behav] REQ-0095[behav] REQ-0113[behav] REQ-0114[behav] REQ-0118[behav] REQ-0119[behav]
+target span>0.90 no  blindness<0.10 MET  audit=0 no

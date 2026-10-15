@@ -1,0 +1,11 @@
+--- gen /home/user/runs/luna14/fpu_exceptions gen3 start 2026-10-15T09:49:32Z on 187ef94
+== RTL editor
+   
+   ROUND 0: 87 pass, 47 FAIL, 2 abstain of 136 requirement(s); 4 failing testpoint(s)
+     failing: REQ-0000, REQ-0003, REQ-0004, REQ-0006, REQ-0008, REQ-0009, REQ-0010, REQ-0014, REQ-0017, REQ-0018, REQ-0019, REQ-0020, REQ-0021, REQ-0025, REQ-0026, REQ-0027 ...
+   
+   FINAL rtl.sv: 434 lines; summary /home/user/runs/luna14/results/fpu_exceptions/gen3/editor_summary.json
+   USAGE {"input": 15357, "cached": 15354, "output": 15991, "reasoning": 0, "calls": 1, "cache_hit_rate": 0.9998}
+   -> exit 0 (log /home/user/runs/luna14/results/fpu_exceptions/gen3/editor.log)
+== ChipVerilog verdict: function_fail (equivalence, bounded_seq)
+--- gen exited 0 at 2026-10-15T10:14:50Z

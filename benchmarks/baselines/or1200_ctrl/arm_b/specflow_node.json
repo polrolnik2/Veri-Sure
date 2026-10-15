@@ -1,0 +1,9 @@
+{
+  "backend": "specflow",
+  "history": [],
+  "artifacts": {
+    "ok": false,
+    "stage": "S1",
+    "reason": "S1 gate failed with 32 issue(s)"
+  }
+}

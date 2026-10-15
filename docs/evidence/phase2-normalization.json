@@ -1,0 +1,36 @@
+{
+ "what": "Phase 2 gate: normalization clause rewritten to ask for NECESSARY inputs",
+ "no_input_activation": {
+  "before": 57,
+  "after": 6,
+  "of": 77,
+  "gained": 51,
+  "lost": 0
+ },
+ "attachable_share": {
+  "before_pct": 25,
+  "after_pct": 92
+ },
+ "attach_precision": {
+  "instrument": "check_static FIRED vs the oracle actually deciding, over (oracle, testpoint) pairs on w-i2c",
+  "controlled_on_the_17_that_already_had_inputs": {
+   "before": 0.81,
+   "after": 0.8
+  },
+  "the_51_that_gained_inputs": 0.55,
+  "combined_after": 0.64,
+  "attach_everything_baseline": 0.4,
+  "true_attachments": {
+   "before": 1061,
+   "after": 2309
+  },
+  "false_attachments": {
+   "before": 250,
+   "after": 1293
+  }
+ },
+ "caveat": "0.81 -> 0.64 read alone is an ARTIFACT of comparing 17 requirements against 68. The controlled comparison is 0.81 -> 0.80, i.e. no regression on what already worked.",
+ "known_bad_values": {
+  "REQ-0043": "cmd=3 for the READ data-bit phase; READ is cmd=8. Legal (the suite drives 3) but wrong, so it lands in the false-attach bucket rather than causing a bad verdict -- a false attach costs one replay returning ok=None."
+ }
+}

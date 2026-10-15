@@ -1,0 +1,197 @@
+"""`refmodel.latency.fragile`: a check resting on a latency nobody stated."""
+from specflow.refmodel import latency as L
+from specflow.refmodel.oracle_gen import RequirementOracle
+
+#: "busy is cleared after STOP": reads busy on the SAME row as `stop`.
+SAME_ROW = '''
+def decide(trace):
+    seen = False
+    for r in trace:
+        if r["outputs"]["stop"] == 1:
+            seen = True
+            if r["outputs"]["busy"] != 0:
+                return (False, r["edge"], "busy not cleared at STOP")
+    return (True, None, "") if seen else (None, None, "no STOP")
+'''
+
+#: The same obligation with a window: busy low on the STOP row or the next --
+#: tolerant of one clock and not of two.
+ONE_ROW = '''
+def decide(trace):
+    seen = False
+    for i, r in enumerate(trace):
+        if r["outputs"]["stop"] == 1:
+            seen = True
+            nxt = trace[i + 1] if i + 1 < len(trace) else r
+            if r["outputs"]["busy"] != 0 and nxt["outputs"]["busy"] != 0:
+                return (False, r["edge"], "busy never cleared after STOP")
+    return (True, None, "") if seen else (None, None, "no STOP")
+'''
+
+#: The obligation as the gate asks for it: busy clears at some row at or after
+#: STOP, before the trace ends.
+WINDOWED = '''
+def decide(trace):
+    for i, r in enumerate(trace):
+        if r["outputs"]["stop"] == 1:
+            if not any(x["outputs"]["busy"] == 0 for x in trace[i:]):
+                return (False, r["edge"], "busy never cleared after STOP")
+            return (True, None, "")
+    return (None, None, "no STOP")
+'''
+
+
+def _raw(stop, busy, clk=None):
+    clk = clk or list(range(len(stop)))
+    return [{"edge": i, "inputs": {"c": c}, "outputs": {"stop": s, "busy": b}}
+            for i, (s, b, c) in enumerate(zip(stop, busy, clk))]
+
+
+def _o(src):
+    return RequirementOracle(req_uid="REQ-1", clause="c", source=src, tp_uids=["TP-0"])
+
+
+#: A combinational design: busy falls on the STOP row.
+ROWS = {"TP-0": _raw([0, 0, 1, 0, 0], [1, 1, 0, 0, 0])}
+
+
+def test_a_same_row_check_is_flagged():
+    why = L.fragile(_o(SAME_ROW), ROWS, ["busy"], "busy is cleared after STOP")
+    assert why.startswith(L.PREFIX) and "busy" in why
+
+
+def test_a_windowed_check_is_not():
+    assert L.fragile(_o(WINDOWED), ROWS, ["busy"], "busy is cleared after STOP") == ""
+
+
+def test_one_clock_of_tolerance_is_not_enough_for_a_two_stage_design():
+    """`din` -> `sda_oen` on the i2c reference is two clocks: a check allowing
+    exactly one is still fragile, and says which lag broke it."""
+    assert L.fragile(_o(ONE_ROW), ROWS, ["busy"], "busy is cleared after STOP",
+                     lags=(1,)) == ""
+    why = L.fragile(_o(ONE_ROW), ROWS, ["busy"], "busy is cleared after STOP")
+    assert "2 clocks later" in why
+
+
+def test_every_testpoint_is_searched_not_only_the_checks_own():
+    """The check's own TP-0 never exposes the lag; another testpoint does."""
+    quiet = {"TP-0": _raw([0, 0, 0, 0, 0], [1, 1, 1, 1, 1]),
+             "TP-9": _raw([0, 0, 1, 0, 0], [1, 1, 0, 0, 0])}
+    why = L.fragile(_o(SAME_ROW), quiet, ["busy"], "busy is cleared after STOP")
+    assert "TP-9" in why
+
+
+def test_a_stated_latency_licenses_the_same_row():
+    assert L.fragile(_o(SAME_ROW), ROWS, ["busy"],
+                     "busy is cleared immediately when STOP is detected") == ""
+    assert L.fragile(_o(SAME_ROW), ROWS, ["busy"],
+                     "busy is cleared asynchronously by STOP") == ""
+
+
+def test_an_observable_the_check_does_not_read_is_not_lagged():
+    assert L.fragile(_o(SAME_ROW), ROWS, ["cmd_ack"], "x after y") == ""
+
+
+def test_a_testpoint_the_check_fails_on_says_nothing_about_latency():
+    bad = {"TP-0": _raw([0, 0, 1, 0, 0], [1, 1, 1, 1, 1])}
+    assert L.fragile(_o(SAME_ROW), bad, ["busy"], "busy is cleared after STOP") == ""
+
+
+def test_lagging_moves_one_clock_on_raw_rows():
+    late = L.lagged(ROWS["TP-0"], ["busy"])
+    assert [r["outputs"]["busy"] for r in late] == [1, 1, 1, 0, 0]
+    assert [r["outputs"]["stop"] for r in late] == [0, 0, 1, 0, 0]
+
+
+# ------------------------------------------------------------- wired into the stage
+
+def test_a_latency_discard_routes_back_to_the_author():
+    from specflow.refmodel import verdict as V
+    assert V.of_discard(L.PREFIX + " anything") == "ORACLE_INVALID"
+
+
+def test_the_refuser_replays_each_testpoint_once_and_needs_a_substrate(monkeypatch):
+    from specflow.refmodel import oracles as O
+    assert L.refuser("", {}, {}, {}, {}, base="step") is None
+
+    calls = []
+
+    def _replay(src, contract, steps, *, base):
+        calls.append(tuple(steps))
+        return type("R", (), {"rows": ROWS["TP-0"]})()
+
+    monkeypatch.setattr(O, "replay", _replay)
+    why = L.refuser("design", {}, {"TP-0": [1]}, {"REQ-1": {"observable": ["busy"]}},
+                    {"REQ-1": "busy is cleared after STOP"}, base="step")
+    assert why("REQ-1", _o(SAME_ROW)).startswith(L.PREFIX)
+    assert why("REQ-1", _o(WINDOWED)) == ""
+    assert len(calls) == 1, "the substrate is replayed once per testpoint"
+
+
+def test_admitted_pool_drops_a_refused_corpus_body():
+    from types import SimpleNamespace
+
+    from specflow.oracles_stage import admitted_pool
+    anchor = _o(WINDOWED)
+    oset = SimpleNamespace(trusted=[anchor], corpus={"REQ-1": [
+        SimpleNamespace(source=SAME_ROW), SimpleNamespace(source=WINDOWED + "\n# v2\n")]})
+    contract = {"io": [{"name": "stop", "dir": "output", "width": 1},
+                       {"name": "busy", "dir": "output", "width": 1}]}
+    plan = [{"uid": "TP-0"}]
+    base_pool = admitted_pool(oset, contract, plan)
+    refused = admitted_pool(oset, contract, plan,
+                            refuse=lambda uid, o: ("latency:" if "not cleared at STOP"
+                                                   in o.source else ""))
+    assert len(refused) == len(base_pool) - 1
+    assert all("not cleared at STOP" not in o.source for o in refused)
+
+
+def test_the_stage_asks_labels_and_prefers_but_never_discards_on_latency():
+    """SOURCE-LEVEL PINS -- a call site inside `run_oracle_stage` has been
+    deleted on this branch without failing a behavioural test more than once.
+
+    ADVISORY: the finding buys a repair round (`quotable`) and a label, and a
+    rescue or swap only PREFERS a body without it. It blocked until the luna6
+    runs measured ~20 points of span for 0-13 points of audit."""
+    import inspect
+
+    from specflow import integration, oracles_stage as S
+    stage = inspect.getsource(S.run_oracle_stage)
+    assert "_late = _latency.refuser(" in stage
+    fold = stage.index("why = _late(uid, held[uid])")
+    tail = stage[fold:fold + 300]
+    assert "quotable[uid] = labels[uid] = why" in tail
+    assert "rejected[uid]" not in tail, "the latency finding must not block"
+    assert stage.index("for uid, detail in dead_now.items():") < fold
+    assert "prefer_not=_late)" in stage
+    assert "and not _late(uid, held[uid])" in stage
+    build = inspect.getsource(integration.build_artifacts)
+    assert "refuse=_refuse" not in build
+    assert "latency.refuser(" not in build
+
+
+def test_a_rescue_takes_a_latency_fragile_body_only_when_nothing_else_decides(
+        monkeypatch):
+    from types import SimpleNamespace
+
+    from specflow import oracles_stage as S
+
+    def _tables(flat, designs, *a, **k):
+        # every candidate decides on the witness; no population refutation
+        return ({key: {"w": True} for key in flat}, {}, {})
+
+    monkeypatch.setattr(S, "_population_tables", _tables)
+    common = dict(held={}, blocked={"REQ-1"},
+                  reasons_for={"REQ-1": "unreached: never reached"},
+                  witness="w", population=(), contract={}, stimulus_by_tp={},
+                  base="step", transactional=True)
+    def late(uid, o):
+        return "latency: late" if "LATE" in o.source else ""
+
+    both = {"REQ-1": [SimpleNamespace(source="def decide(t): return 1  # OK"),
+                      SimpleNamespace(source="def decide(t): return 1  # LATE")]}
+    got = S._rescue_from_corpus(corpus=both, prefer_not=late, **common)
+    assert "OK" in got["REQ-1"].source, "the body without the finding is preferred"
+    only = {"REQ-1": [SimpleNamespace(source="def decide(t): return 1  # LATE")]}
+    got = S._rescue_from_corpus(corpus=only, prefer_not=late, **common)
+    assert "LATE" in got["REQ-1"].source, "a finding never costs the requirement"

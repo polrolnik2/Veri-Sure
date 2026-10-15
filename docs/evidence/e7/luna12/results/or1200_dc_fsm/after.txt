@@ -1,0 +1,13 @@
+or1200_dc_fsm: 88 accepted, pool 232, shipped 80
+/home/user/runs/luna12/after_oracles/or1200_dc_fsm
+scoring the SHIPPED set (shipped.json): 80 bodies over 80 requirement(s); 309 golden trace(s)
+
+SPAN       71/81 behavioural = 87.7%   (100 minted, 97 state an observable obligation)
+BLINDNESS  438/466 cells = 94.0%   (population 7, effective_size 62)
+AUDIT      1/8 judgeable = 12.5%
+ACCEPTS    4 of 7 design(s)
+  note: the control is NOT contract-conformant: 6 of the 11 declared probe(s) are not exposed by it (idle, cload, cstore, lrefill3, srefill4, cnt_nonzero), so the 63 check(s) reading them can say nothing about it
+  note: audit is over the 8 of 71 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 1  REQ-0036[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

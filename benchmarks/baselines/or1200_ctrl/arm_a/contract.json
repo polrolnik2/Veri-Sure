@@ -1,0 +1,478 @@
+{
+  "source_of_truth": "spec",
+  "module_name": "or1200_ctrl",
+  "parameters": [],
+  "io": [
+    {
+      "name": "clk",
+      "dir": "input",
+      "width": 1,
+      "notes": "Primary clock; sequential state updates on posedge."
+    },
+    {
+      "name": "rst",
+      "dir": "input",
+      "width": 1,
+      "notes": "Active-high asynchronous reset."
+    },
+    {
+      "name": "id_freeze",
+      "dir": "input",
+      "width": 1,
+      "notes": "Freeze control for the ID stage."
+    },
+    {
+      "name": "ex_freeze",
+      "dir": "input",
+      "width": 1,
+      "notes": "Freeze control for the EX stage."
+    },
+    {
+      "name": "wb_freeze",
+      "dir": "input",
+      "width": 1,
+      "notes": "Freeze control for the WB stage."
+    },
+    {
+      "name": "flushpipe",
+      "dir": "input",
+      "width": 1,
+      "notes": "Pipeline flush request."
+    },
+    {
+      "name": "if_insn",
+      "dir": "input",
+      "width": 32,
+      "notes": "Fetch-stage instruction word."
+    },
+    {
+      "name": "ex_insn",
+      "dir": "output",
+      "width": 32,
+      "notes": "EX-stage instruction register."
+    },
+    {
+      "name": "branch_op",
+      "dir": "output",
+      "width": 3,
+      "notes": "Registered EX-stage branch or jump operation."
+    },
+    {
+      "name": "branch_taken",
+      "dir": "input",
+      "width": 1,
+      "notes": "Current branch decision used for delay-slot control."
+    },
+    {
+      "name": "rf_addra",
+      "dir": "output",
+      "width": 5,
+      "notes": "Source-A register address, directly from if_insn[20:16]."
+    },
+    {
+      "name": "rf_addrb",
+      "dir": "output",
+      "width": 5,
+      "notes": "Source-B register address, directly from if_insn[15:11]."
+    },
+    {
+      "name": "rf_rda",
+      "dir": "output",
+      "width": 1,
+      "notes": "Source-A register-read indicator, from if_insn[31]."
+    },
+    {
+      "name": "rf_rdb",
+      "dir": "output",
+      "width": 1,
+      "notes": "Source-B register-read indicator, from if_insn[30]."
+    },
+    {
+      "name": "alu_op",
+      "dir": "output",
+      "width": 4,
+      "notes": "Registered EX-stage ALU operation."
+    },
+    {
+      "name": "mac_op",
+      "dir": "output",
+      "width": 2,
+      "notes": "Registered MAC operation; inactive when MAC support is disabled."
+    },
+    {
+      "name": "shrot_op",
+      "dir": "output",
+      "width": 2,
+      "notes": "Registered shift or rotate sub-operation from the ID instruction."
+    },
+    {
+      "name": "comp_op",
+      "dir": "output",
+      "width": 4,
+      "notes": "Registered compare sub-operation from the ID instruction."
+    },
+    {
+      "name": "rf_addrw",
+      "dir": "output",
+      "width": 5,
+      "notes": "EX-control-time register-file write destination."
+    },
+    {
+      "name": "rfwb_op",
+      "dir": "output",
+      "width": 3,
+      "notes": "Registered EX-stage write-back selector and validity encoding."
+    },
+    {
+      "name": "wb_insn",
+      "dir": "output",
+      "width": 32,
+      "notes": "WB-stage instruction register."
+    },
+    {
+      "name": "simm",
+      "dir": "output",
+      "width": 32,
+      "notes": "Expanded immediate derived from the ID-stage instruction."
+    },
+    {
+      "name": "branch_addrofs",
+      "dir": "output",
+      "width": 30,
+      "notes": "Branch offset output corresponding to bits [31:2]."
+    },
+    {
+      "name": "lsu_addrofs",
+      "dir": "output",
+      "width": 32,
+      "notes": "Load/store address offset derived from the EX-stage instruction."
+    },
+    {
+      "name": "sel_a",
+      "dir": "output",
+      "width": 2,
+      "notes": "Operand-A source selector for register-file or forwarding data."
+    },
+    {
+      "name": "sel_b",
+      "dir": "output",
+      "width": 2,
+      "notes": "Operand-B source selector; immediate selection has highest priority."
+    },
+    {
+      "name": "lsu_op",
+      "dir": "output",
+      "width": 4,
+      "notes": "Registered load/store size and sign operation; inactive for non-memory instructions."
+    },
+    {
+      "name": "cust5_op",
+      "dir": "output",
+      "width": 5,
+      "notes": "Custom-operation minor opcode from the EX-stage instruction."
+    },
+    {
+      "name": "cust5_limm",
+      "dir": "output",
+      "width": 6,
+      "notes": "Custom-operation immediate from the EX-stage instruction."
+    },
+    {
+      "name": "multicycle",
+      "dir": "output",
+      "width": 2,
+      "notes": "ID-stage multi-cycle control; ALU instructions use id_insn[9:8], otherwise one-cycle."
+    },
+    {
+      "name": "spr_addrimm",
+      "dir": "output",
+      "width": 16,
+      "notes": "Registered SPR immediate address."
+    },
+    {
+      "name": "wbforw_valid",
+      "dir": "input",
+      "width": 1,
+      "notes": "Indicates valid WB forwarding data."
+    },
+    {
+      "name": "du_hwbkpt",
+      "dir": "input",
+      "width": 1,
+      "notes": "Debug-unit hardware-breakpoint request."
+    },
+    {
+      "name": "sig_syscall",
+      "dir": "output",
+      "width": 1,
+      "notes": "Registered EX-stage system-call indication."
+    },
+    {
+      "name": "sig_trap",
+      "dir": "output",
+      "width": 1,
+      "notes": "Registered EX-stage trap indication, including du_hwbkpt."
+    },
+    {
+      "name": "force_dslot_fetch",
+      "dir": "output",
+      "width": 1,
+      "notes": "Hardwired to 0."
+    },
+    {
+      "name": "no_more_dslot",
+      "dir": "output",
+      "width": 1,
+      "notes": "Delay-slot termination indication."
+    },
+    {
+      "name": "ex_void",
+      "dir": "output",
+      "width": 1,
+      "notes": "Indicates that ex_insn is the OR1200 void or NOP encoding."
+    },
+    {
+      "name": "id_macrc_op",
+      "dir": "output",
+      "width": 1,
+      "notes": "ID-stage MAC-result-read indication."
+    },
+    {
+      "name": "ex_macrc_op",
+      "dir": "output",
+      "width": 1,
+      "notes": "Registered EX-stage MAC-result-read indication."
+    },
+    {
+      "name": "rfe",
+      "dir": "output",
+      "width": 1,
+      "notes": "Exception-return indication from early or EX-stage branch control."
+    },
+    {
+      "name": "except_illegal",
+      "dir": "output",
+      "width": 1,
+      "notes": "Registered EX-stage illegal-instruction indication."
+    }
+  ],
+  "clocking": {
+    "is_sequential": true,
+    "clock": {
+      "name": "clk",
+      "edge": "posedge"
+    },
+    "reset": {
+      "name": "rst",
+      "active": "high",
+      "type": "asynchronous"
+    }
+  },
+  "timing": {
+    "ex_insn": {
+      "latency_cycles": 1,
+      "notes": "An accepted instruction advances through ID into EX on the next advancing posedge; ex_freeze holds EX."
+    },
+    "branch_op": {
+      "latency_cycles": 1,
+      "notes": "Registered from ID-stage branch predecode on a posedge; a flush or ID bubble produces an inactive operation."
+    },
+    "rf_addra": {
+      "latency_cycles": 0,
+      "notes": "Combinational directly from if_insn[20:16]."
+    },
+    "rf_addrb": {
+      "latency_cycles": 0,
+      "notes": "Combinational directly from if_insn[15:11]."
+    },
+    "rf_rda": {
+      "latency_cycles": 0,
+      "notes": "Combinational directly from if_insn[31]."
+    },
+    "rf_rdb": {
+      "latency_cycles": 0,
+      "notes": "Combinational directly from if_insn[30]."
+    },
+    "alu_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control from the ID-stage instruction on a posedge."
+    },
+    "mac_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control; inactive when MAC support is disabled."
+    },
+    "shrot_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    },
+    "comp_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    },
+    "rf_addrw": {
+      "latency_cycles": 1,
+      "notes": "Updated at the EX-control posedge from the ID-stage instruction; it is not necessarily cleared by flushpipe."
+    },
+    "rfwb_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    },
+    "wb_insn": {
+      "latency_cycles": 1,
+      "notes": "Updated from ex_insn on the next advancing posedge; wb_freeze holds WB."
+    },
+    "simm": {
+      "latency_cycles": 0,
+      "notes": "Combinational from the current ID-stage instruction; aligned one stage after the accepted if_insn."
+    },
+    "branch_addrofs": {
+      "latency_cycles": 1,
+      "notes": "Combinational from ex_insn and aligned with the EX instruction. The output is [31:2] and receives no additional shift."
+    },
+    "lsu_addrofs": {
+      "latency_cycles": 1,
+      "notes": "Combinational from ex_insn and aligned with the EX instruction."
+    },
+    "sel_a": {
+      "latency_cycles": 0,
+      "notes": "Combinational from the current ID instruction and forwarding state."
+    },
+    "sel_b": {
+      "latency_cycles": 0,
+      "notes": "Combinational from the current ID instruction and forwarding state; immediate selection has priority."
+    },
+    "lsu_op": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    },
+    "cust5_op": {
+      "latency_cycles": 1,
+      "notes": "Combinational from ex_insn and therefore aligned with EX."
+    },
+    "cust5_limm": {
+      "latency_cycles": 1,
+      "notes": "Combinational from ex_insn and therefore aligned with EX."
+    },
+    "multicycle": {
+      "latency_cycles": 0,
+      "notes": "Combinationally decoded from the current ID instruction."
+    },
+    "spr_addrimm": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control; cleared for a bubble or flush."
+    },
+    "sig_syscall": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    },
+    "sig_trap": {
+      "latency_cycles": 1,
+      "notes": "Trap decode and du_hwbkpt are sampled into EX-stage trap control on a posedge."
+    },
+    "force_dslot_fetch": {
+      "latency_cycles": 0,
+      "notes": "Constant 0."
+    },
+    "no_more_dslot": {
+      "latency_cycles": 0,
+      "notes": "Combinational from current branch control, ID void status, and branch_taken."
+    },
+    "ex_void": {
+      "latency_cycles": 0,
+      "notes": "Combinational from ex_insn."
+    },
+    "id_macrc_op": {
+      "latency_cycles": 0,
+      "notes": "Combinationally decoded from the current ID instruction."
+    },
+    "ex_macrc_op": {
+      "latency_cycles": 1,
+      "notes": "Registered version of the ID MAC-result-read decode."
+    },
+    "rfe": {
+      "latency_cycles": 0,
+      "notes": "Asserted from either early branch predecode or registered EX branch control."
+    },
+    "except_illegal": {
+      "latency_cycles": 1,
+      "notes": "Registered with EX control."
+    }
+  },
+  "functional_summary": [
+    "The module contains ID, EX, and WB instruction pipeline registers. if_insn advances into ID, ID advances into EX, and EX advances into WB on rising clock edges subject to reset, flush, and stage freezes.",
+    "rst is active-high asynchronous reset. Reset has priority over flush and freezes and sets instruction pipeline registers to the OR1200 void or NOP encoding 32'h0001_0000, with registered controls set inactive.",
+    "flushpipe forces the ID, EX, and WB instruction registers to the OR1200 void or NOP encoding and clears the EX-stage functional controls specified by the implementation. It does not implicitly clear every internal register; rf_addrw, WB destination tracking, and sel_imm retain their specified register behavior unless updated by their own logic.",
+    "When id_freeze is asserted while ex_freeze is deasserted, the held ID instruction is not re-executed: EX receives the void or NOP instruction and inactive controls. ex_freeze holds EX and wb_freeze holds WB.",
+    "rf_addra equals if_insn[20:16], rf_addrb equals if_insn[15:11], rf_rda equals if_insn[31], and rf_rdb equals if_insn[30].",
+    "ID decode produces simm, sel_a, sel_b, multicycle, sel_imm, immediate-extension control, and id_macrc_op. EX control registration produces alu_op, mac_op, shrot_op, comp_op, lsu_op, branch_op, rfwb_op, spr_addrimm, sig_syscall, sig_trap, ex_macrc_op, and except_illegal.",
+    "Forwarding selection defaults to the register file. For each source, EX forwarding has priority over valid WB forwarding. Register zero does not create a forwarding dependency. Source-use indicators gate forwarding comparisons. For sel_b, immediate selection has priority over forwarding.",
+    "simm expands id_insn[15:0]. Sign extension is used for addi, addic, xori, enabled muli or maci, and immediate compare instructions. Other immediate forms use zero extension according to the OR1200 decode.",
+    "branch_addrofs is the 30-bit output corresponding to sign extension of ex_insn[25:0] into bits [31:2]. No additional shift is applied. lsu_addrofs uses sign-extended {ex_insn[25:21],ex_insn[10:0]} for stores and sign-extended {ex_insn[15:11],ex_insn[10:0]} for loads and default cases.",
+    "rf_addrw normally uses id_insn[25:21]. When pre_branch_op identifies JR or BAL, rf_addrw is forced to register r9. Actual write-back remains controlled by rfwb_op; JAL and JALR generate link-register write-back, while ordinary J and JR do not.",
+    "spr_addrimm uses id_insn[15:0] for l.mfspr and {id_insn[25:21],id_insn[10:0]} for other applicable SPR operations, including l.mtspr. It resets to zero and is cleared when EX receives a bubble or the pipeline is flushed.",
+    "multicycle uses id_insn[9:8] for OR1200_OR32_ALU and otherwise uses OR1200_ONE_CYCLE. Load/store multi-cycle cases inside an UNUSED conditional block are inactive unless that block is explicitly enabled.",
+    "shrot_op is derived from id_insn[7:6], comp_op is derived from id_insn[24:21], and lsu_op selects load/store size and sign behavior while defaulting inactive for non-memory instructions.",
+    "When MAC support is enabled, mac_op and MAC-result-read decode support the implemented MAC instructions. When MAC support is disabled, mac_op, id_macrc_op, and ex_macrc_op are inactive.",
+    "pre_branch_op identifies branch, jump, jump-register, branch-if-flag, branch-if-no-flag, and RFE operations. branch_op is the registered EX-stage form. rfe asserts when either early predecode or EX branch control identifies RFE.",
+    "no_more_dslot asserts when a branch operation is present, the ID instruction is not void, and branch_taken is true, or when the current branch operation is RFE. force_dslot_fetch is hardwired to 0.",
+    "except_illegal is asserted for unrecognized or unsupported encodings and is cleared for supported encodings. Legal instruction coverage depends on the compile-time MAC, multiplication, and custom-instruction feature configuration. sig_syscall detects l.sys; sig_trap detects l.trap or du_hwbkpt.",
+    "cust5_op and cust5_limm are direct EX-instruction subfields. Custom instruction legality and ALU selection are enabled only when the corresponding compile-time support is enabled."
+  ],
+  "corner_cases": [
+    "Reset is asynchronous and active high. Asserted rst immediately establishes the reset values; registered outputs are checked after reset assertion and after the following rising edge.",
+    "Reset has priority over flushpipe and all freeze controls.",
+    "flushpipe has priority over normal stage advancement and forces id_insn, ex_insn, and wb_insn to 32'h0001_0000. EX functional controls and spr_addrimm are inactive or zero as specified.",
+    "Registers without explicit flush handling, including rf_addrw, WB destination tracking, and sel_imm, are not assumed to clear solely because flushpipe is asserted.",
+    "If id_freeze and ex_freeze are both asserted, EX holds its current contents because ex_freeze controls EX. If id_freeze is asserted and ex_freeze is deasserted, EX receives a bubble rather than the held ID instruction.",
+    "A void or NOP instruction is not illegal and must not request register write-back, memory operation, branch action, syscall, or trap.",
+    "The void or NOP encoding is 32'h0001_0000, and bit 16 is set for void detection. ex_void detects this encoding from ex_insn.",
+    "branch_addrofs has width 30 and represents [31:2]. It is sign-extended from the 26-bit ex_insn[25:0] field without an additional shift.",
+    "Immediate and offset arithmetic uses explicit fixed-width extensions and wraps modulo 2^32 where a 32-bit result is required.",
+    "For simultaneous EX and WB forwarding matches, EX forwarding wins. WB forwarding requires wbforw_valid and a valid WB write-back indication. Register zero never causes forwarding.",
+    "sel_b immediate selection overrides both EX and WB forwarding selections.",
+    "du_hwbkpt contributes to the registered EX-stage sig_trap indication and does not modify pipeline instruction contents.",
+    "Feature-dependent MAC, multiplication, and custom instruction behavior is determined at compile time. Unsupported instructions must default to safe inactive controls and except_illegal asserted.",
+    "force_dslot_fetch is always 0, including during reset, flush, branches, and freezes."
+  ],
+  "test_plan": [
+    "Assert rst asynchronously and verify the void or NOP instruction value and inactive registered controls. Deassert rst and verify normal operation on rising clock edges.",
+    "Drive distinct instructions before successive rising edges and verify ID-to-EX and EX-to-WB movement with one-cycle stage latency.",
+    "Verify that all sequential outputs are checked after the rising edge that updates them, with no half-cycle sampling or edge-based latency interpretation.",
+    "Verify rf_addra, rf_addrb, rf_rda, and rf_rdb directly for varied if_insn values, including all-zero and all-one words.",
+    "Exercise id_freeze, ex_freeze, and wb_freeze independently and in combinations. Specifically verify bubble insertion when ID is frozen while EX advances, EX hold when ex_freeze is asserted, and WB hold when wb_freeze is asserted.",
+    "Assert flushpipe during each freeze combination and verify void or NOP instruction values and inactive EX controls while checking that registers without explicit flush handling retain their contracted behavior.",
+    "Test immediate sign-extension and zero-extension classes with values 0x0000, 0x7fff, 0x8000, and 0xffff.",
+    "Test load and store split offsets and branch offset sign boundaries, including positive and negative values.",
+    "Test forwarding with no match, EX match, WB match, simultaneous EX and WB match, invalid wbforw_valid, register-zero destinations, and source-read-disabled cases. Verify immediate sel_b priority.",
+    "Exercise ordinary branches, jumps, JR, BAL, JAL, JALR, taken and not-taken decisions, RFE, and void ID instructions. Verify branch_op, rf_addrw, rfwb_op, no_more_dslot, and rfe.",
+    "Exercise legal and unsupported ALU, LSU, SFXX, SYS, TRAP, SPR, custom, multiply, and MAC encodings under each configured feature set.",
+    "Verify sig_syscall for l.sys, sig_trap for l.trap, sig_trap contribution from du_hwbkpt, illegal-instruction defaults, MAC-result-read timing, and constant force_dslot_fetch equal to 0."
+  ],
+  "guidance": {
+    "verifier": [
+      "Use the exact declared port names and widths and compile the same feature macros as the DUT; no module parameters exist.",
+      "Drive all inputs before each rising edge. Observe sequential outputs after the same rising edge has completed its nonblocking assignments, and perform all latency accounting in whole rising-edge cycles. Do not use an opposite-edge observation scheme. Use stage-aware queues: an accepted if_insn reaches EX after one advancing cycle, and wb_insn updates from ex_insn after one advancing cycle unless WB is frozen.",
+      "Model asynchronous reset independently of the clock and give reset priority over flushpipe and freezes. Check direct combinational outputs when their source inputs change, and check ID- and EX-aligned combinational outputs after the rising edge that updates the corresponding pipeline register.",
+      "Use procedural checks or simple immediate assertions compatible with Verilator rather than advanced SVA. Compare operation fields against the OR1200 decode constants compiled for the selected feature configuration."
+    ],
+    "coder": [
+      "Match the exact interface and use sequential logic sensitive to posedge clk and posedge rst, with explicit reset values and reset, flush, and freeze priority.",
+      "Keep separate ID, EX, and WB instruction/state registers. Implement the id_freeze and advancing EX case as bubble insertion, and do not re-execute stale ID decode information.",
+      "Preserve the specified behavior of registers without explicit flush branches, including rf_addrw, WB destination tracking, and sel_imm.",
+      "Use explicit signed extensions and intermediate widths for 16-bit immediates, split LSU fields, and the 26-bit branch offset. Implement branch_addrofs as a 30-bit [31:2] signal without an implicit shift.",
+      "Centralize OR1200 opcode and selector constants, feature-gate MAC, multiplication, and custom decode, and default every decode path to safe inactive or NOP values.",
+      "Avoid multiple procedural and continuous drivers for any output.",
+      "Implement forwarding priority as immediate for sel_b, then EX forwarding, then valid WB forwarding, then register file. Gate comparisons with source-use, nonzero destination, and valid write-back conditions.",
+      "Ensure all sequential state is updated only on rising clock edges and that no design behavior depends on an opposite clock edge."
+    ],
+    "debugger": [
+      "First check asynchronous reset sensitivity, reset priority, flush and freeze priority, and whole-cycle stage alignment at rising clock edges.",
+      "Check whether ID freeze incorrectly holds or re-executes an instruction instead of injecting an EX bubble, and whether EX or WB freezes overwrite held state.",
+      "Check the 32'h0001_0000 void or NOP encoding and bit-16 void detection after reset and flush.",
+      "Check signed versus zero extension, split store versus load offset fields, branch offset width [31:2], and accidental shifts or truncation.",
+      "Check forwarding priority, register-zero suppression, wbforw_valid gating, source-use gating, and sel_b immediate precedence.",
+      "Check feature-macro guards and default illegal behavior, then inspect link-register destination versus rfwb_op validity and du_hwbkpt trap timing.",
+      "If a latency mismatch is reported, trace values only across successive rising clock edges and verify that the checker is not introducing half-cycle sampling or an extra transaction delay."
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "gated": {
+    "rates": {
+      "trusted": 6,
+      "considered": 3,
+      "abandoned": 17,
+      "ABANDONED": 7,
+      "NOT_ASSERTABLE": 1,
+      "ORACLE_INVALID": 6,
+      "VACUOUS": null,
+      "admitted_over_an_objection": 0,
+      "trusted_live": 2,
+      "trusted_inert": 0,
+      "trusted_liveness_unknown": 4
+    },
+    "corpus_bodies": 26,
+    "corpus_reqs": 20,
+    "median_depth": 1,
+    "labels": 0
+  },
+  "demoted": {
+    "rates": {
+      "trusted": 14,
+      "considered": 5,
+      "abandoned": 15,
+      "ABANDONED": 6,
+      "VACUOUS": null,
+      "admitted_over_an_objection": 16,
+      "trusted_live": 5,
+      "trusted_inert": 0,
+      "trusted_liveness_unknown": 9
+    },
+    "corpus_bodies": 22,
+    "corpus_reqs": 20,
+    "median_depth": 1,
+    "labels": 16
+  }
+}

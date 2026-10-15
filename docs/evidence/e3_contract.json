@@ -1,0 +1,90 @@
+{
+  "module_name": "i2c_master_bit_ctrl",
+  "io": [
+    {
+      "name": "clk",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "nReset",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "rst",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "ena",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "clk_cnt",
+      "dir": "input",
+      "width": 16
+    },
+    {
+      "name": "cmd",
+      "dir": "input",
+      "width": 4
+    },
+    {
+      "name": "din",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "scl_i",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "sda_i",
+      "dir": "input",
+      "width": 1
+    },
+    {
+      "name": "cmd_ack",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "busy",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "al",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "dout",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "scl_o",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "scl_oen",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "sda_o",
+      "dir": "output",
+      "width": 1
+    },
+    {
+      "name": "sda_oen",
+      "dir": "output",
+      "width": 1
+    }
+  ]
+}

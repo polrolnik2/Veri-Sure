@@ -1,0 +1,55 @@
+                 CONFORMS VIOLATES UNDECIDED   cover   pass
+FROZEN                 44       43        23     79%    61%   golden
+                       42       45        23     79%    59%   candidate
+
+FULL43                 57        5        48     56%    95%   golden
+                       48       17        45     59%    85%   candidate
+
++TOOLS                 59        5        46     58%    95%   golden
+                       49       17        44     60%    85%   candidate
+
+set              discriminating  inverted  separation
+FROZEN                        9         6          +3
+FULL43                       12         3          +9
++TOOLS                       11         1         +10
+
+THE 23, on GOLDEN.  convicting golden is the defect under test.
+req         FULL43   +TOOLS   class     disposition (full43 -> new)
+REQ-0001    True     True     movable   TRUSTED -> TRUSTED
+REQ-0002  ->True     None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0006  ->None     False    control   ORACLE_INVALID -> TRUSTED
+REQ-0007  ->False    None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0016  ->None     True     control   TRUSTED -> TRUSTED
+REQ-0020    False    False    not-assertable?TRUSTED -> TRUSTED
+REQ-0028    None     None     movable   TRUSTED -> NOT_ASSERTABLE
+REQ-0030  ->None     False    movable   ORACLE_INVALID -> TRUSTED
+REQ-0050    True     True     movable   TRUSTED -> TRUSTED
+REQ-0055  ->False    None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0057  ->False    None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0063  ->None     True     movable   ORACLE_INVALID -> TRUSTED
+REQ-0066  ->None     True     movable   ORACLE_INVALID -> TRUSTED
+REQ-0071  ->None     True     movable   ORACLE_INVALID -> TRUSTED
+REQ-0073    True     True     movable   TRUSTED -> TRUSTED
+REQ-0080    None     None     control   ORACLE_INVALID -> ORACLE_INVALID
+REQ-0082    None     None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0087  ->False    None     movable   TRUSTED -> ORACLE_INVALID
+REQ-0095  ->None     False    control   ORACLE_INVALID -> TRUSTED
+REQ-0097    None     None     movable   ORACLE_INVALID -> TRUSTED
+REQ-0101    None     None     movable   TRUSTED -> TRUSTED
+REQ-0117  ->True     False    movable   TRUSTED -> TRUSTED
+REQ-0118    None     None     control   TRUSTED -> TRUSTED
+
+moved on golden: 13 of 23
+  REQ-0002  True -> None   (movable)
+  REQ-0006  None -> False   (control)
+  REQ-0007  False -> None   (movable)
+  REQ-0016  None -> True   (control)
+  REQ-0030  None -> False   (movable)
+  REQ-0055  False -> None   (movable)
+  REQ-0057  False -> None   (movable)
+  REQ-0063  None -> True   (movable)
+  REQ-0066  None -> True   (movable)
+  REQ-0071  None -> True   (movable)
+  REQ-0087  False -> None   (movable)
+  REQ-0095  None -> False   (control)
+  REQ-0117  True -> False   (movable)

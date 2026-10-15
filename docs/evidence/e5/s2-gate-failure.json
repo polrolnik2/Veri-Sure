@@ -1,0 +1,198 @@
+{
+  "ok": false,
+  "rounds": 3,
+  "issues": [
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0148 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0148 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0149 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0149 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0150 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0150 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0151 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0151 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0152 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0152 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0153 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0153 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0154 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0154 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0002.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0003.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0004.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0005.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0006.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0007.covers",
+      "message": "REQ-0155 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0156 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0156 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0157 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0157 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0002.covers",
+      "message": "REQ-0157 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0158 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0158 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0000.covers",
+      "message": "REQ-0159 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0001.covers",
+      "message": "REQ-0159 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    },
+    {
+      "severity": "error",
+      "path": "testplan.TP-0002.covers",
+      "message": "REQ-0159 does not declare needs='testplan'; coverage was not requested",
+      "kind": "unwanted"
+    }
+  ]
+}

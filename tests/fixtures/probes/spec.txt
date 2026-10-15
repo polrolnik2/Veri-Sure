@@ -1,0 +1,17 @@
+or1200_dc_fsm -- data cache controller FSM
+
+The controller sits in the IDLE state until a request arrives. A request is
+accepted only when dc_en and dcqmem_cycstb_i are both asserted.
+
+On a load access the controller enters the CLOAD state, where it performs the
+tag hit/miss evaluation. On tagcomp_miss with biudata_valid, the FSM advances
+to LREFILL3 and drives burst for the remainder of the refill.
+
+On a store access the controller enters the CSTORE state and writes through to
+the bus.
+
+Store-miss refill is present only when OR1200_DC_STORE_REFILL is defined; in
+this configuration the SREFILL4 state does not exist.
+
+The captured request address is held in saved_addr for the duration of the
+access.
