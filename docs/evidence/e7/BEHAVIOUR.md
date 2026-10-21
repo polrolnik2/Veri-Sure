@@ -268,6 +268,38 @@ What this shows:
   noise on both sides of repair, and the one large change (luna13 sb) is for
   the worse.
 
+**Is the spread of final scores tighter than the ablation's?** The comparison
+is like for like: one design per corpus, the editor finals against each
+ablation sample index (gen1, gen2, gen3). The table gives SD across reps, in
+points; the ratio is repaired SD over mean ablation SD.
+
+| module | shipped checks: repaired / ablation (ratio) | edges equal: repaired / ablation (ratio) | order-only testpoints: repaired / ablation (ratio) |
+|---|---|---|---|
+| fpu | 3.1 / 13.7 (0.23) | 0.9 / 4.4 (0.21) | 5.8 / 0.9 (6.39) |
+| bit_ctrl | 12.9 / 13.0 (0.99) | 4.4 / 6.0 (0.73) | 9.7 / 5.6 (1.72) |
+| byte_ctrl | 10.9 / 2.5 (4.30) | 1.1 / 1.4 (0.84) | 2.2 / 1.6 (1.41) |
+| dc_fsm | 6.9 / 5.4 (1.28) | 6.2 / 3.9 (1.57) | 3.7 / 3.9 (0.96) |
+| sb | 28.6 / 28.0 (1.02) | 43.2 / 40.7 (1.06) | 52.6 / 47.9 (1.10) |
+
+**Pooled Brown-Forsythe test** (deviation from each arm's own median, scaled by
+module SD, labels permuted within module):
+
+| metric | repaired vs ablation deviation | p | without sb: deviation, p |
+|---|---|---|---|
+| shipped checks | 0.71 vs 0.72 | 0.99 | 0.72 vs 0.73, 0.96 |
+| edges equal | 0.55 vs 0.68 | 0.57 | 0.52 vs 0.69, 0.49 |
+| order-only testpoints | 0.77 vs 0.58 | 0.46 | 0.78 vs 0.54, 0.37 |
+| testpoints equal | 0.62 vs 0.70 | 0.75 | 0.60 vs 0.68, 0.75 |
+
+**No, the final scores are not more consistent than the ablation's.**
+- On fpu, the repaired designs' shipped-check and cycle-exact scores are
+  tighter (ratio about 0.2). But their timing-independent score is 6 times
+  looser, and byte_ctrl's shipped-check spread is 4 times wider.
+- With 3–4 designs per module, a single SD is too noisy to rank. Pooled, the
+  spreads are indistinguishable on every metric (p 0.37–0.99). That holds even
+  for the shipped-check score that repair optimizes, which repair raises
+  without tightening.
+
 ## Conclusions
 
 1. **Report graded behaviour, not the verdict alone.** Partial equivalence on

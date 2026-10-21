@@ -162,3 +162,45 @@ for k in beh:
     rho = sum((x - ma) * (y - mb) for x, y in zip(rka, rkb)) / math.sqrt(
         sum((x - ma) ** 2 for x in rka) * sum((y - mb) ** 2 for y in rkb))
     print(f"- Spearman(change in shipped checks, change in {k}) = {rho:+.2f}")
+
+print("\n## 5. Is the spread of final scores tighter than the ablation's?\n")
+print("Like for like: one design per corpus. The repaired arm (editor finals) against each ablation sample "
+      "index (gen1, gen2, gen3), as SD across reps per module; then a pooled Brown-Forsythe test "
+      "(|score - its own arm's median| / module SD; arm labels permuted within module).\n")
+
+
+def bf(k, mods, n=20000):
+    groups = []
+    for m in mods:
+        fin = [r[k] for r in R if r["module"] == m and r["kind"] == "final"]
+        abl = [r[k] for r in R if r["module"] == m and r["kind"].startswith("gen")]
+        groups.append((fin, abl, st.pstdev(fin + abl) or 1))
+
+    def stat(gs):
+        df = [abs(x - st.median(f)) / sd for f, _a, sd in gs for x in f]
+        da = [abs(x - st.median(a)) / sd for _f, a, sd in gs for x in a]
+        return st.mean(df), st.mean(da)
+
+    of, oa = stat(groups)
+    hits = 0
+    for _ in range(n):
+        gs = []
+        for f, a, sd in groups:
+            pool = f + a
+            rng.shuffle(pool)
+            gs.append((pool[:len(f)], pool[len(f):], sd))
+        sf, sa = stat(gs)
+        hits += abs(sf - sa) >= abs(of - oa) - 1e-12
+    return of, oa, hits / n
+
+
+for k, lab in [MET[4], MET[0], MET[2], MET[1]]:
+    print(f"**{lab}** -- SD across reps\n\n| module | repaired | ablation gen1 / gen2 / gen3 | ratio repaired / mean ablation |\n|---|---|---|---|")
+    for m in MODS:
+        fin = st.stdev([r[k] for r in R if r["module"] == m and r["kind"] == "final"])
+        per = [st.stdev([r[k] for r in R if r["module"] == m and r["kind"] == g]) for g in ("gen1", "gen2", "gen3")]
+        print(f"| {SH[m]} | {p1(fin)} | {' / '.join(p1(x) for x in per)} | "
+              f"{fin / st.mean(per):.2f} |" if st.mean(per) else f"| {SH[m]} | {p1(fin)} | -- | -- |")
+    a, b = bf(k, MODS), bf(k, MODS[:4])
+    print(f"\nBrown-Forsythe: repaired {a[0]:.2f} vs ablation {a[1]:.2f}, p {a[2]:.3f}; "
+          f"without sb {b[0]:.2f} vs {b[1]:.2f}, p {b[2]:.3f}\n")
