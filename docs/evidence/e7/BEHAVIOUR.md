@@ -216,6 +216,58 @@ and -0.32 on fpu and dc_fsm. Selection scored order-only gives:
 - golden-chosen best 40.2%;
 - repaired 30.3%.
 
+## 6. Consistency: before against after repair
+
+Computed by `consistency.py` from `BEHAVIOUR.json`; it also prints the full
+spread tables.
+
+**Spread.**
+- Designs generated for one corpus scatter by a few points: standard deviation
+  0.6–3.7 points of edges and 0.5–5.2 of order-only testpoints.
+- Across reps the spread is similar, except sb. There every rep is either
+  golden's pass-through or a buffering design, so it splits 100% / ~25%.
+- The repaired arm is no tighter than the generated one. fpu's edge spread
+  narrows (SD 4.1 -> 0.9), but its order-only spread widens (0.9 -> 5.8).
+
+**Paired change, 15 jobs, round 0 -> final:**
+
+| metric | mean change (pts) | 95% bootstrap CI | median | up / down / same | Wilcoxon p | without luna13 sb: mean, CI, p |
+|---|---|---|---|---|---|---|
+| edges equal (open loop) | -6.7 | [-17.1, -0.5] | -0.0 | 5 / 9 / 1 | 0.135 | -1.8, [-3.7, -0.1], 0.244 |
+| testpoints equal (open loop) | -6.2 | [-18.8, +0.7] | +0.0 | 4 / 7 / 4 | 0.465 | -0.1, [-1.1, +1.0], 0.770 |
+| order-only testpoints (closed loop) | -6.9 | [-20.2, +1.5] | -0.1 | 5 / 8 / 2 | 0.414 | -0.8, [-4.4, +2.4], 0.677 |
+| per-port order-only (closed loop) | -5.4 | [-13.2, -0.2] | -1.6 | 3 / 10 / 2 | 0.057 | -2.1, [-5.1, +0.5], 0.110 |
+| **shipped checks (in-run)** | **+8.5** | **[+1.9, +17.0]** | **+4.5** | **11 / 2 / 2** | **0.017** | **+5.0, [+0.6, +9.6], 0.034** |
+
+**Repair against drawing another design.** For each job, another of the
+corpus's generated designs stands in for the repaired one:
+
+| metric | repair: mean change | resample: mean change | repair beats resample | permutation p | without luna13 sb: repair vs resample, p |
+|---|---|---|---|---|---|
+| edges equal | -6.7 | -0.0 | 38% of 45 | 0.022 | -1.8 vs -0.0, 0.190 |
+| testpoints equal | -6.2 | +0.1 | 49% | 0.099 | -0.1 vs +0.1, 0.928 |
+| order-only testpoints | -6.9 | +0.4 | 36% | 0.061 | -0.8 vs +0.5, 0.522 |
+| per-port order-only | -5.4 | +1.1 | 38% | 0.009 | -2.1 vs +1.2, 0.057 |
+| shipped checks | +8.5 | +0.5 | 82% | 0.015 | +5.0 vs +0.5, 0.110 |
+
+What this shows:
+- **The shipped-check score moves reliably.** Up in 11 of 15 jobs, significant
+  with and without the outlier.
+- **Behaviour does not.** No behaviour metric changes significantly (Wilcoxon
+  p ≥ 0.057). Medians are about zero, and the negative means are mostly
+  luna13 sb.
+- **Without luna13 sb, repair's change in behaviour is the size of drawing
+  another design** (2.5 vs 3.3 points of edges) and indistinguishable from it
+  (p 0.19–0.93). It leans slightly negative: repair beats a fresh sample in
+  only 38–52% of comparisons. Per-port order-only is the nearest to a
+  detectable loss (p 0.057).
+- **The two scores are unrelated per job.** The four behaviour metrics move the
+  same way in 10 of 15 jobs. The size of a job's shipped-check gain does not
+  predict its behaviour change (Spearman -0.38 to +0.25).
+- **Neither arm is the better one.** The figures are stable to within sampling
+  noise on both sides of repair, and the one large change (luna13 sb) is for
+  the worse.
+
 ## Conclusions
 
 1. **Report graded behaviour, not the verdict alone.** Partial equivalence on
@@ -263,6 +315,7 @@ minutes on 4 cores):
     python3 docs/evidence/e7_behaviour/latency.py
     python3 docs/evidence/e7_behaviour/report.py
     python3 docs/evidence/e7_behaviour/latency_report.py
+    python3 docs/evidence/e7_behaviour/consistency.py     # reads BEHAVIOUR.json only
 
 `BEHAVIOUR.json` has one row per design: identity, arm, verdict, behaviour
 classes, and every grading and in-run metric above.
