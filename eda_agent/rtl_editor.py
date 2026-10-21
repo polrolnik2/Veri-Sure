@@ -393,6 +393,32 @@ The information below is given to help your work:
 {kmap_hint}
 """
 
+#: `INIT_EDITION_PROMPT` when the reviewer's feedback is the shipped checks
+#: alone. The model-mode prompt calls the failure log "ground truth about
+#: mismatches"; its mismatches are the DUT against a reference model, which is
+#: one reading of the specification, so that wording is wrong there and absent
+#: here. Same slots, so `chat` fills either the same way.
+INIT_EDITION_PROMPT_CHECKS = r"""
+The information below is given to help your work:
+1. The Architect contract (JSON) that the RTL MUST follow (SOURCE OF TRUTH);
+2. The shipped checks: each requirement's text and the Python check that decides it on this design's own simulation recording (fixed; you must not modify them);
+3. The check failure report: which requirements' checks FAIL, where, and the design's own port values around that edge. It reports the checks' verdicts, not expected values -- no expected output values are given anywhere (full report is saved on disk).
+4. The input_spec is included only as background; it must NOT override the contract.
+<input_spec>
+{input_spec}
+</input_spec>
+<contract_json>
+{contract_json}
+</contract_json>
+<shipped_checks>
+{generated_tb}
+</shipped_checks>
+<check_failure_report>
+{sim_failed_log_excerpt}
+</check_failure_report>
+{kmap_hint}
+"""
+
 KMAP_DEBUG_HINT_PROMPT = r"""
 [K-map hint (only if the problem involves Karnaugh maps / K-maps)]:
 - Use mismatch inputs from the sim log/trace to identify wrong minterms.
@@ -499,6 +525,23 @@ When simulation passes, end with generate_response using this format:
   generate_response(response="RTL_FIXED: <one-line summary>\nCONTRACT_CLAUSE: <specific contract requirement violated>\nFIX_RATIONALE: <how this change satisfies that requirement>")
 """
 
+#: `EXTRA_ORDER_PROMPT` under checks-only feedback: the same workflow, with the
+#: trace report described as what it then is -- no mismatch time and no
+#: expected-vs-actual pair, because nothing computes an expected value.
+EXTRA_ORDER_PROMPT_CHECKS = EXTRA_ORDER_PROMPT.replace(
+    """1) Use the contract + trace report + <failing_scenarios> to find the most likely""",
+    """1) Use the contract + trace report + <check_failure_report> to find the most likely""",
+).replace(
+    """You will also receive a structured trace-grounded bug report (JSON) that includes:
+1) earliest mismatch time, 2) (expected vs actual) values when available, 3) a short input window,
+4) a dynamically sliced list of suspect always/assign blocks.""",
+    """You will also receive a structured trace report (JSON). Under these checks it
+carries no mismatch time and no expected vs actual values -- nothing computes an
+expected value -- only a dynamically sliced list of suspect always/assign blocks,
+sliced from the ports the failing checks read.""",
+)
+
+
 
 def _reads_of(rtl: str, name: str) -> int:
     """Whole-word occurrences of `name` outside comments.
@@ -567,6 +610,12 @@ class _EditSession:
     #: off makes the search able to cross that valley; `best_rtl` below is what
     #: keeps that from being a licence to end up worse than it started.
     rollback_on_regression: bool = True
+    #: What the reviewer's count counts, in the words the agent is shown. The
+    #: defaults are the testpoint-against-model wording every backend used;
+    #: `chat` sets both to "failing check instances" when the reviewer's
+    #: `feedback` is "checks", so no message names a count that does not exist.
+    count_noun: str = "mismatches"
+    gradient_noun: str = "failing testpoints"
     #: Best (lowest) mismatch count seen this session, and the RTL that produced
     #: it. Recorded on every simulated edit regardless of accept/rollback, and
     #: restored before `chat()` returns -- so with the guard off the loop is
@@ -2121,14 +2170,14 @@ class _EditSession:
                     + (f"  It did repair {', '.join(sorted(bad0 & ok1))}, so the "
                        f"idea is not wrong -- something else in the batch costs "
                        f"more than it gains." if bad0 & ok1 else "")
-                    + f"  (failing testpoints {prev_mismatch_cnt} -> "
+                    + f"  ({self.gradient_noun} {prev_mismatch_cnt} -> "
                       f"{sim_mismatch_cnt}, for direction only.)"
                 )
                 return result
             self._accepted_req_split = req_after
             result["accept_reason"] = (
                 (f"LATCHED ON THE GRADIENT: passing requirements held at "
-                 f"{len(ok1)} with nothing silenced, and failing testpoints "
+                 f"{len(ok1)} with nothing silenced, and {self.gradient_noun} "
                  f"{prev_mismatch_cnt} -> {sim_mismatch_cnt}"
                  if gradient else
                  f"LATCHED: passing requirements {len(ok0)} -> {len(ok1)}")
@@ -2246,15 +2295,15 @@ def _render_continue_debug_prompt(session: "_EditSession") -> str:
     return (
         f"{last_action_block}"
         f"{staged_note}"
-        f"Current accepted state: {session.last_mismatch_cnt} mismatches{fail_time_note}.\n"
+        f"Current accepted state: {session.last_mismatch_cnt} {session.count_noun}{fail_time_note}.\n"
         f"Trials used: {session.action_calls}/{session.max_trials} "
         f"(a trial is a commit; edits and check_staged are free).\n\n"
-        "Continue debugging. Preserve the contract and module interface. If mismatches remain, "
+        f"Continue debugging. Preserve the contract and module interface. If {session.count_noun} remain, "
         "pick a suspect block and call _tool_read_block(block_id), stage every part of the fix with "
         "_tool_replace_block / _tool_add_block / _tool_remove_block, settle syntax and drivers with "
         "_tool_check_staged(), then call _tool_commit() ONCE for the whole batch. A commit that does "
         "not improve keeps your staged edits — adjust them rather than starting over. Do NOT call "
-        "generate_response until a commit reports is_sim_pass=true with 0 mismatches — an unverified "
+        f"generate_response until a commit reports is_sim_pass=true with 0 {session.count_noun} — an unverified "
         "claim of success is not accepted as done."
     )
 
@@ -2678,8 +2727,14 @@ class RTLEditor:
         plus a Python reference model and no such file exists. Reading that path
         unconditionally is what made the specflow repair loop die with
         `FileNotFoundError` on its first iteration, having never run once.
+
+        A reviewer whose `feedback` is "checks" (`SpecflowReviewer`) reports the
+        shipped checks' verdicts and no expected values, and the prompts and
+        count wording follow it: nothing here then calls the failure report
+        "ground truth about mismatches".
         """
         self.reset()
+        checks_only = getattr(self.sim_reviewer, "feedback", "model") == "checks"
         tb_path = f"{output_dir_per_run}/tb.sv"
         has_tb_file = Path(tb_path).is_file()
         rtl_path = f"{output_dir_per_run}/rtl.sv"
@@ -2711,6 +2766,9 @@ class RTLEditor:
             requirements=self._requirements,
             contract=self._contract,
         )
+        if checks_only:
+            self._session.count_noun = "failing check instances"
+            self._session.gradient_noun = "failing check instances"
         # The caller has ALREADY run the reviewer once -- that is where
         # `sim_failed_log` and `sim_mismatch_cnt` came from. Without this the
         # requirement surface stays empty until the agent's first commit, so
@@ -2746,7 +2804,7 @@ class RTLEditor:
             k in f"{spec}\n{contract_json}".lower()
             for k in ["kmap", "k-map", "karnaugh"]
         )
-        init = INIT_EDITION_PROMPT.format(
+        init = (INIT_EDITION_PROMPT_CHECKS if checks_only else INIT_EDITION_PROMPT).format(
             input_spec=spec,
             contract_json=contract_json,
             generated_tb=_clip_text(generated_tb, max_chars=tb_clip_chars),
@@ -2888,7 +2946,8 @@ class RTLEditor:
         first_prompt = (
             f"{init}\n\n{contradiction_block}{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
-            f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
+            f"{boolean_hint}\n{asserter_hint}\n"
+            f"{EXTRA_ORDER_PROMPT_CHECKS if checks_only else EXTRA_ORDER_PROMPT}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
             "then apply one replace_block(block_id, new_code), then run_simulation()."
         )

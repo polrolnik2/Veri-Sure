@@ -2,6 +2,7 @@
 
     e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--rtl START.sv]
                  [--skip-editor | --editor-only] [--tag NAME]
+                 [--feedback checks|model]
 
 Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
 (the corpus `e6_autorun.py` packed), writes `<runs-root>/results/<module>/`:
@@ -32,6 +33,10 @@ its working directory is `<runs-root>/editor-NAME/<module>`, its JSON and logs g
 to `results/<module>/NAME/`, and its deliverable to `deliverable/NAME/<module>`.
 `--rounds 0 --tag gen1` is GENERATION ONLY: the generator writes rtl.sv, the
 shipped set reviews it once, and no repair runs -- the editor's ablation.
+
+`--feedback` is passed to the editor: `checks` (its default) repairs against the
+shipped checks alone, `model` also hands it the reference model's values and
+source, as every editor run before the flag did. See `e7_rtl_editor.py`.
 """
 from __future__ import annotations
 
@@ -69,7 +74,8 @@ def _step(name: str, argv: list[str], log: Path) -> bool:
 
 def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
-           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag")]
+           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag",
+                                                       "--feedback")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
@@ -110,6 +116,7 @@ def main() -> int:
                                  #: `--rtl`: resume from a given rtl.sv instead of generating one
                                  #: (a run cut short by a provider error, with its remaining budget).
                                  *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
+                                 *(["--feedback", _opt("--feedback")] if _opt("--feedback") else []),
                                  "--summary", str(res_ed / "editor_summary.json")],
                   res_ed / "editor.log")
     if ok_ed or (editor / "rtl.sv").is_file():

@@ -161,6 +161,131 @@ def format_failures(
     return "\n".join(lines)
 
 
+#: What the agent is told the checks are, in place of "the reference model (the
+#: expected behaviour)". Shared by the failure report and the oracle text so the
+#: two cannot describe the checks differently.
+_CHECKS_PREAMBLE = (
+    "These verdicts come from the run's SHIPPED CHECKS. Each requirement has a "
+    "Python check, `decide(trace)`, run on THIS design's own simulation "
+    "recording; it answers PASS, FAILS (with the edge where it objected and "
+    "its complaint) or UNCOVERED (its scenario never occurred). No expected "
+    "output values exist here: a FAILS says the design's own trace broke that "
+    "requirement's check at that edge, not what the design should have output."
+)
+
+
+def format_check_failures(
+    instances: Sequence[tuple[str, Sequence[Any]]], req_results: dict,
+    traces: dict, *, requirements: dict | None = None,
+    reads: dict | None = None, wave: str | None = None,
+    per_requirement: int = 3, window: int = 3, limit: int = 160,
+) -> str:
+    """The repair agent's failure payload when the checks are the only oracle.
+
+    `format_failures`' rows are the DUT against the reference model --
+    `expected=` is the model's value -- and the model is one reading of the
+    specification, not the specification. This reports what the shipped checks
+    decided instead: per failing requirement its text, the check's own
+    complaint, the testpoints and edges it objected at, and the design's own
+    values of the ports that check reads around the first of them. Nothing in
+    it comes from the model.
+
+    `instances` is `decide_rtl_instances`' output: every check body's verdict
+    on every testpoint, before the fold.
+    """
+    from .explain import _boundary
+
+    requirements = requirements or {}
+    reads = reads or {}
+    failed: dict[str, list] = {}
+    for uid, results in instances:
+        failed.setdefault(uid, []).extend(r for r in results if r.ok is False)
+    failed = {u: rs for u, rs in failed.items() if rs}
+    states = [getattr(r, "ok", None) for r, _t in req_results.values()]
+    ports = sorted({p for u in failed for p in reads.get(u) or ()})
+    lines = [
+        f"SUMMARY: {sum(map(len, failed.values()))} failing check instance(s) "
+        f"across {len(failed)} requirement(s); {states.count(None)} "
+        f"uncovered; {states.count(True)} passing.",
+        _CHECKS_PREAMBLE,
+    ]
+    if ports:
+        lines.append(f"Ports the failing checks read: {', '.join(ports)}")
+    if wave:
+        lines.append(f"WAVEFORM: {wave}")
+    lines.append("")
+    for uid in sorted(failed):
+        if len(lines) >= limit:
+            lines.append(f"... {len(failed)} failing requirement(s) in all; "
+                         f"list_failing_requirements() lists every one")
+            break
+        rs = failed[uid]
+        view = requirements.get(uid)
+        text = " ".join(str(getattr(view, "text", "") or "").split())
+        lines.append(f"[{uid}] FAILS on {len({r.tp_uid for r in rs})} "
+                     f"testpoint(s)" + (f" -- {text[:240]}" if text else ""))
+        first = rs[0]
+        lines.append(f"  check: {' '.join(str(first.detail or '').split())[:240]}"
+                     f" -- {first.tp_uid or '?'} at edge {first.edge}")
+        more = [f"{r.tp_uid} at edge {r.edge}" for r in rs[1:per_requirement]]
+        if more:
+            lines.append(f"  also: {'; '.join(more)}"
+                         + (f" (+{len(rs) - per_requirement} more)"
+                            if len(rs) > per_requirement else ""))
+        watched = list(reads.get(uid) or ())
+        trace = traces.get(first.tp_uid) or {}
+        if watched and isinstance(first.edge, int) and trace:
+            rows = _boundary(trace, watched, first.edge - window, first.edge + 1)
+            if rows:
+                lines.append(f"  the design around {first.tp_uid} edge "
+                             f"{first.edge} (ports this check reads):")
+                for row in rows:
+                    vals = " ".join(f"{p}={row[p]}" for p in watched if p in row)
+                    lines.append(f"    edge {row['edge']}: {vals}")
+    return "\n".join(lines)
+
+
+def describe_checks(
+    oracles: Sequence[Any], req_results: dict, *,
+    requirements: dict | None = None, max_chars: int = 16000,
+) -> str:
+    """What the repair agent is shown as the oracle when the checks are the oracle.
+
+    `describe_oracle` shows the reference model's source under "the expected
+    behaviour". That label is wrong: the model is one reading of the
+    specification, and the checks -- not the model -- decide the requirements
+    the editor latches on. This shows the checks themselves: each failing
+    requirement's text and the source of the check that decides it, then the
+    uncovered ones, as budget allows.
+    """
+    requirements = requirements or {}
+    state = {u: getattr(r, "ok", None) for u, (r, _t) in req_results.items()}
+    out = [
+        "The oracle is NOT a testbench and NOT a reference model. "
+        + _CHECKS_PREAMBLE + " A check reads `trace` as a list of rows "
+        "{edge, index, held, inputs: {...}, outputs: {...}}, one per distinct "
+        "state with consecutive identical rows collapsed (`held` counts them). "
+        "The checks are fixed and no tool edits them; the design is accepted "
+        "when no check FAILS.\n",
+    ]
+    used = len(out[0])
+    for verdict, want in (("FAILS", False), ("UNCOVERED", None)):
+        for o in sorted((o for o in oracles if state.get(o.req_uid, ...) is want),
+                        key=lambda o: o.req_uid):
+            view = requirements.get(o.req_uid)
+            text = str(getattr(view, "text", "") or "")
+            entry = (f"\n=== [{o.req_uid}] {verdict}: {text}\n"
+                     + (f"clause: {o.clause}\n" if o.clause else "")
+                     + o.source.rstrip() + "\n")
+            if used + len(entry) > max_chars:
+                out.append("\n... further checks omitted; explain(req_uid) "
+                           "gives any requirement in full\n")
+                return "".join(out)
+            out.append(entry)
+            used += len(entry)
+    return "".join(out)
+
+
 class SpecflowReviewer:
     """`SimReviewer`-shaped adapter over the specflow verdict.
 
@@ -168,13 +293,36 @@ class SpecflowReviewer:
     `mismatch_cnt` is the count of *failing testpoints*, which is what the
     editor's rollback judgement compares round to round -- a count that falls as
     repairs land, exactly as the mismatch count did.
+
+    `feedback` picks what that triple is made of. "model" is the above: the
+    testpoint verdict is the DUT against the reference model, and the failure
+    rows carry the model's values as `expected=`. "checks" uses the shipped
+    checks alone: `is_pass` is a clean build with no requirement failing, the
+    count is failing check instances, and the payload is
+    `format_check_failures` -- no value the model computed reaches the editor.
+    The suite still advances the model in lockstep, because the runtime
+    records through it; under "checks" nothing it says is read.
     """
+
+    FEEDBACK = ("model", "checks")
 
     def __init__(self, *, built, hdl_toplevel: str, output_dir: Path,
                  extra_sources: Sequence[Path | str] = (),
                  include_dirs: Sequence[Path | str] = (),
                  stager: "SpecflowStimulusStager | None" = None,
-                 oracles: Sequence[Any] = (), contract: dict | None = None):
+                 oracles: Sequence[Any] = (), contract: dict | None = None,
+                 feedback: str = "model", requirements: dict | None = None):
+        if feedback not in self.FEEDBACK:
+            raise ValueError(f"feedback must be one of {self.FEEDBACK}, got {feedback!r}")
+        #: Read by `RTLEditor.chat` to pick its prompt wording.
+        self.feedback = feedback
+        #: `{req_uid: RequirementView}`, for the requirement text in a checks
+        #: payload. Optional: without it the payload names uids only.
+        self._requirements = dict(requirements or {})
+        #: `decide_rtl_instances`' output and the recording it judged, from the
+        #: LAST run. The checks payload is built from these.
+        self._instances: list = []
+        self._traces: dict = {}
         self._built = built
         self._top = hdl_toplevel
         self._dir = Path(output_dir)
@@ -269,6 +417,9 @@ class SpecflowReviewer:
                 or _uncovered_requirements(verdict.not_exercised,
                                            self._built.suite_dir))
 
+        if self.feedback == "checks":
+            return self._review_checks(verdict, info)
+
         stdout = format_failures(payload, trace=tr) or verdict.reason
 
         # A build failure is reported as such rather than as failing testpoints,
@@ -297,6 +448,69 @@ class SpecflowReviewer:
         )
         return verdict.outcome == "ACCEPT", len(verdict.failing), sim_output
 
+    def _review_checks(self, verdict, info: dict) -> Tuple[bool, int, str]:
+        """`review`'s triple under `feedback="checks"`. See the class docstring.
+
+        A failed build passes nothing even though no check fails: with no
+        recording every check abstains, and "nothing objected" is not a pass.
+        """
+        from specflow.refmodel.oracles import ports_read
+
+        build_ok = bool(info.get("build_ok"))
+        failing = sorted(u for u, (r, _t) in self.req_results.items()
+                         if getattr(r, "ok", None) is False)
+        uncovered = sorted(u for u, (r, _t) in self.req_results.items()
+                           if getattr(r, "ok", None) is None)
+        instances = [(u, r) for u, rs in self._instances for r in rs if r.ok is False]
+        is_pass = build_ok and bool(self.req_results) and not failing
+        reads: dict[str, list[str]] = {}
+        for o in self._oracles:
+            if o.req_uid in failing:
+                reads.setdefault(o.req_uid, [])
+                reads[o.req_uid] += sorted(ports_read(o, self._contract) - set(reads[o.req_uid]))
+        outputs = {str(p.get("name")) for p in (self._contract.get("io") or [])
+                   if (p.get("dir") or p.get("direction")) != "input"}
+        wave = str(self.vcd_path) if self.vcd_path else None
+        trace = {
+            #: No stimulus-step coordinate: a check localises by EDGE, and
+            #: `_extract_fail_time_from_sim_log_json` must not compare an edge
+            #: against a step from another mode.
+            "fail_step": None,
+            "fail_edge": min((r.edge for _u, r in instances if isinstance(r.edge, int)),
+                             default=None),
+            "failing_check_instances": len(instances),
+            "failing_requirements": failing,
+            "failing_testpoints": sorted({r.tp_uid for _u, r in instances if r.tp_uid}),
+            #: The trace report's slice roots: what the failing checks observe.
+            "check_ports": sorted({p for ps in reads.values() for p in ps} & outputs),
+            "wave_vcd": wave,
+        }
+        stdout = (format_check_failures(self._instances, self.req_results, self._traces,
+                                        requirements=self._requirements, reads=reads,
+                                        wave=wave)
+                  if build_ok else verdict.reason)
+        sim_output = json.dumps(
+            {
+                "format": "specflow",
+                "feedback": "checks",
+                "stdout": stdout,
+                "stderr": "" if build_ok else verdict.reason,
+                "verdict": ("ACCEPT" if is_pass else
+                            "REPAIR_RTL" if build_ok else "BUILD_FAILED"),
+                "requirements": {"failing": failing, "uncovered": uncovered,
+                                 "passing": len(self.req_results) - len(failing)
+                                 - len(uncovered)},
+                "trace": trace,
+            },
+            indent=2,
+        )
+        return is_pass, len(instances), sim_output
+
+    def describe(self, *, max_chars: int = 16000) -> str:
+        """The oracle text for `RTLEditor.chat`'s `tb_text`, under "checks"."""
+        return describe_checks(self._oracles, self.req_results,
+                               requirements=self._requirements, max_chars=max_chars)
+
     def _decide_requirements(self) -> dict:
         """Decide the frozen oracle set on the recording this run just wrote.
 
@@ -310,19 +524,25 @@ class SpecflowReviewer:
         surface and must not cost the run, because the testpoint-level verdict
         this reviewer returns is correct with or without it.
         """
+        self._instances, self._traces = [], {}
         if not self._oracles:
             return {}
         try:
-            from specflow.refmodel.rtl_trace import decide_rtl, load_traces
+            from specflow.refmodel.rtl_trace import decide_rtl_instances, load_traces
             traces = load_traces(Path(self._built.suite_dir) / "results")
         except Exception:  # noqa: BLE001
             logger.debug("no traces to decide requirements against", exc_info=True)
             return {}
         try:
-            results = decide_rtl(self._oracles, traces, self._contract)
+            instances = decide_rtl_instances(self._oracles, traces, self._contract)
         except Exception:  # noqa: BLE001
             logger.debug("deciding the frozen oracles failed", exc_info=True)
             return {}
+        from specflow.refmodel.oracles import _worst
+        #: `decide_rtl` is exactly this fold; deciding once and folding here
+        #: keeps the per-testpoint verdicts the checks payload counts.
+        results = [_worst(u, rs) for u, rs in instances]
+        self._instances, self._traces = instances, traces
         # EACH TESTPOINT HAS ITS OWN WAVEFORM, so publish the map too. A single
         # `session.vcd_path` cannot be right for every requirement -- `run_suite`
         # writes `wave_{iteration}_{module}.vcd` per testpoint, one process each
@@ -335,7 +555,6 @@ class SpecflowReviewer:
         #: failing body followed by a passing one reported the requirement met,
         #: and the editor was told a violated requirement held. Rejections
         #: union: `_worst` is the fold every other path here already uses.
-        from specflow.refmodel.oracles import _worst
         by_req: dict[str, list] = {}
         for r in results:
             by_req.setdefault(r.req_uid, []).append(r)

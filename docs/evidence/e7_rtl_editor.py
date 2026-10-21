@@ -2,6 +2,7 @@
 
     e7_rtl_editor.py <run-dir> <out-dir> --spec <description.txt>
                      [--trials N] [--rounds R] [--rtl START.v] [--summary OUT.json]
+                     [--feedback checks|model]
 
 `e6_rtl_debug.py` generalised to any module. What it does, and nothing else:
 
@@ -16,11 +17,19 @@ run's in-force contract (probes folded in), read rather than rebuilt; the old
 driver rebuilt it from bit_ctrl's baseline and could not run another module.
 
 **THE GOLDEN DESIGN IS NOT IN THIS PATH.** No golden source, no golden trace and
-no verdict computed against one reaches the generator or the editor; they see
-the specification, the contract, the check's complaint, the recording of THEIR
-OWN design and its source. The run's `ref_model.py` is read only because the
-cocotb runtime advances a model in lockstep to record a trace; nothing it says
-reaches a verdict. Grading the final RTL against golden is a separate step.
+no verdict computed against one reaches the generator or the editor. Grading the
+final RTL against golden is a separate step.
+
+**THE REFERENCE MODEL REACHES THE EDITOR ONLY UNDER `--feedback model`.** The
+cocotb runtime always advances the run's `ref_model.py` in lockstep to record a
+trace. Under `model` -- what every editor run before this flag used -- the editor
+is also handed what the model says: failure rows whose `expected=` is the
+model's value, the testpoint verdict (DUT against model) as its stop condition
+and gradient, and the model's source labelled "the expected behaviour". The
+model is one reading of the specification, not the specification, so under
+`checks` (the default) the editor sees the shipped checks alone: their verdicts
+on its own design's recording, the requirement text, the checks' source, and
+the design's own port values; it stops when no shipped check fails.
 """
 from __future__ import annotations
 
@@ -50,7 +59,7 @@ def _opt(name, default=None):
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")
         and sys.argv[sys.argv.index(a) - 1] not in
-        ("--spec", "--trials", "--rounds", "--rtl", "--summary")]
+        ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback")]
 if len(args) < 2 or not _opt("--spec"):
     print(__doc__.strip().splitlines()[2])
     raise SystemExit(2)
@@ -60,6 +69,10 @@ TRIALS = int(_opt("--trials", 20))
 ROUNDS = int(_opt("--rounds", 3))
 START = _opt("--rtl")
 SUMMARY = Path(_opt("--summary", str(OUT / "editor_summary.json")))
+FEEDBACK = _opt("--feedback", "checks")
+if FEEDBACK not in SpecflowReviewer.FEEDBACK:
+    print(f"--feedback must be one of {SpecflowReviewer.FEEDBACK}")
+    raise SystemExit(2)
 spec = Path(_opt("--spec")).read_text(encoding="utf-8")
 
 #: A COPY: the loop writes rtl.sv, suite results and verdicts, and a measurement
@@ -128,7 +141,7 @@ top = str(contract.get("module_name") or "TopModule")
 n_req = len({o.req_uid for o in oracles})
 print(f"run {RUN}\n{len(oracles)} check bodies over {n_req} requirement(s) "
       f"from {'shipped.json' if shipped else 'oracles.json (NO shipped set)'}; "
-      f"trials={TRIALS} rounds={ROUNDS}", flush=True)
+      f"trials={TRIALS} rounds={ROUNDS} feedback={FEEDBACK}", flush=True)
 
 cfg = load_openai_config()
 port = ApiPort(root=OUT / "agent_io")
@@ -140,12 +153,15 @@ reviewer = SpecflowReviewer(
                           refmodel_path=OUT / "ref_model.py",
                           bins=cov.get("bins") or []),
     hdl_toplevel=top, output_dir=OUT, stager=stager,
-    oracles=oracles, contract=contract)
+    oracles=oracles, contract=contract, feedback=FEEDBACK,
+    requirements=load_requirement_views(OUT, contract))
 rtl_path = OUT / "rtl.sv"
+#: Under `checks` the oracle text is the failing checks, so it is rebuilt after
+#: each review; under `model` it is the model's source, built once as before.
 tb_text = describe_oracle(
     suite_dir=OUT / "suite", refmodel_path=OUT / "ref_model.py",
     testplan=json.loads((OUT / "specflow" / "testplan.json").read_text()),
-    max_chars=12000)
+    max_chars=12000) if FEEDBACK == "model" else None
 history: list[dict] = []
 
 
@@ -155,14 +171,17 @@ def _tally(rnd: int, failing: int) -> dict:
     quiet = sorted(u for u, (r, _t) in decided.items() if getattr(r, "ok", None) is None)
     row = {"round": rnd, "requirements": len(decided),
            "pass": len(decided) - len(bad) - len(quiet), "fail": len(bad),
-           "abstain": len(quiet), "failing_testpoints": failing,
+           "abstain": len(quiet),
+           ("failing_testpoints" if FEEDBACK == "model"
+            else "failing_check_instances"): failing,
            "failing": bad, "abstaining": quiet,
            "rtl_lines": len(rtl_path.read_text().splitlines())
            if rtl_path.is_file() else 0}
     history.append(row)
     print(f"\nROUND {rnd}: {row['pass']} pass, {row['fail']} FAIL, "
           f"{row['abstain']} abstain of {row['requirements']} requirement(s); "
-          f"{failing} failing testpoint(s)", flush=True)
+          f"{failing} {'failing testpoint(s)' if FEEDBACK == 'model' else 'failing check instance(s)'}",
+          flush=True)
     if bad:
         print(f"  failing: {', '.join(bad[:16])}{' ...' if len(bad) > 16 else ''}",
               flush=True)
@@ -170,6 +189,7 @@ def _tally(rnd: int, failing: int) -> dict:
 
 
 async def _drive() -> None:
+    global tb_text
     remaining = TRIALS
     if START:
         rtl_path.write_text(Path(START).read_text(encoding="utf-8"), encoding="utf-8")
@@ -190,6 +210,8 @@ async def _drive() -> None:
         if is_pass or row["fail"] == 0 or not remaining or rnd == ROUNDS:
             break
         PHASE["name"] = f"edit-r{rnd}"
+        if FEEDBACK == "checks":
+            tb_text = reviewer.describe(max_chars=12000)
         editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
                            stimulus_stager=stager,
                            requirements=load_requirement_views(OUT, contract),
@@ -219,7 +241,8 @@ if shipped_rtl:
 SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
-    "trials": TRIALS, "rounds": ROUNDS, "seconds": round(time.time() - t0),
+    "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
+    "seconds": round(time.time() - t0),
     "history": history, "final": history[-1] if history else None,
     "usage": _usage_totals(),
 }, indent=2) + "\n")

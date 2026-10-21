@@ -263,6 +263,27 @@ def decide_rtl(
     silences a whole testpoint because one signal the check never mentions was
     missing.
     """
+    return [_worst(uid, results) for uid, results in decide_rtl_instances(
+        oracles, traces_by_tp, contract, side=side, transactional=transactional,
+        stimulus_by_tp=stimulus_by_tp)]
+
+
+def decide_rtl_instances(
+    oracles: list[RequirementOracle],
+    traces_by_tp: dict[str, dict],
+    contract: dict,
+    *,
+    side: str = "dut",
+    transactional: bool = True,
+    stimulus_by_tp: dict[str, list] | None = None,
+) -> list[tuple[str, list[OracleResult]]]:
+    """`decide_rtl` before the fold: every oracle's verdict on every testpoint.
+
+    `(req_uid, results)` per oracle, in oracle order. The fold is the
+    requirement's STATE; this is the count beneath it, which a repair loop needs
+    as its gradient -- a requirement failing on thirty testpoints and one failing
+    on one both fold to a single FAILS.
+    """
     if stimulus_by_tp is not None:
         # RAISES, and deliberately. A verdict computed against the wrong
         # recording is not a weaker measurement, it is a measurement of
@@ -300,7 +321,7 @@ def decide_rtl(
         for _p in declared_width_gap(_t, contract):
             wide_anywhere[_p] = wide_anywhere.get(_p, 0) + _n_rows
 
-    out: list[OracleResult] = []
+    out: list[tuple[str, list[OracleResult]]] = []
     #: **EVERY RECORDED TRACE, NOT THE ONES `tp_uids` NAMES -- AND THIS HAD TO
     #: MOVE WITH THE STAGE'S SCOPE OR NEITHER SHOULD HAVE MOVED.** The oracle
     #: stage screens a check by replaying it wherever the stimulus goes,
@@ -367,7 +388,7 @@ def decide_rtl(
             # a conviction (`explain`, every waveform tool) has to show all of
             # them or guess.
             results.append(replace(result, tp_uid=tp))
-        out.append(_worst(oracle.req_uid, results))
+        out.append((oracle.req_uid, results))
     return out
 
 
