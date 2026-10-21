@@ -330,6 +330,14 @@ module SD, labels permuted within module):
 - In one simulation a corpus's testpoints run back to back, each after the
   testbench's reset. State that a reset does not clear still carries over, the
   same for every design, as it does in the shipped testbench.
+- **Golden's own unreset state lowers the i2c levels.** Golden
+  i2c_master_bit_ctrl never resets `dout`, so its `dout` carries over from the
+  previous testpoint, while every design resets it. On bit_ctrl this is 68% of
+  the raw edge disagreement on reset-first testpoints; resetting golden's
+  `dout` lifts edge agreement from 0.26 to 0.76 (`qualitative/i2c_master_bit_ctrl.md`).
+  byte_ctrl inherits it through the child. The comparison between arms is
+  unaffected, since every design sees the same golden. The absolute
+  bit_ctrl/byte_ctrl levels are not.
 - The open-loop harness does not wire the open-drain lines; the closed-loop one
   does, as the shipped testbench does.
 - Small samples: 3–4 generated designs per corpus; correlations within module

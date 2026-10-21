@@ -1,0 +1,113 @@
+{
+ "luna12": {
+  "artifacts": [
+   "REQ-0009",
+   "REQ-0010",
+   "REQ-0022",
+   "REQ-0051"
+  ],
+  "luna12.gen1": {
+   "fails": [
+    "REQ-0036"
+   ],
+   "visible": {},
+   "rewarded": {}
+  },
+  "luna12.gen2": {
+   "fails": [
+    "REQ-0036"
+   ],
+   "visible": {},
+   "rewarded": {}
+  },
+  "luna12.gen3": {
+   "fails": [
+    "REQ-0030",
+    "REQ-0038",
+    "REQ-0041",
+    "REQ-0054",
+    "REQ-0094",
+    "REQ-0095"
+   ],
+   "visible": {
+    "SR": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ],
+    "CI_COMB": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ],
+    "CI_REFILL": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ]
+   },
+   "rewarded": {
+    "SR": [
+     "REQ-0036"
+    ]
+   }
+  },
+  "luna12.r0": {
+   "fails": [
+    "REQ-0036"
+   ],
+   "visible": {},
+   "rewarded": {}
+  },
+  "luna12.final": {
+   "fails": [
+    "REQ-0030",
+    "REQ-0038",
+    "REQ-0041",
+    "REQ-0054",
+    "REQ-0094",
+    "REQ-0095"
+   ],
+   "visible": {
+    "SR": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ],
+    "CI_COMB": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ],
+    "CI_REFILL": [
+     "REQ-0030",
+     "REQ-0038",
+     "REQ-0041",
+     "REQ-0054",
+     "REQ-0094",
+     "REQ-0095"
+    ]
+   },
+   "rewarded": {
+    "SR": [
+     "REQ-0036"
+    ]
+   }
+  }
+ }
+}

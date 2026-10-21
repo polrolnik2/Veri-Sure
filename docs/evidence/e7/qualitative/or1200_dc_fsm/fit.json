@@ -1,0 +1,409 @@
+{
+ "luna12.gen1": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "ERR_REFILL",
+   "CI_REFILL"
+  ],
+  "base_cells": 4207,
+  "base_edges": 1851,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna12.gen2": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "ACK_EVAL",
+   "CI_REFILL"
+  ],
+  "base_cells": 3403,
+  "base_edges": 1480,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna12.gen3": {
+  "flags": [
+   "SR",
+   "EXIT_EVAL",
+   "NO_ADDR_UP",
+   "CI_COMB",
+   "LATE_REFILL",
+   "BR_LOAD",
+   "ACK_EVAL",
+   "CI_REFILL",
+   "DWE_BR"
+  ],
+  "base_cells": 12401,
+  "base_edges": 4183,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna12.r0": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "CI_REFILL"
+  ],
+  "base_cells": 4110,
+  "base_edges": 1815,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna12.final": {
+  "flags": [
+   "SR",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "CI_REFILL",
+   "ACK_EVAL"
+  ],
+  "base_cells": 10488,
+  "base_edges": 3459,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna13.gen1": {
+  "flags": [
+   "SR",
+   "EXIT_EVAL",
+   "NO_ADDR_UP",
+   "CI_COMB",
+   "LATE_REFILL",
+   "BR_LOAD",
+   "ACK_EVAL"
+  ],
+  "base_cells": 12360,
+  "base_edges": 4153,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna13.gen2": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "CI_REFILL"
+  ],
+  "base_cells": 4201,
+  "base_edges": 1802,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna13.gen3": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "DWE_BR",
+   "BR_CI"
+  ],
+  "base_cells": 4097,
+  "base_edges": 1818,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna13.r0": {
+  "flags": [
+   "SR",
+   "EXIT_EVAL",
+   "NO_ADDR_UP",
+   "CI_COMB",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "ACK_CYC",
+   "CI_REFILL"
+  ],
+  "base_cells": 12166,
+  "base_edges": 4007,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna13.final": {
+  "flags": [
+   "SR",
+   "EXIT_EVAL",
+   "NO_ADDR_UP",
+   "CI_COMB",
+   "LATE_REFILL",
+   "BR_LOAD"
+  ],
+  "base_cells": 12451,
+  "base_edges": 4141,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna14.gen1": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "ERR_REFILL",
+   "ACK_CYC",
+   "CI_REFILL",
+   "DWE_BR",
+   "BR_CI"
+  ],
+  "base_cells": 4264,
+  "base_edges": 1906,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna14.gen2": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "LATE_REFILL",
+   "ACK_EVAL",
+   "CI_REFILL",
+   "DWE_BR",
+   "BR_CI"
+  ],
+  "base_cells": 4131,
+  "base_edges": 1835,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna14.gen3": {
+  "flags": [
+   "EXIT_EVAL",
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "ACK_EVAL",
+   "LATE_IDLE",
+   "ACK_CYC",
+   "BR_CI"
+  ],
+  "base_cells": 3704,
+  "base_edges": 1737,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna14.r0": {
+  "flags": [
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "ACK_ABORT",
+   "CI_REFILL",
+   "BR_CI"
+  ],
+  "base_cells": 2316,
+  "base_edges": 1280,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "luna14.final": {
+  "flags": [
+   "CI_COMB",
+   "NO_ADDR_UP",
+   "BR_LOAD",
+   "DWE_BR"
+  ],
+  "base_cells": 2246,
+  "base_edges": 1235,
+  "resid_cells": 0,
+  "resid_edges": 0,
+  "resid_ports": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ }
+}
