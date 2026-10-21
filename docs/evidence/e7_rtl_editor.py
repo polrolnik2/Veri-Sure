@@ -2,7 +2,7 @@
 
     e7_rtl_editor.py <run-dir> <out-dir> --spec <description.txt>
                      [--trials N] [--rounds R] [--rtl START.v] [--summary OUT.json]
-                     [--feedback checks|model]
+                     [--feedback checks|model] [--extra CHILD.v ...] [--include DIR ...]
 
 `e6_rtl_debug.py` generalised to any module. What it does, and nothing else:
 
@@ -30,6 +30,13 @@ model is one reading of the specification, not the specification, so under
 `checks` (the default) the editor sees the shipped checks alone: their verdicts
 on its own design's recording, the requirement text, the checks' source, and
 the design's own port values; it stops when no shipped check fails.
+
+**A CHILD IS A LIBRARY.** `--extra` (repeatable) names a pre-made child the
+specification says the design instantiates, and `--include` a header directory.
+They go to the generator's lint gate, the suite's build and the editor's lint,
+and to nothing else. Without them the generator's gate rejected a design that
+instantiated its child as specified ("Cannot find file containing module"), and
+the retry pushed it to write a stand-in child: i2c_master_byte_ctrl, 14 of 14.
 """
 from __future__ import annotations
 
@@ -59,7 +66,8 @@ def _opt(name, default=None):
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")
         and sys.argv[sys.argv.index(a) - 1] not in
-        ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback")]
+        ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback",
+         "--extra", "--include")]
 if len(args) < 2 or not _opt("--spec"):
     print(__doc__.strip().splitlines()[2])
     raise SystemExit(2)
@@ -70,6 +78,8 @@ ROUNDS = int(_opt("--rounds", 3))
 START = _opt("--rtl")
 SUMMARY = Path(_opt("--summary", str(OUT / "editor_summary.json")))
 FEEDBACK = _opt("--feedback", "checks")
+EXTRA = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--extra"]
+INCLUDE = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--include"]
 if FEEDBACK not in SpecflowReviewer.FEEDBACK:
     print(f"--feedback must be one of {SpecflowReviewer.FEEDBACK}")
     raise SystemExit(2)
@@ -153,6 +163,7 @@ reviewer = SpecflowReviewer(
                           refmodel_path=OUT / "ref_model.py",
                           bins=cov.get("bins") or []),
     hdl_toplevel=top, output_dir=OUT, stager=stager,
+    extra_sources=EXTRA, include_dirs=INCLUDE,
     oracles=oracles, contract=contract, feedback=FEEDBACK,
     requirements=load_requirement_views(OUT, contract))
 rtl_path = OUT / "rtl.sv"
@@ -196,7 +207,8 @@ async def _drive() -> None:
     else:
         ok, code = await RTLGenerator(cfg).chat(
             input_spec=spec, testbench="", interface="",
-            rtl_path=str(rtl_path), contract_json=contract_json)
+            rtl_path=str(rtl_path), contract_json=contract_json,
+            extra_sources=EXTRA, include_dirs=INCLUDE)
         if not ok or not code.strip():
             print("RTL generation produced nothing", flush=True)
             raise SystemExit(1)
@@ -242,6 +254,7 @@ SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
+    "extra_sources": EXTRA, "include_dirs": INCLUDE,
     "seconds": round(time.time() - t0),
     "history": history, "final": history[-1] if history else None,
     "usage": _usage_totals(),

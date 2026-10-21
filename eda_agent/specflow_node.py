@@ -331,6 +331,9 @@ class SpecflowReviewer:
         # at generation time would not be enough.
         self._extra = list(extra_sources)
         self._incs = list(include_dirs)
+        #: Public so `RTLEditor` lints with what this reviewer builds with.
+        self.extra_sources = tuple(str(x) for x in self._extra)
+        self.include_dirs = tuple(str(x) for x in self._incs)
         self._iteration = 0
         self.golden_rtl_path = None  # rtl_editor getattrs this
         #: Published to after every run, so `add_stimulus`'s "must currently be
@@ -952,6 +955,8 @@ async def run_specflow_node(
         interface="",
         rtl_path=str(rtl_path),
         contract_json=contract_json,
+        extra_sources=[str(p) for p in extra_sources],
+        include_dirs=[str(p) for p in include_dirs],
     )
     if not ok or not rtl_code.strip():
         detail["history"].append("RTL generation produced nothing")

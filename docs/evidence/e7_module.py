@@ -37,6 +37,10 @@ shipped set reviews it once, and no repair runs -- the editor's ablation.
 `--feedback` is passed to the editor: `checks` (its default) repairs against the
 shipped checks alone, `model` also hands it the reference model's values and
 source, as every editor run before the flag did. See `e7_rtl_editor.py`.
+
+A module with children (`i2c_master_byte_ctrl`) has them, and the task's header
+directories, passed to the editor as `--extra`/`--include`; one without children
+gets neither, so its jobs lint exactly as before.
 """
 from __future__ import annotations
 
@@ -117,6 +121,9 @@ def main() -> int:
                                  #: (a run cut short by a provider error, with its remaining budget).
                                  *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
                                  *(["--feedback", _opt("--feedback")] if _opt("--feedback") else []),
+                                 *[a for e in extras for a in ("--extra", e)],
+                                 *([a for d in (task, task.parent) for a in ("--include", str(d))]
+                                   if extras else []),
                                  "--summary", str(res_ed / "editor_summary.json")],
                   res_ed / "editor.log")
     if ok_ed or (editor / "rtl.sv").is_file():

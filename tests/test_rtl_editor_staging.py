@@ -270,9 +270,9 @@ def _committable(tmp_path, results, *, syntax=(True, ""), multi=(),
     import eda_agent.rtl_editor as mod
     s = _session(tmp_path) if rtl is None else _session(tmp_path, rtl)
     s.sim_reviewer = _Reviewer(results)
-    monkeypatch.setattr(mod, "check_syntax", lambda _p: syntax)
+    monkeypatch.setattr(mod, "check_syntax", lambda _p, *_lib: syntax)
     monkeypatch.setattr(mod, "multidriven_signals",
-                        lambda pth: set(multi) if str(pth).endswith("staged.sv") else set())
+                        lambda pth, *_lib: set(multi) if str(pth).endswith("staged.sv") else set())
     monkeypatch.setattr(s, "_refresh_trace", lambda **_kw: None)
     return s
 

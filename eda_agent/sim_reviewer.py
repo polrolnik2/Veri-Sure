@@ -147,7 +147,11 @@ def check_syntax(
 _MULTIDRIVEN_SIGNAL_RE = re.compile(r"%Warning-MULTIDRIVEN:.*?signal '([^']+)'", re.S)
 
 
-def multidriven_signals(rtl_path: str) -> set[str]:
+def multidriven_signals(
+    rtl_path: str,
+    extra_sources: "Sequence[str]" = (),
+    include_dirs: "Sequence[str]" = (),
+) -> set[str]:
     """Signals with more than one continuous driver, per Verilator.
 
     `check_syntax` is deliberately permissive about warnings, which is right for
@@ -172,7 +176,7 @@ def multidriven_signals(rtl_path: str) -> set[str]:
     arrived already broken.
     """
     try:
-        ok, out = check_syntax(rtl_path)
+        ok, out = check_syntax(rtl_path, extra_sources, include_dirs)
         obj = CommandResult.model_validate_json(out)
         text = (obj.stdout or "") + "\n" + (obj.stderr or "")
     except Exception:  # noqa: BLE001

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
@@ -536,7 +536,18 @@ class RTLGenerator:
         interface: str,
         rtl_path: str,
         contract_json: str,
+        extra_sources: Sequence[str] = (),
+        include_dirs: Sequence[str] = (),
     ) -> Tuple[bool, str]:
+        """Write `rtl_path` from the specification and contract, lint-gated.
+
+        `extra_sources` and `include_dirs` are the pre-made children the design
+        instantiates and the headers they include. The lint gate needs them:
+        linted alone, a design that instantiates its child exactly as the
+        specification says fails with "Cannot find file containing module", and
+        the retry prompt then pushes the model to write a stand-in child of its
+        own -- measured on i2c_master_byte_ctrl, 14 of 14 designs.
+        """
         self.reset()
         self.generated_tb = testbench
         self.generated_if = interface
@@ -576,7 +587,7 @@ class RTLGenerator:
             with open(rtl_path, "w") as f:
                 f.write(rtl_code)
             syntax_correct, syntax_output = await asyncio.to_thread(
-                check_syntax, rtl_path
+                check_syntax, rtl_path, extra_sources, include_dirs
             )
             if syntax_correct:
                 break
@@ -584,7 +595,9 @@ class RTLGenerator:
             prompt = f"{fmt}\n\n{order}"
         return (syntax_correct, rtl_code)
 
-    async def ablation_chat(self, input_spec: str, rtl_path: str) -> Tuple[bool, str]:
+    async def ablation_chat(self, input_spec: str, rtl_path: str,
+                            extra_sources: Sequence[str] = (),
+                            include_dirs: Sequence[str] = ()) -> Tuple[bool, str]:
         self.reset()
         self.generated_tb = None
         self.generated_if = None
@@ -608,7 +621,7 @@ class RTLGenerator:
             with open(rtl_path, "w") as f:
                 f.write(rtl_code)
             syntax_correct, syntax_output = await asyncio.to_thread(
-                check_syntax, rtl_path
+                check_syntax, rtl_path, extra_sources, include_dirs
             )
             if syntax_correct:
                 break

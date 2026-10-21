@@ -616,6 +616,13 @@ class _EditSession:
     #: `feedback` is "checks", so no message names a count that does not exist.
     count_noun: str = "mismatches"
     gradient_noun: str = "failing testpoints"
+    #: The pre-made children the design instantiates, and their headers, for
+    #: every lint this session runs. Without them a design that instantiates
+    #: its child as specified fails "Cannot find file containing module", so
+    #: every commit of it is rejected as a syntax error. `chat` takes them from
+    #: the reviewer, which already builds with them.
+    extra_sources: Tuple[str, ...] = ()
+    include_dirs: Tuple[str, ...] = ()
     #: Best (lowest) mismatch count seen this session, and the RTL that produced
     #: it. Recorded on every simulated edit regardless of accept/rollback, and
     #: restored before `chat()` returns -- so with the guard off the loop is
@@ -1094,7 +1101,7 @@ class _EditSession:
         """
         scratch = Path(self.output_dir) / "staged.sv"
         scratch.write_text(text, encoding="utf-8")
-        ok, out = check_syntax(str(scratch))
+        ok, out = check_syntax(str(scratch), *self._lib())
         # The AUTHORITATIVE multi-driver check, which `driver_warnings` only
         # approximates because it cannot afford Verilator per edit.
         warnings = list(self.driver_warnings())
@@ -1105,7 +1112,7 @@ class _EditSession:
         # check is the reverse: it sees any two writing blocks but cannot reason
         # about clocking it never parsed.
         try:
-            multi = sorted(set(multidriven_signals(str(scratch)))
+            multi = sorted(set(multidriven_signals(str(scratch), *self._lib()))
                            | overdriven_signals(text))
         except Exception:  # noqa: BLE001
             multi = []
@@ -1135,7 +1142,7 @@ class _EditSession:
             return ("the staged buffer does not compile, so a commit would be "
                     "rejected and would cost a trial")
         try:
-            pre = (set(multidriven_signals(self.rtl_path))
+            pre = (set(multidriven_signals(self.rtl_path, *self._lib()))
                    | overdriven_signals(self.read_rtl()))
         except Exception:  # noqa: BLE001
             pre = set()
@@ -1398,7 +1405,7 @@ class _EditSession:
 
         accepted = self.read_rtl()
         staged = self.staged_rtl
-        pre_multi = (set(multidriven_signals(self.rtl_path))
+        pre_multi = (set(multidriven_signals(self.rtl_path, *self._lib()))
                      | overdriven_signals(self.read_rtl()))
 
         ok, syntax_out, warnings, multi = self._static_findings(staged)
@@ -1475,6 +1482,10 @@ class _EditSession:
             # losing the agent's work is the cost staging exists to remove.
             judged["staged_kept"] = True
         return judged
+
+    def _lib(self) -> tuple[Tuple[str, ...], Tuple[str, ...]]:
+        """`(extra_sources, include_dirs)`, as `check_syntax` takes them."""
+        return self.extra_sources, self.include_dirs
 
     def _req_split(self) -> tuple[set, set, set] | None:
         """(passing, failing, uncovered) requirement uids, or None if unknown.
@@ -1935,7 +1946,7 @@ class _EditSession:
         req_before = self._accepted_req_split
         if req_before is None:
             req_before = self._accepted_req_split = self._req_split()
-        is_syntax_correct, syntax_output = check_syntax(self.rtl_path)
+        is_syntax_correct, syntax_output = check_syntax(self.rtl_path, *self._lib())
         result["is_syntax_correct"] = is_syntax_correct
         result["syntax_output"] = syntax_output
         if not is_syntax_correct:
@@ -1947,7 +1958,7 @@ class _EditSession:
         # nit, and check_syntax is deliberately permissive about warnings so it
         # sails through. Reject BEFORE simulating: the sim would either mask it
         # (last-writer-wins) or blame the datapath for an X.
-        new_multi = (set(multidriven_signals(self.rtl_path))
+        new_multi = (set(multidriven_signals(self.rtl_path, *self._lib()))
                      | overdriven_signals(self.read_rtl()))
         introduced = new_multi - (pre_multidriven or set())
         if introduced:
@@ -2766,6 +2777,10 @@ class RTLEditor:
             requirements=self._requirements,
             contract=self._contract,
         )
+        self._session.extra_sources = tuple(
+            str(x) for x in getattr(self.sim_reviewer, "extra_sources", ()) or ())
+        self._session.include_dirs = tuple(
+            str(x) for x in getattr(self.sim_reviewer, "include_dirs", ()) or ())
         if checks_only:
             self._session.count_noun = "failing check instances"
             self._session.gradient_noun = "failing check instances"
