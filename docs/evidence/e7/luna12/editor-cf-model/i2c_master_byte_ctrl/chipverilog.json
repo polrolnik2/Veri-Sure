@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "flow": "equivalence",
+  "proof_type": "bounded_seq",
+  "reason": "equivalence passed (bounded, k=16, zero-initialized state)",
+  "reference_precheck": "pass",
+  "interface_status": "compatible",
+  "formal_status": "equivalent_bounded",
+  "compile_gate_status": "pass"
+}
