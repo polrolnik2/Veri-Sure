@@ -24,7 +24,8 @@ sys.path.insert(0, "/home/user/Veri-Sure")
 sys.path.insert(0, "/home/user/Veri-Sure/benchmarks")
 from eda_agent.strip_probes import deliverable  # noqa: E402
 from run_chipverilog import child_sources, submodules  # noqa: E402
-from specflow.ports import asserted_resets, idle_values, pinned_inputs  # noqa: E402
+from specflow.ports import (asserted_resets, idle_values, inactive_value,  # noqa: E402
+                            is_reset, pinned_inputs)
 from specflow.refmodel.oracles import EDGE_BUDGET  # noqa: E402
 from specflow.tb.runtime import (SETTLE_EDGES, bus_lines_from, is_reset_step,  # noqa: E402
                                  normalise_step, reset_ports)
@@ -43,6 +44,12 @@ ins = [p["name"] for p in C0["io"] if p["dir"] == "input" and p["name"] != clock
 outs = [p["name"] for p in C0["io"] if p["dir"] == "output"]
 W = {p["name"]: int(p.get("width") or 1) for p in C0["io"]}
 bus = [b for b in bus_lines_from(C0) if b["input"] in ins and b["oen"] in outs]
+#: **THE TESTBENCH'S PER-TESTPOINT RESET** (`Env.reset`): every input idle, every declared reset
+#: asserted for 2 edges, then released for 1 -- run before EVERY testpoint, not recorded. Without it
+#: a testpoint whose stimulus starts without a reset step (34-82% of them) inherited the previous
+#: testpoint's state, while the reference model's rows start fresh.
+IDLE = dict(idle_values(C0))
+RESETS = [n for n in ins if is_reset(n)]
 
 
 def program(run: str) -> Path:
@@ -92,7 +99,15 @@ def tb() -> str:
           '    if (!$value$plusargs("in=%s", fin) || !$value$plusargs("out=%s", fout)) $finish;',
           '    fi = $fopen(fin, "r"); fo = $fopen(fout, "w"); rows = 0; exh = 0;',
           '    while ($fscanf(fi, "%d", typ) == 1) begin',
-          '      if (typ == 0) begin $fwrite(fo, "#\\n"); rows = 0; exh = 0; end',
+          '      if (typ == 0) begin',
+          '        $fwrite(fo, "#\\n"); rows = 0; exh = 0;']
+    L += [f"        i_{n} = {int(IDLE.get(n, 0) or 0)};" for n in ins if n not in RESETS]
+    L += [f"        i_{n} = {1 - inactive_value(n)};" for n in RESETS]
+    wire = [f"if (o_{b['oen']} === 1'b0) i_{b['input']} = 1'b0;" for b in bus]
+    L += [f"        repeat (2) begin #1; {' '.join(wire)} #1; #1 {clock} = 1; #1 {clock} = 0; end"]
+    L += [f"        i_{n} = {inactive_value(n)};" for n in RESETS]
+    L += [f"        #1; {' '.join(wire)} #1; #1 {clock} = 1; #1 {clock} = 0;",
+          '      end',
           "      else begin",
           '        r = $fscanf(fi, "%d %d %h", n, ui, uv);']
     L += [f'        r = $fscanf(fi, "%h", n_{n});' for n in ins]

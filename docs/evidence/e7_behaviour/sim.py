@@ -19,6 +19,7 @@ sys.path.insert(0, "/home/user/Veri-Sure")
 sys.path.insert(0, "/home/user/Veri-Sure/benchmarks")
 from eda_agent.strip_probes import deliverable  # noqa: E402
 from run_chipverilog import child_sources, submodules  # noqa: E402
+from specflow.ports import idle_values, inactive_value, is_reset  # noqa: E402
 
 #: Working tree (stimulus, traces, metrics): large and regenerable, so outside the repo.
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
@@ -36,6 +37,13 @@ stims = {r: json.loads((EQ / "stim" / r / f"{mod}.json").read_text()) for r in r
 S0 = stims[runs[0]]
 clock = S0["clock"]
 ins = [n for n in S0["inputs"] if n != clock]
+#: **THE TESTBENCH'S PER-TESTPOINT RESET** (`Env.reset`): every input idle, every declared reset
+#: asserted for 2 edges, then released for 1 -- run before EVERY testpoint, not recorded. Without it
+#: a testpoint whose stimulus starts without a reset step (34-82% of them) inherited the previous
+#: testpoint's state, while the reference model's rows start fresh.
+C0 = json.loads((EQ / "corpora" / runs[0] / mod / "contract.json").read_text())
+IDLE = dict(idle_values(C0))
+RESETS = [n for n in ins if is_reset(n)]
 outs = S0["outputs"]
 W = S0["width"]
 
@@ -79,7 +87,14 @@ def tb() -> str:
         '    if (!$value$plusargs("in=%s", fin) || !$value$plusargs("out=%s", fout)) $finish;',
         '    fi = $fopen(fin, "r"); fo = $fopen(fout, "w");',
         '    while ($fscanf(fi, "%d", typ) == 1) begin',
-        '      if (typ == 0) $fwrite(fo, "#\\n");',
+        '      if (typ == 0) begin',
+        '        $fwrite(fo, "#\\n");',
+        *[f"        i_{n} = {int(IDLE.get(n, 0) or 0)};" for n in ins if n not in RESETS],
+        *[f"        i_{n} = {1 - inactive_value(n)};" for n in RESETS],
+        f"        repeat (2) begin #2; #1 {clock} = 1; #1 {clock} = 0; end",
+        *[f"        i_{n} = {inactive_value(n)};" for n in RESETS],
+        f"        #2; #1 {clock} = 1; #1 {clock} = 0;",
+        '      end',
         "      else begin",
     ]
     L += [f'        r = $fscanf(fi, "%h", i_{n});' for n in ins]

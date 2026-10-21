@@ -1,5 +1,18 @@
 # Measuring behaviour when there is no golden in the loop
 
+> **CORRECTION PENDING (2026-10-21).** The figures below came from harnesses
+> that ran each corpus's testpoints back to back WITHOUT the shipped
+> testbench's per-testpoint reset (`Env.reset`: idle inputs, resets asserted
+> for 2 edges, released). Only 18–66% of testpoints start with a reset step,
+> so the rest inherited the previous testpoint's state.
+> - **Still valid:** the behaviour-class counts (any trace difference proves two
+>   designs differ) and the harness-vs-formal validation.
+> - **Distorted:** per-testpoint shares, and agreement with the run's reference
+>   model, which is understated because its rows start fresh.
+>
+> Both harnesses now run the reset before every testpoint. The figures will be
+> replaced from the corrected rerun.
+
 ## The constraint, and the two kinds of metric it forces
 
 In a run there is no golden design. Anything that chooses -- a sample, a repair,
