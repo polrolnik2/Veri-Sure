@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from specflow.refmodel.oracle_gen import RequirementOracle
 from specflow.refmodel.oracles import decide_all
-from specflow.refmodel.rtl_trace import decide_rtl_instances
+from specflow.refmodel.rtl_trace import decide_rtl_each
 
 CONTRACT = {
     "module_name": "m",
@@ -87,8 +87,8 @@ def test_the_suite_that_ships_decides_at_the_SAME_scope_as_the_screen():
     the stage accepted."""
     import inspect
 
-    #: The loop lives in `decide_rtl_instances`; `decide_rtl` folds it.
-    src = inspect.getsource(decide_rtl_instances)
+    #: The loop lives in `decide_rtl_each`; `decide_rtl` folds it.
+    src = inspect.getsource(decide_rtl_each)
     assert "scope = sorted(traces_by_tp)" in src, (
         "the shipped suite narrowed back to tp_uids while the screen stayed "
         "wide -- the two have to move together")
@@ -105,4 +105,4 @@ def test_both_scopes_are_stated_in_the_same_terms():
     from specflow.refmodel import rtl_trace
 
     assert "EVERY TESTPOINT THE STIMULUS HAS" in inspect.getdoc(decide_all)
-    assert "EVERY RECORDED TRACE" in inspect.getsource(rtl_trace.decide_rtl_instances)
+    assert "EVERY RECORDED TRACE" in inspect.getsource(rtl_trace.decide_rtl_each)

@@ -142,6 +142,23 @@ def test_model_feedback_is_unchanged(tmp_path, monkeypatch):
     assert rev.req_results["REQ-0001"][0].ok is True
 
 
+def test_only_checks_mode_keeps_instances_and_never_their_rows(tmp_path, monkeypatch):
+    """Every result carries its own copy of the judged rows; keeping them all ran
+    an i2c job out of memory. Model mode keeps nothing beyond the fold."""
+    _write(tmp_path / "suite", "TP-0000", [0, 0, 5, 5])
+    _write(tmp_path / "suite", "TP-0001", [0, 0, 0, 0])
+    o = [_oracle("REQ-0001", STRICT, ("TP-0000", "TP-0001"))]
+    model = _reviewer(tmp_path, monkeypatch, o, feedback="model")
+    model.review()
+    assert model._instances == [] and model._traces == {}
+    checks = _reviewer(tmp_path, monkeypatch, o, feedback="checks")
+    checks.review()
+    kept = [r for _u, rs in checks._instances for r in rs]
+    assert [r.tp_uid for r in kept] == ["TP-0000"], "the failing instance only"
+    assert all(r.rows == [] for r in kept)
+    assert checks.req_results["REQ-0001"][0].rows, "the folded result keeps its rows"
+
+
 def test_an_unknown_feedback_is_refused(tmp_path):
     from eda_agent.specflow_node import SpecflowReviewer
     with pytest.raises(ValueError, match="feedback"):
@@ -174,13 +191,13 @@ def test_describe_respects_its_budget():
 
 def test_decide_rtl_is_the_fold_of_its_instances(tmp_path):
     from specflow.refmodel.oracles import _worst
-    from specflow.refmodel.rtl_trace import (decide_rtl, decide_rtl_instances,
+    from specflow.refmodel.rtl_trace import (decide_rtl, decide_rtl_each,
                                              load_traces)
     _write(tmp_path, "TP-0000", [0, 0, 5])
     _write(tmp_path, "TP-0001", [0, 0, 0])
     traces = load_traces(tmp_path / "results")
     oracles = [_oracle("REQ-0001", STRICT), _oracle("REQ-0002", LAX)]
-    each = decide_rtl_instances(oracles, traces, CONTRACT)
+    each = list(decide_rtl_each(oracles, traces, CONTRACT))
     assert [u for u, _rs in each] == ["REQ-0001", "REQ-0002"]
     assert [r.ok for r in each[0][1]] == [False, True]
     assert decide_rtl(oracles, traces, CONTRACT) == [_worst(u, rs) for u, rs in each]

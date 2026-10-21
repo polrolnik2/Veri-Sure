@@ -190,8 +190,8 @@ def format_check_failures(
     values of the ports that check reads around the first of them. Nothing in
     it comes from the model.
 
-    `instances` is `decide_rtl_instances`' output: every check body's verdict
-    on every testpoint, before the fold.
+    `instances` is `decide_rtl_each`'s output, `(req_uid, results)` per check
+    body before the fold; only the results with `ok is False` are read.
     """
     from .explain import _boundary
 
@@ -319,8 +319,9 @@ class SpecflowReviewer:
         #: `{req_uid: RequirementView}`, for the requirement text in a checks
         #: payload. Optional: without it the payload names uids only.
         self._requirements = dict(requirements or {})
-        #: `decide_rtl_instances`' output and the recording it judged, from the
-        #: LAST run. The checks payload is built from these.
+        #: Under "checks" only: the FAILING per-testpoint verdicts of the LAST
+        #: run, `[(req_uid, [OracleResult])]` with their row copies dropped, and
+        #: the recording they judged. The checks payload is built from these.
         self._instances: list = []
         self._traces: dict = {}
         self._built = built
@@ -531,21 +532,29 @@ class SpecflowReviewer:
         if not self._oracles:
             return {}
         try:
-            from specflow.refmodel.rtl_trace import decide_rtl_instances, load_traces
+            from specflow.refmodel.rtl_trace import decide_rtl_each, load_traces
             traces = load_traces(Path(self._built.suite_dir) / "results")
         except Exception:  # noqa: BLE001
             logger.debug("no traces to decide requirements against", exc_info=True)
             return {}
+        from dataclasses import replace
+
+        from specflow.refmodel.oracles import _worst
+        #: `decide_rtl` is exactly this fold. Folding here, one oracle at a
+        #: time, also keeps what the checks payload counts -- the failing
+        #: instances, WITHOUT their row copies: every result holds its own, and
+        #: keeping them all is what ran an i2c job to 3 GB and out of memory.
+        results, failing = [], []
         try:
-            instances = decide_rtl_instances(self._oracles, traces, self._contract)
+            for u, rs in decide_rtl_each(self._oracles, traces, self._contract):
+                results.append(_worst(u, rs))
+                if self.feedback == "checks":
+                    failing.append((u, [replace(r, rows=[]) for r in rs if r.ok is False]))
         except Exception:  # noqa: BLE001
             logger.debug("deciding the frozen oracles failed", exc_info=True)
             return {}
-        from specflow.refmodel.oracles import _worst
-        #: `decide_rtl` is exactly this fold; deciding once and folding here
-        #: keeps the per-testpoint verdicts the checks payload counts.
-        results = [_worst(u, rs) for u, rs in instances]
-        self._instances, self._traces = instances, traces
+        if self.feedback == "checks":
+            self._instances, self._traces = failing, traces
         # EACH TESTPOINT HAS ITS OWN WAVEFORM, so publish the map too. A single
         # `session.vcd_path` cannot be right for every requirement -- `run_suite`
         # writes `wave_{iteration}_{module}.vcd` per testpoint, one process each

@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from typing import Iterator
 
 from .oracles import (OracleResult, RequirementOracle, _worst, decide,
                       ports_read, transactional_view)
@@ -263,12 +264,12 @@ def decide_rtl(
     silences a whole testpoint because one signal the check never mentions was
     missing.
     """
-    return [_worst(uid, results) for uid, results in decide_rtl_instances(
+    return [_worst(uid, results) for uid, results in decide_rtl_each(
         oracles, traces_by_tp, contract, side=side, transactional=transactional,
         stimulus_by_tp=stimulus_by_tp)]
 
 
-def decide_rtl_instances(
+def decide_rtl_each(
     oracles: list[RequirementOracle],
     traces_by_tp: dict[str, dict],
     contract: dict,
@@ -276,13 +277,17 @@ def decide_rtl_instances(
     side: str = "dut",
     transactional: bool = True,
     stimulus_by_tp: dict[str, list] | None = None,
-) -> list[tuple[str, list[OracleResult]]]:
+) -> Iterator[tuple[str, list[OracleResult]]]:
     """`decide_rtl` before the fold: every oracle's verdict on every testpoint.
 
-    `(req_uid, results)` per oracle, in oracle order. The fold is the
+    Yields `(req_uid, results)` per oracle, in oracle order. The fold is the
     requirement's STATE; this is the count beneath it, which a repair loop needs
     as its gradient -- a requirement failing on thirty testpoints and one failing
     on one both fold to a single FAILS.
+
+    A GENERATOR, because every result carries its own copy of the judged rows.
+    Materialising all of them at once held oracles x testpoints row lists -- about
+    3 GB per i2c job -- where folding as it goes holds one oracle's.
     """
     if stimulus_by_tp is not None:
         # RAISES, and deliberately. A verdict computed against the wrong
@@ -321,7 +326,6 @@ def decide_rtl_instances(
         for _p in declared_width_gap(_t, contract):
             wide_anywhere[_p] = wide_anywhere.get(_p, 0) + _n_rows
 
-    out: list[tuple[str, list[OracleResult]]] = []
     #: **EVERY RECORDED TRACE, NOT THE ONES `tp_uids` NAMES -- AND THIS HAD TO
     #: MOVE WITH THE STAGE'S SCOPE OR NEITHER SHOULD HAVE MOVED.** The oracle
     #: stage screens a check by replaying it wherever the stimulus goes,
@@ -388,8 +392,7 @@ def decide_rtl_instances(
             # a conviction (`explain`, every waveform tool) has to show all of
             # them or guess.
             results.append(replace(result, tp_uid=tp))
-        out.append((oracle.req_uid, results))
-    return out
+        yield oracle.req_uid, results
 
 
 def load_traces(results_dir: Path | str) -> dict[str, dict]:
