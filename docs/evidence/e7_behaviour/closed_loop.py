@@ -33,6 +33,7 @@ from specflow.tb.runtime import (SETTLE_EDGES, bus_lines_from, is_reset_step,  #
 #: Working tree (stimulus, traces, metrics): large and regenerable, so outside the repo.
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
 E = Path("/home/user/Veri-Sure/docs/evidence/e7")
+CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "cf-model": "cfm"}
 DES = Path("/home/user/Veri-Sure/benchmarks/chipverilog/Des")
 mod = sys.argv[1]
 runs = [r for r in ("luna12", "luna13", "luna14", "luna15") if (EQ / "corpora" / r / mod).is_dir()]
@@ -145,6 +146,12 @@ def designs():
             d[f"{r}.r0"] = [w / "r0.sv"]
         if (ed / "rtl_deliverable.sv").is_file():
             d[f"{r}.final"] = [ed / "rtl_deliverable.sv"]
+        #: The checks-only feedback rerun (`CHECKS-FEEDBACK.md`): `cfc` and `cfm` repair one start
+        #: under checks-only and model feedback; `cfg` is byte_ctrl's start, generated with its child.
+        for tag, key in CF_TAGS.items():
+            f = E / r / f"editor-{tag}" / mod / "rtl_deliverable.sv"
+            if f.is_file():
+                d[f"{r}.{key}"] = [f]
     return d
 
 

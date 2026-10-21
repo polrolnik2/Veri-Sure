@@ -36,9 +36,21 @@ abl = {
     for r in json.loads((E / "ABLATION.json").read_text())
 }
 edj = {(r["run"], r["module"]): r for r in json.loads((E / "EDITOR.json").read_text())}
+#: The checks-only feedback rerun's kinds -> editor tag, and the arm each is reported under. Arms of
+#: their own, so the generated/repaired figures of `BEHAVIOUR.md` are unchanged by their presence.
+CF = {"cfg": "cf-gen", "cfc": "cf-checks", "cfm": "cf-model"}
+ARM = {"final": "repaired", "cfg": "generated-child", "cfc": "checks-repaired",
+       "cfm": "model-repaired-rerun"}
+
+
+def _cf(run, mod, kind, name):
+    f = E / run / f"editor-{CF[kind]}" / mod / name
+    return json.loads(f.read_text()) if f.is_file() else None
 
 
 def verdict(run, mod, kind):
+    if kind in CF:
+        return (_cf(run, mod, kind, "chipverilog.json") or {}).get("status")
     if kind.startswith("gen"):
         return abl[(run, mod, kind)]["verdict"]
     if kind == "final":
@@ -48,6 +60,9 @@ def verdict(run, mod, kind):
 
 
 def ship(run, mod, kind):
+    if kind in CF:
+        h = _cf(run, mod, kind, "editor_summary.json")["final"]
+        return h["pass"] / h["requirements"]
     if kind.startswith("gen"):
         r = abl[(run, mod, kind)]
     elif kind == "final":
@@ -179,7 +194,7 @@ for mod in MODS:
                 "module": mod,
                 "run": run,
                 "kind": kind,
-                "arm": "repaired" if kind == "final" else "generated",
+                "arm": ARM.get(kind, "generated"),
                 "verdict": verdict(run, mod, kind),
                 "class": cls,
                 "golden_class": cls == gfp,

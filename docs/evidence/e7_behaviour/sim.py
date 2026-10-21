@@ -24,6 +24,7 @@ from specflow.ports import idle_values, inactive_value, is_reset  # noqa: E402
 #: Working tree (stimulus, traces, metrics): large and regenerable, so outside the repo.
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
 E = Path("/home/user/Veri-Sure/docs/evidence/e7")
+CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "cf-model": "cfm"}
 DES = Path("/home/user/Veri-Sure/benchmarks/chipverilog/Des")
 mod = sys.argv[1]
 runs = [
@@ -67,6 +68,12 @@ def designs():
             d[f"{r}.r0"] = [w / "r0.sv"]
         if (ed / "rtl_deliverable.sv").is_file():
             d[f"{r}.final"] = [ed / "rtl_deliverable.sv"]
+        #: The checks-only feedback rerun (`CHECKS-FEEDBACK.md`): `cfc` and `cfm` repair one start
+        #: under checks-only and model feedback; `cfg` is byte_ctrl's start, generated with its child.
+        for tag, key in CF_TAGS.items():
+            f = E / r / f"editor-{tag}" / mod / "rtl_deliverable.sv"
+            if f.is_file():
+                d[f"{r}.{key}"] = [f]
     return d
 
 
