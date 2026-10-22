@@ -31,7 +31,8 @@ This rerun asks what repair does when all five are replaced by the shipped check
 - **Fidelity check.** The suites were rebuilt from the corpora as `integration.py` renders
   them. All 7 original round-0 designs reproduce their original review exactly, failing
   requirement lists included.
-- **Jobs.** 10 jobs, 19 of 20 arms finished; luna13 byte_ctrl's checks arm is pending.
+- **Jobs.** 10 jobs, 20 arms, all finished. luna13 byte_ctrl's checks arm was resumed
+  after interruptions; see its `RESUME.md`.
 - **Scoring** uses the behaviour harness (`BEHAVIOUR.md`, with the per-testpoint reset) and
   ChipVerilog. Golden is used for scoring only.
 
@@ -39,23 +40,24 @@ This rerun asks what repair does when all five are replaced by the shipped check
 
 | | start | checks arm | model arm |
 |---|---|---|---|
-| edges equal to golden, mean of 8 jobs (excl. sb luna13) | 64.5% | 56.5% | 54.1% |
-| agreement with the run's reference model, same 8 | 60.4% | **61.8%** | **72.2%** |
-| same, all 9 paired jobs | 58.6% | 59.8% | 75.3% |
-| jobs where golden agreement fell / rose (edges, of 9) | | 4 / 4 | 7 / 1 |
-| shipped checks passed, mean of 9 | | 82.5% | 90.3% |
-| ChipVerilog pass, of 9 | | 1 (sb luna13, induction) | 1 (byte_ctrl luna12, bounded k=16 only; see below) |
-| mean model calls / trials / hours per job | | 218 / 8.3 / 2.6 | 297 / 10.3 / 3.0 |
+| edges equal to golden, mean of 9 jobs (excl. sb luna13) | 61.1% | 53.7% | 53.0% |
+| agreement with the run's reference model, same 9 | 54.3% | **55.5%** | **64.8%** |
+| same, all 10 jobs | 53.3% | 54.4% | 68.3% |
+| jobs where golden agreement fell / rose (edges, of 10) | | 5 / 4 | 7 / 2 |
+| shipped checks passed, mean of 10 | 68.8% | 82.0% | 87.2% |
+| ChipVerilog pass, of 10 | | 1 (sb luna13, induction) | 1 (byte_ctrl luna12, bounded k=16 only; see below) |
+| mean model calls / trials / hours per job | | 214 / 9.2 / 2.5 | 297 / 10.3 / 3.0 |
 
 1. **Without the model in the feedback, repair no longer moves designs onto the
    reference model.** Under model feedback, agreement with the run's reference model
-   rises 12–17 points. Under checks only it stays where the start was, and it is lower
-   than the model arm in 7 of 9 jobs.
+   rises 10–15 points. Under checks only it stays where the start was (+1 point), and it
+   is lower than the model arm in 8 of 10 jobs. (Calls and hours for luna13 byte_ctrl's
+   checks arm count only its final resume; its trials count the whole chain.)
 2. **That does not make repair move designs toward golden.** Both arms end further from
-   golden than they started: 8 and 10 points, on average, excluding sb luna13. The checks
+   golden than they started: 7 and 8 points, on average, excluding sb luna13. The checks
    come from the same reading as the reference model, so they carry the same misreadings,
-   and repair satisfies them. Checks-only feedback lost golden agreement in 4 of 9 jobs,
-   model feedback in 7 of 9.
+   and repair satisfies them. Checks-only feedback lost golden agreement in 5 of 10 jobs,
+   model feedback in 7 of 10.
 3. **The largest single difference is sb luna13.** The start is formally equivalent to
    golden.
    - **Checks arm:** found no edit the checks would latch (28/7/31 for all 3 rounds) and
@@ -76,11 +78,17 @@ This rerun asks what repair does when all five are replaced by the shipped check
    90–96% of edges equal to golden and stays there under either arm (89.6–96.1%). On
    whole testpoints the arms split in opposite directions on two runs: luna12 favours
    model (81.6 vs 69.5), luna13 favours checks (83.1 vs 75.3).
-6. **Checks-only feedback is not weaker at satisfying the checks.** It went further than
-   model feedback on bit_ctrl luna12 (87 vs 81 passing) and byte_ctrl luna14 (80 vs 72).
-   It went less far on byte_ctrl luna12 (56 vs 70) and dc_fsm luna12. It made about a
-   quarter fewer model calls per job (218 vs 297), mostly by stopping earlier when nothing
-   latches.
+6. **Checks-only feedback is not weaker at satisfying the checks.**
+   - It went further than model feedback on 3 jobs: bit_ctrl luna12 (87 vs 81 passing),
+     byte_ctrl luna14 (80 vs 72) and byte_ctrl luna13 (75 vs 58).
+   - It went less far on 3: byte_ctrl luna12 (56 vs 70), dc_fsm luna12 (67 vs 77) and
+     sb luna13, where it kept the equivalent start.
+   - The other 4 tie.
+   - It made about a quarter fewer model calls per job (214 vs 297), mostly by stopping
+     earlier when nothing latches.
+
+   Passing more checks is not progress: on byte_ctrl luna13 the checks arm passes 75 to the
+   model arm's 58 yet matches golden on fewer edges (31.0% vs 43.7%).
 
 ### Per job
 
@@ -103,7 +111,7 @@ repaired a different, stand-in start.
 | byte_ctrl luna13 | start (real child) | function_fail | 50.5 | 34.4 | 21.4 | 21.5 | 5.6 |
 | | original final | function_fail | 73.2 | 6.7 | 11.4 | 11.5 | 84.8 |
 | | **model** | function_fail | 59.8 | 43.7 | 20.0 | 27.4 | 5.5 |
-| | **checks** | *pending* | | | | | |
+| | **checks** | function_fail | 77.3 | 31.0 | 19.5 | 20.0 | 5.4 |
 | byte_ctrl luna14 | start (real child) | function_fail | 73.5 | 16.7 | 13.8 | 19.6 | 7.4 |
 | | original final | function_fail | 60.2 | 4.2 | 11.3 | 11.4 | 3.9 |
 | | **model** | function_fail | 73.5 | 16.7 | 13.8 | 19.6 | 7.4 |
@@ -145,7 +153,7 @@ every lint (41958ed), all three new generations instantiate it as `bit_controlle
 | generated, stand-in child | 11 | 5.1% (0.0–8.1) | 8.2% | 47.5% | 76.7% |
 | repaired, stand-in child | 3 | 4.2% (1.9–6.7) | 7.6% | 46.5% | 71.7% |
 | **generated, real child** | 3 | **31.3%** (16.7–42.7) | **20.7%** | **61.0%** | **61.0%** |
-| real child, then repaired (both arms) | 5 | 31.0% (16.1–43.8) | 18.8% | 60.4% | 71.6% |
+| real child, then repaired (both arms) | 6 | 31.0% (16.1–43.8) | 19.0% | 60.0% | 72.6% |
 
 - **Golden agreement:** about 6× more edges equal golden with the real child. The worst
   real-child design beats the best stand-in design.
@@ -164,7 +172,7 @@ at 100%.
 
 1. **Stop calling the reference model expected.** With checks-only feedback, repair stops
    rendering the model's reading in RTL: reference-model agreement stays flat instead of
-   rising 12–17 points, at no loss of check-satisfying power.
+   rising 10–15 points, and the checks are satisfied about as well.
 2. **It is not sufficient on its own.** The checks were drawn from the same reading as the
    model, so repair against them still imports the shared misreadings. That is the luna14 sb
    result under both arms, and the mean loss of golden agreement under both. The fix is the
@@ -182,13 +190,15 @@ at 100%.
   points between arms are within that noise. sb luna13 and luna14, both equivalent starts,
   show that even the direction of the outcome can depend on whether the editor happens on
   the configuration move.
-- **luna13 byte_ctrl, checks arm, is pending.**
-  - First attempt: killed when memory ran out (the reviewer kept every check's per-testpoint
-    rows; fixed in 4eba03f).
-  - Rerun: crashed on a provider 5xx during round 1's repair.
-  - First resume: crashed on a gateway connection reset.
-  - Now: resumed again with round 1's budget, 2 rounds and 10 trials, from the last
-    accepted design.
+- **luna13 byte_ctrl, checks arm, took six launches (five interruptions).**
+  - An OOM kill: the reviewer kept every check's per-testpoint rows; fixed in 4eba03f.
+  - A provider 5xx.
+  - Two gateway connection resets.
+  - A container restart.
+
+  Its `RESUME.md` records which work each launch kept. The final design's chain used 20
+  trials over 3 rounds, like every other job, but its round-1 repair was attempted more than
+  once.
 - **luna12 dc_fsm, model arm:** its probe-port `rtl.sv` was lost after the job finished; see
   that directory's `NOTE.md`. The deliverable ChipVerilog graded, and that the harness
   simulates, was recovered.

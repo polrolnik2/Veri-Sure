@@ -1,7 +1,8 @@
 # luna13 i2c_master_byte_ctrl, checks-feedback arm -- a resumed run
 
 The start is the generation with the real child (`../../editor-cf-gen/`, 49/27/21). The arm
-needed five launches to finish; `editor_summary.json` and `chipverilog.json` cover the last.
+needed six launches (five interruptions) to finish; `editor_summary.json` and
+`chipverilog.json` cover the last.
 
 1. **First attempt:** killed by the container's memory cgroup after round 1 (58/20/19). The
    reviewer held every check's per-testpoint rows at the time; fixed in 4eba03f. Discarded;
