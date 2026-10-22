@@ -120,6 +120,9 @@ The same checks are no better as a selector than as an objective. Until the chec
 the generator's misreadings (`QUALITATIVE.md`), the check score is not evidence of behaviour, for
 repair or for choosing among samples. Agreement between independent samples is.
 
+`REPAIR-ANATOMY.md` shows why, output by output. The fixes are real but touch rare events. Edits
+made for one check break outputs no check watches, and 82% of the editing is reverted.
+
 `CHECKS-VS-ABLATION-ROBUST.md` tests this verdict against every other metric the harness records,
 a random stimulus, paired and pooled baselines, outliers, significance, cost and the byte_ctrl
 codes. "No better" survives all of them; "worse" rests on one job.
