@@ -24,7 +24,9 @@ from specflow.ports import idle_values, inactive_value, is_reset  # noqa: E402
 #: Working tree (stimulus, traces, metrics): large and regenerable, so outside the repo.
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
 E = Path("/home/user/Veri-Sure/docs/evidence/e7")
-CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "cf-model": "cfm"}
+CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "cf-model": "cfm",
+           #: byte_ctrl generation-only samples with the real child: its like-for-like ablation
+           "abl-child-gen1": "acg1", "abl-child-gen2": "acg2", "abl-child-gen3": "acg3"}
 DES = Path("/home/user/Veri-Sure/benchmarks/chipverilog/Des")
 mod = sys.argv[1]
 runs = [

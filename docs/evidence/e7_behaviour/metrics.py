@@ -38,9 +38,11 @@ abl = {
 edj = {(r["run"], r["module"]): r for r in json.loads((E / "EDITOR.json").read_text())}
 #: The checks-only feedback rerun's kinds -> editor tag, and the arm each is reported under. Arms of
 #: their own, so the generated/repaired figures of `BEHAVIOUR.md` are unchanged by their presence.
-CF = {"cfg": "cf-gen", "cfc": "cf-checks", "cfm": "cf-model"}
+CF = {"cfg": "cf-gen", "cfc": "cf-checks", "cfm": "cf-model",
+      "acg1": "abl-child-gen1", "acg2": "abl-child-gen2", "acg3": "abl-child-gen3"}
 ARM = {"final": "repaired", "cfg": "generated-child", "cfc": "checks-repaired",
-       "cfm": "model-repaired-rerun"}
+       "cfm": "model-repaired-rerun", "acg1": "generated-child", "acg2": "generated-child",
+       "acg3": "generated-child"}
 
 
 def _cf(run, mod, kind, name):
