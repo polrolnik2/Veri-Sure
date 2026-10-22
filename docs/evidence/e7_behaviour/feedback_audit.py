@@ -99,7 +99,37 @@ def udiff(before, after, bid):
                                         fromfile=f"{bid}.before", tofile=f"{bid}.after", n=2))
 
 
+def reverse_patch(after, recorded):
+    """The block's text before the edit, from its text after and the recorded unified diff."""
+    al = after.splitlines(keepends=True)
+    out, ptr = [], 0
+    lines = recorded.splitlines(keepends=True)
+    i = 0
+    while i < len(lines):
+        m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", lines[i])
+        i += 1
+        if not m:
+            continue
+        c, d = int(m.group(1)), int(m.group(2) if m.group(2) is not None else 1)
+        upto = c if d == 0 else c - 1
+        out += al[ptr:upto]
+        ptr = upto
+        while i < len(lines) and not lines[i].startswith("@@"):
+            ln = lines[i]
+            if ln[:1] in (" ", "-"):
+                out.append(ln[1:])
+            if ln[:1] in (" ", "+"):
+                ptr += 1
+            i += 1
+    out += al[ptr:]
+    return "".join(out)
+
+
 def block_before(sh, bid, new_code, recorded):
+    if recorded:
+        b = reverse_patch(new_code, recorded)
+        if udiff(b, new_code, bid) == recorded:
+            return b
     cands = []
     if bid in sh.staged_text:
         cands.append(sh.staged_text[bid])
