@@ -174,11 +174,15 @@ for mod in MODS:
                     num(s) == (int(v) if v is not None else None)
                     for s, v in zip(row, exp)
                 )
+        #: byte_ctrl's real-child designs are compared with the real-child samples only: the
+        #: gen1..3 of ABLATION.json had a stand-in child.
+        group = (("cfg", "acg1", "acg2", "acg3") if mod == "i2c_master_byte_ctrl" and kind in CF
+                 else ("gen1", "gen2", "gen3", "r0"))
         peers = [
             p
             for p in D
             if p.split(".")[0] == run
-            and p.split(".")[1] in ("gen1", "gen2", "gen3", "r0")
+            and p.split(".")[1] in group
             and p != name
         ]
         peer = (

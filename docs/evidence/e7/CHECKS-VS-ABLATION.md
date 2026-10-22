@@ -61,19 +61,65 @@ designs and keep one.
 
 ## byte_ctrl (real-child environment)
 
-*Pending:* the three real-child ablation samples per run are being generated. Against the one
-real-child generation available so far (the arm's start):
-- **edges equal to golden:** the checks final is higher on luna12 (43.8 vs 42.7) and lower on
-  luna13 (31.0 vs 34.4) and luna14 (16.1 vs 16.7);
-- **shipped checks:** higher on all three.
+The ablation is the arm's real-child start plus three more real-child samples per run. Each of
+the 9 new samples instantiates the child.
+
+| job | edges equal to golden: ablation min–max (mean) | checks final | its start | shipped checks: ablation min–max | checks final | ChipVerilog passes: ablation / checks |
+|---|---|---|---|---|---|---|
+| byte_ctrl luna12 | 18.7–42.7 (33.2) | **43.8** | 42.7 | 53.4–64.8 | 63.6 | 0/4 / no |
+| byte_ctrl luna13 | 12.6–34.4 (24.5) | 31.0 | 34.4 | 22.7–51.5 | **77.3** | 0/4 / no |
+| byte_ctrl luna14 | 16.7–20.2 (18.5) | 16.1 | 16.7 | 63.3–73.5 | **81.6** | 0/4 / no |
+
+**This is the one module where repair beats a random fresh sample, and the lead comes from the
+start.**
+- **Against the ablation mean:** +10.6 on luna12 and +6.5 on luna13, −2.4 on luna14.
+- **Against its own start:** +1.1, −3.4 and −0.6. On luna12 and luna13 the start the arm was
+  given was the best of the four samples. Repair kept roughly what the start had and added little
+  or nothing.
+- **Check score:** above every sample on luna13 and luna14, second on luna12.
+- **With the header's command codes applied to every design** (`CHECKS-VS-ABLATION-ROBUST.md`),
+  the repair's loss to its start grows to 2.4 points on luna12 and 15.2 on luna13. luna14's start
+  also drops its command every cycle, so codes alone leave it at 19.8% and the final at 18.8%.
+  The edits that looked neutral while the codes were wrong cost real behaviour once they are
+  right.
+- **Spread** is unchanged. Across runs, the SD of edges equal to golden is 11.3 points for the
+  checks finals and 5.0–12.1 for the ablation indices.
+
+## All ten jobs
+
+| mean edges equal to golden | 10 jobs | without sb luna14 |
+|---|---|---|
+| repair against the checks | 58.3% | 60.3% |
+| *the start that repair was given* | *65.0%* | *61.1%* |
+| keep the sample that passes most shipped checks | 61.4% | 57.1% |
+| keep a random sample | 62.7% | 58.6% |
+| keep the sample that agrees most with the other samples (golden-free) | **65.2%** | **61.4%** |
+| keep the best sample by golden (oracle, not available) | 66.1% | 62.4% |
+
+- **On average, repair does not beat the start it was given:** −6.7 points, or −0.8 without sb
+  luna14. Its largest gain over a start in any job is 1.1 points.
+- **Where it beats a random sample, the start was lucky:** in byte_ctrl luna12 and luna13, and in
+  the 9 jobs without sb luna14.
+- **Choosing by the checks loses to choosing at random.**
+- **Choosing by consensus wins.**
+
+Consensus selection is examined in `CHECKS-VS-ABLATION-ROBUST.md`, with the other metrics and
+assumptions.
 
 ## What it means
 
-On these modules, repairing against the checks does not improve on generating again. Its
-expected behaviour equals a fresh sample's. It carries a tail risk the ablation does not have:
-breaking a design that was already correct, which happened on 1 of the 2 sb jobs whose ablation
-was all golden-equivalent.
+On these modules, repairing against the checks does not improve on generating again.
+- **Its expected behaviour is its start's.** Where it looks better than a fresh sample, the start
+  was better than one.
+- **It carries a tail risk the ablation does not have:** breaking a design that was already
+  correct. This happened on 1 of the 2 sb jobs whose ablation was all golden-equivalent.
+- **On byte_ctrl the same holds,** and it gets worse for repair once the command codes are
+  right.
 
 The same checks are no better as a selector than as an objective. Until the checks stop sharing
 the generator's misreadings (`QUALITATIVE.md`), the check score is not evidence of behaviour, for
-repair or for choosing among samples.
+repair or for choosing among samples. Agreement between independent samples is.
+
+`CHECKS-VS-ABLATION-ROBUST.md` tests this verdict against every other metric the harness records,
+a random stimulus, paired and pooled baselines, outliers, significance, cost and the byte_ctrl
+codes. "No better" survives all of them; "worse" rests on one job.
