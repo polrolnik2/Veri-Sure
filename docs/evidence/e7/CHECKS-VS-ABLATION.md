@@ -121,7 +121,7 @@ the generator's misreadings (`QUALITATIVE.md`), the check score is not evidence 
 repair or for choosing among samples. Agreement between independent samples is.
 
 `REPAIR-ANATOMY.md` shows why, output by output. The fixes are real but touch rare events. Edits
-made for one check break outputs no check watches, and 82% of the editing is reverted.
+made for one check break outputs no check watches, and 82% of edit calls never reach the design.
 
 `CHECKS-VS-ABLATION-ROBUST.md` tests this verdict against every other metric the harness records,
 a random stimulus, paired and pooled baselines, outliers, significance, cost and the byte_ctrl
