@@ -14,7 +14,9 @@ Figures come from `e7_behaviour/repair_anatomy.py`, which writes `REPAIR-ANATOMY
 
 ## The short answer
 
-**Repair does do things. They cancel.**
+**Repair does do things. On these 10 jobs they roughly cancel.** Most points below are
+individual cases, not tested across jobs. `CHECKS-VS-ABLATION-ROBUST.md` ("How much weight each
+claim bears") grades each one.
 - **It makes real fixes,** where a check restates a spec sentence literally. These touch rare
   events, so they barely move edges; dc_fsm luna13 and luna14 gain 4 points of whole testpoints
   but only 0.1–0.3 of edges.
@@ -23,9 +25,13 @@ Figures come from `e7_behaviour/repair_anatomy.py`, which writes `REPAIR-ANATOMY
     store buffer, byte_ctrl's narrowed abort;
   - an edit made to satisfy one check changes an output no check is watching: byte_ctrl luna13's
     `dout`, −17 points.
-- **Most of the editing never reaches the design.** Of 358 edit calls, 65 (18%) ended in a
-  commit that latched. The rest were reverted, discarded or never committed. What survives is
-  0 to 41 changed lines per job.
+- **Much of the editing never reaches the design.** Of 358 edit calls, 65 (18%) ended in a
+  commit that latched. The rest were reverted, discarded or never committed. This is bimodal:
+  - in the 3 jobs with 1–9 edit calls, all were kept;
+  - in the other 6, 0–24% were;
+  - 4 long runs dominate the pooled figure.
+
+  What survives is 0 to 41 changed lines per job.
 
 **Per output,** across all 95 (job, output) pairs, against the final's own start:
 
@@ -43,7 +49,10 @@ Against the four fresh samples of the same job:
 | below every one | 15 |
 | inside their range | 76 |
 
-Repair invents an error no fresh sample makes more often than it finds a fix no fresh sample has.
+Counted per job, 7 jobs have more outputs worse than better and 1 the reverse (sign test
+p = 0.07). Outputs within a job are not independent, so the 38-vs-10 count overstates the
+evidence. 9 of the 15 "below every fresh sample" are sb luna14; without it, the counts are 6
+below and 4 above.
 
 **The fresh samples and the repaired finals differ in kind.**
 - **Fresh samples differ structurally.** On sb luna12 they span 44.6–56.4% of edges; on
@@ -192,7 +201,8 @@ Each entry gives the RTL changes, then their effect on the outputs.
      - every final differs from its start in 41 RTL lines or fewer, counting added and removed;
      - on 6 of 10 jobs they change at most 4.1% of edges;
      - dc_fsm luna13 flips 8 requirements by changing 1.1% of edges.
-3. **When an edit does reach frequent behaviour, fixes and breaks cancel.**
+3. **When an edit does reach frequent behaviour, fixes and breaks roughly cancel.** Net
+   port-edges are negative in 7 jobs and positive in 2 (p = 0.18).
    - bit_ctrl fixes 2.6% of edges and breaks 2.5%; byte_ctrl luna13 4.6% and 8.0%; luna14 0.9%
      and 1.5%.
    - The latch counts requirements, not behaviour. An edit that flips a requirement latches
@@ -203,7 +213,9 @@ Each entry gives the RTL changes, then their effect on the outputs.
    - On byte_ctrl that other output is usually `sda_oen` or `scl_oen`, wrong on about half the
      edges in every design because of the command codes (`BYTE-CTRL-CODES-POOL.json`).
    - A whole edge cannot become right until the shared error is fixed, and no check points at it.
-5. **The checks reward the reading they encode, right or wrong.**
+5. **The checks reward the reading they encode, right or wrong.** This is shown for sb, where
+   golden-equivalent designs pass 42% of the checks. For the other modules check validity was not
+   measured, so the cases below illustrate it rather than establish it.
    - 76 of the 89 requirements flipped to passing name a spec output, so repair is not merely
      gaming probes.
    - It moves outputs toward each check's reading. That reading matches golden only where the

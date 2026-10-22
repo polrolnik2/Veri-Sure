@@ -27,13 +27,16 @@ final's own start. Figures come from `e7_behaviour/checks_vs_ablation_robust.py`
 - **Repair wins only on what it optimises:** +13.9 points of shipped checks, in 9 of 9 jobs that
   moved (p < 0.01).
 
-**Two assumptions change part of the picture.**
+**Two assumptions may change part of the picture; neither is established** (see "How much
+weight each claim bears", below).
 1. **The selector.** Keeping the sample that agrees most with the other samples (consensus,
-   golden-free) beats a random sample by 2.5 points and comes within 0.9 of the oracle.
-   - It improves as more samples are drawn.
-   - Selecting by shipped checks or by the reference model gets worse as more samples are drawn.
-   - So `CHECKS-VS-ABLATION.md`'s "choosing is no better than random" is a property of those two
-     selectors, not of choosing.
+   golden-free) beats a random sample by 2.5 points on average and comes within 0.9 of the oracle.
+   - Job by job, it is better in 6 jobs and worse in 3 (sign test p = 0.51). Most of the mean
+     comes from byte_ctrl luna12 and luna13 and sb luna12.
+   - Selecting by shipped checks is worse than random in 7 jobs and better in 2 (p = 0.18).
+     The decline with more samples is 1.3 points on average.
+   - So whether choosing helps depends on the selector, but these 10 jobs cannot show which
+     selector is better.
 2. **byte_ctrl's command codes.** As generated, byte_ctrl is the one module where repair beats the
    ablation mean (on luna12 and luna13), but there its starts were already the best samples. With
    the header's codes in every design, repair falls behind its own start on all three runs, by 2.4,
@@ -147,14 +150,15 @@ starts' luck; the same holds for byte_ctrl, below.
 | most agreement with the other samples | 62.7 | 64.6 | 65.1 | 65.2 |
 | golden (oracle) | 62.7 | 65.0 | 65.9 | 66.1 |
 
-**The two selectors that encode the run's reading of the spec get worse the more they choose
-from.** Those are the shipped checks and the reference model, which is debugged against them.
+**The two selectors that encode the run's reading of the spec fall slightly as they choose from
+more samples.** Those are the shipped checks and the reference model, which is debugged against
+them. The fall is 1.3–1.9 points on average and is not significant job by job (above).
 - They pick the same sample in all 7 non-byte_ctrl jobs.
 - On sb luna13 and luna14 the golden-equivalent designs pass 42% of shipped checks and match the
   reference model on 42–44% of edges.
 
-**Consensus encodes no reading, only agreement between independent attempts, and it improves
-with k.**
+**Consensus encodes no reading, only agreement between independent attempts, and it rises with
+k** (by 2.5 points on average; better than random in 6 of 9 jobs that differ).
 - Its failure mode is a shared misreading. Where all samples are wrong the same way, it cannot
   help: byte_ctrl's codes are the case.
 
@@ -238,9 +242,36 @@ The verdict should be stated as **"repair against the checks shows no benefit ov
 sample, on any measure of behaviour"**, not as "repair is worse". The difference from "worse"
 rests on one job and is inside the noise.
 
-Two findings are new:
-1. **Choosing among fresh samples can beat a random one,** but only with a selector that does not
-   share the run's reading of the spec. Consensus does. The checks and the reference model do
-   not, and choosing harder with them makes things worse.
-2. **Fixing the generator's blind spot does not rescue repair; it exposes it.** On byte_ctrl,
-   once the command codes are right, the repaired designs fall further behind their starts.
+Two observations are new, and neither is established:
+1. **Choosing among fresh samples may beat a random one** with a selector that does not share
+   the run's reading of the spec. Consensus beat random in 6 of 9 jobs (p = 0.51).
+2. **On byte_ctrl, fixing the command codes makes repair look worse, not better:** the repaired
+   designs fall further behind their starts on all 3 runs. That is one module and one mechanism.
+
+## How much weight each claim bears
+
+There are 10 jobs, but only 4 modules, and the jobs of one module share a spec. There is one
+repair run per job, so run-to-run variation is unmeasured. luna13 byte_ctrl's checks arm reached
+different scores at the same point in two launches.
+
+| claim | rests on | job-level count | standing |
+|---|---|---|---|
+| repair raises the shipped-check score | 10 jobs | up in 9, tie in 1 (rank p < 0.01) | established |
+| no detectable benefit to behaviour | 10 jobs, 15 measures | medians ±0.4; rank p ≥ 0.27; CI [−17.5, +3.7] | established as *no detectable* benefit. A gain of a few points is not excluded, nor a large loss. |
+| repair is worse than a fresh sample | the mean | sb luna14 alone; leave-one-out −6.1 to +1.7 | not supported |
+| more outputs get worse than better | 95 (job, output) pairs | 7 jobs worse, 1 better (p = 0.07). Outputs in a job are not independent. | suggestive |
+| repair moves more outputs below every fresh sample than above | 19 pairs | 9 of the 15 "below" are sb luna14; without it, 6 vs 4 | not supported |
+| fixes and breaks cancel | port-edges per job | net negative in 7, positive in 2 (p = 0.18) | suggestive |
+| selecting by checks is worse than random | 10 jobs | 7 worse, 2 better (p = 0.18) | not established |
+| consensus selection beats random | 10 jobs | 6 better, 3 worse (p = 0.51) | not established |
+| most edit calls are thrown away | 9 logged jobs | kept share 0–24% in 6 jobs, 100% in the 3 jobs with 1–9 edit calls. The pooled 82% is dominated by 4 long runs. | descriptive, bimodal |
+| the checks share the generator's misreadings | sb luna13 and luna14 | golden-equivalent designs pass 42% of checks; other modules not measured | one module |
+| fixing the codes makes repair look worse | byte_ctrl, 3 runs | 3 of 3 | one module, one mechanism |
+| fixes are real where a check restates the spec literally | 4 edits, classified after the fact | | anecdote |
+| `find_signal` defects caused failures | toy-module demonstrations; 1–2 jobs | | mechanism shown, consequence anecdotal |
+
+The two established claims are what the comparison can carry: repair raises the check score,
+and no benefit to behaviour is detectable at this sample size. The explanations in
+`REPAIR-ANATOMY.md` (the oracle, the latch rule, the tools, the command codes) are
+hypotheses supported by cases, not tested across jobs. That applies equally to "the model cannot
+repair RTL" and to "the checks are the bottleneck".

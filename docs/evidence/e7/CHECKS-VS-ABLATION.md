@@ -100,8 +100,11 @@ start.**
   luna14. Its largest gain over a start in any job is 1.1 points.
 - **Where it beats a random sample, the start was lucky:** in byte_ctrl luna12 and luna13, and in
   the 9 jobs without sb luna14.
-- **Choosing by the checks loses to choosing at random.**
-- **Choosing by consensus wins.**
+- **Choosing by the checks scores below choosing at random,** worse in 7 jobs and better in 2
+  (p = 0.18).
+- **Choosing by consensus scores highest,** better in 6 jobs and worse in 3 (p = 0.51).
+- **Neither difference is established** at 10 jobs. The grading is in
+  `CHECKS-VS-ABLATION-ROBUST.md`.
 
 Consensus selection is examined in `CHECKS-VS-ABLATION-ROBUST.md`, with the other metrics and
 assumptions.
