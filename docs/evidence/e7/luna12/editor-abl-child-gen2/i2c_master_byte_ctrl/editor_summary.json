@@ -1,0 +1,116 @@
+{
+  "run": "/home/user/runs-cf/luna12/i2c_master_byte_ctrl",
+  "module": "i2c_master_byte_ctrl",
+  "bodies": 88,
+  "requirements": 88,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "feedback": "checks",
+  "extra_sources": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/i2c_master_bit_ctrl.v"
+  ],
+  "include_dirs": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_byte_ctrl",
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c"
+  ],
+  "seconds": 617,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 88,
+      "pass": 57,
+      "fail": 21,
+      "abstain": 10,
+      "failing_check_instances": 450,
+      "failing": [
+        "REQ-0002",
+        "REQ-0003",
+        "REQ-0008",
+        "REQ-0012",
+        "REQ-0026",
+        "REQ-0038",
+        "REQ-0043",
+        "REQ-0051",
+        "REQ-0060",
+        "REQ-0069",
+        "REQ-0076",
+        "REQ-0082",
+        "REQ-0085",
+        "REQ-0093",
+        "REQ-0094",
+        "REQ-0095",
+        "REQ-0097",
+        "REQ-0108",
+        "REQ-0111",
+        "REQ-0119",
+        "REQ-0120"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0044",
+        "REQ-0066",
+        "REQ-0074",
+        "REQ-0080",
+        "REQ-0086",
+        "REQ-0090",
+        "REQ-0092",
+        "REQ-0098"
+      ],
+      "rtl_lines": 252
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 88,
+    "pass": 57,
+    "fail": 21,
+    "abstain": 10,
+    "failing_check_instances": 450,
+    "failing": [
+      "REQ-0002",
+      "REQ-0003",
+      "REQ-0008",
+      "REQ-0012",
+      "REQ-0026",
+      "REQ-0038",
+      "REQ-0043",
+      "REQ-0051",
+      "REQ-0060",
+      "REQ-0069",
+      "REQ-0076",
+      "REQ-0082",
+      "REQ-0085",
+      "REQ-0093",
+      "REQ-0094",
+      "REQ-0095",
+      "REQ-0097",
+      "REQ-0108",
+      "REQ-0111",
+      "REQ-0119",
+      "REQ-0120"
+    ],
+    "abstaining": [
+      "REQ-0004",
+      "REQ-0014",
+      "REQ-0044",
+      "REQ-0066",
+      "REQ-0074",
+      "REQ-0080",
+      "REQ-0086",
+      "REQ-0090",
+      "REQ-0092",
+      "REQ-0098"
+    ],
+    "rtl_lines": 252
+  },
+  "usage": {
+    "input": 34143,
+    "cached": 12805,
+    "output": 14122,
+    "reasoning": 0,
+    "calls": 2,
+    "cache_hit_rate": 0.375
+  }
+}
