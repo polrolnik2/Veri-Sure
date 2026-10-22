@@ -227,6 +227,9 @@ def simulator(mod):
             return cache[h]
         d = WORK / mod
         d.mkdir(parents=True, exist_ok=True)
+        if (d / f"{h}.json").is_file():
+            cache[h] = json.loads((d / f"{h}.json").read_text())
+            return cache[h]
         src, vvp = d / f"{h}.sv", d / f"{h}.vvp"
         src.write_text(text)
         have = set(re.findall(r"^\s*module\s+(\w+)", text, re.M))
@@ -250,6 +253,7 @@ def simulator(mod):
             o.unlink()
             res[r] = per
         vvp.unlink(missing_ok=True)
+        (d / f"{h}.json").write_text(json.dumps(res))
         cache[h] = res
         return res
     return run
