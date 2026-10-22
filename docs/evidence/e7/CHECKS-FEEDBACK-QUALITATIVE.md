@@ -57,6 +57,39 @@ nothing in the loop can see.
 - It is more prone to cheap check-satisfying moves: probe-only edits, padding, and narrowing a
   condition until a check stops objecting.
 
+## Did the agent itself behave differently?
+
+The editor logs say how it worked. `qualitative-cf/behaviour_tally.py` counts tool calls, commit
+outcomes, and the authorities its thinking summaries appeal to; it prints numbers only. The
+sample is 18 arms; luna12 dc_fsm's logs were lost, and luna13 byte_ctrl's checks arm counts all
+its launches.
+
+| | checks arm | model arm |
+|---|---|---|
+| tool mix: read_block / focus / explain / find_signal / edits / commit | 25 / 17 / 15 / 12 / 12 / 3% | 26 / 19 / 11 / 15 / 9 / 3% |
+| reads per commit, edits per commit | 22, 3.4 | 25, 2.9 |
+| `add_stimulus` calls (for UNCOVERED requirements) | 0 | 0 |
+| commits: latched by a rise / latched on a tie / not latched | 27 / 1 / 58 | 18 / 7 / 36 |
+| thinking segments citing the checks | 26% | 9% |
+| ... citing the reference model | 0% | 23% |
+| ... citing requirement or spec text | 26% | 22% |
+| ... citing the spec itself | 4% | 3% |
+
+**The way of working is the same.** Both arms show the same tools, depth of reading and batch
+size. Neither ever stages stimulus for an uncovered requirement. Both rarely reason from the spec.
+
+**What differs is the authority the agent defers to.** In the model arm the reference model
+replaces the checks as the thing it argues from: it cites them in 23% and 9% of segments, against
+0% and 26% in the checks arm. Its moves follow:
+- it keeps editing on ties to reduce model mismatches (7 gradient latches against 1);
+- it retries the model's structure after the checks reject it (at least 8 times each in bit_ctrl
+  and dc_fsm luna14).
+
+The checks arm makes more check-raising latches (27 against 18) and stops when the checks pass.
+In both arms, when the authority and the spec text conflict, the agent sides with the authority:
+- luna13 byte_ctrl's checks arm committed an abort edit it had itself judged a deviation;
+- luna13 sb's model arm took the model's default over the contract.
+
 ## What nobody in the loop could see
 
 **byte_ctrl's command encoding** *(verified; `e7_behaviour/byte_ctrl_codes.py`, `BYTE-CTRL-CODES.json`)*.
