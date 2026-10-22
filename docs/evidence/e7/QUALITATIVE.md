@@ -99,7 +99,10 @@ finals' near-zero spread in `BEHAVIOUR.md` is that convergence made visible.
 
 ## Why the checks cannot see it
 
-The checks encode the reference model's and the population's readings:
+The checks are written from the requirements before the reference model exists. They are
+screened against the witness and the population: a witness may trigger a repair, while the
+population may ask for one and, at shipping, outvote a check. Both are further readings of
+the same text by the same LLM. So the checks share whatever reading those designs share:
 - **fpu:** every run's shipped NaN-pattern check *requires* bit 51 set, so
   golden fails all four.
 - **bit_ctrl:** 18 of the 23 checks repair turned from fail to pass are checks
@@ -145,7 +148,7 @@ These rules need no golden. Each is grounded in sentences the agents quote.
 3. **Do not let a shared reading outvote an explicit sentence.** A check
    grounded in a stated default ("the default behavior is …") should not be
    refuted by a population that shares the opposite reading.
-4. **Repair against checks drawn from the same reading cannot correct that
+4. **Repair against checks that share a reading cannot correct that
    reading.** Hold repair to the same justified-reading standard, and refuse
    its check-gaming moves:
    - defining macros;

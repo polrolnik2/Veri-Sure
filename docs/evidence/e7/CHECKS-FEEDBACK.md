@@ -54,10 +54,16 @@ This rerun asks what repair does when all five are replaced by the shipped check
    is lower than the model arm in 8 of 10 jobs. (Calls and hours for luna13 byte_ctrl's
    checks arm count only its final resume; its trials count the whole chain.)
 2. **That does not make repair move designs toward golden.** Both arms end further from
-   golden than they started: 7 and 8 points, on average, excluding sb luna13. The checks
-   come from the same reading as the reference model, so they carry the same misreadings,
-   and repair satisfies them. Checks-only feedback lost golden agreement in 5 of 10 jobs,
-   model feedback in 7 of 10.
+   golden than they started: 7 and 8 points, on average, excluding sb luna13.
+   - The checks are not derived from the reference model: they are written before it
+     exists.
+   - But they are written by the same LLM from the same text.
+   - They are then kept or dropped by a vote of further readings by the same LLM: the
+     population. The witness can only trigger repairs, and the shipped set is chosen on
+     the population alone.
+
+   So they share the model's common-mode misreadings, and repair satisfies those.
+   Checks-only feedback lost golden agreement in 5 of 10 jobs, model feedback in 7 of 10.
 3. **The largest single difference is sb luna13.** The start is formally equivalent to
    golden.
    - **Checks arm:** found no edit the checks would latch (28/7/31 for all 3 rounds) and
@@ -173,8 +179,9 @@ at 100%.
 1. **Stop calling the reference model expected.** With checks-only feedback, repair stops
    rendering the model's reading in RTL: reference-model agreement stays flat instead of
    rising 10–15 points, and the checks are satisfied about as well.
-2. **It is not sufficient on its own.** The checks were drawn from the same reading as the
-   model, so repair against them still imports the shared misreadings. That is the luna14 sb
+2. **It is not sufficient on its own.** The checks are independent of the model, but they
+   are another reading of the same text by the same LLM, so repair against them still
+   imports the misreadings the two share. That is the luna14 sb
    result under both arms, and the mean loss of golden agreement under both. The fix is the
    reading, not the feedback channel (`QUALITATIVE.md`, rules R1–R6).
 3. **Refuse the configuration move outright.** Both sb breakages, and the original luna13 sb
