@@ -12,6 +12,8 @@ whether the commit latched.
 """
 
 import json
+import os
+import re
 import statistics as st
 from pathlib import Path
 
@@ -19,6 +21,17 @@ E = Path(__file__).resolve().parents[1] / "e7"
 SH = {"i2c_master_bit_ctrl": "bit_ctrl", "i2c_master_byte_ctrl": "byte_ctrl",
       "or1200_dc_fsm": "dc_fsm", "or1200_sb": "sb"}
 A = json.loads((E / "FEEDBACK-AUDIT.json").read_text())
+RUNS = Path(os.environ.get("E7_RUNS", "/home/user/runs-cf"))
+
+
+def reads(run, mod):
+    """Requirement -> the names its shipped check reads (spec outputs and probes)."""
+    d = RUNS / run / mod
+    return {o["req_uid"]: set(re.findall(r"""["'](\w+)["']""", o.get("source") or ""))
+            for o in json.loads((d / "shipped.json").read_text())["oracles"]}
+
+
+RD = {(j["module"], j["run"]): reads(j["run"], j["module"]) for j in A["jobs"]}
 
 
 def golden_class(c):
@@ -41,7 +54,11 @@ for j in A["jobs"]:
         elif "cells_fixed" not in c:
             skipped["did not compile"] += 1
         else:
+            told = c["requirements"]["broken"]
+            watched = set().union(*[RD[(j["module"], j["run"])].get(q, set()) for q in told]) if told else set()
+            pointed = sum(v for o, v in (c.get("port_broken") or {}).items() if o in watched)
             rows.append({**c, "job": f"{SH[j['module']]} {j['run']}", "golden": golden_class(c),
+                         "broken_where_told": pointed,
                          "dpass": passing(c)[1] - passing(c)[0], "told_broken": len(c["requirements"]["broken"]),
                          "net": c["cells_fixed"] - c["cells_broken"],
                          "dedge": c["edge_after"] - c["edge_before"], "dtp": c["tp_after"] - c["tp_before"]})
@@ -69,6 +86,54 @@ for lab, sel in (("rose", lambda r: r["dpass"] > 0), ("unchanged", lambda r: r["
     print(f"| {lab} ({len(x)}) | {sum(r['net'] > 0 for r in x)} | {sum(r['net'] < 0 for r in x)} | "
           f"{sum(r['net'] == 0 for r in x)} |")
 
+
+
+def fisher_two_sided(a, b, c, d):
+    """Exact two-sided p for the 2x2 table [[a, b], [c, d]]."""
+    from math import comb
+    n, r1, c1 = a + b + c + d, a + b, a + c
+
+    def p(x):
+        return comb(r1, x) * comb(n - r1, c1 - x) / comb(n, c1)
+    obs = p(a)
+    return min(1.0, sum(p(x) for x in range(max(0, c1 - (n - r1)), min(r1, c1) + 1) if p(x) <= obs + 1e-12))
+
+
+rose_b = sum(r["dpass"] > 0 and r["net"] > 0 for r in rows)
+rose_w = sum(r["dpass"] > 0 and r["net"] < 0 for r in rows)
+fell_b = sum(r["dpass"] < 0 and r["net"] > 0 for r in rows)
+fell_w = sum(r["dpass"] < 0 and r["net"] < 0 for r in rows)
+print(f"\nRose vs fell, golden better vs worse: Fisher exact p = {fisher_two_sided(rose_b, rose_w, fell_b, fell_w):.2f}")
+MAT = 0.0005  # half a tenth of a point of edges equal to golden
+print("\nThe same, judging golden by edges equal (a change of at least 0.05 points counts):\n")
+print("| feedback | edges better | edges worse | within ±0.05 |")
+print("|---|---|---|---|")
+for lab, sel in (("rose", lambda r: r["dpass"] > 0), ("unchanged", lambda r: r["dpass"] == 0),
+                 ("fell", lambda r: r["dpass"] < 0)):
+    x = [r for r in rows if sel(r)]
+    print(f"| {lab} ({len(x)}) | {sum(r['dedge'] >= MAT for r in x)} | {sum(r['dedge'] <= -MAT for r in x)} | "
+          f"{sum(abs(r['dedge']) < MAT for r in x)} |")
+print("\nThe same, golden judged on the run's own stimulus only (what the shipped checks see), by cells:\n")
+print("| feedback | golden net better | golden net worse | unchanged |")
+print("|---|---|---|---|")
+for lab, sel in (("rose", lambda r: r["dpass"] > 0), ("unchanged", lambda r: r["dpass"] == 0),
+                 ("fell", lambda r: r["dpass"] < 0)):
+    x = [r for r in rows if sel(r)]
+    nets = [r["own"]["cells_fixed"] - r["own"]["cells_broken"] for r in x]
+    print(f"| {lab} ({len(x)}) | {sum(n > 0 for n in nets)} | {sum(n < 0 for n in nets)} | {sum(n == 0 for n in nets)} |")
+ob = sum(r["dpass"] > 0 and r["own"]["cells_fixed"] > r["own"]["cells_broken"] for r in rows)
+ow = sum(r["dpass"] > 0 and r["own"]["cells_fixed"] < r["own"]["cells_broken"] for r in rows)
+fb = sum(r["dpass"] < 0 and r["own"]["cells_fixed"] > r["own"]["cells_broken"] for r in rows)
+fw = sum(r["dpass"] < 0 and r["own"]["cells_fixed"] < r["own"]["cells_broken"] for r in rows)
+print(f"\nFisher exact p (own stimulus) = {fisher_two_sided(ob, ow, fb, fw):.2f}")
+print("\nBy module (passing rose / fell -> golden net better : worse):\n")
+for m in ("bit_ctrl", "byte_ctrl", "dc_fsm", "sb"):
+    x = [r for r in rows if r["job"].startswith(m)]
+    if x:
+        print(f"- {m}: {len(x)} commits; rose -> {sum(r['dpass'] > 0 and r['net'] > 0 for r in x)} : "
+              f"{sum(r['dpass'] > 0 and r['net'] < 0 for r in x)}; fell -> {sum(r['dpass'] < 0 and r['net'] > 0 for r in x)} : "
+              f"{sum(r['dpass'] < 0 and r['net'] < 0 for r in x)}")
+
 print("\n## 3. When a commit broke behaviour that was right, what was the editor told?\n")
 brk = [r for r in rows if r["cells_broken"] > 0]
 cells = sum(r["cells_broken"] for r in brk)
@@ -78,6 +143,30 @@ print(f"- told some requirement BROKE: {len(told)}; told nothing broke: {len(brk
 print(f"- broken cells in commits told nothing broke: {100 * sum(r['cells_broken'] for r in brk if not r['told_broken']) / max(1, cells):.0f}%")
 print(f"- broken cells that LATCHED: {100 * sum(r['cells_broken'] for r in brk if r['latched']) / max(1, cells):.0f}%; "
       f"of those, told nothing broke: {100 * sum(r['cells_broken'] for r in brk if r['latched'] and not r['told_broken']) / max(1, sum(r['cells_broken'] for r in brk if r['latched'])):.0f}%")
+
+tb = [r for r in brk if r["told_broken"]]
+print(f"- in commits told some requirement BROKE, share of broken cells on an output that a reported "
+      f"requirement's check reads: {100 * sum(r['broken_where_told'] for r in tb) / max(1, sum(r['cells_broken'] for r in tb)):.0f}%")
+lb = [r for r in brk if r["latched"]]
+print(f"- in LATCHED commits, broken cells on an output no reported-broken requirement reads: "
+      f"{100 * sum(r['cells_broken'] - r['broken_where_told'] for r in lb) / max(1, sum(r['cells_broken'] for r in lb)):.0f}%")
+print(f"- latched commits that broke cells: {len(lb)}; of these told nothing broke: {sum(not r['told_broken'] for r in lb)}")
+
+lat = [r for r in rows if r["latched"]]
+rej = [r for r in rows if not r["latched"]]
+
+
+def pts(x, sign):
+    return 100 * sum(r["dedge"] for r in x if (r["dedge"] > 0 if sign > 0 else r["dedge"] < 0))
+
+
+print(f"\nIn points of edges equal to golden, summed over commits: the gate accepted {pts(lat, 1):+.2f} of gains and "
+      f"{pts(lat, -1):+.2f} of losses, and rejected {pts(rej, 1):+.2f} of gains and {pts(rej, -1):+.2f} of losses.")
+mx = sorted(r["cells_broken"] / (r["cells_fixed"] + r["cells_broken"]) for r in rows if r["golden"] == "mixed")
+ch = [r for r in rows if r["golden"] != "unchanged"]
+print(f"Commits that changed any output: {len(ch)}; of these broke something that was right: "
+      f"{sum(r['cells_broken'] > 0 for r in ch)}. In mixed commits, breaks are a median "
+      f"{100 * st.median(mx):.0f}% of the changed cells (IQR {100 * mx[len(mx) // 4]:.0f}–{100 * mx[3 * len(mx) // 4]:.0f}%).")
 
 print("\n## 4. Per job\n")
 print("| job | commits counted | latched | latched improvements / mixed+ / mixed− / regressions / unchanged | "

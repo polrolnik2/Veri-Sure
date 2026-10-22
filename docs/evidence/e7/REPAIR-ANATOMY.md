@@ -202,7 +202,10 @@ Each entry gives the RTL changes, then their effect on the outputs.
      - on 6 of 10 jobs they change at most 4.1% of edges;
      - dc_fsm luna13 flips 8 requirements by changing 1.1% of edges.
 3. **When an edit does reach frequent behaviour, fixes and breaks roughly cancel.** Net
-   port-edges are negative in 7 jobs and positive in 2 (p = 0.18).
+   port-edges are negative in 7 jobs and positive in 2 (p = 0.18). Commit by commit
+   (`FEEDBACK-AUDIT.md`, 73 commits in 8 jobs), 51 of the 53 that changed any output broke
+   something that was right. The checks' verdict on a commit is unrelated in direction to
+   golden's.
    - bit_ctrl fixes 2.6% of edges and breaks 2.5%; byte_ctrl luna13 4.6% and 8.0%; luna14 0.9%
      and 1.5%.
    - The latch counts requirements, not behaviour. An edit that flips a requirement latches

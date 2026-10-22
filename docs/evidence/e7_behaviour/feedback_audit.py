@@ -266,6 +266,7 @@ def dc(v):
 def compare(A, B, G):
     """A = accepted, B = submitted: edges / testpoints equal to golden for each, and cells fixed / broken."""
     ea = eb = et = ta = tb = tt = fx = bk = 0
+    pfx, pbk = {}, {}
     for r in G:
         for tp, g in G[r].items():
             a, b = A[r][tp], B[r][tp]
@@ -281,6 +282,8 @@ def compare(A, B, G):
                     rb &= vb
                     fx += vb and not va
                     bk += va and not vb
+                    if vb != va:
+                        (pfx if vb else pbk)[k] = (pfx if vb else pbk).get(k, 0) + 1
                 ea += ra
                 eb += rb
                 oka &= ra
@@ -290,7 +293,7 @@ def compare(A, B, G):
             tb += okb
             tt += 1
     return {"edge_before": ea / et, "edge_after": eb / et, "tp_before": ta / tt, "tp_after": tb / tt,
-            "cells_fixed": fx, "cells_broken": bk}
+            "cells_fixed": fx, "cells_broken": bk, "port_fixed": pfx, "port_broken": pbk}
 
 
 out = {"jobs": []}
@@ -322,6 +325,11 @@ for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / "editor-cf-checks" / "*" / 
                "exact": c["exact"]}
         if A is not None and B is not None:
             row.update(compare(A, B, G))
+            outs = json.loads((EQ / "stim" / run / f"{mod}.json").read_text())["outputs"]
+            row["port_fixed"] = {outs[k]: v for k, v in row["port_fixed"].items()}
+            row["port_broken"] = {outs[k]: v for k, v in row["port_broken"].items()}
+            own = compare(A, B, {run: G[run]})  # the stimulus the shipped checks see
+            row["own"] = {k: own[k] for k in ("edge_before", "edge_after", "cells_fixed", "cells_broken")}
         rows.append(row)
     out["jobs"].append({"module": mod, "run": run, "commits": rows})
     del G

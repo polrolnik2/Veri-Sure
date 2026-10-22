@@ -269,6 +269,8 @@ different scores at the same point in two launches.
 | fixing the codes makes repair look worse | byte_ctrl, 3 runs | 3 of 3 | one module, one mechanism |
 | fixes are real where a check restates the spec literally | 4 edits, classified after the fact | | anecdote |
 | `find_signal` defects caused failures | toy-module demonstrations; 1–2 jobs | | mechanism shown, consequence anecdotal |
+| the checks' verdict on a commit tracks golden's | 73 commits in 8 jobs (`FEEDBACK-AUDIT.md`) | rose: 6 net better, 9 worse; fell: 15 better, 10 worse (Fisher p = 0.33; own stimulus p = 1.00). 57 commits come from 3 jobs. | no detectable association |
+| commits that change behaviour also break something | 53 commits in 8 jobs | 51 of 53; breaks a median 48% of changed cells | consistent across all 8 jobs |
 
 The two established claims are what the comparison can carry: repair raises the check score,
 and no benefit to behaviour is detectable at this sample size. The explanations in
