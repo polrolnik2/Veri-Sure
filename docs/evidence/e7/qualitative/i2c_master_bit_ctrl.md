@@ -21,7 +21,7 @@
 
 **Root cause, spec class and whether the ref/checks encode it.** Class (a) = misread; (b) = ambiguous; (c) = silent or contradicts golden.
 - **M1.**
-  - *Root cause:* the generator turns each clause of a sequence into one phase ("there are four phases… three phases for STOP, reading, and writing", luna12 Coder log), so every level lasts one tick.
+  - *Root cause:* the generator turns each clause of a sequence into one phase (the luna12 generator's log plans a fixed number of phases per command, one per clause), so every level lasts one tick.
   - *Class:* (b). The text gives the order of changes, not their durations. Two exceptions favour golden. For WRITE, "When the FSM reaches the **stable high phase** of a WRITE bit, it asserts `sda_chk`" means release and stable-high are separate phases. For the ack, "pulls SCL low **and** asserts cmd_ack" and "returns to idle **and** pulses cmd_ack" mean the ack is not a separate step. For START lead, the I2C rule "SDA changes only while SCL is low" gives SDA-before-SCL. START hold and STOP length follow only from the OpenCores convention (4 phases per bit, 5 for START), not from the description.
   - *Ref models:* all 4 encode the short START/STOP, 3/4 the extra ack phase. Repair copied ref12's and ref14's tables exactly; 0/16 generated designs match their run's ref table.
 - **M2.**
@@ -36,9 +36,9 @@
   - *Registered sSCL/sta:* (c). The spec writes `sta_condition = ~sSDA & dSDA & sSCL` as an equation; golden registers it.
 - **M5.**
   - *Class:* (a), explicitly contradicted: "When reset is active, … when the core is disabled … cnt is loaded from clk_cnt and **clk_en is asserted**".
-  - *Ref models:* purely ref-pulled ("The reference model has clk_en set to zero post-reset…", luna12 repair log).
+  - *Ref models:* purely ref-pulled (the luna12 repair log cites the reference model's post-reset clk_en of zero).
 - **M6.**
-  - *Root cause:* `al` was treated as a status latch ("canonical arbitration lost sticky", luna13.gen2 log). The reset list's "arbitration lost is cleared" encourages this.
+  - *Root cause:* `al` was treated as a status latch (the luna13.gen2 log treats a sticky flag as the canonical form). The reset list's "arbitration lost is cleared" encourages this.
   - *Class:* (b), tilted to golden. `busy` gets set/clear wording; `al` is only "asserted when <condition>", and the FSM's return to idle removes the condition.
   - *Ref models:* ref12/13/14 sticky. luna15 is sticky despite its pulse-like ref, so this is also a generator habit.
 - **M7.**

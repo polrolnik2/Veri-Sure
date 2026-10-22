@@ -173,3 +173,25 @@ These rules need no golden. Each is grounded in sentences the agents quote.
   identical to, `BEHAVIOUR.md`'s rerun.
 - bit_ctrl: about 22% of disagreement is unexplained by the modelled readings;
   two designs have bugs the agent's tables could not model.
+
+## Addendum: byte_ctrl's command codes, measured
+
+Root cause 2 put byte_ctrl's command codes at about 21% of its gap, latent behind the stand-in
+child. With the child supplied to the generator's lint gate (`CHECKS-FEEDBACK.md`), every design
+instantiates it, and the codes become the largest remaining defect. Every design swaps READ and
+WRITE relative to the header the child decodes them with, and the spec gives no values.
+
+Swapping only those two constants changes edges equal to golden as follows
+(`e7_behaviour/byte_ctrl_codes.py`, `BYTE-CTRL-CODES.json`):
+
+| run | before | after |
+|---|---|---|
+| luna12 | 43.2% | 97.6% |
+| luna13 | 34.4% | 74.1% |
+| luna14 | 15.5% | 13.9% |
+
+luna14 also needs its command held, a class-(b) reading per mode C. With both fixes it reaches
+64.5%. The codes are class (c) for the text, but not for the environment: the child's header has
+them. The generator was given the child's file for linting, never its interface, which extends
+rule R2.
+

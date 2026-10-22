@@ -10,6 +10,7 @@ was handed it as ground truth on five channels:
 - the model's source, labelled "the expected behaviour".
 
 This rerun asks what repair does when all five are replaced by the shipped checks alone.
+What the repair changed in the RTL, arm by arm, is in `CHECKS-FEEDBACK-QUALITATIVE.md`.
 
 ## Setup
 
@@ -21,6 +22,10 @@ This rerun asks what repair does when all five are replaced by the shipped check
     Its gradient is the count of failing check instances. No value the model computed
     reaches it (706d973).
   - **model:** the old feedback on current code, as the control.
+  - **When a commit latches:** in both arms, when passing shipped requirements rise. It also
+    latches when they hold, nothing is silenced, and the arm's own progress count falls. In the
+    model arm that count is testpoints disagreeing with the model, so the model also steers
+    those ties (`CHECKS-FEEDBACK-QUALITATIVE.md`).
 - **Starts.**
   - sb, dc_fsm, bit_ctrl: each original job's round-0 design (`rtl_generated.sv`).
   - byte_ctrl: a fresh generation per run, with its child `i2c_master_bit_ctrl` supplied
@@ -67,7 +72,9 @@ This rerun asks what repair does when all five are replaced by the shipped check
 3. **The largest single difference is sb luna13.** The start is formally equivalent to
    golden.
    - **Checks arm:** found no edit the checks would latch (28/7/31 for all 3 rounds) and
-     returned it unchanged.
+     returned it unchanged. That was not the feedback protecting it. The editor's signal tool
+     reads both arms of an `` `ifdef `` as conflicting drivers, so all 9 commits deleted live
+     code (`CHECKS-FEEDBACK-QUALITATIVE.md`).
    - **Model arm:** reached 65/0/1 by defining `OR1200_SB_IMPLEMENTED` inside the module
      and building the FIFO, exactly as the original job did. That took golden agreement
      from 100% to 45% of edges.
@@ -147,7 +154,7 @@ repaired a different, stand-in start.
 | | **model** | function_fail | 98.5 | 44.6 | 34.2 | 34.2 | 100.0 |
 | | **checks** | equivalence_error | 98.5 | 40.5 | 34.1 | 34.1 | 55.4 |
 
-## byte_ctrl: the missing child was the largest single defect
+## byte_ctrl: the missing child, and the command codes behind it
 
 All 14 earlier byte_ctrl designs wrote their own stand-in for `i2c_master_bit_ctrl`. The
 generator's lint gate had no child source and rejected a correct instantiation ("Cannot find
@@ -188,7 +195,11 @@ at 100%.
    repair, came from defining or inverting a configuration macro inside the module. This is
    R1, and the editor should reject it mechanically, whatever the feedback.
 4. **Fix the environment first.** Supplying byte_ctrl's child was worth more than any repair:
-   about 6× golden edge agreement, against no change from repair under either feedback.
+   about 6× golden edge agreement, against no change from repair under either feedback. The
+   next defect behind it is the command encoding the child decodes. The spec gives no values,
+   and every design swaps READ and WRITE. Correcting those two constants takes luna12's start
+   from 43.2% to 97.6% of edges equal to golden, and luna13's from 34.4% to 74.1%
+   (`BYTE-CTRL-CODES.json`).
 
 ## Caveats
 

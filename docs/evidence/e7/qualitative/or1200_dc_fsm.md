@@ -39,7 +39,7 @@ The share columns give the fraction of disagreement edges in the generated arm (
 - **M4.**
   - *Cause:* a "read request" during a write-through store looked like a bug.
   - *Class (a).* The condition has no load term, and hitmiss_eval is set for stores too ("hitmiss_eval is set to 1, and either the store or load flag is set").
-  - *Encoded:* in the luna13 and luna14 refs. Golden fails luna13 REQ-0088 and luna12 REQ-0022; the luna12 ref fails REQ-0022 too. luna13's repair added the gate, reasoning that "biu_read can assert for a store miss because its hit/miss-evaluation term is not gated by the load flag".
+  - *Encoded:* in the luna13 and luna14 refs. Golden fails luna13 REQ-0088 and luna12 REQ-0022; the luna12 ref fails REQ-0022 too. luna13's repair added the gate, reasoning that biu_read could otherwise assert for a store miss, because the hit/miss term was not gated by the load flag.
 - **M5.**
   - *Cause:* the generator's habit of latching the miss decision once.
   - *Class (b), with some textual support for golden.* The hit is stated as a condition of the state ("while the FSM is in CLOAD"), while the spec names hitmiss_eval explicitly where it applies (abort, biu_read, dc_addr). The port is also described as "Combinational tag-compare miss indication".
