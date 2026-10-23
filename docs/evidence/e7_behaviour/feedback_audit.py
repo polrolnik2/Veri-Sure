@@ -55,6 +55,9 @@ SH = {"i2c_master_bit_ctrl": "bit_ctrl", "i2c_master_byte_ctrl": "byte_ctrl",
       "or1200_dc_fsm": "dc_fsm", "or1200_sb": "sb"}
 EDITS = ("replace_block", "edit", "add_block", "remove_block")
 WORK = EQ / "feedback_audit"
+#: Which editor arm to audit: cf-checks (checks-only feedback, the default) or cf-model.
+ARM = os.environ.get("E7_ARM", "cf-checks")
+SUFFIX = "" if ARM == "cf-checks" else f"-{ARM}"
 dec = json.JSONDecoder()
 
 
@@ -297,9 +300,9 @@ def compare(A, B, G):
 
 
 out = {"jobs": []}
-for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / "editor-cf-checks" / "*" / "debug_trajectory.jsonl"))):
+for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / f"editor-{ARM}" / "*" / "debug_trajectory.jsonl"))):
     run, mod = traj_f.split("/")[-4], traj_f.split("/")[-2]
-    logs = sorted(glob.glob(str(RUNS / run / "results" / mod / "cf-checks*" / "editor.log")))
+    logs = sorted(glob.glob(str(RUNS / run / "results" / mod / f"{ARM}*" / "editor.log")))
     if len(logs) != 1:
         print(f"{SH[mod]} {run}: skipped ({len(logs)} launches; the trajectory holds only the last)")
         continue
@@ -308,7 +311,7 @@ for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / "editor-cf-checks" / "*" / 
     start = ((E / run / "editor-cf-gen" / mod / "rtl.sv") if mod == "i2c_master_byte_ctrl"
              else (E / run / "editor" / mod / "rtl_generated.sv")).read_text()
     commits, final, miss = replay(start, traj, log_records(text, "input"), log_records(text, "output"))
-    delivered = (E / run / "editor-cf-checks" / mod / "rtl.sv").read_text()
+    delivered = (E / run / f"editor-{ARM}" / mod / "rtl.sv").read_text()
     ok = norm(final) == norm(delivered)
     print(f"{SH[mod]} {run}: {len(commits)} commits replayed, {miss} edits unresolved, "
           f"final {'REPRODUCED' if ok else 'DIFFERS'}", flush=True)
@@ -334,4 +337,4 @@ for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / "editor-cf-checks" / "*" / 
     out["jobs"].append({"module": mod, "run": run, "commits": rows})
     del G
 
-(E / "FEEDBACK-AUDIT.json").write_text(json.dumps(out, indent=1) + "\n")
+(E / f"FEEDBACK-AUDIT{SUFFIX}.json").write_text(json.dumps(out, indent=1) + "\n")
