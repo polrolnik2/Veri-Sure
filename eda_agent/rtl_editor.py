@@ -1618,10 +1618,15 @@ class _EditSession:
         so a run that wanders across a plateau returns the point it reached
         first rather than the last one it happened to touch.
 
-        Under the consensus latch, `agreement` is what commits are judged on, so it ranks.
+        Under the consensus latch, `agreement` is what commits are judged on, so it ranks -- with
+        THE LATCH'S OWN MARGIN. Measured on the second live smoke run (sb luna12): a commit rose by
+        0.08 points, under the 0.1-point margin, and was correctly refused; ranked on the raw value
+        it became "best", and `restore_best` shipped the refused design (1,565 output cells broken).
         """
         if agreement is not None:
-            if self.best_agreement is None or agreement > self.best_agreement + 1e-12:
+            margin = float(getattr(self.latch_gate, "min_gain", 0.0) or 0.0)
+            if self.best_agreement is None or (agreement > self.best_agreement + 1e-12
+                                               and agreement >= self.best_agreement + margin - 1e-12):
                 self.best_agreement = float(agreement)
                 self.best_rtl = rtl_text
                 if passing is not None:

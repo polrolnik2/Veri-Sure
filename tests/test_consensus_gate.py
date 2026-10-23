@@ -137,6 +137,17 @@ def test_best_is_ranked_on_agreement_under_the_consensus_latch(tmp_path):
     assert s.best_rtl == "a" and s.best_agreement == pytest.approx(0.5)
 
 
+def test_a_design_refused_for_the_margin_never_becomes_best(tmp_path):
+    """The second live smoke run shipped a design the latch had refused (sb luna12)."""
+    s = _session(tmp_path)
+    s.latch_gate = type("G", (), {"min_gain": 0.001})()
+    assert s.note_best(5, "start", passing=61, agreement=0.8604)
+    assert not s.note_best(5, "refused", passing=64, agreement=0.8612), "+0.08 points is under the margin"
+    assert s.best_rtl == "start"
+    assert s.note_best(5, "kept", passing=64, agreement=0.8620)
+    assert s.best_rtl == "kept"
+
+
 def test_workflow_prompt_says_what_the_run_does():
     assert workflow_prompt(True) == EXTRA_ORDER_PROMPT_CHECKS
     assert workflow_prompt(False) == EXTRA_ORDER_PROMPT
