@@ -136,6 +136,10 @@ feedback, the consensus latch and `--full-view`. The analysis tool is
 | smoke 2: sb luna12 | the +0.08 rise refused by the new margin, then **shipped anyway** (bug below) | 54.5% |
 | smoke 3: sb luna12 | all 3 commits refused (one would have taken agreement from 86.0% to 50.6%) | unchanged, 56.1% |
 | smoke 4: byte_ctrl luna12 | 1 commit (passing 52 → 56, agreement 63.73% → 63.65%), refused | unchanged, 42.7% |
+| full arm: dc_fsm luna14 (before the tolerance) | all 12 commits refused. 10 were net better per golden, at agreement losses of 0.00–1.03 points; the two net worse lost 0.26 and 10.3 points | unchanged, 95.8% edges |
+| smoke 5: dc_fsm luna14 (tolerance 0.5) | 1 commit (passing 65 → 72, agreement 99.81% → 98.96%), refused | unchanged. The refused design scored 96.1% edges, 470 cells fixed / 3 broken |
+| full arm: sb luna14 (before the free refusal), stopped after 13 commits | all refused; 10 of them behave the same (agreement 99.16% → 38.07%) | unchanged: the start already matches golden on every edge |
+| smoke 6: sb luna14 (current code) | 3 commits, all refused: two variants of the same configuration change (agreement → 38.07% and 41.79%, golden 47–49k cells broken) and one that changed no output | unchanged, 100% |
 
 **Defects found and fixed:**
 1. **A rise below 0.1 points latched** (smoke 1). Gains that small were a coin flip in the audited
@@ -144,8 +148,33 @@ feedback, the consensus latch and `--full-view`. The analysis tool is
    ignoring the margin, so `restore_best` returned the design the latch had just refused.
    `note_best` now applies the margin. Confirmed in smoke 3.
 3. **Batches that change no output spent trials** (the stopped sessions). The refusal now says so.
-4. **A batch behaving exactly like one already refused was resubmitted** (smoke 3). The gate
-   fingerprints behaviour, and the refusal names the earlier trial. This is not yet exercised live.
+4. **A batch behaving exactly like one already refused was resubmitted** (smoke 3, and 10 of 13
+   commits in the stopped sb luna14 arm). The gate fingerprints behaviour, and an exact repeat is
+   now refused before it is charged a trial. This is not yet exercised live: in smoke 6 the
+   editor's repeat was a variant with different behaviour.
+5. **Real fixes that cost a little agreement were all refused** (dc_fsm luna14). Its peers share
+   the start's defect, so a real fix moves away from them. A rise in passing requirements may now
+   buy an agreement loss under `ConsensusGate.TOLERANCE` = 0.5 points.
+   - Under 0.5, that run's 8 small-loss commits would latch: 7 net better and 1 net worse
+     (59 cells fixed / 94 broken).
+   - Its two largest fixes (472 / 2 and 274 / 2 cells) lost 0.85 points and are still refused, as
+     smoke 5's was.
+
+**The tolerance offline.** Swept on the 166 audited commits; the rule is "agreement rises ≥ 0.1
+pt, or passing rises and agreement falls less than τ":
+
+| τ, points | checks arm: accepted better / worse, gains / losses | model arm: accepted better / worse, gains / losses |
+|---|---|---|
+| 0 | 15 / 3, +8.7 / −2.1 | 7 / 4, +29.8 / −1.4 |
+| 0.5 (current) | 15 / 3, +8.7 / −2.1 | 8 / 5, +31.0 / −1.4 |
+| 1 | 16 / 5, +9.0 / −4.5 | 10 / 5, +36.2 / −1.4 |
+| 2 | 18 / 5, +10.3 / −4.5 | 10 / 6, +36.2 / −1.6 |
+| 5 | 18 / 6, +10.3 / −4.5 | 10 / 9, +36.2 / −13.9 |
+
+- From 0.5 to 1, the offline commits change by +3 net better and +2 net worse commits, gains
+  +5.5 and losses −2.4 points. That is close to even.
+- Above 2, losses grow on the model arm.
+- The live case for 1 is dc_fsm luna14's two large refused fixes, one run.
 
 **Not a defect, but the main inefficiency:**
 - **Steering and latch disagree.** The editor is steered by the checks and judged by agreement,
