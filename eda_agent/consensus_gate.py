@@ -197,4 +197,6 @@ class ConsensusGate:
         fell.sort(key=lambda kv: kv[1])
         return {"peers": len(self.peers), "before": a0, "after": a1,
                 "rises": a0 is not None and a1 is not None and a1 > a0 + 1e-12,
-                "outputs_moved_away": [n for n, _ in fell]}
+                "outputs_moved_away": [n for n, _ in fell],
+                #: False when no spec output differs on any edge: the batch cannot move agreement
+                "behaviour_changed": None if tb is None or ta is None else tb != ta}

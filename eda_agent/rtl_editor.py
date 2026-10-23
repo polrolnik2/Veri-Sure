@@ -1546,6 +1546,13 @@ class _EditSession:
         away = consensus.get("outputs_moved_away") or []
         away_note = (f"  Outputs that moved AWAY from the independent designs: {', '.join(away)}."
                      if away else "")
+        if consensus.get("behaviour_changed") is False:
+            #: Measured on the first live runs: batches that changed no spec output on any edge
+            #: were committed again and again, each spending a trial to learn nothing.
+            away_note += ("  This batch changed NO spec output on any edge of the run's stimulus, so "
+                          "it cannot move agreement: it only changes internal signals or behaviour "
+                          "the stimulus never reaches. Change what the outputs do, or try "
+                          "something else.")
         n = consensus.get("peers") or 0
         if consensus.get("rises"):
             self.last_mismatch_cnt = sim_mismatch_cnt

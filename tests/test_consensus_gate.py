@@ -48,6 +48,7 @@ def test_judge_reports_direction_and_the_outputs_that_moved_away(gate):
     assert not down["rises"] and down["outputs_moved_away"] == ["q"]
     same = gate.judge(counter(1), counter(1))
     assert not same["rises"], "a tie does not latch"
+    assert same["behaviour_changed"] is False and down["behaviour_changed"] is True
 
 
 @needs_iverilog
@@ -101,6 +102,14 @@ def test_a_commit_that_lowers_agreement_is_reverted_whatever_the_checks_say(tmp_
     assert "did NOT latch" in r["error_msg"] and "passing requirements 1 -> 2" in r["error_msg"]
     assert "moved AWAY" in r["error_msg"] and "q" in r["error_msg"]
     assert Path(s.rtl_path).read_text() == "old"
+
+
+def test_a_batch_that_changes_no_output_is_told_so(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.6, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": False}
+    r = s._consensus_decision({}, c, None, None, "old", 2, None, "{}")
+    assert "changed NO spec output" in r["error_msg"]
 
 
 def test_best_is_ranked_on_agreement_under_the_consensus_latch(tmp_path):
