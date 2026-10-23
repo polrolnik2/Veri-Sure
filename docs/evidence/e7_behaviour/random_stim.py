@@ -35,7 +35,7 @@ E = Path(__file__).resolve().parents[1] / "e7"
 DES = Path("/home/user/Veri-Sure/benchmarks/chipverilog/Des")
 SEED, EDGES = 20261022, 200000
 CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "abl-child-gen1": "acg1", "abl-child-gen2": "acg2",
-           "abl-child-gen3": "acg3"}
+           "abl-child-gen3": "acg3", "val-cons": "vc"}
 mod = sys.argv[1]
 task = next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod)
 kids = [Path(p) for p in child_sources(submodules(task, mod))]

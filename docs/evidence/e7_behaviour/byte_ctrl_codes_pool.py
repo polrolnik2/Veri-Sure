@@ -30,7 +30,7 @@ CHILD = TASK.parent / "i2c_master_bit_ctrl" / "i2c_master_bit_ctrl.v"
 M = "i2c_master_byte_ctrl"
 RUNS = ("luna12", "luna13", "luna14")
 KINDS = {"cfg": "cf-gen", "acg1": "abl-child-gen1", "acg2": "abl-child-gen2", "acg3": "abl-child-gen3",
-         "cfc": "cf-checks"}
+         "cfc": "cf-checks", "vc": "val-cons"}
 THREE_BIT = [
     ("    localparam [2:0] I2C_CMD_NOP   = 3'b000,\n                     I2C_CMD_START = 3'b001,\n"
      "                     I2C_CMD_STOP  = 3'b010,\n                     I2C_CMD_READ  = 3'b100,\n"
@@ -97,6 +97,8 @@ def main():
     for run in RUNS:
         for kind, tag in KINDS.items():
             f = E / run / f"editor-{tag}" / M / "rtl_deliverable.sv"
+            if not f.is_file():
+                continue
             x = simulate(fix_codes(f.read_text()))
             g_edge, g_tp = score(x, golden, RUNS)
             own_edge, _ = score(x, golden, [run])

@@ -24,6 +24,9 @@ import statistics as st
 from pathlib import Path
 
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
+#: The repaired arm under test: cfc (checks-only latch, the default) or vc (consensus latch).
+TREAT = os.environ.get("E7_TREAT", "cfc")
+SUFFIX = "" if TREAT == "cfc" else f"-{TREAT}"
 E = Path(__file__).resolve().parents[1] / "e7"
 SH = {"i2c_master_bit_ctrl": "bit_ctrl", "i2c_master_byte_ctrl": "byte_ctrl",
       "or1200_dc_fsm": "dc_fsm", "or1200_sb": "sb"}
@@ -32,7 +35,7 @@ ABL_DEFAULT = ("gen1", "gen2", "gen3", "r0")
 KEYS = ("g_edge", "g_tp", "cl_order", "cl_port", "ship", "ref")
 
 R = {(r["module"], r["run"], r["kind"]): r for r in json.loads((EQ / "latency.json").read_text())}
-jobs = sorted({(m, run) for (m, run, k) in R if k == "cfc"}, key=lambda j: (SH[j[0]], j[1]))
+jobs = sorted({(m, run) for (m, run, k) in R if k == TREAT}, key=lambda j: (SH[j[0]], j[1]))
 
 
 def pct(v):
@@ -44,7 +47,7 @@ print("| job | ablation n | metric | ablation min–max (mean) | checks final | 
 print("|---|---|---|---|---|---|")
 for m, run in jobs:
     abl = [R[(m, run, k)] for k in ABL.get(m, ABL_DEFAULT) if (m, run, k) in R]
-    c = R[(m, run, "cfc")]
+    c = R[(m, run, TREAT)]
     if not abl:
         continue
     job = {"module": m, "run": run, "n_ablation": len(abl), "checks": {}, "ablation": {}}
@@ -101,4 +104,4 @@ for m in sorted({j["module"] for j in out["jobs"]}, key=lambda x: SH[x]):
               + f" | {100 * spread['checks']:.1f} | | |")
     out["modules"][m] = mod
 
-(E / "CHECKS-VS-ABLATION.json").write_text(json.dumps(out, indent=1) + "\n")
+(E / f"CHECKS-VS-ABLATION{SUFFIX}.json").write_text(json.dumps(out, indent=1) + "\n")

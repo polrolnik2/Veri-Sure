@@ -33,6 +33,9 @@ import statistics as st
 from pathlib import Path
 
 EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
+#: The repaired arm under test: cfc (checks-only latch, the default) or vc (consensus latch).
+TREAT = os.environ.get("E7_TREAT", "cfc")
+SUFFIX = "" if TREAT == "cfc" else f"-{TREAT}"
 RUNS = Path(os.environ.get("E7_RUNS", "/home/user/runs-cf"))
 E = Path(__file__).resolve().parents[1] / "e7"
 SH = {"i2c_master_bit_ctrl": "bit_ctrl", "i2c_master_byte_ctrl": "byte_ctrl",
@@ -82,7 +85,7 @@ for r in json.loads((EQ / "latency.json").read_text()):
     for k in ("golden_class", "cl_golden_class"):
         r[k] = float(bool(r[k]))
     R[(r["module"], r["run"], r["kind"])] = r
-JOBS = sorted({(m, run) for (m, run, k) in R if k == "cfc"}, key=lambda j: (SH[j[0]], j[1]))
+JOBS = sorted({(m, run) for (m, run, k) in R if k == TREAT}, key=lambda j: (SH[j[0]], j[1]))
 JOBS = [j for j in JOBS if all((j[0], j[1], k) in R for k in ABL.get(j[0], ABL_DEFAULT))]
 
 
@@ -104,7 +107,7 @@ def rank_p(jobs, k):
     """Exact two-sided p for the summed wins of cfc, under 'cfc is one more fresh sample'."""
     dist, obs = {0.0: 1.0}, 0.0
     for m, run in jobs:
-        vals = [a[k] for a in pool(m, run)] + [R[(m, run, "cfc")][k]]
+        vals = [a[k] for a in pool(m, run)] + [R[(m, run, TREAT)][k]]
         obs += wins(vals[-1], vals[:-1])
         alt = [wins(v, vals[:i] + vals[i + 1:]) for i, v in enumerate(vals)]
         new = {}
@@ -134,7 +137,7 @@ print("|---|---|---|---|---|---|---|---|---|---|---|")
 for k, lab, _g in MET:
     rows = []
     for j in JOBS:
-        c, a, s = (R[(*j, "cfc")].get(k), [x.get(k) for x in pool(*j)],
+        c, a, s = (R[(*j, TREAT)].get(k), [x.get(k) for x in pool(*j)],
                    R[(*j, START.get(j[0], "r0"))].get(k))
         if c is None or any(v is None for v in a + [s]):
             continue
@@ -166,7 +169,7 @@ def pick(cands, key):
 
 
 def guard(j):
-    c, s = R[(*j, "cfc")], R[(*j, START.get(j[0], "r0"))]
+    c, s = R[(*j, TREAT)], R[(*j, START.get(j[0], "r0"))]
     return c if c["peer"] >= s["peer"] - TOL else s
 
 
@@ -182,9 +185,9 @@ for k in SCORE:
     col = {"repair": [], "guard": [], "random": [], "oracle": [], **{s: [] for s, _ in SEL}}
     for j in JOBS:
         a = pool(*j)
-        if any(x.get(k) is None for x in a + [R[(*j, "cfc")]]):
+        if any(x.get(k) is None for x in a + [R[(*j, TREAT)]]):
             continue
-        col["repair"].append(R[(*j, "cfc")][k])
+        col["repair"].append(R[(*j, TREAT)][k])
         col["guard"].append(guard(j)[k])
         col["random"].append(st.mean(x[k] for x in a))
         col["oracle"].append(max(x[k] for x in a))
@@ -194,9 +197,9 @@ for k in SCORE:
     o = out["selection"][k]
     print(f"| {lab} | {pt(o['repair'])} | {pt(o['guard'])} | {pt(o['random'])} | "
           + " | ".join(pt(o[s]) for s, _ in SEL) + f" | {pt(o['oracle'])} |")
-worst = min(JOBS, key=lambda j: R[(*j, "cfc")]["g_edge"] - st.mean(x["g_edge"] for x in pool(*j)))
+worst = min(JOBS, key=lambda j: R[(*j, TREAT)]["g_edge"] - st.mean(x["g_edge"] for x in pool(*j)))
 rest = [j for j in JOBS if j != worst]
-sel = {"repair": [R[(*j, "cfc")]["g_edge"] for j in rest], "guard": [guard(j)["g_edge"] for j in rest],
+sel = {"repair": [R[(*j, TREAT)]["g_edge"] for j in rest], "guard": [guard(j)["g_edge"] for j in rest],
        "start": [R[(*j, START.get(j[0], "r0"))]["g_edge"] for j in rest],
        "random": [st.mean(x["g_edge"] for x in pool(*j)) for j in rest],
        "oracle": [max(x["g_edge"] for x in pool(*j)) for j in rest],
@@ -206,7 +209,7 @@ out["start_mean"] = {k: st.mean(R[(*j, START.get(j[0], "r0"))][k] for j in JOBS)
 print(f"\nWithout {SH[worst[0]]} {worst[1]} (repair's largest loss), edges equal to golden: "
       + ", ".join(f"{k} {pt(st.mean(v))}" for k, v in sel.items())
       + f". The starts themselves average {pt(out['start_mean']['g_edge'])} on all jobs.")
-fired = [f"{SH[j[0]]} {j[1]}" for j in JOBS if guard(j) is not R[(*j, "cfc")]]
+fired = [f"{SH[j[0]]} {j[1]}" for j in JOBS if guard(j) is not R[(*j, TREAT)]]
 out["guard"] = {"kept_start": fired}
 print(f"\nThe guard kept the start on: {', '.join(fired) or 'none'}.")
 
@@ -240,7 +243,9 @@ if f.is_file():
         for k in ("g_edge", "own_edge", "g_tp"):
             a0 = [R[("i2c_master_byte_ctrl", run, kk)][k] for kk in ABL["i2c_master_byte_ctrl"]]
             a1 = [C[(run, kk)][k] for kk in ABL["i2c_master_byte_ctrl"]]
-            c0, c1 = R[("i2c_master_byte_ctrl", run, "cfc")][k], C[(run, "cfc")][k]
+            if (run, TREAT) not in C:
+                continue
+            c0, c1 = R[("i2c_master_byte_ctrl", run, TREAT)][k], C[(run, TREAT)][k]
             out["codes"].setdefault(run, {})[k] = {"pool": a1, "checks": c1, "pool_as_generated": a0,
                                                    "checks_as_generated": c0}
             print(f"| {run} | {k} | {pt(min(a0))}–{pt(max(a0))} ({pt(st.mean(a0))}) / {pt(c0)} | "
@@ -263,7 +268,7 @@ print("| job | one generation (mean of the ablation) | the checks arm's editor |
 print("|---|---|---|---|")
 for m, run in JOBS:
     gi, go = (st.mean(x[i] for x in gen[m]) for i in (0, 1))
-    f = RUNS / run / "editor-cf-checks" / m / "usage.jsonl"
+    f = RUNS / run / f"editor-{ {'cfc': 'cf-checks', 'vc': 'val-cons'}.get(TREAT, TREAT) }" / m / "usage.jsonl"
     if not f.is_file():
         print(f"| {SH[m]} {run} | {gi / 1e3:.0f} / {go / 1e3:.0f} | not available | |")
         continue
@@ -275,4 +280,4 @@ for m, run in JOBS:
     out["cost"][f"{m} {run}"] = {"gen_uncached_in": gi, "gen_out": go, "editor_uncached_in": ei, "editor_out": eo}
     print(f"| {SH[m]} {run} | {gi / 1e3:.0f} / {go / 1e3:.0f} | {ei / 1e3:.0f} / {eo / 1e3:.0f} | {eo / go:.0f}× |")
 
-(E / "CHECKS-VS-ABLATION-ROBUST.json").write_text(json.dumps(out, indent=1) + "\n")
+(E / f"CHECKS-VS-ABLATION-ROBUST{SUFFIX}.json").write_text(json.dumps(out, indent=1) + "\n")

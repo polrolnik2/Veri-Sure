@@ -26,7 +26,9 @@ EQ = Path(os.environ.get("E7_BEHAVIOUR_WORK", "/tmp/e7_behaviour"))
 E = Path("/home/user/Veri-Sure/docs/evidence/e7")
 CF_TAGS = {"cf-gen": "cfg", "cf-checks": "cfc", "cf-model": "cfm",
            #: byte_ctrl generation-only samples with the real child: its like-for-like ablation
-           "abl-child-gen1": "acg1", "abl-child-gen2": "acg2", "abl-child-gen3": "acg3"}
+           "abl-child-gen1": "acg1", "abl-child-gen2": "acg2", "abl-child-gen3": "acg3",
+           #: the consensus-latch validation arm (LATCH-OFFLINE.md), from the checks arm's start
+           "val-cons": "vc"}
 DES = Path("/home/user/Veri-Sure/benchmarks/chipverilog/Des")
 mod = sys.argv[1]
 runs = [
